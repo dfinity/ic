@@ -11,7 +11,7 @@
 //!
 //! For more context please check `<https://youtu.be/WaNJINjGleg>`
 //!
-use crate::artifact::Artifact;
+use crate::artifact::{Artifact, StateSyncMessage};
 use ic_protobuf::p2p::v1 as p2p_pb;
 use phantom_newtype::Id;
 
@@ -43,7 +43,10 @@ pub trait ChunkableArtifact {
 
 pub trait Chunkable {
     fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>>;
-    fn add_chunk(&mut self, artifact_chunk: ArtifactChunk) -> Result<Artifact, ArtifactErrorCode>;
+    fn add_chunk(
+        &mut self,
+        artifact_chunk: ArtifactChunk,
+    ) -> Result<StateSyncMessage, ArtifactErrorCode>;
 }
 
 impl From<ArtifactChunk> for p2p_pb::StateSyncChunkResponse {

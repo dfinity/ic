@@ -20,7 +20,7 @@ use ic_test_utilities::{
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_types::{
-    artifact::{Artifact, StateSyncMessage},
+    artifact::StateSyncMessage,
     chunkable::{
         ArtifactChunk,
         ArtifactErrorCode::{ChunkVerificationFailed, ChunksMoreNeeded},
@@ -436,10 +436,7 @@ pub fn pipe_meta_manifest(
     }
 
     match dst.add_chunk(chunk) {
-        Ok(Artifact::StateSync(msg)) => Ok(msg),
-        Ok(artifact) => {
-            panic!("Unexpected artifact type: {:?}", artifact);
-        }
+        Ok(msg) => Ok(msg),
         Err(ChunksMoreNeeded) => Err(StateSyncErrorCode::ChunksMoreNeeded),
         Err(ChunkVerificationFailed) => Err(StateSyncErrorCode::MetaManifestVerificationFailed),
     }
@@ -476,11 +473,8 @@ pub fn pipe_manifest(
         }
 
         match dst.add_chunk(chunk) {
-            Ok(Artifact::StateSync(msg)) => {
+            Ok(msg) => {
                 return Ok(msg);
-            }
-            Ok(artifact) => {
-                panic!("Unexpected artifact type: {:?}", artifact);
             }
             Err(ChunksMoreNeeded) => (),
             Err(ChunkVerificationFailed) => {
@@ -525,11 +519,8 @@ pub fn pipe_partial_state_sync(
             }
 
             match dst.add_chunk(chunk) {
-                Ok(Artifact::StateSync(msg)) => {
+                Ok(msg) => {
                     return Ok(msg);
-                }
-                Ok(artifact) => {
-                    panic!("Unexpected artifact type: {:?}", artifact);
                 }
                 Err(ChunksMoreNeeded) => (),
                 Err(ChunkVerificationFailed) => {

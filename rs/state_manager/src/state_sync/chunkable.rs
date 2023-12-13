@@ -11,7 +11,7 @@ use ic_state_layout::utils::do_copy_overwrite;
 use ic_state_layout::{error::LayoutError, CheckpointLayout, ReadOnly, RwPolicy, StateLayout};
 use ic_sys::mmap::ScopedMmap;
 use ic_types::{
-    artifact::{Artifact, StateSyncMessage},
+    artifact::StateSyncMessage,
     chunkable::{
         ArtifactChunk,
         ArtifactErrorCode::{self, ChunkVerificationFailed, ChunksMoreNeeded},
@@ -72,7 +72,7 @@ enum DownloadState {
     },
     /// Successfully completed and returned the artifact to P2P, nothing else to
     /// do.
-    Complete(Box<Artifact>),
+    Complete(Box<StateSyncMessage>),
 }
 
 /// An implementation of Chunkable trait that represents a (on-disk) state under
@@ -776,8 +776,8 @@ impl IncompleteState {
         root_hash: CryptoHashOfState,
         manifest: &Manifest,
         meta_manifest: &MetaManifest,
-    ) -> Artifact {
-        Artifact::StateSync(StateSyncMessage {
+    ) -> StateSyncMessage {
+        StateSyncMessage {
             height,
             root_hash,
             checkpoint_root: state_layout
@@ -790,7 +790,7 @@ impl IncompleteState {
             // `state_sync_file_group` and `checkpoint_root` are not included in the integrity hash of this artifact.
             // Therefore it is OK to pass a default value here as it is only used when fetching chunks.
             state_sync_file_group: Default::default(),
-        })
+        }
     }
 
     fn make_checkpoint(
@@ -1157,7 +1157,10 @@ impl Chunkable for IncompleteState {
         }
     }
 
-    fn add_chunk(&mut self, artifact_chunk: ArtifactChunk) -> Result<Artifact, ArtifactErrorCode> {
+    fn add_chunk(
+        &mut self,
+        artifact_chunk: ArtifactChunk,
+    ) -> Result<StateSyncMessage, ArtifactErrorCode> {
         let ix = artifact_chunk.chunk_id.get();
         let payload = &artifact_chunk.chunk;
         match &mut self.state {
