@@ -230,6 +230,10 @@ pub enum BlockTag {
     /// <https://www.alchemy.com/overviews/ethereum-commitment-levels#what-are-ethereum-commitment-levels>
     #[serde(rename = "finalized")]
     Finalized,
+    #[serde(rename = "earliest")]
+    Earliest,
+    #[serde(rename = "pending")]
+    Pending,
 }
 
 impl From<CandidBlockTag> for BlockTag {
@@ -248,6 +252,8 @@ impl Display for BlockTag {
             Self::Latest => write!(f, "latest"),
             Self::Safe => write!(f, "safe"),
             Self::Finalized => write!(f, "finalized"),
+            Self::Earliest => write!(f, "earliest"),
+            Self::Pending => write!(f, "pending"),
         }
     }
 }
@@ -439,11 +445,38 @@ impl From<BlockNumber> for BlockSpec {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, CandidType)]
 pub struct Block {
-    ///The block number. `None` when its pending block.
     pub number: BlockNumber,
-    /// Base fee value of this block
-    #[serde(rename = "baseFeePerGas")]
-    pub base_fee_per_gas: Wei,
+    pub difficulty: String,
+    #[serde(rename = "extraData")]
+    pub extra_data: String,
+    #[serde(rename = "gasLimit")]
+    pub gas_limit: CheckedAmountOf<()>,
+    #[serde(rename = "gasUsed")]
+    pub gas_used: CheckedAmountOf<()>,
+    pub hash: String,
+    #[serde(rename = "logsBloom")]
+    pub logs_bloom: String,
+    pub miner: String,
+    #[serde(rename = "mixHash")]
+    pub mix_hash: String,
+    pub nonce: CheckedAmountOf<()>,
+    #[serde(rename = "parentHash")]
+    pub parent_hash: String,
+    #[serde(rename = "receiptsRoot")]
+    pub receipts_root: String,
+    #[serde(rename = "sha3Uncles")]
+    pub sha3_uncles: String,
+    pub size: CheckedAmountOf<()>,
+    #[serde(rename = "stateRoot")]
+    pub state_root: String,
+    #[serde(rename = "timestamp")]
+    pub timestamp: CheckedAmountOf<()>,
+    #[serde(rename = "totalDifficulty")]
+    pub total_difficulty: CheckedAmountOf<()>,
+    pub transactions: Vec<String>,
+    #[serde(rename = "transactionsRoot")]
+    pub transactions_root: String,
+    pub uncles: Vec<String>,
 }
 
 impl HttpResponsePayload for Block {
