@@ -63,7 +63,7 @@ pub const STABLE_MEMORY_DIRTY_PAGE_LIMIT: u64 = 8 * GiB / (PAGE_SIZE as u64);
 pub const STABLE_MEMORY_ACCESSED_PAGE_LIMIT: u64 = 8 * GiB / (PAGE_SIZE as u64);
 
 /// Used for 64-bit main memory support:
-/// Limit for the number of pages accessed in a single message.
+/// Limit the number of main memory pages accessed in a single message.
 pub const MAIN_MEMORY_PAGE_ACCESS_LIMIT: u64 = STABLE_MEMORY_ACCESSED_PAGE_LIMIT;
 
 #[derive(Copy, Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
