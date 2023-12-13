@@ -2324,8 +2324,9 @@ fn main_write_page_guard<S: SystemApi>(
     };
 
     let bytemap = bytemap_mem.data_mut(&mut caller);
+    let first_access = bytemap[page_index] == NO_ACCESS;
     bytemap[page_index] = WRITE_ACCESS;
-    if bytemap[page_index] == NO_ACCESS {
+    if first_access {
         first_access_on_main_memory_page(&mut caller)?;
     }
     Ok(())
