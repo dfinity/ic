@@ -130,10 +130,7 @@ impl FileDownloader {
         if response.status().is_success() {
             Ok(response)
         } else {
-            Err(FileDownloadError::HttpError(HttpError::NonSuccessResponse(
-                Method::GET,
-                response,
-            )))
+            Err(FileDownloadError::NonSuccessResponse(Method::GET, response))
         }
     }
 
@@ -175,11 +172,11 @@ pub fn check_file_hash(path: &Path, expected_sha256_hex: &str) -> FileDownloadRe
     let computed_sha256_hex = compute_sha256_hex(path)?;
 
     if computed_sha256_hex != expected_sha256_hex {
-        Err(FileDownloadError::file_hash_mismatch_error(
-            computed_sha256_hex,
-            expected_sha256_hex.into(),
-            path.to_path_buf(),
-        ))
+        Err(FileDownloadError::FileHashMismatchError {
+            computed_hash: computed_sha256_hex,
+            expected_hash: expected_sha256_hex.into(),
+            file_path: path.to_path_buf(),
+        })
     } else {
         Ok(())
     }
@@ -206,8 +203,11 @@ pub enum FileDownloadError {
     /// An IO error occurred
     IoError(String, io::Error),
 
-    /// An error occurred when making an HTTP request for a binary
-    HttpError(HttpError),
+    /// A reqwest HTTP client produced an error
+    ReqwestError(reqwest::Error),
+
+    /// A non-success HTTP response was received from the given URI
+    NonSuccessResponse(http::Method, Response),
 
     /// A file's computed hash did not match the expected hash
     FileHashMismatchError {
@@ -219,66 +219,28 @@ pub enum FileDownloadError {
 }
 
 impl FileDownloadError {
-    pub fn file_create_error(file_path: &Path, e: io::Error) -> Self {
+    pub(crate) fn file_create_error(file_path: &Path, e: io::Error) -> Self {
         FileDownloadError::IoError(format!("Failed to create file: {:?}", file_path), e)
     }
 
-    pub fn file_write_error(file_path: &Path, e: io::Error) -> Self {
+    pub(crate) fn file_write_error(file_path: &Path, e: io::Error) -> Self {
         FileDownloadError::IoError(format!("Failed to write to file: {:?}", file_path), e)
     }
 
-    pub fn file_open_error(file_path: &Path, e: io::Error) -> Self {
+    pub(crate) fn file_open_error(file_path: &Path, e: io::Error) -> Self {
         FileDownloadError::IoError(format!("Failed to open file: {:?}", file_path), e)
     }
 
-    pub fn file_remove_error(file_path: &Path, e: io::Error) -> Self {
+    pub(crate) fn file_remove_error(file_path: &Path, e: io::Error) -> Self {
         FileDownloadError::IoError(format!("Failed to remove file: {:?}", file_path), e)
     }
 
-    pub fn file_copy_error(src: &Path, dest: &Path, e: io::Error) -> Self {
-        FileDownloadError::IoError(
-            format!("Failed to copy file from {:?} to {:?}", src, dest),
-            e,
-        )
-    }
-
-    pub fn file_set_permissions_error(file_path: &Path, e: io::Error) -> Self {
-        FileDownloadError::IoError(
-            format!("Failed to set permissions on file: {:?}", file_path),
-            e,
-        )
-    }
-
-    pub fn dir_create_error(dir: &Path, e: io::Error) -> Self {
-        FileDownloadError::IoError(format!("Failed to create dir: {:?}", dir), e)
-    }
-
-    pub fn untar_error(file_path: &Path, e: io::Error) -> Self {
+    pub(crate) fn untar_error(file_path: &Path, e: io::Error) -> Self {
         FileDownloadError::IoError(format!("Failed to unpack tar file: {:?}", file_path), e)
     }
 
-    pub fn tar_gz_temp_dir_error(e: io::Error) -> Self {
-        FileDownloadError::IoError("Failed to create .tar.gz extraction tmpdir".into(), e)
-    }
-
-    pub fn bad_url(url: &str, e: http::uri::InvalidUri) -> Self {
-        FileDownloadError::HttpError(HttpError::MalformedUrl(url.to_string(), e))
-    }
-
-    pub fn compute_hash_error(file_path: &Path, e: io::Error) -> Self {
+    pub(crate) fn compute_hash_error(file_path: &Path, e: io::Error) -> Self {
         FileDownloadError::IoError(format!("Failed to hash of: {:?}", file_path), e)
-    }
-
-    pub fn file_hash_mismatch_error(
-        computed_hash: String,
-        expected_hash: String,
-        file_path: PathBuf,
-    ) -> Self {
-        FileDownloadError::FileHashMismatchError {
-            computed_hash,
-            expected_hash,
-            file_path,
-        }
     }
 }
 
@@ -290,17 +252,12 @@ impl fmt::Display for FileDownloadError {
                 "IO error, message: {}, error: {:?}",
                 msg, e
             ),
-            FileDownloadError::HttpError(HttpError::MalformedUrl(bad_url, e)) => write!(
+            FileDownloadError::ReqwestError(e) => write!(
                 f,
-                "Unable to parse URL: {}, error: {:?}",
-                bad_url, e
-            ),
-            FileDownloadError::HttpError(HttpError::ReqwestError(e)) => write!(
-                f,
-                "Encountered error when making Reqwest request: {}",
+                "Encountered error when making Http request: {}",
                 e
             ),
-            FileDownloadError::HttpError(HttpError::NonSuccessResponse(method, response)) => write!(
+            FileDownloadError::NonSuccessResponse(method, response) => write!(
                 f,
                 "Received non-success response from endpoint: method: {}, uri: {}, remote_addr: {:?}, status_code: {}, headers: {:?}",
                 method.as_str(), response.url(), response.remote_addr(), response.status(), response.headers()
@@ -322,24 +279,11 @@ impl fmt::Display for FileDownloadError {
 
 impl From<reqwest::Error> for FileDownloadError {
     fn from(e: reqwest::Error) -> Self {
-        FileDownloadError::HttpError(HttpError::ReqwestError(e))
+        FileDownloadError::ReqwestError(e)
     }
 }
 
 impl Error for FileDownloadError {}
-
-/// An HTTP error that File Downloader may encounter
-#[derive(Debug)]
-pub enum HttpError {
-    /// Failed to parse this String as a URL
-    MalformedUrl(String, http::uri::InvalidUri),
-
-    /// A reqwest HTTP client produced an error
-    ReqwestError(reqwest::Error),
-
-    /// A non-success HTTP response was received from the given URI
-    NonSuccessResponse(http::Method, Response),
-}
 
 #[cfg(test)]
 mod tests {
