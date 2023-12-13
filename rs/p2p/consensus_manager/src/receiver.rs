@@ -71,17 +71,14 @@ async fn rpc_handler<Artifact: ArtifactKind>(
     let jh = tokio::task::spawn_blocking(move || {
         let id: Artifact::Id =
             Artifact::PbId::proxy_decode(&payload).map_err(|_| StatusCode::BAD_REQUEST)?;
-        Ok::<_, StatusCode>(
-            pool.read()
-                .unwrap()
-                .get_validated_by_identifier(&id)
-                .map(|msg| Bytes::from(Artifact::PbMessage::proxy_encode(msg))),
-        )
+        let artifact = pool
+            .read()
+            .unwrap()
+            .get_validated_by_identifier(&id)
+            .ok_or(StatusCode::NO_CONTENT)?;
+        Ok::<_, StatusCode>(Bytes::from(Artifact::PbMessage::proxy_encode(artifact)))
     });
-    let bytes = jh
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)??
-        .ok_or(StatusCode::NO_CONTENT)?;
+    let bytes = jh.await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)??;
 
     Ok(bytes)
 }
