@@ -445,6 +445,8 @@ impl From<BlockNumber> for BlockSpec {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, CandidType)]
 pub struct Block {
+    #[serde(rename = "baseFeePerGas")]
+    pub base_fee_per_gas: Wei,
     pub number: BlockNumber,
     pub difficulty: String,
     #[serde(rename = "extraData")]
