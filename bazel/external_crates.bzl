@@ -237,11 +237,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "build-info": crate.spec(
                 git = "https://github.com/dfinity-lab/build-info",
-                rev = "abb2971c5d07a9b40d41a0c84b63a3156f2ff764",
+                rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7",
             ),
             "build-info-build": crate.spec(
                 git = "https://github.com/dfinity-lab/build-info",
-                rev = "abb2971c5d07a9b40d41a0c84b63a3156f2ff764",
+                rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7",
                 default_features = False,
             ),
             "by_address": crate.spec(

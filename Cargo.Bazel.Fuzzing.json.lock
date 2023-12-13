@@ -1,5 +1,5 @@
 {
-  "checksum": "f4f94d5d337b8bec8571516e1e3166973d44fbb03c51229f6f55556135d8ccc1",
+  "checksum": "211727575d07e31ab742dbaaec38eb2c4a88ece76317d48a576f1c7ed92fc834",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -6707,14 +6707,14 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "build-info 0.0.26": {
+    "build-info 0.0.27": {
       "name": "build-info",
-      "version": "0.0.26",
+      "version": "0.0.27",
       "repository": {
         "Git": {
           "remote": "https://github.com/dfinity-lab/build-info",
           "commitish": {
-            "Rev": "abb2971c5d07a9b40d41a0c84b63a3156f2ff764"
+            "Rev": "701a696844fba5c87df162fbbc1ccef96f27c9d7"
           },
           "strip_prefix": "build-info"
         }
@@ -6747,7 +6747,7 @@
         "deps": {
           "common": [
             {
-              "id": "build-info-common 0.0.26",
+              "id": "build-info-common 0.0.27",
               "target": "build_info_common"
             },
             {
@@ -6761,7 +6761,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "build-info-proc 0.0.26",
+              "id": "build-info-proc 0.0.27",
               "target": "build_info_proc"
             },
             {
@@ -6771,18 +6771,18 @@
           ],
           "selects": {}
         },
-        "version": "0.0.26"
+        "version": "0.0.27"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "build-info-build 0.0.26": {
+    "build-info-build 0.0.27": {
       "name": "build-info-build",
-      "version": "0.0.26",
+      "version": "0.0.27",
       "repository": {
         "Git": {
           "remote": "https://github.com/dfinity-lab/build-info",
           "commitish": {
-            "Rev": "abb2971c5d07a9b40d41a0c84b63a3156f2ff764"
+            "Rev": "701a696844fba5c87df162fbbc1ccef96f27c9d7"
           },
           "strip_prefix": "build-info-build"
         }
@@ -6818,16 +6818,12 @@
               "target": "bincode"
             },
             {
-              "id": "build-info-common 0.0.26",
+              "id": "build-info-common 0.0.27",
               "target": "build_info_common"
             },
             {
               "id": "cargo_metadata 0.14.2",
               "target": "cargo_metadata"
-            },
-            {
-              "id": "chrono 0.4.19",
-              "target": "chrono"
             },
             {
               "id": "glob 0.3.1",
@@ -6857,18 +6853,18 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.0.26"
+        "version": "0.0.27"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "build-info-common 0.0.26": {
+    "build-info-common 0.0.27": {
       "name": "build-info-common",
-      "version": "0.0.26",
+      "version": "0.0.27",
       "repository": {
         "Git": {
           "remote": "https://github.com/dfinity-lab/build-info",
           "commitish": {
-            "Rev": "abb2971c5d07a9b40d41a0c84b63a3156f2ff764"
+            "Rev": "701a696844fba5c87df162fbbc1ccef96f27c9d7"
           },
           "strip_prefix": "build-info-common"
         }
@@ -6900,10 +6896,6 @@
         "deps": {
           "common": [
             {
-              "id": "chrono 0.4.19",
-              "target": "chrono"
-            },
-            {
               "id": "semver 1.0.20",
               "target": "semver"
             },
@@ -6924,18 +6916,18 @@
           ],
           "selects": {}
         },
-        "version": "0.0.26"
+        "version": "0.0.27"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "build-info-proc 0.0.26": {
+    "build-info-proc 0.0.27": {
       "name": "build-info-proc",
-      "version": "0.0.26",
+      "version": "0.0.27",
       "repository": {
         "Git": {
           "remote": "https://github.com/dfinity-lab/build-info",
           "commitish": {
-            "Rev": "abb2971c5d07a9b40d41a0c84b63a3156f2ff764"
+            "Rev": "701a696844fba5c87df162fbbc1ccef96f27c9d7"
           },
           "strip_prefix": "build-info-proc"
         }
@@ -6978,12 +6970,8 @@
               "target": "bincode"
             },
             {
-              "id": "build-info-common 0.0.26",
+              "id": "build-info-common 0.0.27",
               "target": "build_info_common"
-            },
-            {
-              "id": "chrono 0.4.19",
-              "target": "chrono"
             },
             {
               "id": "num-bigint 0.4.4",
@@ -7030,7 +7018,7 @@
           ],
           "selects": {}
         },
-        "version": "0.0.26"
+        "version": "0.0.27"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -13820,11 +13808,11 @@
               "target": "bs58"
             },
             {
-              "id": "build-info 0.0.26",
+              "id": "build-info 0.0.27",
               "target": "build_info"
             },
             {
-              "id": "build-info-build 0.0.26",
+              "id": "build-info-build 0.0.27",
               "target": "build_info_build"
             },
             {
