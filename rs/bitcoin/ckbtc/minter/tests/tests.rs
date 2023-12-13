@@ -435,6 +435,68 @@ fn test_no_new_utxos() {
 }
 
 #[test]
+fn update_balance_should_return_correct_confirmations() {
+    let ckbtc = CkBtcSetup::new();
+    let upgrade_args = UpgradeArgs {
+        retrieve_btc_min_amount: None,
+        min_confirmations: Some(3),
+        max_time_in_queue_nanos: None,
+        mode: None,
+        kyt_principal: None,
+        kyt_fee: None,
+    };
+    let minter_arg = MinterArg::Upgrade(Some(upgrade_args));
+    ckbtc
+        .env
+        .upgrade_canister(
+            ckbtc.minter_id,
+            minter_wasm(),
+            Encode!(&minter_arg).unwrap(),
+        )
+        .expect("Failed to upgrade the minter canister");
+
+    ckbtc.set_tip_height(12);
+
+    let deposit_value = 100_000_000;
+    let utxo = Utxo {
+        height: 10,
+        outpoint: OutPoint {
+            txid: range_to_txid(1..=32),
+            vout: 1,
+        },
+        value: deposit_value,
+    };
+
+    let user = Principal::from(ckbtc.caller);
+
+    ckbtc.deposit_utxo(user, utxo);
+
+    let update_balance_args = UpdateBalanceArgs {
+        owner: None,
+        subaccount: None,
+    };
+
+    let res = ckbtc
+        .env
+        .execute_ingress_as(
+            PrincipalId::new_user_test_id(1),
+            ckbtc.minter_id,
+            "update_balance",
+            Encode!(&update_balance_args).unwrap(),
+        )
+        .expect("Failed to call update_balance");
+    let res = Decode!(&res.bytes(), Result<Vec<UtxoStatus>, UpdateBalanceError>).unwrap();
+    assert_eq!(
+        res,
+        Err(UpdateBalanceError::NoNewUtxos {
+            current_confirmations: None,
+            required_confirmations: 3,
+            pending_utxos: Some(vec![])
+        })
+    );
+}
+
+#[test]
 fn test_illegal_caller() {
     let env = StateMachine::new();
     let ledger_id = install_ledger(&env);
