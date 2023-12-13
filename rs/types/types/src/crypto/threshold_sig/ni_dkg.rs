@@ -1,7 +1,6 @@
 //! Types for non-interactive distributed key generation (NI-DKG).
 pub use crate::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
 use crate::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
-use crate::crypto::threshold_sig::ThresholdSigPublicKey;
 #[cfg(test)]
 use crate::NodeId;
 use crate::NumberOfNodes;
@@ -14,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
 use strum_macros::EnumIter;
+use thiserror::Error;
 
 pub mod config;
 pub mod errors;
@@ -143,6 +143,12 @@ impl From<NiDkgDealing> for CspNiDkgDealing {
     }
 }
 
+#[derive(Error, Debug)]
+pub enum ThresholdSigPublicKeyError {
+    #[error("threshold signature public key coefficients empty")]
+    CoefficientsEmpty,
+}
+
 /// Summarizes a distributed key generation.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct NiDkgTranscript {
@@ -247,13 +253,6 @@ impl NiDkgTranscript {
             1,
             0,
         )
-    }
-}
-
-impl NiDkgTranscript {
-    /// Computes the threshold-committee public key from the transcript.
-    pub fn public_key(&self) -> ThresholdSigPublicKey {
-        ThresholdSigPublicKey::from(self)
     }
 }
 

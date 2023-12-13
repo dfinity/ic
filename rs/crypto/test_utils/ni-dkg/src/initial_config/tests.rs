@@ -12,6 +12,7 @@ use ic_registry_keys::make_catch_up_package_contents_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
 use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
+use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{Height, NumberOfNodes, RegistryVersion, SubnetId};
 use ic_types_test_utils::ids::{node_test_id, NODE_1, SUBNET_1};
 use rand::Rng;
@@ -207,7 +208,8 @@ fn should_get_master_key_associated_with_transcript_public_key() {
 
     let (transcript, secret) = initial_dkg_transcript_and_master_key(config, &receiver_keys, rng);
 
-    let pk = transcript.public_key();
+    let pk = ThresholdSigPublicKey::try_from(&transcript)
+        .expect("should extract public key from high threshold transcript");
 
     let test_message = rng.gen::<[u8; 32]>();
 
