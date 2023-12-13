@@ -1,5 +1,5 @@
 {
-  "checksum": "06e49bd4aa9720bd84debde5ada945567976284611aa4d08d6386023fc9d517a",
+  "checksum": "f4f94d5d337b8bec8571516e1e3166973d44fbb03c51229f6f55556135d8ccc1",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -26642,6 +26642,10 @@
           "selects": {}
         },
         "edition": "2021",
+        "rustc_flags": [
+          "-C",
+          "opt-level=3"
+        ],
         "version": "0.13.2"
       },
       "license": "Apache-2.0 OR MIT"
@@ -35401,6 +35405,10 @@
           "selects": {}
         },
         "edition": "2021",
+        "rustc_flags": [
+          "-C",
+          "opt-level=3"
+        ],
         "version": "0.13.2"
       },
       "license": "Apache-2.0 OR MIT"
