@@ -60,5 +60,6 @@ if [ "$EXIT_CODE" == "38" ]; then
     # ERROR: The Build Event Protocol upload failed: Not retrying publishBuildEvents, no more attempts left: status='Status{code=CANCELLED, description=context canceled, cause=null}' CANCELLED: CANCELLED: context canceled CANCELLED: CANCELLED: context canceled
     #Error: exit status 38
 else
+    echo "bazel process exited with $EXIT_CODE" >&2
     exit "$EXIT_CODE"
 fi
