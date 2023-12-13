@@ -35,6 +35,14 @@ proxies:
               quantum: 0.25
           - reduce_time_resolution:
               resolution: 30s
+      # Power metrics.  Useful to track the blockchain's
+      # power consumption.
+      # No need to reduce resolution since these are already
+      # collected periodically using a cron job rather than
+      # on every poll.
+      - regex: power.*
+        actions:
+          - keep
       # File system errors and NVME hardware info.
       - regex: node_filesystem_device_error|nvme.*|node_nvme_info
         actions:
@@ -57,7 +65,7 @@ proxies:
       - regex: node_network_carrier.*|node_network_info|node_network_iface.*|node_network_mtu_bytes|node_network_(receive|transmit)_.*
         actions:
           - keep
-      # HostOS version
+      # HostOS version.
       - regex: hostos_version
         actions:
           - keep
