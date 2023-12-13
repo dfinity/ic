@@ -423,6 +423,9 @@ pub struct FeeHistory {
     /// Zeroes are returned for pre-EIP-1559 blocks.
     #[serde(rename = "baseFeePerGas")]
     pub base_fee_per_gas: Vec<WeiPerGas>,
+    /// An array of block gas used ratios (gasUsed / gasLimit).
+    #[serde(rename = "gasUsedRatio")]
+    pub gas_used_ratio: Vec<f64>,
     /// A two-dimensional array of effective priority fees per gas at the requested block percentiles.
     #[serde(default)]
     #[serde(rename = "reward")]
