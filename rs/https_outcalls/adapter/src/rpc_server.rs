@@ -20,7 +20,7 @@ use ic_https_outcalls_service::{
 };
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use std::{collections::HashMap, fmt, net::SocketAddr};
+use std::collections::HashMap;
 use tonic::{Request, Response, Status};
 
 /// Hyper only supports a maximum of 32768 headers https://docs.rs/hyper/0.14.23/hyper/header/index.html#limitations-1
@@ -144,42 +144,29 @@ impl CanisterHttpService for CanisterHttp {
             *http_req.headers_mut() = headers;
             *http_req.method_mut() = method;
             *http_req.uri_mut() = uri.clone();
+            let mut http_req_clone = hyper::Request::new(Body::from(req_body_clone));
+            *http_req_clone.headers_mut() = http_req.headers().clone();
+            *http_req_clone.method_mut() = http_req.method().clone();
+            *http_req_clone.uri_mut() = http_req.uri().clone();
 
-            if !should_use_socks_proxy(&uri).await {
-                let mut http_req_clone = hyper::Request::new(Body::from(req_body_clone));
-                *http_req_clone.headers_mut() = http_req.headers().clone();
-                *http_req_clone.method_mut() = http_req.method().clone();
-                *http_req_clone.uri_mut() = http_req.uri().clone();
-                // If we fail to connect through IPv6 we retry with socks.
-                match self.client.request(http_req).await {
-                    Err(direct_err) if direct_err.is_connect() => {
-                        self.metrics.requests_socks.inc();
-                        self.socks_client
-                            .request(http_req_clone)
-                            .await
-                            .map_err(|socks_err| {
-                                RequestError::DirectAndSocks((direct_err, socks_err))
-                            })
-                    }
-                    resp => resp.map_err(RequestError::Direct),
+            match self.client.request(http_req).await {
+                // If we fail we try with the socks proxy. For destinations that are ipv4 only this should
+                // fail fast because our interface does not have an ipv4 assigned.
+                Err(direct_err) => {
+                    self.metrics.requests_socks.inc();
+                    self.socks_client.request(http_req_clone).await.map_err(|e| {
+                        format!("Request failed direct connect {direct_err} and connect through socks {e}")
+                    })
                 }
-            } else {
-                self.metrics.requests_socks.inc();
-                self.socks_client
-                    .request(http_req)
-                    .await
-                    .map_err(RequestError::Socks)
+                Ok(resp)=> Ok(resp),
             }
         } else {
             let mut http_req = hyper::Request::new(Body::from(req.body));
             *http_req.headers_mut() = headers;
             *http_req.method_mut() = method;
             *http_req.uri_mut() = uri.clone();
-            self.client
-                .request(http_req)
-                .await
-                .map_err(RequestError::Direct)
-        }
+            self.client.request(http_req).await.map_err(|e| format!("Failed to directly connect: {e}"))
+            }
         .map_err(|err| {
             debug!(self.logger, "Failed to connect: {}", err);
             self.metrics
@@ -286,61 +273,6 @@ impl CanisterHttpService for CanisterHttp {
             content: body_bytes.to_vec(),
         }))
     }
-}
-
-enum RequestError {
-    Direct(hyper::Error),
-    Socks(hyper::Error),
-    DirectAndSocks((hyper::Error, hyper::Error)),
-}
-
-impl fmt::Display for RequestError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Direct(direct_err) => {
-                write!(f, "Request failed: {}", direct_err)
-            }
-            Self::Socks(direct_err) => {
-                write!(f, "Request through socks proxy failed: {}", direct_err)
-            }
-            Self::DirectAndSocks((direct_err, socks_err)) => {
-                write!(
-                    f,
-                    "Request failed to connect: {} fallback to socks also failed: {}",
-                    direct_err, socks_err
-                )
-            }
-        }
-    }
-}
-
-/// Decides if socks proxy should be used to connect to given Uri. In the following cases we do NOT use the proxy:
-/// 1. If we can't get the necessary information from the url to do the dns lookup.
-/// 2. If the dns resolution fails.
-/// 3. If we connect to localhost.
-/// 4. If the dns resolution returns at least a single IPV6.
-async fn should_use_socks_proxy(url: &Uri) -> bool {
-    let host = match url.host() {
-        Some(host) => host,
-        None => return false,
-    };
-    // We use a default port in case no port is specified becuase `lookup_host` requires us to specify a port.
-    let port = url.port_u16().unwrap_or(443);
-
-    let mut lookup = match tokio::net::lookup_host((host, port)).await {
-        Ok(lookup) => lookup,
-        Err(_) => return false,
-    };
-
-    // Check if localhost address.
-    if lookup.all(|addr| addr.ip().is_loopback()) {
-        return false;
-    }
-
-    if lookup.any(|addr| matches!(addr, SocketAddr::V6(_))) {
-        return false;
-    }
-    true
 }
 
 fn validate_headers(raw_headers: Vec<HttpHeader>) -> Result<HeaderMap, Status> {
