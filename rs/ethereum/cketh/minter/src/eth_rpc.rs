@@ -475,9 +475,11 @@ pub struct Block {
     pub timestamp: CheckedAmountOf<()>,
     #[serde(rename = "totalDifficulty")]
     pub total_difficulty: CheckedAmountOf<()>,
+    #[serde(default)]
     pub transactions: Vec<String>,
     #[serde(rename = "transactionsRoot")]
-    pub transactions_root: String,
+    pub transactions_root: Option<String>,
+    #[serde(default)]
     pub uncles: Vec<String>,
 }
 
