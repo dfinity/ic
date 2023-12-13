@@ -1,5 +1,4 @@
 use anyhow::Result;
-use ic_nervous_system_common::E8;
 use ic_nns_governance::pb::v1::CreateServiceNervousSystem;
 use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::driver::test_env::TestEnv;
@@ -27,23 +26,27 @@ use std::time::Duration;
 // "danger zone" and should modify the SNS to be robust to many more NF neurons.
 const NEURONS_FUND_NUM_PARTICIPANTS: u64 = 1500;
 
-const NEURONS_FUND_TOTAL_MATURITY_EQUIVALENT_ICP_E8S: u64 = 1_000_000 * E8;
-
 fn create_service_nervous_system_proposal() -> CreateServiceNervousSystem {
     const MIN_PARTICIPANTS: u64 = 4;
     test_create_service_nervous_system_proposal(MIN_PARTICIPANTS)
 }
 
 fn nns_nf_neurons() -> Vec<NnsNfNeuron> {
-    neurons_fund::initial_nns_neurons(
-        NEURONS_FUND_TOTAL_MATURITY_EQUIVALENT_ICP_E8S,
-        NEURONS_FUND_NUM_PARTICIPANTS,
-    )
+    let max_nf_contribution = create_service_nervous_system_proposal()
+        .swap_parameters
+        .unwrap()
+        .maximum_direct_participation_icp
+        .unwrap()
+        .e8s
+        .unwrap()
+        * 2;
+
+    neurons_fund::initial_nns_neurons(max_nf_contribution * 10, NEURONS_FUND_NUM_PARTICIPANTS)
 }
 
 fn sns_setup_with_one_proposal(env: TestEnv) {
     sns_deployment::setup(
-        env,
+        &env,
         vec![],
         nns_nf_neurons(),
         create_service_nervous_system_proposal(),
@@ -53,7 +56,7 @@ fn sns_setup_with_one_proposal(env: TestEnv) {
 }
 
 fn wait_for_swap_to_start(env: TestEnv) {
-    block_on(swap_finalization::wait_for_swap_to_start(env));
+    block_on(swap_finalization::wait_for_swap_to_start(&env));
 }
 
 /// Creates ticket participants which will contribute in such a way that they'll hit max_icp_e8s with min_participants.
@@ -88,7 +91,7 @@ fn generate_ticket_participants_workload_necessary_to_close_the_swap(env: TestEn
     // So if we set rps to `1`, and the duration to `num_participants`, we'll
     // have `num_participants` participants.
     generate_ticket_participants_workload(
-        env,
+        &env,
         1,
         Duration::from_secs(num_participants),
         contribution_per_user,
@@ -98,7 +101,7 @@ fn generate_ticket_participants_workload_necessary_to_close_the_swap(env: TestEn
 fn finalize_swap(env: TestEnv) {
     let create_service_nervous_system_proposal = create_service_nervous_system_proposal();
     block_on(finalize_committed_swap(
-        env,
+        &env,
         create_service_nervous_system_proposal,
     ));
 }

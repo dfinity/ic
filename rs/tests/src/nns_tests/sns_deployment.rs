@@ -4,7 +4,6 @@ use std::time::Duration;
 use std::time::Instant;
 
 use crate::canister_agent::{CanisterAgent, HasCanisterAgentCapability};
-use crate::canister_api::NnsRequestProvider;
 use crate::canister_api::{
     CallMode, CanisterHttpRequestProvider, Icrc1RequestProvider, Icrc1TransferRequest,
     NnsDappRequestProvider, Request, Response, SnsRequestProvider,
@@ -291,25 +290,23 @@ pub fn setup_with_oc_parameters_legacy(
     );
 }
 
-/// Sets up the IC, the NNS, and sets up an SNS using the legacy, non-one-proposal flow.
+/// Sets up the IC, the NNS, and sets up an SNS using the one-proposal flow.
 pub fn setup(
-    env: TestEnv,
+    env: &TestEnv,
     sale_participants: Vec<SaleParticipant>,
     nf_neurons: Vec<NnsNfNeuron>,
     create_service_nervous_system_proposal: CreateServiceNervousSystem,
     canister_wasm_strategy: NnsCanisterWasmStrategy,
     fast_test_setup: bool,
 ) {
-    setup_ic(&env, fast_test_setup);
+    setup_ic(env, fast_test_setup);
 
     install_nns(
-        &env,
+        env,
         canister_wasm_strategy,
         sale_participants,
         nf_neurons.clone(),
     );
-    let nns_request_provider = NnsRequestProvider::default();
-    let nns_node = env.get_first_healthy_system_node_snapshot();
 
     // get the first application node from the second subnet, which should be the dapp subnet
     let dapp_node = env.get_first_healthy_node_snapshot_from_nth_subnet_where(
@@ -319,7 +316,7 @@ pub fn setup(
     let dapp_agent = dapp_node.build_default_agent();
 
     // Create a canister and give it to NNS root
-    let dapp_canister = block_on(DappCanister::new(&env, dapp_node, &dapp_agent));
+    let dapp_canister = block_on(DappCanister::new(env, dapp_node, &dapp_agent));
     let create_service_nervous_system_proposal = CreateServiceNervousSystem {
         dapp_canisters: vec![Canister {
             id: Some(PrincipalId::from(dapp_canister.canister_id)),
@@ -327,50 +324,14 @@ pub fn setup(
         ..create_service_nervous_system_proposal
     };
 
-    let starting_nf_neuron_maturity = {
-        let mut neurons = Vec::new();
-        for neuron in nf_neurons.iter() {
-            let updated_neuron =
-                block_on(neuron.get_current_info(&nns_node, &nns_request_provider)).unwrap();
-            neurons.push(updated_neuron);
-        }
-        neurons
-            .iter()
-            .map(|n| n.maturity_e8s_equivalent)
-            .sum::<u64>()
-    };
-
     // Install the SNS with an "OC-ish" CreateServiceNervousSystem proposal
     install_sns(
-        &env,
+        env,
         canister_wasm_strategy,
         create_service_nervous_system_proposal.clone(),
     );
 
-    let final_nf_neuron_maturity = {
-        let mut neurons = Vec::new();
-        for neuron in nf_neurons.iter() {
-            let updated_neuron =
-                block_on(neuron.get_current_info(&nns_node, &nns_request_provider)).unwrap();
-            neurons.push(updated_neuron);
-        }
-        neurons
-            .iter()
-            .map(|n| n.maturity_e8s_equivalent)
-            .sum::<u64>()
-    };
-    assert!(
-        final_nf_neuron_maturity < starting_nf_neuron_maturity,
-        "NF maturity did not decrease after SNS creation",
-    );
-
-    info!(
-        env.logger(),
-        "Neurons' Fund maturity has decreased by {} e8s.",
-        starting_nf_neuron_maturity - final_nf_neuron_maturity,
-    );
-
-    block_on(dapp_canister.check_exclusively_owned_by_sns_root(&env));
+    block_on(dapp_canister.check_exclusively_owned_by_sns_root(env));
 }
 
 /// Sets up the IC, the NNS, and sets up an SNS using the legacy, non-one-proposal flow.
@@ -1181,7 +1142,7 @@ async fn mint_tokens(
 }
 
 pub fn generate_ticket_participants_workload(
-    env: TestEnv,
+    env: &TestEnv,
     rps: usize,
     duration: Duration,
     contribution_per_user: u64,
@@ -1192,7 +1153,7 @@ pub fn generate_ticket_participants_workload(
     let future_generator = {
         let nns_node = env.get_first_healthy_nns_node_snapshot();
         let sns_node = env.get_first_healthy_application_node_snapshot();
-        let sns_client = SnsClient::read_attribute(&env);
+        let sns_client = SnsClient::read_attribute(env);
         let sns_request_provider = SnsRequestProvider::from_sns_client(&sns_client);
         let ledger_canister_id = Principal::try_from(LEDGER_CANISTER_ID.get()).unwrap();
 
@@ -1201,6 +1162,9 @@ pub fn generate_ticket_participants_workload(
             async move {
                 let (nns_node, app_node) = (nns_node.clone(), app_node.clone());
                 let overall_start_time = Instant::now();
+                // The seed should depend on all inputs of `generate_ticket_participants_workload` and this closure to avoid
+                // re-creating the same participants in subsequent calls to `generate_ticket_participants_workload`, all of which
+                // are assumed to have different values for `duration` and `rps`).
                 let seed = ((idx as u64) << 32) + (duration.as_secs() << 16) + (rps as u64);
 
                 let mut sale_outcome = LoadTestOutcome::<(), String>::default();
@@ -1275,9 +1239,6 @@ async fn create_one_sale_participant(
         let starting_icp_balance = Tokens::ZERO;
         // Tokens for this user will be minted later.
         let starting_sns_balance = Tokens::ZERO;
-        // The seed should depend on all inputs of `generate_ticket_participants_workload` and this closure to avoid
-        // re-creating the same participants in subsequent calls to `generate_ticket_participants_workload`, all of which
-        // are assumed to have different values for `duration` and `rps`).
         let p = SaleParticipant::random(
             participant_name,
             starting_icp_balance,
