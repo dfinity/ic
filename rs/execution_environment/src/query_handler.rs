@@ -231,7 +231,7 @@ impl QueryHandler for InternalHttpQueryHandler {
 
         // Check the query cache first (if the query caching is enabled).
         // If a valid cache entry found, the result will be immediately returned.
-        // Otherwise, the key and the env will be kept for the `insert` below.
+        // Otherwise, the key and the env will be kept for the `push` below.
         let (cache_entry_key, cache_entry_env) = if self.config.query_caching == FlagStatus::Enabled
         {
             let key = query_cache::EntryKey::from(&query);
@@ -281,11 +281,11 @@ impl QueryHandler for InternalHttpQueryHandler {
         );
         context.observe_system_api_calls(&self.metrics.query_system_api_calls);
 
-        // Add the query execution result to the query cache  (if the query caching is enabled).
+        // Add the query execution result to the query cache (if the query caching is enabled).
         if self.config.query_caching == FlagStatus::Enabled {
             if let (Some(key), Some(env)) = (cache_entry_key, cache_entry_env) {
-                self.query_cache
-                    .push(key, query_cache::EntryValue::new(env, result.clone()));
+                let call_counters = context.system_api_call_counters();
+                self.query_cache.push(key, env, &result, call_counters);
             }
         }
         result

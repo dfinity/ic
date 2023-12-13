@@ -1,5 +1,6 @@
 use ic_base_types::{CanisterId, NumBytes};
 use ic_error_types::UserError;
+use ic_interfaces::execution_environment::SystemApiCallCounters;
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{ingress::WasmResult, messages::UserQuery, CountBytes, Cycles, Time, UserId};
@@ -91,7 +92,7 @@ impl QueryCacheMetrics {
 ///
 /// The key is to distinguish query cache entries, i.e. entries with different
 /// keys are (almost) completely independent from each other.
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Clone, Eq, Hash, PartialEq)]
 pub(crate) struct EntryKey {
     /// Query source.
     pub source: UserId,
@@ -121,24 +122,18 @@ impl From<&UserQuery> for EntryKey {
 }
 
 ////////////////////////////////////////////////////////////////////////
-/// Query Cache entry environment metadata.
+/// Query Cache entry environment metadata captured before the query execution.
 ///
-/// The structure captures the environment metadata. The cache entry is valid
-/// only when its environment metadata matches the current state environment.
+/// The cache entry is valid as long as the metadata is unchanged,
+/// or it can be proven that the query does not depend on the change.
 #[derive(PartialEq)]
 pub(crate) struct EntryEnv {
-    /// The Consensus-determined time when the cache entry was created.
+    /// The consensus-determined time when the query is executed.
     pub batch_time: Time,
-    /// Receiving canister version.
+    /// Receiving canister version (includes both canister updates and upgrades).
     pub canister_version: u64,
     /// Receiving canister cycles balance.
     pub canister_balance: Cycles,
-}
-
-impl CountBytes for EntryEnv {
-    fn count_bytes(&self) -> usize {
-        size_of_val(self)
-    }
 }
 
 impl TryFrom<(&EntryKey, &ReplicatedState)> for EntryEnv {
@@ -157,19 +152,39 @@ impl TryFrom<(&EntryKey, &ReplicatedState)> for EntryEnv {
 ////////////////////////////////////////////////////////////////////////
 /// Query Cache entry value.
 pub(crate) struct EntryValue {
+    /// Query Cache entry environment metadata captured before the query execution.
     env: EntryEnv,
+    /// The result produced by the query.
     result: Result<WasmResult, UserError>,
+    /// If set, the `env.batch_time` might be ignored.
+    ignore_batch_time: bool,
+    /// If set, the `env.canister_balance` might be ignored.
+    ignore_canister_balance: bool,
 }
 
 impl CountBytes for EntryValue {
     fn count_bytes(&self) -> usize {
-        self.env.count_bytes() + self.result.count_bytes()
+        size_of_val(self) + self.result.count_bytes()
     }
 }
 
 impl EntryValue {
-    pub(crate) fn new(env: EntryEnv, result: Result<WasmResult, UserError>) -> Self {
-        Self { env, result }
+    pub(crate) fn new(
+        env: EntryEnv,
+        result: Result<WasmResult, UserError>,
+        system_api_call_counters: &SystemApiCallCounters,
+    ) -> EntryValue {
+        // It's safe to ignore `batch_time` changes if the query never calls `ic0.time()`.
+        let ignore_batch_time = system_api_call_counters.time == 0;
+        // It's safe to ignore `canister_balance` changes if the query never checks the balance.
+        let ignore_canister_balance = system_api_call_counters.canister_cycle_balance == 0
+            && system_api_call_counters.canister_cycle_balance128 == 0;
+        EntryValue {
+            env,
+            result,
+            ignore_batch_time,
+            ignore_canister_balance,
+        }
     }
 
     fn is_valid(&self, env: &EntryEnv, max_expiry_time: Duration) -> bool {
@@ -180,7 +195,7 @@ impl EntryValue {
     }
 
     fn is_valid_time(&self, env: &EntryEnv) -> bool {
-        self.env.batch_time == env.batch_time
+        self.ignore_batch_time || self.env.batch_time == env.batch_time
     }
 
     /// Check cache entry max expiration time.
@@ -197,7 +212,7 @@ impl EntryValue {
     }
 
     fn is_valid_canister_balance(&self, env: &EntryEnv) -> bool {
-        self.env.canister_balance == env.canister_balance
+        self.ignore_canister_balance || self.env.canister_balance == env.canister_balance
     }
 
     fn result(&self) -> Result<WasmResult, UserError> {
@@ -241,6 +256,7 @@ impl QueryCache {
         }
     }
 
+    /// Return the cached `Result` if it's still valid, updating the metrics.
     pub(crate) fn get_valid_result(
         &self,
         key: &EntryKey,
@@ -254,8 +270,6 @@ impl QueryCache {
                 let res = value.result();
                 // Update the metrics.
                 self.metrics.hits.inc();
-                let count_bytes = cache.count_bytes() as i64;
-                self.metrics.count_bytes.set(count_bytes);
                 // The cache entry is valid, return it.
                 return Some(res);
             } else {
@@ -279,29 +293,45 @@ impl QueryCache {
                 }
                 // The cache entry is no longer valid, remove it.
                 cache.pop(key);
+                // Update the metrics.
+                let count_bytes = cache.count_bytes() as i64;
+                self.metrics.count_bytes.set(count_bytes);
             }
         }
         None
     }
 
-    pub(crate) fn push(&self, key: EntryKey, value: EntryValue) -> Vec<(EntryKey, EntryValue)> {
-        let now = value.env.batch_time;
+    /// Push a new `result` to the cache, evicting LRU entries if needed and updating the metrics.
+    pub(crate) fn push(
+        &self,
+        key: EntryKey,
+        env: EntryEnv,
+        result: &Result<WasmResult, UserError>,
+        system_api_call_counters: &SystemApiCallCounters,
+    ) {
+        let now = env.batch_time;
+        // Push is always a cache miss.
+        self.metrics.misses.inc();
+
+        // The result should not be saved if the query calls a nested query.
+        if system_api_call_counters.call_perform != 0 {
+            return;
+        }
+
+        let value = EntryValue::new(env, result.clone(), system_api_call_counters);
         let mut cache = self.cache.lock().unwrap();
         let evicted_entries = cache.push(key, value);
 
-        // Update the metrics.
+        // Update other metrics.
         self.metrics
             .evicted_entries
             .inc_by(evicted_entries.len() as u64);
-        for (_evited_key, evicted_value) in &evicted_entries {
+        for (_evicted_key, evicted_value) in &evicted_entries {
             let d = evicted_value.elapsed_seconds(now);
             self.metrics.evicted_entries_duration.observe(d);
         }
-        self.metrics.misses.inc();
         let count_bytes = cache.count_bytes() as i64;
         self.metrics.count_bytes.set(count_bytes);
         self.metrics.len.set(cache.len() as i64);
-
-        evicted_entries
     }
 }

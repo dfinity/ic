@@ -1011,4 +1011,9 @@ impl<'a> QueryContext<'a> {
             Some(self.data_certificate.0.clone())
         }
     }
+
+    /// Return how many times each tracked System API call was invoked.
+    pub fn system_api_call_counters(&self) -> &SystemApiCallCounters {
+        &self.system_api_call_counters
+    }
 }
