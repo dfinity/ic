@@ -4,8 +4,10 @@ use crate::{
         SYSTEM_API_CALL_PERFORM, SYSTEM_API_CANISTER_CYCLE_BALANCE,
         SYSTEM_API_CANISTER_CYCLE_BALANCE128, SYSTEM_API_TIME,
     },
+    query_handler::query_cache::EntryKey,
     InternalHttpQueryHandler,
 };
+use ic_interfaces::execution_environment::SystemApiCallCounters;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_test_utilities::{types::ids::user_test_id, universal_canister::wasm};
@@ -15,10 +17,13 @@ use ic_types::{
     messages::{CanisterTask, UserQuery},
     time, CountBytes, Cycles,
 };
+use ic_types_test_utils::ids::canister_test_id;
 use ic_universal_canister::call_args;
 use std::{sync::Arc, time::Duration};
 
 const CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
+const MAX_EXPIRY_TIME: Duration = Duration::from_secs(10);
+const MORE_THAN_MAX_EXPIRY_TIME: Duration = Duration::from_secs(11);
 
 fn downcast_query_handler(query_handler: &dyn std::any::Any) -> &InternalHttpQueryHandler {
     // SAFETY:
@@ -40,7 +45,11 @@ fn query_cache_entry_value_elapsed_seconds() {
         canister_version: 1,
         canister_balance: Cycles::new(0),
     };
-    let entry_value = EntryValue::new(entry_env, Result::Ok(WasmResult::Reply(vec![])));
+    let entry_value = EntryValue::new(
+        entry_env,
+        Result::Ok(WasmResult::Reply(vec![])),
+        &SystemApiCallCounters::default(),
+    );
     let forward_time = current_time + Duration::from_secs(2);
     assert_eq!(2.0, entry_value.elapsed_seconds(forward_time));
 
@@ -146,6 +155,57 @@ fn query_cache_metrics_evicted_entries_count_bytes_work() {
     // REPLY_SIZE < count_bytes < REPLY_SIZE * 2
     assert!(REPLY_SIZE < count_bytes);
     assert!(REPLY_SIZE * 2 > count_bytes);
+}
+
+#[test]
+fn query_cache_metrics_count_bytes_work() {
+    const BIG_RESULT_SIZE: usize = 1_000_000;
+
+    let mut test = ExecutionTestBuilder::new().with_query_caching().build();
+    let _canister_id = test.universal_canister().unwrap();
+
+    let query_cache = &downcast_query_handler(test.query_handler()).query_cache;
+    let metrics = &downcast_query_handler(test.query_handler())
+        .query_cache
+        .metrics;
+    let key = EntryKey {
+        source: user_test_id(1),
+        receiver: canister_test_id(1),
+        method_name: "method".into(),
+        method_payload: vec![],
+    };
+
+    // Assert initial cache state.
+    assert_eq!(0, metrics.hits.get());
+    assert_eq!(0, metrics.misses.get());
+    let initial_count_bytes = metrics.count_bytes.get();
+    assert!((initial_count_bytes as usize) < BIG_RESULT_SIZE);
+
+    // Push a big result into the cache.
+    let env = EntryEnv {
+        batch_time: time::GENESIS,
+        canister_version: 1,
+        canister_balance: Cycles::from(1_u64),
+    };
+    let big_result = Ok(WasmResult::Reply(vec![0; BIG_RESULT_SIZE]));
+    let system_api_call_counters = SystemApiCallCounters::default();
+    query_cache.push(key.clone(), env, &big_result, &system_api_call_counters);
+    assert_eq!(0, metrics.hits.get());
+    assert_eq!(1, metrics.misses.get());
+    let count_bytes = metrics.count_bytes.get();
+    assert!((count_bytes as usize) > BIG_RESULT_SIZE);
+
+    // Invalidate and pop the result.
+    let new_env = EntryEnv {
+        batch_time: time::GENESIS,
+        canister_version: 2,
+        canister_balance: Cycles::from(1_u64),
+    };
+    query_cache.get_valid_result(&key, &new_env);
+    assert_eq!(0, metrics.hits.get());
+    assert_eq!(1, metrics.misses.get());
+    let final_count_bytes = metrics.count_bytes.get();
+    assert!((final_count_bytes as usize) < BIG_RESULT_SIZE);
 }
 
 #[test]
@@ -454,7 +514,8 @@ fn query_cache_env_different_batch_time_returns_different_results() {
             source: user_test_id(1),
             receiver: canister_id,
             method_name: "query".into(),
-            method_payload: wasm().reply_data(&[42]).build(),
+            // The query must get the time, otherwise the entry won't be invalidated.
+            method_payload: wasm().time().reply_data(&[42]).build(),
             ingress_expiry: 0,
             nonce: None,
         },
@@ -472,7 +533,7 @@ fn query_cache_env_different_batch_time_returns_different_results() {
             source: user_test_id(1),
             receiver: canister_id,
             method_name: "query".into(),
-            method_payload: wasm().reply_data(&[42]).build(),
+            method_payload: wasm().time().reply_data(&[42]).build(),
             ingress_expiry: 0,
             nonce: None,
         },
@@ -502,11 +563,80 @@ fn query_cache_env_different_batch_time_returns_different_results() {
 }
 
 #[test]
-fn query_cache_env_expired_entries_returns_different_results() {
-    let max_expiry_time = Duration::from_secs(10);
+fn query_cache_different_batch_times_return_the_same_result() {
+    let mut test = ExecutionTestBuilder::new().with_query_caching().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    // The query does not depend on time.
+    let query = wasm().reply_data(&[42]).build();
+
+    // Run the query for the first time.
+    let output_1 = test.non_replicated_query(canister_id, "query", query.clone());
+    // Assert it's a miss.
+    let metrics = &downcast_query_handler(test.query_handler())
+        .query_cache
+        .metrics;
+    assert_eq!(1, metrics.misses.get());
+    assert_eq!(0, metrics.hits.get());
+    assert_eq!(output_1, Ok(WasmResult::Reply([42].into())));
+
+    // Change the canister balance and time.
+    test.canister_state_mut(canister_id)
+        .system_state
+        .remove_cycles(1_u128.into(), CyclesUseCase::Memory);
+    test.state_mut().metadata.batch_time += Duration::from_secs(1);
+
+    // Run the same query for the second time.
+    let output_2 = test.non_replicated_query(canister_id, "query", query);
+    // Assert it's a hit despite the changed balance and time.
+    let metrics = &downcast_query_handler(test.query_handler())
+        .query_cache
+        .metrics;
+    assert_eq!(1, metrics.misses.get());
+    assert_eq!(1, metrics.hits.get());
+    assert_eq!(output_1, output_2);
+}
+
+#[test]
+fn query_cache_different_batch_times_return_different_results_after_expiry_time() {
     let mut test = ExecutionTestBuilder::new()
         .with_query_caching()
-        .with_query_cache_max_expiry_time(max_expiry_time)
+        .with_query_cache_max_expiry_time(MAX_EXPIRY_TIME)
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+
+    // The query does not depend on time.
+    let query = wasm().reply_data(&[42]).build();
+
+    // Run the query for the first time.
+    let output_1 = test.non_replicated_query(canister_id, "query", query.clone());
+    // Assert it's a miss.
+    let metrics = &downcast_query_handler(test.query_handler())
+        .query_cache
+        .metrics;
+    assert_eq!(1, metrics.misses.get());
+    assert_eq!(0, metrics.hits.get());
+    assert_eq!(output_1, Ok(WasmResult::Reply([42].into())));
+
+    // Change the batch time more than the max expiry time.
+    test.state_mut().metadata.batch_time += MORE_THAN_MAX_EXPIRY_TIME;
+
+    // Run the same query for the second time.
+    let output_2 = test.non_replicated_query(canister_id, "query", query);
+    // Assert it's a miss.
+    let metrics = &downcast_query_handler(test.query_handler())
+        .query_cache
+        .metrics;
+    assert_eq!(2, metrics.misses.get());
+    assert_eq!(0, metrics.hits.get());
+    assert_eq!(output_1, output_2);
+}
+
+#[test]
+fn query_cache_env_expired_entries_returns_different_results() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_query_caching()
+        .with_query_cache_max_expiry_time(MAX_EXPIRY_TIME)
         .build();
     let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
     let output_1 = test.query(
@@ -526,7 +656,10 @@ fn query_cache_env_expired_entries_returns_different_results() {
         assert_eq!(query_handler.query_cache.metrics.misses.get(), 1);
         assert_eq!(output_1, Ok(WasmResult::Reply([42].into())));
     }
-    test.state_mut().metadata.batch_time += max_expiry_time + Duration::from_secs(1);
+
+    // Change the batch time more than the max expiry time.
+    test.state_mut().metadata.batch_time += MORE_THAN_MAX_EXPIRY_TIME;
+
     let output_2 = test.query(
         UserQuery {
             source: user_test_id(1),
@@ -546,12 +679,12 @@ fn query_cache_env_expired_entries_returns_different_results() {
         assert_eq!(2, metrics.misses.get());
         assert_eq!(output_1, output_2);
         assert_eq!(1, metrics.invalidated_entries.get());
-        assert_eq!(1, metrics.invalidated_entries_by_time.get());
+        assert_eq!(0, metrics.invalidated_entries_by_time.get());
         assert_eq!(1, metrics.invalidated_entries_by_max_expiry_time.get());
         assert_eq!(0, metrics.invalidated_entries_by_canister_version.get());
         assert_eq!(0, metrics.invalidated_entries_by_canister_balance.get());
         assert_eq!(
-            (max_expiry_time + Duration::from_secs(1)).as_secs(),
+            MORE_THAN_MAX_EXPIRY_TIME.as_secs(),
             metrics.invalidated_entries_duration.get_sample_sum() as u64
         );
         assert_eq!(
@@ -574,7 +707,8 @@ fn query_cache_env_invalidated_entries_negative_duration_works() {
             source: user_test_id(1),
             receiver: canister_id,
             method_name: "query".into(),
-            method_payload: wasm().reply_data(&[42]).build(),
+            // The query must get the time, otherwise the entry won't be invalidated.
+            method_payload: wasm().time().reply_data(&[42]).build(),
             ingress_expiry: 0,
             nonce: None,
         },
@@ -592,7 +726,7 @@ fn query_cache_env_invalidated_entries_negative_duration_works() {
             source: user_test_id(1),
             receiver: canister_id,
             method_name: "query".into(),
-            method_payload: wasm().reply_data(&[42]).build(),
+            method_payload: wasm().time().reply_data(&[42]).build(),
             ingress_expiry: 0,
             nonce: None,
         },
@@ -685,7 +819,8 @@ fn query_cache_env_different_canister_balance_returns_different_results() {
             source: user_test_id(1),
             receiver: canister_id,
             method_name: "query".into(),
-            method_payload: wasm().reply_data(&[42]).build(),
+            // The query must get the balance, otherwise the entry won't be invalidated.
+            method_payload: wasm().cycles_balance().reply_data(&[42]).build(),
             ingress_expiry: 0,
             nonce: None,
         },
@@ -705,7 +840,100 @@ fn query_cache_env_different_canister_balance_returns_different_results() {
             source: user_test_id(1),
             receiver: canister_id,
             method_name: "query".into(),
-            method_payload: wasm().reply_data(&[42]).build(),
+            method_payload: wasm().cycles_balance().reply_data(&[42]).build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    {
+        let metrics = &downcast_query_handler(test.query_handler())
+            .query_cache
+            .metrics;
+        assert_eq!(2, metrics.misses.get());
+        assert_eq!(output_1, output_2);
+        assert_eq!(1, metrics.invalidated_entries.get());
+        assert_eq!(0, metrics.invalidated_entries_by_time.get());
+        assert_eq!(0, metrics.invalidated_entries_by_canister_version.get());
+        assert_eq!(1, metrics.invalidated_entries_by_canister_balance.get());
+        assert_eq!(
+            0,
+            metrics.invalidated_entries_duration.get_sample_sum() as usize
+        );
+        assert_eq!(
+            1,
+            metrics.invalidated_entries_duration.get_sample_count() as usize
+        );
+    }
+}
+
+#[test]
+fn query_cache_different_canister_balances_return_the_same_result() {
+    let mut test = ExecutionTestBuilder::new().with_query_caching().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    // The query does not depend on canister balance.
+    let query = wasm().reply_data(&[42]).build();
+
+    // Run the query for the first time.
+    let output_1 = test.non_replicated_query(canister_id, "query", query.clone());
+    // Assert it's a miss.
+    let metrics = &downcast_query_handler(test.query_handler())
+        .query_cache
+        .metrics;
+    assert_eq!(1, metrics.misses.get());
+    assert_eq!(0, metrics.hits.get());
+    assert_eq!(output_1, Ok(WasmResult::Reply([42].into())));
+
+    // Change the canister balance and time.
+    test.canister_state_mut(canister_id)
+        .system_state
+        .remove_cycles(1_u128.into(), CyclesUseCase::Memory);
+    test.state_mut().metadata.batch_time += Duration::from_secs(1);
+
+    // Run the same query for the second time.
+    let output_2 = test.non_replicated_query(canister_id, "query", query.clone());
+    // Assert it's a hit despite the changed balance and time.
+    let metrics = &downcast_query_handler(test.query_handler())
+        .query_cache
+        .metrics;
+    assert_eq!(1, metrics.misses.get());
+    assert_eq!(1, metrics.hits.get());
+    assert_eq!(output_1, output_2);
+}
+
+#[test]
+fn query_cache_env_different_canister_balance128_returns_different_results() {
+    let mut test = ExecutionTestBuilder::new().with_query_caching().build();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    let output_1 = test.query(
+        UserQuery {
+            source: user_test_id(1),
+            receiver: canister_id,
+            method_name: "query".into(),
+            // The query must get the balance, otherwise the entry won't be invalidated.
+            method_payload: wasm().cycles_balance128().reply_data(&[42]).build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    {
+        let query_handler = downcast_query_handler(test.query_handler());
+        assert_eq!(query_handler.query_cache.metrics.misses.get(), 1);
+        assert_eq!(output_1, Ok(WasmResult::Reply([42].into())));
+    }
+    test.canister_state_mut(canister_id)
+        .system_state
+        .remove_cycles(1_u128.into(), CyclesUseCase::Memory);
+    let output_2 = test.query(
+        UserQuery {
+            source: user_test_id(1),
+            receiver: canister_id,
+            method_name: "query".into(),
+            method_payload: wasm().cycles_balance128().reply_data(&[42]).build(),
             ingress_expiry: 0,
             nonce: None,
         },
@@ -736,10 +964,9 @@ fn query_cache_env_different_canister_balance_returns_different_results() {
 
 #[test]
 fn query_cache_env_combined_invalidation() {
-    let max_expiry_time = Duration::from_secs(10);
     let mut test = ExecutionTestBuilder::new()
         .with_query_caching()
-        .with_query_cache_max_expiry_time(max_expiry_time)
+        .with_query_cache_max_expiry_time(MAX_EXPIRY_TIME)
         .build();
     let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
     let output_1 = test.query(
@@ -747,14 +974,17 @@ fn query_cache_env_combined_invalidation() {
             source: user_test_id(1),
             receiver: canister_id,
             method_name: "query".into(),
-            method_payload: wasm().reply_data(&[42]).build(),
+            // The query must get the time and balance, otherwise the entry won't be invalidated.
+            method_payload: wasm().time().cycles_balance().reply_data(&[42]).build(),
             ingress_expiry: 0,
             nonce: None,
         },
         Arc::new(test.state().clone()),
         vec![],
     );
-    test.state_mut().metadata.batch_time += max_expiry_time + Duration::from_secs(1);
+
+    // Change the batch time more than the max expiry time.
+    test.state_mut().metadata.batch_time += MORE_THAN_MAX_EXPIRY_TIME;
     test.canister_state_mut(canister_id)
         .system_state
         .canister_version += 1;
@@ -766,7 +996,7 @@ fn query_cache_env_combined_invalidation() {
             source: user_test_id(1),
             receiver: canister_id,
             method_name: "query".into(),
-            method_payload: wasm().reply_data(&[42]).build(),
+            method_payload: wasm().time().cycles_balance().reply_data(&[42]).build(),
             ingress_expiry: 0,
             nonce: None,
         },
@@ -997,7 +1227,7 @@ fn query_cache_system_api_calls_correctly_reported_on_composite_query() {
     let b_id = test.universal_canister().unwrap();
 
     let a = wasm()
-        // Fist set of System API calls.
+        // Fist group of System API calls.
         .cycles_balance()
         .cycles_balance128()
         .time()
@@ -1006,7 +1236,7 @@ fn query_cache_system_api_calls_correctly_reported_on_composite_query() {
             b_id,
             call_args().on_reply(
                 wasm()
-                    // Third set of System API calls.
+                    // Third group of System API calls.
                     .cycles_balance()
                     .cycles_balance128()
                     .time()
@@ -1016,7 +1246,7 @@ fn query_cache_system_api_calls_correctly_reported_on_composite_query() {
                         b_id,
                         call_args().on_reply(
                             wasm()
-                                // Forth set of System API calls.
+                                // Forth group of System API calls.
                                 .cycles_balance()
                                 .cycles_balance128()
                                 .cycles_balance128()
@@ -1027,7 +1257,7 @@ fn query_cache_system_api_calls_correctly_reported_on_composite_query() {
                     ),
             ),
         )
-        // Second set of System API calls.
+        // Second group of System API calls.
         .cycles_balance()
         .cycles_balance128()
         .time()
@@ -1053,7 +1283,7 @@ fn query_cache_system_api_calls_correctly_reported_on_composite_query() {
             .with_label_values(&[SYSTEM_API_CANISTER_CYCLE_BALANCE])
             .get()
     );
-    // Three `ic0.canister_cycle_balance128()` calls.
+    // Five `ic0.canister_cycle_balance128()` calls.
     assert_eq!(
         5,
         metrics
@@ -1061,7 +1291,7 @@ fn query_cache_system_api_calls_correctly_reported_on_composite_query() {
             .with_label_values(&[SYSTEM_API_CANISTER_CYCLE_BALANCE128])
             .get()
     );
-    // Two `ic0.time()` calls.
+    // Six `ic0.time()` calls.
     assert_eq!(
         6,
         metrics
@@ -1069,4 +1299,117 @@ fn query_cache_system_api_calls_correctly_reported_on_composite_query() {
             .with_label_values(&[SYSTEM_API_TIME])
             .get()
     );
+}
+
+#[test]
+fn query_cache_composite_queries_return_the_same_result() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_composite_queries()
+        .with_query_caching()
+        .build();
+    let a_id = test.universal_canister().unwrap();
+
+    // The query has no time or balance dependencies.
+    let query = wasm().reply_data(&[42]).build();
+
+    // Run the query for the first time.
+    let output_1 = test.non_replicated_query(a_id, "composite_query", query.clone());
+    // Assert it's a miss.
+    let metrics = &downcast_query_handler(test.query_handler())
+        .query_cache
+        .metrics;
+    assert_eq!(1, metrics.misses.get());
+    assert_eq!(0, metrics.hits.get());
+    assert_eq!(output_1, Ok(WasmResult::Reply([42].into())));
+
+    // Change the canister balance and time.
+    test.canister_state_mut(a_id)
+        .system_state
+        .remove_cycles(1_u128.into(), CyclesUseCase::Memory);
+    test.state_mut().metadata.batch_time += Duration::from_secs(1);
+
+    // Run the same query for the second time.
+    let output_2 = test.non_replicated_query(a_id, "composite_query", query);
+    // Assert it's a hit despite the changed balance and time.
+    let metrics = &downcast_query_handler(test.query_handler())
+        .query_cache
+        .metrics;
+    assert_eq!(1, metrics.misses.get());
+    assert_eq!(1, metrics.hits.get());
+    assert_eq!(output_1, output_2);
+}
+
+#[test]
+fn query_cache_composite_queries_return_different_results_after_expiry_time() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_composite_queries()
+        .with_query_caching()
+        .with_query_cache_max_expiry_time(MAX_EXPIRY_TIME)
+        .build();
+    let a_id = test.universal_canister().unwrap();
+
+    // The query has no time or balance dependencies.
+    let query = wasm().reply_data(&[42]).build();
+
+    // Run the query for the first time.
+    let output_1 = test.non_replicated_query(a_id, "composite_query", query.clone());
+    // Assert it's a miss.
+    let metrics = &downcast_query_handler(test.query_handler())
+        .query_cache
+        .metrics;
+    assert_eq!(1, metrics.misses.get());
+    assert_eq!(0, metrics.hits.get());
+    assert_eq!(output_1, Ok(WasmResult::Reply([42].into())));
+
+    // Change the batch time more than the max expiry time.
+    test.state_mut().metadata.batch_time += MORE_THAN_MAX_EXPIRY_TIME;
+
+    // Run the same query for the second time.
+    let output_2 = test.non_replicated_query(a_id, "composite_query", query);
+    // Assert it's a miss.
+    let metrics = &downcast_query_handler(test.query_handler())
+        .query_cache
+        .metrics;
+    assert_eq!(2, metrics.misses.get());
+    assert_eq!(0, metrics.hits.get());
+    assert_eq!(output_1, output_2);
+}
+
+#[test]
+fn query_cache_nested_queries_never_get_cached() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_composite_queries()
+        .with_query_caching()
+        .build();
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    // The query has no time or balance dependencies...
+    let query = wasm()
+        // ...but there is a nested query.
+        .composite_query(b_id, call_args())
+        .reply_data(&[42])
+        .build();
+
+    // Run the query for the first time.
+    let output_1 = test.non_replicated_query(a_id, "composite_query", query.clone());
+    // Assert it's a miss.
+    let metrics = &downcast_query_handler(test.query_handler())
+        .query_cache
+        .metrics;
+    assert_eq!(1, metrics.misses.get());
+    assert_eq!(0, metrics.hits.get());
+    assert_eq!(output_1, Ok(WasmResult::Reply([42].into())));
+
+    // Do not change balance or time.
+
+    // Run the same query for the second time.
+    let output_2 = test.non_replicated_query(a_id, "composite_query", query);
+    // Assert it's a miss again, despite there were no changes.
+    let metrics = &downcast_query_handler(test.query_handler())
+        .query_cache
+        .metrics;
+    assert_eq!(2, metrics.misses.get());
+    assert_eq!(0, metrics.hits.get());
+    assert_eq!(output_1, output_2);
 }
