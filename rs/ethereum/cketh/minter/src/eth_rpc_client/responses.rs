@@ -31,7 +31,7 @@ pub struct TransactionReceipt {
     pub transaction_hash: Hash,
 
     #[serde(rename = "contractAddress")]
-    pub contract_address: String,
+    pub contract_address: Option<String>,
 
     pub from: String,
     pub logs: Vec<LogEntry>,
