@@ -96,7 +96,7 @@ impl From<TransactionStatus> for ethnum::u256 {
     fn from(value: TransactionStatus) -> Self {
         match value {
             TransactionStatus::Success => ethnum::u256::ONE,
-            TransactionStatus::Failure => ethnum::U256::ZERO,
+            TransactionStatus::Failure => ethnum::u256::ZERO,
         }
     }
 }
