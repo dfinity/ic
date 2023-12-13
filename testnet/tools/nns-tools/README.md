@@ -54,7 +54,8 @@ PATH=$PATH:$HOME/bin
 This takes approximately 10-15 minutes to run.
 
 ```bash
-ssh -A devenv
+# You might be able to use devenv instead, but I have had problems with that.
+ssh -A zh1-spm22.zh1.dfinity.network
 
 # Check out recent commit of the ic repo. It does not have to be the release candidate commit,
 # because pre-built WASMs are used (downloaded from S3).
