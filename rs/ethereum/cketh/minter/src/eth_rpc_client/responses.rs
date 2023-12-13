@@ -1,39 +1,65 @@
-use crate::eth_rpc::{Hash, HttpResponsePayload, ResponseTransform};
+use crate::checked_amount::CheckedAmountOf;
+use crate::eth_rpc::{Hash, HttpResponsePayload, LogEntry, ResponseTransform};
 use crate::numeric::{BlockNumber, GasAmount, Wei, WeiPerGas};
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct TransactionReceipt {
     /// The hash of the block containing the transaction.
-    #[n(0)]
     #[serde(rename = "blockHash")]
     pub block_hash: Hash,
 
     /// The number of the block containing the transaction.
-    #[n(1)]
     #[serde(rename = "blockNumber")]
     pub block_number: BlockNumber,
 
     /// The total base charge plus tip paid for each unit of gas
-    #[n(2)]
     #[serde(rename = "effectiveGasPrice")]
     pub effective_gas_price: WeiPerGas,
 
     /// The amount of gas used by this specific transaction alone
-    #[n(3)]
     #[serde(rename = "gasUsed")]
     pub gas_used: GasAmount,
 
     /// Status of the transaction.
-    #[n(4)]
     pub status: TransactionStatus,
 
     /// The hash of the transaction
-    #[n(5)]
     #[serde(rename = "transactionHash")]
     pub transaction_hash: Hash,
+
+    #[serde(rename = "contractAddress")]
+    pub contract_address: String,
+
+    pub from: String,
+    pub logs: Vec<LogEntry>,
+    #[serde(rename = "logsBloom")]
+    pub logs_bloom: String,
+    pub to: String,
+    #[serde(rename = "transactionIndex")]
+    pub transaction_index: CheckedAmountOf<()>,
+    pub r#type: String,
+}
+
+impl<C> minicbor::Encode<C> for TransactionReceipt {
+    fn encode<W: minicbor::encode::Write>(
+        &self,
+        _e: &mut minicbor::Encoder<W>,
+        _ctx: &mut C,
+    ) -> Result<(), minicbor::encode::Error<W::Error>> {
+        unimplemented!("TransactionReceipt")
+    }
+}
+
+impl<'b, C> minicbor::Decode<'b, C> for TransactionReceipt {
+    fn decode(
+        _d: &mut minicbor::Decoder<'b>,
+        _ctx: &mut C,
+    ) -> Result<Self, minicbor::decode::Error> {
+        unimplemented!("TransactionReceipt")
+    }
 }
 
 impl TransactionReceipt {
