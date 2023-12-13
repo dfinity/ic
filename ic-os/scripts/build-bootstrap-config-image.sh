@@ -42,7 +42,7 @@ options may be specified:
     (optional) The IPv4 address to assign. Must include prefix length (e.g.
     18.208.190.35/28).
 
-  --ipv4_gateway a:b::c
+  --ipv4_gateway a.b.c.d
     (optional) Default IPv4 gateway (e.g. 18.208.190.33).
 
   --hostname name
