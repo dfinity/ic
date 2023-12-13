@@ -13,6 +13,8 @@ use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_metrics::MetricsRegistry;
 use regex::Regex;
+use service_discovery::job_types::{map_jobs, JobAndPort, JobType, NodeOS};
+use service_discovery::jobs::Job;
 use service_discovery::registry_sync::sync_local_registry;
 use service_discovery::{metrics::Metrics, poll_loop::make_poll_loop, IcServiceDiscoveryImpl};
 use slog::{info, o, Drain, Logger};
@@ -22,7 +24,6 @@ use crate::custom_filters::OldMachinesFilter;
 use crate::prometheus_config::PrometheusConfigBuilder;
 
 mod custom_filters;
-mod jobs;
 mod prometheus_config;
 // mod prometheus_updater;
 
@@ -63,7 +64,7 @@ fn main() -> Result<()> {
         public_key,
     ));
 
-    let jobs = jobs::get_jobs();
+    let jobs = map_jobs(&JobAndPort::all());
 
     info!(log, "Starting IcServiceDiscovery ...");
     let ic_discovery = Arc::new(IcServiceDiscoveryImpl::new(
@@ -118,9 +119,9 @@ fn main() -> Result<()> {
     // We need to filter old nodes for host node exporters, but not for everything else
     // To do that, we will create 2 separate updated nodes, with different filters for them
     let jobs = vec![
-        jobs::JOB_NODE_EXPORTER_GUEST,
-        jobs::JOB_ORCHESTRATOR,
-        jobs::JOB_REPLICA,
+        Job::from(JobType::NodeExporter(NodeOS::Guest)),
+        Job::from(JobType::Orchestrator),
+        Job::from(JobType::Replica),
     ];
 
     let filters = Arc::new(TargetGroupFilterList::new(filters_vec));
@@ -146,7 +147,7 @@ fn main() -> Result<()> {
         )));
     };
     // Second loop, with the old machines filter
-    let jobs = vec![jobs::JOB_NODE_EXPORTER_HOST];
+    let jobs = vec![Job::from(JobType::NodeExporter(NodeOS::Host))];
 
     filters_vec.push(Box::new(OldMachinesFilter {}));
 
