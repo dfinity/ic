@@ -15,7 +15,7 @@ use ic_memory_transport::TransportRouter;
 use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::mocks::{MockChunkable, MockStateSync};
 use ic_types::{
-    artifact::{Artifact, StateSyncArtifactId, StateSyncMessage},
+    artifact::{StateSyncArtifactId, StateSyncMessage},
     chunkable::{ArtifactChunk, ArtifactErrorCode, Chunk, ChunkId, Chunkable},
     crypto::CryptoHash,
     state_sync::{Manifest, MetaManifest, StateSyncVersion},
@@ -279,7 +279,10 @@ impl Chunkable for FakeChunkable {
         Box::new(to_download.into_iter().map(ChunkId::from))
     }
 
-    fn add_chunk(&mut self, artifact_chunk: ArtifactChunk) -> Result<Artifact, ArtifactErrorCode> {
+    fn add_chunk(
+        &mut self,
+        artifact_chunk: ArtifactChunk,
+    ) -> Result<StateSyncMessage, ArtifactErrorCode> {
         for set in self.chunk_sets.iter_mut() {
             if set.is_empty() {
                 continue;
@@ -337,7 +340,10 @@ impl Chunkable for SharableMockChunkable {
         self.chunks_to_download_calls.fetch_add(1, Ordering::SeqCst);
         self.mock.lock().unwrap().chunks_to_download()
     }
-    fn add_chunk(&mut self, artifact_chunk: ArtifactChunk) -> Result<Artifact, ArtifactErrorCode> {
+    fn add_chunk(
+        &mut self,
+        artifact_chunk: ArtifactChunk,
+    ) -> Result<StateSyncMessage, ArtifactErrorCode> {
         self.add_chunks_calls.fetch_add(1, Ordering::SeqCst);
         self.mock.lock().unwrap().add_chunk(artifact_chunk)
     }
@@ -411,21 +417,21 @@ pub fn latency_30ms_throughput_1000mbits() -> (Duration, usize) {
     (Duration::from_millis(30), 3_750_000)
 }
 
-fn state_sync_artifact(id: StateSyncArtifactId) -> Artifact {
+fn state_sync_artifact(id: StateSyncArtifactId) -> StateSyncMessage {
     let manifest = Manifest::new(StateSyncVersion::V0, vec![], vec![]);
     let meta_manifest = MetaManifest {
         version: StateSyncVersion::V0,
         sub_manifest_hashes: vec![],
     };
 
-    Artifact::StateSync(StateSyncMessage {
+    StateSyncMessage {
         height: id.height,
         root_hash: id.hash,
         checkpoint_root: PathBuf::new(),
         manifest,
         meta_manifest: Arc::new(meta_manifest),
         state_sync_file_group: Default::default(),
-    })
+    }
 }
 
 pub fn create_node(

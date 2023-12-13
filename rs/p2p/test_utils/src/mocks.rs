@@ -9,7 +9,7 @@ use ic_interfaces::p2p::{
 use ic_quic_transport::{ConnId, SendError, Transport};
 use ic_types::{artifact::PriorityFn, chunkable::ArtifactChunk};
 use ic_types::{
-    artifact::{Artifact, StateSyncArtifactId, StateSyncMessage},
+    artifact::{StateSyncArtifactId, StateSyncMessage},
     chunkable::{ArtifactErrorCode, Chunkable},
     chunkable::{Chunk, ChunkId},
     NodeId,
@@ -61,7 +61,7 @@ mock! {
 
     impl Chunkable for Chunkable{
         fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>>;
-        fn add_chunk(&mut self, artifact_chunk: ArtifactChunk) -> Result<Artifact, ArtifactErrorCode>;
+        fn add_chunk(&mut self, artifact_chunk: ArtifactChunk) -> Result<StateSyncMessage, ArtifactErrorCode>;
     }
 }
 

@@ -24,7 +24,7 @@ use ic_interfaces::p2p::state_sync::StateSyncClient;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_quic_transport::Transport;
 use ic_types::{
-    artifact::{Artifact, StateSyncArtifactId, StateSyncMessage},
+    artifact::{StateSyncArtifactId, StateSyncMessage},
     chunkable::ChunkId,
     chunkable::{ArtifactErrorCode, Chunkable},
     NodeId,
@@ -339,11 +339,7 @@ impl OngoingStateSync {
         .and_then(std::convert::identity);
 
         let result = match chunk_add_result {
-            Ok(Ok(Artifact::StateSync(msg))) => Ok(Some(msg)),
-            Ok(Ok(_)) => {
-                //TODO: (NET-1448) With new protobufs this condition will redundant.
-                panic!("Should not happen");
-            }
+            Ok(Ok(msg)) => Ok(Some(msg)),
             Ok(Err(ArtifactErrorCode::ChunksMoreNeeded)) => Ok(None),
             Ok(Err(ArtifactErrorCode::ChunkVerificationFailed)) => {
                 Err(DownloadChunkError::RequestError {

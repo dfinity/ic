@@ -74,14 +74,14 @@ fn fake_complete() -> DownloadState {
         version: StateSyncVersion::V0,
         sub_manifest_hashes: vec![],
     };
-    let artifact = Artifact::StateSync(StateSyncMessage {
+    let artifact = StateSyncMessage {
         height: Height::new(0),
         root_hash: CryptoHashOfState::from(CryptoHash(vec![0; 32])),
         checkpoint_root: PathBuf::new(),
         manifest,
         meta_manifest: Arc::new(meta_manifest),
         state_sync_file_group: Default::default(),
-    });
+    };
     DownloadState::Complete(Box::new(artifact))
 }
 
