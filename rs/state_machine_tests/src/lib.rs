@@ -24,13 +24,15 @@ pub use ic_ic00_types::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs, ECDSAPublicKeyResponse,
     EcdsaCurve, EcdsaKeyId, HttpHeader, HttpMethod, SignWithECDSAReply, UpdateSettingsArgs,
 };
-use ic_ingress_manager::IngressManager;
+use ic_ingress_manager::{CustomRandomState, IngressManager};
+use ic_interfaces::ingress_pool::{
+    IngressPool, PoolSection, UnvalidatedIngressArtifact, ValidatedIngressArtifact,
+};
 use ic_interfaces::{
     certification::{Verifier, VerifierError},
     consensus::PayloadBuilder as ConsensusPayloadBuilder,
     consensus_pool::ConsensusTime,
     execution_environment::{IngressFilter, IngressHistoryReader, QueryHandler},
-    ingress_pool::{IngressPoolObject, IngressPoolSelect, SelectResult},
     validation::ValidationResult,
 };
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
@@ -83,6 +85,7 @@ use ic_test_utilities_registry::{
     add_single_subnet_record, add_subnet_list_record, insert_initial_dkg_transcript,
     SubnetRecordBuilder,
 };
+use ic_types::artifact::IngressMessageId;
 use ic_types::batch::{BlockmakerMetrics, QueryStatsPayload, TotalQueryStats, ValidationContext};
 pub use ic_types::canister_http::{CanisterHttpMethod, CanisterHttpRequestContext};
 use ic_types::consensus::block_maker::SubnetRecords;
@@ -94,7 +97,9 @@ use ic_types::crypto::{
     CombinedThresholdSigOf, KeyPurpose, Signable, Signed,
 };
 use ic_types::malicious_flags::MaliciousFlags;
-use ic_types::messages::{CallbackId, Certificate, RejectContext, Response};
+use ic_types::messages::{
+    CallbackId, Certificate, RejectContext, Response, EXPECTED_MESSAGE_ID_LENGTH,
+};
 use ic_types::signature::ThresholdSignature;
 use ic_types::time::GENESIS;
 use ic_types::xnet::CertifiedStreamSlice;
@@ -129,7 +134,6 @@ pub use slog::Level;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::io::stderr;
-use std::ops::RangeInclusive;
 use std::path::Path;
 use std::str::FromStr;
 use std::string::ToString;
@@ -397,43 +401,64 @@ impl ConsensusTime for PocketConsensusTime {
 /// Struct mocking the pool of received ingress messages required for
 /// instantiating `IngressManager` in `StateMachine`.
 struct PocketIngressPool {
-    ingress_messages: Vec<SignedIngress>,
+    validated: BTreeMap<IngressMessageId, ValidatedIngressArtifact>,
+}
+
+impl IngressPool for PocketIngressPool {
+    fn validated(&self) -> &dyn PoolSection<ValidatedIngressArtifact> {
+        self
+    }
+    fn unvalidated(&self) -> &dyn PoolSection<UnvalidatedIngressArtifact> {
+        unimplemented!("PocketIngressPool has no unvalidated pool")
+    }
+}
+
+impl PoolSection<ValidatedIngressArtifact> for PocketIngressPool {
+    fn get(&self, message_id: &IngressMessageId) -> Option<&ValidatedIngressArtifact> {
+        self.validated.get(message_id)
+    }
+
+    fn get_all_by_expiry_range<'a>(
+        &self,
+        range: std::ops::RangeInclusive<Time>,
+    ) -> Box<dyn Iterator<Item = &ValidatedIngressArtifact> + '_> {
+        let (start, end) = range.into_inner();
+        if end < start {
+            return Box::new(std::iter::empty());
+        }
+        let min_bytes = [0; EXPECTED_MESSAGE_ID_LENGTH];
+        let max_bytes = [0xff; EXPECTED_MESSAGE_ID_LENGTH];
+        let range = std::ops::RangeInclusive::new(
+            IngressMessageId::new(start, MessageId::from(min_bytes)),
+            IngressMessageId::new(end, MessageId::from(max_bytes)),
+        );
+        Box::new(self.validated.range(range).map(|(_, v)| v))
+    }
+
+    fn get_timestamp(&self, message_id: &IngressMessageId) -> Option<Time> {
+        self.validated.get(message_id).map(|x| x.timestamp)
+    }
+
+    fn size(&self) -> usize {
+        self.validated.len()
+    }
 }
 
 impl PocketIngressPool {
     fn new() -> Self {
         Self {
-            ingress_messages: vec![],
+            validated: btreemap![],
         }
     }
     /// Pushes a received ingress message into the pool.
-    fn push(&mut self, m: SignedIngress) {
-        self.ingress_messages.push(m);
-    }
-}
-
-impl IngressPoolSelect for PocketIngressPool {
-    /// Validates (incl. expiry checks) and selects ingress messages from the pool.
-    fn select_validated<'a>(
-        &self,
-        range: RangeInclusive<Time>,
-        mut f: Box<dyn FnMut(&IngressPoolObject) -> SelectResult<SignedIngress> + 'a>,
-    ) -> Vec<SignedIngress> {
-        let artifacts: Vec<IngressPoolObject> = self
-            .ingress_messages
-            .iter()
-            .filter(|m| range.contains(&m.expiry_time()))
-            .map(|m| m.clone().into())
-            .collect();
-        let mut collected = Vec::new();
-        for artifact in &artifacts {
-            match f(artifact) {
-                SelectResult::Selected(msg) => collected.push(msg),
-                SelectResult::Skip => (),
-                SelectResult::Abort => break,
-            }
-        }
-        collected
+    fn push(&mut self, m: SignedIngress, timestamp: Time) {
+        self.validated.insert(
+            IngressMessageId::new(m.expiry_time(), m.id()),
+            ValidatedIngressArtifact {
+                msg: m.into(),
+                timestamp,
+            },
+        );
     }
 }
 
@@ -1121,6 +1146,7 @@ impl StateMachine {
             state_manager.clone(),
             cycles_account_manager,
             malicious_flags,
+            CustomRandomState::Deterministic,
         ));
 
         Self {
@@ -1332,7 +1358,10 @@ impl StateMachine {
 
         // All checks were successful at this point so we can push the ingress message to the ingress pool.
         let message_id = msg.id();
-        self.ingress_pool.write().unwrap().push(msg);
+        self.ingress_pool
+            .write()
+            .unwrap()
+            .push(msg, self.get_time());
         Ok(message_id)
     }
 

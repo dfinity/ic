@@ -31,7 +31,7 @@ use ic_https_outcalls_consensus::{
     pool_manager::CanisterHttpPoolManagerImpl,
 };
 use ic_icos_sev::Sev;
-use ic_ingress_manager::IngressManager;
+use ic_ingress_manager::{CustomRandomState, IngressManager};
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
     execution_environment::IngressHistoryReader,
@@ -502,6 +502,7 @@ fn start_consensus(
         Arc::clone(&state_reader) as Arc<_>,
         cycles_account_manager,
         malicious_flags.clone(),
+        CustomRandomState::default(),
     ));
 
     let canister_http_payload_builder = Arc::new(CanisterHttpPayloadBuilderImpl::new(
