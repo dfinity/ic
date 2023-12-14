@@ -1,16 +1,12 @@
 #![allow(unused)] // TODO(NNS1-2409): Re-enable once we add code to migrate indexes.
 
 use crate::{
+    account_id_index::NeuronAccountIdIndex,
     known_neuron_index::{AddKnownNeuronError, KnownNeuronIndex, RemoveKnownNeuronError},
     neuron_store::NeuronStoreError,
     pb::v1::Neuron,
-    storage::Signed32,
-    subaccount_index::NeuronSubaccountIndex,
-};
-
-use crate::{
-    pb::v1::Topic,
     storage::{NeuronIdU64, TopicSigned32},
+    subaccount_index::NeuronSubaccountIndex,
 };
 use ic_base_types::PrincipalId;
 use ic_nervous_system_governance::index::{
@@ -24,9 +20,9 @@ use ic_nervous_system_governance::index::{
     },
 };
 use ic_nns_common::pb::v1::NeuronId;
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_stable_structures::VectorMemory;
-use icp_ledger::Subaccount;
-use mockall::predicate::ne;
+use icp_ledger::AccountIdentifier;
 use std::{
     collections::{BTreeSet, HashSet},
     fmt::{Display, Formatter},
@@ -47,6 +43,7 @@ pub(crate) struct StableNeuronIndexesBuilder<Memory> {
     pub principal: Memory,
     pub following: Memory,
     pub known_neuron: Memory,
+    pub account_id: Memory,
 }
 
 impl<Memory> StableNeuronIndexesBuilder<Memory>
@@ -59,6 +56,7 @@ where
             principal,
             following,
             known_neuron,
+            account_id,
         } = self;
 
         StableNeuronIndexes {
@@ -66,6 +64,7 @@ where
             principal: StableNeuronPrincipalIndex::new(principal),
             following: StableNeuronFollowingIndex::new(following),
             known_neuron: KnownNeuronIndex::new(known_neuron),
+            account_id: NeuronAccountIdIndex::new(account_id),
         }
     }
 }
@@ -79,6 +78,7 @@ where
     principal: StableNeuronPrincipalIndex<NeuronIdU64, Memory>,
     following: StableNeuronFollowingIndex<NeuronIdU64, TopicSigned32, Memory>,
     known_neuron: KnownNeuronIndex<Memory>,
+    account_id: NeuronAccountIdIndex<Memory>,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -109,6 +109,7 @@ pub enum NeuronIndexDefect {
     Principal { reason: String },
     Following { reason: String },
     KnownNeuron { reason: String },
+    AccountId { reason: String },
 }
 
 impl Display for NeuronIndexDefect {
@@ -125,6 +126,9 @@ impl Display for NeuronIndexDefect {
             }
             Self::KnownNeuron { reason } => {
                 write!(f, "Known neuron index is corrupted: {}", reason)
+            }
+            Self::AccountId { reason } => {
+                write!(f, "AccountId index is corrupted: {}", reason)
             }
         }
     }
@@ -183,8 +187,8 @@ where
 
     fn update_neuron(
         &mut self,
-        old_neuron: &Neuron,
-        new_neuron: &Neuron,
+        _old_neuron: &Neuron,
+        _new_neuron: &Neuron,
     ) -> Result<(), Vec<NeuronIndexDefect>> {
         // StableNeuronIndexes::update_neuron checks that the subaccount should not be modified. No
         // need to do anything here.
@@ -669,6 +673,7 @@ where
             &mut self.principal,
             &mut self.following,
             &mut self.known_neuron,
+            &mut self.account_id,
         ]
     }
 
@@ -687,6 +692,14 @@ where
 
     pub fn known_neuron(&self) -> &KnownNeuronIndex<Memory> {
         &self.known_neuron
+    }
+
+    pub fn account_id(&self) -> &NeuronAccountIdIndex<Memory> {
+        &self.account_id
+    }
+
+    pub fn account_id_mut(&mut self) -> &mut NeuronAccountIdIndex<Memory> {
+        &mut self.account_id
     }
 }
 
@@ -708,8 +721,56 @@ pub(crate) fn new_heap_based() -> StableNeuronIndexes<VectorMemory> {
         principal: VectorMemory::default(),
         following: VectorMemory::default(),
         known_neuron: VectorMemory::default(),
+        account_id: VectorMemory::default(),
     }
     .build()
+}
+
+impl<Memory> NeuronIndex for NeuronAccountIdIndex<Memory>
+where
+    Memory: ic_stable_structures::Memory,
+{
+    fn add_neuron(&mut self, new_neuron: &Neuron) -> Result<(), NeuronIndexDefect> {
+        // StableNeuronIndexes::add_neuron calls validate_neuron which make sure id and subaccount
+        // are valid.
+        let neuron_id = new_neuron.id.expect("Expected Neuron.id to bet set");
+        let subaccount = new_neuron
+            .subaccount()
+            .expect("Expected Neuron.account to be set");
+
+        let account_id = AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(subaccount));
+
+        self.add_neuron_account_id(neuron_id, account_id)
+            .map_err(|error| NeuronIndexDefect::AccountId {
+                reason: error.error_message,
+            })
+    }
+
+    fn remove_neuron(&mut self, existing_neuron: &Neuron) -> Result<(), NeuronIndexDefect> {
+        // StableNeuronIndexes::remove_neuron calls validate_neuron which make sure id and subaccount
+        // are valid.
+        let neuron_id = existing_neuron.id.expect("Expected Neuron.id to bet set");
+        let subaccount = existing_neuron
+            .subaccount()
+            .expect("Expected Neuron.account to be set");
+
+        let account_id = AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(subaccount));
+        self.remove_neuron_account_id(neuron_id, account_id)
+            .map_err(|error| NeuronIndexDefect::AccountId {
+                reason: error.error_message,
+            })
+    }
+
+    fn update_neuron(
+        &mut self,
+        _old_neuron: &Neuron,
+        _new_neuron: &Neuron,
+    ) -> Result<(), Vec<NeuronIndexDefect>> {
+        // StableNeuronIndexes::update_neuron checks that the subaccount should not be modified.
+        // And since NNS Governance's CanisterId cannot change either, nothing needs to be done
+        // here.
+        Ok(())
+    }
 }
 
 #[cfg(test)]

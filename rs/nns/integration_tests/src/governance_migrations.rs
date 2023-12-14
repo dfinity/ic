@@ -39,6 +39,7 @@ struct NeuronIndexesLens {
     principal: u64,
     following: u64,
     known_neuron: u64,
+    account_id: u64,
 }
 
 fn assert_neuron_indexes_lens(
@@ -77,6 +78,10 @@ fn assert_neuron_indexes_lens(
         "governance_known_neuron_index_len {} ",
         neuron_indexes_lens.known_neuron
     )));
+    assert!(response_body.contains(&format!(
+        "governance_account_id_index_len {} ",
+        neuron_indexes_lens.account_id
+    )));
 }
 
 #[test]
@@ -97,6 +102,7 @@ fn test_neuron_indexes_migrations() {
             principal: 3,
             following: 0,
             known_neuron: 0,
+            account_id: 3,
         },
     );
     assert_no_validation_issues(&state_machine);
@@ -124,6 +130,7 @@ fn test_neuron_indexes_migrations() {
             principal: 3,
             following: 2,
             known_neuron: 0,
+            account_id: 3,
         },
     );
 
@@ -145,6 +152,7 @@ fn test_neuron_indexes_migrations() {
             principal: 4,
             following: 2,
             known_neuron: 0,
+            account_id: 4,
         },
     );
 

@@ -106,7 +106,7 @@ where
 /// Notice that all of these return Result<X, NeuronStoreError>, where X is ()
 /// for mutations, and Neuron for read.
 ///
-/// Additionall, there is upsert, which updates or inserts, depending on whether
+/// Additionally, there is upsert, which updates or inserts, depending on whether
 /// an entry with the same ID already exists. You can think of this as insert,
 /// but clobbering is allowed.
 ///
@@ -297,6 +297,18 @@ where
             .map(|(_neuron_id, neuron)| self.reconstitute_neuron(neuron))
     }
 
+    /// Returns the next NeuronId and Neuron equal to or higher than the provided neuron_id. This
+    /// method differs from `range_neurons` in that it does not reconstitute the neuron or read
+    /// any attributes from other stable memory collections.
+    // TODO[NNS1-2784] - remove method after index has been built
+    pub fn range_neurons_map<R>(&self, range: R) -> impl Iterator<Item = (u64, Neuron)> + '_
+    where
+        R: RangeBounds<NeuronId>,
+    {
+        let range = neuron_id_range_to_u64_range(&range);
+        self.main.range(range)
+    }
+
     /// Returns all neuron ids as a set. Note that this method can take ~1B instructions and
     /// probably shouldn't be used outside of upgrades.
     pub fn stable_neuron_ids(&self) -> HashSet<u64> {
@@ -367,7 +379,7 @@ where
                 // the Ord implementation of FolloweesKey), and the current implementation of
                 // `group_by()` preserves the order of the elements within groups. Therefore
                 // `sorted_by_key()` below is technically not needed. However, the
-                // `Itertools::group_by` documentation does not specify whether it actually preseves
+                // `Itertools::group_by` documentation does not specify whether it actually preserves
                 // the order. For this reason we choose to still sort by `FolloweesKey::index`,
                 // instead of relying on an undefined behavior.
                 let followees = group

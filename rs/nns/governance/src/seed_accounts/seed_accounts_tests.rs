@@ -1,11 +1,10 @@
-use crate::seed_accounts::SEED_NEURON_DISTRIBUTION_COUNT;
 use crate::{
     governance::{Governance, MockEnvironment, ONE_MONTH_SECONDS},
     pb::v1::{
         governance::{seed_accounts::SeedAccount, SeedAccounts},
         Governance as GovernanceProto, Neuron, NeuronType,
     },
-    seed_accounts::AccountState,
+    seed_accounts::{AccountState, SEED_NEURON_DISTRIBUTION_COUNT},
 };
 use candid::Encode;
 use ic_base_types::PrincipalId;

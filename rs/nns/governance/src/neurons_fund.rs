@@ -1795,14 +1795,19 @@ mod test_functions_tests {
 
 #[cfg(test)]
 mod neurons_fund_anonymization_tests {
-
-    use crate::neurons_fund::*;
-    use crate::pb::v1::{
-        neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
-        IdealMatchedParticipationFunction as IdealMatchedParticipationFunctionPb,
-        NeuronsFundParticipation as NeuronsFundParticipationPb,
-        NeuronsFundSnapshot as NeuronsFundSnapshotPb,
-        SwapParticipationLimits as SwapParticipationLimitsPb,
+    use crate::{
+        neurons_fund::{
+            NeuronsFundNeuronPortion, NeuronsFundNeuronPortionError,
+            NeuronsFundParticipationValidationError, NeuronsFundSnapshot,
+            NeuronsFundSnapshotValidationError,
+        },
+        pb::v1::{
+            neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
+            IdealMatchedParticipationFunction as IdealMatchedParticipationFunctionPb,
+            NeuronsFundParticipation as NeuronsFundParticipationPb,
+            NeuronsFundSnapshot as NeuronsFundSnapshotPb,
+            SwapParticipationLimits as SwapParticipationLimitsPb,
+        },
     };
     use ic_base_types::PrincipalId;
     use ic_neurons_fund::{PolynomialMatchingFunction, SerializableFunction};

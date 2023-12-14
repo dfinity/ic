@@ -1,14 +1,21 @@
 use super::*;
-
-use crate::pb::v1::{neuron::Followees, KnownNeuronData};
-
+use crate::{
+    governance::{Governance, MockEnvironment},
+    pb::v1::{
+        neuron::{DissolveState, Followees},
+        Governance as GovernanceProto, KnownNeuronData,
+    },
+    storage::{reset_stable_memory, Signed32},
+};
 use assert_matches::assert_matches;
+use ic_nervous_system_common::{cmc::MockCMC, ledger::MockIcpLedger};
 use ic_nervous_system_governance::index::{
     neuron_following::NeuronFollowingIndex, neuron_principal::NeuronPrincipalIndex,
 };
 use ic_nns_common::pb::v1::NeuronId;
 use lazy_static::lazy_static;
-use maplit::{hashmap, hashset};
+use maplit::{btreemap, hashmap, hashset};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
 fn add_remove_neuron() {
@@ -37,6 +44,7 @@ fn add_remove_neuron() {
         }),
         ..Default::default()
     };
+    let account_id = AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), neuron.subaccount().ok());
 
     // Step 2: reading indexes return empty before adding neuron to them.
     assert_eq!(
@@ -58,6 +66,12 @@ fn add_remove_neuron() {
         Vec::<u64>::default()
     );
     assert_eq!(indexes.known_neuron().list_known_neuron_ids(), vec![]);
+    assert_eq!(
+        indexes
+            .account_id()
+            .get_neuron_id_by_account_id(&account_id),
+        None
+    );
 
     // Step 3: adding a neuron.
     assert_eq!(indexes.add_neuron(&neuron), Ok(()));
@@ -89,6 +103,12 @@ fn add_remove_neuron() {
         indexes.known_neuron().list_known_neuron_ids(),
         vec![NeuronId { id: 1 }]
     );
+    assert_eq!(
+        indexes
+            .account_id()
+            .get_neuron_id_by_account_id(&account_id),
+        Some(NeuronId { id: 1 })
+    );
 
     // Step 5: remove the neuron.
     assert_eq!(indexes.remove_neuron(&neuron), Ok(()));
@@ -113,6 +133,12 @@ fn add_remove_neuron() {
         Vec::<u64>::default()
     );
     assert_eq!(indexes.known_neuron().list_known_neuron_ids(), vec![]);
+    assert_eq!(
+        indexes
+            .account_id()
+            .get_neuron_id_by_account_id(&account_id),
+        None
+    );
 }
 
 lazy_static! {
@@ -156,7 +182,7 @@ fn update_neuron_id_fails() {
         ..MODEL_NEURON.clone()
     };
 
-    assert_matches!(indexes.update_neuron(&neuron, &neuron_with_different_id), 
+    assert_matches!(indexes.update_neuron(&neuron, &neuron_with_different_id),
         Err(NeuronStoreError::NeuronIdModified { old_neuron_id, new_neuron_id })
         if old_neuron_id.id == 1 && new_neuron_id.id == 2);
 }
@@ -479,7 +505,7 @@ fn update_neuron_add_known_neuron() {
 
     assert_eq!(indexes.update_neuron(&old_neuron, &new_neuron), Ok(()));
 
-    // Known neuron can be lookedp up after update.
+    // Known neuron can be looked up after update.
     assert_eq!(
         indexes.known_neuron().list_known_neuron_ids(),
         vec![neuron_id]
@@ -545,4 +571,85 @@ fn update_neuron_update_known_neuron_name() {
     assert!(indexes
         .known_neuron()
         .contains_known_neuron_name("different known neuron data"),);
+}
+
+fn create_mock_environment(now_timestamp_seconds: Option<u64>) -> MockEnvironment {
+    let mut environment = MockEnvironment::new();
+    let now_timestamp_seconds = now_timestamp_seconds.unwrap_or(now_seconds());
+
+    environment.expect_now().return_const(now_timestamp_seconds);
+    environment
+}
+
+fn now_seconds() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
+
+fn simple_neuron(id: u64) -> Neuron {
+    // Make sure different neurons have different accounts.
+    let mut account = vec![0; 32];
+    for (destination, data) in account.iter_mut().zip(id.to_le_bytes().iter().cycle()) {
+        *destination = *data;
+    }
+
+    Neuron {
+        id: Some(NeuronId { id }),
+        account,
+        controller: Some(PrincipalId::new_user_test_id(id)),
+        ..Default::default()
+    }
+}
+
+// TODO(NNS1-2784) - Remove test after 1-time upgrade
+/// Test that restoring the Governance canister after an upgrade with an empty NeuronAccountIdIndex will
+/// trigger the index to be built with existing neurons. To do this, mainnet like state must be simulated.
+/// Initializing or adding a neuron to Governance's data layer will automatically add a neuron to the index,
+/// so in this test, a special test only API to reset the index will be called to simulate mainnet like state.
+#[test]
+fn test_neuron_store_populates_index_on_restore() {
+    // Step 1: set up 1 active neuron and 1 inactive neuron.
+    let active_neuron = Neuron {
+        cached_neuron_stake_e8s: 1,
+        ..simple_neuron(1)
+    };
+    let inactive_neuron = Neuron {
+        cached_neuron_stake_e8s: 0,
+        dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(1)),
+        ..simple_neuron(2)
+    };
+    let mut gov = Governance::new(
+        GovernanceProto::default(),
+        Box::new(create_mock_environment(None)),
+        Box::<MockIcpLedger>::default(),
+        Box::<MockCMC>::default(),
+    );
+
+    // Step 2: Add neurons to governance and simulate mainnet like state
+    gov.neuron_store.add_neuron(active_neuron);
+    gov.neuron_store.add_neuron(inactive_neuron);
+
+    // The stable indexes should have been updated to include the neurons
+    assert_eq!(gov.neuron_store.stable_indexes_lens().account_id, 2);
+    assert_eq!(gov.neuron_store.len(), 2);
+
+    // Simulate mainnet like state to have an empty index with existing neurons.
+    gov.neuron_store.reset_account_id_index();
+    assert_eq!(gov.neuron_store.stable_indexes_lens().account_id, 0);
+    assert_eq!(gov.neuron_store.len(), 2);
+
+    // Step 3: Test that restoring the governance canister will trigger the stable index to be
+    // rebuilt with neurons.
+    let mut heap_proto = gov.take_heap_proto();
+    let gov = Governance::new_restored(
+        heap_proto,
+        Box::new(create_mock_environment(None)),
+        Box::<MockIcpLedger>::default(),
+        Box::<MockCMC>::default(),
+    );
+
+    assert_eq!(gov.neuron_store.stable_indexes_lens().account_id, 2);
+    assert_eq!(gov.neuron_store.len(), 2);
 }

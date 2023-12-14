@@ -1,4 +1,3 @@
-use crate::pb::v1::NeuronType;
 use crate::{
     governance,
     governance::{
@@ -7,7 +6,7 @@ use crate::{
     },
     pb::v1::{
         governance_error::ErrorType, manage_neuron, neuron::DissolveState, Ballot, BallotInfo,
-        GovernanceError, Neuron, NeuronInfo, NeuronState, Topic, Vote,
+        GovernanceError, Neuron, NeuronInfo, NeuronState, NeuronType, Topic, Vote,
     },
 };
 #[cfg(target_arch = "wasm32")]

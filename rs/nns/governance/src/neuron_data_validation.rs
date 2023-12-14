@@ -695,7 +695,10 @@ mod tests {
     use maplit::{btreemap, hashmap};
 
     use crate::{
-        pb::v1::{neuron::DissolveState, neuron::Followees, KnownNeuronData, Neuron},
+        pb::v1::{
+            neuron::{DissolveState, Followees},
+            KnownNeuronData, Neuron,
+        },
         storage::{with_stable_neuron_indexes_mut, with_stable_neuron_store_mut},
     };
 
