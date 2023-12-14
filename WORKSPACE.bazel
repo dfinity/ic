@@ -193,13 +193,6 @@ load(
     "@io_bazel_rules_docker//repositories:repositories.bzl",
     container_repositories = "repositories",
 )
-load("//third_party/openssl:openssl_repositories.bzl", "openssl_repositories")
-
-openssl_repositories()
-
-load("//third_party/openssl:openssl_setup.bzl", "openssl_setup")
-
-openssl_setup()
 
 # Bitcoin core
 
