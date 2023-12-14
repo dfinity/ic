@@ -13,6 +13,7 @@ use crate::page_map::{
     FileDescriptor, MemoryInstructions, MemoryMapOrData, PageAllocator, PageDelta, PageMap,
     PersistDestination, PersistenceError, StorageMetrics, MAX_NUMBER_OF_FILES,
 };
+use assert_matches::assert_matches;
 use bit_vec::BitVec;
 use ic_metrics::MetricsRegistry;
 use ic_sys::{PageIndex, PAGE_SIZE};
@@ -170,8 +171,14 @@ fn verify_merge_to_overlay(
 
 /// Write the entire data from `delta` into a byte buffer.
 fn page_delta_as_buffer(delta: &PageDelta) -> Vec<u8> {
-    let mut result: Vec<u8> =
-        vec![0; (delta.max_page_index().unwrap().get() as usize + 1) * PAGE_SIZE];
+    let num_pages = if let Some(max) = delta.max_page_index() {
+        max.get() as usize + 1
+    } else {
+        // `delta` is empty in this case.
+        0
+    };
+
+    let mut result: Vec<u8> = vec![0; num_pages * PAGE_SIZE];
     for (index, data) in delta.iter() {
         let offset = index.get() as usize * PAGE_SIZE;
         unsafe {
@@ -264,11 +271,15 @@ fn verify_storage(dir: &Path, expected: &PageDelta) {
 
     let storage = Storage::load(base.as_deref(), &overlays).unwrap();
 
-    // Verify num_host_pages.
-    assert_eq!(
-        expected.max_page_index().unwrap().get() + 1,
-        storage.num_logical_pages() as u64
-    );
+    let expected_num_pages = if let Some(max) = expected.max_page_index() {
+        max.get() + 1
+    } else {
+        // `delta` is empty in this case.
+        0
+    };
+
+    // Verify `num_logical_pages`.
+    assert_eq!(expected_num_pages, storage.num_logical_pages() as u64);
 
     // Verify every single page in the range.
     for index in 0..storage.num_logical_pages() as u64 {
@@ -316,6 +327,7 @@ fn merge_assert_num_files(
 }
 
 /// An instruction to modify a storage.
+#[derive(Debug, Clone)]
 enum Instruction {
     /// Create an overlay file with provided list of `PageIndex` to write.
     WriteOverlay(Vec<u64>),
@@ -325,7 +337,7 @@ enum Instruction {
 use Instruction::*;
 
 /// This function applies `instructions` to a new `Storage` in a temporary directory.
-/// At the same time, we apply the same instructions, a `PageDelta`, which acts as the reference
+/// At the same time, we apply the same instructions to a `PageDelta`, which acts as the reference
 /// implementation. After each operation, we check that all overlay files are as expected and
 /// correspond to the reference.
 fn write_overlays_and_verify_with_tempdir(instructions: Vec<Instruction>, tempdir: &TempDir) {
@@ -747,4 +759,164 @@ fn test_two_same_length_files_are_a_pyramid() {
     )
     .unwrap();
     assert!(merge_candidate.is_none());
+}
+
+#[test]
+fn can_get_small_memory_regions_from_file() {
+    let indices = vec![9, 10, 11, 19, 20, 21, 22, 23];
+
+    let tempdir = tempdir().unwrap();
+    let path = &tempdir.path().join("0_vmemory_0.overlay");
+
+    let allocator = PageAllocator::new_for_testing();
+    let metrics = StorageMetrics::new(&MetricsRegistry::new());
+
+    let data = &[42_u8; PAGE_SIZE];
+    let overlay_pages: Vec<_> = indices.iter().map(|i| (PageIndex::new(*i), data)).collect();
+
+    let delta = PageDelta::from(allocator.allocate(&overlay_pages));
+
+    OverlayFile::write(&delta, path, &metrics).unwrap();
+    let overlay = OverlayFile::load(path).unwrap();
+    let range = PageIndex::new(0)..PageIndex::new(30);
+
+    // Call `get_memory_instructions` with an empty filter.
+    let mut empty_filter = BitVec::from_elem((range.end.get() - range.start.get()) as usize, false);
+    let actual_instructions =
+        overlay.get_memory_instructions(PageIndex::new(0)..PageIndex::new(30), &mut empty_filter);
+
+    assert_eq!(actual_instructions.range, range);
+    assert_eq!(actual_instructions.instructions.len(), indices.len());
+    for (_range, instruction) in actual_instructions.instructions {
+        assert_matches!(instruction, MemoryMapOrData::Data { .. });
+    }
+
+    // Check that filter was updated correctly.
+    let mut expected_filter =
+        BitVec::from_elem((range.end.get() - range.start.get()) as usize, false);
+    for index in &indices {
+        expected_filter.set(*index as usize, true);
+    }
+    assert_eq!(empty_filter, expected_filter);
+
+    // Call `get_memory_instructions` with a nonempty filter.
+    let mut nonempty_filter =
+        BitVec::from_elem((range.end.get() - range.start.get()) as usize, false);
+    nonempty_filter.set(9, true); // Present in `indices`.
+    nonempty_filter.set(11, true); // Present in `indices`.
+    nonempty_filter.set(12, true); // Not present in `indices`.
+    let actual_instructions = overlay
+        .get_memory_instructions(PageIndex::new(0)..PageIndex::new(30), &mut nonempty_filter);
+
+    assert_eq!(actual_instructions.range, range);
+    assert_eq!(actual_instructions.instructions.len(), indices.len() - 2); // 2 results are filtered out.
+    for (_range, instruction) in actual_instructions.instructions {
+        assert_matches!(instruction, MemoryMapOrData::Data { .. });
+    }
+
+    // This covers more generic checks with this input.
+    write_overlays_and_verify(vec![WriteOverlay(indices)]);
+}
+
+#[test]
+fn can_get_large_memory_regions_from_file() {
+    let indices = vec![9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+
+    let tempdir = tempdir().unwrap();
+    let path = &tempdir.path().join("0_vmemory_0.overlay");
+
+    let allocator = PageAllocator::new_for_testing();
+    let metrics = StorageMetrics::new(&MetricsRegistry::new());
+
+    let data = &[42_u8; PAGE_SIZE];
+    let overlay_pages: Vec<_> = indices.iter().map(|i| (PageIndex::new(*i), data)).collect();
+
+    let delta = PageDelta::from(allocator.allocate(&overlay_pages));
+
+    OverlayFile::write(&delta, path, &metrics).unwrap();
+    let overlay = OverlayFile::load(path).unwrap();
+    let range = PageIndex::new(0)..PageIndex::new(30);
+
+    // Call `get_memory_instructions` with an empty filter.
+    let mut empty_filter = BitVec::from_elem((range.end.get() - range.start.get()) as usize, false);
+    let actual_instructions =
+        overlay.get_memory_instructions(PageIndex::new(0)..PageIndex::new(30), &mut empty_filter);
+
+    assert_eq!(actual_instructions.range, range);
+    assert_eq!(actual_instructions.instructions.len(), 1);
+    let (mmap_range, instruction) = &actual_instructions.instructions[0];
+    assert_eq!(*mmap_range, PageIndex::new(9)..PageIndex::new(21));
+    assert_matches!(instruction, MemoryMapOrData::MemoryMap { .. });
+
+    // Check that filter was updated correctly.
+    let mut expected_filter =
+        BitVec::from_elem((range.end.get() - range.start.get()) as usize, false);
+    for index in &indices {
+        expected_filter.set(*index as usize, true);
+    }
+    assert_eq!(empty_filter, expected_filter);
+
+    // Call `get_memory_instructions` with a nonempty filter that still results in a memory map.
+    let mut nonempty_filter =
+        BitVec::from_elem((range.end.get() - range.start.get()) as usize, false);
+    nonempty_filter.set(9, true); // Present in `indices`.
+    nonempty_filter.set(25, true); // Not present in `indices`.
+    let actual_instructions = overlay
+        .get_memory_instructions(PageIndex::new(0)..PageIndex::new(30), &mut nonempty_filter);
+
+    assert_eq!(actual_instructions.range, range);
+    assert_eq!(actual_instructions.instructions.len(), 1);
+    let (mmap_range, instruction) = &actual_instructions.instructions[0];
+    assert_eq!(*mmap_range, PageIndex::new(9)..PageIndex::new(21));
+    assert_matches!(instruction, MemoryMapOrData::MemoryMap { .. });
+
+    // Call `get_memory_instructions` with a nonempty filter that so that we copy instead.
+    let mut nonempty_filter =
+        BitVec::from_elem((range.end.get() - range.start.get()) as usize, false);
+    nonempty_filter.set(9, true); // Present in `indices`.
+    nonempty_filter.set(11, true); // Present in `indices`.
+    nonempty_filter.set(25, true); // Not present in `indices`.
+    let actual_instructions = overlay
+        .get_memory_instructions(PageIndex::new(0)..PageIndex::new(30), &mut nonempty_filter);
+
+    assert_eq!(actual_instructions.range, range);
+    assert_eq!(actual_instructions.instructions.len(), indices.len() - 2); // 9, 11 should be missing
+    for (_range, instruction) in actual_instructions.instructions {
+        assert_matches!(instruction, MemoryMapOrData::Data { .. });
+    }
+
+    // This covers more generic checks with this input.
+    write_overlays_and_verify(vec![WriteOverlay(indices)]);
+}
+
+mod proptest_tests {
+    use super::*;
+    use proptest::collection::vec as prop_vec;
+    use proptest::prelude::*;
+
+    /// A random individual instruction.
+    fn instruction_strategy() -> impl Strategy<Value = Instruction> {
+        prop_oneof![
+            prop_vec(0..100_u64, 1..50).prop_map(|mut vec| {
+                vec.sort();
+                vec.dedup();
+                WriteOverlay(vec)
+            }),
+            Just(Merge {
+                assert_files_merged: None,
+            }),
+        ]
+    }
+
+    /// A random vector of instructions.
+    fn instructions_strategy() -> impl Strategy<Value = Vec<Instruction>> {
+        prop_vec(instruction_strategy(), 1..20)
+    }
+
+    proptest! {
+        #[test]
+        fn random_instructions(instructions in instructions_strategy()) {
+            write_overlays_and_verify(instructions);
+        }
+    }
 }
