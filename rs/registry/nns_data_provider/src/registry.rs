@@ -103,11 +103,11 @@ impl RegistryCanister {
         ))
     }
 
-    /// Queries the registry for all the changes that occurred since `version`
-    /// using a certified endpoint.
+    /// Queries the registry for a prefix of all the changes that occurred since
+    /// `version`, using a certified endpoint.
     ///
-    /// The registry records returned by this function are guaranteed to be
-    /// sorted by version.
+    /// Returns a prefix of the registry records since `version`, sorted by version;
+    /// the latest version available; and the time when the response was certified.
     pub async fn get_certified_changes_since(
         &self,
         version: u64,
