@@ -167,6 +167,7 @@ members = [
   "rs/monitoring/metrics",
   "rs/monitoring/pprof",
   "rs/nervous_system/clients",
+  "rs/nervous_system/collections/union_multi_map",
   "rs/nervous_system/common",
   "rs/nervous_system/common/build_metadata",
   "rs/nervous_system/common/test_canister",

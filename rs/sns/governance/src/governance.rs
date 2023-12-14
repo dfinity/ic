@@ -74,6 +74,7 @@ use ic_canister_log::log;
 use ic_canister_profiler::SpanStats;
 use ic_ic00_types::CanisterInstallMode;
 use ic_ledger_core::Tokens;
+use ic_nervous_system_collections_union_multi_map::UnionMultiMap;
 use ic_nervous_system_common::{
     cmc::CMC,
     i2d,
@@ -3012,8 +3013,11 @@ impl Governance {
     ///
     /// This method should only be called with `vote_of_neuron` being `yes`
     /// or `no`.
+    ///
+    /// `function_id` must be a real function ID, not the "catch-all" (pseudo)
+    /// function ID, which is used for following.
     fn cast_vote_and_cascade_follow(
-        proposal_id: &ProposalId,
+        proposal_id: &ProposalId, // As of Nov, 2023 (a2095be), this is only used for logging.
         voting_neuron_id: &NeuronId,
         vote_of_neuron: Vote,
         function_id: u64,
@@ -3022,18 +3026,37 @@ impl Governance {
         now_seconds: u64,
         ballots: &mut BTreeMap<String, Ballot>, // This is ultimately what gets changed.
     ) {
-        // Select the "follow graph" that belongs to the type of proposal being
-        // voted on.
-        let unspecified_function_id = u64::from(&Action::Unspecified(Empty {}));
-        assert!(function_id != unspecified_function_id);
-        // The follow graph is the union of these two "successor list" tables.
-        let empty_neuron_id_to_follower_neuron_ids = BTreeMap::new();
-        let neuron_id_to_follower_neuron_ids_on_function = function_followee_index
-            .get(&function_id)
-            .unwrap_or(&empty_neuron_id_to_follower_neuron_ids);
-        let neuron_id_to_blanket_follower_neuron_ids = function_followee_index
-            .get(&unspecified_function_id)
-            .unwrap_or(&empty_neuron_id_to_follower_neuron_ids);
+        let fallback_pseudo_function_id = u64::from(&Action::Unspecified(Empty {}));
+        assert!(function_id != fallback_pseudo_function_id);
+
+        // This identifies which other neurons might get "triggered" to vote by
+        // filling in the current neuron's ballot.
+        //
+        // By default, followers on the specific function_id are reconsidered,
+        // as well as followers have have general "catch-all" following. As an
+        // optimization, catch-all followers are not considered when the
+        // proposal is not Critical.
+        //
+        // E.g. if Alice follows Bob on "catch-all", and Bob votes on a
+        // TransferSnsTreasuryFunds proposal, then Alice will not be considered
+        // a follower of Bob, because the proposal is Critical.
+        let neuron_id_to_follower_neuron_ids = {
+            let mut members = vec![];
+            let mut push_member = |function_id| {
+                if let Some(member) = function_followee_index.get(&function_id) {
+                    members.push(member);
+                }
+            };
+
+            push_member(function_id);
+
+            let is_proposal_critical = false; // TODO(NNS1-2748): Call real implementation.
+            if !is_proposal_critical {
+                push_member(fallback_pseudo_function_id);
+            }
+
+            UnionMultiMap::new(members)
+        };
 
         // Traverse the follow graph using breadth first search (BFS).
 
@@ -3082,16 +3105,13 @@ impl Governance {
 
                 // Take note of the followers of current_neuron_id, and add them
                 // to the next "tier" in the BFS.
-                let mut specific_follower_neuron_ids = neuron_id_to_follower_neuron_ids_on_function
-                    .get(current_neuron_id)
-                    .cloned()
-                    .unwrap_or_default();
-                let mut blanket_follower_neuron_ids = neuron_id_to_blanket_follower_neuron_ids
-                    .get(current_neuron_id)
-                    .cloned()
-                    .unwrap_or_default();
-                follower_neuron_ids.append(&mut specific_follower_neuron_ids);
-                follower_neuron_ids.append(&mut blanket_follower_neuron_ids);
+                if let Some(new_follower_neuron_ids) =
+                    neuron_id_to_follower_neuron_ids.get(current_neuron_id)
+                {
+                    for follower_neuron_id in new_follower_neuron_ids {
+                        follower_neuron_ids.insert(follower_neuron_id.clone());
+                    }
+                }
             }
 
             // Prepare for the next iteration of the (outer most) loop by
