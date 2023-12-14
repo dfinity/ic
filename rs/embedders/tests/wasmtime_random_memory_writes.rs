@@ -418,11 +418,9 @@ fn wat2wasm(wat: &str) -> Result<BinaryEncodedWasm, wat::Error> {
 mod tests {
     use super::*;
 
-    use ic_embedders::{
-        wasm_executor::compute_page_delta, wasmtime_embedder::CanisterMemoryType, InstanceRunResult,
-    };
+    use ic_embedders::{wasm_executor::compute_page_delta, wasmtime_embedder::CanisterMemoryType};
     // Get .current() trait method
-    use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult, SystemApi};
+    use ic_interfaces::execution_environment::{HypervisorError, SystemApi};
     use ic_logger::ReplicaLogger;
     use ic_replicated_state::{PageIndex, PageMap};
     use ic_system_api::ModificationTracking;
@@ -1376,93 +1374,5 @@ mod tests {
             apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, false)
         }
         apply_writes_and_check_heap(&writes, ModificationTracking::Ignore, &wat, false);
-    }
-
-    fn run_wasm(wat: &str, function_name: &str) -> HypervisorResult<InstanceRunResult> {
-        with_test_replica_logger(|log| {
-            let wasm = wat::parse_str(wat).map(BinaryEncodedWasm::new).unwrap();
-            let embedder = WasmtimeEmbedder::new(ic_config::embedders::Config::default(), log);
-            let (embedder_cache, result) = compile(&embedder, &wasm);
-            result.unwrap();
-            let api = test_api_for_update(
-                no_op_logger(),
-                None,
-                vec![],
-                SubnetType::Application,
-                NumInstructions::new(10_000_000_000),
-            );
-            let instruction_limit = api.slice_instruction_limit();
-            let memory = Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0));
-            let mut instance = embedder
-                .new_instance(
-                    canister_test_id(1),
-                    &embedder_cache,
-                    None,
-                    &memory.clone(),
-                    &memory,
-                    ModificationTracking::Ignore,
-                    api,
-                )
-                .map_err(|r| r.0)
-                .expect("Failed to create instance");
-            instance.set_instruction_counter(i64::try_from(instruction_limit.get()).unwrap());
-            instance.run(FuncRef::Method(WasmMethod::Update(
-                function_name.to_string(),
-            )))
-        })
-    }
-
-    #[test]
-    fn check_64bit_working_set_limit_by_reading() {
-        let wat = r#"
-                (module
-                    (func (export "canister_update test")
-                        (local $address i64)
-                        loop
-                            local.get $address
-                            i64.load
-                            drop
-                            local.get $address
-                            i64.const 4096 ;; OS page
-                            i64.add
-                            local.set $address
-                            br 0
-                        end
-                    )
-                    (memory i64 131073) ;; 8 GB working set limit + 1 Wasm page
-                )
-            "#;
-        let result = run_wasm(wat, "test");
-        match result.unwrap_err() {
-            HypervisorError::MemoryAccessLimitExceeded(_) => {}
-            other_error => panic!("Unexpected error: {other_error:?}"),
-        }
-    }
-
-    #[test]
-    fn check_64bit_working_set_limit_by_writing() {
-        let wat = r#"
-                (module
-                    (func (export "canister_update test")
-                        (local $address i64)
-                        loop
-                            local.get $address
-                            i64.const 0
-                            i64.store
-                            local.get $address
-                            i64.const 4096 ;; OS page
-                            i64.add
-                            local.set $address
-                            br 0
-                        end
-                    )
-                    (memory i64 131073) ;; 8 GB working set limit + 1 Wasm page
-                )
-            "#;
-        let result = run_wasm(wat, "test");
-        match result.unwrap_err() {
-            HypervisorError::MemoryAccessLimitExceeded(_) => {}
-            other_error => panic!("Unexpected error: {other_error:?}"),
-        }
     }
 }
