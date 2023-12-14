@@ -2906,13 +2906,8 @@ cargo-clippy-linux:
 commit-lint:
   artifacts:
     expire_in: 3 days
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
-    when: always
   extends:
-    - ".build-k8s"
+    - ".ic-build-image"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:05d4f93d618d6f9b9d4260db3aa0b7809165430b00a7f8d3ad03e0daee7bfdcc
   needs: []
@@ -2934,10 +2929,7 @@ commit-lint:
   tags:
     - dfinity-ic
   variables:
-    GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
 container-autobuild:
   artifacts:
     expire_in: 3 days
@@ -4077,13 +4069,8 @@ maximum-capacity-system-baseline-update:
 no-interrupt:
   artifacts:
     expire_in: 3 days
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
-    when: always
   extends:
-    - ".build-k8s"
+    - ".ic-build-image"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:05d4f93d618d6f9b9d4260db3aa0b7809165430b00a7f8d3ad03e0daee7bfdcc
   interruptible: false
@@ -4094,10 +4081,7 @@ no-interrupt:
   tags:
     - dfinity-ic
   variables:
-    GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
 notify-gitlab-failure:
   artifacts:
     expire_in: 3 days
@@ -4127,14 +4111,9 @@ notify-gitlab-failure:
 notify-gitlab-success:
   artifacts:
     expire_in: 3 days
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
-    when: always
   dependencies: []
   extends:
-    - ".build-k8s"
+    - ".ic-build-image"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:05d4f93d618d6f9b9d4260db3aa0b7809165430b00a7f8d3ad03e0daee7bfdcc
   rules:
@@ -4148,20 +4127,12 @@ notify-gitlab-success:
   tags:
     - dfinity-ic
   variables:
-    GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
 pre-commit:
   artifacts:
     expire_in: 3 days
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
-    when: always
   extends:
-    - ".build-k8s"
+    - ".ic-build-image"
     - ".rules-master-pipeline-and-merge-request"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:05d4f93d618d6f9b9d4260db3aa0b7809165430b00a7f8d3ad03e0daee7bfdcc
@@ -4198,10 +4169,7 @@ pre-commit:
   tags:
     - dfinity-ic
   variables:
-    GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     PRE_COMMIT_HOME: "/cache/pre-commit/$CI_CONCURRENT_ID"
 python-gitlab-ci-tests:
   artifacts:
