@@ -239,14 +239,6 @@ fn install_rosetta(
         "Setting up configuration for Rosetta test on port {}", port
     );
 
-    let workspace_path = env
-        .get_dependency_path("rs/tests/rosetta_workspace")
-        .into_os_string()
-        .into_string()
-        .unwrap();
-    let log_conf_file = format!("{}/ic_rosetta_api_log_config.yml", workspace_path);
-    debug!(&logger, "Conf file: {}", log_conf_file);
-
     // Activate script for code to release.
     let image_file = "/config/rosetta_image.tar";
 
@@ -309,14 +301,6 @@ echo \"Rosetta container started \"
         config_dir.clone(),
         "rosetta_image.tar",
         &get_file_content(&logger, rosetta_image_path),
-    );
-
-    // Add log config in config dir.
-    let log_config_path = Path::new(log_conf_file.as_str());
-    let _ = insert_file_to_config(
-        config_dir.clone(),
-        "ic_rosetta_api_log_config.yml",
-        &get_file_content(&logger, log_config_path),
     );
 
     UniversalVm::new(String::from(vm_name))

@@ -7,10 +7,6 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-exports_files([
-    "log_config.yml",
-])
-
 DEPENDENCIES = [
     "//rs/canister_client",
     "//rs/canister_client/sender",
@@ -40,16 +36,18 @@ DEPENDENCIES = [
     "@crate_index//:hex",
     "@crate_index//:ic-agent",
     "@crate_index//:lazy_static",
-    "@crate_index//:log",
-    "@crate_index//:log4rs",
     "@crate_index//:prometheus",
     "@crate_index//:rand",
     "@crate_index//:reqwest",
+    "@crate_index//:rolling-file",
     "@crate_index//:serde",
     "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
     "@crate_index//:strum",
     "@crate_index//:tokio",
+    "@crate_index//:tracing",
+    "@crate_index//:tracing-appender",
+    "@crate_index//:tracing-subscriber",
     "@crate_index//:url",
 ]
 
@@ -212,8 +210,8 @@ container_image(
     ],
     files = [
         ":ic-rosetta-api",
-        ":log_config.yml",
     ],
+    ports = ["8080"],
     tags = ["manual"],
     user = "rosetta",
     workdir = "/home/rosetta",

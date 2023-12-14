@@ -1,19 +1,27 @@
-FROM rust:1.55.0-bullseye as builder
+FROM rust:1.74-bookworm as builder
 
 ARG RELEASE=master
 
 WORKDIR /var/tmp
 
-ADD \
-  https://github.com/dfinity/ic/archive/${RELEASE}.tar.gz \
+COPY \
+  ic-fi-1079.tar.gz \
   ic.tar.gz
+
+RUN \
+  apt update && \
+  apt install -y \
+    ca-certificates \
+    libsqlite3-0 \
+    protobuf-compiler && \
+  apt autoremove --purge -y
 
 RUN \
   tar -xf ic.tar.gz --strip-components=1 && \
   cd rs/rosetta-api && \
   cargo build --release --bin ic-rosetta-api
 
-FROM debian:bullseye-slim
+FROM debian:bookworm-slim
 
 ARG RELEASE
 
@@ -25,16 +33,7 @@ COPY --from=builder \
   /var/tmp/rs/target/release/ic-rosetta-api \
   /usr/local/bin/
 
-COPY --from=builder \
-  /var/tmp/rs/rosetta-api/log_config.yml \
-  /root/
-
 RUN \
-  apt update && \
-  apt install -y \
-    ca-certificates \
-    libsqlite3-0 && \
-  apt autoremove --purge -y && \
   rm -rf \
     /tmp/* \
     /var/lib/apt/lists/* \

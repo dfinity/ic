@@ -8377,13 +8377,12 @@ dependencies = [
  "ic-ledger-hash-of",
  "ic-types",
  "icp-ledger",
- "log",
- "log4rs",
  "on_wire",
  "rusqlite",
  "serde",
  "serde_bytes",
  "tokio",
+ "tracing",
  "url",
 ]
 
@@ -10266,14 +10265,13 @@ dependencies = [
  "ic-types",
  "icp-ledger",
  "lazy_static",
- "log",
- "log4rs",
  "on_wire",
  "prometheus",
  "proptest",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "reqwest",
+ "rolling-file",
  "rosetta-core",
  "rustls",
  "rustls-pemfile",
@@ -10284,6 +10282,9 @@ dependencies = [
  "strum 0.25.0",
  "strum_macros 0.25.3",
  "tokio",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
  "url",
 ]
 
@@ -15887,6 +15888,15 @@ checksum = "bb6f170a4041d50a0ce04b0d2e14916d6ca863ea2e422689a5b694395d299ffe"
 dependencies = [
  "libc",
  "librocksdb-sys",
+]
+
+[[package]]
+name = "rolling-file"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8395b4f860856b740f20a296ea2cd4d823e81a2658cf05ef61be22916026a906"
+dependencies = [
+ "chrono",
 ]
 
 [[package]]

@@ -54,14 +54,6 @@ fn get_rosetta_path() -> std::path::PathBuf {
         .unwrap()
 }
 
-fn get_rosetta_log_config_path() -> std::path::PathBuf {
-    std::fs::canonicalize(
-        std::env::var_os("ROSETTA_LOG_CONFIG_PATH")
-            .expect("missing ic-rosetta-api log_config.yaml"),
-    )
-    .unwrap()
-}
-
 fn icp_ledger_wasm() -> Vec<u8> {
     let icp_ledger_project_path =
         std::path::Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap())
@@ -196,13 +188,8 @@ async fn test() {
         .expect("Unable to transfer tokens!");
 
     // start rosetta
-    let (client, _rosetta_context) = start_rosetta(
-        &get_rosetta_path(),
-        &get_rosetta_log_config_path(),
-        replica_url,
-        ledger_id,
-    )
-    .await;
+    let (client, _rosetta_context) =
+        start_rosetta(&get_rosetta_path(), replica_url, ledger_id).await;
     let network = client
         .network_list()
         .await

@@ -1,7 +1,7 @@
 use super::*;
 
+use ic_ledger_canister_blocks_synchronizer_test_utils::create_tmp_dir;
 use ic_ledger_canister_blocks_synchronizer_test_utils::sample_data::Scribe;
-use ic_ledger_canister_blocks_synchronizer_test_utils::{create_tmp_dir, init_test_logger};
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::tokens::CheckedAdd;
 use ic_rosetta_api::convert::{block_id, from_hash, to_hash};
@@ -24,8 +24,6 @@ use std::sync::Arc;
 
 #[actix_rt::test]
 async fn smoke_test() {
-    init_test_logger();
-
     let mut scribe = Scribe::new();
     let num_transactions: usize = 1000;
     let num_accounts = 100;
@@ -225,8 +223,6 @@ async fn smoke_test() {
 
 #[actix_rt::test]
 async fn blocks_test() {
-    init_test_logger();
-
     let ledger = Arc::new(TestLedger::new());
     let req_handler = RosettaRequestHandler::new_with_default_blockchain(ledger.clone());
     let mut scribe = Scribe::new();
@@ -401,8 +397,6 @@ async fn blocks_test() {
 
 #[actix_rt::test]
 async fn balances_test() {
-    init_test_logger();
-
     let ledger = Arc::new(TestLedger::new());
     let req_handler = RosettaRequestHandler::new_with_default_blockchain(ledger.clone());
     let mut scribe = Scribe::new();
@@ -663,7 +657,6 @@ async fn verify_account_search(
 
 #[actix_rt::test]
 async fn load_from_store_test() {
-    init_test_logger();
     let tmpdir = create_tmp_dir();
     let location = tmpdir.path();
     let scribe = Scribe::new_with_sample_data(10, 150);
@@ -751,7 +744,6 @@ async fn load_from_store_test() {
 // remove this test if it's in the way of a new spec
 #[actix_rt::test]
 async fn load_unverified_test() {
-    init_test_logger();
     let tmpdir = create_tmp_dir();
     let location = tmpdir.path();
     let scribe = Scribe::new_with_sample_data(10, 150);
@@ -789,7 +781,6 @@ async fn load_unverified_test() {
 
 #[actix_rt::test]
 async fn store_batch_test() {
-    init_test_logger();
     let tmpdir = create_tmp_dir();
     let location = tmpdir.path();
     let scribe = Scribe::new_with_sample_data(10, 150);
