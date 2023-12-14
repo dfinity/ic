@@ -15,6 +15,7 @@ use ic_interfaces::{
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::replica_logger::no_op_logger;
+use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
 use ic_test_utilities::{consensus::fake::*, crypto::CryptoReturningOk, mock_time};
@@ -30,6 +31,7 @@ use std::sync::RwLock;
 
 #[allow(clippy::type_complexity)]
 pub struct TestConsensusPool {
+    subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
     pool: ConsensusPoolImpl,
     time_source: Arc<dyn TimeSource>,
@@ -192,6 +194,7 @@ impl TestConsensusPool {
             no_op_logger(),
         );
         TestConsensusPool {
+            subnet_id,
             registry_client,
             pool,
             time_source,
@@ -209,7 +212,19 @@ impl TestConsensusPool {
 
     pub fn make_next_block_from_parent(&self, parent: &Block) -> BlockProposal {
         let mut block = Block::from_parent(parent);
-        block.context.registry_version = self.registry_client.get_latest_version();
+        let registry_version = self.registry_client.get_latest_version();
+
+        // Increase time monotonically by at least initial_notary_delay
+        let monotonic_block_increment = self
+            .registry_client
+            .get_notarization_delay_settings(self.subnet_id, registry_version)
+            .unwrap()
+            .expect("subnet record should be available")
+            .initial_notary_delay
+            + core::time::Duration::from_nanos(1);
+        block.context.time += monotonic_block_increment;
+
+        block.context.registry_version = registry_version;
         let dkg_payload = (self.dkg_payload_builder)(self, parent.clone(), &block.context);
         block.payload = Payload::new(ic_types::crypto::crypto_hash, dkg_payload.into());
         BlockProposal::fake(block, node_test_id(0))

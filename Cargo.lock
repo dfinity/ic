@@ -11106,6 +11106,7 @@ dependencies = [
  "ic-interfaces-state-manager",
  "ic-logger",
  "ic-metrics",
+ "ic-registry-client-helpers",
  "ic-replicated-state",
  "ic-test-utilities",
  "ic-types",

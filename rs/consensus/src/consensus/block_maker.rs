@@ -9,8 +9,8 @@ use crate::{
     ecdsa,
 };
 use ic_consensus_utils::{
-    find_lowest_ranked_proposals, get_block_hash_string, get_subnet_record, is_time_to_make_block,
-    membership::Membership, pool_reader::PoolReader,
+    find_lowest_ranked_proposals, get_block_hash_string, get_notarization_delay_settings,
+    get_subnet_record, is_time_to_make_block, membership::Membership, pool_reader::PoolReader,
 };
 use ic_interfaces::{
     consensus::PayloadBuilder, dkg::DkgPool, ecdsa::EcdsaPool, time_source::TimeSource,
@@ -212,6 +212,23 @@ impl BlockMaker {
         let subnet_records =
             subnet_records_for_registry_version(self, registry_version, stable_registry_version)?;
 
+        // The monotonic_block_increment is used as the minimum timestamp increment over
+        // the parent for block proposals. Technically we only need this delta to be 1ns
+        // to fulfil the requirement of strict monotonicity.
+        //
+        // The idea behind setting this value to the initial_notary_delay is that when
+        // replicas' clocks fall behind, they'll still be incrementing the block time at
+        // a degraded, but reasonable rate, instead of the time falling flat. We add 1ns
+        // to the initial_notary_delay to ensure the delta is always > 0.
+        let monotonic_block_increment = get_notarization_delay_settings(
+            &self.log,
+            &*self.registry_client,
+            self.replica_config.subnet_id,
+            registry_version,
+        )?
+        .initial_notary_delay
+            + Duration::from_nanos(1);
+
         // If we have previously tried to make a payload but got an error at the given
         // height, We should try again with the same context. Otherwise create a
         // new context.
@@ -226,19 +243,29 @@ impl BlockMaker {
             // Below we skip proposing the block if this context is behind the parent's context.
             // We set the time so that block making is not skipped due to local time being
             // behind the network time.
-            time: std::cmp::max(self.time_source.get_relative_time(), parent.context.time),
+            // We also enforce strictly monotonic increase of timestamp by a non-negative
+            // delta over the parent. It's important that (parent + delta) is not greater
+            // than local time, assuming the clocks are perfectly in-sync. We choose
+            // `delta = initial_notary_delay + 1ns`, because all nodes have to wait at least
+            // `initial_notary_delay` time to notarize (and therefore propose subsequent)
+            // blocks. The additional 1ns makes no practical difference in that regard.
+            time: std::cmp::max(
+                self.time_source.get_relative_time(),
+                parent.context.time + monotonic_block_increment,
+            ),
         };
 
-        if !context.greater_or_equal(&parent.context) {
-            // The values in our validation context are not monotonically increasing the
-            // values included in the parent block. To avoid proposing an invalid block, we
-            // simply do not propose a block now.
+        if !context.greater(&parent.context) {
+            // The values in our validation context are not strictly monotonically
+            // increasing the values included in the parent block by at least
+            // monotonic_block_increment. To avoid proposing an invalid block, we simply
+            // do not propose a block now.
             warn!(
                 every_n_seconds => 5,
                 self.log,
                 "Cannot propose block as the locally available validation context is \
-                        smaller than the parent validation context \
-                        (locally available={:?}, parent context={:?})",
+                smaller than the parent validation context (locally available={:?}, \
+                parent context={:?})",
                 context,
                 &parent.context
             );
@@ -501,12 +528,7 @@ mod tests {
     fn test_block_maker() {
         let subnet_id = subnet_test_id(0);
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let node_ids = vec![
-                node_test_id(0),
-                node_test_id(1),
-                node_test_id(3),
-                node_test_id(4),
-            ];
+            let node_ids: Vec<_> = (0..13).map(node_test_id).collect();
             let dkg_interval_length = 300;
             let Dependencies {
                 mut pool,
@@ -578,28 +600,29 @@ mod tests {
             let start_hash = start.content.get_hash();
             let expected_payloads = PoolReader::new(&pool)
                 .get_payloads_from_height(certified_height.increment(), start.as_ref().clone());
-            let matches_expected_payloads =
-                move |payloads: &[(Height, Time, Payload)]| payloads == &*expected_payloads;
             let returned_payload =
                 dkg::Payload::Dealings(dkg::Dealings::new_empty(Height::from(0)));
+            let expected_time = expected_payloads[0].1
+                + get_block_maker_delay(
+                    &no_op_logger(),
+                    registry.as_ref(),
+                    subnet_id,
+                    RegistryVersion::from(10),
+                    Rank(4),
+                )
+                .unwrap();
             let expected_context = ValidationContext {
                 certified_height,
                 registry_version: RegistryVersion::from(10),
-                time: time_source.get_relative_time()
-                    + get_block_maker_delay(
-                        &no_op_logger(),
-                        registry.as_ref(),
-                        subnet_id,
-                        RegistryVersion::from(10),
-                        Rank(1),
-                    )
-                    .unwrap(),
+                time: expected_time,
             };
+            let matches_expected_payloads =
+                move |payloads: &[(Height, Time, Payload)]| payloads == &*expected_payloads;
             let expected_block = Block::new(
                 start_hash.clone(),
                 Payload::new(ic_types::crypto::crypto_hash, returned_payload.into()),
                 next_height,
-                Rank(1),
+                Rank(4),
                 expected_context.clone(),
             );
 
@@ -612,13 +635,13 @@ mod tests {
 
             let pool_reader = PoolReader::new(&pool);
             let replica_config = ReplicaConfig {
-                node_id: (0..4)
+                node_id: (0..13)
                     .map(node_test_id)
                     .find(|node_id| {
                         let h = pool_reader.get_notarized_height();
                         let prev_beacon = pool_reader.get_random_beacon(h).unwrap();
                         membership.get_block_maker_rank(h.increment(), &prev_beacon, *node_id)
-                            == Ok(Some(Rank(1)))
+                            == Ok(Some(Rank(4)))
                     })
                     .unwrap(),
                 subnet_id: replica_config.subnet_id,
@@ -646,19 +669,7 @@ mod tests {
             // kick start another round
             assert!(run_block_maker().is_none());
 
-            time_source
-                .set_time(
-                    time_source.get_relative_time()
-                        + get_block_maker_delay(
-                            &no_op_logger(),
-                            registry.as_ref(),
-                            subnet_id,
-                            RegistryVersion::from(10),
-                            Rank(1),
-                        )
-                        .unwrap(),
-                )
-                .unwrap();
+            time_source.set_time(expected_time).unwrap();
             if let Some(proposal) = run_block_maker() {
                 assert_eq!(proposal.as_ref(), &expected_block);
             } else {
