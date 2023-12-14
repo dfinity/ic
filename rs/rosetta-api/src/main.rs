@@ -7,6 +7,14 @@ use ic_rosetta_api::rosetta_server::{RosettaApiServer, RosettaApiServerOpt};
 use ic_rosetta_api::{ledger_client, DEFAULT_BLOCKCHAIN, DEFAULT_TOKEN_SYMBOL};
 use ic_types::{CanisterId, PrincipalId};
 use std::{path::Path, path::PathBuf, str::FromStr, sync::Arc};
+use tracing::level_filters::LevelFilter;
+use tracing::{error, info, warn, Level};
+use tracing_appender::non_blocking::WorkerGuard;
+use tracing_subscriber::filter::FilterExt;
+use tracing_subscriber::filter::FilterFn;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{Layer, Registry};
 use url::Url;
 
 #[derive(Debug, Parser)]
@@ -32,12 +40,10 @@ struct Opt {
     /// The URL of the replica to connect to.
     #[clap(long = "ic-url")]
     ic_url: Option<String>,
-    #[clap(
-        short = 'l',
-        long = "log-config-file",
-        default_value = "log_config.yml"
-    )]
-    log_config_file: PathBuf,
+    #[clap(short = 'l', long = "log-config-file")]
+    log_config_file: Option<PathBuf>,
+    #[clap(short = 'L', long = "log-level", default_value = "INFO")]
+    log_level: Level,
     #[clap(long = "root-key")]
     root_key: Option<PathBuf>,
     /// Supported options: sqlite, sqlite-in-memory
@@ -80,30 +86,68 @@ impl Opt {
     }
 }
 
+fn init_logging(level: Level) -> std::io::Result<WorkerGuard> {
+    std::fs::create_dir_all("log")?;
+
+    // stdout
+    fn rosetta_filter(module: &str) -> bool {
+        module.starts_with("ic_rosetta_api")
+            || module.starts_with("ic_ledger_canister_blocks_synchronizer")
+    }
+    let rosetta_filter =
+        FilterFn::new(|metadata| metadata.module_path().map_or(true, rosetta_filter));
+    let stdout_filter = LevelFilter::from_level(level).and(rosetta_filter);
+    let stdout_layer = tracing_subscriber::fmt::Layer::default()
+        .with_target(false) // instead include file and lines in the next lines
+        .with_file(true) // display source code file paths
+        .with_line_number(true) // display source code line numbers
+        .with_filter(stdout_filter);
+
+    // rolling file
+    let file_appender = rolling_file::RollingFileAppender::new(
+        "log/rosetta-api.log",
+        rolling_file::RollingConditionBasic::new().max_size(100_000_000),
+        usize::MAX,
+    )
+    .map_err(std::io::Error::other)?;
+    let (file_writer, guard) = tracing_appender::non_blocking(file_appender);
+    let file_layer = tracing_subscriber::fmt::Layer::default()
+        .with_target(false) // instead include file and lines in the next lines
+        .with_file(true) // display source code file paths
+        .with_line_number(true) // display source code line numbers
+        .with_writer(file_writer)
+        .with_filter(LevelFilter::from_level(level));
+
+    Registry::default()
+        .with(stdout_layer)
+        .with(file_layer)
+        .init();
+
+    Ok(guard)
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let opt = Opt::parse();
 
-    if let Err(e) = log4rs::init_file(opt.log_config_file.as_path(), Default::default()) {
-        panic!(
-            "rosetta-api failed to load log configuration file: {}, error: {}. (current_dir is: {:?})",
-            &opt.log_config_file.as_path().display(),
-            e,
-            std::env::current_dir()
-        );
+    let _guard = init_logging(opt.log_level)?;
+
+    if opt.log_config_file.is_some() {
+        warn!("--log-config-file is deprecated and ignored")
     }
 
     let pkg_name = env!("CARGO_PKG_NAME");
     let pkg_version = env!("CARGO_PKG_VERSION");
-    log::info!("Starting {}, pkg_version: {}", pkg_name, pkg_version);
+    info!("Starting {}, pkg_version: {}", pkg_name, pkg_version);
     let listen_port = match (opt.listen_port, &opt.listen_port_file) {
         (None, None) => 8081,
         (None, Some(_)) => 0, // random port
         (Some(p), _) => p,
     };
-    log::info!("Listening on {}:{}", opt.listen_address, listen_port);
+    info!("Listening on {}:{}", opt.listen_address, listen_port);
     let addr = format!("{}:{}", opt.listen_address, listen_port);
     let url = opt.ic_url().unwrap();
+    info!("Internet Computer URL set to {}", url);
 
     let (root_key, canister_id, governance_canister_id) = if opt.mainnet {
         let root_key = match opt.root_key {
@@ -135,7 +179,7 @@ async fn main() -> std::io::Result<()> {
         let root_key = match opt.root_key {
             Some(root_key_path) => Some(parse_threshold_sig_key(root_key_path.as_path())?),
             None => {
-                log::warn!("Data certificate will not be verified due to missing root key");
+                warn!("Data certificate will not be verified due to missing root key");
                 None
             }
         };
@@ -160,16 +204,16 @@ async fn main() -> std::io::Result<()> {
     let token_symbol = opt
         .token_symbol
         .unwrap_or_else(|| DEFAULT_TOKEN_SYMBOL.to_string());
-    log::info!("Token symbol set to {}", token_symbol);
+    info!("Token symbol set to {}", token_symbol);
 
     let store_location: Option<&Path> = match opt.store_type.as_ref() {
         "sqlite" => Some(&opt.store_location),
         "sqlite-in-memory" | "in-memory" => {
-            log::info!("Using in-memory block store");
+            info!("Using in-memory block store");
             None
         }
         _ => {
-            log::error!("Invalid store type. Expected sqlite or sqlite-in-memory.");
+            error!("Invalid store type. Expected sqlite or sqlite-in-memory.");
             panic!("Invalid store type");
         }
     };
@@ -206,7 +250,7 @@ async fn main() -> std::io::Result<()> {
     let ledger = Arc::new(client);
     let req_handler = RosettaRequestHandler::new(blockchain, ledger.clone());
 
-    log::info!("Network id: {:?}", req_handler.network_id());
+    info!("Network id: {:?}", req_handler.network_id());
     let serv = RosettaApiServer::new(
         ledger,
         req_handler,
@@ -227,6 +271,6 @@ async fn main() -> std::io::Result<()> {
     .await
     .unwrap();
     serv.stop().await;
-    log::info!("Th-th-th-that's all folks!");
+    info!("Th-th-th-that's all folks!");
     Ok(())
 }

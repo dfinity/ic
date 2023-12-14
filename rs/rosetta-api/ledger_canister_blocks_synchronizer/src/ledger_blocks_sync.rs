@@ -8,8 +8,8 @@ use std::time::Instant;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_hash_of::HashOf;
 use icp_ledger::{Block, TipOfChainRes};
-use log::{debug, error, info, trace, warn};
 use tokio::sync::RwLock;
+use tracing::{debug, error, info, trace, warn};
 
 use crate::blocks::BlockStoreError;
 use crate::blocks::{Blocks, HashedBlock};

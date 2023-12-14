@@ -14,11 +14,10 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:chrono",
     "@crate_index//:ic-agent",
-    "@crate_index//:log",
-    "@crate_index//:log4rs",
     "@crate_index//:rusqlite",
     "@crate_index//:serde",
     "@crate_index//:tokio",
+    "@crate_index//:tracing",
     "@crate_index//:url",
 ]
 

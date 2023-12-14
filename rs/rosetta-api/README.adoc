@@ -48,3 +48,39 @@ $ nghttpx --backend "127.0.0.1,8080" --frontend "127.0.0.1,2053;no-tls"
 This will reforward the connections to `2053` port, supporting
 plain-text http2. You can then pass `--ic-url http://127.0.0.1:2053` to
 `ic-rosetta-api`.
+
+== Building and running Docker image for developers
+
+Enter the dev container
+
+```
+./gitlab-ci/container/container-run.sh
+```
+
+Use Bazel to build the image locally:
+
+```
+$ bazel build //rs/rosetta-api:rosetta_image.tar
+```
+
+Query Bazel for the produced image
+
+```
+$ bazel cquery //rs/rosetta-api:rosetta_image.tar --output=files
+```
+
+The load the image in docker
+
+```
+$ docker load -i <bazel_path_to>/rosetta_image.tar
+...
+Loaded image(s): localhost/bazel/rs/rosetta-api:rosetta_image
+```
+
+Finally run the image
+
+```
+$ docker run localhost/bazel/rs/rosetta-api:rosetta_image
+```
+
+Remember to mount `/home/rosetta/log` and `/data` to persist logs and data after shutting down the docker container.

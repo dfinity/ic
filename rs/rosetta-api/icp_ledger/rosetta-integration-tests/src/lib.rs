@@ -31,7 +31,6 @@ impl Drop for KillOnDrop {
 
 pub async fn start_rosetta(
     rosetta_bin: &Path,
-    rosetta_log_config_file: &Path,
     ic_url: Url,
     ledger_canister_id: Principal,
 ) -> (RosettaClient, RosettaContext) {
@@ -47,8 +46,6 @@ pub async fn start_rosetta(
 
     let _proc = KillOnDrop(
         Command::new(rosetta_bin)
-            .arg("--log-config-file")
-            .arg(rosetta_log_config_file)
             .arg("--ic-url")
             .arg(ic_url.to_string())
             .arg("--canister-id")

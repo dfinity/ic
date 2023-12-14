@@ -4307,7 +4307,6 @@ rosetta-api-docker-image:
       pushd "$(mktemp -d)"
       cp \
         "$CI_PROJECT_DIR"/artifacts/release/ic-rosetta-api \
-        "$CI_PROJECT_DIR"/rs/rosetta-api/log_config.yml \
         .
       docker build \
         --build-arg RELEASE="$CI_COMMIT_SHA" \

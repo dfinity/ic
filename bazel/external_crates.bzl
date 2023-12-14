@@ -682,9 +682,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "log": crate.spec(
                 version = "^0.4.14",
             ),
-            "log4rs": crate.spec(
-                version = "^1.1.1",
-            ),
             "lru": crate.spec(
                 version = "^0.7.8",
                 default_features = False,
@@ -961,6 +958,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "rocksdb": crate.spec(
                 version = "^0.21.0",
                 default_features = False,
+            ),
+            "rolling-file": crate.spec(
+                version = "^0.2.0",
             ),
             "rsa": crate.spec(
                 version = "^0.9.2",
