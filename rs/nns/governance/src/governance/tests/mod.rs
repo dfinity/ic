@@ -1391,8 +1391,7 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
     use super::*;
     use ic_nervous_system_proto::pb::v1 as pb;
     use ic_sns_init::pb::v1::sns_init_payload;
-    use test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING;
-    use test_data::{IMAGE_1, IMAGE_2};
+    use test_data::{CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING, IMAGE_1, IMAGE_2};
 
     // Alias types from crate::pb::v1::...
     //
@@ -2139,6 +2138,7 @@ fn test_pre_and_post_upgrade_first_time() {
                 followees: vec![NeuronId { id : 3}]
             }
         },
+        account: vec![0; 32],
         ..Default::default()
     };
     let neurons = btreemap! { 1 => neuron1 };

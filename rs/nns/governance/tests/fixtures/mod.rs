@@ -18,7 +18,6 @@ use ic_nns_common::{
     types::UpdateIcpXdrConversionRatePayload,
 };
 use ic_nns_constants::LEDGER_CANISTER_ID;
-use ic_nns_governance::pb::v1::NeuronType;
 use ic_nns_governance::{
     governance::{
         governance_minting_account, neuron_subaccount, Environment, Governance, HeapGrowthPotential,
@@ -31,7 +30,7 @@ use ic_nns_governance::{
         neuron,
         neuron::DissolveState,
         proposal, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError, ManageNeuron,
-        ManageNeuronResponse, Motion, NetworkEconomics, Neuron, NnsFunction, Proposal,
+        ManageNeuronResponse, Motion, NetworkEconomics, Neuron, NeuronType, NnsFunction, Proposal,
         ProposalData, Topic, Vote,
     },
 };
