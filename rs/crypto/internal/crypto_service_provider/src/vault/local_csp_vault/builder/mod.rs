@@ -41,12 +41,17 @@ impl ProdLocalCspVault {
         const PUBLIC_KEY_STORE_DATA_FILENAME: &str = "public_keys.pb";
         const CANISTER_SKS_DATA_FILENAME: &str = "canister_sks_data.pb";
 
-        let node_secret_key_store =
-            ProtoSecretKeyStore::open(key_store_dir, SKS_DATA_FILENAME, Some(new_logger!(logger)));
+        let node_secret_key_store = ProtoSecretKeyStore::open(
+            key_store_dir,
+            SKS_DATA_FILENAME,
+            Some(new_logger!(logger)),
+            Arc::clone(&metrics),
+        );
         let canister_secret_key_store = ProtoSecretKeyStore::open(
             key_store_dir,
             CANISTER_SKS_DATA_FILENAME,
             Some(new_logger!(logger)),
+            Arc::clone(&metrics),
         );
         let public_key_store = ProtoPublicKeyStore::open(
             key_store_dir,

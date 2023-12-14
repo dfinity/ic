@@ -315,6 +315,17 @@ impl CryptoMetrics {
                 .inc();
         }
     }
+
+    /// Observes errors while performing cleanup of a secret key store. Cleanup involves zeroizing
+    /// the blocks of the old key store, and removing the file (unlinking it). If either one of
+    /// these operations fails, then the cleanup is considered to have failed.
+    pub fn observe_secret_key_store_cleanup_error(&self, increment: u64) {
+        if let Some(metrics) = &self.metrics {
+            metrics
+                .crypto_secret_key_store_cleanup_error
+                .inc_by(increment);
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, Eq, strum_macros::Display, PartialOrd, Ord, PartialEq)]
@@ -567,6 +578,9 @@ struct Metrics {
 
     /// Counter for iDKG dealing encryption public key too old, but not in registry.
     crypto_latest_idkg_dealing_encryption_public_key_too_old_but_not_in_registry: IntCounter,
+
+    /// Counter for secret key store cleanup errors.
+    crypto_secret_key_store_cleanup_error: IntCounter,
 }
 
 impl Metrics {
@@ -704,6 +718,10 @@ impl Metrics {
             crypto_latest_idkg_dealing_encryption_public_key_too_old_but_not_in_registry: r.int_counter(
                 "crypto_latest_idkg_dealing_encryption_public_key_too_old_but_not_in_registry",
                 "latest iDKG dealing encryption public key too old, but not in registry"
+            ),
+            crypto_secret_key_store_cleanup_error: r.int_counter(
+                "crypto_secret_key_store_cleanup_error",
+                "Error while cleaning up secret key store"
             ),
         }
     }

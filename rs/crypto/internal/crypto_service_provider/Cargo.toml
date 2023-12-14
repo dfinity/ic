@@ -56,6 +56,7 @@ strum_macros = { workspace = true }
 tarpc = { version = "0.32", features = ["full"] }
 tempfile = "3.1.0"
 time = "0.3.20"
+thiserror = "1.0.26"
 tokio = { workspace = true }
 tokio-serde = { version = "0.8", features = ["json", "bincode"] }
 tokio-util = { version = "0.7.4", features = ["codec"] }
@@ -71,6 +72,7 @@ ic-crypto-node-key-generation = { path = "../../node_key_generation" }
 ic-crypto-temp-crypto-vault = { path = "../../temp_crypto/temp_vault" }
 ic-crypto-test-utils = { path = "../../test_utils" }
 ic-crypto-test-utils-keys = { path = "../../../crypto/test_utils/keys" }
+ic-crypto-test-utils-metrics = { path = "../../../crypto/test_utils/metrics" }
 ic-crypto-test-utils-local-csp-vault = { path = "../../../crypto/test_utils/local_csp_vault" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../crypto/test_utils/reproducible_rng" }
 ic-crypto-utils-basic-sig = { path = "../../utils/basic_sig" }
