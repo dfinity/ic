@@ -162,6 +162,7 @@ pub struct InstallCodeContext {
     pub arg: Vec<u8>,
     pub compute_allocation: Option<ComputeAllocation>,
     pub memory_allocation: Option<MemoryAllocation>,
+    pub unsafe_drop_stable_memory: bool,
 }
 
 impl InstallCodeContext {
@@ -267,6 +268,7 @@ impl InstallCodeContext {
             arg: args.arg,
             compute_allocation: None,
             memory_allocation: None,
+            unsafe_drop_stable_memory: false,
         })
     }
 }
@@ -296,6 +298,8 @@ impl TryFrom<(CanisterChangeOrigin, InstallCodeArgsV2)> for InstallCodeContext {
             None => None,
         };
 
+        let unsafe_drop_stable_memory = args.unsafe_drop_stable_memory.unwrap_or(false);
+
         Ok(InstallCodeContext {
             origin,
             mode: args.mode,
@@ -304,6 +308,7 @@ impl TryFrom<(CanisterChangeOrigin, InstallCodeArgsV2)> for InstallCodeContext {
             arg: args.arg,
             compute_allocation,
             memory_allocation,
+            unsafe_drop_stable_memory,
         })
     }
 }
@@ -871,6 +876,8 @@ impl CanisterManager {
             requested_memory_allocation: context.memory_allocation,
             sender: context.sender(),
             canister_id: canister.canister_id(),
+            unsafe_drop_stable_memory: context.unsafe_drop_stable_memory,
+            fd_factory: Arc::clone(&self.fd_factory),
         };
 
         let round = RoundContext {
