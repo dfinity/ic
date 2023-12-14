@@ -1549,8 +1549,25 @@ fn write_barrier_instructions<'a>(
 }
 
 enum AccessKind {
-    Load,
-    Store { value_argument_index: u32 },
+    // Native Wasm load operation with `length <= 8 <= PAGE_SIZE`.
+    NativeLoad {
+        offset: u64,
+        length: u64,
+    },
+    // Native Wasm store operation with `length <= 8 <= PAGE_SIZE`.
+    NativeStore {
+        offset: u64,
+        length: u64,
+        value_argument_index: u32,
+    },
+    /// Short-length bulk load operation with `length <= PAGE_SIZE`, by `memory.copy` or `memory.fill`.
+    ShortBulkLoad {
+        length_argument_index: u32,
+    },
+    /// Short-length bulk store operation with `length <= PAGE_SIZE`, by `memory.copy` or `memory.fill`.
+    ShortBulkStore {
+        length_argument_index: u32,
+    },
 }
 
 /// Special read and write barriers used for 64-bit main memory.
@@ -1563,15 +1580,21 @@ enum AccessKind {
 /// 1: Page has been accessed, and at least one write access was involved.
 /// 2: Page has only been read until now.
 ///
-/// It assumes that the original arguments of a load or store operation are
+/// For native load and store operations, it assumes that the original arguments reside
 /// on top of the Wasm evaluation stack.
 ///
-/// Note: Accesses may be unaligned and cross an OS page boundary.
+/// Note: Native load and store accesses may be unaligned and cross an OS page boundary.
+/// Moreover, short-length bulk access potentially also cross OS page boundaries.
 /// Therefore, the barrier potentially triggers two page guards for an unaligned access.
+///  
+/// Requirements:
+/// * `length > 0 && length <= PAGE_SIZE``, regardless of whether the length is static or dynamic.
+/// This implies that at most 2 pages are accessed by the operation.
+///
+/// Bulk accesses with a longer length than an OS page size may access more than 2 pages
+/// and are thus separatedly handled, calling `main_bulk_accesss_guard()` in the system API.
 fn memory64_barrier_instructions<'a>(
     kind: AccessKind,
-    offset: u64,
-    size: u64,
     address_argument_index: u32,
     byte_map_index: u32,
     wasm_native_stable_memory: FlagStatus,
@@ -1582,31 +1605,54 @@ fn memory64_barrier_instructions<'a>(
 
     let mut instructions = vec![];
 
-    // Backup value of a store operation.
-    match kind {
-        AccessKind::Load => {}
-        AccessKind::Store {
-            value_argument_index,
-        } => {
-            instructions.push(LocalSet {
-                local_index: value_argument_index,
-            });
-        }
+    // Backup value of a native store operation.
+    if let AccessKind::NativeStore {
+        value_argument_index,
+        ..
+    } = kind
+    {
+        instructions.push(LocalSet {
+            local_index: value_argument_index,
+        });
     }
 
     const _: () = assert!(MAX_WASM_MEMORY_IN_BYTES / PAGE_SIZE as u64 <= u32::MAX as u64);
 
+    // Backup the address argument of a native access operation.
+    // And load the address argument for the subsequent page access guard detection.
+    match kind {
+        AccessKind::NativeLoad { .. } | AccessKind::NativeStore { .. } => {
+            instructions.push(LocalTee {
+                local_index: address_argument_index,
+            });
+        }
+        AccessKind::ShortBulkLoad { .. } | AccessKind::ShortBulkStore { .. } => {
+            instructions.push(LocalGet {
+                local_index: address_argument_index,
+            });
+        }
+    }
+
+    let static_byte_map_offset = match kind {
+        AccessKind::NativeLoad { offset, .. } | AccessKind::NativeStore { offset, .. } => {
+            // Analogous optimization for the offset as in `write_barrier_instructions`.
+            if offset as usize % PAGE_SIZE != 0 {
+                instructions.append(&mut vec![
+                    I64Const {
+                        value: offset as i64,
+                    },
+                    I64Add,
+                ]);
+                0
+            } else {
+                offset / PAGE_SIZE as u64
+            }
+        }
+        AccessKind::ShortBulkLoad { .. } | AccessKind::ShortBulkStore { .. } => 0,
+    };
+
+    // Read the page-associated information in the byte map.
     instructions.append(&mut vec![
-        // Backup the address argument of the access operation.
-        LocalTee {
-            local_index: address_argument_index,
-        },
-        // Read the page-associated information in the byte map.
-        // TODO: Possibly optimize for `offset % PAGE_SIZE == 0`, analogous to `write_barrier_instructions`.
-        I64Const {
-            value: offset as i64,
-        },
-        I64Add,
         I64Const {
             value: page_size_shift as i64,
         },
@@ -1620,7 +1666,7 @@ fn memory64_barrier_instructions<'a>(
             memarg: wasmparser::MemArg {
                 align: 0,
                 max_align: 0,
-                offset: 0,
+                offset: static_byte_map_offset,
                 memory: tracking_mem_idx,
             },
         },
@@ -1631,14 +1677,22 @@ fn memory64_barrier_instructions<'a>(
     // * For write accesses, if it has not yet been previously written (i.e. state is not `1`).
     // Unaligned accesses crossing pages are handled later.
     match kind {
-        AccessKind::Load => instructions.push(I32Eqz),
-        AccessKind::Store { .. } => instructions.append(&mut vec![I32Const { value: 1 }, I32Ne]),
+        AccessKind::NativeLoad { .. } | AccessKind::ShortBulkLoad { .. } => {
+            instructions.push(I32Eqz)
+        }
+        AccessKind::NativeStore { .. } | AccessKind::ShortBulkStore { .. } => {
+            instructions.append(&mut vec![I32Const { value: 1 }, I32Ne])
+        }
     }
 
     // Trigger page guard for the first accessed byte only if needed.
     let page_guard_import = match kind {
-        AccessKind::Load => InjectedImports::MainReadPageGuard,
-        AccessKind::Store { .. } => InjectedImports::MainWritePageGuard,
+        AccessKind::NativeLoad { .. } | AccessKind::ShortBulkLoad { .. } => {
+            InjectedImports::MainReadPageGuard
+        }
+        AccessKind::NativeStore { .. } | AccessKind::ShortBulkStore { .. } => {
+            InjectedImports::MainWritePageGuard
+        }
     };
     let page_guard_function_index =
         page_guard_import.get_index(MemoryMode::Memory64, wasm_native_stable_memory) as u32;
@@ -1656,17 +1710,47 @@ fn memory64_barrier_instructions<'a>(
         End,
     ]);
 
-    assert!(size <= PAGE_SIZE as u64);
-    if size > 1 {
-        // Handle potential unaligned accesses.
+    let check_cross_page_access = match kind {
+        AccessKind::NativeLoad { length, .. } | AccessKind::NativeStore { length, .. } => {
+            length > 1
+        }
+        AccessKind::ShortBulkLoad { .. } | AccessKind::ShortBulkStore { .. } => true,
+    };
+
+    if check_cross_page_access {
+        // Handle potential cross-page accesses, e.g. by unaligned native load or store accesses, or bulk accesses.
+
+        // Compute the last accessed byte.
+        instructions.push(LocalGet {
+            local_index: address_argument_index,
+        });
+
+        match kind {
+            AccessKind::NativeLoad { offset, length, .. }
+            | AccessKind::NativeStore { offset, length, .. } => {
+                assert!(length as u64 <= PAGE_SIZE as u64);
+                instructions.append(&mut vec![I64Const {
+                    value: (offset + length - 1) as i64,
+                }]);
+            }
+            AccessKind::ShortBulkLoad {
+                length_argument_index,
+            }
+            | AccessKind::ShortBulkStore {
+                length_argument_index,
+            } => {
+                instructions.append(&mut vec![
+                    LocalGet {
+                        local_index: length_argument_index,
+                    },
+                    // Using the requirement that `length > 0`, see above, to avoid underflow.
+                    I64Const { value: 1 },
+                    I64Sub,
+                ]);
+            }
+        }
+
         instructions.append(&mut vec![
-            // Compute the last accessed byte.
-            LocalGet {
-                local_index: address_argument_index,
-            },
-            I64Const {
-                value: (offset + size - 1) as i64,
-            },
             I64Add,
             I64Const {
                 value: page_size_shift as i64,
@@ -1682,7 +1766,7 @@ fn memory64_barrier_instructions<'a>(
             If {
                 blockty: BlockType::Empty,
             },
-            // Page-crossing access. At most one subsequent page can be accessed because `size <= PAGE_SIZE`.
+            // Page-crossing access. At most one subsequent page can be accessed because `length <= PAGE_SIZE`.
             // The guard is unconditionally triggered for the second accessed page. The guard logic checks whether
             // this access needs specific handling (updating the byte map and guarding the working set limit).
             LocalGet {
@@ -1697,23 +1781,29 @@ fn memory64_barrier_instructions<'a>(
         ]);
     }
 
-    instructions.append(&mut vec![
-        // Restore the address argument of the access operation.
-        LocalGet {
-            local_index: address_argument_index,
-        },
-    ]);
-
-    // Restore value of a store operation.
+    // Restore the address argument of a native access operation.
     match kind {
-        AccessKind::Load => {}
-        AccessKind::Store {
+        AccessKind::NativeLoad { .. } | AccessKind::NativeStore { .. } => {
+            instructions.push(LocalGet {
+                local_index: address_argument_index,
+            });
+        }
+        AccessKind::ShortBulkLoad { .. } | AccessKind::ShortBulkStore { .. } => {}
+    }
+
+    // Restore the value of a native store operation.
+    match kind {
+        AccessKind::NativeStore {
             value_argument_index,
+            ..
         } => {
             instructions.push(LocalGet {
                 local_index: value_argument_index,
             });
         }
+        AccessKind::NativeLoad { .. }
+        | AccessKind::ShortBulkLoad { .. }
+        | AccessKind::ShortBulkStore { .. } => {}
     }
     instructions
 }
@@ -1721,54 +1811,130 @@ fn memory64_barrier_instructions<'a>(
 const IS_BULK_READ: i32 = 0;
 const IS_BULK_WRITE: i32 = 1;
 
-fn memory_copy_barrier_instructions<'a>(
-    destination_argument_index: u32,
-    source_argument_index: u32,
+enum BulkAccessKind {
+    Load,
+    Store,
+}
+
+fn bulk_access_barrier_instructions<'a>(
+    kind: BulkAccessKind,
+    address_argument_index: u32,
     length_argument_index: u32,
+    byte_map_index: u32,
     wasm_native_stable_memory: FlagStatus,
 ) -> Vec<Operator<'a>> {
     use Operator::*;
     let bulk_access_guard_index = InjectedImports::MainBulkAccessGuard
         .get_index(MemoryMode::Memory64, wasm_native_stable_memory)
         as u32;
-    vec![
-        // Backup arguments.
-        LocalSet {
+    let mut instructions = vec![];
+    instructions.append(&mut vec![
+        LocalGet {
             local_index: length_argument_index,
         },
-        LocalSet {
-            local_index: source_argument_index,
+        I64Const { value: 0 },
+        I64Ne,
+        // Skip zero-length bulk access, a requirement for short bulk accesses handled by
+        // `memory64_barrier_instructions`.
+        If {
+            blockty: BlockType::Empty,
         },
-        LocalSet {
-            local_index: destination_argument_index,
-        },
-        // Bulk read guard on the source segment.
         LocalGet {
-            local_index: source_argument_index,
+            local_index: length_argument_index,
+        },
+        I64Const {
+            value: PAGE_SIZE as i64,
+        },
+        I64LeU,
+        If {
+            blockty: BlockType::Empty,
+        },
+    ]);
+
+    // Optimization for a short bulk access of length > 0 && length <= PAGE_SIZE.
+    let short_bulk_access_kind = match kind {
+        BulkAccessKind::Load => AccessKind::ShortBulkLoad {
+            length_argument_index,
+        },
+        BulkAccessKind::Store => AccessKind::ShortBulkStore {
+            length_argument_index,
+        },
+    };
+
+    instructions.extend_from_slice(&memory64_barrier_instructions(
+        short_bulk_access_kind,
+        address_argument_index,
+        byte_map_index,
+        wasm_native_stable_memory,
+    ));
+
+    // Bulk access longer than a page size is handled by `main_bulk_access_guard()` in the system API.
+    instructions.append(&mut vec![
+        Else,
+        LocalGet {
+            local_index: address_argument_index,
         },
         LocalGet {
             local_index: length_argument_index,
         },
         I32Const {
-            value: IS_BULK_READ,
+            value: match kind {
+                BulkAccessKind::Load => IS_BULK_READ,
+                BulkAccessKind::Store => IS_BULK_WRITE,
+            },
         },
         Call {
             function_index: bulk_access_guard_index,
         },
-        // Bulk write guard on the destination segment.
-        LocalGet {
-            local_index: destination_argument_index,
-        },
-        LocalGet {
+        End,
+        End,
+    ]);
+    instructions
+}
+
+fn memory_copy_barrier_instructions<'a>(
+    destination_argument_index: u32,
+    source_argument_index: u32,
+    length_argument_index: u32,
+    byte_map_index: u32,
+    wasm_native_stable_memory: FlagStatus,
+) -> Vec<Operator<'a>> {
+    use Operator::*;
+    let mut instructions = vec![];
+
+    // Backup arguments.
+    instructions.append(&mut vec![
+        LocalSet {
             local_index: length_argument_index,
         },
-        I32Const {
-            value: IS_BULK_WRITE,
+        LocalSet {
+            local_index: source_argument_index,
         },
-        Call {
-            function_index: bulk_access_guard_index,
+        LocalSet {
+            local_index: destination_argument_index,
         },
-        // Restore arguments
+    ]);
+
+    // Bulk read guard on the source segment.
+    instructions.extend_from_slice(&bulk_access_barrier_instructions(
+        BulkAccessKind::Load,
+        source_argument_index,
+        length_argument_index,
+        byte_map_index,
+        wasm_native_stable_memory,
+    ));
+
+    // Bulk write guard on the destination segment.
+    instructions.extend_from_slice(&bulk_access_barrier_instructions(
+        BulkAccessKind::Store,
+        destination_argument_index,
+        length_argument_index,
+        byte_map_index,
+        wasm_native_stable_memory,
+    ));
+
+    // Restore arguments
+    instructions.append(&mut vec![
         LocalGet {
             local_index: destination_argument_index,
         },
@@ -1778,21 +1944,22 @@ fn memory_copy_barrier_instructions<'a>(
         LocalGet {
             local_index: length_argument_index,
         },
-    ]
+    ]);
+    instructions
 }
 
 fn memory_fill_barrier_instructions<'a>(
     destination_argument_index: u32,
     val_i32_index: u32,
     length_argument_index: u32,
+    byte_map_index: u32,
     wasm_native_stable_memory: FlagStatus,
 ) -> Vec<Operator<'a>> {
     use Operator::*;
-    let bulk_access_guard_index = InjectedImports::MainBulkAccessGuard
-        .get_index(MemoryMode::Memory64, wasm_native_stable_memory)
-        as u32;
-    vec![
-        // Backup arguments.
+    let mut instructions = vec![];
+
+    // Backup arguments.
+    instructions.append(&mut vec![
         LocalSet {
             local_index: length_argument_index,
         },
@@ -1802,20 +1969,19 @@ fn memory_fill_barrier_instructions<'a>(
         LocalSet {
             local_index: destination_argument_index,
         },
-        // Bulk write guard on the destination segment.
-        LocalGet {
-            local_index: destination_argument_index,
-        },
-        LocalGet {
-            local_index: length_argument_index,
-        },
-        I32Const {
-            value: IS_BULK_WRITE,
-        },
-        Call {
-            function_index: bulk_access_guard_index,
-        },
-        // Restore arguments
+    ]);
+
+    // Bulk write guard on the destination segment.
+    instructions.extend_from_slice(&bulk_access_barrier_instructions(
+        BulkAccessKind::Store,
+        destination_argument_index,
+        length_argument_index,
+        byte_map_index,
+        wasm_native_stable_memory,
+    ));
+
+    // Restore arguments
+    instructions.append(&mut vec![
         LocalGet {
             local_index: destination_argument_index,
         },
@@ -1825,7 +1991,8 @@ fn memory_fill_barrier_instructions<'a>(
         LocalGet {
             local_index: length_argument_index,
         },
-    ]
+    ]);
+    instructions
 }
 
 fn inject_mem_barrier(
@@ -1984,7 +2151,7 @@ fn inject_mem_barrier(
         for point in injection_points {
             let mem_instr = orig_elems[point].clone();
             elems.extend_from_slice(&orig_elems[last_injection_position..point]);
-            let access_size = get_access_size(&mem_instr);
+            let access_length = get_access_length(&mem_instr);
 
             match mem_instr {
                 I32Load { memarg }
@@ -1995,9 +2162,10 @@ fn inject_mem_barrier(
                     if main_memory_mode == MemoryMode::Memory64 =>
                 {
                     elems.extend_from_slice(&memory64_barrier_instructions(
-                        AccessKind::Load,
-                        memarg.offset,
-                        access_size.unwrap(),
+                        AccessKind::NativeLoad {
+                            offset: memarg.offset,
+                            length: access_length.unwrap(),
+                        },
                         arg_address_idx,
                         byte_map_index.unwrap(),
                         wasm_native_stable_memory,
@@ -2007,11 +2175,11 @@ fn inject_mem_barrier(
                     match main_memory_mode {
                         MemoryMode::Memory64 => {
                             elems.extend_from_slice(&memory64_barrier_instructions(
-                                AccessKind::Store {
+                                AccessKind::NativeStore {
                                     value_argument_index: arg_i32_val_idx,
+                                    offset: memarg.offset,
+                                    length: access_length.unwrap(),
                                 },
-                                memarg.offset,
-                                access_size.unwrap(),
                                 arg_address_idx,
                                 byte_map_index.unwrap(),
                                 wasm_native_stable_memory,
@@ -2036,9 +2204,10 @@ fn inject_mem_barrier(
                     if main_memory_mode == MemoryMode::Memory64 =>
                 {
                     elems.extend_from_slice(&memory64_barrier_instructions(
-                        AccessKind::Load,
-                        memarg.offset,
-                        access_size.unwrap(),
+                        AccessKind::NativeLoad {
+                            offset: memarg.offset,
+                            length: access_length.unwrap(),
+                        },
                         arg_address_idx,
                         byte_map_index.unwrap(),
                         wasm_native_stable_memory,
@@ -2050,11 +2219,11 @@ fn inject_mem_barrier(
                 | I64Store32 { memarg } => match main_memory_mode {
                     MemoryMode::Memory64 => {
                         elems.extend_from_slice(&memory64_barrier_instructions(
-                            AccessKind::Store {
+                            AccessKind::NativeStore {
                                 value_argument_index: arg_i64_val_idx,
+                                offset: memarg.offset,
+                                length: access_length.unwrap(),
                             },
-                            memarg.offset,
-                            access_size.unwrap(),
                             arg_address_idx,
                             byte_map_index.unwrap(),
                             wasm_native_stable_memory,
@@ -2068,9 +2237,10 @@ fn inject_mem_barrier(
                 },
                 F32Load { memarg } if main_memory_mode == MemoryMode::Memory64 => {
                     elems.extend_from_slice(&memory64_barrier_instructions(
-                        AccessKind::Load,
-                        memarg.offset,
-                        access_size.unwrap(),
+                        AccessKind::NativeLoad {
+                            offset: memarg.offset,
+                            length: access_length.unwrap(),
+                        },
                         arg_address_idx,
                         byte_map_index.unwrap(),
                         wasm_native_stable_memory,
@@ -2079,11 +2249,11 @@ fn inject_mem_barrier(
                 F32Store { memarg } => match main_memory_mode {
                     MemoryMode::Memory64 => {
                         elems.extend_from_slice(&memory64_barrier_instructions(
-                            AccessKind::Store {
+                            AccessKind::NativeStore {
                                 value_argument_index: arg_f32_val_idx,
+                                offset: memarg.offset,
+                                length: access_length.unwrap(),
                             },
-                            memarg.offset,
-                            access_size.unwrap(),
                             arg_address_idx,
                             byte_map_index.unwrap(),
                             wasm_native_stable_memory,
@@ -2097,9 +2267,10 @@ fn inject_mem_barrier(
                 },
                 F64Load { memarg } if main_memory_mode == MemoryMode::Memory64 => {
                     elems.extend_from_slice(&memory64_barrier_instructions(
-                        AccessKind::Load,
-                        memarg.offset,
-                        access_size.unwrap(),
+                        AccessKind::NativeLoad {
+                            offset: memarg.offset,
+                            length: access_length.unwrap(),
+                        },
                         arg_address_idx,
                         byte_map_index.unwrap(),
                         wasm_native_stable_memory,
@@ -2108,11 +2279,11 @@ fn inject_mem_barrier(
                 F64Store { memarg } => match main_memory_mode {
                     MemoryMode::Memory64 => {
                         elems.extend_from_slice(&memory64_barrier_instructions(
-                            AccessKind::Store {
+                            AccessKind::NativeStore {
                                 value_argument_index: arg_f64_val_idx,
+                                offset: memarg.offset,
+                                length: access_length.unwrap(),
                             },
-                            memarg.offset,
-                            access_size.unwrap(),
                             arg_address_idx,
                             byte_map_index.unwrap(),
                             wasm_native_stable_memory,
@@ -2131,6 +2302,7 @@ fn inject_mem_barrier(
                         arg_address_idx,
                         arg_i64_val_idx,
                         memory_length_index.unwrap(),
+                        byte_map_index.unwrap(),
                         wasm_native_stable_memory,
                     ));
                 }
@@ -2140,6 +2312,7 @@ fn inject_mem_barrier(
                         arg_address_idx,
                         arg_i32_val_idx,
                         memory_length_index.unwrap(),
+                        byte_map_index.unwrap(),
                         wasm_native_stable_memory,
                     ));
                 }
@@ -2155,7 +2328,7 @@ fn inject_mem_barrier(
     }
 }
 
-fn get_access_size(mem_instr: &Operator<'_>) -> Option<u64> {
+fn get_access_length(mem_instr: &Operator<'_>) -> Option<u64> {
     use Operator::*;
     match *mem_instr {
         I32Load8U { .. }
