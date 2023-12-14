@@ -1240,6 +1240,7 @@ pub struct InstallCodeArgsV2 {
     pub memory_allocation: Option<candid::Nat>,
     pub query_allocation: Option<candid::Nat>,
     pub sender_canister_version: Option<u64>,
+    pub unsafe_drop_stable_memory: Option<bool>,
 }
 
 impl std::fmt::Display for InstallCodeArgsV2 {
@@ -1273,6 +1274,14 @@ impl std::fmt::Display for InstallCodeArgsV2 {
                 .as_ref()
                 .map(|value| format!("{}", value))
         )?;
+        writeln!(
+            f,
+            "  unsafe_drop_stable_memory: {:?}",
+            &self
+                .unsafe_drop_stable_memory
+                .as_ref()
+                .map(|value| format!("{}", value))
+        )?;
         writeln!(f, "}}")
     }
 }
@@ -1298,6 +1307,7 @@ impl InstallCodeArgsV2 {
             memory_allocation: memory_allocation.map(candid::Nat::from),
             query_allocation: query_allocation.map(candid::Nat::from),
             sender_canister_version: None,
+            unsafe_drop_stable_memory: None,
         }
     }
 

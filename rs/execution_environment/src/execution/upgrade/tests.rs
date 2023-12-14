@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 
 use ic_error_types::ErrorCode;
-use ic_ic00_types::{EmptyBlob, Payload, SkipPreUpgrade};
+use ic_ic00_types::{CanisterInstallModeV2, EmptyBlob, InstallCodeArgsV2, Payload, SkipPreUpgrade};
 use ic_logger::replica_logger::LogEntryLogger;
+use ic_replicated_state::NumWasmPages;
 use ic_replicated_state::{canister_state::NextExecution, CanisterState};
 use ic_state_machine_tests::{IngressState, WasmResult};
+use ic_sys::PageIndex;
 use ic_test_utilities::types::ids::user_test_id;
 use ic_test_utilities_execution_environment::{
     check_ingress_status, ExecutionTest, ExecutionTestBuilder,
@@ -12,6 +14,7 @@ use ic_test_utilities_execution_environment::{
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_types::Cycles;
 use ic_types::{ComputeAllocation, MemoryAllocation};
+use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
 use maplit::btreeset;
 
 ////////////////////////////////////////////////////////////////////////
@@ -1017,4 +1020,177 @@ fn upgrade_with_skip_pre_upgrade_ok_with_no_pre_upgrade() {
     );
     assert_eq!(result, Ok(()));
     assert_canister_state_after_ok(&canister_state_before, test.canister_state(canister_id));
+}
+
+#[test]
+fn upgrade_and_drop_stable_memory() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "stable64_grow"
+                (func $ic0_stable64_grow (param $pages i64) (result i64)))
+            (import "ic0" "stable64_read"
+                (func $ic0_stable64_read (param $dst i64) (param $offset i64) (param $size i64)))
+            (import "ic0" "stable64_write"
+                (func $ic0_stable64_write (param $offset i64) (param $src i64) (param $size i64)))
+
+            (func (export "canister_pre_upgrade")
+                    (i32.store (i32.const 0) (i32.const 42))
+                    (drop (call $ic0_stable64_grow (i64.const 1)))
+                    (call $ic0_stable64_write (i64.const 0) (i64.const 0) (i64.const 1))
+            )
+            (func (export "canister_post_upgrade")
+                    (call $ic0_stable64_read (i64.const 0) (i64.const 0) (i64.const 1))
+            )
+            (memory 1)
+        )"#;
+
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let wasm = wat::parse_str(wat).unwrap();
+
+    let subnet_available_memory_before = test.subnet_available_memory();
+
+    let mut args = InstallCodeArgsV2::new(
+        CanisterInstallModeV2::Upgrade(None),
+        canister_id,
+        wasm,
+        vec![],
+        None,
+        None,
+        None,
+    );
+    args.unsafe_drop_stable_memory = Some(true);
+
+    test.install_code_v2(args).unwrap();
+
+    let subnet_available_memory_after = test.subnet_available_memory();
+
+    assert_eq!(
+        subnet_available_memory_before.get_execution_memory(),
+        subnet_available_memory_after.get_execution_memory()
+    );
+
+    assert_eq!(
+        NumWasmPages::new(1),
+        test.execution_state(canister_id).wasm_memory.size
+    );
+
+    assert_eq!(
+        42,
+        test.execution_state(canister_id)
+            .wasm_memory
+            .page_map
+            .get_page(PageIndex::new(0))[0],
+    );
+
+    assert_eq!(
+        NumWasmPages::new(0),
+        test.execution_state(canister_id).stable_memory.size
+    );
+}
+
+#[test]
+fn upgrade_and_drop_stable_memory2() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test
+        .canister_from_binary(UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    let res = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm()
+                .stable64_grow(1000)
+                .push_bytes(&[42])
+                .append_and_reply()
+                .build(),
+        )
+        .unwrap();
+
+    assert_eq!(res, WasmResult::Reply(vec![42]));
+
+    let res = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm()
+                .set_pre_upgrade(wasm().stable64_write(0, &[42]).build())
+                .push_bytes(&[42])
+                .append_and_reply()
+                .build(),
+        )
+        .unwrap();
+
+    assert_eq!(res, WasmResult::Reply(vec![42]));
+
+    let wat = r#"
+        (module
+            (import "ic0" "stable64_grow"
+                (func $ic0_stable64_grow (param $pages i64) (result i64)))
+            (import "ic0" "stable64_read"
+                (func $ic0_stable64_read (param $dst i64) (param $offset i64) (param $size i64)))
+            (import "ic0" "stable64_write"
+                (func $ic0_stable64_write (param $offset i64) (param $src i64) (param $size i64)))
+
+            (func (export "canister_update update")
+                    (drop (call $ic0_stable64_grow (i64.const 1)))
+                    (call $ic0_stable64_write (i64.const 0) (i64.const 0) (i64.const 1))
+            )
+
+            (func (export "canister_post_upgrade")
+                    (call $ic0_stable64_read (i64.const 0) (i64.const 0) (i64.const 4))
+            )
+            (memory 1)
+        )"#;
+
+    let wasm = wat::parse_str(wat).unwrap();
+
+    let mut args = InstallCodeArgsV2::new(
+        CanisterInstallModeV2::Upgrade(None),
+        canister_id,
+        wasm,
+        vec![],
+        None,
+        None,
+        None,
+    );
+    args.unsafe_drop_stable_memory = Some(true);
+
+    test.install_code_v2(args).unwrap();
+
+    assert_eq!(
+        NumWasmPages::new(1),
+        test.execution_state(canister_id).wasm_memory.size
+    );
+
+    assert_eq!(
+        42,
+        test.execution_state(canister_id)
+            .wasm_memory
+            .page_map
+            .get_page(PageIndex::new(0))[0],
+    );
+
+    assert_eq!(
+        NumWasmPages::new(0),
+        test.execution_state(canister_id).stable_memory.size
+    );
+
+    let err = test.ingress(canister_id, "update", vec![]).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterDidNotReply);
+
+    assert_eq!(
+        NumWasmPages::new(1),
+        test.execution_state(canister_id).stable_memory.size
+    );
+
+    assert_eq!(
+        42,
+        test.execution_state(canister_id)
+            .stable_memory
+            .page_map
+            .get_page(PageIndex::new(0))[0],
+    );
 }

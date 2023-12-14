@@ -2,6 +2,7 @@
 // and upgrades.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_config::flag_status::FlagStatus;
@@ -13,7 +14,8 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{error, fatal, info, warn};
 use ic_replicated_state::canister_state::system_state::ReservationError;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
-use ic_replicated_state::{CanisterState, ExecutionState};
+use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
+use ic_replicated_state::{num_bytes_try_from, CanisterState, ExecutionState, Memory, PageMap};
 use ic_state_layout::{CanisterLayout, CheckpointLayout, ReadOnly};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::ExecutionParameters;
@@ -241,6 +243,18 @@ impl InstallCodeHelper {
                 round.log,
                 round.counters.charging_from_balance_error,
             );
+
+        // Drop the stable memory if needed.
+        if original.unsafe_drop_stable_memory {
+            // The execution state is not empty after `post_upgrade()`.
+            let execution_state = self.canister.execution_state.as_mut().unwrap();
+            self.deallocated_bytes +=
+                num_bytes_try_from(execution_state.stable_memory.size).unwrap_or_default();
+            let empty_page_map = PageMap::new(Arc::clone(&original.fd_factory));
+            let empty_stable_memory =
+                Memory::new(empty_page_map, ic_replicated_state::NumWasmPages::from(0));
+            execution_state.stable_memory = empty_stable_memory;
+        }
 
         if self.allocated_bytes > self.deallocated_bytes {
             let bytes = self.allocated_bytes - self.deallocated_bytes;
@@ -778,6 +792,8 @@ pub(crate) struct OriginalContext {
     pub requested_memory_allocation: Option<MemoryAllocation>,
     pub sender: PrincipalId,
     pub canister_id: CanisterId,
+    pub unsafe_drop_stable_memory: bool,
+    pub fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 }
 
 pub(crate) fn validate_controller(
