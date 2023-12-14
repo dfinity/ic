@@ -336,18 +336,6 @@ impl CanisterState {
         )
     }
 
-    pub fn from_parts(
-        execution_state: Option<ExecutionState>,
-        system_state: SystemState,
-        scheduler_state: SchedulerState,
-    ) -> Self {
-        Self {
-            system_state,
-            execution_state,
-            scheduler_state,
-        }
-    }
-
     /// Checks the constraints that a canister should always respect.
     /// These invariants will be verified at the end of each execution round.
     pub fn check_invariants(&self, default_limit: NumBytes) -> Result<(), StateError> {
@@ -596,28 +584,4 @@ pub fn num_bytes_try_from(pages: NumWasmPages) -> Result<NumBytes, String> {
 
 pub mod testing {
     pub use super::queues::testing::{new_canister_queues_for_test, CanisterQueuesTesting};
-    use super::*;
-
-    /// Exposes `CanisterState` internals for use in other crates' unit tests.
-    pub trait CanisterStateTesting {
-        /// Testing only: Publicly exposes `CanisterState::push_input()`.
-        fn push_input(
-            &mut self,
-            msg: RequestOrResponse,
-        ) -> Result<(), (StateError, RequestOrResponse)>;
-    }
-
-    impl CanisterStateTesting for CanisterState {
-        fn push_input(
-            &mut self,
-            msg: RequestOrResponse,
-        ) -> Result<(), (StateError, RequestOrResponse)> {
-            (self as &mut CanisterState).push_input(
-                msg,
-                &mut (i64::MAX / 2),
-                SubnetType::Application,
-                InputQueueType::RemoteSubnet,
-            )
-        }
-    }
 }
