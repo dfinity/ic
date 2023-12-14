@@ -275,13 +275,12 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
                 try_from_option_field(entry.subnet_topology, "NetworkTopology::subnets::V")?,
             );
         }
-        // NetworkTopology.nns_subnet_id will be removed in the following PR
-        // Currently, initialise nns_subnet_id with dummy value in case not found
-        let nns_subnet_id =
-            match try_from_option_field(item.nns_subnet_id, "NetworkTopology::nns_subnet_id") {
-                Ok(subnet_id) => subnet_id_try_from_protobuf(subnet_id)?,
-                Err(_) => SubnetId::new(PrincipalId::new_anonymous()),
-            };
+
+        let nns_subnet_id = subnet_id_try_from_protobuf(try_from_option_field(
+            item.nns_subnet_id,
+            "NetworkTopology::nns_subnet_id",
+        )?)?;
+
         let mut ecdsa_signing_subnets = BTreeMap::new();
         for entry in item.ecdsa_signing_subnets {
             let mut subnet_ids = vec![];
