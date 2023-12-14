@@ -16,8 +16,9 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    page_map::PageIndex, testing::ReplicatedStateTesting, Memory, NetworkTopology, NumWasmPages,
-    PageMap, ReplicatedState, Stream, SubnetTopology,
+    canister_state::system_state::wasm_chunk_store::WasmChunkStore, page_map::PageIndex,
+    testing::ReplicatedStateTesting, Memory, NetworkTopology, NumWasmPages, PageMap,
+    ReplicatedState, Stream, SubnetTopology,
 };
 use ic_state_layout::{CheckpointLayout, ReadOnly, StateLayout, SYSTEM_METADATA_FILE};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
@@ -113,6 +114,25 @@ fn stable_memory_size(canister_layout: &ic_state_layout::CanisterLayout<ReadOnly
                 .unwrap_or(0)
     } else {
         std::fs::metadata(canister_layout.stable_memory_blob())
+            .unwrap()
+            .len()
+    }
+}
+
+/// Combined size of wasm chunk store including overlays.
+fn wasm_chunk_store_size(canister_layout: &ic_state_layout::CanisterLayout<ReadOnly>) -> u64 {
+    if lsmt_storage_default() == FlagStatus::Enabled {
+        canister_layout
+            .wasm_chunk_store_overlays()
+            .unwrap()
+            .into_iter()
+            .map(|p| std::fs::metadata(p).unwrap().len())
+            .sum::<u64>()
+            + std::fs::metadata(canister_layout.wasm_chunk_store())
+                .map(|metadata| metadata.len())
+                .unwrap_or(0)
+    } else {
+        std::fs::metadata(canister_layout.wasm_chunk_store())
             .unwrap()
             .len()
     }
@@ -4152,7 +4172,7 @@ fn can_reset_memory() {
     state_manager_test(|metrics, state_manager| {
         let (_height, mut state) = state_manager.take_tip();
 
-        // One canister with some data
+        // One canister with some data.
         insert_dummy_canister(&mut state, canister_test_id(100));
         let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
@@ -4219,7 +4239,7 @@ fn can_reset_memory() {
         let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
 
-        // Check again after checkpoint that no remnants of old data remain
+        // Check again after checkpoint that no remnants of old data remain.
         assert_eq!(
             execution_state
                 .wasm_memory
@@ -4235,7 +4255,7 @@ fn can_reset_memory() {
             &[0u8; PAGE_SIZE]
         );
 
-        // Wipe data completely
+        // Wipe data completely.
         execution_state.wasm_memory = Memory::new(PageMap::new_for_testing(), NumWasmPages::new(0));
 
         state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
@@ -4304,6 +4324,230 @@ fn can_reset_memory_state_machine() {
 }
 
 #[test]
+fn can_reset_stable_memory() {
+    state_manager_test(|metrics, state_manager| {
+        let (_height, mut state) = state_manager.take_tip();
+
+        // One canister with some data.
+        insert_dummy_canister(&mut state, canister_test_id(100));
+        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        execution_state.stable_memory.page_map.update(&[
+            (PageIndex::new(0), &[99u8; PAGE_SIZE]),
+            (PageIndex::new(1), &[99u8; PAGE_SIZE]),
+            (PageIndex::new(2), &[99u8; PAGE_SIZE]),
+            (PageIndex::new(3), &[99u8; PAGE_SIZE]),
+            (PageIndex::new(4), &[99u8; PAGE_SIZE]),
+            (PageIndex::new(5), &[99u8; PAGE_SIZE]),
+            (PageIndex::new(6), &[99u8; PAGE_SIZE]),
+            (PageIndex::new(7), &[99u8; PAGE_SIZE]),
+        ]);
+
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        // Check the data is written to disk.
+        let canister_layout = state_manager
+            .state_layout()
+            .checkpoint(height(1))
+            .unwrap()
+            .canister(&canister_test_id(100))
+            .unwrap();
+        assert!(stable_memory_size(&canister_layout) >= 8 * PAGE_SIZE as u64);
+
+        let (_height, mut state) = state_manager.take_tip();
+
+        // Wipe data and write different data
+        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        execution_state.stable_memory =
+            Memory::new(PageMap::new_for_testing(), NumWasmPages::new(0));
+        execution_state.stable_memory.page_map.update(&[
+            (PageIndex::new(0), &[100u8; PAGE_SIZE]),
+            (PageIndex::new(1), &[100u8; PAGE_SIZE]),
+        ]);
+
+        // Check no remnants of the old data remain.
+        assert_eq!(
+            execution_state
+                .stable_memory
+                .page_map
+                .get_page(PageIndex::new(1)),
+            &[100u8; PAGE_SIZE]
+        );
+        assert_eq!(
+            execution_state
+                .stable_memory
+                .page_map
+                .get_page(PageIndex::new(300)),
+            &[0u8; PAGE_SIZE]
+        );
+
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+
+        // Check file in checkpoint does not contain old data by checking its size.
+        let canister_layout = state_manager
+            .state_layout()
+            .checkpoint(height(2))
+            .unwrap()
+            .canister(&canister_test_id(100))
+            .unwrap();
+        assert!(stable_memory_size(&canister_layout) < 8 * PAGE_SIZE as u64);
+
+        let (_height, mut state) = state_manager.take_tip();
+        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+
+        // Check again after checkpoint that no remnants of old data remain.
+        assert_eq!(
+            execution_state
+                .stable_memory
+                .page_map
+                .get_page(PageIndex::new(1)),
+            &[100u8; PAGE_SIZE]
+        );
+        assert_eq!(
+            execution_state
+                .stable_memory
+                .page_map
+                .get_page(PageIndex::new(300)),
+            &[0u8; PAGE_SIZE]
+        );
+
+        // Wipe data completely.
+        execution_state.stable_memory =
+            Memory::new(PageMap::new_for_testing(), NumWasmPages::new(0));
+
+        state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+
+        // File should be empty after wiping and checkpoint.
+        let canister_layout = state_manager
+            .state_layout()
+            .checkpoint(height(3))
+            .unwrap()
+            .canister(&canister_test_id(100))
+            .unwrap();
+        assert_eq!(stable_memory_size(&canister_layout), 0);
+
+        assert_error_counters(metrics);
+    });
+}
+
+#[test]
+fn can_reset_wasm_chunk_store() {
+    state_manager_test(|metrics, state_manager| {
+        let (_height, mut state) = state_manager.take_tip();
+
+        // One canister with some data.
+        insert_dummy_canister(&mut state, canister_test_id(100));
+        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        canister_state
+            .system_state
+            .wasm_chunk_store
+            .page_map_mut()
+            .update(&[
+                (PageIndex::new(0), &[99u8; PAGE_SIZE]),
+                (PageIndex::new(1), &[99u8; PAGE_SIZE]),
+                (PageIndex::new(2), &[99u8; PAGE_SIZE]),
+                (PageIndex::new(3), &[99u8; PAGE_SIZE]),
+                (PageIndex::new(4), &[99u8; PAGE_SIZE]),
+                (PageIndex::new(5), &[99u8; PAGE_SIZE]),
+                (PageIndex::new(6), &[99u8; PAGE_SIZE]),
+                (PageIndex::new(7), &[99u8; PAGE_SIZE]),
+            ]);
+
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        // Check the data is written to disk.
+        let canister_layout = state_manager
+            .state_layout()
+            .checkpoint(height(1))
+            .unwrap()
+            .canister(&canister_test_id(100))
+            .unwrap();
+        assert!(wasm_chunk_store_size(&canister_layout) >= 8 * PAGE_SIZE as u64);
+
+        let (_height, mut state) = state_manager.take_tip();
+
+        // Wipe data and write different data.
+        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        // Chunk size does not matter for this test, as we interact with the `PageMap` directly.
+        canister_state.system_state.wasm_chunk_store = WasmChunkStore::new_for_testing(42.into());
+        canister_state
+            .system_state
+            .wasm_chunk_store
+            .page_map_mut()
+            .update(&[
+                (PageIndex::new(0), &[100u8; PAGE_SIZE]),
+                (PageIndex::new(1), &[100u8; PAGE_SIZE]),
+            ]);
+
+        // Check no remnants of the old data remain.
+        assert_eq!(
+            canister_state
+                .system_state
+                .wasm_chunk_store
+                .page_map()
+                .get_page(PageIndex::new(1)),
+            &[100u8; PAGE_SIZE]
+        );
+        assert_eq!(
+            canister_state
+                .system_state
+                .wasm_chunk_store
+                .page_map()
+                .get_page(PageIndex::new(300)),
+            &[0u8; PAGE_SIZE]
+        );
+
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+
+        // Check file in checkpoint does not contain old data by checking its size.
+        let canister_layout = state_manager
+            .state_layout()
+            .checkpoint(height(2))
+            .unwrap()
+            .canister(&canister_test_id(100))
+            .unwrap();
+        assert!(wasm_chunk_store_size(&canister_layout) < 8 * PAGE_SIZE as u64);
+
+        let (_height, mut state) = state_manager.take_tip();
+        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+
+        // Check again after checkpoint that no remnants of old data remain.
+        assert_eq!(
+            canister_state
+                .system_state
+                .wasm_chunk_store
+                .page_map()
+                .get_page(PageIndex::new(1)),
+            &[100u8; PAGE_SIZE]
+        );
+        assert_eq!(
+            canister_state
+                .system_state
+                .wasm_chunk_store
+                .page_map()
+                .get_page(PageIndex::new(300)),
+            &[0u8; PAGE_SIZE]
+        );
+
+        // Wipe data completely.
+        canister_state.system_state.wasm_chunk_store = WasmChunkStore::new_for_testing(42.into());
+
+        state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+
+        // File should be empty after wiping and checkpoint.
+        let canister_layout = state_manager
+            .state_layout()
+            .checkpoint(height(3))
+            .unwrap()
+            .canister(&canister_test_id(100))
+            .unwrap();
+        assert_eq!(wasm_chunk_store_size(&canister_layout), 0);
+
+        assert_error_counters(metrics);
+    });
+}
+
+#[test]
 fn can_delete_canister() {
     state_manager_test(|metrics, state_manager| {
         let (_height, mut state) = state_manager.take_tip();
@@ -4313,7 +4557,7 @@ fn can_delete_canister() {
 
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
 
-        // Check the checkpoint has the canister
+        // Check the checkpoint has the canister.
         let canister_path = state_manager
             .state_layout()
             .checkpoint(height(1))
