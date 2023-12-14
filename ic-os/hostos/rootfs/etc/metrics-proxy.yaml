@@ -69,6 +69,9 @@ proxies:
       - regex: hostos_version
         actions:
           - keep
+    # The expectation is that clients will scrape at a
+    # maximum rate of 1 per 10 seconds (6 / min).
+    cache_duration: 8s
 metrics:
   # Metrics clients only (see nftables.conf in HostOS).
   url: https://[::]:19100/metrics
