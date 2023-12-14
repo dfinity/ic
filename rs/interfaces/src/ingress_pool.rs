@@ -6,6 +6,7 @@ use ic_types::{
     messages::{MessageId, SignedIngress},
     CountBytes, NodeId, Time,
 };
+
 // tag::interface[]
 
 /// IngressObject is the format stored in the unvalidated/validated sections of
@@ -102,34 +103,12 @@ pub trait PoolSection<T> {
 ///
 /// - The unvalidated section contains artifacts that have been received but
 ///   haven't yet been validated.
-pub trait IngressPool {
+pub trait IngressPool: Send + Sync {
     /// Validated Ingress Pool Section
     fn validated(&self) -> &dyn PoolSection<ValidatedIngressArtifact>;
 
     /// Unvalidated Ingress Pool Section
     fn unvalidated(&self) -> &dyn PoolSection<UnvalidatedIngressArtifact>;
-}
-
-/// Indicate whether something should be selected, and whether selection should
-/// continue:
-/// - 'Selected': select the object and continue;
-/// - 'Skip': skip the object and continue;
-/// - 'Abort': abort the selection process.
-pub enum SelectResult<T> {
-    Selected(T),
-    Skip,
-    Abort,
-}
-
-/// A query interface that selects qualifying artifacts from the validated pool.
-#[allow(clippy::type_complexity)]
-pub trait IngressPoolSelect: Send + Sync {
-    /// Select qualifying objects from the validated pool.
-    fn select_validated<'a>(
-        &self,
-        range: std::ops::RangeInclusive<Time>,
-        f: Box<dyn FnMut(&IngressPoolObject) -> SelectResult<SignedIngress> + 'a>,
-    ) -> Vec<SignedIngress>;
 }
 
 /// Interface to throttle user ingress messages
