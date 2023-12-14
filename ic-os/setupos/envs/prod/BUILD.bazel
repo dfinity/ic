@@ -1,5 +1,6 @@
 load("//ic-os:defs.bzl", "icos_build")
 load("//ic-os/setupos:defs.bzl", "image_deps")
+load("//ic-os/utils/bare_metal_deployment:tools.bzl", "launch_bare_metal")
 
 exports_files(["build_container_filesystem_config.txt"])
 
@@ -13,4 +14,9 @@ icos_build(
     upgrades = False,
     upload_prefix = "setup-os",
     vuln_scan = False,
+)
+
+launch_bare_metal(
+    name = "launch_bare_metal",
+    image_zst_file = ":disk-img.tar.zst",
 )
