@@ -5,13 +5,11 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{fatal, ReplicaLogger};
 use ic_metrics::Timer;
+use ic_query_stats::deliver_query_stats;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_replicated_state::{NetworkTopology, ReplicatedState};
 use ic_types::{batch::Batch, ExecutionRound};
 
-use self::query_stats::deliver_query_stats;
-
-mod query_stats;
 #[cfg(test)]
 mod tests;
 

@@ -15,9 +15,9 @@ use ic_embedders::{wasm_utils::compile, WasmtimeEmbedder};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 pub use ic_execution_environment::ExecutionResponse;
 use ic_execution_environment::{
-    execute_canister, init_query_stats, CompilationCostHandling, ExecuteMessageResult,
-    ExecutionEnvironment, Hypervisor, IngressFilterMetrics, IngressHistoryWriterImpl,
-    InternalHttpQueryHandler, RoundInstructions, RoundLimits,
+    execute_canister, CompilationCostHandling, ExecuteMessageResult, ExecutionEnvironment,
+    Hypervisor, IngressFilterMetrics, IngressHistoryWriterImpl, InternalHttpQueryHandler,
+    RoundInstructions, RoundLimits,
 };
 use ic_ic00_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
@@ -2047,7 +2047,7 @@ impl ExecutionTestBuilder {
             self.heap_delta_rate_limit,
             self.upload_wasm_chunk_instructions,
         );
-        let (query_stats_collector, _) = init_query_stats(self.log.clone());
+        let (query_stats_collector, _) = ic_query_stats::init_query_stats(self.log.clone());
 
         let query_handler = InternalHttpQueryHandler::new(
             self.log.clone(),

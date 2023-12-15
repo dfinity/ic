@@ -12,6 +12,7 @@ DEPENDENCIES = [
     "//rs/interfaces/state_manager",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
+    "//rs/query_stats",
     "//rs/registry/provisional_whitelist",
     "//rs/registry/routing_table",
     "//rs/registry/subnet_features",

@@ -24,6 +24,7 @@ ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
+ic-query-stats = { path = "../query_stats" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-client-fake = { path = "../registry/fake" }
 ic-registry-keys = { path = "../registry/keys" }
