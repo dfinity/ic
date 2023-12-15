@@ -11,7 +11,6 @@ use ic_state_layout::utils::do_copy_overwrite;
 use ic_state_layout::{error::LayoutError, CheckpointLayout, ReadOnly, RwPolicy, StateLayout};
 use ic_sys::mmap::ScopedMmap;
 use ic_types::{
-    artifact::StateSyncMessage,
     chunkable::{
         ArtifactErrorCode::{self, ChunkVerificationFailed, ChunksMoreNeeded},
         Chunk, ChunkId, Chunkable,
@@ -19,8 +18,8 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     state_sync::{
         decode_manifest, decode_meta_manifest, state_sync_chunk_type, FileGroupChunks, Manifest,
-        MetaManifest, StateSyncChunk, FILE_CHUNK_ID_OFFSET, FILE_GROUP_CHUNK_ID_OFFSET,
-        MANIFEST_CHUNK_ID_OFFSET, META_MANIFEST_CHUNK,
+        MetaManifest, StateSyncChunk, StateSyncMessage, FILE_CHUNK_ID_OFFSET,
+        FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, META_MANIFEST_CHUNK,
     },
     CryptoHashOfState, Height,
 };

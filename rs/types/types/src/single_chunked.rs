@@ -6,13 +6,17 @@
 use crate::{
     artifact::Artifact,
     canister_http::CanisterHttpResponseShare,
-    chunkable::ChunkableArtifact,
     consensus::{
         certification::CertificationMessage, dkg::Message as DkgMessage, ecdsa::EcdsaMessage,
         ConsensusMessage,
     },
     messages::SignedIngress,
 };
+
+/// Interface providing access to artifact.
+pub trait ChunkableArtifact {
+    fn get_chunk(self: Box<Self>) -> Artifact;
+}
 
 macro_rules! chunkable_artifact_impl {
     ($id:path, |$self:ident| $v:expr) => {

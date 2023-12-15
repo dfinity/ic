@@ -8,9 +8,9 @@ use crate::{
 use ic_interfaces::p2p::state_sync::StateSyncClient;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_types::{
-    artifact::{Priority, StateSyncArtifactId, StateSyncMessage},
+    artifact::{Priority, StateSyncArtifactId},
     chunkable::{Chunk, ChunkId, Chunkable},
-    state_sync::FileGroupChunks,
+    state_sync::{FileGroupChunks, StateSyncMessage},
     Height,
 };
 use std::sync::{Arc, Mutex};

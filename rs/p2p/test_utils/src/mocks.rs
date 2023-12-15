@@ -9,9 +9,10 @@ use ic_interfaces::p2p::{
 use ic_quic_transport::{ConnId, SendError, Transport};
 use ic_types::artifact::PriorityFn;
 use ic_types::{
-    artifact::{StateSyncArtifactId, StateSyncMessage},
+    artifact::StateSyncArtifactId,
     chunkable::{ArtifactErrorCode, Chunkable},
     chunkable::{Chunk, ChunkId},
+    state_sync::StateSyncMessage,
     NodeId,
 };
 use mockall::mock;

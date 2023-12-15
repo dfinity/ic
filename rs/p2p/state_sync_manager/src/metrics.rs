@@ -1,7 +1,7 @@
 use ic_metrics::{
     buckets::decimal_buckets, tokio_metrics_collector::TokioTaskMetricsCollector, MetricsRegistry,
 };
-use ic_types::artifact::StateSyncMessage;
+use ic_types::state_sync::StateSyncMessage;
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGauge};
 use tokio_metrics::TaskMonitor;
 
