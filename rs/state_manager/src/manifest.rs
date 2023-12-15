@@ -572,9 +572,6 @@ fn files_with_sizes(
     if metadata.is_file() {
         files.push(FileWithSize(relative_path, metadata.len()))
     } else {
-        if relative_path.ends_with("slot_db") {
-            return Ok(());
-        }
         assert!(
             metadata.is_dir(),
             "Checkpoints must not contain special files, found one at {}",
