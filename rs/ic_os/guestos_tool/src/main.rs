@@ -11,32 +11,45 @@ use prometheus_metric::write_single_metric;
 
 mod generate_network_config;
 use generate_network_config::{
-    generate_networkd_config, regenerate_networkd_config, DEFAULT_GUESTOS_NETWORK_CONFIG_PATH,
+    generate_networkd_config, validate_and_construct_ipv4_address_info,
+    DEFAULT_GUESTOS_NETWORK_CONFIG_PATH,
 };
 
-use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
+use network::systemd::{restart_systemd_networkd, DEFAULT_SYSTEMD_NETWORK_DIR};
 
 #[derive(Subcommand)]
 pub enum Commands {
     /// Generate systemd network configuration files.
     GenerateNetworkConfig {
-        #[arg(short, long, default_value_t = DEFAULT_SYSTEMD_NETWORK_DIR.to_string(), value_name = "DIR")]
+        #[arg(long, default_value_t = DEFAULT_SYSTEMD_NETWORK_DIR.to_string(), value_name = "DIR")]
         /// systemd-networkd output directory
         systemd_network_dir: String,
 
-        #[arg(short, long, default_value_t = DEFAULT_GUESTOS_NETWORK_CONFIG_PATH.to_string(), value_name = "FILE")]
+        #[arg(long, default_value_t = DEFAULT_GUESTOS_NETWORK_CONFIG_PATH.to_string(), value_name = "FILE")]
         /// network.conf input file
         network_config: String,
     },
-    /// Generate systemd network configuration files and then restart the systemd network
+    /// Regenerate systemd network configuration files, optionally incorporating specified IPv4 configuration parameters, and then restart the systemd network.
     RegenerateNetworkConfig {
-        #[arg(short, long, default_value_t = DEFAULT_SYSTEMD_NETWORK_DIR.to_string(), value_name = "DIR")]
+        #[arg(long, default_value_t = DEFAULT_SYSTEMD_NETWORK_DIR.to_string(), value_name = "DIR")]
         /// systemd-networkd output directory
         systemd_network_dir: String,
 
-        #[arg(short, long, default_value_t = DEFAULT_GUESTOS_NETWORK_CONFIG_PATH.to_string(), value_name = "FILE")]
+        #[arg(long, default_value_t = DEFAULT_GUESTOS_NETWORK_CONFIG_PATH.to_string(), value_name = "FILE")]
         /// network.conf input file
         network_config: String,
+
+        #[arg(long, value_name = "IPV4_ADDRESS")]
+        /// IPv4 address
+        ipv4_address: Option<String>,
+
+        #[arg(long, value_name = "IPV4_PREFIX_LENGTH")]
+        /// IPv4 prefix length
+        ipv4_prefix_length: Option<String>,
+
+        #[arg(long, value_name = "IPV4_GATEWAY")]
+        /// IPv4 gateway
+        ipv4_gateway: Option<String>,
     },
     SetHardwareGenMetric {
         #[arg(
@@ -72,12 +85,33 @@ pub fn main() -> Result<()> {
         Some(Commands::GenerateNetworkConfig {
             systemd_network_dir,
             network_config,
-        }) => generate_networkd_config(Path::new(&network_config), Path::new(&systemd_network_dir)),
+        }) => generate_networkd_config(
+            Path::new(&network_config),
+            Path::new(&systemd_network_dir),
+            None,
+        ),
         Some(Commands::RegenerateNetworkConfig {
             systemd_network_dir,
             network_config,
+            ipv4_address,
+            ipv4_prefix_length,
+            ipv4_gateway,
         }) => {
-            regenerate_networkd_config(Path::new(&network_config), Path::new(&systemd_network_dir))
+            let ipv4_info = validate_and_construct_ipv4_address_info(
+                ipv4_address.as_deref(),
+                ipv4_prefix_length.as_deref(),
+                ipv4_gateway.as_deref(),
+            )?;
+
+            generate_networkd_config(
+                Path::new(&network_config),
+                Path::new(&systemd_network_dir),
+                ipv4_info,
+            )?;
+
+            eprintln!("Restarting systemd networkd");
+            restart_systemd_networkd();
+            Ok(())
         }
         None => Ok(()),
     }
