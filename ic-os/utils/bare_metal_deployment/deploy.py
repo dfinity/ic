@@ -59,6 +59,9 @@ class Args:
     # Username for SSH/SCP access to file share. Defaults to the current username
     file_share_username: Optional[str] = None
 
+    # SSH private key file for access to file share. This is passed via the '-i' flag to `scp`. If omitted, the '-i' flag is omitted.
+    file_share_ssh_key: Optional[str] = None
+
     upload_img: Optional[str] = field(default=None, alias="-f")
     """
     If specified, file will be scp'd to `file_share_url`, decompressed, and the contained disk.img file moved to `file_share_dir` and renamed to `file_share_image_filename`.
@@ -105,7 +108,9 @@ class Args:
         if self.inject_image_ipv6_prefix:
             assert self.inject_configuration_tool, \
                 "setupos_inject_configuration tool required to modify image"
-
+        assert self.file_share_ssh_key is None \
+            or Path(self.file_share_ssh_key).exists(), \
+            "File share ssh key path does not exist"
 
 @dataclass(frozen=True)
 class BMCInfo:
@@ -387,6 +392,7 @@ def upload_to_file_share(
     file_share_url: str,
     file_share_dir: str,
     file_share_image_name: str,
+    file_share_ssh_key: str,
 ):
     endpoint = (
         file_share_url
@@ -401,7 +407,8 @@ def upload_to_file_share(
         result = conn.run("mktemp --directory", hide="both", echo=True)
         tmp_dir = str.strip(result.stdout)
         # scp is faster than fabric's built-in transfer.
-        invoke.run(f"scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {upload_img}  {endpoint}:{tmp_dir}", echo=True)
+        ssh_key_arg = f"-i {file_share_ssh_key}" if file_share_ssh_key else ""
+        invoke.run(f"scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {ssh_key_arg} {upload_img}  {endpoint}:{tmp_dir}", echo=True)
 
         upload_img_filename = upload_img.name
         # Decompress in place. disk.img should appear in the same directory
@@ -495,7 +502,8 @@ def main():
             args.file_share_username,
             args.file_share_url,
             args.file_share_dir,
-            args.file_share_image_filename)
+            args.file_share_image_filename,
+            args.file_share_ssh_key)
 
     elif args.upload_img:
         upload_to_file_share(
