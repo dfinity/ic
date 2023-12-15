@@ -1,5 +1,4 @@
 use crossbeam_channel::{Receiver, TryRecvError};
-use ic_base_types::{CanisterId, NodeId};
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext},
     consensus::{PayloadPermanentError, PayloadTransientError, PayloadValidationError},
@@ -11,7 +10,7 @@ use ic_logger::{error, warn, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::{LocalQueryStats, QueryStatsPayload, ValidationContext, ENABLE_QUERY_STATS},
-    epoch_from_height, Height, NumBytes, QueryStatsEpoch,
+    epoch_from_height, CanisterId, Height, NodeId, NumBytes, QueryStatsEpoch,
 };
 use std::{
     collections::BTreeSet,

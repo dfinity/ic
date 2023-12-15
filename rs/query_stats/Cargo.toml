@@ -1,0 +1,23 @@
+
+[package]
+name = "ic-query-stats"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-interfaces = { path = "../interfaces" }
+ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
+ic-logger = { path = "../monitoring/logger" }
+ic-metrics = { path = "../monitoring/metrics" }
+ic-replicated-state = { path = "../replicated_state" }
+ic-types = { path = "../types/types" }
+crossbeam-channel = "0.5.5"
+slog = { workspace = true }
+
+[dev-dependencies]
+ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
+ic-test-utilities = { path = "../test_utilities" }
+ic-types-test-utils = { path = "../types/types_test_utils" }

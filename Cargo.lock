@@ -7439,7 +7439,6 @@ dependencies = [
  "candid",
  "canister-test",
  "criterion",
- "crossbeam-channel",
  "escargot",
  "execution-environment-bench",
  "hex",
@@ -7463,6 +7462,7 @@ dependencies = [
  "ic-logger",
  "ic-metrics",
  "ic-nns-constants",
+ "ic-query-stats",
  "ic-registry-provisional-whitelist",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
@@ -8542,6 +8542,7 @@ dependencies = [
  "ic-logger",
  "ic-metrics",
  "ic-protobuf",
+ "ic-query-stats",
  "ic-registry-client-fake",
  "ic-registry-client-helpers",
  "ic-registry-keys",
@@ -9533,6 +9534,23 @@ version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
  "prost-build",
+]
+
+[[package]]
+name = "ic-query-stats"
+version = "0.9.0"
+dependencies = [
+ "crossbeam-channel",
+ "ic-interfaces",
+ "ic-interfaces-state-manager",
+ "ic-interfaces-state-manager-mocks",
+ "ic-logger",
+ "ic-metrics",
+ "ic-replicated-state",
+ "ic-test-utilities",
+ "ic-types",
+ "ic-types-test-utils",
+ "slog",
 ]
 
 [[package]]
@@ -11231,6 +11249,7 @@ dependencies = [
  "ic-interfaces-state-manager",
  "ic-logger",
  "ic-metrics",
+ "ic-query-stats",
  "ic-registry-provisional-whitelist",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",

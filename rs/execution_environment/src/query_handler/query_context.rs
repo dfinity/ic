@@ -1,3 +1,4 @@
+use super::query_call_graph::evaluate_query_call_graph;
 use crate::{
     execution::common::{self, validate_method},
     execution::nonreplicated_query::execute_non_replicated_query,
@@ -20,6 +21,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_interfaces_state_manager::Labeled;
 use ic_logger::{error, ReplicaLogger};
+use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CallContextAction, CallOrigin, CanisterState, NetworkTopology, ReplicatedState,
@@ -41,8 +43,6 @@ use ic_types::{
 };
 use prometheus::{IntCounter, IntCounterVec};
 use std::{collections::VecDeque, sync::Arc, time::Duration, time::Instant};
-
-use super::{query_call_graph::evaluate_query_call_graph, query_stats::QueryStatsCollector};
 
 /// The response of a query. If the query originated from a user, then it
 /// contains either `UserResponse` or `UserError`. If the query originated from

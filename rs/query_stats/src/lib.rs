@@ -8,7 +8,10 @@ use std::sync::Mutex;
 use std::{collections::BTreeMap, sync::RwLock};
 
 mod payload_builder;
+mod state_machine;
+
 pub use self::payload_builder::{QueryStatsPayloadBuilderImpl, QueryStatsPayloadBuilderParams};
+pub use self::state_machine::deliver_query_stats;
 
 pub fn init_query_stats(
     log: ReplicaLogger,

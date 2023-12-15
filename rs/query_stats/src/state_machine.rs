@@ -1,9 +1,10 @@
-use ic_base_types::CanisterId;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
-use ic_types::batch::{QueryStats, QueryStatsPayload, RawQueryStats};
-use ic_types::consensus::get_faults_tolerated;
-use ic_types::{epoch_from_height, Height};
+use ic_types::{
+    batch::{QueryStats, QueryStatsPayload, RawQueryStats},
+    consensus::get_faults_tolerated,
+    epoch_from_height, CanisterId, Height,
+};
 use std::collections::BTreeMap;
 
 /// Aggregate given query stats
@@ -141,5 +142,56 @@ pub fn deliver_query_stats(
                     message.canister_id, query_stats.proposer
                 );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ic_interfaces_state_manager::StateManager;
+    use ic_logger::replica_logger::no_op_logger;
+    use ic_test_utilities::state_manager::FakeStateManager;
+    use ic_types::{batch::CanisterQueryStats, NodeId, PrincipalId, QueryStatsEpoch};
+    use ic_types_test_utils::ids::canister_test_id;
+
+    /// Tests that we correctly collect temporary query stats in the replicated state throughout an epoch.
+    #[test]
+    pub fn test_query_stats() {
+        let test_canister_stats = QueryStats {
+            num_calls: 1,
+            num_instructions: 2,
+            ingress_payload_size: 3,
+            egress_payload_size: 4,
+        };
+        let uninstalled_canister = canister_test_id(1);
+        let proposer = NodeId::from(PrincipalId::new_node_test_id(1));
+        let query_stats = QueryStatsPayload {
+            epoch: QueryStatsEpoch::from(1),
+            proposer,
+            stats: vec![CanisterQueryStats {
+                canister_id: uninstalled_canister,
+                stats: test_canister_stats.clone(),
+            }],
+        };
+
+        let (_, mut state) = FakeStateManager::new().take_tip();
+        deliver_query_stats(&query_stats, &mut state, Height::new(1), &no_op_logger());
+
+        // Check that query stats are added to replicated state.
+        assert!(state.epoch_query_stats.epoch.is_some());
+        assert!(state
+            .epoch_query_stats
+            .stats
+            .contains_key(&uninstalled_canister));
+        assert_eq!(
+            state
+                .epoch_query_stats
+                .stats
+                .get(&uninstalled_canister)
+                .unwrap()
+                .get(&proposer)
+                .unwrap(),
+            &test_canister_stats
+        );
     }
 }

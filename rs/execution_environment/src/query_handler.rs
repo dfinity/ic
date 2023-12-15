@@ -5,7 +5,6 @@ mod query_cache;
 mod query_call_graph;
 mod query_context;
 mod query_scheduler;
-pub mod query_stats;
 #[cfg(test)]
 mod tests;
 
@@ -26,6 +25,7 @@ use ic_interfaces::execution_environment::{
 use ic_interfaces_state_manager::{Labeled, StateReader};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
+use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::batch::QueryStats;
@@ -51,7 +51,6 @@ use tokio::sync::oneshot;
 use tower::{util::BoxCloneService, Service};
 
 pub(crate) use self::query_scheduler::{QueryScheduler, QuerySchedulerFlag};
-use self::query_stats::QueryStatsCollector;
 use ic_ic00_types::{BitcoinGetBalanceArgs, BitcoinGetUtxosArgs, Payload, QueryMethod};
 use ic_replicated_state::NetworkTopology;
 
