@@ -55,7 +55,12 @@ This takes approximately 10-15 minutes to run.
 
 ```bash
 # You might be able to use devenv instead, but I have had problems with that.
-ssh -A zh1-spm22.zh1.dfinity.network
+#
+# `caffeinate` is not required, but highly recommended. This is because
+# without it, if you walk away from your computer for a while, your ssh
+# connection will be lost, and as a result, `recovered_mainnet_nns` will
+# not be kept alive.
+caffeinate ssh -A zh1-spm22.zh1.dfinity.network
 
 # Check out recent commit of the ic repo. It does not have to be the release candidate commit,
 # because pre-built WASMs are used (downloaded from S3).
