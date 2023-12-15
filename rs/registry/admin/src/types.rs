@@ -1,6 +1,7 @@
 //! Helper types used by `ic-admin`.
 
 use ic_protobuf::registry::{
+    node::v1::IPv4InterfaceConfig,
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
     subnet::v1::{GossipConfig as GossipConfigProto, SubnetRecord as SubnetRecordProto},
 };
@@ -10,8 +11,11 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::PrincipalId;
 use indexmap::IndexMap;
 use serde::Serialize;
-use std::convert::{From, TryFrom, TryInto};
 use std::str::FromStr;
+use std::{
+    convert::{From, TryFrom, TryInto},
+    net::{Ipv4Addr, Ipv6Addr},
+};
 
 /// All or part of the registry
 #[derive(Default, Serialize)]
@@ -125,13 +129,32 @@ impl From<&SubnetRecordProto> for SubnetRecord {
     }
 }
 
+/// User-friendly representation of the v1::IPv4InterfaceConfig.
+/// Ipv4 is parsed into Ipv4Addr. Other fields are omitted for now.
+#[derive(Serialize, Clone)]
+pub(crate) struct IPv4Interface {
+    pub ipv4: Ipv4Addr,
+}
+
 /// Encapsulates a node/node operator id pair.
 #[derive(Serialize, Clone)]
 pub(crate) struct NodeDetails {
-    pub ipv6: std::net::Ipv6Addr,
+    pub ipv6: Ipv6Addr,
+    pub ipv4: Option<IPv4Interface>,
     pub node_operator_id: PrincipalId,
     pub node_provider_id: PrincipalId,
     pub dc_id: String,
+}
+
+impl From<IPv4InterfaceConfig> for IPv4Interface {
+    fn from(value: IPv4InterfaceConfig) -> Self {
+        Self {
+            ipv4: value
+                .ip_addr
+                .parse::<Ipv4Addr>()
+                .expect("couldn't parse ipv4 address"),
+        }
+    }
 }
 
 /// User-friendly representation of a v1::ProvisionalWhitelist.

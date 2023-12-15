@@ -6331,6 +6331,7 @@ async fn get_node_list_since(
                 node_id,
                 NodeDetails {
                     node_operator_id,
+                    ipv4: node_record.public_ipv4_config.map(|r| r.into()),
                     ipv6: node_record
                         .http
                         .as_ref()
