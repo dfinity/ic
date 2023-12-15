@@ -252,6 +252,19 @@ impl<T: RpcTransport> EthRpcClient<T> {
         .await
     }
 
+    pub async fn multi_eth_send_raw_transaction(
+        &self,
+        raw_signed_transaction_hex: String,
+    ) -> Result<SendRawTransactionResult, MultiCallError<SendRawTransactionResult>> {
+        self.parallel_call(
+            "eth_sendRawTransaction",
+            vec![raw_signed_transaction_hex],
+            ResponseSizeEstimate::new(256),
+        )
+        .await
+        .reduce_with_equality()
+    }
+
     pub async fn eth_get_transaction_count(
         &self,
         params: GetTransactionCountParams,
