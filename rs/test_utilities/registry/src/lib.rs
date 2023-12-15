@@ -170,9 +170,9 @@ pub fn add_subnet_record(
 pub fn test_subnet_record() -> SubnetRecord {
     SubnetRecord {
         membership: vec![],
-        max_ingress_bytes_per_message: 60 * 1024 * 1024,
+        max_ingress_bytes_per_message: 2 * 1024 * 1024,
         max_ingress_messages_per_block: 1000,
-        max_block_payload_size: 2 * 1024 * 1024,
+        max_block_payload_size: 4 * 1024 * 1024,
         unit_delay_millis: 500,
         initial_notary_delay_millis: 1500,
         replica_version_id: ReplicaVersion::default().into(),
