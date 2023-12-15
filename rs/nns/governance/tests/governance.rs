@@ -11999,6 +11999,17 @@ lazy_static! {
         .unwrap()),
     );
 
+    static ref EXPECTED_FAILING_LIST_DEPLOYED_SNSES_CALL: (ExpectedCallCanisterMethodCallArguments<'static>, CanisterCallResult) = (
+        ExpectedCallCanisterMethodCallArguments {
+            target: SNS_WASM_CANISTER_ID,
+            method_name: "list_deployed_snses",
+            request: Encode!(&ListDeployedSnsesRequest {}).unwrap(),
+        },
+        Err((
+            None, "list_deployed_snses failed for no apparent reason.".to_string()
+        ))
+    );
+
     static ref EXPECTED_SWAP_GET_STATE_CALL: (ExpectedCallCanisterMethodCallArguments<'static>, CanisterCallResult) = (
         ExpectedCallCanisterMethodCallArguments {
             target: CanisterId::try_from(*TARGET_SWAP_CANISTER_ID).unwrap(),
@@ -12500,7 +12511,7 @@ async fn test_settle_community_fund_participation_restores_lifecycle_on_failure(
 /// Failure when settling the Neurons' fund should result in the Lifecycle remaining
 /// what it was before the method invocation.
 #[tokio::test]
-async fn test_settle_neurons_fund_participation_restores_lifecycle_on_failure() {
+async fn test_settle_neurons_fund_participation_restores_lifecycle_on_sns_w_failure() {
     use settle_neurons_fund_participation_request::{Committed, Result};
 
     // Step 1: Prepare the world.
@@ -12515,8 +12526,134 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_failure() 
             // Called during proposal execution
             EXPECTED_DEPLOY_NEW_SNS_CALL.clone(),
             // Called during first settlement call
-            EXPECTED_LIST_DEPLOYED_SNSES_CALL.clone(),
-            // Called during second settlement call
+            EXPECTED_FAILING_LIST_DEPLOYED_SNSES_CALL.clone(),
+        ]
+        .into(),
+    ));
+
+    let driver = fake::FakeDriver::default();
+    let mut gov = Governance::new(
+        governance_proto,
+        Box::new(MockEnvironment {
+            expected_call_canister_method_calls: Arc::clone(&expected_call_canister_method_calls),
+            call_canister_method_min_duration: None,
+        }),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+
+    // Step 2: Run code under test.
+
+    // Create a CreateServiceNervousSystem proposal that will decrement NF neuron's stake
+    // by a measurable amount.
+    let proposal_id = gov
+        .make_proposal(
+            &NeuronId { id: 1 },
+            &principal(1),
+            &CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL,
+        )
+        .await
+        .unwrap();
+
+    // Step 3: Inspect results.
+    let proposal = gov.get_proposal_data(proposal_id).unwrap();
+    // Assert that the proposal is executed and the lifecycle has been set
+    assert!(proposal.executed_timestamp_seconds > 0, "{:?}", proposal);
+    assert_eq!(
+        proposal.sns_token_swap_lifecycle,
+        Some(sns_swap_pb::Lifecycle::Open as i32)
+    );
+
+    // Calculate the AccountIdentifier of SNS Governance for balance lookups
+    let sns_governance_icp_account =
+        AccountIdentifier::new(*SNS_GOVERNANCE_CANISTER_ID, /* Subaccount*/ None);
+
+    // Get the treasury accounts balance
+    let sns_governance_treasury_balance_before_commitment = driver
+        .get_fake_ledger()
+        .account_balance(sns_governance_icp_account)
+        .await
+        .unwrap();
+
+    // The value should be zero since the maturity has not been minted
+    assert_eq!(
+        sns_governance_treasury_balance_before_commitment.get_e8s(),
+        0
+    );
+
+    // Settle the Neurons' Fund participation. This should fail due to
+    // `EXPECTED_FAILING_LIST_DEPLOYED_SNSES_CALL`.
+    let response = gov
+        .settle_neurons_fund_participation(
+            *TARGET_SWAP_CANISTER_ID,
+            SettleNeuronsFundParticipationRequest {
+                nns_proposal_id: Some(proposal.id.unwrap().id),
+                result: Some(Result::Committed(Committed {
+                    sns_governance_canister_id: Some(*SNS_GOVERNANCE_CANISTER_ID),
+                    total_direct_participation_icp_e8s: Some(45_000 * E8),
+                    total_neurons_fund_participation_icp_e8s: Some(50_000 * E8),
+                })),
+            },
+        )
+        .await;
+
+    let settle_neurons_fund_participation_response =
+        assert_matches!(response, Err(err) => err.to_string());
+    assert!(
+        settle_neurons_fund_participation_response
+            .contains("not authorized to settle Neurons' Fund participation"),
+        "unexpected settle_neurons_fund_participation_response: {:?}",
+        settle_neurons_fund_participation_response,
+    );
+    assert!(
+        settle_neurons_fund_participation_response.contains("list_deployed_snses failed"),
+        "unexpected settle_neurons_fund_participation_response: {:?}",
+        settle_neurons_fund_participation_response,
+    );
+
+    // Get the treasury account's balance again
+    let sns_governance_treasury_balance_after_commitment = driver
+        .get_fake_ledger()
+        .account_balance(sns_governance_icp_account)
+        .await
+        .unwrap();
+
+    // The balance should still be zero.
+    assert_eq!(
+        sns_governance_treasury_balance_after_commitment.get_e8s(),
+        0
+    );
+
+    // Make sure the ProposalData's sns_token_swap_lifecycle is still Open.
+    let proposal = gov.get_proposal_data(proposal_id).unwrap();
+    assert_eq!(
+        proposal.sns_token_swap_lifecycle,
+        Some(sns_swap_pb::Lifecycle::Open as i32)
+    );
+
+    // Inspect the proposal fields related to the Neurons' Fund
+    assert_eq!(proposal.cf_participants, vec![]);
+    assert_eq!(proposal.neurons_fund_data, *NEURONS_FUND_DATA_BEFORE_SETTLE);
+}
+
+/// Failure when settling the Neurons' fund should result in the Lifecycle remaining
+/// what it was before the method invocation.
+#[tokio::test]
+async fn test_settle_neurons_fund_participation_restores_lifecycle_on_ledger_failure() {
+    use settle_neurons_fund_participation_request::{Committed, Result};
+
+    // Step 1: Prepare the world.
+    let governance_proto = GovernanceProto {
+        economics: Some(NetworkEconomics::with_default_values()),
+        neurons: SWAP_ID_TO_NEURON.clone(),
+        ..Default::default()
+    };
+
+    let expected_call_canister_method_calls: Arc<Mutex<VecDeque<_>>> = Arc::new(Mutex::new(
+        [
+            // Called during proposal execution
+            EXPECTED_DEPLOY_NEW_SNS_CALL.clone(),
+            // Called during first settlement call
             EXPECTED_LIST_DEPLOYED_SNSES_CALL.clone(),
         ]
         .into(),
@@ -12575,8 +12712,7 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_failure() 
         0
     );
 
-    // Settle the Neurons' Fund participation. This should fail with the error added to
-    // the ICP SpyLedger.
+    // Settle the Neurons' Fund participation. This should fail due to the ICP Ledger transfer error.
     let response = gov
         .settle_neurons_fund_participation(
             *TARGET_SWAP_CANISTER_ID,
@@ -12591,7 +12727,19 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_failure() 
         )
         .await;
 
-    assert!(response.is_err(), "Expected error, got {:?}", response);
+    let settle_neurons_fund_participation_response =
+        assert_matches!(response, Err(err) => err.to_string());
+    assert!(
+        settle_neurons_fund_participation_response
+            .contains("Minting ICP from the Neuron's Fund failed"),
+        "unexpected settle_neurons_fund_participation_response: {:?}",
+        settle_neurons_fund_participation_response,
+    );
+    assert!(
+        settle_neurons_fund_participation_response.contains("Error conducting the the transfer"),
+        "unexpected settle_neurons_fund_participation_response: {:?}",
+        settle_neurons_fund_participation_response,
+    );
 
     // Get the treasury account's balance again
     let sns_governance_treasury_balance_after_commitment = driver
@@ -12612,6 +12760,10 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_failure() 
         proposal.sns_token_swap_lifecycle,
         Some(sns_swap_pb::Lifecycle::Open as i32)
     );
+
+    // Inspect the proposal fields related to the Neurons' Fund
+    assert_eq!(proposal.cf_participants, vec![]);
+    assert_eq!(proposal.neurons_fund_data, *NEURONS_FUND_DATA_BEFORE_SETTLE);
 }
 
 #[cfg(not(feature = "test"))]
@@ -13703,8 +13855,9 @@ async fn test_settle_neurons_fund_is_idempotent_for_create_service_nervous_syste
                 nns_proposal_id: Some(proposal.id.unwrap().id),
                 result: Some(Result::Committed(Committed {
                     sns_governance_canister_id: Some(*SNS_GOVERNANCE_CANISTER_ID),
-                    total_direct_participation_icp_e8s: Some(100_000 * E8),
-                    total_neurons_fund_participation_icp_e8s: Some(50_000 * E8),
+                    // This amount should result in some NF funds and some refunds.
+                    total_direct_participation_icp_e8s: Some(40_000 * E8),
+                    total_neurons_fund_participation_icp_e8s: Some(69_439_371_803),
                 })),
             },
         )
@@ -13733,6 +13886,12 @@ async fn test_settle_neurons_fund_is_idempotent_for_create_service_nervous_syste
         proposal.sns_token_swap_lifecycle,
         Some(sns_swap_pb::Lifecycle::Committed as i32)
     );
+    // Inspect the proposal fields related to the Neurons' Fund
+    assert_eq!(proposal.cf_participants, vec![]);
+    assert_eq!(
+        proposal.neurons_fund_data,
+        *NEURONS_FUND_DATA_AFTER_SETTLE_COMMIT
+    );
 
     // Settle the Neurons' Fund participation for the second time.
     let response = gov
@@ -13742,8 +13901,9 @@ async fn test_settle_neurons_fund_is_idempotent_for_create_service_nervous_syste
                 nns_proposal_id: Some(proposal.id.unwrap().id),
                 result: Some(Result::Committed(Committed {
                     sns_governance_canister_id: Some(*SNS_GOVERNANCE_CANISTER_ID),
-                    total_direct_participation_icp_e8s: Some(100_000 * E8),
-                    total_neurons_fund_participation_icp_e8s: Some(50_000 * E8),
+                    // This amount should result in some NF funds and some refunds.
+                    total_direct_participation_icp_e8s: Some(40_000 * E8),
+                    total_neurons_fund_participation_icp_e8s: Some(69_439_371_803),
                 })),
             },
         )
@@ -13769,6 +13929,12 @@ async fn test_settle_neurons_fund_is_idempotent_for_create_service_nervous_syste
     assert_eq!(
         proposal.sns_token_swap_lifecycle,
         Some(sns_swap_pb::Lifecycle::Committed as i32)
+    );
+    // Inspect the proposal fields related to the Neurons' Fund
+    assert_eq!(proposal.cf_participants, vec![]);
+    assert_eq!(
+        proposal.neurons_fund_data,
+        *NEURONS_FUND_DATA_AFTER_SETTLE_COMMIT
     );
 
     // Try to settle the third time, now by calling the old `settle_community_fund_participation`
