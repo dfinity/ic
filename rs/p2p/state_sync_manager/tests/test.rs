@@ -735,7 +735,7 @@ fn test_state_sync_abortion() {
         c2.clear();
         c2.get_mut()
             .expect_add_chunk()
-            .returning(|_| Err(ArtifactErrorCode::ChunkVerificationFailed));
+            .returning(|_, _| Err(ArtifactErrorCode::ChunkVerificationFailed));
         c2.get_mut()
             .expect_chunks_to_download()
             .returning(|| Box::new(vec![ChunkId::from(1)].into_iter()) as Box<_>);
