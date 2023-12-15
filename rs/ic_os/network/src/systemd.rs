@@ -1,5 +1,5 @@
 use std::fs::{create_dir_all, write};
-use std::net::Ipv6Addr;
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::Path;
 use std::process::Command;
 
@@ -11,13 +11,30 @@ use crate::mac_address::FormattedMacAddress;
 
 pub static DEFAULT_SYSTEMD_NETWORK_DIR: &str = "/run/systemd/network";
 
-pub fn generate_nameserver_list<'a, I>(nameservers: I) -> Result<String>
+pub fn generate_ipv6_nameserver_list<'a, I>(nameservers: I) -> Result<String>
 where
     I: IntoIterator<Item = &'a str>,
 {
     let mut result = String::new();
     for nameserver in nameservers {
         if nameserver.parse::<Ipv6Addr>().is_err() {
+            bail!(
+                "Invalid nameserver found in deployment config: {}",
+                nameserver
+            );
+        }
+        result.push_str(&format!("DNS={nameserver}\n"));
+    }
+    Ok(result)
+}
+
+pub fn generate_ipv4_nameserver_list<'a, I>(nameservers: I) -> Result<String>
+where
+    I: IntoIterator<Item = &'a str>,
+{
+    let mut result = String::new();
+    for nameserver in nameservers {
+        if nameserver.parse::<Ipv4Addr>().is_err() {
             bail!(
                 "Invalid nameserver found in deployment config: {}",
                 nameserver
@@ -150,7 +167,7 @@ fn generate_and_write_systemd_files(
     let nameserver_content = match dns_nameservers {
         Some(nameservers) => {
             let nameservers = nameservers.split(' ');
-            generate_nameserver_list(nameservers)?
+            generate_ipv6_nameserver_list(nameservers)?
         }
         None => String::new(),
     };

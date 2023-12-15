@@ -8,7 +8,7 @@ name = "guestos_tool"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = {version = "^1"} 
+anyhow = {version = "^1"}
 clap = {version = "^4", features = ["derive"]}
 itertools = { workspace = true }
 regex = {version = "^1.3"}
