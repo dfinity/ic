@@ -24,9 +24,10 @@ use ic_interfaces::p2p::state_sync::StateSyncClient;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_quic_transport::Transport;
 use ic_types::{
-    artifact::{StateSyncArtifactId, StateSyncMessage},
+    artifact::StateSyncArtifactId,
     chunkable::ChunkId,
     chunkable::{ArtifactErrorCode, Chunkable},
+    state_sync::StateSyncMessage,
     NodeId,
 };
 use rand::{

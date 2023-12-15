@@ -79,7 +79,10 @@
 //!   table only and does not include a version number.
 pub mod proto;
 
-use crate::chunkable::ChunkId;
+use crate::{
+    chunkable::{Chunk, ChunkId},
+    CryptoHashOfState, Height,
+};
 use ic_protobuf::{proxy::ProtoProxy, state::sync::v1 as pb};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -459,6 +462,88 @@ impl FileGroupChunks {
 
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+}
+
+/// State sync message.
+//
+// P2P will call get_chunk() on it to get a byte array to send to a peer, and
+// this byte array will be read from the FS.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StateSyncMessage {
+    pub height: Height,
+    pub root_hash: CryptoHashOfState,
+    /// Absolute path to the checkpoint root directory.
+    pub checkpoint_root: std::path::PathBuf,
+    pub meta_manifest: Arc<crate::state_sync::MetaManifest>,
+    /// The manifest containing the summary of the content.
+    pub manifest: crate::state_sync::Manifest,
+    pub state_sync_file_group: Arc<crate::state_sync::FileGroupChunks>,
+}
+
+impl StateSyncMessage {
+    pub fn get_chunk(&self, chunk_id: ChunkId) -> Option<Chunk> {
+        #[cfg(not(target_family = "unix"))]
+        {
+            let _keep_clippy_quiet = chunk_id;
+            panic!("This method should only be used when the target OS family is unix.");
+        }
+
+        #[cfg(target_family = "unix")]
+        {
+            use std::os::unix::fs::FileExt;
+
+            let get_single_chunk = |chunk_index: usize| -> Option<Vec<u8>> {
+                let chunk = self.manifest.chunk_table.get(chunk_index).cloned()?;
+                let path = self
+                    .checkpoint_root
+                    .join(&self.manifest.file_table[chunk.file_index as usize].relative_path);
+                let mut buf = vec![0; chunk.size_bytes as usize];
+                let f = std::fs::File::open(path).ok()?;
+                f.read_exact_at(&mut buf[..], chunk.offset).ok()?;
+                Some(buf)
+            };
+
+            let mut payload: Vec<u8> = Vec::new();
+            match state_sync_chunk_type(chunk_id.get()) {
+                StateSyncChunk::MetaManifestChunk => {
+                    payload = encode_meta_manifest(&self.meta_manifest);
+                }
+                StateSyncChunk::ManifestChunk(index) => {
+                    let index = index as usize;
+                    if index < self.meta_manifest.sub_manifest_hashes.len() {
+                        let encoded_manifest = encode_manifest(&self.manifest);
+                        let start = index * DEFAULT_CHUNK_SIZE as usize;
+                        let end = std::cmp::min(
+                            start + DEFAULT_CHUNK_SIZE as usize,
+                            encoded_manifest.len(),
+                        );
+                        let sub_manifest = encoded_manifest.get(start..end).unwrap_or_else(||
+                            panic!("We cannot get the {}th piece of the encoded manifest. The manifest and/or meta-manifest must be in abnormal state.", index)
+                        );
+                        payload = sub_manifest.to_vec();
+                    } else {
+                        // The chunk request is either malicious or invalid due to the collision between normal file chunks and manifest chunks.
+                        // Neither case could be resolved and a `None` has to be returned in both cases.
+                        return None;
+                    }
+                }
+                StateSyncChunk::FileGroupChunk(index) => {
+                    if let Some(chunk_table_indices) = self.state_sync_file_group.get(&index) {
+                        for chunk_table_index in chunk_table_indices {
+                            payload.extend(get_single_chunk(*chunk_table_index as usize)?);
+                        }
+                    } else {
+                        return None;
+                    }
+                }
+                StateSyncChunk::FileChunk(index) => {
+                    payload = get_single_chunk(index as usize)?;
+                }
+            }
+
+            Some(payload)
+        }
     }
 }
 

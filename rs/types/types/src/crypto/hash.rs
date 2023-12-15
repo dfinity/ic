@@ -1,6 +1,5 @@
 //! Defines hash types.
 
-use crate::artifact::StateSyncMessage;
 use crate::canister_http::{
     CanisterHttpResponse, CanisterHttpResponseMetadata, CanisterHttpResponseShare,
 };
@@ -25,6 +24,7 @@ use crate::signature::{
     BasicSignature, MultiSignature, MultiSignatureShare, ThresholdSignature,
     ThresholdSignatureShare,
 };
+use crate::state_sync::StateSyncMessage;
 use ic_crypto_sha2::{DomainSeparationContext, Sha256};
 use std::hash::Hash;
 

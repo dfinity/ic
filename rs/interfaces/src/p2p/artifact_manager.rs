@@ -5,7 +5,7 @@ use derive_more::From;
 use ic_types::artifact::{
     Advert, ArtifactKind, ArtifactPriorityFn, PriorityFn, UnvalidatedArtifactMutation,
 };
-use ic_types::{artifact, chunkable, p2p, NodeId};
+use ic_types::{artifact, p2p, single_chunked, NodeId};
 
 /// Event loops/actors that implement a graceful shutdown on destruction implement this trait.
 /// This is useful when the the event loop/actor has multiple handles and a separate object
@@ -148,7 +148,7 @@ pub trait ArtifactManager: Send + Sync {
     fn get_validated_by_identifier(
         &self,
         artifact_id: &artifact::ArtifactId,
-    ) -> Option<Box<dyn chunkable::ChunkableArtifact + '_>>;
+    ) -> Option<Box<dyn single_chunked::ChunkableArtifact + '_>>;
 
     /// Return a filter that is passed along to other peers when Gossip
     /// sends a re-transmission/bootstrap request. This filter is a collection of all

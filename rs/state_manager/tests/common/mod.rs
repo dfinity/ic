@@ -23,7 +23,6 @@ use ic_test_utilities::{
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_types::{
-    artifact::StateSyncMessage,
     chunkable::{
         ArtifactErrorCode::{ChunkVerificationFailed, ChunksMoreNeeded},
         Chunk, ChunkId, Chunkable,
@@ -31,7 +30,7 @@ use ic_types::{
     consensus::certification::{Certification, CertificationContent},
     crypto::Signed,
     signature::ThresholdSignature,
-    state_sync::MANIFEST_CHUNK_ID_OFFSET,
+    state_sync::{StateSyncMessage, MANIFEST_CHUNK_ID_OFFSET},
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
     CanisterId, CryptoHashOfState, Cycles, Height, RegistryVersion, SubnetId,
 };

@@ -15,10 +15,10 @@ use ic_memory_transport::TransportRouter;
 use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::mocks::{MockChunkable, MockStateSync};
 use ic_types::{
-    artifact::{StateSyncArtifactId, StateSyncMessage},
+    artifact::StateSyncArtifactId,
     chunkable::{ArtifactErrorCode, Chunk, ChunkId, Chunkable},
     crypto::CryptoHash,
-    state_sync::{Manifest, MetaManifest, StateSyncVersion},
+    state_sync::{Manifest, MetaManifest, StateSyncMessage, StateSyncVersion},
     CryptoHashOfState, Height, NodeId, PrincipalId,
 };
 use tokio::{runtime::Handle, task::JoinHandle};
