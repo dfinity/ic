@@ -1,5 +1,4 @@
-use candid::{Decode, Encode};
-use candid::{Nat, Principal};
+use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount;
@@ -148,17 +147,6 @@ fn wait_for_ledger_canister_to_start_after_an_upgrade(
             panic!("cannot verify the ledger is running.");
         }
     }
-}
-
-pub fn icrc1_balance(machine: &StateMachine, ledger_id: CanisterId, account: Account) -> Nat {
-    let result = query(
-        machine,
-        ledger_id,
-        "icrc1_balance_of",
-        Encode!(&account).unwrap(),
-    )
-    .unwrap();
-    Decode!(&result, Nat).unwrap()
 }
 
 fn set_up_sns_for_mlp(
