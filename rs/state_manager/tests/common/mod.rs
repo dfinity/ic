@@ -1,6 +1,9 @@
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
-use ic_config::state_manager::Config;
+use ic_config::{
+    flag_status::FlagStatus,
+    state_manager::{lsmt_storage_default, Config},
+};
 use ic_interfaces::{
     certification::{CertificationPermanentError, Verifier, VerifierError},
     validation::ValidationResult,
@@ -642,12 +645,18 @@ where
     });
 }
 
-pub fn state_manager_restart_test_with_metrics<Test>(test: Test)
+pub fn state_manager_restart_test_with_lsmt<Test>(lsmt_storage: FlagStatus, test: Test)
 where
     Test: FnOnce(
         &MetricsRegistry,
         StateManagerImpl,
-        Box<dyn Fn(StateManagerImpl, Option<Height>) -> (MetricsRegistry, StateManagerImpl)>,
+        Box<
+            dyn Fn(
+                StateManagerImpl,
+                Option<Height>,
+                FlagStatus,
+            ) -> (MetricsRegistry, StateManagerImpl),
+        >,
     ),
 {
     let tmp = tmpdir("sm");
@@ -656,8 +665,11 @@ where
     let verifier: Arc<dyn Verifier> = Arc::new(FakeVerifier::new());
 
     with_test_replica_logger(|log| {
-        let make_state_manager = move |starting_height| {
+        let make_state_manager = move |starting_height, lsmt_storage| {
             let metrics_registry = MetricsRegistry::new();
+
+            let mut config = config.clone();
+            config.lsmt_storage = lsmt_storage;
 
             let state_manager = StateManagerImpl::new(
                 Arc::clone(&verifier),
@@ -673,15 +685,34 @@ where
             (metrics_registry, state_manager)
         };
 
-        let (metrics_registry, state_manager) = make_state_manager(None);
+        let (metrics_registry, state_manager) = make_state_manager(None, lsmt_storage);
 
-        let restart_fn = Box::new(move |state_manager, starting_height| {
+        let restart_fn = Box::new(move |state_manager, starting_height, lsmt_storage| {
             drop(state_manager);
-            make_state_manager(starting_height)
+            make_state_manager(starting_height, lsmt_storage)
         });
 
         test(&metrics_registry, state_manager, restart_fn);
     });
+}
+
+pub fn state_manager_restart_test_with_metrics<Test>(test: Test)
+where
+    Test: FnOnce(
+        &MetricsRegistry,
+        StateManagerImpl,
+        Box<dyn Fn(StateManagerImpl, Option<Height>) -> (MetricsRegistry, StateManagerImpl)>,
+    ),
+{
+    state_manager_restart_test_with_lsmt(
+        lsmt_storage_default(),
+        |metrics, state_manager, restart_fn| {
+            let restart_fn_simplified = Box::new(move |state_manager, starting_height| {
+                restart_fn(state_manager, starting_height, lsmt_storage_default())
+            });
+            test(metrics, state_manager, restart_fn_simplified);
+        },
+    );
 }
 
 pub fn state_manager_restart_test<Test>(test: Test)
