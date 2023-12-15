@@ -19,6 +19,9 @@ pub fn build_dashboard() -> Vec<u8> {
             <head>
                 <title>Minter Dashboard</title>
                 <style>
+                    body {{
+                        font-family: monospace;
+                    }}
                     table {{
                         border: solid;
                         text-align: left;
