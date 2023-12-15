@@ -12,7 +12,6 @@
 //! For more context please check `<https://youtu.be/WaNJINjGleg>`
 //!
 use crate::artifact::{Artifact, StateSyncMessage};
-use ic_protobuf::p2p::v1 as p2p_pb;
 use phantom_newtype::Id;
 
 pub type Chunk = Vec<u8>;
@@ -25,16 +24,8 @@ pub enum ArtifactErrorCode {
 }
 
 /// The chunk type.
-pub type ChunkId = Id<ArtifactChunk, u32>;
-
-/// An artifact chunk.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct ArtifactChunk {
-    // Chunk number/id for this chunk
-    pub chunk_id: ChunkId,
-    // Payload for the chunk
-    pub chunk: Chunk,
-}
+pub struct ChunkIdTag;
+pub type ChunkId = Id<ChunkIdTag, u32>;
 
 /// Interface providing access to artifact.
 pub trait ChunkableArtifact {
@@ -45,12 +36,7 @@ pub trait Chunkable {
     fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>>;
     fn add_chunk(
         &mut self,
-        artifact_chunk: ArtifactChunk,
+        chunk_id: ChunkId,
+        chunk: Chunk,
     ) -> Result<StateSyncMessage, ArtifactErrorCode>;
-}
-
-impl From<ArtifactChunk> for p2p_pb::StateSyncChunkResponse {
-    fn from(chunk: ArtifactChunk) -> Self {
-        Self { data: chunk.chunk }
-    }
 }

@@ -13,7 +13,7 @@ use ic_logger::ReplicaLogger;
 use ic_protobuf::p2p::v1 as pb;
 use ic_types::{
     artifact::StateSyncArtifactId,
-    chunkable::{ArtifactChunk, ChunkId},
+    chunkable::{Chunk, ChunkId},
 };
 use prost::Message;
 
@@ -100,7 +100,7 @@ pub(crate) fn parse_chunk_handler_response(
     response: Response<Bytes>,
     chunk_id: ChunkId,
     metrics: OngoingStateSyncMetrics,
-) -> Result<ArtifactChunk, DownloadChunkError> {
+) -> Result<Chunk, DownloadChunkError> {
     let (parts, body) = response.into_parts();
 
     match parts.status {
@@ -127,11 +127,7 @@ pub(crate) fn parse_chunk_handler_response(
                     }
                 })?;
 
-            let chunk = ArtifactChunk {
-                chunk_id,
-                chunk: pb.data,
-            };
-            Ok(chunk)
+            Ok(pb.data)
         }
         StatusCode::NO_CONTENT => Err(DownloadChunkError::NoContent),
         StatusCode::TOO_MANY_REQUESTS => Err(DownloadChunkError::Overloaded),

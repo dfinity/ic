@@ -13,9 +13,8 @@ use ic_sys::mmap::ScopedMmap;
 use ic_types::{
     artifact::StateSyncMessage,
     chunkable::{
-        ArtifactChunk,
         ArtifactErrorCode::{self, ChunkVerificationFailed, ChunksMoreNeeded},
-        ChunkId, Chunkable,
+        Chunk, ChunkId, Chunkable,
     },
     malicious_flags::MaliciousFlags,
     state_sync::{
@@ -1159,21 +1158,22 @@ impl Chunkable for IncompleteState {
 
     fn add_chunk(
         &mut self,
-        artifact_chunk: ArtifactChunk,
+        chunk_id: ChunkId,
+        chunk: Chunk,
     ) -> Result<StateSyncMessage, ArtifactErrorCode> {
-        let ix = artifact_chunk.chunk_id.get();
-        let payload = &artifact_chunk.chunk;
+        let ix = chunk_id.get();
+        let payload = &chunk;
         match &mut self.state {
             DownloadState::Complete(ref artifact) => {
                 debug!(
                     self.log,
-                    "Received chunk {} on completed state {}", artifact_chunk.chunk_id, self.height
+                    "Received chunk {} on completed state {}", chunk_id, self.height
                 );
 
                 Ok(*artifact.clone())
             }
             DownloadState::Blank => {
-                if artifact_chunk.chunk_id == META_MANIFEST_CHUNK {
+                if chunk_id == META_MANIFEST_CHUNK {
                     let meta_manifest = decode_meta_manifest(payload).map_err(|err| {
                         warn!(
                             self.log,

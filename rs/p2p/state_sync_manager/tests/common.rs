@@ -16,7 +16,7 @@ use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::mocks::{MockChunkable, MockStateSync};
 use ic_types::{
     artifact::{StateSyncArtifactId, StateSyncMessage},
-    chunkable::{ArtifactChunk, ArtifactErrorCode, Chunk, ChunkId, Chunkable},
+    chunkable::{ArtifactErrorCode, Chunk, ChunkId, Chunkable},
     crypto::CryptoHash,
     state_sync::{Manifest, MetaManifest, StateSyncVersion},
     CryptoHashOfState, Height, NodeId, PrincipalId,
@@ -281,23 +281,23 @@ impl Chunkable for FakeChunkable {
 
     fn add_chunk(
         &mut self,
-        artifact_chunk: ArtifactChunk,
+        chunk_id: ChunkId,
+        chunk: Chunk,
     ) -> Result<StateSyncMessage, ArtifactErrorCode> {
         for set in self.chunk_sets.iter_mut() {
             if set.is_empty() {
                 continue;
             }
-            if set.remove(&artifact_chunk.chunk_id) {
+            if set.remove(&chunk_id) {
                 break;
             } else {
-                panic!("Downloaded chunk {} twice", artifact_chunk.chunk_id)
+                panic!("Downloaded chunk {} twice", chunk_id)
             }
         }
 
         // Add chunk to state if not part of manifest
-        if !is_manifest_chunk(artifact_chunk.chunk_id) {
-            self.local_state
-                .add_chunk(artifact_chunk.chunk_id, artifact_chunk.chunk.len())
+        if !is_manifest_chunk(chunk_id) {
+            self.local_state.add_chunk(chunk_id, chunk.len())
         }
 
         let elems = self.chunk_sets.iter().map(|set| set.len()).sum::<usize>();
@@ -342,10 +342,11 @@ impl Chunkable for SharableMockChunkable {
     }
     fn add_chunk(
         &mut self,
-        artifact_chunk: ArtifactChunk,
+        chunk_id: ChunkId,
+        chunk: Chunk,
     ) -> Result<StateSyncMessage, ArtifactErrorCode> {
         self.add_chunks_calls.fetch_add(1, Ordering::SeqCst);
-        self.mock.lock().unwrap().add_chunk(artifact_chunk)
+        self.mock.lock().unwrap().add_chunk(chunk_id, chunk)
     }
 }
 

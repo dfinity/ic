@@ -22,9 +22,8 @@ use ic_test_utilities_tmpdir::tmpdir;
 use ic_types::{
     artifact::StateSyncMessage,
     chunkable::{
-        ArtifactChunk,
         ArtifactErrorCode::{ChunkVerificationFailed, ChunksMoreNeeded},
-        ChunkId, Chunkable,
+        Chunk, ChunkId, Chunkable,
     },
     consensus::certification::{Certification, CertificationContent},
     crypto::Signed,
@@ -394,8 +393,8 @@ pub fn pipe_state_sync(src: StateSyncMessage, mut dst: Box<dyn Chunkable>) -> St
         .expect("State sync not completed.")
 }
 
-fn alter_chunk_data(chunk: &mut ArtifactChunk) {
-    let mut chunk_data = chunk.chunk.clone();
+fn alter_chunk_data(chunk: &mut Chunk) {
+    let mut chunk_data = chunk.clone();
     match chunk_data.last_mut() {
         Some(last) => {
             // Alter the last element of chunk_data.
@@ -406,7 +405,7 @@ fn alter_chunk_data(chunk: &mut ArtifactChunk) {
             chunk_data = vec![9; 100];
         }
     }
-    chunk.chunk = chunk_data;
+    *chunk = chunk_data;
 }
 
 /// Pipe the meta-manifest (chunk 0) from src to dest.
@@ -423,19 +422,16 @@ pub fn pipe_meta_manifest(
 
     let id = ids[0];
 
-    let mut chunk = ArtifactChunk {
-        chunk_id: id,
-        chunk: src
-            .clone()
-            .get_chunk(id)
-            .unwrap_or_else(|| panic!("Requested unknown chunk {}", id)),
-    };
+    let mut chunk = src
+        .clone()
+        .get_chunk(id)
+        .unwrap_or_else(|| panic!("Requested unknown chunk {}", id));
 
     if use_bad_chunk {
         alter_chunk_data(&mut chunk);
     }
 
-    match dst.add_chunk(chunk) {
+    match dst.add_chunk(id, chunk) {
         Ok(msg) => Ok(msg),
         Err(ChunksMoreNeeded) => Err(StateSyncErrorCode::ChunksMoreNeeded),
         Err(ChunkVerificationFailed) => Err(StateSyncErrorCode::MetaManifestVerificationFailed),
@@ -460,19 +456,16 @@ pub fn pipe_manifest(
     assert!(ids.iter().all(|id| manifest_chunks.contains(id)));
 
     for (index, id) in ids.iter().enumerate() {
-        let mut chunk = ArtifactChunk {
-            chunk_id: *id,
-            chunk: src
-                .clone()
-                .get_chunk(*id)
-                .unwrap_or_else(|| panic!("Requested unknown chunk {}", id)),
-        };
+        let mut chunk = src
+            .clone()
+            .get_chunk(*id)
+            .unwrap_or_else(|| panic!("Requested unknown chunk {}", id));
 
         if use_bad_chunk && index == ids.len() / 2 {
             alter_chunk_data(&mut chunk);
         }
 
-        match dst.add_chunk(chunk) {
+        match dst.add_chunk(*id, chunk) {
             Ok(msg) => {
                 return Ok(msg);
             }
@@ -506,19 +499,16 @@ pub fn pipe_partial_state_sync(
                 omitted_chunks = true;
                 continue;
             }
-            let mut chunk = ArtifactChunk {
-                chunk_id: *id,
-                chunk: src
-                    .clone()
-                    .get_chunk(*id)
-                    .unwrap_or_else(|| panic!("Requested unknown chunk {}", id)),
-            };
+            let mut chunk = src
+                .clone()
+                .get_chunk(*id)
+                .unwrap_or_else(|| panic!("Requested unknown chunk {}", id));
 
             if use_bad_chunk && index == ids.len() / 2 {
                 alter_chunk_data(&mut chunk);
             }
 
-            match dst.add_chunk(chunk) {
+            match dst.add_chunk(*id, chunk) {
                 Ok(msg) => {
                     return Ok(msg);
                 }
