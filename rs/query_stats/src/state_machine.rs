@@ -72,8 +72,9 @@ pub fn deliver_query_stats(
     state: &mut ReplicatedState,
     height: Height,
     logger: &ReplicaLogger,
+    epoch_length: u64,
 ) {
-    let epoch = epoch_from_height(height);
+    let epoch = epoch_from_height(height, epoch_length);
 
     // If current epoch doesn't match the epoch we received
     if Some(epoch) != state.epoch_query_stats.epoch {
@@ -175,7 +176,14 @@ mod tests {
         };
 
         let (_, mut state) = FakeStateManager::new().take_tip();
-        deliver_query_stats(&query_stats, &mut state, Height::new(1), &no_op_logger());
+        let epoch_length = ic_config::execution_environment::QUERY_STATS_EPOCH_LENGTH;
+        deliver_query_stats(
+            &query_stats,
+            &mut state,
+            Height::new(1),
+            &no_op_logger(),
+            epoch_length,
+        );
 
         // Check that query stats are added to replicated state.
         assert!(state.epoch_query_stats.epoch.is_some());

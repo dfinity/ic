@@ -2,7 +2,7 @@ use crossbeam_channel::{Sender, TrySendError};
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_types::{
     batch::{CanisterQueryStats, LocalQueryStats, QueryStats},
-    CanisterId, NumInstructions, QueryStatsEpoch,
+    epoch_from_height, CanisterId, Height, NumInstructions, QueryStatsEpoch,
 };
 use std::sync::Mutex;
 use std::{collections::BTreeMap, sync::RwLock};
@@ -15,6 +15,7 @@ pub use self::state_machine::deliver_query_stats;
 
 pub fn init_query_stats(
     log: ReplicaLogger,
+    query_stats_epoch_length: u64,
 ) -> (QueryStatsCollector, QueryStatsPayloadBuilderParams) {
     let (tx, rx) = crossbeam_channel::bounded(1);
     (
@@ -23,8 +24,9 @@ pub fn init_query_stats(
             current_query_stats: Mutex::new(BTreeMap::new()),
             current_epoch: RwLock::new(None),
             sender: tx,
+            query_stats_epoch_length,
         },
-        QueryStatsPayloadBuilderParams(rx),
+        QueryStatsPayloadBuilderParams(rx, query_stats_epoch_length),
     )
 }
 
@@ -37,9 +39,14 @@ pub struct QueryStatsCollector {
     pub current_query_stats: Mutex<BTreeMap<CanisterId, QueryStats>>, // Needs to be pub for testing
     current_epoch: RwLock<Option<QueryStatsEpoch>>,
     sender: Sender<LocalQueryStats>,
+    query_stats_epoch_length: u64,
 }
 
 impl QueryStatsCollector {
+    pub fn set_epoch_from_height(&self, height: Height) {
+        self.set_epoch(epoch_from_height(height, self.query_stats_epoch_length));
+    }
+
     pub fn set_epoch(&self, new_epoch: QueryStatsEpoch) {
         let mut current_epoch = self.current_epoch.write().unwrap();
         let Some(previous_epoch) = *current_epoch else {

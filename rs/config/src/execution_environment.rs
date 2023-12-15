@@ -103,6 +103,9 @@ const QUERY_CACHE_CAPACITY: NumBytes = NumBytes::new(200 * MIB);
 /// The upper limit on how long the cache entry stays valid in the query cache.
 const QUERY_CACHE_MAX_EXPIRY_TIME: Duration = Duration::from_secs(60);
 
+/// Length of an epoch of query statistics in blocks
+pub const QUERY_STATS_EPOCH_LENGTH: u64 = 2000;
+
 // The ID of the Bitcoin testnet canister.
 pub const BITCOIN_TESTNET_CANISTER_ID: &str = "g4xu7-jiaaa-aaaan-aaaaq-cai";
 
@@ -236,6 +239,9 @@ pub struct Config {
     /// Indicate whether query stats should be collected or not.
     pub query_stats_aggregation: FlagStatus,
 
+    /// Length of an epoch for query stats collection.
+    pub query_stats_epoch_length: u64,
+
     /// Indicate whether the Wasm chunk store feature has been enabled or not.
     pub wasm_chunk_store: FlagStatus,
 
@@ -306,6 +312,7 @@ impl Default for Config {
             query_cache_max_expiry_time: QUERY_CACHE_MAX_EXPIRY_TIME,
             max_compilation_cache_size: MAX_COMPILATION_CACHE_SIZE,
             query_stats_aggregation: FlagStatus::Disabled,
+            query_stats_epoch_length: QUERY_STATS_EPOCH_LENGTH,
             wasm_chunk_store: FlagStatus::Disabled,
             stop_canister_timeout_duration: STOP_CANISTER_TIMEOUT_DURATION,
         }

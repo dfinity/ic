@@ -2047,7 +2047,8 @@ impl ExecutionTestBuilder {
             self.heap_delta_rate_limit,
             self.upload_wasm_chunk_instructions,
         );
-        let (query_stats_collector, _) = ic_query_stats::init_query_stats(self.log.clone());
+        let (query_stats_collector, _) =
+            ic_query_stats::init_query_stats(self.log.clone(), config.query_stats_epoch_length);
 
         let query_handler = InternalHttpQueryHandler::new(
             self.log.clone(),

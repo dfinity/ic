@@ -9602,6 +9602,7 @@ name = "ic-query-stats"
 version = "0.9.0"
 dependencies = [
  "crossbeam-channel",
+ "ic-config",
  "ic-interfaces",
  "ic-interfaces-state-manager",
  "ic-interfaces-state-manager-mocks",

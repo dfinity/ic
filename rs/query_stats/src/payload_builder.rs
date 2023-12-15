@@ -23,7 +23,7 @@ use std::{
 /// We initialize the [`QueryStatsPayloadBuilder`] in two steps, because otherwise
 /// we would have to pass consensus related arguments (like the [`NodeId`]) to the
 /// execution environment.
-pub struct QueryStatsPayloadBuilderParams(pub(crate) Receiver<LocalQueryStats>);
+pub struct QueryStatsPayloadBuilderParams(pub(crate) Receiver<LocalQueryStats>, pub(crate) u64);
 
 impl QueryStatsPayloadBuilderParams {
     pub fn into_payload_builder(
@@ -38,6 +38,7 @@ impl QueryStatsPayloadBuilderParams {
             log,
             current_stats: RwLock::new(None),
             receiver: self.0,
+            epoch_length: self.1,
         })
     }
 }
@@ -48,6 +49,7 @@ pub struct QueryStatsPayloadBuilderImpl {
     log: ReplicaLogger,
     current_stats: RwLock<Option<LocalQueryStats>>,
     receiver: Receiver<LocalQueryStats>,
+    epoch_length: u64,
 }
 
 impl BatchPayloadBuilder for QueryStatsPayloadBuilderImpl {
@@ -126,7 +128,7 @@ impl QueryStatsPayloadBuilderImpl {
             }
         };
 
-        let max_valid_epoch = epoch_from_height(context.certified_height);
+        let max_valid_epoch = epoch_from_height(context.certified_height, self.epoch_length);
         if current_stats.epoch > max_valid_epoch {
             warn!(
                 self.log,
@@ -190,8 +192,10 @@ impl QueryStatsPayloadBuilderImpl {
         }
 
         // Check that epoch is not too high
-        let max_valid_epoch =
-            epoch_from_height(proposal_context.validation_context.certified_height);
+        let max_valid_epoch = epoch_from_height(
+            proposal_context.validation_context.certified_height,
+            self.epoch_length,
+        );
         if payload.epoch > max_valid_epoch {
             return Err(permanent_error(
                 QueryStatsPermanentValidationError::EpochTooHigh {
@@ -729,6 +733,7 @@ mod tests {
             log: no_op_logger(),
             current_stats: Some(stats).into(),
             receiver: rx,
+            epoch_length: ic_config::execution_environment::QUERY_STATS_EPOCH_LENGTH,
         }
     }
 

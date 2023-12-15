@@ -139,16 +139,12 @@ pub struct HeightTag {}
 /// The block height.
 // Note [ExecutionRound vs Height]
 pub type Height = AmountOf<HeightTag, u64>;
-
-/// Length of an epoch of query statistics in blocks
-pub const QUERY_STATS_EPOCH_LENGTH: u64 = 2000;
-
 pub struct QueryStatsTag {}
 /// The epoch as used by query stats aggregation.
 pub type QueryStatsEpoch = AmountOf<QueryStatsTag, u64>;
 
-pub fn epoch_from_height(height: Height) -> QueryStatsEpoch {
-    QueryStatsEpoch::from(height.get() / QUERY_STATS_EPOCH_LENGTH)
+pub fn epoch_from_height(height: Height, epoch_length: u64) -> QueryStatsEpoch {
+    QueryStatsEpoch::from(height.get() / epoch_length)
 }
 
 /// Converts a NodeId into its protobuf definition.  Normally, we would use
