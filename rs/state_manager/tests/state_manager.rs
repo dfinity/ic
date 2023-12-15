@@ -4626,6 +4626,124 @@ fn checkpoints_are_readonly() {
     });
 }
 
+#[test]
+fn can_upgrade_to_lsmt() {
+    fn vmemory0_exists(state_manager: &StateManagerImpl, height: Height) -> bool {
+        state_manager
+            .state_layout()
+            .checkpoint(height)
+            .unwrap()
+            .canister(&canister_test_id(1))
+            .unwrap()
+            .vmemory_0()
+            .exists()
+    }
+
+    fn num_overlays(state_manager: &StateManagerImpl, height: Height) -> usize {
+        state_manager
+            .state_layout()
+            .checkpoint(height)
+            .unwrap()
+            .canister(&canister_test_id(1))
+            .unwrap()
+            .vmemory_0_overlays()
+            .unwrap()
+            .len()
+    }
+
+    state_manager_restart_test_with_lsmt(
+        FlagStatus::Disabled,
+        |metrics, state_manager, restart_fn| {
+            let (_height, mut state) = state_manager.take_tip();
+
+            insert_dummy_canister(&mut state, canister_test_id(1));
+            let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
+            let execution_state = canister_state.execution_state.as_mut().unwrap();
+
+            const NEW_WASM_PAGE: u64 = 100;
+
+            fn verify_page_map(page_map: &PageMap, value: u8) {
+                assert_eq!(page_map.get_page(PageIndex::new(0)), &[1u8; PAGE_SIZE]);
+                for i in 1..NEW_WASM_PAGE {
+                    assert_eq!(page_map.get_page(PageIndex::new(i)), &[0u8; PAGE_SIZE]);
+                }
+                assert_eq!(
+                    page_map.get_page(PageIndex::new(NEW_WASM_PAGE)),
+                    &[value; PAGE_SIZE]
+                );
+            }
+
+            execution_state.wasm_memory.page_map.update(&[
+                (PageIndex::new(0), &[1u8; PAGE_SIZE]),
+                (PageIndex::new(NEW_WASM_PAGE), &[2u8; PAGE_SIZE]),
+            ]);
+
+            verify_page_map(&execution_state.wasm_memory.page_map, 2u8);
+
+            state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+            wait_for_checkpoint(&state_manager, height(1));
+
+            assert!(vmemory0_exists(&state_manager, height(1)));
+            assert_eq!(num_overlays(&state_manager, height(1)), 0);
+
+            let (_height, mut state) = state_manager.take_tip();
+            let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
+            let execution_state = canister_state.execution_state.as_mut().unwrap();
+            verify_page_map(&execution_state.wasm_memory.page_map, 2u8);
+
+            execution_state.wasm_memory.page_map.update(&[
+                (PageIndex::new(0), &[1u8; PAGE_SIZE]),
+                (PageIndex::new(NEW_WASM_PAGE), &[3u8; PAGE_SIZE]),
+            ]);
+
+            state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+            wait_for_checkpoint(&state_manager, height(2));
+
+            let (_height, mut state) = state_manager.take_tip();
+            let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
+            let execution_state = canister_state.execution_state.as_mut().unwrap();
+            verify_page_map(&execution_state.wasm_memory.page_map, 3u8);
+
+            assert!(vmemory0_exists(&state_manager, height(2)));
+            assert_eq!(num_overlays(&state_manager, height(2)), 0);
+
+            assert_error_counters(metrics);
+
+            // restart the state_manager
+            let (metrics, state_manager) = restart_fn(state_manager, None, FlagStatus::Enabled);
+
+            let (_height, mut state) = state_manager.take_tip();
+            let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
+            let execution_state = canister_state.execution_state.as_mut().unwrap();
+            verify_page_map(&execution_state.wasm_memory.page_map, 3u8);
+
+            assert!(vmemory0_exists(&state_manager, height(2)));
+            assert_eq!(num_overlays(&state_manager, height(2)), 0);
+
+            execution_state.wasm_memory.page_map.update(&[
+                (PageIndex::new(0), &[1u8; PAGE_SIZE]),
+                (PageIndex::new(NEW_WASM_PAGE), &[4u8; PAGE_SIZE]),
+            ]);
+
+            state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+            wait_for_checkpoint(&state_manager, height(3));
+
+            let (_height, mut state) = state_manager.take_tip();
+            let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
+            let execution_state = canister_state.execution_state.as_mut().unwrap();
+            verify_page_map(&execution_state.wasm_memory.page_map, 4u8);
+
+            assert!(vmemory0_exists(&state_manager, height(3)));
+            assert_eq!(num_overlays(&state_manager, height(3)), 1);
+
+            state_manager.commit_and_certify(state, height(4), CertificationScope::Full);
+            wait_for_checkpoint(&state_manager, height(4));
+
+            assert_error_counters(&metrics);
+        },
+    );
+}
+
 proptest! {
     #[test]
     fn stream_store_encode_decode(stream in arb_stream(0, 10, 0, 10), size_limit in 0..20usize) {

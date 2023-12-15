@@ -2299,8 +2299,14 @@ impl StateManagerImpl {
                 })
                 .and_then(|(base_manifest, base_height)| {
                     if let Ok(checkpoint_layout) = self.state_layout.checkpoint(base_height) {
+                        // If `lsmt_storage` is enabled, then `dirty_pages` is not needed, as each file is either completely
+                        // new, or identical (same inode) to before.
+                        let dirty_pages = match self.lsmt_storage {
+                            FlagStatus::Enabled => Vec::new(),
+                            FlagStatus::Disabled => get_dirty_pages(state),
+                        };
                         Some(PreviousCheckpointInfo {
-                            dirty_pages: get_dirty_pages(state),
+                            dirty_pages,
                             base_manifest,
                             base_height,
                             checkpoint_layout,
@@ -2418,6 +2424,7 @@ impl StateManagerImpl {
                         target_height: height,
                         dirty_memory_pages: dirty_pages,
                         base_checkpoint: checkpoint_layout,
+                        lsmt_storage: self.lsmt_storage,
                     }
                 },
             )

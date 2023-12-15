@@ -8,6 +8,7 @@ use crate::manifest::{
     MAX_FILE_SIZE_TO_GROUP,
 };
 
+use ic_config::flag_status::FlagStatus;
 use ic_crypto_sha2::Sha256;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
@@ -1089,6 +1090,7 @@ fn test_dirty_pages_to_dirty_chunks_accounts_for_hardlinks() {
                 Height::new(0),
             )
             .unwrap(),
+            lsmt_storage: FlagStatus::Enabled,
         },
         &CheckpointLayout::new_untracked(checkpoint1.to_path_buf(), Height::new(1)).unwrap(),
         &[

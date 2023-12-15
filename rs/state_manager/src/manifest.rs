@@ -16,6 +16,7 @@ use crate::{
 };
 use bit_vec::BitVec;
 use hash::{chunk_hasher, file_hasher, manifest_hasher, ManifestHash};
+use ic_config::flag_status::FlagStatus;
 use ic_crypto_sha2::Sha256;
 use ic_logger::{error, fatal, replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -235,6 +236,7 @@ pub struct ManifestDelta {
     /// state at `base_height`.
     pub(crate) dirty_memory_pages: DirtyPages,
     pub(crate) base_checkpoint: CheckpointLayout<ReadOnly>,
+    pub(crate) lsmt_storage: FlagStatus,
 }
 
 /// Groups small files into larger chunks.
@@ -790,26 +792,37 @@ fn dirty_pages_to_dirty_chunks(
     );
 
     let mut dirty_chunks: BTreeMap<PathBuf, BitVec> = Default::default();
-    for dirty_page in &manifest_delta.dirty_memory_pages {
-        if dirty_page.height != manifest_delta.base_height {
-            continue;
-        }
 
-        let path = dirty_page.page_type.path(checkpoint);
+    // If `lsmt_storage` is enabled, we shouldn't have populated `dirty_memory_pages` in the first place.
+    debug_assert!(
+        manifest_delta.lsmt_storage == FlagStatus::Disabled
+            || manifest_delta.dirty_memory_pages.is_empty()
+    );
 
-        if let Ok(path) = path {
-            let relative_path = path
-                .strip_prefix(checkpoint.raw_path())
-                .expect("failed to strip path prefix");
+    // Any information on dirty pages is not relevant to what files might have changed with `lsmt_storage`
+    // enabled.
+    if manifest_delta.lsmt_storage == FlagStatus::Disabled {
+        for dirty_page in &manifest_delta.dirty_memory_pages {
+            if dirty_page.height != manifest_delta.base_height {
+                continue;
+            }
 
-            if let Some(chunks_bitmap) = dirty_chunks_of_file(
-                relative_path,
-                &dirty_page.page_delta_indices,
-                files,
-                max_chunk_size,
-                &manifest_delta.base_manifest,
-            ) {
-                dirty_chunks.insert(relative_path.to_path_buf(), chunks_bitmap);
+            let path = dirty_page.page_type.path(checkpoint);
+
+            if let Ok(path) = path {
+                let relative_path = path
+                    .strip_prefix(checkpoint.raw_path())
+                    .expect("failed to strip path prefix");
+
+                if let Some(chunks_bitmap) = dirty_chunks_of_file(
+                    relative_path,
+                    &dirty_page.page_delta_indices,
+                    files,
+                    max_chunk_size,
+                    &manifest_delta.base_manifest,
+                ) {
+                    dirty_chunks.insert(relative_path.to_path_buf(), chunks_bitmap);
+                }
             }
         }
     }
@@ -847,6 +860,7 @@ fn dirty_pages_to_dirty_chunks(
             let num_chunks = count_chunks(*size_bytes, max_chunk_size);
             let chunks_bitmap = BitVec::from_elem(num_chunks, false);
             let _prev_chunk = dirty_chunks.insert(path.clone(), chunks_bitmap);
+            // Check that for hardlinked files there are no dirty pages.
             debug_assert!(_prev_chunk.is_none());
         }
     }
