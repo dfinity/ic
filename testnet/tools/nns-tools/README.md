@@ -75,7 +75,7 @@ tmux -S release
 
 rm -rf test_tmpdir; \
     ict testnet create recovered_mainnet_nns \
-        --lifetime-mins 120 \
+        --lifetime-mins 1440 \
         --set-required-host-features=dc=zh1 \
         --verbose \
         -- \
