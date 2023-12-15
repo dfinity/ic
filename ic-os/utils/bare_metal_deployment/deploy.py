@@ -42,7 +42,7 @@ class Args:
     Use --config_path <yaml file> to load args from a file. Args on the command line will override config file args.
     """
 
-    # URL for NFS enabled fileshare, e.g. 10.10.101.254
+    # Endpoint for NFS enabled fileshare, e.g. zh2-rmu or 10.10.101.254
     file_share_url: str = field(alias="-u")
 
     # Directory on the remote file share where files are served from. E.g. /srv/images. This will be postfixed to the file_share_url, e.g.: 10.10.101.254:/srv/images
