@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    "//rs/config",
     "//rs/interfaces",
     "//rs/interfaces/state_manager",
     "//rs/monitoring/logger",

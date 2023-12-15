@@ -28,7 +28,6 @@ use ic_replicated_state::{
 };
 use ic_system_api::{ApiType, ExecutionParameters, InstructionLimits};
 use ic_types::{
-    epoch_from_height,
     ingress::WasmResult,
     messages::{
         CallContextId, CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response,
@@ -424,7 +423,7 @@ impl<'a> QueryContext<'a> {
 
         // Add query statistics to the query aggregator.
         if let Some(query_stats) = self.local_query_execution_stats {
-            query_stats.set_epoch(epoch_from_height(self.state.height()));
+            query_stats.set_epoch_from_height(self.state.height());
 
             query_stats.register_query_statistics(
                 canister.canister_id(),

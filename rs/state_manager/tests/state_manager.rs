@@ -52,7 +52,7 @@ use ic_types::{
     xnet::{StreamIndex, StreamIndexedQueue},
     CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, NumBytes, PrincipalId,
 };
-use ic_types::{epoch_from_height, QUERY_STATS_EPOCH_LENGTH};
+use ic_types::{epoch_from_height, QueryStatsEpoch};
 use nix::sys::time::TimeValLike;
 use nix::sys::{
     stat::{utimensat, UtimensatFlags},
@@ -585,9 +585,9 @@ fn query_stats_are_persisted() {
         let canister_id: CanisterId = canister_test_id(100);
         let proposer_id: NodeId = node_test_id(42);
 
-        let (curr_height, mut state) = state_manager.take_tip();
+        let (_curr_height, mut state) = state_manager.take_tip();
 
-        let epoch = epoch_from_height(curr_height);
+        let epoch = QueryStatsEpoch::from(42);
         let test_query_stats: QueryStats = QueryStats {
             num_calls: 1337,
             num_instructions: 100000,
@@ -5288,6 +5288,7 @@ proptest! {
 #[test]
 fn query_stats_are_collected() {
     let mut env = StateMachineBuilder::new().build();
+    let query_stats_epoch_length = ic_config::execution_environment::QUERY_STATS_EPOCH_LENGTH;
 
     const INITIAL_VALUES: u128 = 42;
 
@@ -5337,7 +5338,7 @@ fn query_stats_are_collected() {
 
     // Run for an entire epoch and then deliver one more batch to ensure query stats get copied to the canister state.
     // In practise, some batches have already been delivered (e.g. ingress messages for canister installation).
-    for i in 0..QUERY_STATS_EPOCH_LENGTH as usize + 1 {
+    for i in 0..query_stats_epoch_length as usize + 1 {
         let mut stats = vec![];
 
         // Append query stats the first time each node is a block maker.
@@ -5397,10 +5398,10 @@ fn query_stats_are_collected() {
         let height = env.deliver_query_stats(QueryStatsPayload {
             proposer: proposers[i % NUM_NODES],
             stats,
-            epoch: epoch_from_height(Height::from(i as u64)),
+            epoch: epoch_from_height(Height::from(i as u64), query_stats_epoch_length),
         });
 
-        if height.get() < QUERY_STATS_EPOCH_LENGTH {
+        if height.get() < query_stats_epoch_length {
             // Query stats in the canister state should only be changed after more than QUERY_STATS_EPOCH_LENGTH batches.
             // have been delivered. Before, they should be unchanged.
             println!("Checking query stats in round {}", i);
