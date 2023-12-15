@@ -6704,8 +6704,18 @@ impl Governance {
     }
 
     fn can_spawn_neurons(&self) -> bool {
-        let spawning = self.heap_data.spawning_neurons;
-        spawning.is_none() || !spawning.unwrap()
+        let spawning = self.heap_data.spawning_neurons.unwrap_or(false);
+        if spawning {
+            return false;
+        }
+
+        let now_seconds = self.env.now();
+        let neuron_count_ready_to_spawn = self
+            .neuron_store
+            .list_ready_to_spawn_neuron_ids(now_seconds)
+            .len();
+
+        neuron_count_ready_to_spawn > 0
     }
 
     /// Actually spawn neurons by minting their maturity, modulated by the maturity modulation rate of the day.
