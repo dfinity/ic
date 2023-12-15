@@ -1,4 +1,4 @@
-use candid::{Decode, Encode, Nat, Principal};
+use candid::{Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount;
