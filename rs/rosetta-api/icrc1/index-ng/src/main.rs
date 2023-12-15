@@ -28,7 +28,7 @@ use icrc_ledger_types::icrc3::blocks::{
 };
 use icrc_ledger_types::icrc3::transactions::Transaction;
 use num_traits::ToPrimitive;
-use scopeguard::{guard, ScopeGuard};
+use scopeguard::guard;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -52,8 +52,7 @@ const BLOCK_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(2);
 const ACCOUNT_BLOCK_IDS_MEMORY_ID: MemoryId = MemoryId::new(3);
 const ACCOUNT_DATA_MEMORY_ID: MemoryId = MemoryId::new(4);
 
-const DEFAULT_MAX_WAIT_TIME: Duration = Duration::from_secs(2);
-const DEFAULT_RETRY_WAIT_TIME: Duration = Duration::from_secs(1);
+const DEFAULT_MAX_WAIT_TIME: Duration = Duration::from_secs(1);
 
 #[cfg(not(feature = "u256-tokens"))]
 type Tokens = ic_icrc1_tokens_u64::U64;
@@ -281,7 +280,7 @@ fn init(index_arg: Option<IndexArg>) {
     });
 
     // set the first build_index to be called after init
-    set_build_index_timer(Duration::from_secs(0));
+    set_build_index_timer(DEFAULT_MAX_WAIT_TIME);
 }
 
 // The part of the legacy index (//rs/rosetta-api/icrc1/index) state
@@ -331,7 +330,7 @@ fn post_upgrade(index_arg: Option<IndexArg>) {
     };
 
     // set the first build_index to be called after init
-    set_build_index_timer(Duration::from_secs(0));
+    set_build_index_timer(DEFAULT_MAX_WAIT_TIME);
 }
 
 async fn measured_call<I, O>(
@@ -418,9 +417,6 @@ pub async fn build_index() -> Option<()> {
             state.is_build_index_running = false;
         });
     });
-    let failure_guard = guard((), |_| {
-        set_build_index_timer(DEFAULT_RETRY_WAIT_TIME);
-    });
     let next_txid = with_blocks(|blocks| blocks.len());
     let res = get_blocks_from_ledger(next_txid).await?;
     let mut tx_indexed_count: usize = 0;
@@ -442,37 +438,21 @@ pub async fn build_index() -> Option<()> {
     }
     tx_indexed_count += res.blocks.len();
     append_blocks(res.blocks);
-    let wait_time = compute_wait_time(tx_indexed_count);
     log!(
         P1,
         "Indexed: {} waiting : {:?}",
         tx_indexed_count,
-        wait_time
+        DEFAULT_MAX_WAIT_TIME
     );
-    mutate_state(|state| state.last_wait_time = wait_time);
-    ScopeGuard::into_inner(failure_guard);
-    set_build_index_timer(wait_time);
     Some(())
 }
 
 fn set_build_index_timer(after: Duration) -> TimerId {
-    ic_cdk_timers::set_timer(after, || {
+    ic_cdk_timers::set_timer_interval(after, || {
         ic_cdk::spawn(async {
             let _ = build_index().await;
         })
     })
-}
-
-/// Compute the waiting time before next indexing
-pub fn compute_wait_time(indexed_tx_count: usize) -> Duration {
-    let max_blocks_per_response = with_state(|state| state.max_blocks_per_response);
-    if indexed_tx_count as u64 >= max_blocks_per_response {
-        // If we indexed more than max_blocks_per_response,
-        // we index again on the next build_index call.
-        return Duration::ZERO;
-    }
-    let numerator = 1f64 - (indexed_tx_count as f64 / max_blocks_per_response as f64);
-    DEFAULT_MAX_WAIT_TIME * (100f64 * numerator) as u32 / 100
 }
 
 fn append_block(block_index: BlockIndex64, block: GenericBlock) {
@@ -964,22 +944,4 @@ fn check_candid_interface() {
             e
         )
     });
-}
-
-#[test]
-fn compute_wait_time_test() {
-    fn blocks(n: u64) -> usize {
-        let max_blocks = DEFAULT_MAX_BLOCKS_PER_RESPONSE as f64;
-        (max_blocks * n as f64 / 100f64) as usize
-    }
-
-    fn wait_time(n: u32) -> Duration {
-        DEFAULT_MAX_WAIT_TIME * n / 100
-    }
-
-    assert_eq!(wait_time(100), compute_wait_time(blocks(0)));
-    assert_eq!(wait_time(75), compute_wait_time(blocks(25)));
-    assert_eq!(wait_time(50), compute_wait_time(blocks(50)));
-    assert_eq!(wait_time(25), compute_wait_time(blocks(75)));
-    assert_eq!(wait_time(0), compute_wait_time(blocks(100)));
 }

@@ -1110,6 +1110,9 @@ fn test_oldest_tx_id() {
     );
     let index_id = install_index_ng(env, ledger_id);
 
+    env.advance_time(Duration::from_secs(60));
+    env.tick();
+
     // account(2, 0) and account(3, 0) have no transactions so oldest_tx_id should be `None`.
     for account in [account(2, 0), account(3, 0)] {
         let oldest_tx_id =
