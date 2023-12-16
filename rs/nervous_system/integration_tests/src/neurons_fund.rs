@@ -19,7 +19,7 @@ use ic_nns_governance::{
 };
 use ic_nns_test_utils::{
     common::{
-        build_governance_wasm, build_ledger_wasm, build_root_wasm, build_sns_wasms_wasm,
+        build_ledger_wasm, build_root_wasm, build_sns_wasms_wasm, build_test_governance_wasm,
         NnsInitPayloadsBuilder,
     },
     ids::TEST_NEURON_1_ID,
@@ -492,7 +492,7 @@ fn test_sns_lifecycle(neurons_fund_participation: bool) {
         "NNS Governance",
         GOVERNANCE_CANISTER_ID,
         nns_init_payload.governance.encode_to_vec(),
-        build_governance_wasm(),
+        build_test_governance_wasm(),
     );
     install_canister(
         &pic,
