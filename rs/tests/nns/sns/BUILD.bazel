@@ -4,37 +4,6 @@ load("//rs/tests:system_tests.bzl", "system_test")
 package(default_visibility = ["//visibility:public"])
 
 system_test(
-    name = "sale_participation",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    # TODO[NNS1-2658]: re-enable this test
-    tags = [
-        "manual",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
-                   SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
-)
-
-system_test(
-    name = "sale_mass_participation",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    # TODO[NNS1-2658]: re-enable this test with the following tags:
-    # tags = [
-    #     "system_test_hourly",
-    #     "system_test_nightly",
-    # ],
-    tags = [
-        "manual",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
-                   SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
-)
-
-system_test(
     name = "sns_sale_load_test_1",
     flaky = False,  # remove after when PFOPS-3148 is resolved
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -154,42 +123,7 @@ system_test(
 )
 
 system_test(
-    name = "payment_flow_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    # TODO[NNS1-2658]: re-enable this test
-    tags = [
-        "manual",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
-                   SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
-)
-
-system_test(
-    name = "payment_flow_with_finalization_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    # TODO[NNS1-2590]: re-enable this test
-    tags = [
-        "manual",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
-                   SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
-)
-
-system_test(
-    name = "one_proposal_payment_flow_with_finalization_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
-                   SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
-)
-
-system_test(
-    name = "one_proposal_neurons_fund_swap_participation_test",
+    name = "neurons_fund_swap_participation_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
@@ -203,7 +137,7 @@ system_test(
 )
 
 system_test(
-    name = "one_proposal_overpayment_fail_test",
+    name = "overpayment_fail_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
