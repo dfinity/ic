@@ -283,9 +283,13 @@ pub fn modify_wasm_bytes(wasm_bytes: &[u8], modify_with: &str) -> Vec<u8> {
 }
 
 /// Build Wasm for NNS Governance canister
-pub fn build_governance_wasm() -> Wasm {
+pub fn build_test_governance_wasm() -> Wasm {
     let features = ["test"];
-    Project::cargo_bin_maybe_from_env("governance-canister", &features)
+    build_governance_wasm(&features)
+}
+/// Build Wasm for NNS Governance canister
+pub fn build_governance_wasm(features: &[&str]) -> Wasm {
+    Project::cargo_bin_maybe_from_env("governance-canister", features)
 }
 /// Build Wasm for NNS Root canister
 pub fn build_root_wasm() -> Wasm {

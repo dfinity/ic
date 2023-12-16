@@ -5235,9 +5235,12 @@ impl Governance {
         }
 
         // Must be unique.
+        #[allow(unused_variables)]
         let other_proposal_ids = self.select_open_proposal_ids(|action| {
             matches!(action, Action::CreateServiceNervousSystem(_))
         });
+
+        #[cfg(not(feature = "test"))]
         if !other_proposal_ids.is_empty() {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
