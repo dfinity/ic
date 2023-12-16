@@ -953,3 +953,28 @@ tnet-test:
       timeout 10m \
           bash -c "kubectl -n tnets logs -f $TNET_OPERATOR -c init | grep -q 'All NNS canisters have been set up'"
       kill "$(jobs -p)" || true
+
+bazel-test-bare-metal:
+  extends:
+    - .bazel-test-all
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "setupos-bare-metal-smoke-test"'
+  tags:
+    - zh
+  needs: [] # don't wait on other jobs
+  script:
+    - |
+      bazel run //ic-os/setupos/envs/dev:launch-bare-metal -- \
+      --config_path $ZH2_DLL01_CONFIG_YAML_PATH \
+      --csv_filename $ZH2_DLL01_CSV_SECRETS_PATH \
+      --file_share_ssh_key $ZH2_FILE_SHARE_KEY_PATH
+
+      bazel run //ic-os/setupos/envs/dev-sev:launch-bare-metal -- \
+      --config_path $ZH2_DLL01_CONFIG_YAML_PATH \
+      --csv_filename $ZH2_DLL01_CSV_SECRETS_PATH \
+      --file_share_ssh_key $ZH2_FILE_SHARE_KEY_PATH
+
+      bazel run //ic-os/setupos/envs/prod:launch-bare-metal -- \
+      --config_path $ZH2_DLL01_CONFIG_YAML_PATH \
+      --csv_filename $ZH2_DLL01_CSV_SECRETS_PATH \
+      --file_share_ssh_key $ZH2_FILE_SHARE_KEY_PATH
