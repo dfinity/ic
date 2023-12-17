@@ -23,7 +23,7 @@ Make sure you have *two* testnets reserved, then:
   ```
 
 - You can observe the benchmark on the following dashboard: https://grafana.testnet.dfinity.network/d/u016YUeGz/workload-generator-metrics?orgId=1&refresh=5s - make sure to select the target subnetwork *as well as* the subnetwork with workload generators under "IC" and "IC workload generator" at the top respectively.
-- Create the report `python3 generate_report.py --base_dir {your_artifacts_root_dir} --git_revision {IC_revision_your_experiment_ran_on} --timestamp {the_timestamp_marker_of_your_experiment}`. This is normally called from the suite automatically, so in many cases you won't to manually run it.
+- Create the report `python3 generate_report.py --base_dir {your_artifacts_root_dir} --git_revision {IC_revision_your_experiment_ran_on} --timestamp {the_timestamp_marker_of_your_experiment}`. This is normally called from the suite automatically, so in many cases you won't need to manually run it.
 
 # Design philosophy behind the benchmark suite
 
