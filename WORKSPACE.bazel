@@ -193,13 +193,6 @@ load(
     "@io_bazel_rules_docker//repositories:repositories.bzl",
     container_repositories = "repositories",
 )
-load("//third_party/openssl:openssl_repositories.bzl", "openssl_repositories")
-
-openssl_repositories()
-
-load("//third_party/openssl:openssl_setup.bzl", "openssl_setup")
-
-openssl_setup()
 
 # Bitcoin core
 
@@ -710,8 +703,8 @@ http_file(
 http_file(
     name = "nns_dapp_canister",
     downloaded_file_path = "nns_dapp_canister.wasm.gz",
-    sha256 = "6af3470ef980b01eb427bdecde7d7c2c440a8c444f6c1fd6e7a39b251eceaf7a",
-    url = "https://github.com/dfinity/nns-dapp/releases/download/proposal-122512/nns-dapp.wasm.gz",
+    sha256 = "10cd06c5912411a7e038c3a0f3160190ab3cf31b747c9707d1d7332b222a4933",
+    url = "https://github.com/dfinity/nns-dapp/releases/download/sdvp-demo/nns-dapp_test.wasm.gz",
 )
 
 # SNS aggregator canister

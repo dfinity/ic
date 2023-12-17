@@ -276,7 +276,7 @@ impl Upgrade {
                     registry_store_uri.uri,
                     registry_store_uri.hash,
                 );
-                let downloader = FileDownloader::new(Some(self.logger.clone())).follow_redirects();
+                let downloader = FileDownloader::new(Some(self.logger.clone()));
                 let local_store_location = tempfile::tempdir()
                     .expect("temporary location for local store download could not be created")
                     .into_path();

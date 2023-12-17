@@ -370,10 +370,6 @@ fn build_types_proto(def: &Path, out: &Path) {
     );
     config.type_attribute(".types.v1.Artifact", "#[allow(clippy::large_enum_variant)]");
     config.type_attribute(
-        ".types.v1.ArtifactChunk",
-        "#[allow(clippy::large_enum_variant)]",
-    );
-    config.type_attribute(
         ".types.v1.GossipChunk",
         "#[allow(clippy::large_enum_variant)]",
     );

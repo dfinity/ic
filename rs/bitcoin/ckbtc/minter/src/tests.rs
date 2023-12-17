@@ -182,6 +182,82 @@ fn greedy_smoke_test() {
 }
 
 #[test]
+fn should_have_same_input_and_output_count() {
+    let mut available_utxos = BTreeSet::new();
+    for i in 0..crate::UTXOS_COUNT_THRESHOLD {
+        available_utxos.insert(Utxo {
+            outpoint: OutPoint {
+                txid: [9; 32].into(),
+                vout: i as u32,
+            },
+            value: 0,
+            height: 10,
+        });
+    }
+    available_utxos.insert(Utxo {
+        outpoint: OutPoint {
+            txid: [0; 32].into(),
+            vout: 0,
+        },
+        value: 100_000,
+        height: 10,
+    });
+
+    available_utxos.insert(Utxo {
+        outpoint: OutPoint {
+            txid: [1; 32].into(),
+            vout: 1,
+        },
+        value: 100_000,
+        height: 10,
+    });
+
+    available_utxos.insert(Utxo {
+        outpoint: OutPoint {
+            txid: [2; 32].into(),
+            vout: 1,
+        },
+        value: 100,
+        height: 10,
+    });
+
+    available_utxos.insert(Utxo {
+        outpoint: OutPoint {
+            txid: [3; 32].into(),
+            vout: 1,
+        },
+        value: 100,
+        height: 11,
+    });
+
+    let minter_addr = BitcoinAddress::P2wpkhV0([0; 20]);
+    let out1_addr = BitcoinAddress::P2wpkhV0([1; 20]);
+    let out2_addr = BitcoinAddress::P2wpkhV0([2; 20]);
+    let fee_per_vbyte = 10000;
+
+    let (tx, change_output, _) = build_unsigned_transaction(
+        &mut available_utxos,
+        vec![(out1_addr.clone(), 100_000), (out2_addr.clone(), 99_999)],
+        minter_addr.clone(),
+        fee_per_vbyte,
+    )
+    .expect("failed to build a transaction");
+
+    let minter_fee = crate::MINTER_FEE_PER_INPUT * tx.inputs.len() as u64
+        + crate::MINTER_FEE_PER_OUTPUT * tx.outputs.len() as u64
+        + crate::MINTER_FEE_CONSTANT;
+
+    assert_eq!(tx.outputs.len(), tx.inputs.len());
+    assert_eq!(
+        change_output,
+        ChangeOutput {
+            vout: 2,
+            value: 1 + minter_fee
+        }
+    );
+}
+
+#[test]
 fn test_min_change_amount() {
     let mut available_utxos = BTreeSet::new();
     available_utxos.insert(Utxo {
@@ -397,14 +473,19 @@ fn arb_retrieve_btc_requests(
         any::<u64>(),
         1569975147000..2069975147000u64,
         option::of(any::<u64>()),
+        option::of(arb_account()),
     )
         .prop_map(
-            |(amount, address, block_index, received_at, provider)| RetrieveBtcRequest {
-                amount,
-                address,
-                block_index,
-                received_at,
-                kyt_provider: provider.map(|id| Principal::from(CanisterId::from_u64(id).get())),
+            |(amount, address, block_index, received_at, provider, reimbursement_account)| {
+                RetrieveBtcRequest {
+                    amount,
+                    address,
+                    block_index,
+                    received_at,
+                    kyt_provider: provider
+                        .map(|id| Principal::from(CanisterId::from_u64(id).get())),
+                    reimbursement_account,
+                }
             },
         );
     pvec(request_strategy, num).prop_map(|mut reqs| {

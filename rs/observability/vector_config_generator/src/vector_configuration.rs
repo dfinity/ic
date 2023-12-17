@@ -186,10 +186,7 @@ mod tests {
 
     use config_writer_common::vector_config_structure::VectorConfigBuilder;
     use ic_types::{NodeId, PrincipalId, SubnetId};
-    use service_discovery::{
-        job_types::{JobType, NodeOS},
-        TargetGroup,
-    };
+    use service_discovery::{job_types::JobType, TargetGroup};
 
     use service_discovery::jobs::Job;
 
@@ -252,32 +249,7 @@ mod tests {
     }
 
     fn jobs() -> Vec<Job> {
-        vec![
-            Job {
-                _type: JobType::NodeExporter(NodeOS::Guest),
-                port: 9100,
-                endpoint: "/metrics",
-                scheme: "http",
-            },
-            Job {
-                _type: JobType::NodeExporter(NodeOS::Host),
-                port: 9100,
-                endpoint: "/metrics",
-                scheme: "http",
-            },
-            Job {
-                _type: JobType::Orchestrator,
-                port: 9091,
-                endpoint: "/",
-                scheme: "https",
-            },
-            Job {
-                _type: JobType::Replica,
-                port: 9090,
-                endpoint: "/",
-                scheme: "https",
-            },
-        ]
+        Job::all()
     }
 
     fn get_jobs_parameters() -> HashMap<JobType, JobParameters> {

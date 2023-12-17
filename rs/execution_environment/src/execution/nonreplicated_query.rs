@@ -9,6 +9,7 @@ use crate::execution::common::{validate_canister, validate_method};
 use crate::execution_environment::RoundLimits;
 use crate::{Hypervisor, NonReplicatedQueryKind};
 use ic_error_types::UserError;
+use ic_interfaces::execution_environment::SystemApiCallCounters;
 use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology};
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::ingress::WasmResult;
@@ -36,6 +37,7 @@ pub fn execute_non_replicated_query(
     NumInstructions,
     Result<Option<WasmResult>, UserError>,
     Option<CallContextId>,
+    SystemApiCallCounters,
 ) {
     // Validate that the canister is running.
     if let Err(err) = validate_canister(&canister) {
@@ -44,6 +46,7 @@ pub fn execute_non_replicated_query(
             execution_parameters.instruction_limits.message(),
             Err(err),
             None,
+            SystemApiCallCounters::default(),
         );
     }
 
@@ -58,6 +61,7 @@ pub fn execute_non_replicated_query(
             execution_parameters.instruction_limits.message(),
             Err(err.into_user_error(&canister_id)),
             None,
+            SystemApiCallCounters::default(),
         );
     }
 
@@ -126,5 +130,6 @@ pub fn execute_non_replicated_query(
         output.num_instructions_left,
         result,
         call_context_id,
+        output.system_api_call_counters,
     )
 }

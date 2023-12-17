@@ -2,9 +2,7 @@ use ic_ledger_canister_blocks_synchronizer::{
     balance_book::{BalanceBook, ClientBalancesStore},
     blocks::{BlockStoreError, Blocks},
 };
-use ic_ledger_canister_blocks_synchronizer_test_utils::{
-    create_tmp_dir, init_test_logger, sample_data::Scribe,
-};
+use ic_ledger_canister_blocks_synchronizer_test_utils::{create_tmp_dir, sample_data::Scribe};
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction};
 use ic_ledger_core::{
     approvals::AllowanceTable, balances::BalancesStore, block::BlockType, timestamp::TimeStamp,
@@ -55,7 +53,6 @@ impl LedgerContext for TestContext {
 
 #[actix_rt::test]
 async fn store_smoke_test() {
-    init_test_logger();
     let tmpdir = create_tmp_dir();
     let mut store = sqlite_on_disk_store(tmpdir.path());
     let scribe = Scribe::new_with_sample_data(10, 100);
@@ -88,7 +85,6 @@ async fn store_smoke_test() {
 
 #[actix_rt::test]
 async fn store_coherence_test() {
-    init_test_logger();
     let tmpdir = create_tmp_dir();
 
     let location = tmpdir.path();
@@ -126,7 +122,6 @@ async fn store_coherence_test() {
 
 #[actix_rt::test]
 async fn store_account_balances_test() {
-    init_test_logger();
     let tmpdir = create_tmp_dir();
     let mut store = sqlite_on_disk_store(tmpdir.path());
     let scribe = Scribe::new_with_sample_data(10, 100);
@@ -185,7 +180,6 @@ async fn store_account_balances_test() {
 
 #[actix_rt::test]
 async fn store_prune_test() {
-    init_test_logger();
     let tmpdir = create_tmp_dir();
     let mut store = sqlite_on_disk_store(tmpdir.path());
     let scribe = Scribe::new_with_sample_data(10, 100);
@@ -204,7 +198,6 @@ async fn store_prune_test() {
 
 #[actix_rt::test]
 async fn store_prune_corner_cases_test() {
-    init_test_logger();
     let tmpdir = create_tmp_dir();
     let mut store = sqlite_on_disk_store(tmpdir.path());
     let scribe = Scribe::new_with_sample_data(10, 100);
@@ -227,7 +220,6 @@ async fn store_prune_corner_cases_test() {
 
 #[actix_rt::test]
 async fn store_prune_first_balance_test() {
-    init_test_logger();
     let tmpdir = create_tmp_dir();
     let mut store = sqlite_on_disk_store(tmpdir.path());
     let scribe = Scribe::new_with_sample_data(10, 100);
@@ -248,7 +240,6 @@ async fn store_prune_first_balance_test() {
 
 #[actix_rt::test]
 async fn store_prune_and_load_test() {
-    init_test_logger();
     let tmpdir = create_tmp_dir();
     let mut store = sqlite_on_disk_store(tmpdir.path());
 

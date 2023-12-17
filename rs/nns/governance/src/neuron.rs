@@ -1,4 +1,3 @@
-use crate::pb::v1::NeuronType;
 use crate::{
     governance,
     governance::{
@@ -7,7 +6,7 @@ use crate::{
     },
     pb::v1::{
         governance_error::ErrorType, manage_neuron, neuron::DissolveState, Ballot, BallotInfo,
-        GovernanceError, Neuron, NeuronInfo, NeuronState, Topic, Vote,
+        GovernanceError, Neuron, NeuronInfo, NeuronState, NeuronType, Topic, Vote,
     },
 };
 #[cfg(target_arch = "wasm32")]
@@ -741,11 +740,10 @@ impl Neuron {
     ///
     /// The exact criteria is subject to change. Currently, all of the following must hold:
     ///
-    ///     1. Not seed: NeuronType is not NeuronType::Seed
-    ///     2. Not ect: NeuronType is not NeuronType::Ect
-    ///     3. Not funded: No stake, and no (unstaked) maturity.
-    ///     4. Dissolved sufficiently "long ago": Precisely, dissolved as of now - 2 weeks.
-    ///     5. Member of the Neuron's Fund.
+    ///     1. Not seed or ect: NeuronType is not NeuronType::Seed or NeuronType::Ect
+    ///     2. Not funded: No stake, and no (unstaked) maturity.
+    ///     3. Dissolved sufficiently "long ago": Precisely, dissolved as of now - 2 weeks.
+    ///     4. Member of the Neuron's Fund.
     ///
     ///
     /// Remarks about condition 2:
@@ -786,7 +784,7 @@ impl Neuron {
             return false;
         }
 
-        // Finally, require condition 3: Member of the Neuron's Fund.
+        // Finally, require condition 4: Member of the Neuron's Fund.
         if self.is_a_neurons_fund_member() {
             return false;
         }
@@ -825,18 +823,7 @@ impl Neuron {
         match self.dissolve_state {
             None => None,
             Some(WhenDissolvedTimestampSeconds(result)) => Some(result),
-            Some(DissolveDelaySeconds(seconds)) => {
-                if seconds == 0 {
-                    println!(
-                        "{}WARNING: Neuron {:?} is dissolved, but it is not \
-                         known when that happened. Thus, by default, \
-                         dissolved_at_timestamp_seconds is set to None.",
-                        LOG_PREFIX, self.id,
-                    );
-                }
-
-                None
-            }
+            Some(DissolveDelaySeconds(_)) => None,
         }
     }
 

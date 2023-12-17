@@ -42,7 +42,7 @@ options may be specified:
     (optional) The IPv4 address to assign. Must include prefix length (e.g.
     18.208.190.35/28).
 
-  --ipv4_gateway a:b::c
+  --ipv4_gateway a.b.c.d
     (optional) Default IPv4 gateway (e.g. 18.208.190.33).
 
   --hostname name
@@ -304,11 +304,15 @@ function build_ic_bootstrap_diskimage() {
     shift
 
     local TMPDIR=$(mktemp -d)
-    build_ic_bootstrap_tar "${TMPDIR}/ic-bootstrap.tar" "$@"
+    local TAR="${TMPDIR}/ic-bootstrap.tar"
+    build_ic_bootstrap_tar "${TAR}" "$@"
 
-    truncate -s 10M "${OUT_FILE}"
-    mkfs.vfat "${OUT_FILE}"
-    mcopy -i "${OUT_FILE}" -o "${TMPDIR}/ic-bootstrap.tar" ::
+    size=$(du --bytes "${TAR}" | awk '{print $1}')
+    size=$((2 * size + 1048576))
+    echo "image size: $size"
+    truncate -s $size "${OUT_FILE}"
+    mkfs.vfat -n CONFIG "${OUT_FILE}"
+    mcopy -i "${OUT_FILE}" -o "${TAR}" ::
 
     rm -rf "${TMPDIR}"
 }

@@ -21,14 +21,6 @@ name = "ic_sns_tests"
 path = "src/lib.rs"
 
 [[bin]]
-name = "ic-systest-sns-sale-participation"
-path = "sale_participation.rs"
-
-[[bin]]
-name = "ic-systest-sns-sale-mass-participation"
-path = "sale_mass_participation.rs"
-
-[[bin]]
 name = "ic-systest-sns-sale-simple-load-test"
 path = "sns_sale_load_test_1.rs"
 
@@ -61,24 +53,20 @@ name = "ic-systest-sns-launchpad-aggregator-load-test"
 path = "launchpad_aggregator_load_test.rs"
 
 [[bin]]
-name = "ic-systest-sns-payment-flow-test"
-path = "payment_flow_test.rs"
-
-[[bin]]
 name = "ic-systest-sns-payment-flow-with-finalization-test"
 path = "payment_flow_with_finalization_test.rs"
 
 [[bin]]
 name = "ic-systest-sns-one-proposal-payment-flow-with-finalization-test"
-path = "one_proposal_payment_flow_with_finalization_test.rs"
+path = "payment_flow_with_finalization_test.rs"
 
 [[bin]]
 name = "ic-systest-sns-one-proposal-neurons-fund-swap-participation-test"
-path = "one_proposal_neurons_fund_swap_participation_test.rs"
+path = "neurons_fund_swap_participation_test.rs"
 
 [[bin]]
 name = "ic-systest-sns-one-proposal-overpayment-fail-test"
-path = "one_proposal_overpayment_fail_test.rs"
+path = "overpayment_fail_test.rs"
 
 [[bin]]
 name = "ic-systest-sns-payment-flow-load-test"

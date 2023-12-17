@@ -15,10 +15,6 @@ name = "governance-mem-test-canister"
 path = "test_canisters/governance_mem_test_canister.rs"
 
 [[bin]]
-name = "governance-memory-migration-test-canister"
-path = "test_canisters/governance_memory_migration_test_canister.rs"
-
-[[bin]]
 name = "unstoppable-canister"
 path = "test_canisters/unstoppable_canister.rs"
 

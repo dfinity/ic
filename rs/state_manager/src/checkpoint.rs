@@ -4,6 +4,7 @@ use crate::{
 };
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::{subnet_id_try_from_protobuf, CanisterId};
+use ic_config::flag_status::FlagStatus;
 use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
@@ -54,6 +55,7 @@ pub(crate) fn make_checkpoint(
     metrics: &CheckpointMetrics,
     thread_pool: &mut scoped_threadpool::Pool,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+    lsmt_storage: FlagStatus,
 ) -> Result<(CheckpointLayout<ReadOnly>, ReplicatedState), CheckpointError> {
     {
         let _timer = metrics
@@ -87,10 +89,19 @@ pub(crate) fn make_checkpoint(
                 sender: send,
             })
             .unwrap();
-        recv.recv().unwrap()?
+        let cp = recv.recv().unwrap()?;
+        // With lsmt storage, this happens later (after manifest)
+        if lsmt_storage == FlagStatus::Disabled {
+            tip_channel
+                .send(TipRequest::ResetTipTo {
+                    checkpoint_layout: cp.clone(),
+                })
+                .unwrap();
+        }
+        cp
     };
 
-    {
+    if lsmt_storage == FlagStatus::Disabled {
         // Wait for reset_tip_to so that we don't reflink in parallel with other operations.
         let _timer = metrics
             .make_checkpoint_step_duration
@@ -370,17 +381,12 @@ pub fn load_canister_state<P: ReadPolicy>(
     );
 
     let starting_time = Instant::now();
-    // on initial rollout the checkpoint file won't exist.
-    let wasm_chunk_store_data = if canister_layout.wasm_chunk_store().exists() {
-        PageMap::open(
-            &canister_layout.wasm_chunk_store(),
-            &canister_layout.wasm_chunk_store_overlays()?,
-            height,
-            Arc::clone(&fd_factory),
-        )?
-    } else {
-        PageMap::new(Arc::clone(&fd_factory))
-    };
+    let wasm_chunk_store_data = PageMap::open(
+        &canister_layout.wasm_chunk_store(),
+        &canister_layout.wasm_chunk_store_overlays()?,
+        height,
+        Arc::clone(&fd_factory),
+    )?;
     durations.insert("wasm_chunk_store", starting_time.elapsed());
 
     let system_state = SystemState::new_from_checkpoint(

@@ -182,7 +182,17 @@ pub fn handle_ip(target_group: TargetDto, job_type: &JobType, is_bn: bool) -> St
                 .ip()
                 .to_string(),
         },
-        _ => panic!("Unsupported job type"),
+        JobType::MetricsProxy => match is_bn {
+            // It should not be possible for this to ever be true.
+            // There is a structural typing problem somewhere here.
+            true => target_group.targets.first().unwrap().ip().to_string(),
+            false => guest_to_host_address(*target_group.targets.first().unwrap())
+                .unwrap()
+                .ip()
+                .to_string(),
+        },
+        JobType::Replica => panic!("Unsupported job type for handle_ip"),
+        JobType::Orchestrator => panic!("Unsupported job type for handle_ip"),
     }
 }
 
@@ -194,12 +204,12 @@ mod tests {
     use ic_types::PrincipalId;
     use serde_json::{json, Value};
 
+    use service_discovery::job_types::JobType;
     use service_discovery::job_types::NodeOS;
 
     use super::VectorConfigBuilderImpl;
     use crate::builders::ConfigBuilder;
     use crate::contracts::TargetDto;
-    use crate::JobType;
 
     fn convert_ipv6_to_array(ipv6: &str) -> [u16; 8] {
         let mut array = [0u16; 8];

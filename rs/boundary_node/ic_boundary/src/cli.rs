@@ -140,8 +140,15 @@ pub struct FirewallConfig {
 #[cfg(feature = "tls")]
 #[derive(Args)]
 pub struct TlsConfig {
-    /// The path to the ACME credentials file
+    /// Hostname to request TLS certificate for
+    #[clap(long)]
+    pub hostname: String,
 
+    /// How many days before certificate expires to start renewing it
+    #[clap(long, default_value = "30", value_parser = clap::value_parser!(u32).range(1..90))]
+    pub renew_days_before: u32,
+
+    /// The path to the ACME credentials file
     #[clap(long, default_value = "acme.json")]
     pub acme_credentials_path: PathBuf,
 
@@ -159,6 +166,9 @@ pub struct MonitoringConfig {
     /// The socket used to export metrics.
     #[clap(long, default_value = "127.0.0.1:9090")]
     pub metrics_addr: SocketAddr,
+    /// Maximum logging level
+    #[clap(long, default_value = "info")]
+    pub max_logging_level: tracing::Level,
 }
 
 #[derive(Args)]

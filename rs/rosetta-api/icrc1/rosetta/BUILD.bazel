@@ -122,7 +122,6 @@ rust_test_suite_with_extra_srcs(
     name = "icrc_rosetta_integration",
     srcs = [
         "tests/integration_tests.rs",
-        "tests/system_tests.rs",
     ],
     data = LOCAL_REPLICA_DATA,
     env = LOCAL_REPLICA_ENV,
@@ -130,6 +129,20 @@ rust_test_suite_with_extra_srcs(
         "tests/common/*.rs",
         "tests/integration_test_components/*.rs",
         "tests/integration_test_components/blocks_synchronizer/*.rs",
+    ]),
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
+    deps = DEV_DEPENDENCIES + DEPENDENCIES,
+)
+
+rust_test_suite_with_extra_srcs(
+    name = "icrc_rosetta_system",
+    srcs = [
+        "tests/system_tests.rs",
+    ],
+    data = LOCAL_REPLICA_DATA,
+    env = LOCAL_REPLICA_ENV,
+    extra_srcs = glob([
+        "tests/common/*.rs",
     ]),
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = DEV_DEPENDENCIES + DEPENDENCIES,

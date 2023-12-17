@@ -43,7 +43,7 @@ use crate::{
     util::block_on,
 };
 
-use super::sns_deployment::{self, install_nns, install_sns_legacy, SaleParticipant};
+use super::sns_deployment::{self, install_nns, install_sns, SaleParticipant};
 
 use ic_base_types::PrincipalId;
 
@@ -71,11 +71,11 @@ fn config_for_security_testing(env: &TestEnv, wasm_strategy: NnsCanisterWasmStra
     });
     install_nns(env, wasm_strategy, vec![], vec![]);
     let create_service_nervous_system_proposal = openchat_create_service_nervous_system_proposal();
-    install_sns_legacy(env, wasm_strategy, create_service_nervous_system_proposal);
+    install_sns(env, wasm_strategy, create_service_nervous_system_proposal);
 }
 
 pub fn benchmark_config(env: TestEnv) {
-    sns_deployment::sns_setup_legacy(env);
+    sns_deployment::sns_setup(env);
 }
 
 pub fn benchmark_config_with_auth(env: TestEnv) {
@@ -83,7 +83,7 @@ pub fn benchmark_config_with_auth(env: TestEnv) {
 }
 
 pub fn benchmark_config_with_aggregator(env: TestEnv) {
-    sns_deployment::sns_setup_legacy(env.clone());
+    sns_deployment::sns_setup(env.clone());
     install_aggregator(&env);
 }
 

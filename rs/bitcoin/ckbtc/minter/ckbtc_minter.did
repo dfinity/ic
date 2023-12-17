@@ -232,6 +232,48 @@ type RetrieveBtcStatus = variant {
     Confirmed : record { txid : blob };
 };
 
+type ReimbursementRequest = record {
+  account : Account;
+  amount : nat64;
+  reason : ReimbursementReason;
+};
+
+type ReimbursedDeposit = record {
+  account : Account;
+  mint_block_index : nat64;
+  amount : nat64;
+  reason : ReimbursementReason;
+};
+
+type RetrieveBtcStatusV2 = variant {
+    // The minter does not have any information on the specified
+    // retrieval request.  It can be that nobody submitted the
+    // request or the minter pruned the relevant information from the
+    // history to save space.
+    Unknown;
+    // The minter did not send a Bitcoin transaction for this request yet.
+    Pending;
+    // The minter is obtaining all required ECDSA signatures on the
+    // Bitcoin transaction for this request.
+    Signing;
+    // The minter signed the transaction and is waiting for a reply
+    // from the Bitcoin canister.
+    Sending : record { txid : blob };
+    // The minter sent a transaction for the retrieve request.
+    // The payload contains the identifier of the transaction on the Bitcoin network.
+    Submitted : record { txid : blob };
+    // The amount was too low to cover the transaction fees.
+    AmountTooLow;
+    // The minter received enough confirmations for the Bitcoin
+    // transaction for this request.  The payload contains the
+    // identifier of the transaction on the Bitcoin network.
+    Confirmed : record { txid : blob };
+    /// The retrieve bitcoin request has been reimbursed.
+    Reimbursed : ReimbursedDeposit;
+    /// The minter will try to reimburse this transaction.
+    WillReimburse : ReimbursementRequest;
+};
+
 type Utxo = record {
     outpoint : record { txid : vec nat8; vout : nat32 };
     value : nat64;
@@ -270,6 +312,7 @@ type Event = variant {
         block_index : nat64;
         received_at : nat64;
         kyt_provider : opt principal;
+        reimbursement_account : opt Account;
     };
     distributed_kyt_fee : record {
         kyt_provider : principal;
@@ -388,8 +431,20 @@ service : (minter_arg : MinterArg) -> {
     //   using [icrc2_approve] on the ckBTC ledger.
     retrieve_btc_with_approval : (RetrieveBtcWithApprovalArgs) -> (variant { Ok : RetrieveBtcOk; Err : RetrieveBtcWithApprovalError });
 
-    /// Returns the status of a [retrieve_btc] request.
+    /// [deprecated] Returns the status of a withdrawal request.
+    /// You should use retrieve_btc_status_v2 to retrieve the status of your withdrawal request.
     retrieve_btc_status : (record { block_index : nat64 }) -> (RetrieveBtcStatus) query;
+
+    /// Returns the status of a withdrawal request request using the RetrieveBtcStatusV2 type.
+    retrieve_btc_status_v2 : (record { block_index : nat64 }) -> (RetrieveBtcStatusV2) query;
+    
+    // Returns the withdrawal statues by account.
+    //
+    // # Note
+    // The _v2_ part indicates that you get a response in line with the retrieve_btc_status_v2 endpoint,
+    // i.e., you get a vector of RetrieveBtcStatusV2 and not RetrieveBtcStatus.
+    //
+    retrieve_btc_status_v2_by_account : (opt Account) -> (vec record { block_index: nat64; status_v2: opt RetrieveBtcStatusV2; }) query;
 
     // }}} Section "Convert ckBTC to BTC"
 

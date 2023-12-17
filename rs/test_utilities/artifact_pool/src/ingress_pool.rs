@@ -2,8 +2,8 @@ use ic_artifact_pool::ingress_pool::IngressPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_interfaces::{
     ingress_pool::{
-        ChangeSet, IngressPool, IngressPoolObject, IngressPoolSelect, IngressPoolThrottler,
-        PoolSection, SelectResult, UnvalidatedIngressArtifact, ValidatedIngressArtifact,
+        ChangeSet, IngressPool, IngressPoolThrottler, PoolSection, UnvalidatedIngressArtifact,
+        ValidatedIngressArtifact,
     },
     p2p::consensus::{ChangeResult, MutablePool, UnvalidatedArtifact},
 };
@@ -11,7 +11,6 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     artifact::IngressMessageId, artifact_kind::IngressArtifact, messages::SignedIngress, NodeId,
-    Time,
 };
 
 pub struct TestIngressPool {
@@ -60,15 +59,5 @@ impl MutablePool<IngressArtifact> for TestIngressPool {
 
     fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<IngressArtifact> {
         self.pool.apply_changes(change_set)
-    }
-}
-
-impl IngressPoolSelect for TestIngressPool {
-    fn select_validated<'a>(
-        &self,
-        range: std::ops::RangeInclusive<Time>,
-        f: Box<dyn FnMut(&IngressPoolObject) -> SelectResult<SignedIngress> + 'a>,
-    ) -> Vec<SignedIngress> {
-        self.pool.select_validated(range, f)
     }
 }

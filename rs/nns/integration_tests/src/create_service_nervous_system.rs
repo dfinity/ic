@@ -21,13 +21,14 @@ use ic_nns_governance::{
         Vote,
     },
 };
+use ic_nns_test_utils::state_test_helpers::setup_nns_canisters_with_features;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
     sns_wasm::add_real_wasms_to_sns_wasms,
     state_test_helpers::{
         create_canister_id_at_position, list_deployed_snses, nns_governance_make_proposal,
-        nns_list_proposals, nns_wait_for_proposal_execution, set_controllers, setup_nns_canisters,
+        nns_list_proposals, nns_wait_for_proposal_execution, set_controllers,
     },
 };
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
@@ -62,7 +63,7 @@ fn test_several_proposals() {
         .with_sns_wasm_allowed_principals(vec![PrincipalId::from(GOVERNANCE_CANISTER_ID)])
         .build();
     // Note that this uses governance with cfg(features = "test") enabled.
-    setup_nns_canisters(&state_machine, nns_init_payload);
+    setup_nns_canisters_with_features(&state_machine, nns_init_payload, /* features */ &[]);
     add_real_wasms_to_sns_wasms(&state_machine);
     let dapp_canister = create_canister_id_at_position(&state_machine, 1000, None);
     set_controllers(

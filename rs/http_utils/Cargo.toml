@@ -16,3 +16,9 @@ ic-logger = { path = "../monitoring/logger" }
 reqwest = { workspace = true }
 slog = { workspace = true }
 tar = "0.4.38"
+
+[dev-dependencies]
+assert_matches = "1.5.0"
+ic-test-utilities-in-memory-logger = { path = "../test_utilities/in_memory_logger" }
+mockito = { workspace = true }
+tempfile = "3.1.0"

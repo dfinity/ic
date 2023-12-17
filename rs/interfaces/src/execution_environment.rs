@@ -84,6 +84,145 @@ pub enum PerformanceCounterType {
     CallContextInstructions(i64),
 }
 
+/// System API call ids to track their execution (in alphabetical order).
+#[derive(Debug)]
+pub enum SystemApiCallId {
+    /// Tracker for `ic0.accept_message())`
+    AcceptMessage,
+    /// Tracker for `ic0.call_cycles_add()`
+    CallCyclesAdd,
+    /// Tracker for `ic0.call_cycles_add128()`
+    CallCyclesAdd128,
+    /// Tracker for `ic0.call_data_append()`
+    CallDataAppend,
+    /// Tracker for `ic0.call_new()`
+    CallNew,
+    /// Tracker for `ic0.call_on_cleanup()`
+    CallOnCleanup,
+    /// Tracker for `ic0.call_perform()`
+    CallPerform,
+    /// Tracker for `ic0.canister_cycle_balance()`
+    CanisterCycleBalance,
+    /// Tracker for `ic0.canister_cycle_balance128()`
+    CanisterCycleBalance128,
+    /// Tracker for `ic0.canister_self_copy()`
+    CanisterSelfCopy,
+    /// Tracker for `ic0.canister_self_size()`
+    CanisterSelfSize,
+    /// Tracker for `ic0.canister_status()`
+    CanisterStatus,
+    /// Tracker for `ic0.canister_version()`
+    CanisterVersion,
+    /// Tracker for `ic0.certified_data_set()`
+    CertifiedDataSet,
+    /// Tracker for `ic0.cycles_burn128()`
+    CyclesBurn128,
+    /// Tracker for `ic0.data_certificate_copy()`
+    DataCertificateCopy,
+    /// Tracker for `ic0.data_certificate_present()`
+    DataCertificatePresent,
+    /// Tracker for `ic0.data_certificate_size()`
+    DataCertificateSize,
+    /// Tracker for `ic0.debug_print()`
+    DebugPrint,
+    /// Tracker for `ic0.global_timer_set()`
+    GlobalTimerSet,
+    /// Tracker for `ic0.is_controller()`
+    IsController,
+    /// Tracker for `ic0.mint_cycles()`
+    MintCycles,
+    /// Tracker for `ic0.msg_arg_data_copy()`
+    MsgArgDataCopy,
+    /// Tracker for `ic0.msg_arg_data_size()`
+    MsgArgDataSize,
+    /// Tracker for `ic0.msg_caller_copy()`
+    MsgCallerCopy,
+    /// Tracker for `ic0.msg_caller_size()`
+    MsgCallerSize,
+    /// Tracker for `ic0.msg_cycles_accept()`
+    MsgCyclesAccept,
+    /// Tracker for `ic0.msg_cycles_accept128()`
+    MsgCyclesAccept128,
+    /// Tracker for `ic0.msg_cycles_available()`
+    MsgCyclesAvailable,
+    /// Tracker for `ic0.msg_cycles_available128()`
+    MsgCyclesAvailable128,
+    /// Tracker for `ic0.msg_cycles_refunded()`
+    MsgCyclesRefunded,
+    /// Tracker for `ic0.msg_cycles_refunded128()`
+    MsgCyclesRefunded128,
+    /// Tracker for `ic0.msg_method_name_copy()`
+    MsgMethodNameCopy,
+    /// Tracker for `ic0.msg_method_name_size()`
+    MsgMethodNameSize,
+    /// Tracker for `ic0.msg_reject()`
+    MsgReject,
+    /// Tracker for `ic0.msg_reject_code()`
+    MsgRejectCode,
+    /// Tracker for `ic0.msg_reject_msg_copy()`
+    MsgRejectMsgCopy,
+    /// Tracker for `ic0.msg_reject_msg_size()`
+    MsgRejectMsgSize,
+    /// Tracker for `ic0.msg_reply()`
+    MsgReply,
+    /// Tracker for `ic0.msg_reply_data_append()`
+    MsgReplyDataAppend,
+    /// Tracker for `__.out_of_instructions()`
+    OutOfInstructions,
+    /// Tracker for `ic0.performance_counter()`
+    PerformanceCounter,
+    /// Tracker for `ic0.stable64_grow()`
+    Stable64Grow,
+    /// Tracker for `ic0.stable64_read()`
+    Stable64Read,
+    /// Tracker for `ic0.stable64_size()`
+    Stable64Size,
+    /// Tracker for `ic0.stable64_write())`
+    Stable64Write,
+    /// Tracker for `ic0.stable_grow()`
+    StableGrow,
+    /// Tracker for `ic0.stable_read()`
+    StableRead,
+    /// Tracker for `ic0.stable_size()`
+    StableSize,
+    /// Tracker for `ic0.stable_write())`
+    StableWrite,
+    /// Tracker for `ic0.time()`
+    Time,
+    /// Tracker for `ic0.trap()`
+    Trap,
+    /// Tracker for `__.update_available_memory()`
+    UpdateAvailableMemory,
+}
+
+/// System API call counters, i.e. how many times each tracked System API call
+/// was invoked.
+// #[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct SystemApiCallCounters {
+    /// Counter for `ic0.call_perform()`
+    pub call_perform: usize,
+    /// Counter for `ic0.canister_cycle_balance()`
+    pub canister_cycle_balance: usize,
+    /// Counter for `ic0.canister_cycle_balance128()`
+    pub canister_cycle_balance128: usize,
+    /// Counter for `ic0.time()`
+    pub time: usize,
+}
+
+impl SystemApiCallCounters {
+    pub fn saturating_add(&mut self, rhs: Self) {
+        self.call_perform = self.call_perform.saturating_add(rhs.call_perform);
+        self.canister_cycle_balance = self
+            .canister_cycle_balance
+            .saturating_add(rhs.canister_cycle_balance);
+        self.canister_cycle_balance128 = self
+            .canister_cycle_balance128
+            .saturating_add(rhs.canister_cycle_balance128);
+        self.time = self.time.saturating_add(rhs.time);
+    }
+}
+
 /// Tracks the available memory on a subnet. The main idea is to separately track
 /// the execution available memory, the message available memory and the wasm custom
 /// sections available memory. The different flavors of memory are independent of each
@@ -722,7 +861,7 @@ pub trait SystemApi {
     ) -> HypervisorResult<(NumPages, NumInstructions)>;
 
     /// The canister can query the IC for the current time.
-    fn ic0_time(&self) -> HypervisorResult<Time>;
+    fn ic0_time(&mut self) -> HypervisorResult<Time>;
 
     /// The canister can set a global one-off timer at the specific time.
     fn ic0_global_timer_set(&mut self, time: Time) -> HypervisorResult<Time>;
@@ -788,7 +927,7 @@ pub trait SystemApi {
     /// Returns the current balance in cycles.
     ///
     /// Traps if current canister balance cannot fit in a 64-bit value.
-    fn ic0_canister_cycle_balance(&self) -> HypervisorResult<u64>;
+    fn ic0_canister_cycle_balance(&mut self) -> HypervisorResult<u64>;
 
     /// This system call indicates the current cycle balance
     /// of the canister.
@@ -796,7 +935,7 @@ pub trait SystemApi {
     /// The amount of cycles is represented by a 128-bit value
     /// and is copied in the canister memory starting
     /// starting at the location `dst`.
-    fn ic0_canister_cycle_balance128(&self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()>;
+    fn ic0_canister_cycle_balance128(&mut self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()>;
 
     /// (deprecated) Please use `ic0_msg_cycles_available128` instead.
     /// This API supports only 64-bit values.
@@ -927,6 +1066,12 @@ pub trait SystemApi {
     /// This system call traps if src+size exceeds the size of the WebAssembly memory.
     fn ic0_is_controller(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<u32>;
 
+    /// If run in replicated execution (i.e. an update call or a certified
+    /// query), returns 1.
+    /// If run in non-replicated execution (i.e. query),
+    /// returns 0 if the data certificate is present, 1 otherwise.
+    fn ic0_in_replicated_execution(&self) -> HypervisorResult<i32>;
+
     /// Burns the provided `amount` cycles.
     /// Removes cycles from the canister's balance.
     ///
@@ -1041,6 +1186,8 @@ pub struct WasmExecutionOutput {
     pub allocated_bytes: NumBytes,
     pub allocated_message_bytes: NumBytes,
     pub instance_stats: InstanceStats,
+    /// How many times each tracked System API call was invoked.
+    pub system_api_call_counters: SystemApiCallCounters,
 }
 
 impl fmt::Display for WasmExecutionOutput {

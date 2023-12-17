@@ -635,7 +635,7 @@ mod tests {
         };
         let account = handler
             .construction_derive(ConstructionDeriveRequest {
-                network_identifier: network_identifier.clone(),
+                network_identifier: network_identifier.clone().into(),
                 public_key: pub_key.clone(),
                 metadata: None,
             })

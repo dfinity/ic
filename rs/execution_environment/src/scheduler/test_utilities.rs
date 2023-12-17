@@ -24,7 +24,7 @@ use ic_ic00_types::{
 };
 use ic_interfaces::execution_environment::{
     ExecutionRoundType, HypervisorError, HypervisorResult, IngressHistoryWriter, InstanceStats,
-    RegistryExecutionSettings, Scheduler, WasmExecutionOutput,
+    RegistryExecutionSettings, Scheduler, SystemApiCallCounters, WasmExecutionOutput,
 };
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -1071,6 +1071,7 @@ impl TestWasmExecutorCore {
                 allocated_bytes: NumBytes::from(0),
                 allocated_message_bytes: NumBytes::from(0),
                 instance_stats: InstanceStats::default(),
+                system_api_call_counters: SystemApiCallCounters::default(),
             };
             self.schedule
                 .push((self.round, canister_id, instructions_to_execute));
@@ -1115,6 +1116,7 @@ impl TestWasmExecutorCore {
             allocated_message_bytes: NumBytes::from(0),
             num_instructions_left: instructions_left,
             instance_stats,
+            system_api_call_counters: SystemApiCallCounters::default(),
         };
         self.schedule
             .push((self.round, canister_id, instructions_to_execute));

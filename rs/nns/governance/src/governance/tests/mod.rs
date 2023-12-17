@@ -205,7 +205,7 @@ impl Environment for MockEnvironment<'_> {
     }
 
     fn heap_growth_potential(&self) -> HeapGrowthPotential {
-        unimplemented!();
+        HeapGrowthPotential::NoIssue
     }
 
     async fn call_canister_method(
@@ -1391,8 +1391,7 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
     use super::*;
     use ic_nervous_system_proto::pb::v1 as pb;
     use ic_sns_init::pb::v1::sns_init_payload;
-    use test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING;
-    use test_data::{IMAGE_1, IMAGE_2};
+    use test_data::{CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING, IMAGE_1, IMAGE_2};
 
     // Alias types from crate::pb::v1::...
     //
@@ -2139,6 +2138,7 @@ fn test_pre_and_post_upgrade_first_time() {
                 followees: vec![NeuronId { id : 3}]
             }
         },
+        account: vec![0; 32],
         ..Default::default()
     };
     let neurons = btreemap! { 1 => neuron1 };
@@ -2313,4 +2313,44 @@ fn governance_ignores_if_seed_accounts_is_set() {
 
     assert!(governance.heap_data.seed_accounts.is_some());
     assert_eq!(governance.heap_data.seed_accounts, expected_seed_accounts);
+}
+
+#[test]
+fn can_spawn_neurons_only_true_when_not_spawning_and_neurons_ready_to_spawn() {
+    let proto = GovernanceProto {
+        ..Default::default()
+    };
+
+    let mock_env = MockEnvironment {
+        expected_call_canister_method_calls: Arc::new(Mutex::new(Default::default())),
+        now: Arc::new(Mutex::new(100)),
+    };
+
+    let mut governance = Governance::new(
+        proto,
+        Box::new(mock_env),
+        Box::new(StubIcpLedger {}),
+        Box::new(StubCMC {}),
+    );
+    // No neurons to spawn...
+    assert!(!governance.can_spawn_neurons());
+
+    governance
+        .neuron_store
+        .add_neuron(Neuron {
+            id: Some(NeuronId { id: 1 }),
+            spawn_at_timestamp_seconds: Some(99),
+            ..Default::default()
+        })
+        .unwrap();
+
+    governance.heap_data.spawning_neurons = Some(true);
+
+    // spawning_neurons is true, so it shouldn't be able to spawn again.
+    assert!(!governance.can_spawn_neurons());
+
+    governance.heap_data.spawning_neurons = None;
+
+    // Work to do, no lock, should say yes.
+    assert!(governance.can_spawn_neurons());
 }

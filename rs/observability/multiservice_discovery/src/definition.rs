@@ -3,7 +3,6 @@ use crossbeam_channel::Sender;
 use ic_registry_client::client::ThresholdSigPublicKey;
 use service_discovery::job_types::map_jobs;
 use service_discovery::job_types::JobType;
-use service_discovery::job_types::NodeOS;
 use service_discovery::{
     job_types::JobAndPort, registry_sync::sync_local_registry, IcServiceDiscoveryImpl,
 };
@@ -64,24 +63,7 @@ impl Definition {
                     log,
                     registry_path,
                     registry_query_timeout,
-                    map_jobs(&[
-                        JobAndPort {
-                            job_type: JobType::Replica,
-                            port: 9090,
-                        },
-                        JobAndPort {
-                            job_type: JobType::Orchestrator,
-                            port: 9091,
-                        },
-                        JobAndPort {
-                            job_type: JobType::NodeExporter(NodeOS::Guest),
-                            port: 9100,
-                        },
-                        JobAndPort {
-                            job_type: JobType::NodeExporter(NodeOS::Host),
-                            port: 9100,
-                        },
-                    ]),
+                    map_jobs(&JobAndPort::all()),
                 )
                 .unwrap(),
             ),

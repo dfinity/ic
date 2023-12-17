@@ -5,13 +5,11 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{fatal, ReplicaLogger};
 use ic_metrics::Timer;
+use ic_query_stats::deliver_query_stats;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_replicated_state::{NetworkTopology, ReplicatedState};
 use ic_types::{batch::Batch, ExecutionRound};
 
-use self::query_stats::deliver_query_stats;
-
-mod query_stats;
 #[cfg(test)]
 mod tests;
 
@@ -37,6 +35,7 @@ pub(crate) struct StateMachineImpl {
     stream_builder: Box<dyn StreamBuilder>,
     log: ReplicaLogger,
     metrics: MessageRoutingMetrics,
+    query_stats_epoch_length: u64,
 }
 
 impl StateMachineImpl {
@@ -46,6 +45,7 @@ impl StateMachineImpl {
         stream_builder: Box<dyn StreamBuilder>,
         log: ReplicaLogger,
         metrics: MessageRoutingMetrics,
+        query_stats_epoch_length: u64,
     ) -> Self {
         Self {
             scheduler,
@@ -53,6 +53,7 @@ impl StateMachineImpl {
             stream_builder,
             log,
             metrics,
+            query_stats_epoch_length,
         }
     }
 
@@ -80,7 +81,13 @@ impl StateMachine for StateMachineImpl {
 
         // Get query stats from blocks and add them to the state, so that they can be aggregated later.
         if let Some(query_stats) = &batch.messages.query_stats {
-            deliver_query_stats(query_stats, &mut state, batch.batch_number, &self.log);
+            deliver_query_stats(
+                query_stats,
+                &mut state,
+                batch.batch_number,
+                &self.log,
+                self.query_stats_epoch_length,
+            );
         }
 
         if batch.time >= state.metadata.batch_time {

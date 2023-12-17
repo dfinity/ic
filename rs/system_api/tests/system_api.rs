@@ -180,6 +180,7 @@ fn test_canister_init_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
+    assert_api_supported(api.ic0_in_replicated_execution());
     assert_api_supported(api.ic0_cycles_burn128(Cycles::zero(), 0, &mut []));
     check_stable_apis_support(api);
 }
@@ -237,6 +238,7 @@ fn test_canister_update_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
+    assert_api_supported(api.ic0_in_replicated_execution());
     assert_api_supported(api.ic0_cycles_burn128(Cycles::zero(), 0, &mut []));
     check_stable_apis_support(api);
 }
@@ -294,6 +296,7 @@ fn test_canister_replicated_query_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
+    assert_api_supported(api.ic0_in_replicated_execution());
     assert_api_not_supported(api.ic0_cycles_burn128(Cycles::zero(), 0, &mut []));
     check_stable_apis_support(api);
 }
@@ -351,6 +354,7 @@ fn test_canister_pure_query_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
+    assert_api_supported(api.ic0_in_replicated_execution());
     assert_api_not_supported(api.ic0_cycles_burn128(Cycles::zero(), 0, &mut []));
     check_stable_apis_support(api);
 }
@@ -418,6 +422,7 @@ fn test_canister_stateful_query_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
+    assert_api_supported(api.ic0_in_replicated_execution());
     assert_api_not_supported(api.ic0_cycles_burn128(Cycles::zero(), 0, &mut []));
     check_stable_apis_support(api);
 }
@@ -475,6 +480,7 @@ fn test_reply_api_support_on_nns() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
+    assert_api_supported(api.ic0_in_replicated_execution());
     assert_api_supported(api.ic0_cycles_burn128(Cycles::zero(), 0, &mut []));
     check_stable_apis_support(api);
 }
@@ -532,6 +538,7 @@ fn test_reply_api_support_non_nns() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
+    assert_api_supported(api.ic0_in_replicated_execution());
     assert_api_supported(api.ic0_cycles_burn128(Cycles::zero(), 0, &mut []));
     check_stable_apis_support(api);
 }
@@ -590,6 +597,7 @@ fn test_reject_api_support_on_nns() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
+    assert_api_supported(api.ic0_in_replicated_execution());
     assert_api_supported(api.ic0_cycles_burn128(Cycles::zero(), 0, &mut []));
     check_stable_apis_support(api);
 }
@@ -648,6 +656,7 @@ fn test_reject_api_support_non_nns() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
+    assert_api_supported(api.ic0_in_replicated_execution());
     assert_api_supported(api.ic0_cycles_burn128(Cycles::zero(), 0, &mut []));
     check_stable_apis_support(api);
 }
@@ -705,6 +714,7 @@ fn test_pre_upgrade_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
+    assert_api_supported(api.ic0_in_replicated_execution());
     assert_api_supported(api.ic0_cycles_burn128(Cycles::zero(), 0, &mut []));
     check_stable_apis_support(api);
 }
@@ -762,6 +772,7 @@ fn test_start_support() {
     assert_api_not_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
+    assert_api_supported(api.ic0_in_replicated_execution());
     assert_api_not_supported(api.ic0_cycles_burn128(Cycles::zero(), 0, &mut []));
     check_stable_apis_support(api);
 }
@@ -823,6 +834,7 @@ fn test_cleanup_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
+    assert_api_supported(api.ic0_in_replicated_execution());
     assert_api_supported(api.ic0_cycles_burn128(Cycles::zero(), 0, &mut []));
     check_stable_apis_support(api);
 }
@@ -885,6 +897,7 @@ fn test_inspect_message_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
+    assert_api_supported(api.ic0_in_replicated_execution());
     assert_api_not_supported(api.ic0_cycles_burn128(Cycles::zero(), 0, &mut []));
     check_stable_apis_support(api);
 }
@@ -943,6 +956,7 @@ fn test_canister_system_task_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
+    assert_api_supported(api.ic0_in_replicated_execution());
     assert_api_supported(api.ic0_cycles_burn128(Cycles::zero(), 0, &mut []));
     check_stable_apis_support(api);
 }
@@ -1000,6 +1014,7 @@ fn test_canister_system_task_support_nns() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
+    assert_api_supported(api.ic0_in_replicated_execution());
     assert_api_supported(api.ic0_cycles_burn128(Cycles::zero(), 0, &mut []));
     check_stable_apis_support(api);
 }
@@ -1156,7 +1171,7 @@ fn test_canister_balance() {
             Time::from_nanos_since_unix_epoch(0),
         );
 
-    let api = get_system_api(
+    let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
         &system_state,
         cycles_account_manager,
@@ -1184,7 +1199,7 @@ fn test_canister_cycle_balance() {
             Time::from_nanos_since_unix_epoch(0),
         );
 
-    let api = get_system_api(
+    let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
         &system_state,
         cycles_account_manager,

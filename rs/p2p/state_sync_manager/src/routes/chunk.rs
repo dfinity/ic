@@ -13,7 +13,7 @@ use ic_logger::ReplicaLogger;
 use ic_protobuf::p2p::v1 as pb;
 use ic_types::{
     artifact::StateSyncArtifactId,
-    chunkable::{ArtifactChunk, ChunkId},
+    chunkable::{Chunk, ChunkId},
 };
 use prost::Message;
 
@@ -56,7 +56,7 @@ pub(crate) async fn state_sync_chunk_handler(
         tokio::task::spawn_blocking(
             move || match state.state_sync.chunk(&artifact_id, chunk_id) {
                 Some(data) => {
-                    let pb_chunk = pb::StateSyncChunkResponse { data: data.into() };
+                    let pb_chunk = pb::StateSyncChunkResponse { data };
                     let mut raw = BytesMut::with_capacity(pb_chunk.encoded_len());
                     pb_chunk.encode(&mut raw).expect("Allocated enough memory");
                     let raw = raw.freeze();
@@ -100,7 +100,7 @@ pub(crate) fn parse_chunk_handler_response(
     response: Response<Bytes>,
     chunk_id: ChunkId,
     metrics: OngoingStateSyncMetrics,
-) -> Result<ArtifactChunk, DownloadChunkError> {
+) -> Result<Chunk, DownloadChunkError> {
     let (parts, body) = response.into_parts();
 
     match parts.status {
@@ -127,12 +127,7 @@ pub(crate) fn parse_chunk_handler_response(
                     }
                 })?;
 
-            let chunk = ArtifactChunk {
-                chunk_id,
-                artifact_chunk_data:
-                    ic_types::chunkable::ArtifactChunkData::SemiStructuredChunkData(pb.data),
-            };
-            Ok(chunk)
+            Ok(pb.data)
         }
         StatusCode::NO_CONTENT => Err(DownloadChunkError::NoContent),
         StatusCode::TOO_MANY_REQUESTS => Err(DownloadChunkError::Overloaded),

@@ -4,7 +4,6 @@ use crate::{
     routing::demux::MockDemux, routing::stream_builder::MockStreamBuilder,
     state_machine::StateMachineImpl,
 };
-use ic_base_types::NodeId;
 use ic_ic00_types::EcdsaKeyId;
 use ic_interfaces::execution_environment::Scheduler;
 use ic_interfaces_state_manager::StateManager;
@@ -12,7 +11,6 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{ReplicatedState, SubnetTopology};
-use ic_test_utilities::types::ids::canister_test_id;
 use ic_test_utilities::{
     state_manager::FakeStateManager, types::batch::BatchBuilder, types::ids::subnet_test_id,
     types::messages::SignedIngressBuilder,
@@ -20,10 +18,9 @@ use ic_test_utilities::{
 use ic_test_utilities_execution_environment::test_registry_settings;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::fetch_int_counter_vec;
-use ic_types::batch::{CanisterQueryStats, QueryStats, QueryStatsPayload};
 use ic_types::messages::SignedIngress;
 use ic_types::{batch::BatchMessages, crypto::canister_threshold_sig::MasterEcdsaPublicKey};
-use ic_types::{Height, PrincipalId, QueryStatsEpoch, SubnetId, Time};
+use ic_types::{Height, PrincipalId, SubnetId, Time};
 use maplit::btreemap;
 use mockall::{mock, predicate::*, Sequence};
 use std::collections::{BTreeMap, BTreeSet};
@@ -156,6 +153,7 @@ fn state_machine_populates_network_topology() {
             fixture.stream_builder,
             log,
             fixture.metrics,
+            ic_config::execution_environment::QUERY_STATS_EPOCH_LENGTH,
         ));
 
         assert_ne!(
@@ -189,6 +187,7 @@ fn test_delivered_batch(provided_batch: Batch) -> ReplicatedState {
             fixture.stream_builder,
             log,
             fixture.metrics,
+            ic_config::execution_environment::QUERY_STATS_EPOCH_LENGTH,
         ));
 
         state_machine.execute_round(
@@ -250,6 +249,7 @@ fn test_batch_time_regression() {
             fixture.stream_builder,
             log,
             fixture.metrics,
+            ic_config::execution_environment::QUERY_STATS_EPOCH_LENGTH,
         );
 
         assert_eq!(
@@ -287,50 +287,4 @@ fn fetch_critical_error_batch_time_regression_count(
     fetch_int_counter_vec(metrics_registry, "critical_errors")
         .get(&btreemap! { "error".to_string() => CRITICAL_ERROR_BATCH_TIME_REGRESSION.to_string() })
         .cloned()
-}
-
-/// Tests that we correctly collect temporary query stats in the replicated state throughout an epoch.
-#[test]
-pub fn test_query_stats() {
-    let test_canister_stats = QueryStats {
-        num_calls: 1,
-        num_instructions: 2,
-        ingress_payload_size: 3,
-        egress_payload_size: 4,
-    };
-    let uninstalled_canister = canister_test_id(1);
-    let proposer = NodeId::from(PrincipalId::new_node_test_id(1));
-    let provided_batch = BatchBuilder::new()
-        .batch_number(Height::new(1))
-        .time(Time::from_nanos_since_unix_epoch(1))
-        .messages(BatchMessages {
-            query_stats: Some(QueryStatsPayload {
-                epoch: QueryStatsEpoch::from(1),
-                proposer,
-                stats: vec![CanisterQueryStats {
-                    canister_id: uninstalled_canister,
-                    stats: test_canister_stats.clone(),
-                }],
-            }),
-            ..BatchMessages::default()
-        })
-        .build();
-
-    // Check that query stats are added to replciated state
-    let state = test_delivered_batch(provided_batch);
-    assert!(state.epoch_query_stats.epoch.is_some());
-    assert!(state
-        .epoch_query_stats
-        .stats
-        .contains_key(&uninstalled_canister));
-    assert_eq!(
-        state
-            .epoch_query_stats
-            .stats
-            .get(&uninstalled_canister)
-            .unwrap()
-            .get(&proposer)
-            .unwrap(),
-        &test_canister_stats
-    );
 }

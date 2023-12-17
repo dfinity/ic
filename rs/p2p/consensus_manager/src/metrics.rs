@@ -117,7 +117,7 @@ impl ConsensusManagerMetrics {
             download_task_artifact_download_errors_total: metrics_registry.register(
                 IntCounter::with_opts(opts!(
                     "ic_consensus_manager_download_task_artifact_download_errors_total",
-                    "Error occured when downloading artifact.",
+                    "Error occurred when downloading artifact.",
                     const_labels.clone(),
                 ))
                 .unwrap(),
@@ -252,7 +252,7 @@ impl ConsensusManagerMetrics {
             slot_manager_maximum_slots_total: metrics_registry.register(
                 IntCounter::with_opts(opts!(
                     "ic_consensus_manager_slot_manager_maximum_slots_total",
-                    "Maxumum of slots simultaneously used.",
+                    "Maximum of slots simultaneously used.",
                     const_labels.clone(),
                 ))
                 .unwrap(),

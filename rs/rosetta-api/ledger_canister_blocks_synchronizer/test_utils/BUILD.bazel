@@ -9,14 +9,13 @@ DEPENDENCIES = [
     "//rs/rosetta-api/ledger_core",
     "//rs/types/types",
     "@crate_index//:ic-cdk",
-    "@crate_index//:log",
-    "@crate_index//:log4rs",
     "@crate_index//:rand",
     "@crate_index//:rand_distr",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
+    "@crate_index//:tracing",
 ]
 
 MACRO_DEPENDENCIES = []

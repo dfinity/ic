@@ -990,7 +990,7 @@ where
         // Maps `direct_participation_icp_e8s` to a set of
         // `(neuron_id, maturity_equivalent_icp_e8s)` pairs. Represented via `Vec` to make it
         // efficiently extendable in the loop.
-        let mut steps: Vec<(u64, Vec<(NeuronId, u64)>)> = vec![(0, vec![])];
+        let mut steps: Vec<(u64, Vec<(NeuronId, u64)>)> = vec![];
         // Buffer containing previously computed neurons with maturity above threshold.
         let mut neurons_above_threshold: Vec<(NeuronId, u64)> = vec![];
 
@@ -1009,11 +1009,8 @@ where
         // Decimal). This mitigates rounding errors in the calculation of `proportion_to_overall_neurons_fund`.
         let total_maturity_equivalent_icp_e8s = u64_to_dec(self.total_maturity_equivalent_icp_e8s);
 
-        // Start with the lowest viable `direct_participation_icp_e8s` value, then increase
-        // in the loop.
-        let mut direct_participation_icp_e8s = self
-            .swap_participation_limits
-            .min_direct_participation_icp_e8s;
+        // Start with `direct_participation_icp_e8s == 0`, then increase in the loop.
+        let mut direct_participation_icp_e8s = 0;
 
         let matching_function_min_value_icp = self
             .ideal_matched_participation_function
@@ -1598,8 +1595,9 @@ mod test_functions_tests {
             ValidatedNeuronsFundParticipationConstraints::<SimpleLinearFunction>::try_from(&params)
                 .unwrap();
 
-        // Below min_direct_participation_threshold_icp_e8s
-        assert_eq!(participation.apply_unchecked(0), 0);
+        // Below min_direct_participation_threshold_icp_e8s, but falls into Interval A.
+        // Thus, we expect slope(0.5) * x + intercept_icp_e8s(111)
+        assert_eq!(participation.apply_unchecked(0), 111);
         // Falls into Interval A, thus we expect slope(0.5) * x + intercept_icp_e8s(111)
         assert_eq!(participation.apply_unchecked(90 * E8), 45 * E8 + 111);
         // Falls into Interval B, thus we expect slope(0.6) * x + intercept_icp_e8s(222)
@@ -1797,14 +1795,19 @@ mod test_functions_tests {
 
 #[cfg(test)]
 mod neurons_fund_anonymization_tests {
-
-    use crate::neurons_fund::*;
-    use crate::pb::v1::{
-        neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
-        IdealMatchedParticipationFunction as IdealMatchedParticipationFunctionPb,
-        NeuronsFundParticipation as NeuronsFundParticipationPb,
-        NeuronsFundSnapshot as NeuronsFundSnapshotPb,
-        SwapParticipationLimits as SwapParticipationLimitsPb,
+    use crate::{
+        neurons_fund::{
+            NeuronsFundNeuronPortion, NeuronsFundNeuronPortionError,
+            NeuronsFundParticipationValidationError, NeuronsFundSnapshot,
+            NeuronsFundSnapshotValidationError,
+        },
+        pb::v1::{
+            neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
+            IdealMatchedParticipationFunction as IdealMatchedParticipationFunctionPb,
+            NeuronsFundParticipation as NeuronsFundParticipationPb,
+            NeuronsFundSnapshot as NeuronsFundSnapshotPb,
+            SwapParticipationLimits as SwapParticipationLimitsPb,
+        },
     };
     use ic_base_types::PrincipalId;
     use ic_neurons_fund::{PolynomialMatchingFunction, SerializableFunction};
@@ -2435,11 +2438,15 @@ mod neurons_fund_participation_constraints_test {
             vec![
                 NeuronParticipationInterval {
                     from_direct_participation_icp_e8s: 0,
-                    to_direct_participation_icp_e8s: 50 * E8,
+                    to_direct_participation_icp_e8s: 1261104295,
                     neurons: btreeset! {},
                 },
+                // 1261104295 is the value of `direct_participation_icp_e8s` at which the biggest
+                // Neurons' Fund neuron (ID 80) becomes eligible, i.e., its proportional
+                // participation amount `(800 / 1000) * f(x)` reaches `min_participant_icp_e8s`,
+                // where `f(x)` is the ideal matching function.
                 NeuronParticipationInterval {
-                    from_direct_participation_icp_e8s: 50 * E8,
+                    from_direct_participation_icp_e8s: 1261104295,
                     to_direct_participation_icp_e8s: 5605550845,
                     neurons: btreeset! {
                         neurons[&80],
@@ -2497,16 +2504,24 @@ mod neurons_fund_participation_constraints_test {
             vec![
                 NeuronParticipationInterval {
                     from_direct_participation_icp_e8s: 0,
-                    to_direct_participation_icp_e8s: 50 * E8,
+                    to_direct_participation_icp_e8s: 4111122042,
                     neurons: btreeset! {},
                 },
+                // 4111122042 is the value of `direct_participation_icp_e8s` at which the biggest
+                // Neurons' Fund neuron (ID 80) becomes capped, i.e., its proportional participation
+                // amount `(800 / 1000) * f(x)` reaches `max_participant_icp_e8s`, where `f(x)` is
+                // the ideal matching function.
                 NeuronParticipationInterval {
-                    from_direct_participation_icp_e8s: 50 * E8,
+                    from_direct_participation_icp_e8s: 4111122042,
                     to_direct_participation_icp_e8s: 9189069784,
                     neurons: btreeset! {
                         neurons[&80],
                     },
                 },
+                // 9189069784 is the value of `direct_participation_icp_e8s` at which the second-
+                // biggest Neurons' Fund neuron (ID 70) becomes capped, i.e., its proportional
+                // participation amount `(100 / 1000) * f(x)` reaches `max_participant_icp_e8s`,
+                // where `f(x)` is the ideal matching function.
                 NeuronParticipationInterval {
                     from_direct_participation_icp_e8s: 9189069784,
                     to_direct_participation_icp_e8s: u64::MAX,
@@ -2534,15 +2549,24 @@ mod neurons_fund_participation_constraints_test {
                 // `direct_participation_icp_e8s` too low for anyone from the NF to participate.
                 ValidatedLinearScalingCoefficient {
                     from_direct_participation_icp_e8s: 0,
-                    to_direct_participation_icp_e8s: 50 * E8,
+                    to_direct_participation_icp_e8s: 1261104295,
                     slope_numerator: 0,
                     slope_denominator: participation.total_maturity_equivalent_icp_e8s,
                     intercept_icp_e8s: 0,
                 },
-                // The biggest NF neuron (ID 80) starts participating, but it's already capped at
-                // the maximum participant amount for this Swap (`intercept_icp_e8s` = 4 ICP).
+                // The biggest NF neuron (ID 80) starts participating.
                 ValidatedLinearScalingCoefficient {
-                    from_direct_participation_icp_e8s: 50 * E8,
+                    from_direct_participation_icp_e8s: 1261104295,
+                    to_direct_participation_icp_e8s: 4111122042,
+                    slope_numerator: 800 * E8,
+                    slope_denominator: participation.total_maturity_equivalent_icp_e8s,
+                    intercept_icp_e8s: 0,
+                },
+                // The biggest NF neuron (ID 80) becomes capped at the maximum participant amount
+                // for this Swap (`intercept_icp_e8s` = 4 ICP). Note that it no longer contributes
+                // towards `slope_numerator`.
+                ValidatedLinearScalingCoefficient {
+                    from_direct_participation_icp_e8s: 4111122042,
                     to_direct_participation_icp_e8s: 5605550845,
                     slope_numerator: 0,
                     slope_denominator: participation.total_maturity_equivalent_icp_e8s,
@@ -2647,24 +2671,68 @@ mod neurons_fund_participation_constraints_test {
         assert_eq!(
             linear_scaling_coefficients,
             vec![
-                // No NF participation until direct participation reaches 100 ICP.
+                // No NF participation until the largest neuron becomes eligible.
                 ValidatedLinearScalingCoefficient {
                     from_direct_participation_icp_e8s: 0,
-                    to_direct_participation_icp_e8s: 100 * E8,
+                    to_direct_participation_icp_e8s: 1261104295,
                     slope_numerator: 0,
                     slope_denominator: participation.total_maturity_equivalent_icp_e8s,
-                    intercept_icp_e8s: 0
+                    intercept_icp_e8s: 0,
                 },
+                // N80 is eligible and uncapped; all others are not eligible yet.
                 ValidatedLinearScalingCoefficient {
-                    from_direct_participation_icp_e8s: 100 * E8,
-                    to_direct_participation_icp_e8s: u64::MAX,
-                    // N61, N62, N50 are eligible uncapped; N40, N30, N20, N10 are not eligible.
-                    slope_numerator: 90 * E8,
+                    from_direct_participation_icp_e8s: 1261104295,
+                    to_direct_participation_icp_e8s: 4111122042,
+                    slope_numerator: 800 * E8,
+                    slope_denominator: participation.total_maturity_equivalent_icp_e8s,
+                    intercept_icp_e8s: 0,
+                },
+                // N80 becomes capped, so it does not contribute to `slope_numerator` anymore
+                // (only to `intercept_icp_e8s`).
+                ValidatedLinearScalingCoefficient {
+                    from_direct_participation_icp_e8s: 4111122042,
+                    to_direct_participation_icp_e8s: 5605550845,
+                    slope_numerator: 0,
+                    slope_denominator: participation.total_maturity_equivalent_icp_e8s,
+                    intercept_icp_e8s: 4 * E8,
+                },
+                // N70 becomes eligible (and uncapped) while N80 is still capped.
+                ValidatedLinearScalingCoefficient {
+                    from_direct_participation_icp_e8s: 5605550845,
+                    to_direct_participation_icp_e8s: 8167418536,
+                    slope_numerator: 100 * E8,
+                    slope_denominator: participation.total_maturity_equivalent_icp_e8s,
+                    intercept_icp_e8s: 4 * E8,
+                },
+                // N61 and N62 become eligible (and uncapped) while N70 is still eligible (and
+                // uncapped) and N80 is still capped.
+                ValidatedLinearScalingCoefficient {
+                    from_direct_participation_icp_e8s: 8167418536,
+                    to_direct_participation_icp_e8s: 9189069784,
+                    slope_numerator: 170 * E8,
+                    slope_denominator: participation.total_maturity_equivalent_icp_e8s,
+                    intercept_icp_e8s: 4 * E8,
+                },
+                // N70 becomes capped, while N61 and N62 are still eligible (and uncapped)
+                // and N80 is still capped.
+                ValidatedLinearScalingCoefficient {
+                    from_direct_participation_icp_e8s: 9189069784,
+                    to_direct_participation_icp_e8s: 100 * E8,
+                    slope_numerator: 70 * E8,
                     slope_denominator: participation.total_maturity_equivalent_icp_e8s,
                     // N80 and N70 are capped
                     intercept_icp_e8s: 8 * E8,
                 },
+                // N50 becomes eligible (and uncapped) while N80 and N70 are still capped.
+                ValidatedLinearScalingCoefficient {
+                    from_direct_participation_icp_e8s: 100 * E8,
+                    to_direct_participation_icp_e8s: u64::MAX,
+                    slope_numerator: 90 * E8,
+                    slope_denominator: participation.total_maturity_equivalent_icp_e8s,
+                    intercept_icp_e8s: 8 * E8,
+                },
                 // No more intervals, as `max_direct_participation_icp_e8s` is already reached.
+                // In particular, N40, N30, N20, N10 are not eligible under any circumstances.
             ]
         );
     }
@@ -2694,13 +2762,13 @@ mod neurons_fund_participation_constraints_test {
             vec![
                 ValidatedLinearScalingCoefficient {
                     from_direct_participation_icp_e8s: 0,
-                    to_direct_participation_icp_e8s: 50 * E8,
+                    to_direct_participation_icp_e8s: 2672876708,
                     slope_numerator: 0,
                     slope_denominator: participation.total_maturity_equivalent_icp_e8s,
                     intercept_icp_e8s: 0
                 },
                 ValidatedLinearScalingCoefficient {
-                    from_direct_participation_icp_e8s: 50 * E8,
+                    from_direct_participation_icp_e8s: 2672876708,
                     to_direct_participation_icp_e8s: 7227411278,
                     slope_numerator: 0,
                     slope_denominator: participation.total_maturity_equivalent_icp_e8s,
@@ -2744,13 +2812,13 @@ mod neurons_fund_participation_constraints_test {
             vec![
                 ValidatedLinearScalingCoefficient {
                     from_direct_participation_icp_e8s: 0,
-                    to_direct_participation_icp_e8s: 50 * E8,
+                    to_direct_participation_icp_e8s: 2672876708,
                     slope_numerator: 0,
                     slope_denominator: participation.total_maturity_equivalent_icp_e8s,
                     intercept_icp_e8s: 0,
                 },
                 ValidatedLinearScalingCoefficient {
-                    from_direct_participation_icp_e8s: 50 * E8,
+                    from_direct_participation_icp_e8s: 2672876708,
                     to_direct_participation_icp_e8s: 7227411278,
                     // N80 is eligible and uncapped.
                     slope_numerator: 800 * E8,
@@ -2797,32 +2865,31 @@ mod neurons_fund_participation_constraints_test {
         assert_eq!(
             linear_scaling_coefficients,
             vec![
+                // All neurons become eligible from `direct_participation_icp_e8s == 0`,
+                // as `min_participant_icp_e8s == 0`.
                 ValidatedLinearScalingCoefficient {
                     from_direct_participation_icp_e8s: 0,
-                    to_direct_participation_icp_e8s: 50 * E8,
-                    // Even though `min_participant_icp_e8s == 0`, no NF participation is possible until
-                    // `direct_participation_icp_e8s` reaches `min_direct_participation_icp_e8s`, so
-                    // `slope_numerator == intercept_icp_e8s == 0`.
-                    slope_numerator: 0,
+                    to_direct_participation_icp_e8s: 4583899598,
+                    slope_numerator: 1000 * E8,
                     slope_denominator: participation.total_maturity_equivalent_icp_e8s,
                     intercept_icp_e8s: 0,
                 },
-                // All neurons become eligible, as `min_participant_icp_e8s == 0`.
+                // N80 becomes capped. All other neurons are still contributing towards
+                // `slope_numerator`.
                 ValidatedLinearScalingCoefficient {
-                    from_direct_participation_icp_e8s: 50 * E8,
+                    from_direct_participation_icp_e8s: 4583899598,
                     to_direct_participation_icp_e8s: 100 * E8,
                     slope_numerator: 200 * E8,
                     slope_denominator: participation.total_maturity_equivalent_icp_e8s,
-                    // Only N80 becomes capped.
                     intercept_icp_e8s: 5 * E8,
                 },
+                // N70 becomes capped and N80 is still capped. Only N50, N61, and N62 remain
+                // eligible and uncapped.
                 ValidatedLinearScalingCoefficient {
                     from_direct_participation_icp_e8s: 100 * E8,
                     to_direct_participation_icp_e8s: u64::MAX,
-                    // Only N50, N61, and N62 remain eligible and uncapped.
                     slope_numerator: 100 * E8,
                     slope_denominator: participation.total_maturity_equivalent_icp_e8s,
-                    // N80 and N70 become capped.
                     intercept_icp_e8s: 10 * E8,
                 },
             ]
@@ -2851,22 +2918,13 @@ mod neurons_fund_participation_constraints_test {
             .collect();
         assert_eq!(
             linear_scaling_coefficients,
-            vec![
-                ValidatedLinearScalingCoefficient {
-                    from_direct_participation_icp_e8s: 0,
-                    to_direct_participation_icp_e8s: 50 * E8,
-                    slope_numerator: 0,
-                    slope_denominator: participation.total_maturity_equivalent_icp_e8s,
-                    intercept_icp_e8s: 0,
-                },
-                ValidatedLinearScalingCoefficient {
-                    from_direct_participation_icp_e8s: 50 * E8,
-                    to_direct_participation_icp_e8s: u64::MAX,
-                    slope_numerator: participation.total_maturity_equivalent_icp_e8s,
-                    slope_denominator: participation.total_maturity_equivalent_icp_e8s,
-                    intercept_icp_e8s: 0,
-                },
-            ]
+            vec![ValidatedLinearScalingCoefficient {
+                from_direct_participation_icp_e8s: 0,
+                to_direct_participation_icp_e8s: u64::MAX,
+                slope_numerator: participation.total_maturity_equivalent_icp_e8s,
+                slope_denominator: participation.total_maturity_equivalent_icp_e8s,
+                intercept_icp_e8s: 0,
+            },]
         );
     }
 }

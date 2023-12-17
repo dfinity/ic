@@ -62,8 +62,10 @@ function get_guestos_version() {
         "gauge"
 }
 
-# List all block devices marked as "removable".
-function find_removable_devices() {
+# List all block devices that could potentially contain the ic-bootstrap.tar configuration,
+# i.e. "removable" devices, devices with the serial "config"
+# or devices containing a filesystem with the label "CONFIG".
+function find_config_devices() {
     for DEV in $(ls -C /sys/class/block); do
         echo "Consider device $DEV" >&2
         if [ -e /sys/class/block/"${DEV}"/removable ]; then
@@ -73,7 +75,8 @@ function find_removable_devices() {
             # configuration device is identified by the serial "config".
             local IS_REMOVABLE=$(cat /sys/class/block/"${DEV}"/removable)
             local CONFIG_SERIAL=$(udevadm info --name=/dev/"${DEV}" | grep "ID_SCSI_SERIAL=config")
-            if [ "${IS_REMOVABLE}" == 1 ] || [ "${CONFIG_SERIAL}" != "" ]; then
+            local FS_LABEL=$(lsblk --fs --noheadings --output LABEL /dev/"${DEV}")
+            if [ "${IS_REMOVABLE}" == 1 ] || [ "${CONFIG_SERIAL}" != "" ] || [ "${FS_LABEL}" == "CONFIG" ]; then
                 # If this is a partitioned device (and it usually is), then
                 # the first partition is of relevance.
                 # return first partition for use instead.
@@ -160,17 +163,17 @@ if [ -f /boot/config/CONFIGURED ]; then
 fi
 
 while [ ! -f /boot/config/CONFIGURED ]; do
-    echo "Locating removable device"
-    DEV="$(find_removable_devices)"
+    echo "Locating CONFIG device"
+    DEV="$(find_config_devices)"
 
-    # Check whether we were provided with a removable device -- on "real"
+    # Check whether we were provided with a CONFIG device -- on "real"
     # VM deployments this will be the method used to inject bootstrap information
     # into the system.
     # But even if nothing can be mounted, just try and see if something usable
     # is there already -- this might be useful when operating this thing as a
     # docker container instead of full-blown VM.
     if [ "${DEV}" != "" ]; then
-        echo "Found removable device at ${DEV}"
+        echo "Found CONFIG device at ${DEV}"
         mount -t vfat -o ro "${DEV}" /mnt
     fi
 

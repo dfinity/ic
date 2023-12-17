@@ -29,6 +29,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{NetworkTopology, ReplicatedState, SubnetTopology};
+use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{
     batch::Batch,
     crypto::KeyPurpose,
@@ -541,6 +542,7 @@ impl BatchProcessorImpl {
             stream_builder,
             log.clone(),
             metrics.clone(),
+            hypervisor_config.query_stats_epoch_length,
         ));
 
         Self {
@@ -752,15 +754,21 @@ impl BatchProcessorImpl {
                 .map_err(|err| registry_error("public key in transcript", Some(*subnet_id), err))?
                 .value
                 .map(|transcripts| {
-                    ic_crypto_utils_threshold_sig_der::public_key_to_der(
-                        &transcripts.high_threshold.public_key().into_bytes(),
-                    )
-                    .map_err(|err: String| {
-                        Persistent(format!(
-                            "'public key to DER for subnet {}' failed, err: {}",
+                    match ThresholdSigPublicKey::try_from(&transcripts.high_threshold) {
+                        Ok(public_key) => ic_crypto_utils_threshold_sig_der::public_key_to_der(
+                            &public_key.into_bytes(),
+                        )
+                        .map_err(|err: String| {
+                            Persistent(format!(
+                                "'public key to DER for subnet {}' failed, err: {}",
+                                *subnet_id, err
+                            ))
+                        }),
+                        Err(err) => Err(Persistent(format!(
+                            "'public key from transcript for subnet {}' failed, err: {:?}",
                             *subnet_id, err
-                        ))
-                    })
+                        ))),
+                    }
                 })
                 .transpose()?
                 .ok_or_else(|| not_found_error("public key in transcript", Some(*subnet_id)))?;

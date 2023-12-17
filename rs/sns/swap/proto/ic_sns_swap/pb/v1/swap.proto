@@ -804,7 +804,9 @@ message DerivedState {
   float sns_tokens_per_icp = 2;
   // Current amount of contributions from direct swap participants.
   optional uint64 direct_participation_icp_e8s = 6;
-  // Current amount of contributions from the Neurons' Fund.
+  // Current amount that the Neurons' Fund promises to participate with if the swap were to
+  // successfully finalize now. Until the swap's success criterium is satisfied, this value is
+  // merely a progress indicator.
   optional uint64 neurons_fund_participation_icp_e8s = 7;
 }
 

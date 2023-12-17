@@ -24,9 +24,10 @@ use ic_interfaces::p2p::state_sync::StateSyncClient;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_quic_transport::Transport;
 use ic_types::{
-    artifact::{Artifact, StateSyncArtifactId, StateSyncMessage},
+    artifact::StateSyncArtifactId,
     chunkable::ChunkId,
     chunkable::{ArtifactErrorCode, Chunkable},
+    state_sync::StateSyncMessage,
     NodeId,
 };
 use rand::{
@@ -329,7 +330,7 @@ impl OngoingStateSync {
 
         let chunk_add_result = tokio::task::spawn_blocking(move || {
             let chunk = parse_chunk_handler_response(response, chunk_id, metrics)?;
-            Ok(tracker.lock().unwrap().add_chunk(chunk))
+            Ok(tracker.lock().unwrap().add_chunk(chunk_id, chunk))
         })
         .await
         .map_err(|err| DownloadChunkError::RequestError {
@@ -339,11 +340,7 @@ impl OngoingStateSync {
         .and_then(std::convert::identity);
 
         let result = match chunk_add_result {
-            Ok(Ok(Artifact::StateSync(msg))) => Ok(Some(msg)),
-            Ok(Ok(_)) => {
-                //TODO: (NET-1448) With new protobufs this condition will redundant.
-                panic!("Should not happen");
-            }
+            Ok(Ok(msg)) => Ok(Some(msg)),
             Ok(Err(ArtifactErrorCode::ChunksMoreNeeded)) => Ok(None),
             Ok(Err(ArtifactErrorCode::ChunkVerificationFailed)) => {
                 Err(DownloadChunkError::RequestError {

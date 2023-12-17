@@ -33,16 +33,6 @@ use serde::{Deserialize, Serialize};
 use tower_governor::errors::GovernorError;
 use url::Url;
 
-#[cfg(feature = "tls")]
-use {
-    axum::{
-        extract::{Host, OriginalUri},
-        http::{uri::PathAndQuery, Uri},
-        response::Redirect,
-    },
-    tokio::sync::RwLock,
-};
-
 use crate::{
     cache::CacheStatus,
     core::MAX_REQUEST_BODY_SIZE,
@@ -426,32 +416,6 @@ impl Health for ProxyRouter {
     }
 }
 
-#[cfg(feature = "tls")]
-pub async fn acme_challenge(
-    Extension(token): Extension<Arc<RwLock<Option<String>>>>,
-) -> impl IntoResponse {
-    token.read().await.clone().unwrap_or_default()
-}
-
-#[cfg(feature = "tls")]
-pub async fn redirect_to_https(
-    Host(host): Host,
-    OriginalUri(uri): OriginalUri,
-) -> impl IntoResponse {
-    let fallback_path = PathAndQuery::from_static("/");
-    let pq = uri.path_and_query().unwrap_or(&fallback_path).as_str();
-
-    Redirect::permanent(
-        &Uri::builder()
-            .scheme("https") // redirect to https
-            .authority(host) // re-use the same host
-            .path_and_query(pq) // re-use the same path and query
-            .build()
-            .unwrap()
-            .to_string(),
-    )
-}
-
 #[derive(Debug, thiserror::Error)]
 pub enum ApiError {
     #[error("status {0}: {1}")]
@@ -677,12 +641,19 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
             HeaderValue::from_maybe_shared(Bytes::from(ctx.request_type.to_string())).unwrap(),
         );
 
-        ctx.canister_id.and_then(|v| {
-            response.headers_mut().insert(
-                HEADER_IC_CANISTER_ID,
-                HeaderValue::from_maybe_shared(Bytes::from(v.to_string())).unwrap(),
-            )
-        });
+        // Try to get canister_id from CBOR first, then from the URL
+        ctx.canister_id
+            .or(response
+                .extensions()
+                .get::<CanisterId>()
+                .map(|x| x.get_ref().0))
+            .map(|x| x.to_string())
+            .and_then(|v| {
+                response.headers_mut().insert(
+                    HEADER_IC_CANISTER_ID,
+                    HeaderValue::from_maybe_shared(Bytes::from(v)).unwrap(),
+                )
+            });
 
         ctx.sender.and_then(|v| {
             response.headers_mut().insert(

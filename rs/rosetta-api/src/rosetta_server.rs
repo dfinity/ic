@@ -11,7 +11,6 @@ use crate::{
     request_handler::RosettaRequestHandler,
 };
 
-use log::{debug, error, info};
 use prometheus::{
     register_gauge, register_histogram, register_histogram_vec, register_int_counter,
     register_int_counter_vec, register_int_gauge, Encoder, Gauge, Histogram, HistogramVec,
@@ -31,6 +30,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::Mutex;
+use tracing::{debug, error, info};
 
 use lazy_static::lazy_static;
 

@@ -258,16 +258,11 @@ impl Gossip for GossipImpl {
             .with_label_values(&["in_chunk_request"])
             .start_timer();
 
-        let artifact_chunk = match self
+        let artifact = match self
             .artifact_manager
             .get_validated_by_identifier(&chunk_request.artifact_id)
         {
-            Some(artifact) => artifact.get_chunk(chunk_request.chunk_id).ok_or_else(|| {
-                self.gossip_metrics.requested_chunks_not_found.inc();
-                P2PError {
-                    p2p_error_code: P2PErrorCode::NotFound,
-                }
-            }),
+            Some(artifact) => Ok(artifact.get_chunk()),
             None => {
                 self.gossip_metrics.requested_chunks_not_found.inc();
                 Err(P2PError {
@@ -278,7 +273,7 @@ impl Gossip for GossipImpl {
 
         let gossip_chunk = GossipChunk {
             request: chunk_request,
-            artifact_chunk,
+            artifact,
         };
         let message = GossipMessage::Chunk(gossip_chunk);
         self.transport_send(message, node_id);

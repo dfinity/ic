@@ -10,7 +10,7 @@ const RPS: usize = 20;
 const PAYLOAD_SIZE_BYTES: usize = 100_000;
 const WORKLOAD_RUNTIME: Duration = Duration::from_secs(5 * 60);
 const NNS_SUBNET_MAX_SIZE: usize = 5;
-const APP_SUBNET_MAX_SIZE: usize = 100;
+const APP_SUBNET_MAX_SIZE: usize = 13;
 const LATENCY: Option<Duration> = Some(Duration::from_millis(120));
 const DOWNLOAD_PROMETHEUS_DATA: bool = false;
 // Timeout parameters

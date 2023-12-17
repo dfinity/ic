@@ -13,6 +13,7 @@ DEPENDENCIES = [
     "//rs/interfaces/state_manager",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
+    "//rs/registry/helpers",
     "//rs/replicated_state",
     "//rs/test_utilities",
     "//rs/types/types",

@@ -47,6 +47,7 @@ ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-icrc1-ledger = { path = "../../rosetta-api/icrc1/ledger" }
 ic-metrics-encoder = "1"
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
+ic-nervous-system-collections-union-multi-map = { path = "../../nervous_system/collections/union_multi_map" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
 ic-nervous-system-governance = { path = "../../nervous_system/governance" }

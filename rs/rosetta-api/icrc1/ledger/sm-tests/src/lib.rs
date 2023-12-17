@@ -477,13 +477,14 @@ fn arb_transfer() -> impl Strategy<Value = Operation<Tokens>> {
         arb_account(),
         arb_amount(),
         proptest::option::of(arb_amount()),
+        proptest::option::of(arb_account()),
     )
-        .prop_map(|(from, to, amount, fee)| Operation::Transfer {
+        .prop_map(|(from, to, amount, fee, spender)| Operation::Transfer {
             from,
             to,
             amount,
             fee,
-            spender: None,
+            spender,
         })
 }
 
@@ -513,11 +514,16 @@ fn arb_mint() -> impl Strategy<Value = Operation<Tokens>> {
 }
 
 fn arb_burn() -> impl Strategy<Value = Operation<Tokens>> {
-    (arb_account(), arb_amount()).prop_map(|(from, amount)| Operation::Burn {
-        from,
-        spender: None,
-        amount,
-    })
+    (
+        arb_account(),
+        proptest::option::of(arb_account()),
+        arb_amount(),
+    )
+        .prop_map(|(from, spender, amount)| Operation::Burn {
+            from,
+            spender,
+            amount,
+        })
 }
 
 fn arb_operation() -> impl Strategy<Value = Operation<Tokens>> {

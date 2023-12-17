@@ -63,6 +63,11 @@ pub const MIN_RESUBMISSION_DELAY: Duration = Duration::from_secs(24 * 60 * 60);
 /// to have some room for future modifications.
 pub const CKBTC_LEDGER_MEMO_SIZE: u16 = 80;
 
+/// The threshold for the number of UTXOs under management before
+/// trying to match the number of outputs with the number of inputs
+/// when building transactions.
+pub const UTXOS_COUNT_THRESHOLD: usize = 1_000;
+
 #[derive(Clone, serde::Serialize, Deserialize, Debug)]
 pub enum Priority {
     P0,
@@ -432,7 +437,7 @@ fn finalized_txids(candidates: &[state::SubmittedBtcTransaction], new_utxos: &[U
 }
 
 async fn reimburse_failed_kyt() {
-    let try_to_reimburse = state::read_state(|s| s.reimbursement_map.clone());
+    let try_to_reimburse = state::read_state(|s| s.pending_reimbursements.clone());
     for (burn_block_index, entry) in try_to_reimburse {
         let (memo_status, kyt_fee) = match entry.reason {
             ReimbursementReason::TaintedDestination { kyt_fee, .. } => (Status::Rejected, kyt_fee),
@@ -740,6 +745,41 @@ fn filter_output_accounts(
         .collect()
 }
 
+/// The algorithm greedily selects the smallest UTXO(s) with a value that is at least the given `target` in a first step.
+///
+/// If the minter manages more than [UTXOS_COUNT_THRESHOLD], it will then try to match the number of inputs with the
+/// number of outputs + 1 (where the additional output corresponds to the change output).
+///
+/// If there are no UTXOs matching the criteria, returns an empty vector.
+///
+/// PROPERTY: sum(u.value for u in available_set) ≥ target ⇒ !solution.is_empty()
+/// POSTCONDITION: !solution.is_empty() ⇒ sum(u.value for u in solution) ≥ target
+/// POSTCONDITION:  solution.is_empty() ⇒ available_utxos did not change.
+fn utxos_selection(
+    target: u64,
+    available_utxos: &mut BTreeSet<Utxo>,
+    output_count: usize,
+) -> Vec<Utxo> {
+    let mut input_utxos = greedy(target, available_utxos);
+
+    if input_utxos.is_empty() {
+        return vec![];
+    }
+
+    if available_utxos.len() > UTXOS_COUNT_THRESHOLD {
+        while input_utxos.len() < output_count + 1 {
+            if let Some(min_utxo) = available_utxos.iter().min_by_key(|u| u.value) {
+                input_utxos.push(min_utxo.clone());
+                assert!(available_utxos.remove(&min_utxo.clone()));
+            } else {
+                break;
+            }
+        }
+    }
+
+    input_utxos
+}
+
 /// Selects a subset of UTXOs with the specified total target value and removes
 /// the selected UTXOs from the available set.
 ///
@@ -921,7 +961,7 @@ pub fn build_unsigned_transaction(
 
     let amount = outputs.iter().map(|(_, amount)| amount).sum::<u64>();
 
-    let input_utxos = greedy(amount, minter_utxos);
+    let input_utxos = utxos_selection(amount, minter_utxos, outputs.len());
 
     if input_utxos.is_empty() {
         return Err(BuildTxError::NotEnoughFunds);
@@ -1203,7 +1243,7 @@ pub fn estimate_fee(
     median_fee_millisatoshi_per_vbyte: u64,
     kyt_fee: u64,
 ) -> WithdrawalFee {
-    const DEFAULT_INPUT_COUNT: u64 = 3;
+    const DEFAULT_INPUT_COUNT: u64 = 2;
     // One output for the caller and one for the change.
     const DEFAULT_OUTPUT_COUNT: u64 = 2;
     let input_count = match maybe_amount {
@@ -1213,7 +1253,8 @@ pub fn estimate_fee(
             // should get the exact number of inputs that the minter
             // will use.
             let mut utxos = available_utxos.clone();
-            let selected_utxos = greedy(amount, &mut utxos);
+            let selected_utxos =
+                utxos_selection(amount, &mut utxos, DEFAULT_OUTPUT_COUNT as usize - 1);
 
             if !selected_utxos.is_empty() {
                 selected_utxos.len() as u64

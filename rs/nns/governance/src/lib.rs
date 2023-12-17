@@ -120,11 +120,14 @@
 //! without need for a quorum of voting power to participate, and it
 //! can also always decide upon proposals in a timely manner.
 
-use crate::governance::{Governance, TimeWarp};
-use crate::pb::v1::governance::GovernanceCachedMetrics;
+use crate::{
+    governance::{Governance, TimeWarp},
+    pb::v1::governance::GovernanceCachedMetrics,
+};
 use mockall::automock;
 use std::{collections::HashMap, io};
 
+mod account_id_index;
 mod audit_event;
 mod garbage_collection;
 /// The 'governance' module contains the canister (smart contract)
@@ -352,6 +355,7 @@ pub fn encode_metrics(
         principal: principal_index_len,
         following: following_index_len,
         known_neuron: known_neuron_index_len,
+        account_id: account_id_index_len,
     } = governance.neuron_store.stable_indexes_lens();
 
     w.encode_gauge(
@@ -373,6 +377,11 @@ pub fn encode_metrics(
         "governance_known_neuron_index_len",
         known_neuron_index_len as f64,
         "Total number of entries in the known neuron index",
+    )?;
+    w.encode_gauge(
+        "governance_account_id_index_len",
+        account_id_index_len as f64,
+        "Total number of entries in the account_id index",
     )?;
 
     w.encode_gauge(

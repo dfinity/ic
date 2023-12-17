@@ -1,6 +1,11 @@
 use anyhow::{anyhow, Context, Error};
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
+use axum::{
+    extract::{Host, OriginalUri, State},
+    http::{uri::PathAndQuery, Uri},
+    response::{IntoResponse, Redirect},
+};
 use axum_server::{accept::Accept, tls_rustls::RustlsAcceptor};
 use futures_util::future::BoxFuture;
 use instant_acme::{Account, AccountCredentials, NewAccount};
@@ -22,6 +27,16 @@ use tokio_rustls::server::TlsStream;
 use x509_parser::prelude::{Pem, Validity};
 
 use crate::acme::{Finalize, Obtain, Order, Ready};
+
+// Public + Private key pair
+#[derive(Clone, Debug, PartialEq)]
+pub struct TLSCert(pub String, pub String);
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ProvisionResult {
+    StillValid(TLSCert),
+    Issued(TLSCert),
+}
 
 #[derive(Clone)]
 pub struct CustomAcceptor {
@@ -59,28 +74,20 @@ where
     }
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum SetError {
-    #[error(transparent)]
-    UnexpectedError(#[from] anyhow::Error),
-}
+pub struct TokenOwner(pub Arc<RwLock<Option<String>>>);
 
-#[async_trait]
-pub trait Set<T>: Sync + Send {
-    async fn set(&mut self, v: T) -> Result<(), SetError>;
-}
+impl TokenOwner {
+    pub fn new() -> Self {
+        Self(Arc::new(RwLock::new(None)))
+    }
 
-pub struct TokenSetter(pub Arc<RwLock<Option<String>>>);
-
-#[async_trait]
-impl Set<Option<String>> for TokenSetter {
-    async fn set(&mut self, v: Option<String>) -> Result<(), SetError> {
-        println!("setting token: {v:?}");
-
+    pub async fn set(&self, v: Option<String>) {
         let mut token = self.0.write().await;
         *token = v;
+    }
 
-        Ok(())
+    pub async fn get(&self) -> Option<String> {
+        self.0.read().await.clone()
     }
 }
 
@@ -102,7 +109,7 @@ trait Load<T: Send + Sync>: Sync + Send {
 #[async_trait]
 impl<T: Send + Sync, L: Load<T>> Load<T> for Arc<L> {
     async fn load(&self) -> Result<T, LoadError> {
-        self.load().await
+        self.as_ref().load().await
     }
 }
 
@@ -121,7 +128,7 @@ trait Store<T: Send + Sync>: Sync + Send {
 #[async_trait]
 impl<T: 'static + Send + Sync, S: Store<T>> Store<T> for Arc<S> {
     async fn store(&self, v: T) -> Result<(), StoreError> {
-        self.store(v).await
+        self.as_ref().store(v).await
     }
 }
 
@@ -140,12 +147,12 @@ pub enum ProvisionError {
 #[automock]
 #[async_trait]
 pub trait Provision: Sync + Send {
-    async fn provision(&mut self, name: &str) -> Result<(String, String), ProvisionError>;
+    async fn provision(&mut self, name: &str) -> Result<ProvisionResult, ProvisionError>;
 }
 
 pub struct Provisioner {
     // Token
-    token_setter: Box<dyn Set<Option<String>>>,
+    token_owner: Arc<TokenOwner>,
 
     // Acme
     acme_order: Box<dyn Order>,
@@ -156,14 +163,14 @@ pub struct Provisioner {
 
 impl Provisioner {
     pub fn new(
-        token_setter: Box<dyn Set<Option<String>>>,
+        token_owner: Arc<TokenOwner>,
         acme_order: Box<dyn Order>,
         acme_ready: Box<dyn Ready>,
         acme_finalize: Box<dyn Finalize>,
         acme_obtain: Box<dyn Obtain>,
     ) -> Self {
         Self {
-            token_setter,
+            token_owner,
             acme_order,
             acme_ready,
             acme_finalize,
@@ -174,25 +181,24 @@ impl Provisioner {
 
 #[async_trait]
 impl Provision for Provisioner {
-    async fn provision(&mut self, name: &str) -> Result<(String, String), ProvisionError> {
+    async fn provision(&mut self, name: &str) -> Result<ProvisionResult, ProvisionError> {
         // Create a new ACME order
         let (mut order, challenge_key) = self
             .acme_order
             .order(name)
             .await
-            .context("failed to create acme order")?;
+            .context("failed to create ACME order")?;
 
         // Set the challenge token
-        self.token_setter
+        self.token_owner
             .set(Some(challenge_key.key_authorization))
-            .await
-            .context("failed to set token")?;
+            .await;
 
         // Notify the ACME provider that the order is ready to be validated
         self.acme_ready
             .ready(&mut order)
             .await
-            .context("failed to mark acme order as ready")?;
+            .context("failed to mark ACME order as ready")?;
 
         // Create a certificate for the ACME provider to sign
         let cert = Certificate::from_params({
@@ -211,25 +217,22 @@ impl Provision for Provisioner {
         self.acme_finalize
             .finalize(&mut order, &csr)
             .await
-            .context("failed to finalize acme order")?;
+            .context("failed to finalize ACME order")?;
 
         // Obtain the signed certificate chain from the ACME provider
         let cert_chain_pem = self
             .acme_obtain
             .obtain(&mut order)
             .await
-            .context("failed to obtain acme certificate")?;
+            .context("failed to obtain ACME certificate")?;
 
         // Unset the challenge token
-        self.token_setter
-            .set(None)
-            .await
-            .context("failed to set token")?;
+        self.token_owner.set(None).await;
 
-        Ok((
+        Ok(ProvisionResult::Issued(TLSCert(
             cert_chain_pem,                   // Certificate Chain
             cert.serialize_private_key_pem(), // Private Key
-        ))
+        )))
     }
 }
 
@@ -239,8 +242,8 @@ pub struct Loader {
 }
 
 #[async_trait]
-impl Load<(String, String)> for Loader {
-    async fn load(&self) -> Result<(String, String), LoadError> {
+impl Load<TLSCert> for Loader {
+    async fn load(&self) -> Result<TLSCert, LoadError> {
         let (cert, pkey) = (
             fs::read_to_string(&self.cert_path),
             fs::read_to_string(&self.pkey_path),
@@ -248,7 +251,7 @@ impl Load<(String, String)> for Loader {
 
         match (cert, pkey) {
             // Certificates Found
-            (Ok(cert), Ok(pkey)) => Ok((cert, pkey)),
+            (Ok(cert), Ok(pkey)) => Ok(TLSCert(cert, pkey)),
 
             // No certificates found
             (Err(err1), Err(err2))
@@ -268,8 +271,8 @@ impl Load<(String, String)> for Loader {
 }
 
 #[async_trait]
-impl Store<(String, String)> for Loader {
-    async fn store(&self, v: (String, String)) -> Result<(), StoreError> {
+impl Store<TLSCert> for Loader {
+    async fn store(&self, v: TLSCert) -> Result<(), StoreError> {
         fs::write(&self.cert_path, v.0).context("failed to write certificate to file")?;
         fs::write(&self.pkey_path, v.1).context("failed to write private-key to file")?;
 
@@ -282,14 +285,14 @@ impl Store<(String, String)> for Loader {
 pub struct WithLoad<P, L>(pub P, pub L, pub Duration);
 
 #[async_trait]
-impl<P: Provision, L: Load<(String, String)>> Provision for WithLoad<P, L> {
-    async fn provision(&mut self, name: &str) -> Result<(String, String), ProvisionError> {
+impl<P: Provision, L: Load<TLSCert>> Provision for WithLoad<P, L> {
+    async fn provision(&mut self, name: &str) -> Result<ProvisionResult, ProvisionError> {
         match self.1.load().await {
-            Ok((cert, pkey)) => {
+            Ok(tls_cert) => {
                 // An existing set of certificates was found
                 // attempt to ensure they are valid
                 // otherwise proceed to provision new ones
-                let validity = extract_cert_validity(name, cert.as_bytes())
+                let validity = extract_cert_validity(name, tls_cert.0.as_bytes())
                     .context("failed to extract certificate validity")?;
 
                 if let Some(validity) = validity {
@@ -302,7 +305,7 @@ impl<P: Provision, L: Load<(String, String)>> Provision for WithLoad<P, L> {
                     );
 
                     if (now + self.2.as_secs()) < expiration {
-                        return Ok((cert, pkey));
+                        return Ok(ProvisionResult::StillValid(tls_cert));
                     }
                 }
             }
@@ -321,13 +324,15 @@ impl<P: Provision, L: Load<(String, String)>> Provision for WithLoad<P, L> {
 pub struct WithStore<P, S>(pub P, pub S);
 
 #[async_trait]
-impl<P: Provision, S: Store<(String, String)>> Provision for WithStore<P, S> {
-    async fn provision(&mut self, name: &str) -> Result<(String, String), ProvisionError> {
+impl<P: Provision, S: Store<TLSCert>> Provision for WithStore<P, S> {
+    async fn provision(&mut self, name: &str) -> Result<ProvisionResult, ProvisionError> {
         // Provision a new set of certificates
         let out = self.0.provision(name).await?;
 
-        // Store the certificates before returning them
-        self.1.store(out.clone()).await?;
+        // Persist the certificates if they were renewed
+        if let ProvisionResult::Issued(tls_cert) = out.clone() {
+            self.1.store(tls_cert).await?;
+        }
 
         Ok(out)
     }
@@ -389,6 +394,28 @@ pub async fn load_or_create_acme_account(
         .context("failed to serialize acme credentials")?;
 
     Ok(account)
+}
+
+pub async fn acme_challenge(State(token): State<Arc<TokenOwner>>) -> impl IntoResponse {
+    token.get().await.clone().unwrap_or_default()
+}
+
+pub async fn redirect_to_https(
+    Host(host): Host,
+    OriginalUri(uri): OriginalUri,
+) -> impl IntoResponse {
+    let fallback_path = PathAndQuery::from_static("/");
+    let pq = uri.path_and_query().unwrap_or(&fallback_path).as_str();
+
+    Redirect::permanent(
+        &Uri::builder()
+            .scheme("https") // redirect to https
+            .authority(host) // re-use the same host
+            .path_and_query(pq) // re-use the same path and query
+            .build()
+            .unwrap()
+            .to_string(),
+    )
 }
 
 #[cfg(test)]

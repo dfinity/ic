@@ -5,6 +5,7 @@ use crate::sign::threshold_sig::public_key::bls12_381::{
 };
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
+use thiserror::Error;
 
 /// A threshold signature public key.
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialOrd, Ord, PartialEq, Serialize, Deserialize)]
@@ -20,20 +21,31 @@ impl From<CspThresholdSigPublicKey> for bls12_381::PublicKeyBytes {
     }
 }
 
-impl From<&CspNiDkgTranscript> for CspThresholdSigPublicKey {
-    // The conversion is deliberately implemented directly, i.e., without
-    // using From-conversions involving intermediate types, because the
-    // panic on empty coefficients is currently specific to converting
-    // the transcript to the contained threshold signature public key.
-    fn from(csp_ni_dkg_transcript: &CspNiDkgTranscript) -> Self {
-        match PublicKeyBytes::try_from(csp_ni_dkg_transcript) {
-            Ok(public_key_bytes) => Self::ThresBls12_381(public_key_bytes),
-            Err(err) => match err {
-                CspNiDkgTranscriptThresholdSigPublicKeyBytesConversionError::CoefficientsEmpty => {
-                    panic!("coefficients empty")
-                }
-            },
+/// Converting an NI-DKG transcript to a BLS 12 381 CspThresholdSigPublicKey struct failed.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Error)]
+pub enum CspNiDkgTranscriptToCspThresholdSigPublicKeyConversionError {
+    #[error("the public coefficients of the threshold public key are empty")]
+    CoefficientsEmpty,
+}
+
+impl From<CspNiDkgTranscriptThresholdSigPublicKeyBytesConversionError>
+    for CspNiDkgTranscriptToCspThresholdSigPublicKeyConversionError
+{
+    fn from(err: CspNiDkgTranscriptThresholdSigPublicKeyBytesConversionError) -> Self {
+        match err {
+            CspNiDkgTranscriptThresholdSigPublicKeyBytesConversionError::CoefficientsEmpty => {
+                CspNiDkgTranscriptToCspThresholdSigPublicKeyConversionError::CoefficientsEmpty
+            }
         }
+    }
+}
+
+impl TryFrom<&CspNiDkgTranscript> for CspThresholdSigPublicKey {
+    type Error = CspNiDkgTranscriptToCspThresholdSigPublicKeyConversionError;
+
+    fn try_from(csp_ni_dkg_transcript: &CspNiDkgTranscript) -> Result<Self, Self::Error> {
+        let public_key_bytes = PublicKeyBytes::try_from(csp_ni_dkg_transcript)?;
+        Ok(Self::ThresBls12_381(public_key_bytes))
     }
 }
 

@@ -32,7 +32,7 @@ impl ToString for GetSubnetForCanisterError {
     }
 }
 
-fn routing_table_into_registry_mutation(
+pub(crate) fn routing_table_into_registry_mutation(
     routing_table: RoutingTable,
     mutation_type: i32,
 ) -> RegistryMutation {

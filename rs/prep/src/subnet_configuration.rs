@@ -21,6 +21,7 @@ use ic_protobuf::registry::{
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
+use ic_types::crypto::threshold_sig::ni_dkg::ThresholdSigPublicKeyError;
 use ic_types::{
     crypto::{
         threshold_sig::{
@@ -117,6 +118,12 @@ pub enum InitializeSubnetError {
     ThresholdSigPublicKey {
         #[from]
         source: ThresholdSigPublicKeyBytesConversionError,
+    },
+
+    #[error("NI-DKG transcript threshold signature public key: {source}")]
+    NiDkgTranscriptToThresholdSigPublicKey {
+        #[from]
+        source: ThresholdSigPublicKeyError,
     },
 
     #[error("crypto error: {source}")]
@@ -338,9 +345,9 @@ impl SubnetConfig {
             &dkg_dealing_encryption_pubkeys,
             &mut rand::rngs::OsRng,
         );
-        let subnet_threshold_signing_public_key = PublicKey::from(ThresholdSigPublicKey::from(
+        let subnet_threshold_signing_public_key = PublicKey::from(ThresholdSigPublicKey::try_from(
             &ni_dkg_transcript_high_threshold,
-        ));
+        )?);
 
         let subnet_dkg = CatchUpPackageContents {
             initial_ni_dkg_transcript_low_threshold: Some(InitialNiDkgTranscriptRecord::from(

@@ -1,6 +1,6 @@
 no-interrupt:
   extends:
-    - .build-k8s
+    - .ic-build-image
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
   interruptible: False
@@ -464,7 +464,7 @@ pre-commit:
     # more easily.
     PRE_COMMIT_HOME: /cache/pre-commit/$CI_CONCURRENT_ID
   extends:
-    - .build-k8s
+    - .ic-build-image
     - .rules-master-pipeline-and-merge-request
   needs: [] # don't wait on other jobs
   script:
@@ -766,7 +766,7 @@ release-boundary-node-service-worker:
 
 notify-gitlab-success:
   extends:
-    - .build-k8s
+    - .ic-build-image
   rules:
     # Run on schedule pipelines as several Honeycomb alert rules rely on this.
     # TODO(IDX-2856): Disable when alerts will be send from superset.
@@ -823,7 +823,7 @@ notify-gitlab-failure:
 commit-lint:
   needs: []
   extends:
-    - .build-k8s
+    - .ic-build-image
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       allow_failure: true

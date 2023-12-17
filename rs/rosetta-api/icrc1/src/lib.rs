@@ -199,7 +199,7 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 _ => None,
             },
             spender: match &t.operation {
-                Transfer { spender, .. } => spender.to_owned(),
+                Transfer { spender, .. } | Burn { spender, .. } => spender.to_owned(),
                 Approve { spender, .. } => Some(*spender),
                 _ => None,
             },

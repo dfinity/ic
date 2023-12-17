@@ -336,7 +336,6 @@ impl From<NeuronsFundParticipants> for ic_sns_swap::pb::v1::NeuronsFundParticipa
 #[derive(Clone, Copy)]
 pub enum NeuronsFundParticipationValidationError {
     Unspecified,
-    ExclusivelyEnabled,
 }
 
 impl NeuronsFundParticipationValidationError {
@@ -349,7 +348,6 @@ impl ToString for NeuronsFundParticipationValidationError {
     fn to_string(&self) -> String {
         let msg = match self {
             Self::Unspecified => "must be specified".to_string(),
-            Self::ExclusivelyEnabled => "can only exclusively be set to true".to_string(),
         };
         format!("{} {msg}", Self::field_name())
     }
@@ -1952,13 +1950,10 @@ impl SnsInitPayload {
     }
 
     pub fn validate_neurons_fund_participation(&self) -> Result<(), String> {
-        match self.neurons_fund_participation {
-            None => Result::from(NeuronsFundParticipationValidationError::Unspecified),
-            Some(false) => {
-                Result::from(NeuronsFundParticipationValidationError::ExclusivelyEnabled)
-            }
-            Some(true) => Ok(()),
+        if self.neurons_fund_participation.is_none() {
+            return Result::from(NeuronsFundParticipationValidationError::Unspecified);
         }
+        Ok(())
     }
 
     pub fn validate_neurons_fund_participation_constraints(

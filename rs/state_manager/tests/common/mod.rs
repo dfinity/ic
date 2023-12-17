@@ -1,6 +1,9 @@
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
-use ic_config::state_manager::Config;
+use ic_config::{
+    flag_status::FlagStatus,
+    state_manager::{lsmt_storage_default, Config},
+};
 use ic_interfaces::{
     certification::{CertificationPermanentError, Verifier, VerifierError},
     validation::ValidationResult,
@@ -20,16 +23,14 @@ use ic_test_utilities::{
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_types::{
-    artifact::{Artifact, StateSyncMessage},
     chunkable::{
-        ArtifactChunk, ArtifactChunkData,
         ArtifactErrorCode::{ChunkVerificationFailed, ChunksMoreNeeded},
-        ChunkId, Chunkable,
+        Chunk, ChunkId, Chunkable,
     },
     consensus::certification::{Certification, CertificationContent},
     crypto::Signed,
     signature::ThresholdSignature,
-    state_sync::MANIFEST_CHUNK_ID_OFFSET,
+    state_sync::{StateSyncMessage, MANIFEST_CHUNK_ID_OFFSET},
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
     CanisterId, CryptoHashOfState, Cycles, Height, RegistryVersion, SubnetId,
 };
@@ -394,16 +395,8 @@ pub fn pipe_state_sync(src: StateSyncMessage, mut dst: Box<dyn Chunkable>) -> St
         .expect("State sync not completed.")
 }
 
-fn alter_chunk_data(chunk: &mut ArtifactChunk) {
-    let mut chunk_data = match &chunk.artifact_chunk_data {
-        ArtifactChunkData::UnitChunkData(_) => {
-            panic!(
-                "Unexpected artifact chunk data type: {:?}",
-                chunk.artifact_chunk_data
-            );
-        }
-        ArtifactChunkData::SemiStructuredChunkData(chunk_data) => chunk_data.clone(),
-    };
+fn alter_chunk_data(chunk: &mut Chunk) {
+    let mut chunk_data = chunk.clone();
     match chunk_data.last_mut() {
         Some(last) => {
             // Alter the last element of chunk_data.
@@ -414,7 +407,7 @@ fn alter_chunk_data(chunk: &mut ArtifactChunk) {
             chunk_data = vec![9; 100];
         }
     }
-    chunk.artifact_chunk_data = ArtifactChunkData::SemiStructuredChunkData(chunk_data);
+    *chunk = chunk_data;
 }
 
 /// Pipe the meta-manifest (chunk 0) from src to dest.
@@ -431,25 +424,17 @@ pub fn pipe_meta_manifest(
 
     let id = ids[0];
 
-    let mut chunk = ArtifactChunk {
-        chunk_id: id,
-        artifact_chunk_data: ArtifactChunkData::SemiStructuredChunkData(
-            src.clone()
-                .get_chunk(id)
-                .unwrap_or_else(|| panic!("Requested unknown chunk {}", id))
-                .into(),
-        ),
-    };
+    let mut chunk = src
+        .clone()
+        .get_chunk(id)
+        .unwrap_or_else(|| panic!("Requested unknown chunk {}", id));
 
     if use_bad_chunk {
         alter_chunk_data(&mut chunk);
     }
 
-    match dst.add_chunk(chunk) {
-        Ok(Artifact::StateSync(msg)) => Ok(msg),
-        Ok(artifact) => {
-            panic!("Unexpected artifact type: {:?}", artifact);
-        }
+    match dst.add_chunk(id, chunk) {
+        Ok(msg) => Ok(msg),
         Err(ChunksMoreNeeded) => Err(StateSyncErrorCode::ChunksMoreNeeded),
         Err(ChunkVerificationFailed) => Err(StateSyncErrorCode::MetaManifestVerificationFailed),
     }
@@ -473,26 +458,18 @@ pub fn pipe_manifest(
     assert!(ids.iter().all(|id| manifest_chunks.contains(id)));
 
     for (index, id) in ids.iter().enumerate() {
-        let mut chunk = ArtifactChunk {
-            chunk_id: *id,
-            artifact_chunk_data: ArtifactChunkData::SemiStructuredChunkData(
-                src.clone()
-                    .get_chunk(*id)
-                    .unwrap_or_else(|| panic!("Requested unknown chunk {}", id))
-                    .into(),
-            ),
-        };
+        let mut chunk = src
+            .clone()
+            .get_chunk(*id)
+            .unwrap_or_else(|| panic!("Requested unknown chunk {}", id));
 
         if use_bad_chunk && index == ids.len() / 2 {
             alter_chunk_data(&mut chunk);
         }
 
-        match dst.add_chunk(chunk) {
-            Ok(Artifact::StateSync(msg)) => {
+        match dst.add_chunk(*id, chunk) {
+            Ok(msg) => {
                 return Ok(msg);
-            }
-            Ok(artifact) => {
-                panic!("Unexpected artifact type: {:?}", artifact);
             }
             Err(ChunksMoreNeeded) => (),
             Err(ChunkVerificationFailed) => {
@@ -524,26 +501,18 @@ pub fn pipe_partial_state_sync(
                 omitted_chunks = true;
                 continue;
             }
-            let mut chunk = ArtifactChunk {
-                chunk_id: *id,
-                artifact_chunk_data: ArtifactChunkData::SemiStructuredChunkData(
-                    src.clone()
-                        .get_chunk(*id)
-                        .unwrap_or_else(|| panic!("Requested unknown chunk {}", id))
-                        .into(),
-                ),
-            };
+            let mut chunk = src
+                .clone()
+                .get_chunk(*id)
+                .unwrap_or_else(|| panic!("Requested unknown chunk {}", id));
 
             if use_bad_chunk && index == ids.len() / 2 {
                 alter_chunk_data(&mut chunk);
             }
 
-            match dst.add_chunk(chunk) {
-                Ok(Artifact::StateSync(msg)) => {
+            match dst.add_chunk(*id, chunk) {
+                Ok(msg) => {
                     return Ok(msg);
-                }
-                Ok(artifact) => {
-                    panic!("Unexpected artifact type: {:?}", artifact);
                 }
                 Err(ChunksMoreNeeded) => (),
                 Err(ChunkVerificationFailed) => {
@@ -675,12 +644,18 @@ where
     });
 }
 
-pub fn state_manager_restart_test_with_metrics<Test>(test: Test)
+pub fn state_manager_restart_test_with_lsmt<Test>(lsmt_storage: FlagStatus, test: Test)
 where
     Test: FnOnce(
         &MetricsRegistry,
         StateManagerImpl,
-        Box<dyn Fn(StateManagerImpl, Option<Height>) -> (MetricsRegistry, StateManagerImpl)>,
+        Box<
+            dyn Fn(
+                StateManagerImpl,
+                Option<Height>,
+                FlagStatus,
+            ) -> (MetricsRegistry, StateManagerImpl),
+        >,
     ),
 {
     let tmp = tmpdir("sm");
@@ -689,8 +664,11 @@ where
     let verifier: Arc<dyn Verifier> = Arc::new(FakeVerifier::new());
 
     with_test_replica_logger(|log| {
-        let make_state_manager = move |starting_height| {
+        let make_state_manager = move |starting_height, lsmt_storage| {
             let metrics_registry = MetricsRegistry::new();
+
+            let mut config = config.clone();
+            config.lsmt_storage = lsmt_storage;
 
             let state_manager = StateManagerImpl::new(
                 Arc::clone(&verifier),
@@ -706,15 +684,34 @@ where
             (metrics_registry, state_manager)
         };
 
-        let (metrics_registry, state_manager) = make_state_manager(None);
+        let (metrics_registry, state_manager) = make_state_manager(None, lsmt_storage);
 
-        let restart_fn = Box::new(move |state_manager, starting_height| {
+        let restart_fn = Box::new(move |state_manager, starting_height, lsmt_storage| {
             drop(state_manager);
-            make_state_manager(starting_height)
+            make_state_manager(starting_height, lsmt_storage)
         });
 
         test(&metrics_registry, state_manager, restart_fn);
     });
+}
+
+pub fn state_manager_restart_test_with_metrics<Test>(test: Test)
+where
+    Test: FnOnce(
+        &MetricsRegistry,
+        StateManagerImpl,
+        Box<dyn Fn(StateManagerImpl, Option<Height>) -> (MetricsRegistry, StateManagerImpl)>,
+    ),
+{
+    state_manager_restart_test_with_lsmt(
+        lsmt_storage_default(),
+        |metrics, state_manager, restart_fn| {
+            let restart_fn_simplified = Box::new(move |state_manager, starting_height| {
+                restart_fn(state_manager, starting_height, lsmt_storage_default())
+            });
+            test(metrics, state_manager, restart_fn_simplified);
+        },
+    );
 }
 
 pub fn state_manager_restart_test<Test>(test: Test)

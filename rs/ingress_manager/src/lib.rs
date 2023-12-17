@@ -11,10 +11,8 @@ mod proptests;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::{
-    consensus_pool::ConsensusTime,
-    execution_environment::IngressHistoryReader,
-    ingress_pool::{IngressPoolObject, IngressPoolSelect, SelectResult},
-    time_source::TimeSource,
+    consensus_pool::ConsensusTime, execution_environment::IngressHistoryReader,
+    ingress_pool::IngressPool, time_source::TimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
@@ -29,7 +27,6 @@ use ic_types::{
     consensus::BlockPayload,
     crypto::CryptoHashOf,
     malicious_flags::MaliciousFlags,
-    messages::SignedIngress,
     time::{Time, UNIX_EPOCH},
     Height, RegistryVersion, SubnetId,
 };
@@ -37,9 +34,10 @@ use ic_validator::{
     CanisterIdSet, HttpRequestVerifier, HttpRequestVerifierImpl, RequestValidationError,
 };
 use prometheus::{Histogram, IntGauge};
+use std::collections::hash_map::{DefaultHasher, RandomState};
+use std::hash::BuildHasher;
 use std::{
     collections::{BTreeMap, HashSet},
-    ops::RangeInclusive,
     sync::{Arc, RwLock},
 };
 
@@ -51,30 +49,6 @@ use std::{
 type IngressPayloadCache =
     BTreeMap<(Height, CryptoHashOf<BlockPayload>), Arc<HashSet<IngressMessageId>>>;
 
-/// A wrapper for the ingress pool that delays locking until the member function
-/// of `IngressPoolSelect` is actually called.
-struct IngressPoolSelectWrapper {
-    pool: Arc<RwLock<dyn IngressPoolSelect>>,
-}
-
-impl IngressPoolSelectWrapper {
-    /// The constructor creates a `IngressPoolSelectWrapper` instance.
-    pub fn new(pool: &Arc<RwLock<dyn IngressPoolSelect>>) -> Self {
-        IngressPoolSelectWrapper { pool: pool.clone() }
-    }
-}
-
-/// `IngressPoolSelectWrapper` implements the `IngressPoolSelect` trait.
-impl IngressPoolSelect for IngressPoolSelectWrapper {
-    fn select_validated<'a>(
-        &self,
-        range: RangeInclusive<Time>,
-        f: Box<dyn FnMut(&IngressPoolObject) -> SelectResult<SignedIngress> + 'a>,
-    ) -> Vec<SignedIngress> {
-        let pool = self.pool.read().unwrap();
-        pool.select_validated(range, f)
-    }
-}
 /// Keeps the metrics to be exported by the IngressManager
 struct IngressManagerMetrics {
     ingress_handler_time: Histogram,
@@ -109,6 +83,34 @@ impl IngressManagerMetrics {
     }
 }
 
+/// A custom RandomState we can use to control the randomness of a hashmap. By default
+/// random.
+#[derive(Clone)]
+pub enum CustomRandomState {
+    /// Seeds a HashMap with the default [`std::collections::hash_map::RandomState`].
+    Random(RandomState),
+    /// Makes a hash map deterministic, by seeding it with the non-random default hasher.
+    /// Use it for testing purposes, to create a repeatable element order.
+    Deterministic,
+}
+
+impl Default for CustomRandomState {
+    fn default() -> Self {
+        CustomRandomState::Random(RandomState::new())
+    }
+}
+
+impl BuildHasher for CustomRandomState {
+    type Hasher = DefaultHasher;
+
+    fn build_hasher(&self) -> DefaultHasher {
+        match self {
+            Self::Deterministic => DefaultHasher::new(),
+            Self::Random(r) => r.build_hasher(),
+        }
+    }
+}
+
 /// This struct is responsible for ingresses. It validates, invalidates,
 /// advertizes, purges ingresses, and selects the ingresses to be included in
 /// the blocks.
@@ -117,7 +119,7 @@ pub struct IngressManager {
     consensus_time: Arc<dyn ConsensusTime>,
     ingress_hist_reader: Box<dyn IngressHistoryReader>,
     ingress_payload_cache: Arc<RwLock<IngressPayloadCache>>,
-    ingress_pool: IngressPoolSelectWrapper,
+    ingress_pool: Arc<RwLock<dyn IngressPool>>,
     registry_client: Arc<dyn RegistryClient>,
     request_validator:
         Arc<dyn HttpRequestVerifier<SignedIngressContent, RegistryRootOfTrustProvider>>,
@@ -130,6 +132,10 @@ pub struct IngressManager {
     pub(crate) last_purge_time: RwLock<Time>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     cycles_account_manager: Arc<CyclesAccountManager>,
+
+    /// A determinism flag for testing. Used for making hashmaps in the ingress selector
+    /// deterministic. Set to `false` in production.
+    random_state: CustomRandomState,
 }
 
 impl IngressManager {
@@ -139,7 +145,7 @@ impl IngressManager {
         time_source: Arc<dyn TimeSource>,
         consensus_time: Arc<dyn ConsensusTime>,
         ingress_hist_reader: Box<dyn IngressHistoryReader>,
-        ingress_pool: Arc<RwLock<dyn IngressPoolSelect>>,
+        ingress_pool: Arc<RwLock<dyn IngressPool>>,
         registry_client: Arc<dyn RegistryClient>,
         ingress_signature_crypto: Arc<dyn IngressSigVerifier + Send + Sync>,
         metrics_registry: MetricsRegistry,
@@ -148,6 +154,7 @@ impl IngressManager {
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         cycles_account_manager: Arc<CyclesAccountManager>,
         malicious_flags: MaliciousFlags,
+        random_state: CustomRandomState,
     ) -> Self {
         let request_validator = if malicious_flags.maliciously_disable_ingress_validation {
             pub struct DisabledHttpRequestVerifier;
@@ -172,7 +179,7 @@ impl IngressManager {
             consensus_time,
             ingress_hist_reader,
             ingress_payload_cache: Arc::new(RwLock::new(BTreeMap::new())),
-            ingress_pool: IngressPoolSelectWrapper::new(&ingress_pool),
+            ingress_pool,
             registry_client,
             request_validator,
             metrics: IngressManagerMetrics::new(metrics_registry),
@@ -182,6 +189,7 @@ impl IngressManager {
             messages_to_purge: RwLock::new(Vec::new()),
             state_reader,
             cycles_account_manager,
+            random_state,
         }
     }
 
@@ -342,6 +350,7 @@ pub(crate) mod tests {
                         Arc::new(state_manager),
                         cycles_account_manager,
                         MaliciousFlags::default(),
+                        CustomRandomState::default(),
                     ),
                     ingress_pool,
                 )

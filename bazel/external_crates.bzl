@@ -25,6 +25,18 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 "opt-level=3",
             ],
         )],
+        "k256": [crate.annotation(
+            rustc_flags = [
+                "-C",
+                "opt-level=3",
+            ],
+        )],
+        "p256": [crate.annotation(
+            rustc_flags = [
+                "-C",
+                "opt-level=3",
+            ],
+        )],
         "ring": [crate.annotation(
             build_script_env = {
                 "CFLAGS": "-fdebug-prefix-map=$${pwd}=/source",
@@ -225,11 +237,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "build-info": crate.spec(
                 git = "https://github.com/dfinity-lab/build-info",
-                rev = "abb2971c5d07a9b40d41a0c84b63a3156f2ff764",
+                rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7",
             ),
             "build-info-build": crate.spec(
                 git = "https://github.com/dfinity-lab/build-info",
-                rev = "abb2971c5d07a9b40d41a0c84b63a3156f2ff764",
+                rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7",
                 default_features = False,
             ),
             "by_address": crate.spec(
@@ -266,7 +278,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.10.0",
             ),
             "chrono": crate.spec(
-                version = "=0.4.19",
+                version = "=0.4.23",
+                default_features = False,
+                features = [
+                    "alloc",
+                    "clock",
+                    "serde",
+                ],
             ),
             "ciborium": crate.spec(
                 version = "^0.2.1",
@@ -444,16 +462,20 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "http": crate.spec(
                 version = "^0.2.9",
             ),
+            "http_1_0_0": crate.spec(
+                package = "http",
+                version = "^1.0.0",
+            ),
             "http-body": crate.spec(
                 version = "^0.4",
             ),
-            "http-body_1_0_0_rc_2": crate.spec(
+            "http-body_1_0_0": crate.spec(
                 package = "http-body",
-                version = "=1.0.0-rc.2",
+                version = "=1.0.0",
             ),
-            "http-body-util_0_1_0_rc_3": crate.spec(
+            "http-body-util_0_1_0": crate.spec(
                 package = "http-body-util",
-                version = "=0.1.0-rc.3",
+                version = "=0.1.0",
             ),
             "http-serde": crate.spec(
                 version = "^1.1.2",
@@ -481,9 +503,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "tcp",
                 ],
             ),
-            "hyper_1_0_0_rc_4": crate.spec(
+            "hyper_1_0_0": crate.spec(
                 package = "hyper",
-                version = "=1.0.0-rc.4",
+                version = "=1.0.1",
                 features = [
                     "full",
                 ],
@@ -660,9 +682,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "log": crate.spec(
                 version = "^0.4.14",
             ),
-            "log4rs": crate.spec(
-                version = "^1.1.1",
-            ),
             "lru": crate.spec(
                 version = "^0.7.8",
                 default_features = False,
@@ -672,7 +691,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "metrics-proxy": crate.spec(
                 git = "https://github.com/dfinity/metrics-proxy.git",
-                rev = "c18f6ad2639b448968d461096abc76af8a069980",
+                rev = "b9e1c264fc9198f5dde704463b5acf2f34debf2d",
                 default_features = False,
                 features = [
                     "rustls-tls-webpki-roots",
@@ -687,6 +706,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "mockall": crate.spec(
                 version = "^0.11.4",
+            ),
+            "mockito": crate.spec(
+                version = "^1.2.0",
             ),
             "moka": crate.spec(
                 version = "^0.12",
@@ -936,6 +958,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "rocksdb": crate.spec(
                 version = "^0.21.0",
                 default_features = False,
+            ),
+            "rolling-file": crate.spec(
+                version = "^0.2.0",
             ),
             "rsa": crate.spec(
                 version = "^0.9.2",

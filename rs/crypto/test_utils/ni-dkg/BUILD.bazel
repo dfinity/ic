@@ -16,6 +16,7 @@ DEPENDENCIES = [
     "//rs/registry/keys",
     "//rs/registry/proto_data_provider",
     "//rs/types/types",
+    "@crate_index//:hex",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
     "@crate_index//:serde",
@@ -26,7 +27,6 @@ MACRO_DEPENDENCIES = []
 DEV_DEPENDENCIES = [
     "//rs/crypto/test_utils",
     "//rs/types/types_test_utils",
-    "@crate_index//:hex",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

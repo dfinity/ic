@@ -913,15 +913,6 @@ where
 {
     /// Returns a decimal amount of ICP e8s, i.e., a number with a whole and a fractional part.
     fn apply(&self, direct_participation_icp_e8s: u64) -> Result<u64, String> {
-        // Normally, this threshold follows from `self.ideal_matched_participation_function.function`,
-        // a.k.a. the "ideal" participation matching function. However, we add an explicit check
-        // here in order to make this threashold more prominantly visible from readong the code.
-        // In addition, having this branch allows us to use functions with a less complicated shape
-        // in the tests.
-        if direct_participation_icp_e8s < self.min_direct_participation_threshold_icp_e8s {
-            return Ok(0);
-        }
-
         let intervals = &self.coefficient_intervals;
         // This condition is always satisfied, as `self` has been validated. We add it here
         // again for verbosity.

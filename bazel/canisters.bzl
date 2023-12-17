@@ -85,7 +85,7 @@ def rust_canister(name, service_file, **kwargs):
         srcs = [name + ".raw", service_file],
         outs = [name + ".opt.wasm"],
         message = "Shrinking canister " + name,
-        exec_tools = ["@crate_index//:ic-wasm__ic-wasm"],
+        tools = ["@crate_index//:ic-wasm__ic-wasm"],
         cmd_bash = """
         $(location @crate_index//:ic-wasm__ic-wasm) $(location {input_wasm}) -o $@ shrink && \
         $(location @crate_index//:ic-wasm__ic-wasm) $@ -o $@ metadata candid:service --visibility public --file $(location {service_file})
@@ -151,7 +151,7 @@ def inject_version_into_wasm(*, name, src_wasm, version_file = "//bazel:version.
         ],
         outs = [name + ".wasm"],
         message = "Injecting version into wasm.",
-        exec_tools = ["@crate_index//:ic-wasm__ic-wasm"],
+        tools = ["@crate_index//:ic-wasm__ic-wasm"],
         cmd_bash = " ".join([
             "$(location @crate_index//:ic-wasm__ic-wasm)",
             "$(location %s)" % src_wasm,  # Input file.

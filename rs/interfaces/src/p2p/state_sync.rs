@@ -1,6 +1,7 @@
 use ic_types::{
-    artifact::{StateSyncArtifactId, StateSyncMessage},
+    artifact::StateSyncArtifactId,
     chunkable::{Chunk, ChunkId, Chunkable},
+    state_sync::StateSyncMessage,
 };
 
 pub trait StateSyncClient: Send + Sync {

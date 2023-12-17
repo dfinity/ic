@@ -54,8 +54,7 @@ RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.12.2/
     chmod 777 /usr/bin/bazel
 
 ARG nvm_version=v0.39.1
-ARG dependency_mgmt_agent_js_node_version=16
-ARG dependency_mgmt_nns_dapp_node_version=18
+ARG dependency_mgmt_nns_dapp_node_version=18.17.1
 ARG dependency_mgmt_default_node_version=19
 ENV NVM_DIR=/opt/nvm
 RUN mkdir $NVM_DIR && \
@@ -64,7 +63,6 @@ RUN mkdir $NVM_DIR && \
 COPY typescript/service-worker/.nvmrc /tmp/sw.npmrc
 RUN . /opt/nvm/nvm.sh && \
     nvm install $(cat /tmp/sw.npmrc) && \
-    nvm install ${dependency_mgmt_agent_js_node_version} && \
     nvm install ${dependency_mgmt_nns_dapp_node_version} && \
     nvm install ${dependency_mgmt_default_node_version}
 
@@ -113,10 +111,10 @@ ENV PYTHONPATH=/ic/gitlab-ci/src:/ic/gitlab-ci/src/dependencies:$PYTHONPATH
 RUN cd /tmp/bazel && bazel version
 
 # Add Rust/Cargo support
-ARG rust_version=1.71.1
+ARG RUST_VERSION=1.74.0
 RUN curl --fail https://sh.rustup.rs -sSf \
-    | sh -s -- -y --default-toolchain ${rust_version}-x86_64-unknown-linux-gnu --no-modify-path && \
-    rustup default ${rust_version}-x86_64-unknown-linux-gnu && \
+    | sh -s -- -y --default-toolchain ${RUST_VERSION}-x86_64-unknown-linux-gnu --no-modify-path && \
+    rustup default ${RUST_VERSION}-x86_64-unknown-linux-gnu && \
     rustup target add wasm32-unknown-unknown && \
     rustup component add clippy
 

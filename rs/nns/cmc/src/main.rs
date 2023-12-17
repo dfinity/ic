@@ -1,4 +1,5 @@
-use candid::{candid_method, CandidType, Encode};
+use candid::{candid_method, CandidType, Decode, Encode};
+use core::cmp::Ordering;
 use cycles_minting_canister::*;
 use dfn_candid::{candid_one, CandidOne};
 use dfn_core::{
@@ -127,8 +128,49 @@ pub enum NotificationStatus {
     NotifiedMint(NotifyMintCyclesResult),
 }
 
+/// Version of the State type.
+///
+/// Each generation of the State type has an associated version.
+/// The version of the State type currently stored in stable storage
+/// is also stored in stable storage as a candid encoded number
+/// just before the candid encoded State value itself.
+///
+/// Let
+///   v         = version of the current (expected) State
+///   State     = current State type
+///   StateVn   = State type of version n
+///   v_s       = version stored in stable storage, the next argument in stable storage
+///               should then contain the candid encoded StateVv_s
+///
+/// If v = v_s + 1 then decode the stable storage as StateVv_s and migrate it to State
+/// If v = v_s     then decode the stable storage as State
+/// If v = v_s - 1 then it means a rollback probably happened because the stored version
+///                is one bigger than the expected version.
+///                To be safe we don't support this and will panic.
+///                Instead a hotfix should be performed.
+#[derive(
+    Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, CandidType,
+)]
+struct StateVersion(u64);
+
+/// Current state type.
+///
+/// IMPORTANT: when changing the state type in a backwards incompatible way make sure to:
+///
+/// * Introduce a new StateV(n+1) type where n is the version of the current State type.
+///
+/// * Set the State type alias to StateV(n+1).
+///
+/// * Introduce a migration function from StateVn -> StateV(n+1).
+///
+/// * Perform this migration in State::decode(...).
+///
+/// * Optionally remove older State types (StateVm where m < n)
+///   because they are no longer needed.
+type State = StateV1;
+
 #[derive(Serialize, Deserialize, Clone, CandidType, Eq, PartialEq, Debug)]
-pub struct State {
+pub struct StateV1 {
     pub ledger_canister_id: CanisterId,
 
     pub governance_canister_id: CanisterId,
@@ -169,8 +211,8 @@ pub struct State {
 
     pub total_cycles_minted: Cycles,
 
-    pub blocks_notified: Option<BTreeMap<BlockIndex, NotificationStatus>>,
-    pub last_purged_notification: Option<BlockIndex>,
+    pub blocks_notified: BTreeMap<BlockIndex, NotificationStatus>,
+    pub last_purged_notification: BlockIndex,
 
     /// The current maturity modulation in basis points (permyriad), i.e.,
     /// a value of 123 corresponds to 1.23%.
@@ -197,14 +239,138 @@ pub struct State {
     pub update_exchange_rate_canister_state: Option<UpdateExchangeRateState>,
 }
 
+impl StateV1 {
+    fn state_version() -> StateVersion {
+        StateVersion(1)
+    }
+}
+
+/// Old state type. The State type migrates from this type.
+///
+/// The difference with State is that StateV0 has Option wrappers
+/// around blocks_notified and last_purged_notification.
+///
+/// TODO: remove this type once the CMC has upgraded to this version.
+#[derive(Serialize, Deserialize, Clone, CandidType, Eq, PartialEq, Debug)]
+pub struct StateV0 {
+    pub ledger_canister_id: CanisterId,
+    pub governance_canister_id: CanisterId,
+    pub exchange_rate_canister_id: Option<CanisterId>,
+    pub cycles_ledger_canister_id: Option<CanisterId>,
+    pub minting_account_id: Option<AccountIdentifier>,
+    pub authorized_subnets: BTreeMap<PrincipalId, Vec<SubnetId>>,
+    pub default_subnets: Vec<SubnetId>,
+    pub icp_xdr_conversion_rate: Option<IcpXdrConversionRate>,
+    pub average_icp_xdr_conversion_rate: Option<IcpXdrConversionRate>,
+    pub recent_icp_xdr_rates: Option<Vec<IcpXdrConversionRate>>,
+    pub cycles_per_xdr: Cycles,
+    pub cycles_limit: Cycles,
+    pub limiter: limiter::Limiter,
+    pub total_cycles_minted: Cycles,
+
+    pub blocks_notified: Option<BTreeMap<BlockIndex, NotificationStatus>>,
+    pub last_purged_notification: Option<BlockIndex>,
+
+    pub maturity_modulation_permyriad: Option<i32>,
+    pub subnet_types_to_subnets: Option<BTreeMap<String, BTreeSet<SubnetId>>>,
+    pub update_exchange_rate_canister_state: Option<UpdateExchangeRateState>,
+}
+
+/// Migrate from the old state type to the current one.
+fn migrate(state_v0: StateV0) -> StateV1 {
+    let StateV0 {
+        ledger_canister_id,
+        governance_canister_id,
+        exchange_rate_canister_id,
+        cycles_ledger_canister_id,
+        minting_account_id,
+        authorized_subnets,
+        default_subnets,
+        icp_xdr_conversion_rate,
+        average_icp_xdr_conversion_rate,
+        recent_icp_xdr_rates,
+        cycles_per_xdr,
+        cycles_limit,
+        limiter,
+        total_cycles_minted,
+        blocks_notified,
+        last_purged_notification,
+        maturity_modulation_permyriad,
+        subnet_types_to_subnets,
+        update_exchange_rate_canister_state,
+    } = state_v0;
+
+    let blocks_notified = blocks_notified.unwrap_or_default();
+    let last_purged_notification = last_purged_notification.unwrap_or_default();
+
+    StateV1 {
+        ledger_canister_id,
+        governance_canister_id,
+        exchange_rate_canister_id,
+        cycles_ledger_canister_id,
+        minting_account_id,
+        authorized_subnets,
+        default_subnets,
+        icp_xdr_conversion_rate,
+        average_icp_xdr_conversion_rate,
+        recent_icp_xdr_rates,
+        cycles_per_xdr,
+        cycles_limit,
+        limiter,
+        total_cycles_minted,
+        blocks_notified,
+        last_purged_notification,
+        maturity_modulation_permyriad,
+        subnet_types_to_subnets,
+        update_exchange_rate_canister_state,
+    }
+}
+
 impl State {
     fn encode(&self) -> Vec<u8> {
-        candid::encode_one(self).unwrap()
+        Encode!(&Self::state_version(), &self).unwrap()
     }
 
     fn decode(bytes: &[u8]) -> Result<Self, String> {
-        candid::decode_one(bytes)
-            .map_err(|err| format!("Decoding cycles minting canister state failed: {}", err))
+        let mut deserializer = candid::de::IDLDeserialize::new(bytes).unwrap();
+        match deserializer.get_value::<StateVersion>() {
+            // When stable storage contains a StateV0 encoded value
+            // decoding it as a StateVersion will fail (this has been experimentally verified).
+            // In this case we decode stable storage as a StateV0 and migrate it to the desired StateV1.
+            Err(_) => {
+                print("[cycles] state has not been migrated to the new versioned State format yet, doing that now ...");
+                let state_v0: StateV0 = Decode!(bytes, StateV0)
+                    .expect("stable storage needs to contain a candid-encoded StateV0 value!");
+                let state_v1: StateV1 = migrate(state_v0);
+                Ok(state_v1)
+            }
+            Ok(stored_state_version) => {
+                let current_state_version: StateVersion = Self::state_version();
+                match stored_state_version.cmp(&current_state_version) {
+                    Ordering::Greater =>
+                        return Err(format!(
+                            "[cycles] ERROR: stored state version {:?} is greater than the current state version {:?}! \
+                            This likely means a rollback happened. This is not supported. Please upgrade to a hotfix instead.",
+                            stored_state_version, current_state_version
+                        )),
+                    Ordering::Less =>
+                        return Err(format!(
+                            "[cycles] ERROR: stored state version {:?} is lesser than the current state version {:?}! \
+                            Did you forget to migrate the old to the current type?",
+                            stored_state_version, current_state_version
+                        )),
+                    Ordering::Equal =>
+                        print(format!(
+                            "[cycles] INFO: stored state version {:?} equals the current state version {:?}. \
+                            Continuing to decode the stable storage ... ",
+                            stored_state_version, current_state_version,
+                        )),
+                }
+                let state = deserializer.get_value::<State>().unwrap();
+                deserializer.done().unwrap();
+                Ok(state)
+            }
+        }
     }
 
     // Keep the size of blocks_notified map not larger than max_history.
@@ -214,23 +380,15 @@ impl State {
         let mut cnt = 0;
         // Remove elements from the beginning of self.blocks_notified until either
         // it is small enough, or MAX_NOTIFY_PURGE entries have been removed.
-        while self.blocks_notified.as_ref().unwrap().len() > max_history && cnt < MAX_NOTIFY_PURGE {
+        while self.blocks_notified.len() > max_history && cnt < MAX_NOTIFY_PURGE {
             // pop_first is nightly only
-            let block_height = *self
-                .blocks_notified
-                .as_ref()
-                .unwrap()
-                .iter()
-                .next()
-                .unwrap()
-                .0;
-            self.blocks_notified.as_mut().unwrap().remove(&block_height);
+            let block_height = *self.blocks_notified.iter().next().unwrap().0;
+            self.blocks_notified.remove(&block_height);
             last_purged = block_height;
             cnt += 1;
         }
         // make sure this grows monotonically (a delayed callback might have added older status)
-        last_purged = last_purged.max(self.last_purged_notification.unwrap());
-        self.last_purged_notification = Some(last_purged);
+        self.last_purged_notification = last_purged.max(self.last_purged_notification);
     }
 }
 
@@ -260,8 +418,8 @@ impl Default for State {
             cycles_limit: 50_000_000_000_000_000u128.into(), // == 50 Pcycles/hour
             limiter: limiter::Limiter::new(resolution, max_age),
             total_cycles_minted: Cycles::zero(),
-            blocks_notified: Some(BTreeMap::new()),
-            last_purged_notification: Some(0),
+            blocks_notified: BTreeMap::new(),
+            last_purged_notification: 0,
             maturity_modulation_permyriad: Some(0),
             subnet_types_to_subnets: Some(BTreeMap::new()),
             update_exchange_rate_canister_state: Some(UpdateExchangeRateState::default()),
@@ -312,7 +470,9 @@ fn init(maybe_args: Option<CyclesCanisterInitPayload>) {
             .governance_canister_id
             .expect("Governance canister ID must be set!");
         state.minting_account_id = args.minting_account_id;
-        state.last_purged_notification = args.last_purged_notification;
+        if let Some(last_purged_notification) = args.last_purged_notification {
+            state.last_purged_notification = last_purged_notification;
+        }
         if let Some(xrc_flag) = args.exchange_rate_canister {
             state.exchange_rate_canister_id = xrc_flag.extract_exchange_rate_canister_id();
         }
@@ -1069,13 +1229,13 @@ async fn notify_top_up(
     let maybe_early_result = with_state_mut(|state| {
         state.purge_old_notifications(MAX_NOTIFY_HISTORY);
 
-        if block_index <= state.last_purged_notification.unwrap() {
+        if block_index <= state.last_purged_notification {
             return Some(Err(NotifyError::TransactionTooOld(
-                state.last_purged_notification.unwrap() + 1,
+                state.last_purged_notification + 1,
             )));
         }
 
-        match state.blocks_notified.as_mut().unwrap().entry(block_index) {
+        match state.blocks_notified.entry(block_index) {
             Entry::Occupied(entry) => match entry.get() {
                 NotificationStatus::Processing => Some(Err(NotifyError::Processing)),
                 NotificationStatus::NotifiedTopUp(result) => Some(result.clone()),
@@ -1101,12 +1261,12 @@ async fn notify_top_up(
             let result = process_top_up(canister_id, from, amount).await;
 
             with_state_mut(|state| {
-                state.blocks_notified.as_mut().unwrap().insert(
+                state.blocks_notified.insert(
                     block_index,
                     NotificationStatus::NotifiedTopUp(result.clone()),
                 );
                 if is_transient_error(&result) {
-                    state.blocks_notified.as_mut().unwrap().remove(&block_index);
+                    state.blocks_notified.remove(&block_index);
                 }
             });
 
@@ -1146,13 +1306,13 @@ async fn notify_mint_cycles(
     let maybe_early_result = with_state_mut(|state| {
         state.purge_old_notifications(MAX_NOTIFY_HISTORY);
 
-        if block_index <= state.last_purged_notification.unwrap() {
+        if block_index <= state.last_purged_notification {
             return Some(Err(NotifyError::TransactionTooOld(
-                state.last_purged_notification.unwrap() + 1,
+                state.last_purged_notification + 1,
             )));
         }
 
-        match state.blocks_notified.as_mut().unwrap().entry(block_index) {
+        match state.blocks_notified.entry(block_index) {
             Entry::Occupied(entry) => match entry.get() {
                 NotificationStatus::Processing => Some(Err(NotifyError::Processing)),
                 NotificationStatus::NotifiedMint(resp) => Some(resp.clone()),
@@ -1180,12 +1340,12 @@ async fn notify_mint_cycles(
                 process_mint_cycles(to_account, amount, deposit_memo, from, subaccount).await;
 
             with_state_mut(|state| {
-                state.blocks_notified.as_mut().unwrap().insert(
+                state.blocks_notified.insert(
                     block_index,
                     NotificationStatus::NotifiedMint(result.clone()),
                 );
                 if is_transient_error(&result) {
-                    state.blocks_notified.as_mut().unwrap().remove(&block_index);
+                    state.blocks_notified.remove(&block_index);
                 }
             });
 
@@ -1233,13 +1393,13 @@ async fn notify_create_canister(
     let maybe_early_result = with_state_mut(|state| {
         state.purge_old_notifications(MAX_NOTIFY_HISTORY);
 
-        if block_index <= state.last_purged_notification.unwrap() {
+        if block_index <= state.last_purged_notification {
             return Some(Err(NotifyError::TransactionTooOld(
-                state.last_purged_notification.unwrap() + 1,
+                state.last_purged_notification + 1,
             )));
         }
 
-        match state.blocks_notified.as_mut().unwrap().entry(block_index) {
+        match state.blocks_notified.entry(block_index) {
             Entry::Occupied(entry) => match entry.get() {
                 NotificationStatus::Processing => Some(Err(NotifyError::Processing)),
                 NotificationStatus::NotifiedCreateCanister(resp) => Some(resp.clone()),
@@ -1264,12 +1424,12 @@ async fn notify_create_canister(
                 process_create_canister(controller, from, amount, subnet_selection, settings).await;
 
             with_state_mut(|state| {
-                state.blocks_notified.as_mut().unwrap().insert(
+                state.blocks_notified.insert(
                     block_index,
                     NotificationStatus::NotifiedCreateCanister(result.clone()),
                 );
                 if is_transient_error(&result) {
-                    state.blocks_notified.as_mut().unwrap().remove(&block_index);
+                    state.blocks_notified.remove(&block_index);
                 }
             });
 
@@ -1438,33 +1598,27 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
 
     // We need this check if MAX_NOTIFY_HISTORY is smaller than max number of transactions
     // the ledger can process within 24h
-    let last_purged_notification = with_state(|state| state.last_purged_notification.unwrap());
+    let last_purged_notification = with_state(|state| state.last_purged_notification);
 
     if tn.block_height <= last_purged_notification {
         return Err(NotifyError::TransactionTooOld(last_purged_notification + 1).to_string());
     }
 
     let block_height = tn.block_height;
-    with_state_mut(
-        |state| match state.blocks_notified.as_mut().unwrap().entry(block_height) {
-            Entry::Occupied(entry) => match entry.get() {
-                NotificationStatus::Processing => Err("Another notification is in progress".into()),
-                NotificationStatus::NotifiedTopUp(resp) => {
-                    Err(format!("Already notified: {:?}", resp))
-                }
-                NotificationStatus::NotifiedCreateCanister(resp) => {
-                    Err(format!("Already notified: {:?}", resp))
-                }
-                NotificationStatus::NotifiedMint(resp) => {
-                    Err(format!("Already notified: {:?}", resp))
-                }
-            },
-            Entry::Vacant(entry) => {
-                entry.insert(NotificationStatus::Processing);
-                Ok(())
+    with_state_mut(|state| match state.blocks_notified.entry(block_height) {
+        Entry::Occupied(entry) => match entry.get() {
+            NotificationStatus::Processing => Err("Another notification is in progress".into()),
+            NotificationStatus::NotifiedTopUp(resp) => Err(format!("Already notified: {:?}", resp)),
+            NotificationStatus::NotifiedCreateCanister(resp) => {
+                Err(format!("Already notified: {:?}", resp))
             }
+            NotificationStatus::NotifiedMint(resp) => Err(format!("Already notified: {:?}", resp)),
         },
-    )?;
+        Entry::Vacant(entry) => {
+            entry.insert(NotificationStatus::Processing);
+            Ok(())
+        }
+    })?;
 
     let from = AccountIdentifier::new(tn.from, tn.from_subaccount);
 
@@ -1528,18 +1682,10 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
 
     with_state_mut(|state| {
         if let Some(status) = notification_status {
-            state
-                .blocks_notified
-                .as_mut()
-                .unwrap()
-                .insert(block_height, status);
+            state.blocks_notified.insert(block_height, status);
         }
         if is_transient_error(&cycles_response) {
-            state
-                .blocks_notified
-                .as_mut()
-                .unwrap()
-                .remove(&block_height);
+            state.blocks_notified.remove(&block_height);
         }
     });
 
@@ -2104,12 +2250,12 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     with_state(|state| {
         w.encode_gauge(
             "cmc_last_purged_notification",
-            state.last_purged_notification.unwrap() as f64,
+            state.last_purged_notification as f64,
             "Block index of the last purged notification.",
         )?;
         w.encode_gauge(
             "cmc_blocks_notified_count",
-            state.blocks_notified.as_ref().unwrap().len() as f64,
+            state.blocks_notified.len() as f64,
             "Number of notifications stored in the cache.",
         )?;
         w.encode_gauge(
@@ -2211,7 +2357,7 @@ mod tests {
             )),
             default_subnets: vec![SubnetId::from(PrincipalId::new_subnet_test_id(123))],
             total_cycles_minted: Cycles::new(1234),
-            last_purged_notification: Some(33),
+            last_purged_notification: 33,
             ..Default::default()
         };
         state.authorized_subnets.insert(
@@ -2231,7 +2377,7 @@ mod tests {
                 PrincipalId::new_user_test_id(4),
             ))),
         );
-        state.blocks_notified = Some(blocks_notified);
+        state.blocks_notified = blocks_notified;
 
         let bytes = state.encode();
 
@@ -2246,7 +2392,7 @@ mod tests {
             Cycles::new(block_index as u128)
         }
         let mut state = State {
-            last_purged_notification: Some(0),
+            last_purged_notification: 0,
             ..Default::default()
         };
         let initial_number_of_notifications = 100;
@@ -2257,7 +2403,7 @@ mod tests {
                 NotificationStatus::NotifiedTopUp(Ok(block_index_to_cycles(i))),
             );
         }
-        state.blocks_notified = Some(blocks_notified);
+        state.blocks_notified = blocks_notified;
 
         let target_history_len = 30;
         state.purge_old_notifications(target_history_len);
@@ -2265,31 +2411,18 @@ mod tests {
         let expected_oldest_transaction_index =
             initial_number_of_notifications - target_history_len as u64;
         let expected_last_purged = expected_oldest_transaction_index - 1;
-        assert_eq!(state.last_purged_notification, Some(expected_last_purged));
+        assert_eq!(state.last_purged_notification, expected_last_purged);
+        assert_eq!(state.blocks_notified.get(&expected_last_purged), None);
         assert_eq!(
             state
                 .blocks_notified
-                .as_ref()
-                .unwrap()
-                .get(&expected_last_purged),
-            None
-        );
-        assert_eq!(
-            state
-                .blocks_notified
-                .as_ref()
-                .unwrap()
                 .get(&expected_oldest_transaction_index),
             Some(&NotificationStatus::NotifiedTopUp(Ok(
                 block_index_to_cycles(expected_oldest_transaction_index)
             )))
         );
         assert_eq!(
-            state
-                .blocks_notified
-                .as_ref()
-                .unwrap()
-                .get(&most_recent_transaction_index),
+            state.blocks_notified.get(&most_recent_transaction_index),
             Some(&NotificationStatus::NotifiedTopUp(Ok(
                 block_index_to_cycles(most_recent_transaction_index)
             )))

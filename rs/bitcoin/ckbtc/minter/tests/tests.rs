@@ -10,7 +10,11 @@ use ic_ckbtc_kyt::{InitArg as KytInitArg, KytMode, LifecycleArg, SetApiKeyArg};
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
-use ic_ckbtc_minter::state::{Mode, RetrieveBtcStatus};
+use ic_ckbtc_minter::state::{
+    BtcRetrievalStatusV2, Mode, ReimburseDepositTask, ReimbursedDeposit,
+    ReimbursementReason::{CallFailed, TaintedDestination},
+    RetrieveBtcStatus, RetrieveBtcStatusV2,
+};
 use ic_ckbtc_minter::updates::get_btc_address::GetBtcAddressArgs;
 use ic_ckbtc_minter::updates::retrieve_btc::{
     RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk, RetrieveBtcWithApprovalArgs,
@@ -430,6 +434,68 @@ fn test_no_new_utxos() {
             }]),
             current_confirmations: Some(2),
             required_confirmations: 12,
+        })
+    );
+}
+
+#[test]
+fn update_balance_should_return_correct_confirmations() {
+    let ckbtc = CkBtcSetup::new();
+    let upgrade_args = UpgradeArgs {
+        retrieve_btc_min_amount: None,
+        min_confirmations: Some(3),
+        max_time_in_queue_nanos: None,
+        mode: None,
+        kyt_principal: None,
+        kyt_fee: None,
+    };
+    let minter_arg = MinterArg::Upgrade(Some(upgrade_args));
+    ckbtc
+        .env
+        .upgrade_canister(
+            ckbtc.minter_id,
+            minter_wasm(),
+            Encode!(&minter_arg).unwrap(),
+        )
+        .expect("Failed to upgrade the minter canister");
+
+    ckbtc.set_tip_height(12);
+
+    let deposit_value = 100_000_000;
+    let utxo = Utxo {
+        height: 10,
+        outpoint: OutPoint {
+            txid: range_to_txid(1..=32),
+            vout: 1,
+        },
+        value: deposit_value,
+    };
+
+    let user = Principal::from(ckbtc.caller);
+
+    ckbtc.deposit_utxo(user, utxo);
+
+    let update_balance_args = UpdateBalanceArgs {
+        owner: None,
+        subaccount: None,
+    };
+
+    let res = ckbtc
+        .env
+        .execute_ingress_as(
+            PrincipalId::new_user_test_id(1),
+            ckbtc.minter_id,
+            "update_balance",
+            Encode!(&update_balance_args).unwrap(),
+        )
+        .expect("Failed to call update_balance");
+    let res = Decode!(&res.bytes(), Result<Vec<UtxoStatus>, UpdateBalanceError>).unwrap();
+    assert_eq!(
+        res,
+        Err(UpdateBalanceError::NoNewUtxos {
+            current_confirmations: None,
+            required_confirmations: 3,
+            pending_utxos: Some(vec![])
         })
     );
 }
@@ -946,6 +1012,41 @@ impl CkBtcSetup {
         .unwrap()
     }
 
+    pub fn retrieve_btc_status_v2(&self, block_index: u64) -> RetrieveBtcStatusV2 {
+        Decode!(
+            &assert_reply(
+                self.env
+                    .query(
+                        self.minter_id,
+                        "retrieve_btc_status_v2",
+                        Encode!(&RetrieveBtcStatusRequest { block_index }).unwrap()
+                    )
+                    .expect("failed to retrieve_btc_status_v2")
+            ),
+            RetrieveBtcStatusV2
+        )
+        .unwrap()
+    }
+
+    pub fn retrieve_btc_status_v2_by_account(
+        &self,
+        maybe_account: Option<Account>,
+    ) -> Vec<BtcRetrievalStatusV2> {
+        Decode!(
+            &assert_reply(
+                self.env
+                    .execute_ingress(
+                        self.minter_id,
+                        "retrieve_btc_status_v2_by_account",
+                        Encode!(&maybe_account).unwrap()
+                    )
+                    .expect("failed to retrieve_btc_status_v2_by_account")
+            ),
+            Vec<BtcRetrievalStatusV2>
+        )
+        .unwrap()
+    }
+
     pub fn tick_until<R>(
         &self,
         description: &str,
@@ -991,7 +1092,10 @@ impl CkBtcSetup {
         let mut last_status = None;
         for _ in 0..max_ticks {
             dbg!(self.get_logs());
-            match self.retrieve_btc_status(block_index) {
+            let status_v2 = self.retrieve_btc_status_v2(block_index);
+            let status = self.retrieve_btc_status(block_index);
+            assert_eq!(RetrieveBtcStatusV2::from(status.clone()), status_v2);
+            match status {
                 RetrieveBtcStatus::Submitted { txid } => {
                     return txid;
                 }
@@ -1042,7 +1146,10 @@ impl CkBtcSetup {
     pub fn await_finalization(&self, block_index: u64, max_ticks: usize) -> Txid {
         let mut last_status = None;
         for _ in 0..max_ticks {
-            match self.retrieve_btc_status(block_index) {
+            let status_v2 = self.retrieve_btc_status_v2(block_index);
+            let status = self.retrieve_btc_status(block_index);
+            assert_eq!(RetrieveBtcStatusV2::from(status.clone()), status_v2);
+            match status {
                 RetrieveBtcStatus::Confirmed { txid } => {
                     return txid;
                 }
@@ -1801,6 +1908,14 @@ fn test_retrieve_btc_with_approval_from_subaccount() {
         "memo not found in burn"
     );
 
+    assert_eq!(
+        ckbtc.retrieve_btc_status_v2_by_account(Some(user_account)),
+        vec![BtcRetrievalStatusV2 {
+            block_index,
+            status_v2: Some(ckbtc.retrieve_btc_status_v2(block_index))
+        }]
+    );
+
     ckbtc.env.advance_time(MAX_TIME_IN_QUEUE);
 
     // Step 3: wait for the transaction to be submitted
@@ -1826,6 +1941,14 @@ fn test_retrieve_btc_with_approval_from_subaccount() {
 
     ckbtc.finalize_transaction(tx);
     assert_eq!(ckbtc.await_finalization(block_index, 10), txid);
+
+    assert_eq!(
+        ckbtc.retrieve_btc_status_v2_by_account(Some(user_account)),
+        vec![BtcRetrievalStatusV2 {
+            block_index,
+            status_v2: Some(ckbtc.retrieve_btc_status_v2(block_index))
+        }]
+    );
 }
 
 #[test]
@@ -1936,9 +2059,54 @@ fn test_retrieve_btc_with_approval_fail() {
         retrieve_btc_result,
         Err(RetrieveBtcWithApprovalError::GenericError { .. })
     );
+
+    let reimbursed_tx_block_index_2 = BtcRetrievalStatusV2 {
+        block_index: 2,
+        status_v2: Some(RetrieveBtcStatusV2::Reimbursed(ReimbursedDeposit {
+            account: user_account,
+            amount: withdrawal_amount,
+            reason: TaintedDestination {
+                kyt_provider: ckbtc.kyt_provider.into(),
+                kyt_fee: KYT_FEE,
+            },
+            mint_block_index: 3,
+        })),
+    };
+
+    assert_eq!(
+        ckbtc.retrieve_btc_status_v2_by_account(Some(user_account)),
+        vec![
+            reimbursed_tx_block_index_2.clone(),
+            BtcRetrievalStatusV2 {
+                block_index: 5,
+                status_v2: Some(RetrieveBtcStatusV2::WillReimburse(ReimburseDepositTask {
+                    account: user_account,
+                    amount: withdrawal_amount,
+                    reason: CallFailed
+                }))
+            }
+        ]
+    );
+
     ckbtc.env.tick();
     assert_eq!(
         ckbtc.balance_of(user_account),
         Nat::from(deposit_value - 2 * KYT_FEE - TRANSFER_FEE)
+    );
+
+    assert_eq!(
+        ckbtc.retrieve_btc_status_v2_by_account(Some(user_account)),
+        vec![
+            reimbursed_tx_block_index_2,
+            BtcRetrievalStatusV2 {
+                block_index: 5,
+                status_v2: Some(RetrieveBtcStatusV2::Reimbursed(ReimbursedDeposit {
+                    account: user_account,
+                    amount: withdrawal_amount,
+                    reason: CallFailed,
+                    mint_block_index: 6
+                }))
+            }
+        ]
     );
 }

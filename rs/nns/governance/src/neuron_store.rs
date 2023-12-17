@@ -20,13 +20,12 @@ use ic_nervous_system_governance::index::{
     neuron_principal::NeuronPrincipalIndex,
 };
 use ic_nns_common::pb::v1::NeuronId;
-use icp_ledger::Subaccount;
+use icp_ledger::{AccountIdentifier, Subaccount};
 use std::{
     borrow::Cow,
     collections::{BTreeMap, HashSet},
     fmt::{Debug, Display, Formatter},
-    ops::Deref,
-    ops::RangeBounds,
+    ops::{Deref, RangeBounds},
 };
 
 #[derive(Debug, Eq, PartialEq)]
@@ -192,7 +191,7 @@ pub struct NeuronStore {
     /// evaluated this way):
     /// - computing cached entries: when it involves neurons, it mostly cares about stake, maturity
     ///   and NF fund.
-    /// - validating indexes by checking whether each neuron in the heap has corresponding entires
+    /// - validating indexes by checking whether each neuron in the heap has corresponding entries
     ///   in the indexes.
     /// - `Governance::validate`: soon to be deprecated since we have subaccount index.
     /// - `voting_eligible_neurons()`: inactive neurons have been dissolved for 14 days, so it
@@ -261,7 +260,7 @@ impl NeuronStore {
         neuron_store
     }
 
-    // Restores NeuronStore after an upgrade, assuming data  are already in the stable storage (e.g.
+    // Restores NeuronStore after an upgrade, assuming data are already in the stable storage (e.g.
     // neuron indexes and inactive neurons) and persisted data are already calculated (e.g.
     // topic_followee_index).
     pub fn new_restored(
@@ -292,7 +291,7 @@ impl NeuronStore {
     }
 
     /// If there is a bug (related to lock acquisition), this could return u64::MAX.
-    fn now(&self) -> u64 {
+    pub fn now(&self) -> u64 {
         self.clock.now()
     }
 
@@ -508,7 +507,7 @@ impl NeuronStore {
             StorageLocation::Heap
         };
 
-        // Perform transition betweene 2 storage if necessary.
+        // Perform transition between 2 storage if necessary.
         //
         // Note:
         // - the location here is the primary location. Currently, StorageLocation::Stable means the
@@ -565,6 +564,16 @@ impl NeuronStore {
 
     pub fn has_neuron_with_subaccount(&self, subaccount: Subaccount) -> bool {
         self.get_neuron_id_for_subaccount(subaccount).is_some()
+    }
+
+    pub fn get_neuron_id_for_account_id(&self, account_id: &AccountIdentifier) -> Option<NeuronId> {
+        with_stable_neuron_indexes(|indexes| {
+            indexes.account_id().get_neuron_id_by_account_id(account_id)
+        })
+    }
+
+    pub fn has_neuron_with_account_id(&self, account_id: &AccountIdentifier) -> bool {
+        self.get_neuron_id_for_account_id(account_id).is_some()
     }
 
     /// Get a reference to heap neurons.  Temporary method to allow
@@ -656,7 +665,7 @@ impl NeuronStore {
             if !spawning_state {
                 return false;
             }
-            // spawning_state is calculated based on presence of spawn_at_atimestamp_seconds
+            // spawning_state is calculated based on presence of spawn_at_timestamp_seconds
             // so it would be quite surprising if it is missing here (impossible in fact)
             now_seconds >= n.spawn_at_timestamp_seconds.unwrap_or(u64::MAX)
         };
@@ -832,7 +841,15 @@ impl NeuronStore {
             principal: indexes.principal().num_entries(),
             following: indexes.following().num_entries(),
             known_neuron: indexes.known_neuron().num_entries(),
+            account_id: indexes.account_id().num_entries(),
         })
+    }
+
+    /// This method is used in testing to reset the AccountId index to properly test the upgrade path.
+    // TODO(NNS1-2784) - Remove test after 1-time upgrade
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn reset_account_id_index(&mut self) {
+        with_stable_neuron_indexes_mut(|indexes| indexes.account_id_mut().reset())
     }
 }
 
@@ -842,6 +859,7 @@ pub struct NeuronIndexesLens {
     pub principal: usize,
     pub following: usize,
     pub known_neuron: usize,
+    pub account_id: usize,
 }
 
 #[cfg(test)]

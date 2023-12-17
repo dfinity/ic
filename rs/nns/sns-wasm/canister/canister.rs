@@ -289,7 +289,7 @@ fn canister_init() {
 /// In addition to canister_init, this method is called by canister_post_upgrade.
 #[candid_method(init)]
 fn canister_init_(init_payload: SnsWasmCanisterInitPayload) {
-    println!("{}canister_init_", LOG_PREFIX);
+    println!("{}Executing canister init", LOG_PREFIX);
     SNS_WASM.with(|c| {
         c.borrow_mut().set_sns_subnets(init_payload.sns_subnet_ids);
         c.borrow_mut()
@@ -297,7 +297,8 @@ fn canister_init_(init_payload: SnsWasmCanisterInitPayload) {
         c.borrow_mut()
             .set_allowed_principals(init_payload.allowed_principals);
         c.borrow().initialize_stable_memory();
-    })
+    });
+    println!("{}Completed canister init", LOG_PREFIX);
 }
 
 /// Executes some logic before executing an upgrade, including serializing and writing the

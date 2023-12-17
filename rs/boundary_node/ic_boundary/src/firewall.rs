@@ -12,9 +12,6 @@ use ic_registry_subnet_type::SubnetType;
 
 use crate::snapshot::RegistrySnapshot;
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Rule {}
-
 pub struct SystemdReloader {
     bin_path: PathBuf,
     service: String,

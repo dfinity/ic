@@ -13,8 +13,9 @@ use ic_types::{
         Advert, ArtifactKind, ArtifactPriorityFn, ArtifactTag, Priority,
         UnvalidatedArtifactMutation,
     },
-    chunkable::ChunkableArtifact,
-    p2p, NodeId,
+    p2p,
+    single_chunked::ChunkableArtifact,
+    NodeId,
 };
 use std::collections::HashMap;
 use std::convert::TryFrom;

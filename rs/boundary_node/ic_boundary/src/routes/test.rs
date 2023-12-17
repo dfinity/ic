@@ -1,10 +1,14 @@
 use super::*;
 
-use std::sync::{Arc, Mutex};
+use std::{
+    net::SocketAddr,
+    sync::{Arc, Mutex},
+};
 
 use anyhow::Error;
 use axum::{
     body::Body,
+    extract::connect_info::MockConnectInfo,
     http::Request,
     middleware,
     response::IntoResponse,
@@ -350,6 +354,7 @@ async fn test_all_call_types() -> Result<(), Error> {
                 .layer(middleware::from_fn(pre_compression))
                 .set_x_request_id(MakeRequestUuid)
                 .propagate_x_request_id()
+                .layer(MockConnectInfo(SocketAddr::from(([0, 0, 0, 0], 1337))))
                 .layer(middleware::from_fn_with_state(
                     metric_params,
                     metrics_middleware,
@@ -536,6 +541,16 @@ async fn test_all_call_types() -> Result<(), Error> {
 
     let resp = app.call(request).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
+
+    // Make sure that the canister_id is there even if the CBOR does not have it
+    assert_eq!(
+        resp.headers()
+            .get(HEADER_IC_CANISTER_ID)
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        canister_id.to_string(),
+    );
 
     let (_parts, body) = resp.into_parts();
     let body = hyper::body::to_bytes(body).await.unwrap().to_vec();

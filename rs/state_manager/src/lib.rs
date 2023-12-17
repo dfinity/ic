@@ -1047,7 +1047,7 @@ impl PageMapType {
         }
     }
 
-    /// The path of an overlay file written during round `height`
+    /// The path of an overlay file written during round `height`.
     fn overlay<Access>(
         &self,
         layout: &CheckpointLayout<Access>,
@@ -1065,7 +1065,7 @@ impl PageMapType {
         }
     }
 
-    /// List all existing overlay files of a this PageMapType inside `layout`
+    /// List all existing overlay files of a this PageMapType inside `layout`.
     fn overlays<Access>(
         &self,
         layout: &CheckpointLayout<Access>,
@@ -2299,8 +2299,14 @@ impl StateManagerImpl {
                 })
                 .and_then(|(base_manifest, base_height)| {
                     if let Ok(checkpoint_layout) = self.state_layout.checkpoint(base_height) {
+                        // If `lsmt_storage` is enabled, then `dirty_pages` is not needed, as each file is either completely
+                        // new, or identical (same inode) to before.
+                        let dirty_pages = match self.lsmt_storage {
+                            FlagStatus::Enabled => Vec::new(),
+                            FlagStatus::Disabled => get_dirty_pages(state),
+                        };
                         Some(PreviousCheckpointInfo {
-                            dirty_pages: get_dirty_pages(state),
+                            dirty_pages,
                             base_manifest,
                             base_height,
                             checkpoint_layout,
@@ -2333,6 +2339,7 @@ impl StateManagerImpl {
                 &self.metrics.checkpoint_metrics,
                 &mut scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS),
                 self.get_fd_factory(),
+                self.lsmt_storage,
             )
         };
         let (cp_layout, checkpointed_state) = match result {
@@ -2417,6 +2424,7 @@ impl StateManagerImpl {
                         target_height: height,
                         dirty_memory_pages: dirty_pages,
                         base_checkpoint: checkpoint_layout,
+                        lsmt_storage: self.lsmt_storage,
                     }
                 },
             )
@@ -2429,7 +2437,22 @@ impl StateManagerImpl {
                 .make_checkpoint_step_duration
                 .with_label_values(&["create_checkpoint_result"])
                 .start_timer();
+            let checkpoint_layout = self.state_layout.checkpoint(height).unwrap();
+            // With lsmt, we do not need the defrag.
+            // Without lsmt, the ResetTipTo happens earlier in make_checkpoint.
+            let tip_requests = if self.lsmt_storage == FlagStatus::Enabled {
+                vec![TipRequest::ResetTipTo {
+                    checkpoint_layout: checkpoint_layout.clone(),
+                }]
+            } else {
+                vec![TipRequest::DefragTip {
+                    height,
+                    page_map_types: PageMapType::list_all(state),
+                }]
+            };
+
             CreateCheckpointResult {
+                tip_requests,
                 checkpointed_state,
                 state_metadata: StateMetadata {
                     checkpoint_layout: Some(self.state_layout.checkpoint(height).unwrap()),
@@ -2438,14 +2461,10 @@ impl StateManagerImpl {
                 },
                 compute_manifest_request: TipRequest::ComputeManifest {
                     checkpoint_layout: cp_layout,
-                    manifest_delta: if is_nns { None } else { manifest_delta },
+                    manifest_delta,
                     states: self.states.clone(),
                     persist_metadata_guard: self.persist_metadata_guard.clone(),
                 },
-                tip_requests: vec![TipRequest::DefragTip {
-                    height,
-                    page_map_types: PageMapType::list_all(state),
-                }],
             }
         };
 

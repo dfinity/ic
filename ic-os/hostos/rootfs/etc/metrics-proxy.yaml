@@ -1,8 +1,12 @@
 proxies:
   - listen_on:
-      url: http://[::]:42372/metrics/hostos_node_exporter
+      url: https://[::]:42372/metrics/hostos_node_exporter
+      # We reuse the SSL cert of node exporter.
+      certificate_file: /etc/node_exporter/node_exporter.crt
+      key_file: /etc/node_exporter/node_exporter.key
     connect_to:
       url: https://[::1]:9100/metrics
+      tolerate_bad_tls: true
     # In case of conflict, the last matching rule
     # overrides any previous rules.
     # Full documentation at:
@@ -22,10 +26,23 @@ proxies:
           - keep
       # Specifically temperatures.
       # Reduce sampling resolution to half a minute.
+      # Add three degrees Celsius of random noise to
+      # freshly-polled metrics.
       - regex: node_hwmon_temp_celsius
         actions:
+          - add_absolute_noise:
+              amplitude: 3
+              quantum: 0.25
           - reduce_time_resolution:
               resolution: 30s
+      # Power metrics.  Useful to track the blockchain's
+      # power consumption.
+      # No need to reduce resolution since these are already
+      # collected periodically using a cron job rather than
+      # on every poll.
+      - regex: power.*
+        actions:
+          - keep
       # File system errors and NVME hardware info.
       - regex: node_filesystem_device_error|nvme.*|node_nvme_info
         actions:
@@ -44,13 +61,20 @@ proxies:
           - keep
           - reduce_time_resolution:
               resolution: 30s
-      # NIC carrier information.
-      - regex: node_network_carrier.*|node_network_info|node_network_iface.*|node_network_mtu_bytes
+      # NIC carrier information and throughput information.
+      - regex: node_network_carrier.*|node_network_info|node_network_iface.*|node_network_mtu_bytes|node_network_(receive|transmit)_.*
         actions:
           - keep
-      # HostOS version
+      # HostOS version.
       - regex: hostos_version
         actions:
           - keep
+    # The expectation is that clients will scrape at a
+    # maximum rate of 1 per 10 seconds (6 / min).
+    cache_duration: 8s
 metrics:
-  url: http://[::]:19100/metrics
+  # Metrics clients only (see nftables.conf in HostOS).
+  url: https://[::]:19100/metrics
+  # We reuse the SSL cert of node exporter.
+  certificate_file: /etc/node_exporter/node_exporter.crt
+  key_file: /etc/node_exporter/node_exporter.key

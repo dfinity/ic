@@ -456,6 +456,8 @@ fn roundtrip_encoding() {
     system_metadata.node_public_keys = btreemap! {
         node_test_id(1) => pk_der,
     };
+    system_metadata.bitcoin_get_successors_follow_up_responses =
+        btreemap! { 10.into() => vec![vec![1], vec![2]] };
 
     // Decoding a `SystemMetadata` with no `canister_allocation_ranges` succeeds.
     let mut proto = pb::SystemMetadata::from(&system_metadata);

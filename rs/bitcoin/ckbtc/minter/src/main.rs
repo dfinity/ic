@@ -8,7 +8,9 @@ use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::lifecycle::{self, init::MinterArg};
 use ic_ckbtc_minter::metrics::encode_metrics;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
-use ic_ckbtc_minter::state::{read_state, RetrieveBtcStatus};
+use ic_ckbtc_minter::state::{
+    read_state, BtcRetrievalStatusV2, RetrieveBtcStatus, RetrieveBtcStatusV2,
+};
 use ic_ckbtc_minter::tasks::{schedule_now, TaskType};
 use ic_ckbtc_minter::updates::retrieve_btc::{
     RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk, RetrieveBtcWithApprovalArgs,
@@ -164,6 +166,18 @@ async fn retrieve_btc_with_approval(
 #[query]
 fn retrieve_btc_status(req: RetrieveBtcStatusRequest) -> RetrieveBtcStatus {
     read_state(|s| s.retrieve_btc_status(req.block_index))
+}
+
+#[candid_method(query)]
+#[query]
+fn retrieve_btc_status_v2(req: RetrieveBtcStatusRequest) -> RetrieveBtcStatusV2 {
+    read_state(|s| s.retrieve_btc_status_v2(req.block_index))
+}
+
+#[candid_method(query)]
+#[query]
+fn retrieve_btc_status_v2_by_account(target: Option<Account>) -> Vec<BtcRetrievalStatusV2> {
+    read_state(|s| s.retrieve_btc_status_v2_by_account(target))
 }
 
 #[candid_method(update)]

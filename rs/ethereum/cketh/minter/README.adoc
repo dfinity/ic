@@ -276,3 +276,4 @@ Set by `transfer_fee` decided in proposal https://dashboard.internetcomputer.org
 . https://dashboard.internetcomputer.org/proposal/126173[126173]: install index canister
 . https://dashboard.internetcomputer.org/proposal/126309[126309]: install ledger canister
 . https://dashboard.internetcomputer.org/proposal/126314[126314]: upgrade minter canister
+. https://dashboard.internetcomputer.org/proposal/126397[126397]: upgrade ledger canister

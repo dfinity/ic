@@ -590,6 +590,7 @@ pub fn prepare_registry_with_two_node_sets(
             .collect(),
         unit_delay_millis: 600,
         gossip_config: Some(build_default_gossip_config()),
+        subnet_type: ic_protobuf::registry::subnet::v1::SubnetType::Application as i32,
         ..Default::default()
     };
     let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(17));
@@ -632,6 +633,7 @@ pub fn prepare_registry_with_two_node_sets(
                 .collect(),
             unit_delay_millis: 600,
             gossip_config: Some(build_default_gossip_config()),
+            subnet_type: ic_protobuf::registry::subnet::v1::SubnetType::Application as i32,
             ..Default::default()
         };
         let subnet2_id = SubnetId::new(PrincipalId::new_subnet_test_id(18));

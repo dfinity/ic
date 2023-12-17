@@ -460,6 +460,7 @@ pub fn create_canister_id_at_position(
 pub fn setup_nns_governance_with_correct_canister_id(
     machine: &StateMachine,
     init_payload: Governance,
+    features: &[&str],
 ) {
     let canister_id = create_canister_id_at_position(
         machine,
@@ -472,12 +473,12 @@ pub fn setup_nns_governance_with_correct_canister_id(
     );
 
     assert_eq!(canister_id, GOVERNANCE_CANISTER_ID);
-
+    let governance_wasm = build_governance_wasm(features);
     machine
         .install_wasm_in_mode(
             canister_id,
             CanisterInstallMode::Install,
-            build_governance_wasm().bytes(),
+            governance_wasm.bytes(),
             init_payload.encode_to_vec(),
         )
         .unwrap();
@@ -540,6 +541,14 @@ pub fn setup_nns_sns_wasms_with_correct_canister_id(
 
 /// Sets up the NNS for StateMachine tests.
 pub fn setup_nns_canisters(machine: &StateMachine, init_payloads: NnsInitPayloads) {
+    setup_nns_canisters_with_features(machine, init_payloads, &["test"])
+}
+
+pub fn setup_nns_canisters_with_features(
+    machine: &StateMachine,
+    init_payloads: NnsInitPayloads,
+    features: &[&str],
+) {
     let registry_canister_id = create_canister(
         machine,
         build_registry_wasm(),
@@ -553,7 +562,7 @@ pub fn setup_nns_canisters(machine: &StateMachine, init_payloads: NnsInitPayload
     );
     assert_eq!(registry_canister_id, REGISTRY_CANISTER_ID);
 
-    setup_nns_governance_with_correct_canister_id(machine, init_payloads.governance);
+    setup_nns_governance_with_correct_canister_id(machine, init_payloads.governance, features);
 
     let ledger_canister_id = create_canister(
         machine,

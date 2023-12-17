@@ -27,6 +27,7 @@ const NEURON_SUBACCOUNT_INDEX_MEMORY_ID: MemoryId = MemoryId::new(9);
 const NEURON_PRINCIPAL_INDEX_MEMORY_ID: MemoryId = MemoryId::new(10);
 const NEURON_FOLLOWING_INDEX_MEMORY_ID: MemoryId = MemoryId::new(11);
 const NEURON_KNOWN_NEURON_INDEX_MEMORY_ID: MemoryId = MemoryId::new(12);
+const NEURON_ACCOUNT_ID_INDEX_MEMORY_ID: MemoryId = MemoryId::new(13);
 
 pub mod neuron_indexes;
 pub mod neurons;
@@ -90,6 +91,7 @@ impl State {
                 principal: memory_manager.get(NEURON_PRINCIPAL_INDEX_MEMORY_ID),
                 following: memory_manager.get(NEURON_FOLLOWING_INDEX_MEMORY_ID),
                 known_neuron: memory_manager.get(NEURON_KNOWN_NEURON_INDEX_MEMORY_ID),
+                account_id: memory_manager.get(NEURON_ACCOUNT_ID_INDEX_MEMORY_ID),
             }
             .build()
         });

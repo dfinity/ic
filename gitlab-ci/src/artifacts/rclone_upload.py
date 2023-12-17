@@ -52,9 +52,11 @@ class RcloneUpload:
 
         for i in range(MAX_RCLONE_ATTEMPTS):
             try:
-                subprocess.check_output(cmd, stderr=subprocess.STDOUT, timeout=self.timeout)
+                subprocess.check_output(
+                    cmd, stderr=subprocess.STDOUT, timeout=self.timeout
+                )
                 break
-            except subprocess.SubprocessError as e:
+            except subprocess.CalledProcessError as e:
                 # stop-gap solution to IDX-2477
                 if e.output is not None and b"immutable file modified" in e.output:
                     logging.warning(
@@ -63,7 +65,9 @@ class RcloneUpload:
                         e.output,
                         e,
                     )
-                    logging.warning("Tried to modify a file that already exists. Failing open, see IDX-2477")
+                    logging.warning(
+                        "Tried to modify a file that already exists. Failing open, see IDX-2477"
+                    )
                     break
                 logging.warning(
                     "rclone failed (%d) with exception: %s\n%s",
@@ -71,6 +75,11 @@ class RcloneUpload:
                     e.output,
                     e,
                 )
+                if i + 1 < MAX_RCLONE_ATTEMPTS:
+                    logging.info("Retrying after 10 seconds.")
+                    time.sleep(10)
+            except subprocess.SubprocessError as e:
+                logging.warning("rclone failed with exception: %s", e)
                 if i + 1 < MAX_RCLONE_ATTEMPTS:
                     logging.info("Retrying after 10 seconds.")
                     time.sleep(10)
@@ -142,7 +151,8 @@ def main():
     version = args.version or os.environ.get("CI_COMMIT_SHA")
     if not version:
         logging.error(
-            "Cannot determine version string either from --version nor " "from CI_COMMIT_SHA environment variable"
+            "Cannot determine version string either from --version nor "
+            "from CI_COMMIT_SHA environment variable"
         )
 
     rclone.upload_artifacts(local_path, args.remote_subdir, version)

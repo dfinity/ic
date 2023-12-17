@@ -80,6 +80,14 @@ impl ValidationContext {
             && self.certified_height >= other.certified_height
             && self.time >= other.time
     }
+
+    /// Same as [`Self::greater_or_equal`], except that we require time to be strictly
+    /// greater.
+    pub fn greater(&self, other: &ValidationContext) -> bool {
+        self.registry_version >= other.registry_version
+            && self.certified_height >= other.certified_height
+            && self.time > other.time
+    }
 }
 
 /// The payload of a batch.

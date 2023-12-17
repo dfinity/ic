@@ -78,6 +78,7 @@ fn make_checkpoint_and_get_state_impl(
         &state_manager_metrics(log).checkpoint_metrics,
         &mut thread_pool(),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+        ic_config::state_manager::lsmt_storage_default(),
     )
     .unwrap_or_else(|err| panic!("Expected make_checkpoint to succeed, got {:?}", err))
     .1
@@ -196,6 +197,7 @@ fn scratchpad_dir_is_deleted_if_checkpointing_failed() {
             &state_manager_metrics.checkpoint_metrics,
             &mut thread_pool(),
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+            ic_config::state_manager::lsmt_storage_default(),
         );
 
         match replicated_state {
