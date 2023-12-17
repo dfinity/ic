@@ -25,7 +25,7 @@ require some package installation.
 To install Bazel follow the instructions on
 [https://github.com/bazelbuild/bazelisk](https://github.com/bazelbuild/bazelisk).
 IDX recommends and only supports `bazelisk` - do not install the `bazel`
-package with native package managers such as apt get, homebrew, etc..
+package with native package managers such as apt-get, homebrew, etc..
 
 To build Rust and IC-OS code will require a minimal set of packages. On a Linux
 host the
