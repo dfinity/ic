@@ -45,7 +45,7 @@ The benchmarking suite is structured as follows:
 
 Currently, there is support for installing canisters, running the workload generator with different configurations and collecting statistics for it.
 
-Maximum capacity experiments run in iterations, where each iteration typically increases stress on the system, until the benchmake suite considers system can no longer process more transactions.
+Maximum capacity experiments run in iterations, where each iteration typically increases stress on the system, until the benchmark suite considers system can no longer process more transactions.
 
 Each experiment has an entry point.  `run_experiment_*.py` for a spot run, or `max_capacity_*.py` for a maximum capacity run. Worth noting that, maximum capacity runs internally call spot runs, in iteration.
 
