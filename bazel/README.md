@@ -2,7 +2,7 @@
 
 This document helps developers understand how to start with Bazel and port
 Cargo development workflows over to Bazel. While this guide focuses on Rust
-development, Bazel is a polygot build system: See the “Language Specific
+development, Bazel is a polyglot build system: See the “Language Specific
 Guides” section below.
 
 If you know C++ or Java, the best introductory reading material might be the
