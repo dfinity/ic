@@ -40,7 +40,7 @@ bazel test //rs/crypto/sha2:all
 
 Most targets should build on the host machine. However, the IC-OS image only
 builds inside the canonical container (`ic-build-bazel:$TAG`). To enter this
-docker container run `./gitlab-ci/container/conatiner-run.sh`. This container
+docker container run `./gitlab-ci/container/container-run.sh`. This container
 is only available in x86-64 environments.
 
 # Building Blocks
