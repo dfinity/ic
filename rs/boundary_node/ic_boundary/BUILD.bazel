@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/config",
     "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
     "//rs/crypto/test_utils/keys",
@@ -27,6 +28,7 @@ DEPENDENCIES = [
     "@crate_index//:anyhow",
     "@crate_index//:arc-swap",
     "@crate_index//:async-scoped",
+    "@crate_index//:axum-extra",
     "@crate_index//:axum-server",
     "@crate_index//:axum",
     "@crate_index//:bytes",
@@ -50,6 +52,7 @@ DEPENDENCIES = [
     "@crate_index//:moka",
     "@crate_index//:prometheus",
     "@crate_index//:rand",
+    "@crate_index//:ratelimit",
     "@crate_index//:rayon",
     "@crate_index//:rcgen",
     "@crate_index//:regex",
@@ -59,6 +62,7 @@ DEPENDENCIES = [
     "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
     "@crate_index//:slog",
+    "@crate_index//:strum",
     "@crate_index//:tempfile",
     "@crate_index//:thiserror",
     "@crate_index//:tokio-rustls",
