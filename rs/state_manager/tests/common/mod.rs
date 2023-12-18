@@ -390,7 +390,10 @@ pub enum StateSyncErrorCode {
     OtherChunkVerificationFailed,
 }
 
-pub fn pipe_state_sync(src: StateSyncMessage, mut dst: Box<dyn Chunkable>) -> StateSyncMessage {
+pub fn pipe_state_sync(
+    src: StateSyncMessage,
+    mut dst: Box<dyn Chunkable<StateSyncMessage>>,
+) -> StateSyncMessage {
     pipe_partial_state_sync(&src, &mut *dst, &Default::default(), false)
         .expect("State sync not completed.")
 }
@@ -414,7 +417,7 @@ fn alter_chunk_data(chunk: &mut Chunk) {
 /// Alter the chunk data if `use_bad_chunk` is set to true.
 pub fn pipe_meta_manifest(
     src: &StateSyncMessage,
-    dst: &mut dyn Chunkable,
+    dst: &mut dyn Chunkable<StateSyncMessage>,
     use_bad_chunk: bool,
 ) -> Result<StateSyncMessage, StateSyncErrorCode> {
     let ids: Vec<_> = dst.chunks_to_download().collect();
@@ -445,7 +448,7 @@ pub fn pipe_meta_manifest(
 /// Alter the data of the chunk in the middle position if `use_bad_chunk` is set to true.
 pub fn pipe_manifest(
     src: &StateSyncMessage,
-    dst: &mut dyn Chunkable,
+    dst: &mut dyn Chunkable<StateSyncMessage>,
     use_bad_chunk: bool,
 ) -> Result<StateSyncMessage, StateSyncErrorCode> {
     let ids: Vec<_> = dst.chunks_to_download().collect();
@@ -484,7 +487,7 @@ pub fn pipe_manifest(
 /// Alter the data of the chunk in the middle position if `use_bad_chunk` is set to true.
 pub fn pipe_partial_state_sync(
     src: &StateSyncMessage,
-    dst: &mut dyn Chunkable,
+    dst: &mut dyn Chunkable<StateSyncMessage>,
     omit: &HashSet<ChunkId>,
     use_bad_chunk: bool,
 ) -> Result<StateSyncMessage, StateSyncErrorCode> {
