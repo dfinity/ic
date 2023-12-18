@@ -2818,20 +2818,6 @@ impl Governance {
             .expect("NervousSystemParameters must have transaction_fee_e8s")
     }
 
-    /// Returns the initial voting period of proposals.
-    fn initial_voting_period_seconds_or_panic(&self) -> u64 {
-        self.nervous_system_parameters_or_panic()
-            .initial_voting_period_seconds
-            .expect("NervousSystemParameters must have initial_voting_period_seconds")
-    }
-
-    /// Returns the wait for quiet deadline extension period for proposals.
-    fn wait_for_quiet_deadline_increase_seconds_or_panic(&self) -> u64 {
-        self.nervous_system_parameters_or_panic()
-            .wait_for_quiet_deadline_increase_seconds
-            .expect("NervousSystemParameters must have wait_for_quiet_deadline_increase_seconds")
-    }
-
     /// Returns the neuron minimum stake e8s from the nervous system parameters.
     fn neuron_minimum_stake_e8s_or_panic(&self) -> u64 {
         self.nervous_system_parameters_or_panic()
@@ -3010,27 +2996,43 @@ impl Governance {
         // The electoral roll to put into the proposal.
         let mut electoral_roll = BTreeMap::<String, Ballot>::new();
         let mut total_power: u128 = 0;
-        let max_dissolve_delay = self
-            .nervous_system_parameters_or_panic()
+
+        let nervous_system_parameters = self.nervous_system_parameters_or_panic();
+
+        // Voting power bonus parameters.
+        let max_dissolve_delay = nervous_system_parameters
             .max_dissolve_delay_seconds
             .expect("NervousSystemParameters must have max_dissolve_delay_seconds");
-        let max_age_bonus = self
-            .nervous_system_parameters_or_panic()
+        let max_age_bonus = nervous_system_parameters
             .max_neuron_age_for_age_bonus
             .expect("NervousSystemParameters must have max_neuron_age_for_age_bonus");
-        let max_dissolve_delay_bonus_percentage = self
-            .nervous_system_parameters_or_panic()
+        let max_dissolve_delay_bonus_percentage = nervous_system_parameters
             .max_dissolve_delay_bonus_percentage
             .expect("NervousSystemParameters must have max_dissolve_delay_bonus_percentage");
-        let max_age_bonus_percentage = self
-            .nervous_system_parameters_or_panic()
+        let max_age_bonus_percentage = nervous_system_parameters
             .max_age_bonus_percentage
             .expect("NervousSystemParameters must have max_age_bonus_percentage");
-        let initial_voting_period_seconds = self.initial_voting_period_seconds_or_panic();
-        let wait_for_quiet_deadline_increase_seconds =
-            self.wait_for_quiet_deadline_increase_seconds_or_panic();
-        let minimum_yes_proportion_of_total = action.minimum_yes_proportion_of_total();
-        let minimum_yes_proportion_of_exercised = action.minimum_yes_proportion_of_exercised();
+
+        // Voting duration parameters.
+        let voting_duration_parameters =
+            action.voting_duration_parameters(nervous_system_parameters);
+        let initial_voting_period_seconds = voting_duration_parameters
+            .initial_voting_period
+            .seconds
+            .expect(
+                "Unable to determine how long the proposal should initially be open for voting.",
+            );
+        let wait_for_quiet_deadline_increase_seconds = voting_duration_parameters
+            .wait_for_quiet_deadline_increase
+            .seconds
+            .expect("Unable to determine the wait for quiet deadline increase amount.");
+
+        // Voting power threshold parameters.
+        let voting_power_thresholds = action.voting_power_thresholds();
+        let minimum_yes_proportion_of_total =
+            voting_power_thresholds.minimum_yes_proportion_of_total;
+        let minimum_yes_proportion_of_exercised =
+            voting_power_thresholds.minimum_yes_proportion_of_exercised;
 
         for (k, v) in self.proto.neurons.iter() {
             // If this neuron is eligible to vote, record its

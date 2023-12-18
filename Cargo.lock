@@ -10536,6 +10536,7 @@ dependencies = [
  "ic-nns-constants",
  "ic-protobuf",
  "ic-sns-governance",
+ "ic-sns-governance-proposal-criticality",
  "ic-sns-governance-protobuf-generator",
  "ic-sns-test-utils",
  "ic-test-utilities",
@@ -10561,6 +10562,13 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-test",
+]
+
+[[package]]
+name = "ic-sns-governance-proposal-criticality"
+version = "0.0.1"
+dependencies = [
+ "ic-nervous-system-proto",
 ]
 
 [[package]]

@@ -55,6 +55,7 @@ ic-nervous-system-proto = { path = "../../nervous_system/proto" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
 ic-nns-constants = { path = "../../nns/constants" }
+ic-sns-governance-proposal-criticality = { path = "./proposal_criticality" }
 ic-protobuf = { path = "../../protobuf" }
 lazy_static = "1.4.0"
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
