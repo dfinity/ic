@@ -104,6 +104,9 @@ pub mod native_action_ids {
 
     /// MintSnsTokens
     pub const MINT_SNS_TOKENS: u64 = 12;
+
+    /// ManageLedgerParameters Action.
+    pub const MANAGE_LEDGER_PARAMETERS: u64 = 13;
 }
 
 impl governance::Mode {
@@ -1094,6 +1097,14 @@ impl From<Action> for NervousSystemFunction {
                 ),
                 function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
             },
+            Action::ManageLedgerParameters(_) => NervousSystemFunction {
+                id: native_action_ids::MANAGE_LEDGER_PARAMETERS,
+                name: "Manage ledger parameters".to_string(),
+                description: Some(
+                    "Proposal to change some parameters in the ledger canister.".to_string(),
+                ),
+                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+            },
         }
     }
 }
@@ -1578,6 +1589,7 @@ impl From<&Action> for u64 {
             Action::ManageSnsMetadata(_) => native_action_ids::MANAGE_SNS_METADATA,
             Action::TransferSnsTreasuryFunds(_) => native_action_ids::TRANSFER_SNS_TREASURY_FUNDS,
             Action::MintSnsTokens(_) => native_action_ids::MINT_SNS_TOKENS,
+            Action::ManageLedgerParameters(_) => native_action_ids::MANAGE_LEDGER_PARAMETERS,
         }
     }
 }

@@ -48,13 +48,13 @@ use crate::{
             GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
             GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
             Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
-            ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron,
-            ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens, NervousSystemFunction,
-            NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
-            NeuronPermissionType, Proposal, ProposalData, ProposalDecisionStatus, ProposalId,
-            ProposalRewardStatus, RegisterDappCanisters, RewardEvent, Tally,
-            TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
-            WaitForQuietState,
+            ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse,
+            ManageLedgerParameters, ManageNeuron, ManageNeuronResponse, ManageSnsMetadata,
+            MintSnsTokens, NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId,
+            NeuronPermission, NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
+            ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
+            RewardEvent, Tally, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
+            UpgradeSnsToNextVersion, Vote, WaitForQuietState,
         },
     },
     proposal::{
@@ -72,7 +72,9 @@ use dfn_core::api::{spawn, CanisterId};
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_canister_profiler::SpanStats;
-use ic_ic00_types::CanisterInstallMode;
+use ic_ic00_types::{
+    CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
+};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_collections_union_multi_map::UnionMultiMap;
 use ic_nervous_system_common::{
@@ -2056,6 +2058,10 @@ impl Governance {
                 self.perform_transfer_sns_treasury_funds(transfer).await
             }
             Action::MintSnsTokens(mint) => self.perform_mint_sns_tokens(mint).await,
+            Action::ManageLedgerParameters(manage_ledger_parameters) => {
+                self.perform_manage_ledger_parameters(proposal_id, manage_ledger_parameters)
+                    .await
+            }
             // This should not be possible, because Proposal validation is performed when
             // a proposal is first made.
             Action::Unspecified(_) => Err(GovernanceError::new_with_message(
@@ -2639,6 +2645,138 @@ impl Governance {
             .transfer_funds(amount_e8s, 0, None, to, mint.memo())
             .await?;
         Ok(())
+    }
+
+    async fn perform_manage_ledger_parameters(
+        &mut self,
+        proposal_id: u64,
+        manage_ledger_parameters: ManageLedgerParameters,
+    ) -> Result<(), GovernanceError> {
+        err_if_another_upgrade_is_in_progress(&self.proto.proposals, proposal_id)?;
+
+        let current_version = self.proto.deployed_version_or_panic();
+        let ledger_canister_id = self.proto.ledger_canister_id_or_panic();
+
+        let ledger_canister_info = self.env
+            .call_canister(
+                CanisterId::ic_00(),
+                "canister_info",
+                candid::encode_one(
+                    CanisterInfoRequest::new(
+                        ledger_canister_id,
+                        Some(1),
+                    )
+                ).map_err(|e| GovernanceError::new_with_message(ErrorType::External, format!("Could not execute proposal. Error encoding canister_info request.\n{}", e)))?
+            )
+            .await
+            .map(|b| {
+                candid::decode_one::<CanisterInfoResponse>(&b)
+                .map_err(|e| GovernanceError::new_with_message(ErrorType::External, format!("Could not execute proposal. Error decoding canister_info response.\n{}", e)))
+            })
+            .map_err(|err| GovernanceError::new_with_message(ErrorType::External, format!("Canister method call canister_info failed: {:?}", err)))??;
+
+        let ledger_canister_info_version_number_before_upgrade: u64 =
+            ledger_canister_info
+            .changes()
+            .last().ok_or(GovernanceError::new_with_message(ErrorType::External, "Could not execute proposal. Error finding current ledger canister_info version number".to_string()))?
+            .canister_version();
+
+        let ledger_wasm = get_wasm(
+            &*self.env,
+            current_version.ledger_wasm_hash.clone(),
+            SnsCanisterType::Ledger,
+        )
+        .await
+        .map_err(|e| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                format!(
+                    "Could not execute proposal. Error getting ledger canister wasm: {}",
+                    e
+                ),
+            )
+        })?
+        .wasm;
+
+        use ic_icrc1_ledger::{LedgerArgument, UpgradeArgs};
+        let ledger_upgrade_arg =
+            candid::encode_one(Some(LedgerArgument::Upgrade(Some(UpgradeArgs {
+                transfer_fee: manage_ledger_parameters.transfer_fee.map(|tf| tf.into()),
+                ..UpgradeArgs::default()
+            }))))
+            .unwrap();
+
+        self.upgrade_non_root_canister(
+            ledger_canister_id,
+            ledger_wasm,
+            ledger_upgrade_arg,
+            CanisterInstallMode::Upgrade,
+        )
+        .await?;
+
+        let mark_failed_at_seconds = self.env.now() + 5 * 60;
+
+        loop {
+            let ledger_canister_info = self.env
+                .call_canister(
+                    CanisterId::ic_00(),
+                    "canister_info",
+                    candid::encode_one(
+                        CanisterInfoRequest::new(
+                            ledger_canister_id,
+                            Some(20),
+                        )
+                    ).map_err(|e| GovernanceError::new_with_message(ErrorType::External, format!("Could not check if ledger upgrade succeeded. Error encoding canister_info request.\n{}", e)))?
+                )
+                .await
+                .map(|b| {
+                    candid::decode_one::<CanisterInfoResponse>(&b)
+                        .map_err(|e| GovernanceError::new_with_message(ErrorType::External, format!("Could not check if ledger upgrade succeeded. Error decoding canister_info response.\n{}", e)))
+                })
+                .map_err(|e| GovernanceError::new_with_message(ErrorType::External, format!("Could not check if ledger upgrade succeeded. Canister method call canister_info failed: {:?}", e)))??;
+
+            for canister_change in ledger_canister_info.changes().iter().rev() {
+                if canister_change.canister_version()
+                    > ledger_canister_info_version_number_before_upgrade
+                {
+                    if let CanisterChangeDetails::CanisterCodeDeployment(code_deployment) =
+                        canister_change.details()
+                    {
+                        if let CanisterInstallMode::Upgrade = code_deployment.mode() {
+                            if code_deployment.module_hash()[..]
+                                == current_version.ledger_wasm_hash[..]
+                            {
+                                // success
+                                // update nervous-system-parameters transaction_fee if the fee is changed.
+                                if let Some(nervous_system_parameters) =
+                                    self.proto.parameters.as_mut()
+                                {
+                                    if let Some(transfer_fee) =
+                                        manage_ledger_parameters.transfer_fee
+                                    {
+                                        nervous_system_parameters.transaction_fee_e8s =
+                                            Some(transfer_fee);
+                                    }
+                                }
+                                return Ok(());
+                            }
+                        }
+                    }
+                }
+            }
+
+            if self.env.now() > mark_failed_at_seconds {
+                let error = format!(
+                    "Upgrade marked as failed at {} seconds from genesis. \
+                    Did not find an upgrade in the ledger's canister_info recent_changes.",
+                    self.env.now(),
+                );
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::External,
+                    error,
+                ));
+            }
+        }
     }
 
     // Returns an option with the NervousSystemParameters
@@ -5214,9 +5352,10 @@ fn err_if_another_upgrade_is_in_progress(
     id_to_proposal_data: &BTreeMap</* proposal ID */ u64, ProposalData>,
     executing_proposal_id: u64,
 ) -> Result<(), GovernanceError> {
-    let upgrade_action_ids: [u64; 2] = [
+    let upgrade_action_ids: [u64; 3] = [
         (&Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister::default())).into(),
         (&Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion::default())).into(),
+        (&Action::ManageLedgerParameters(ManageLedgerParameters::default())).into(),
     ];
 
     for (other_proposal_id, proposal_data) in id_to_proposal_data {
@@ -6304,6 +6443,30 @@ mod tests {
         let executing_action_id =
             (&Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister::default())).into();
         let action = Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion::default());
+        test_disallow_concurrent_upgrade_execution(executing_action_id, action);
+    }
+
+    #[test]
+    fn two_manage_ledger_parameters_proposals_cannot_be_concurrent() {
+        let executing_action_id =
+            (&Action::ManageLedgerParameters(ManageLedgerParameters::default())).into();
+        let action = Action::ManageLedgerParameters(ManageLedgerParameters::default());
+        test_disallow_concurrent_upgrade_execution(executing_action_id, action);
+    }
+
+    #[test]
+    fn manage_ledger_parameters_block_concurrent_sns_upgrades() {
+        let executing_action_id =
+            (&Action::ManageLedgerParameters(ManageLedgerParameters::default())).into();
+        let action = Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion::default());
+        test_disallow_concurrent_upgrade_execution(executing_action_id, action);
+    }
+
+    #[test]
+    fn manage_ledger_parameters_block_concurrent_canister_upgrades() {
+        let executing_action_id =
+            (&Action::ManageLedgerParameters(ManageLedgerParameters::default())).into();
+        let action = Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister::default());
         test_disallow_concurrent_upgrade_execution(executing_action_id, action);
     }
 

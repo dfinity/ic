@@ -345,6 +345,12 @@ message TransferSnsTreasuryFunds {
   optional Subaccount to_subaccount = 5;
 }
 
+// A proposal function that changes the ledger's parameters.
+// Fields with None values will remain unchanged.
+message ManageLedgerParameters {
+  optional uint64 transfer_fee = 1;
+}
+
 // A proposal to mint SNS tokens to (optionally a Subaccount of) the
 // target principal.
 message MintSnsTokens {
@@ -495,6 +501,11 @@ message Proposal {
     //
     // Id = 12.
     MintSnsTokens mint_sns_tokens = 16;
+
+    // Change some parameters on the ledger.
+    //
+    // Id = 13
+    ManageLedgerParameters manage_ledger_parameters = 17;
   }
 }
 
@@ -672,6 +683,7 @@ message ProposalData {
   // Id 7 - UpgradeSnsToNextVersion proposals.
   // Id 8 - ManageSnsMetadata proposals.
   // Id 9 - TransferSnsTreasuryFunds proposals.
+  // Id 13 - ManageLedgerParameters proposals.
   uint64 action = 1;
 
   // This is stored here temporarily. It is also stored on the map
