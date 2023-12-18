@@ -11802,7 +11802,7 @@ lazy_static! {
             21342385865,
         ),
         allocated_neurons_fund_participation_icp_e8s: Some(
-            19208147279,
+            19208147278,
         ),
     });
 
