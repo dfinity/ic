@@ -45,6 +45,7 @@ use ic_sns_governance::{
     types::{native_action_ids, ONE_DAY_SECONDS, ONE_MONTH_SECONDS},
 };
 use maplit::btreemap;
+use pretty_assertions::assert_eq;
 use std::collections::{BTreeMap, HashSet};
 use strum::IntoEnumIterator;
 
@@ -1424,6 +1425,104 @@ fn test_list_nervous_system_function_contain_all_proposal_actions() {
         "Governance::list_nervous_system_functions is missing \
          native proposal actions in response {:?}",
         missing_actions
+    );
+}
+
+#[test]
+fn test_make_critical_proposal() {
+    // Step 1: Prepare the world: Construct governance, and populate it with one neuron.
+    let (mut canister_fixture, user_principal, neuron_id) =
+        GovernanceCanisterFixtureBuilder::new().create_with_test_neuron();
+
+    // Step 2a: Call the code under test: make a "critical" proposal.
+    let proposal = TransferSnsTreasuryFunds {
+        from_treasury: TransferFrom::IcpTreasury as i32,
+        amount_e8s: 42 * E8,
+        memo: None,
+        to_principal: Some(PrincipalId::new_user_test_id(42)),
+        to_subaccount: None,
+    };
+    let (_proposal_id, proposal_data) = canister_fixture
+        .make_default_proposal(&neuron_id, proposal, user_principal)
+        .unwrap();
+
+    // Step 3a: Inspect results. Critical proposals differ in their voting power thresholds, and
+    // duration parameters.
+
+    // Selects the fields that need to be inspected.
+    fn select_interesting_fields(proposal_data: &ProposalData) -> ProposalData {
+        let ProposalData {
+            minimum_yes_proportion_of_total,
+            minimum_yes_proportion_of_exercised,
+            initial_voting_period_seconds,
+            wait_for_quiet_deadline_increase_seconds,
+            ..
+        } = proposal_data.clone();
+
+        ProposalData {
+            minimum_yes_proportion_of_total,
+            minimum_yes_proportion_of_exercised,
+            initial_voting_period_seconds,
+            wait_for_quiet_deadline_increase_seconds,
+            ..Default::default()
+        }
+    }
+
+    assert_eq!(
+        select_interesting_fields(&proposal_data),
+        ProposalData {
+            minimum_yes_proportion_of_total: Some(
+                // 20%
+                Percentage {
+                    basis_points: Some(2000)
+                },
+            ),
+            minimum_yes_proportion_of_exercised: Some(
+                // 67%
+                Percentage {
+                    basis_points: Some(6700)
+                },
+            ),
+            initial_voting_period_seconds: 5 * SECONDS_PER_DAY,
+            wait_for_quiet_deadline_increase_seconds: 5 * SECONDS_PER_DAY / 2, // 2.5 days
+            ..Default::default()
+        },
+        "{:#?}",
+        proposal_data,
+    );
+
+    // Step 2b: Call the code under test: make a normal (non-critical) proposal.
+    let proposal = Motion {
+        motion_text: "Nothing to see here.".to_string(),
+    };
+    let (_proposal_id, proposal_data) = canister_fixture
+        .make_default_proposal(&neuron_id, proposal, user_principal)
+        .unwrap();
+
+    // Step 3b: Inspect results. Look at the same fields as in 3b, but this time, the values are for
+    // normal proposals.
+
+    assert_eq!(
+        select_interesting_fields(&proposal_data),
+        ProposalData {
+            minimum_yes_proportion_of_total: Some(
+                // 3%
+                Percentage {
+                    basis_points: Some(300)
+                },
+            ),
+            minimum_yes_proportion_of_exercised: Some(
+                // 50%
+                Percentage {
+                    basis_points: Some(5000)
+                },
+            ),
+            initial_voting_period_seconds: 4 * SECONDS_PER_DAY,
+            wait_for_quiet_deadline_increase_seconds: SECONDS_PER_DAY,
+            ..Default::default()
+        },
+        "{:#?}",
+        proposal_data,
     );
 }
 

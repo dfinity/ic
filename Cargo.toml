@@ -315,6 +315,7 @@ members = [
   "rs/sns/audit",
   "rs/sns/cli",
   "rs/sns/governance",
+  "rs/sns/governance/proposal_criticality",
   "rs/sns/governance/protobuf_generator",
   "rs/sns/init",
   "rs/sns/init/protobuf_generator",
