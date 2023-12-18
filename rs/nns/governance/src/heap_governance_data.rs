@@ -1,7 +1,7 @@
 use crate::pb::v1::{
     governance::{
         followers_map::Followers, FollowersMap, GovernanceCachedMetrics, MakingSnsProposal,
-        Migrations, NeuronInFlightCommand, SeedAccounts,
+        Migrations, NeuronInFlightCommand,
     },
     neuron::Followees,
     Governance as GovernanceProto, MostRecentMonthlyNodeProviderRewards, NetworkEconomics, Neuron,
@@ -34,7 +34,6 @@ pub struct HeapGovernanceData {
     pub spawning_neurons: Option<bool>,
     pub making_sns_proposal: Option<MakingSnsProposal>,
     pub migrations: Option<Migrations>,
-    pub seed_accounts: Option<SeedAccounts>,
 }
 
 fn proto_to_heap_topic_followee_index(
@@ -121,7 +120,6 @@ pub fn split_governance_proto(
         making_sns_proposal,
         migrations,
         topic_followee_index,
-        seed_accounts,
     } = governance_proto;
 
     let neuron_management_voting_period_seconds =
@@ -150,7 +148,6 @@ pub fn split_governance_proto(
             spawning_neurons,
             making_sns_proposal,
             migrations,
-            seed_accounts,
         },
     )
 }
@@ -186,7 +183,6 @@ pub fn reassemble_governance_proto(
         spawning_neurons,
         making_sns_proposal,
         migrations,
-        seed_accounts,
     } = heap_governance_proto;
 
     let neuron_management_voting_period_seconds = Some(neuron_management_voting_period_seconds);
@@ -212,7 +208,6 @@ pub fn reassemble_governance_proto(
         making_sns_proposal,
         migrations,
         topic_followee_index: heap_topic_followee_index_to_proto(topic_followee_index),
-        seed_accounts,
     }
 }
 
@@ -253,7 +248,6 @@ mod tests {
             making_sns_proposal: Some(MakingSnsProposal::default()),
             migrations: Some(Migrations::default()),
             topic_followee_index: Default::default(),
-            seed_accounts: Some(SeedAccounts::default()),
         }
     }
 

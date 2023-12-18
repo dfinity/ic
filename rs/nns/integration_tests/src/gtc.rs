@@ -8,10 +8,7 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
-use ic_nns_governance::pb::v1::{
-    governance::{seed_accounts::SeedAccount, SeedAccounts},
-    GovernanceError, Neuron, NeuronInfo, NeuronType,
-};
+use ic_nns_governance::pb::v1::{GovernanceError, Neuron, NeuronInfo};
 use ic_nns_gtc::{
     der_encode,
     pb::v1::AccountState,
@@ -20,7 +17,7 @@ use ic_nns_gtc::{
     },
 };
 use ic_nns_test_utils::{
-    common::{NnsInitPayloads, NnsInitPayloadsBuilder},
+    common::NnsInitPayloadsBuilder,
     state_test_helpers::{
         get_neuron_ids, ledger_account_balance, nns_governance_get_full_neuron,
         nns_governance_get_neuron_info, setup_nns_canisters,
@@ -655,93 +652,4 @@ fn claim_neurons(
     };
 
     Decode!(&result, Result<Vec<NeuronId>, String>).unwrap()
-}
-
-fn are_neurons_marked_seed(state_machine: &mut StateMachine, neuron_ids: &[NeuronId]) -> bool {
-    for neuron_id in neuron_ids {
-        let neuron = nns_governance_get_neuron_info(
-            state_machine,
-            PrincipalId::new_anonymous(),
-            neuron_id.id,
-        )
-        .unwrap();
-
-        if !neuron.is_seed_neuron() {
-            return false;
-        }
-    }
-    true
-}
-
-fn are_neurons_marked_ect(state_machine: &mut StateMachine, neuron_ids: &[NeuronId]) -> bool {
-    for neuron_id in neuron_ids {
-        let neuron = nns_governance_get_neuron_info(
-            state_machine,
-            PrincipalId::new_anonymous(),
-            neuron_id.id,
-        )
-        .unwrap();
-
-        if !neuron.is_ect_neuron() {
-            return false;
-        }
-    }
-    true
-}
-
-// Helper function to get neuron IDs for a specific identity
-fn get_gtc_neuron_ids(nns_init_payload: &NnsInitPayloads, identity_address: &str) -> Vec<NeuronId> {
-    nns_init_payload
-        .genesis_token
-        .accounts
-        .get(identity_address)
-        .unwrap()
-        .neuron_ids
-        .clone()
-}
-
-#[test]
-pub fn test_tag_seed_neurons() {
-    let mut state_machine = StateMachine::new();
-    let mut nns_init_payload_builder = NnsInitPayloadsBuilder::new();
-    add_test_gtc_neurons(&mut nns_init_payload_builder);
-
-    let mut nns_init_payload = nns_init_payload_builder.build();
-    nns_init_payload.governance.seed_accounts = Some(SeedAccounts {
-        accounts: vec![
-            SeedAccount {
-                account_id: TEST_IDENTITY_1.gtc_address.to_string(),
-                neuron_type: NeuronType::Seed as i32,
-                ..Default::default()
-            },
-            SeedAccount {
-                account_id: TEST_IDENTITY_3.gtc_address.to_string(),
-                neuron_type: NeuronType::Ect as i32,
-                ..Default::default()
-            },
-        ],
-    });
-
-    let identity_1_neuron_ids = get_gtc_neuron_ids(&nns_init_payload, TEST_IDENTITY_1.gtc_address);
-    let identity_3_neuron_ids = get_gtc_neuron_ids(&nns_init_payload, TEST_IDENTITY_3.gtc_address);
-
-    setup_nns_canisters(&state_machine, nns_init_payload);
-    state_machine.set_time(SystemTime::now());
-
-    for _ in 0..100 {
-        let (ident_1_is_seed, ident_3_is_seed) = (
-            are_neurons_marked_seed(&mut state_machine, &identity_1_neuron_ids),
-            are_neurons_marked_ect(&mut state_machine, &identity_3_neuron_ids),
-        );
-
-        if ident_1_is_seed && ident_3_is_seed {
-            break;
-        }
-
-        state_machine.tick();
-    }
-
-    let ident_1_is_seed = are_neurons_marked_seed(&mut state_machine, &identity_1_neuron_ids);
-    let ident_3_is_seed = are_neurons_marked_ect(&mut state_machine, &identity_3_neuron_ids);
-    assert!(ident_1_is_seed && ident_3_is_seed);
 }

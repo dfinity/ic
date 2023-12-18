@@ -18,8 +18,7 @@ use crate::{
         get_neurons_fund_audit_info_response,
         governance::{
             neuron_in_flight_command::{Command as InFlightCommand, SyncCommand},
-            seed_accounts::SeedAccount,
-            GovernanceCachedMetrics, MakingSnsProposal, NeuronInFlightCommand, SeedAccounts,
+            GovernanceCachedMetrics, MakingSnsProposal, NeuronInFlightCommand,
         },
         governance_error::ErrorType,
         manage_neuron,
@@ -43,7 +42,7 @@ use crate::{
         KnownNeuron, ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListProposalInfo,
         ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
         MostRecentMonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron, NeuronInfo,
-        NeuronState, NeuronType, NeuronsFundAuditInfo, NeuronsFundData,
+        NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
         NeuronsFundParticipation as NeuronsFundParticipationPb,
         NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, OpenSnsTokenSwap,
         Proposal, ProposalData, ProposalInfo, ProposalRewardStatus, ProposalStatus, RewardEvent,
@@ -80,7 +79,6 @@ use ic_nns_constants::{
     IS_MATCHED_FUNDING_ENABLED, IS_UPDATE_ALLOWED_PRINCIPALS_ENABLED, LIFELINE_CANISTER_ID,
     REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
-use ic_nns_gtc_accounts::{ECT_ACCOUNTS, SEED_ROUND_ACCOUNTS};
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
@@ -1557,37 +1555,6 @@ impl TryFrom<SettleNeuronsFundParticipationRequest>
     }
 }
 
-/// If the seed_accounts is None, then populate it with the `SEED_ROUND_ACCOUNTS` data
-fn set_seed_accounts(governance_proto: &mut GovernanceProto) {
-    if governance_proto.seed_accounts.is_none() {
-        let seed_round_accounts = SEED_ROUND_ACCOUNTS
-            .iter()
-            .map(|(account_id, _)| SeedAccount {
-                account_id: account_id.to_string(),
-                tag_start_timestamp_seconds: None,
-                tag_end_timestamp_seconds: None,
-                error_count: 0,
-                neuron_type: NeuronType::Seed as i32,
-            })
-            .collect::<Vec<_>>();
-
-        let ect_accounts: Vec<SeedAccount> = ECT_ACCOUNTS
-            .iter()
-            .map(|(account_id, _)| SeedAccount {
-                account_id: account_id.to_string(),
-                tag_start_timestamp_seconds: None,
-                tag_end_timestamp_seconds: None,
-                error_count: 0,
-                neuron_type: NeuronType::Ect as i32,
-            })
-            .collect::<Vec<_>>();
-
-        governance_proto.seed_accounts = Some(SeedAccounts {
-            accounts: [seed_round_accounts, ect_accounts].concat(),
-        })
-    }
-}
-
 fn maybe_build_initial_account_id_neuron_index(heap_neurons: &BTreeMap<u64, Neuron>) {
     let is_account_id_index_empty =
         with_stable_neuron_indexes_mut(|indexes| indexes.account_id().num_entries() == 0);
@@ -1697,10 +1664,8 @@ impl Governance {
                 latest_round_available_e8s_equivalent: Some(0),
             })
         }
-        // Step 2: seed_accounts
-        set_seed_accounts(&mut governance_proto);
 
-        // Step 3: Break out Neurons from governance_proto. Neurons are managed separately by
+        // Step 2: Break out Neurons from governance_proto. Neurons are managed separately by
         // NeuronStore. NeuronStore is in charge of Neurons, because some are stored in stable
         // memory, while others are stored in heap. "inactive" Neurons live in stable memory, while
         // the rest live in heap.
@@ -1730,13 +1695,11 @@ impl Governance {
 
     /// Restores Governance after an upgrade from its persisted state.
     pub fn new_restored(
-        mut governance_proto: GovernanceProto,
+        governance_proto: GovernanceProto,
         env: Box<dyn Environment>,
         ledger: Box<dyn IcpLedger>,
         cmc: Box<dyn CMC>,
     ) -> Self {
-        set_seed_accounts(&mut governance_proto);
-
         let (heap_neurons, topic_followee_map, heap_governance_proto) =
             split_governance_proto(governance_proto);
 
@@ -6656,8 +6619,6 @@ impl Governance {
         // Try to update maturity modulation (once per day).
         } else if self.should_update_maturity_modulation() {
             self.update_maturity_modulation().await;
-        } else if self.can_tag_seed_neurons() {
-            self.tag_seed_neurons().await;
         // Try to spawn neurons (potentially multiple times per day).
         } else if self.can_spawn_neurons() {
             self.spawn_neurons().await;

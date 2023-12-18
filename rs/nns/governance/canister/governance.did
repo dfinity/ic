@@ -157,7 +157,6 @@ type GlobalTimeOfDay = record { seconds_after_utc_midnight : opt nat64 };
 type Governance = record {
   default_followees : vec record { int32; Followees };
   making_sns_proposal : opt MakingSnsProposal;
-  seed_accounts : opt SeedAccounts;
   most_recent_monthly_node_provider_rewards : opt MostRecentMonthlyNodeProviderRewards;
   maturity_modulation_last_updated_at_timestamp_seconds : opt nat64;
   wait_for_quiet_threshold_seconds : nat64;
@@ -548,14 +547,6 @@ type RewardNodeProviders = record {
 };
 type RewardToAccount = record { to_account : opt AccountIdentifier };
 type RewardToNeuron = record { dissolve_delay_seconds : nat64 };
-type SeedAccount = record {
-  error_count : nat64;
-  account_id : text;
-  neuron_type : int32;
-  tag_end_timestamp_seconds : opt nat64;
-  tag_start_timestamp_seconds : opt nat64;
-};
-type SeedAccounts = record { accounts : vec SeedAccount };
 type SetDefaultFollowees = record {
   default_followees : vec record { int32; Followees };
 };
