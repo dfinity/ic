@@ -1,10 +1,22 @@
 # The Remote Image Deployer
 
-Get SetupOS images to run remotely given BMC info. Works only for iDRAC (currently). Use bazel target or run in poetry shell.
+Deploy SetupOS to bare metal remotely using BMC. 
+Works only for iDRAC (currently). 
+Reserve the target machine in Dee before deploying. 
+
+## What do you need?
+
+* A Dell machine with iDRAC version 6 or higher
+* SSH key access to a file share, preferably close to the target machine
+* A [yaml file](#whats-in-the-yaml-configuration-file) containing info to configure deployment
+* A [csv file](#whats-in-the-csv-secrets-file) containing the BMC info and credentials
+
 
 ### Run it via bazel target 
     
-From inside the devenv container! I.e.: first run `./gitlab-ci/container/container-run.sh` -
+Must be run inside the devenv container. Use `./gitlab-ci/container/container-run.sh`.
+
+The config files must be accessible from inside the container - e.g., at the root of the ic directory, which maps to `/ic` inside the container.
 
 ```
 bazel run //ic-os/setupos/envs/dev:launch_bare_metal --config=local -- \
@@ -12,14 +24,50 @@ bazel run //ic-os/setupos/envs/dev:launch_bare_metal --config=local -- \
   --csv_filename $(realpath ./zh2-dll01.csv)
 ```
 
-This is all you need for local usage. 
 
-To develop or use finer grained features, read on.
+#### What's in the yaml configuration file? 
 
+```
+file_share_url: <NFS share on which to upload the file>
+file_share_dir: <directory on NFS share which is exposed via NFS>
+file_share_image_filename: <name of image file to appear over NFS>
+file_share_username: <SSH username to log into file share> # NOTE SSH KEYS ARE ASSUMED TO BE FUNCTIONAL
+inject_image_ipv6_prefix: <config.ini: ipv6_prefix>
+inject_image_ipv6_gateway: <config.ini: ipv6_gateway>
+```
+
+These are CLI args submitted in yaml form. See [why](#why-two-config-files) or `./deploy.py --help` for detailed docs on the arguments.
+See ./example_config.yaml for a functional example. 
+
+#### What's in the csv secrets file? 
+
+Per-machine BMC secrets. Each row represents a machine. The tool will deploy to each with the given information.
+
+```
+<ip_address>,<username>,<password>,<guestos ipv6 address>
+```
+
+See [CSV secrets file](#csv-secrets-file) for more info. 
+
+##### Where can I find csv files for the bare metal test machines?
+
+Next to each machine entry in 1Pass. Ask node team for details.
+
+
+#### Why two config files?
+    
+`deploy.py` accepts many CLI arguments and can source a yaml configuration file for those same arguments. The file is a convenient way to manage these but all args can be specified on the command line.
+
+The csv file contains secrets which should _not_ be submitted via the command line. It also supports an arbitrary number of rows to deploy to an arbitrary number of machines. 
+
+
+### This is all you need for local usage. 
+
+# To develop or use finer grained features, read on.
 
 ## Requirements
 
-Ignore if running via bazel + devenv container from the ic repo (see below).
+* Ignore if running via bazel + devenv container from the ic repo *
 
 * Python 3.10 (maybe lower works)
 * Poetry - `pip install poetry` 
@@ -33,11 +81,11 @@ Ignore if running via bazel + devenv container from the ic repo (see below).
 
 ### Prep + Review input data
 
-#### CSV files
+#### CSV secrets file
 
 deploy.py requires a CSV file with the information to deploy to multiple BMC's. Include the BMC info _for each BMC_ where each row is "ip address, username, password".
 
-Each row can include an extra parameter - the GuestOS ipv6 address. This is used to check if the resulting machine has deployed successfully.
+Each row optionally includes a final parameter - the GuestOS ipv6 address. This is used to check if the resulting machine has deployed successfully. This is calculated deterministically. See bazel target /rs/ic_os/deterministic_ips to calculate.
 
 This file is plaintext readable - make it readable only by the current user.
 
@@ -54,35 +102,9 @@ or
 10.10.10.124,root,password,2a00:fb01:400:200:6801::1235
 ```
 
-#### SetupOS image
+#### Manually preparing SetupOS image
 
-If running via the bazel target, skip this section.
-
-Prepare the image for deployment - config.ini, etc.. See the related google doc for details: 'SetupOS bare-metal hardware installation guide'.
-
-Skip these instructions if using the `--upload_file` flag, passing in the compressed file from the above step. Skip directly to running `deploy.py`.
-
-Send to NFS file share:
-```bash
-# Send to nfs file share machine. Alternatively mount the nfs (if you're allowlisted) and cp to it
-scp sh1-setupos.img.zst dfnadmin@zh2-rmu.zh2.dfinity.network:
-```
-
-Log in, decompress, host image:
-```bash
-# Commands run after `ssh dfnadmin@zh2-rmu.zh2.dfinity.network`
-zstd -d sh1-setupos.img.zst
-sudo mv sh1-setupos.img /srv/images
-```
-
-Consider the network url format expected by the tool+iDRAC: "<IP_ADDRESS>:<PATH_TO_IMAGE>"
-E.g., "10.10.101.254:/srv/images/sh1-setupos.img"
-
-The network image url must point to an NFS file share. 
-    
-**The file share machine firewall must allow traffic from the target bmc ip addresses!** 
-
-We've been using `zh2-rmu` for testing. Add the new DC's to the allowlist. 
+See related google doc for details: 'SetupOS bare-metal hardware installation guide'.
 
 
 ## Run it 
