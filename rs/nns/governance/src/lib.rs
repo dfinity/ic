@@ -151,7 +151,6 @@ pub mod neurons_fund;
 pub mod pb;
 pub mod proposals;
 mod reward;
-pub mod seed_accounts;
 pub mod storage;
 mod subaccount_index;
 

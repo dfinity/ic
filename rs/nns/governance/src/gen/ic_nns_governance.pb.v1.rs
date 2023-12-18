@@ -2272,8 +2272,6 @@ pub struct Governance {
     /// This is the inverse of what is stored in a Neuron (its followees).
     #[prost(map = "int32, message", tag = "22")]
     pub topic_followee_index: ::std::collections::HashMap<i32, governance::FollowersMap>,
-    #[prost(message, optional, tag = "23")]
-    pub seed_accounts: ::core::option::Option<governance::SeedAccounts>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -2550,49 +2548,6 @@ pub mod governance {
             /// These values will be non-repeating, and order does not matter.
             #[prost(message, repeated, tag = "1")]
             pub followers: ::prost::alloc::vec::Vec<::ic_nns_common::pb::v1::NeuronId>,
-        }
-    }
-    /// The list of seed accounts existing in the Genesis Token Canister (GTC). These accounts are used during the
-    /// tagging process of Seed Neurons in the NNS.
-    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Message)]
-    pub struct SeedAccounts {
-        #[prost(message, repeated, tag = "1")]
-        pub accounts: ::prost::alloc::vec::Vec<seed_accounts::SeedAccount>,
-    }
-    /// Nested message and enum types in `SeedAccounts`.
-    pub mod seed_accounts {
-        /// An individual seed account existing in the Genesis Token Canister (GTC). This account is used during the
-        /// tagging process of Seed Neurons in the NNS. The structure of the Seed Account allows for idempotent
-        /// processing of all SeedAccounts in the NNS Governance Canister's heartbeat.
-        #[derive(
-            candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable,
-        )]
-        #[allow(clippy::derive_partial_eq_without_eq)]
-        #[derive(Clone, PartialEq, ::prost::Message)]
-        pub struct SeedAccount {
-            /// The id of the Account in the GTC.
-            #[prost(string, tag = "1")]
-            pub account_id: ::prost::alloc::string::String,
-            /// The timestamp in seconds of when this SeedAccount began tagging of its Seed Neurons. If set to None,
-            /// this account has yet to be processed. If set to Some, this account has began or finished processing.
-            #[prost(uint64, optional, tag = "2")]
-            pub tag_start_timestamp_seconds: ::core::option::Option<u64>,
-            /// The timestamp in seconds of when this SeedAccount finished tagging of its Seed Neurons. If set to None,
-            /// this account has yet to be processed, or has started processing. If set to Some, this account has
-            /// finished processing.
-            #[prost(uint64, optional, tag = "3")]
-            pub tag_end_timestamp_seconds: ::core::option::Option<u64>,
-            /// The count of errors encountered when processing this SeedAccount. This is used when considering whether
-            /// this SeedAccount is eligible for tagging. If the error_count is too high, the tagging process will ignore
-            /// it and continue on to the next SeedAccount.
-            #[prost(uint64, tag = "4")]
-            pub error_count: u64,
-            /// The type of the Neuron (either Seed or ECT). This type will be applied to all neurons found in
-            /// the tagging process for this account.
-            #[prost(enumeration = "super::super::NeuronType", tag = "5")]
-            pub neuron_type: i32,
         }
     }
 }
