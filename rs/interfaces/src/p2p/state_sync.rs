@@ -15,7 +15,7 @@ pub trait StateSyncClient: Send + Sync {
     fn start_state_sync(
         &self,
         id: &StateSyncArtifactId,
-    ) -> Option<Box<dyn Chunkable + Send + Sync>>;
+    ) -> Option<Box<dyn Chunkable<StateSyncMessage> + Send + Sync>>;
     /// Returns true if a state sync with the specified Id can be cancelled because a newer state is available.
     /// The result of this function is only meaningful the Id refers to a active state sync started with `start_state_sync`.
     /// TODO: (NET-1469) In the future this API should be made safer by only allowing the id of a previously initiated state sync.

@@ -26,7 +26,7 @@ mock! {
         fn start_state_sync(
             &self,
             id: &StateSyncArtifactId,
-        ) -> Option<Box<dyn Chunkable + Send + Sync>>;
+        ) -> Option<Box<dyn Chunkable<StateSyncMessage> + Send + Sync>>;
 
         fn should_cancel(&self, id: &StateSyncArtifactId) -> bool;
 
@@ -58,11 +58,11 @@ mock! {
 }
 
 mock! {
-    pub Chunkable {}
+    pub Chunkable<T> {}
 
-    impl Chunkable for Chunkable{
+    impl<T> Chunkable<T> for Chunkable<T> {
         fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>>;
-        fn add_chunk(&mut self, chunk_id: ChunkId, chunk: Chunk) -> Result<StateSyncMessage, ArtifactErrorCode>;
+        fn add_chunk(&mut self, chunk_id: ChunkId, chunk: Chunk) -> Result<T, ArtifactErrorCode>;
     }
 }
 
