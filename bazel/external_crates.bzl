@@ -1363,11 +1363,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "x509-parser": crate.spec(
                 version = "^0.15.1",
-                features = ["verify"],
-            ),
-            "x509-parser-without-verify": crate.spec(
-                package = "x509-parser",
-                version = "^0.14.0",
             ),
             "yansi": crate.spec(
                 version = "^0.5.0",

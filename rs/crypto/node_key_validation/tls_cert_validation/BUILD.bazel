@@ -14,7 +14,7 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:hex",
     "@crate_index//:serde",
-    "@crate_index//:x509_parser_without_verify",
+    "@crate_index//:x509-parser",
 ]
 
 MACRO_DEPENDENCIES = []
