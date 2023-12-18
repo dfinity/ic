@@ -202,3 +202,32 @@ impl ConstructionDeriveResponse {
         }
     }
 }
+
+/// ConstructionPreprocessResponse contains `options` that will be sent
+/// unmodified to `/construction/metadata`. If it is not necessary to make a
+/// request to `/construction/metadata`, `options` should be omitted.   Some
+/// blockchains require the PublicKey of particular AccountIdentifiers to
+/// construct a valid transaction. To fetch these PublicKeys, populate
+/// `required_public_keys` with the AccountIdentifiers associated with the
+/// desired PublicKeys. If it is not necessary to retrieve any PublicKeys for
+/// construction, `required_public_keys` should be omitted.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct ConstructionPreprocessResponse {
+    /// The options that will be sent directly to `/construction/metadata` by
+    /// the caller.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub options: Option<ObjectMap>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub required_public_keys: Option<Vec<AccountIdentifier>>,
+}
+
+impl ConstructionPreprocessResponse {
+    pub fn new() -> ConstructionPreprocessResponse {
+        ConstructionPreprocessResponse {
+            options: None,
+            required_public_keys: None,
+        }
+    }
+}

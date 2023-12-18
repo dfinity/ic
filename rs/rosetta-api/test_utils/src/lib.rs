@@ -153,7 +153,10 @@ where
     );
 
     let metadata_res = ros
-        .construction_metadata(pre_res.options, Some(all_sender_pks.clone()))
+        .construction_metadata(
+            Some(pre_res.options.try_into().unwrap()),
+            Some(all_sender_pks.clone()),
+        )
         .await
         .unwrap()?;
     let dry_run_suggested_fee = metadata_res.suggested_fee.map(|mut suggested_fee| {
@@ -194,7 +197,10 @@ where
         "Preprocess should report that sender's pk is required"
     );
     let metadata_res = ros
-        .construction_metadata(pre_res.options, Some(all_sender_pks.clone()))
+        .construction_metadata(
+            Some(pre_res.options.try_into().unwrap()),
+            Some(all_sender_pks.clone()),
+        )
         .await
         .unwrap()?;
     let suggested_fee = metadata_res.suggested_fee.clone().map(|mut suggested_fee| {
