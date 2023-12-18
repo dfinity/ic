@@ -13,15 +13,15 @@ use crate::{
         BuyerState, CanisterCallError, CfInvestment, CfNeuron, CfParticipant, DerivedState,
         DirectInvestment, ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse,
         GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse, GetBuyerStateRequest,
-        GetBuyerStateResponse, GetBuyersTotalResponse, GetDerivedStateResponse,
-        GetLifecycleRequest, GetLifecycleResponse, GetOpenTicketRequest, GetOpenTicketResponse,
-        GetSaleParametersRequest, GetSaleParametersResponse, GetStateResponse, GovernanceError,
-        Icrc1Account, Init, Lifecycle, ListCommunityFundParticipantsRequest,
-        ListCommunityFundParticipantsResponse, ListDirectParticipantsRequest,
-        ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse,
-        NeuronBasketConstructionParameters, NeuronId as SaleNeuronId, NewSaleTicketRequest,
-        NewSaleTicketResponse, NotifyPaymentFailureResponse, OpenRequest, OpenResponse,
-        Participant, RefreshBuyerTokensResponse, RestoreDappControllersResponse,
+        GetBuyerStateResponse, GetBuyersTotalResponse, GetDerivedStateResponse, GetInitRequest,
+        GetInitResponse, GetLifecycleRequest, GetLifecycleResponse, GetOpenTicketRequest,
+        GetOpenTicketResponse, GetSaleParametersRequest, GetSaleParametersResponse,
+        GetStateResponse, GovernanceError, Icrc1Account, Init, Lifecycle,
+        ListCommunityFundParticipantsRequest, ListCommunityFundParticipantsResponse,
+        ListDirectParticipantsRequest, ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest,
+        ListSnsNeuronRecipesResponse, NeuronBasketConstructionParameters, NeuronId as SaleNeuronId,
+        NewSaleTicketRequest, NewSaleTicketResponse, NotifyPaymentFailureResponse, OpenRequest,
+        OpenResponse, Participant, RefreshBuyerTokensResponse, RestoreDappControllersResponse,
         SetDappControllersCallResult, SetDappControllersRequest, SetDappControllersResponse,
         SetModeCallResult, SettleCommunityFundParticipation,
         SettleCommunityFundParticipationResult, SettleNeuronsFundParticipationRequest,
@@ -3315,6 +3315,16 @@ impl Swap {
         GetSaleParametersResponse { params }
     }
 
+    /// Extracts a subset of Init fields. Currently, only `neurons_fund_participants` is excluded,
+    /// as that data is provided via a dedicated endpoint `list_community_fund_participants`.
+    pub fn get_init(&self, _request: &GetInitRequest) -> GetInitResponse {
+        let init = Init {
+            neurons_fund_participants: None,
+            ..self.init.clone().expect("Swap.init must be defined")
+        };
+        GetInitResponse { init: Some(init) }
+    }
+
     /// Lists Community Fund participants.
     pub fn list_community_fund_participants(
         &self,
@@ -3851,7 +3861,7 @@ mod tests {
     use super::*;
     use crate::pb::v1::{
         new_sale_ticket_response::Ok, CfNeuron, CfParticipant, NeuronBasketConstructionParameters,
-        Params,
+        NeuronsFundParticipants, Params,
     };
     use candid::Principal;
     use ic_nervous_system_common::{E8, SECONDS_PER_DAY, START_OF_2022_TIMESTAMP_SECONDS};
@@ -4110,6 +4120,32 @@ mod tests {
             swap.get_sale_parameters(&GetSaleParametersRequest {}),
             GetSaleParametersResponse {
                 params: Some(PARAMS),
+            },
+        );
+    }
+
+    #[test]
+    fn test_get_init() {
+        let swap = Swap {
+            init: Some(Init {
+                neurons_fund_participants: Some(NeuronsFundParticipants {
+                    cf_participants: vec![CfParticipant {
+                        hotkey_principal: "test".to_string(),
+                        cf_neurons: vec![CfNeuron::default()],
+                    }],
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let expected_init = Init {
+            neurons_fund_participants: None,
+            ..swap.init.clone().unwrap()
+        };
+        assert_eq!(
+            swap.get_init(&GetInitRequest {}),
+            GetInitResponse {
+                init: Some(expected_init),
             },
         );
     }
