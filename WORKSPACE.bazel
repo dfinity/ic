@@ -511,15 +511,15 @@ new_git_repository(
 http_file(
     name = "mainnet_nns_registry_canister",
     downloaded_file_path = "registry-canister.wasm.gz",
-    sha256 = "07cb794acb1454525b1686c1d0ba4c1f68dacd700db932f300b9fb2536bff970",
-    url = "https://download.dfinity.systems/ic/0d8ec8daddaa03b5d5f972d68acb0a7697729bba/canisters/registry-canister.wasm.gz",
+    sha256 = "641b6607bff6cd979fcf8af028831fc66d5f7f2bacc6ca498861cf7a8df4ec2c",
+    url = "https://download.dfinity.systems/ic/87f48a595b6f666fbc7fe6ad4081aa98fd113d12/canisters/registry-canister.wasm.gz",
 )
 
 http_file(
     name = "mainnet_nns_governance_canister",
     downloaded_file_path = "governance-canister.wasm.gz",
-    sha256 = "59744b5a9833c747d324316f7b5fc62f725e6eba48e9733da3d26e4b811a7aaa",
-    url = "https://download.dfinity.systems/ic/0d8ec8daddaa03b5d5f972d68acb0a7697729bba/canisters/governance-canister.wasm.gz",
+    sha256 = "0588a175af106fa0849d8175f47bd89648f96e244abba705211a3cbcb889daee",
+    url = "https://download.dfinity.systems/ic/87f48a595b6f666fbc7fe6ad4081aa98fd113d12/canisters/governance-canister.wasm.gz",
 )
 
 http_file(
@@ -541,22 +541,22 @@ http_file(
 http_file(
     name = "mainnet_nns_root-canister",
     downloaded_file_path = "root-canister.wasm.gz",
-    sha256 = "a2d3bdcd10ba8c990ad712d9f6fc90d4e7640c7a2c9928e431230002fc89adb2",
-    url = "https://download.dfinity.systems/ic/9a1f70d6e1b03ef27e86f8094ee48b83846e482d/canisters/root-canister.wasm.gz",
+    sha256 = "d2883d2e5c8a8e0d40585470f720501486c68f9ccfc9d4630d7476cbd2632155",
+    url = "https://download.dfinity.systems/ic/87f48a595b6f666fbc7fe6ad4081aa98fd113d12/canisters/root-canister.wasm.gz",
 )
 
 http_file(
     name = "mainnet_nns_lifeline_canister",
     downloaded_file_path = "lifeline-canister.wasm.gz",
-    sha256 = "775303f6b99530db496117df1edfa1e24153a161895c56e79d4e39daae36e28b",
-    url = "https://download.dfinity.systems/ic/e4a9c0aa4ef24f7ee5bb9d27ce930551a7c5e24d/canisters/lifeline_canister.wasm.gz",
+    sha256 = "6d3029dcd359f80cd64bb68bbc8bd95b810b08bd29b9ef1054118a5285f2abc5",
+    url = "https://download.dfinity.systems/ic/87f48a595b6f666fbc7fe6ad4081aa98fd113d12/canisters/lifeline_canister.wasm.gz",
 )
 
 http_file(
     name = "mainnet_nns_genesis-token-canister",
     downloaded_file_path = "genesis-token-canister.wasm.gz",
-    sha256 = "98cf6a9902e59f6272d03aa281f5247deebf4b61484b54cb80bdd54d6baf6e33",
-    url = "https://download.dfinity.systems/ic/9a1f70d6e1b03ef27e86f8094ee48b83846e482d/canisters/genesis-token-canister.wasm.gz",
+    sha256 = "dd71862512af57e938e01810be016e17431912d9ca0ea3952bc04015eb02acc4",
+    url = "https://download.dfinity.systems/ic/87f48a595b6f666fbc7fe6ad4081aa98fd113d12/canisters/genesis-token-canister.wasm.gz",
 )
 
 # From https://dashboard.internetcomputer.org/proposal/83624
@@ -571,8 +571,8 @@ http_file(
 http_file(
     name = "mainnet_nns_sns-wasm-canister",
     downloaded_file_path = "sns-wasm-canister.wasm.gz",
-    sha256 = "c07b57fac0037ae5e2e979e4217e88e05bd039e4be9f52a5a1b38582edc04b21",
-    url = "https://download.dfinity.systems/ic/0d8ec8daddaa03b5d5f972d68acb0a7697729bba/canisters/sns-wasm-canister.wasm.gz",
+    sha256 = "8c775d8cf1d0ef07884c1aa057e5366111daf59f1c52c0e8514e8b4f6e692e40",
+    url = "https://download.dfinity.systems/ic/87f48a595b6f666fbc7fe6ad4081aa98fd113d12/canisters/sns-wasm-canister.wasm.gz",
 )
 
 # Deployed SNS canisters
