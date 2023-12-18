@@ -108,6 +108,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/config/src/http_handler.rs                          @dfinity-lab/teams/networking-team
 /rs/consensus/                                          @dfinity-lab/teams/consensus-owners
 /rs/constants/                                          @dfinity-lab/teams/interface-owners
+/rs/cross-chain/                                        @dfinity-lab/teams/cross-chain-team
 /rs/crypto/                                             @dfinity-lab/teams/crypto-owners
 /rs/crypto/tree_hash/                                   @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/crypto-owners
 /rs/cup_explorer                                        @dfinity-lab/teams/consensus-owners
