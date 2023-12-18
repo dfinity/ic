@@ -24,7 +24,6 @@ use crate::signature::{
     BasicSignature, MultiSignature, MultiSignatureShare, ThresholdSignature,
     ThresholdSignatureShare,
 };
-use crate::state_sync::StateSyncMessage;
 use ic_crypto_sha2::{DomainSeparationContext, Sha256};
 use std::hash::Hash;
 
@@ -108,7 +107,6 @@ mod private {
     impl CryptoHashDomainSeal for CatchUpShareContent {}
     impl CryptoHashDomainSeal for Signed<CatchUpShareContent, ThresholdSignatureShare<CatchUpContent>> {}
 
-    impl CryptoHashDomainSeal for StateSyncMessage {}
     impl CryptoHashDomainSeal for ConsensusMessage {}
     impl CryptoHashDomainSeal for CertificationMessage {}
 
@@ -320,12 +318,6 @@ impl CryptoHashDomain for Signed<CatchUpContent, ThresholdSignature<CatchUpConte
 impl CryptoHashDomain for Signed<CatchUpShareContent, ThresholdSignatureShare<CatchUpContent>> {
     fn domain(&self) -> String {
         DomainSeparator::CatchUpPackageShare.to_string()
-    }
-}
-
-impl CryptoHashDomain for StateSyncMessage {
-    fn domain(&self) -> String {
-        DomainSeparator::StateSyncMessage.to_string()
     }
 }
 
