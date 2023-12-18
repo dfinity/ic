@@ -80,7 +80,13 @@ pub fn test(env: TestEnv) {
         let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
         info!(log, "Enable ECDSA signing");
-        enable_ecdsa_signing(&governance, nns_subnet.subnet_id, make_key(KEY_ID1)).await;
+        enable_ecdsa_signing(
+            &governance,
+            nns_subnet.subnet_id,
+            vec![make_key(KEY_ID1)],
+            &log,
+        )
+        .await;
         let msg_can = MessageCanister::new(&nns_agent, nns_node.effective_canister_id()).await;
         info!(log, "Getting public key");
         let public_key = get_public_key_with_logger(make_key(KEY_ID1), &msg_can, &log)

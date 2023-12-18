@@ -92,7 +92,13 @@ pub fn test(env: TestEnv) {
     let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
     block_on(async {
-        enable_ecdsa_signing(&governance, nns_subnet.subnet_id, make_key(KEY_ID1)).await;
+        enable_ecdsa_signing(
+            &governance,
+            nns_subnet.subnet_id,
+            vec![make_key(KEY_ID1)],
+            &log,
+        )
+        .await;
     });
     info!(log, "Initial run to get public key.");
     let agent = nns_node.with_default_agent(|agent| async move { agent });
