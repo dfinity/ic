@@ -1269,6 +1269,11 @@ impl ProposalRewardStatus {
 }
 
 impl Topic {
+    pub const MIN: Topic = Topic::Unspecified;
+    // A unit test will fail if this value does not stay up to date (e.g. when a new value is
+    // added).
+    pub const MAX: Topic = Topic::ApiBoundaryNodeManagement;
+
     /// When voting rewards are distributed, the voting power of
     /// neurons voting on proposals are weighted by this amount. The
     /// weights are designed to encourage active participation from
@@ -1642,7 +1647,7 @@ fn maybe_build_initial_account_id_neuron_index(heap_neurons: &BTreeMap<u64, Neur
             let account_id = AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), subaccount);
             if let Err(governance_error) = indexes
                 .account_id_mut()
-                .add_neuron_account_id(NeuronId { id }, account_id)
+                .add_neuron_account_id(id, account_id)
             {
                 panic!(
                     "{}WARNING: issues encountered when adding neuron to NeuronAccountIdIndex. {}",

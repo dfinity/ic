@@ -11,6 +11,9 @@ pub mod registry;
 pub mod types;
 
 impl NeuronId {
+    pub const MIN: Self = Self { id: u64::MIN };
+    pub const MAX: Self = Self { id: u64::MAX };
+
     pub fn from_subaccount(subaccount: &[u8; 32]) -> Self {
         Self {
             id: {
@@ -53,16 +56,12 @@ impl BoundedStorable for NeuronId {
 
 impl LowerBounded for NeuronId {
     fn min_value() -> Self {
-        NeuronId {
-            id: u64::min_value(),
-        }
+        Self::MIN
     }
 }
 
 impl UpperBounded for NeuronId {
     fn max_value() -> Self {
-        NeuronId {
-            id: u64::max_value(),
-        }
+        Self::MAX
     }
 }
