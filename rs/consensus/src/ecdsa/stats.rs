@@ -188,24 +188,25 @@ impl EcdsaStats for EcdsaStatsImpl {
         let mut active_quadruples = HashSet::new();
         let mut state = self.state.lock().unwrap();
         for quadruple_id in block_reader.quadruples_in_creation() {
-            active_quadruples.insert(*quadruple_id);
+            active_quadruples.insert(quadruple_id);
+
             state
                 .quadruple_stats
-                .entry(*quadruple_id)
+                .entry(quadruple_id.clone())
                 .or_insert(QuadrupleStats {
                     start_time: Instant::now(),
                 });
         }
 
-        // Remove the entries that are no longer active, and finish reporting their
-        // metrics
+        // Remove the entries that are no longer active, and finish reporting their metrics
         let mut to_remove = HashSet::new();
         for (quadruple_id, quadruple_stats) in &state.quadruple_stats {
             if !active_quadruples.contains(quadruple_id) {
-                to_remove.insert(*quadruple_id);
+                to_remove.insert(quadruple_id.clone());
                 self.on_quadruple_done(quadruple_stats);
             }
         }
+
         for quadruple_id in &to_remove {
             state.quadruple_stats.remove(quadruple_id);
         }
@@ -262,9 +263,10 @@ impl EcdsaStats for EcdsaStatsImpl {
         let mut state = self.state.lock().unwrap();
         for (request_id, _) in block_reader.requested_signatures() {
             active_requests.insert(request_id);
+
             state
                 .signature_stats
-                .entry(*request_id)
+                .entry(request_id.clone())
                 .or_insert(SignatureStats {
                     start_time: Instant::now(),
                     sig_share_validation_duration: Vec::new(),
@@ -272,18 +274,19 @@ impl EcdsaStats for EcdsaStatsImpl {
                 });
         }
 
-        // Remove the entries no longer active, and finish reporting their
-        // metrics
+        // Remove the entries no longer active, and finish reporting their metrics
         let mut to_remove = HashSet::new();
         for (request_id, signature_stats) in &state.signature_stats {
             if !active_requests.contains(request_id) {
-                to_remove.insert(*request_id);
+                to_remove.insert(request_id.clone());
                 self.on_signature_done(signature_stats);
             }
         }
+
         for request_id in &to_remove {
             state.signature_stats.remove(request_id);
         }
+
         self.signature_metrics
             .active_signatures
             .set(state.signature_stats.len() as i64);

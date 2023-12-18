@@ -77,7 +77,7 @@ impl EcdsaSignerImpl {
             })
             .flat_map(|(request_id, sig_inputs_ref)| {
                 self.resolve_ref(sig_inputs_ref, block_reader, "send_signature_shares")
-                    .map_or(Default::default(), |sig_inputs| {
+                    .map(|sig_inputs| {
                         self.crypto_create_signature_share(
                             ecdsa_pool,
                             transcript_loader,
@@ -85,6 +85,7 @@ impl EcdsaSignerImpl {
                             &sig_inputs,
                         )
                     })
+                    .unwrap_or_default()
             })
             .collect()
     }
@@ -97,7 +98,7 @@ impl EcdsaSignerImpl {
     ) -> EcdsaChangeSet {
         let sig_inputs_map = block_reader
             .requested_signatures()
-            .map(|(request_id, sig_inputs)| (*request_id, sig_inputs))
+            .map(|(request_id, sig_inputs)| (request_id, sig_inputs))
             .collect::<BTreeMap<_, _>>();
 
         // Collection of validated shares
@@ -106,7 +107,7 @@ impl EcdsaSignerImpl {
         let mut ret = Vec::new();
         for (id, share) in ecdsa_pool.unvalidated().signature_shares() {
             // Remove the duplicate entries
-            let key = (share.request_id, share.signer_id);
+            let key = (share.request_id.clone(), share.signer_id);
             if validated_sig_shares.contains(&key) {
                 self.metrics
                     .sign_errors_inc("duplicate_sig_shares_in_batch");
@@ -117,7 +118,7 @@ impl EcdsaSignerImpl {
                 continue;
             }
 
-            match Action::action(block_reader, &sig_inputs_map, &share.request_id) {
+            match Action::new(block_reader, &sig_inputs_map, &share.request_id) {
                 Action::Process(sig_inputs_ref) => {
                     if self.signer_has_issued_signature_share(
                         ecdsa_pool,
@@ -175,7 +176,7 @@ impl EcdsaSignerImpl {
     ) -> EcdsaChangeSet {
         let in_progress = block_reader
             .requested_signatures()
-            .map(|(request_id, _)| *request_id)
+            .map(|(request_id, _)| request_id.clone())
             .collect::<BTreeSet<_>>();
 
         let mut ret = Vec::new();
@@ -246,7 +247,7 @@ impl EcdsaSignerImpl {
             |share| {
                 let sig_share = EcdsaSigShare {
                     signer_id: self.node_id,
-                    request_id: *request_id,
+                    request_id: request_id.clone(),
                     share,
                 };
                 self.metrics.sign_metrics_inc("sig_shares_sent");
@@ -536,12 +537,10 @@ enum Action<'a> {
 }
 
 impl<'a> Action<'a> {
-    /// Decides the action to take on a received message with the given
-    /// height/RequestId
-    #[allow(clippy::self_named_constructors)]
-    fn action(
+    /// Decides the action to take on a received message with the given height/RequestId
+    fn new(
         block_reader: &'a dyn EcdsaBlockReader,
-        requested_signatures: &'a BTreeMap<RequestId, &'a ThresholdEcdsaSigInputsRef>,
+        requested_signatures: &'a BTreeMap<&RequestId, &'a ThresholdEcdsaSigInputsRef>,
         msg_request_id: &RequestId,
     ) -> Action<'a> {
         let msg_height = msg_request_id.height;
@@ -597,7 +596,7 @@ mod tests {
     use prometheus::IntCounterVec;
     use std::ops::Deref;
 
-    /// Resolves the ThresholdEcdsaSigInputsRef -> ThresholdEcdsaSigInputs
+    /// Resolves the [`ThresholdEcdsaSigInputsRef`] -> [`ThresholdEcdsaSigInputs`]
     fn resolve_sig_inputs_refs(
         block_reader: &dyn EcdsaBlockReader,
         reason: &str,
@@ -606,10 +605,10 @@ mod tests {
     ) -> Vec<(RequestId, ThresholdEcdsaSigInputs)> {
         let mut ret = Vec::new();
         for (request_id, sig_inputs_ref) in block_reader.requested_signatures() {
-            // Translate the ThresholdEcdsaSigInputsRef -> ThresholdEcdsaSigInputs
+            // Translate the [`ThresholdEcdsaSigInputsRef`] -> [`ThresholdEcdsaSigInputs`]
             match sig_inputs_ref.translate(block_reader) {
                 Ok(sig_inputs) => {
-                    ret.push((*request_id, sig_inputs));
+                    ret.push((request_id.clone(), sig_inputs));
                 }
                 Err(error) => {
                     warn!(
@@ -637,7 +636,6 @@ mod tests {
         }
     }
 
-    // Tests the Action logic
     #[test]
     fn test_ecdsa_signer_action() {
         let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
@@ -653,25 +651,22 @@ mod tests {
         let block_reader = TestEcdsaBlockReader::for_signer_test(
             height,
             vec![
-                (id_1, create_sig_inputs(1)),
-                (id_2, create_sig_inputs(2)),
-                (id_3, create_sig_inputs(3)),
+                (id_1.clone(), create_sig_inputs(1)),
+                (id_2.clone(), create_sig_inputs(2)),
+                (id_3.clone(), create_sig_inputs(3)),
             ],
         );
         let mut requested = BTreeMap::new();
         for (request_id, sig_inputs_ref) in block_reader.requested_signatures() {
-            requested.insert(*request_id, sig_inputs_ref);
+            requested.insert(request_id, sig_inputs_ref);
         }
 
         // Message from a node ahead of us
-        assert_eq!(
-            Action::action(&block_reader, &requested, &id_4),
-            Action::Defer
-        );
+        assert_eq!(Action::new(&block_reader, &requested, &id_4), Action::Defer);
 
         // Messages for transcripts not being currently requested
         assert_eq!(
-            Action::action(
+            Action::new(
                 &block_reader,
                 &requested,
                 &create_request_id(&mut uid_generator, Height::from(100),)
@@ -679,7 +674,7 @@ mod tests {
             Action::Drop
         );
         assert_eq!(
-            Action::action(
+            Action::new(
                 &block_reader,
                 &requested,
                 &create_request_id(&mut uid_generator, Height::from(10),)
@@ -688,10 +683,10 @@ mod tests {
         );
 
         // Messages for signatures currently requested
-        let action = Action::action(&block_reader, &requested, &id_1);
+        let action = Action::new(&block_reader, &requested, &id_1);
         assert_matches!(action, Action::Process(_));
 
-        let action = Action::action(&block_reader, &requested, &id_2);
+        let action = Action::new(&block_reader, &requested, &id_2);
         assert_matches!(action, Action::Process(_));
     }
 
@@ -712,9 +707,9 @@ mod tests {
         // Set up the ECDSA pool. Pool has shares for requests 1, 2, 3.
         // Only the share for request 1 is issued by us
         let shares = vec![
-            EcdsaMessage::EcdsaSigShare(create_signature_share(NODE_1, id_1)),
-            EcdsaMessage::EcdsaSigShare(create_signature_share(NODE_2, id_2)),
-            EcdsaMessage::EcdsaSigShare(create_signature_share(NODE_3, id_3)),
+            EcdsaMessage::EcdsaSigShare(create_signature_share(NODE_1, id_1.clone())),
+            EcdsaMessage::EcdsaSigShare(create_signature_share(NODE_2, id_2.clone())),
+            EcdsaMessage::EcdsaSigShare(create_signature_share(NODE_3, id_3.clone())),
         ];
 
         // Set up the signature requests
@@ -722,9 +717,9 @@ mod tests {
         let block_reader = TestEcdsaBlockReader::for_signer_test(
             Height::from(100),
             vec![
-                (id_1, create_sig_inputs(1)),
-                (id_4, create_sig_inputs(4)),
-                (id_5, create_sig_inputs(5)),
+                (id_1.clone(), create_sig_inputs(1)),
+                (id_4.clone(), create_sig_inputs(4)),
+                (id_5.clone(), create_sig_inputs(5)),
             ],
         );
         let transcript_loader: TestEcdsaTranscriptLoader = Default::default();
@@ -940,7 +935,10 @@ mod tests {
         // The block requests transcripts 2, 3
         let block_reader = TestEcdsaBlockReader::for_signer_test(
             height,
-            vec![(id_2, create_sig_inputs(2)), (id_3, create_sig_inputs(3))],
+            vec![
+                (id_2.clone(), create_sig_inputs(2)),
+                (id_3.clone(), create_sig_inputs(3)),
+            ],
         );
 
         // Set up the ECDSA pool
@@ -1023,14 +1021,14 @@ mod tests {
 
                 // Set up the ECDSA pool
                 // Validated pool has: {signature share 2, signer = NODE_2}
-                let share = create_signature_share(NODE_2, id_2);
+                let share = create_signature_share(NODE_2, id_2.clone());
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSigShare(share),
                 )];
                 ecdsa_pool.apply_changes(change_set);
 
                 // Unvalidated pool has: {signature share 2, signer = NODE_2, height = 100}
-                let share = create_signature_share(NODE_2, id_2);
+                let share = create_signature_share(NODE_2, id_2.clone());
                 let msg_id_2 = share.message_id();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaSigShare(share),
@@ -1061,7 +1059,7 @@ mod tests {
                 let id_1 = create_request_id(&mut uid_generator, Height::from(100));
 
                 // Unvalidated pool has: {signature share 1, signer = NODE_2}
-                let share = create_signature_share_with_nonce(NODE_2, id_1, 0);
+                let share = create_signature_share_with_nonce(NODE_2, id_1.clone(), 0);
                 let msg_id_1 = share.message_id();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaSigShare(share),
@@ -1070,7 +1068,7 @@ mod tests {
                 });
 
                 // Unvalidated pool has: {signature share 2, signer = NODE_2}
-                let share = create_signature_share_with_nonce(NODE_2, id_1, 1);
+                let share = create_signature_share_with_nonce(NODE_2, id_1.clone(), 1);
                 let msg_id_2 = share.message_id();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaSigShare(share),
@@ -1079,7 +1077,7 @@ mod tests {
                 });
 
                 // Unvalidated pool has: {signature share 2, signer = NODE_3}
-                let share = create_signature_share_with_nonce(NODE_3, id_1, 2);
+                let share = create_signature_share_with_nonce(NODE_3, id_1.clone(), 2);
                 let msg_id_3 = share.message_id();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaSigShare(share),
@@ -1120,7 +1118,10 @@ mod tests {
                 // The block requests transcripts 1, 3
                 let block_reader = TestEcdsaBlockReader::for_signer_test(
                     Height::from(100),
-                    vec![(id_1, create_sig_inputs(1)), (id_3, create_sig_inputs(3))],
+                    vec![
+                        (id_1.clone(), create_sig_inputs(1)),
+                        (id_3.clone(), create_sig_inputs(3)),
+                    ],
                 );
 
                 // Share 1: height <= current_height, in_progress (not purged)
@@ -1172,7 +1173,10 @@ mod tests {
                 // The block requests transcripts 1, 3
                 let block_reader = TestEcdsaBlockReader::for_signer_test(
                     Height::from(100),
-                    vec![(id_1, create_sig_inputs(1)), (id_3, create_sig_inputs(3))],
+                    vec![
+                        (id_1.clone(), create_sig_inputs(1)),
+                        (id_3.clone(), create_sig_inputs(3)),
+                    ],
                 );
 
                 // Share 1: height <= current_height, in_progress (not purged)
@@ -1216,7 +1220,10 @@ mod tests {
 
             let block_reader = TestEcdsaBlockReader::for_signer_test(
                 Height::from(100),
-                vec![(id_1, create_sig_inputs(1)), (id_2, create_sig_inputs(2))],
+                vec![
+                    (id_1.clone(), create_sig_inputs(1)),
+                    (id_2.clone(), create_sig_inputs(2)),
+                ],
             );
 
             let metrics = MetricsRegistry::new();
@@ -1276,7 +1283,7 @@ mod tests {
                 // Set up the transcript creation request
                 let block_reader = TestEcdsaBlockReader::for_signer_test(
                     Height::from(100),
-                    vec![(req_id, (&sig_inputs).into())],
+                    vec![(req_id.clone(), (&sig_inputs).into())],
                 );
 
                 let metrics = EcdsaPayloadMetrics::new(MetricsRegistry::new());
@@ -1308,7 +1315,7 @@ mod tests {
                             .expect("failed to create sig share");
                         EcdsaSigShare {
                             signer_id: receiver.id(),
-                            request_id: req_id,
+                            request_id: req_id.clone(),
                             share,
                         }
                     })

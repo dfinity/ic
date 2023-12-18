@@ -17,10 +17,18 @@ message EcdsaPayload {
   repeated registry.subnet.v1.IDkgTranscript idkg_transcripts = 6;
   repeated OngoingXnetReshare ongoing_xnet_reshares = 7;
   repeated XnetReshareAgreement xnet_reshare_agreements = 8;
-  UnmaskedTranscriptWithAttributes current_key_transcript = 9;
   uint64 next_unused_quadruple_id = 10;
+  repeated EcdsaKeyTranscript key_transcripts = 13;
+  // TODO: retire these fields, once we start using `key_transcripts`.
+  UnmaskedTranscriptWithAttributes current_key_transcript = 9;
   KeyTranscriptCreation next_key_in_creation = 11;
   registry.crypto.v1.EcdsaKeyId key_id = 12;
+}
+
+message EcdsaKeyTranscript {
+  registry.crypto.v1.EcdsaKeyId key_id = 1;
+  UnmaskedTranscriptWithAttributes current = 2;
+  KeyTranscriptCreation next_in_creation = 3;
 }
 
 message OngoingSignature {
@@ -31,11 +39,13 @@ message OngoingSignature {
 message AvailableQuadruple {
   uint64 quadruple_id = 1;
   PreSignatureQuadrupleRef quadruple = 2;
+  registry.crypto.v1.EcdsaKeyId key_id = 3;
 }
 
 message QuadrupleInProgress {
   uint64 quadruple_id = 1;
   QuadrupleInCreation quadruple = 2;
+  registry.crypto.v1.EcdsaKeyId key_id = 3;
 }
 
 message OngoingXnetReshare {
@@ -44,10 +54,9 @@ message OngoingXnetReshare {
 }
 
 message XnetReshareAgreement {
-  reserved 2;
+  reserved 2, 3;
   reserved "response";
   EcdsaReshareRequest request = 1;
-  reserved 3;
   state.queues.v1.Response initial_dealings = 4;
 }
 
@@ -55,6 +64,7 @@ message RequestId {
   bytes pseudo_random_id = 1;
   uint64 quadruple_id = 2;
   uint64 height = 3;
+  registry.crypto.v1.EcdsaKeyId key_id = 4;
 }
 
 message TranscriptRef {
