@@ -34,6 +34,7 @@ hyper = "0.14.18"
 hyper-rustls = "0.24.0"
 ic-btc-interface = { workspace = true }
 ic-config = { path = "../../config" }
+ic-crypto-internal-basic-sig-ed25519 = { path = "../../crypto/internal/crypto_lib/basic_sig/ed25519" }
 ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
 ic-crypto-utils-tls = { path = "../../crypto/utils/tls" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
