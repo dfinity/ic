@@ -69,7 +69,13 @@ pub fn test(env: TestEnv) {
             nns_honest_node.effective_canister_id(),
         );
         let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
-        enable_ecdsa_signing(&governance, nns_subnet.subnet_id, make_key(KEY_ID1)).await;
+        enable_ecdsa_signing(
+            &governance,
+            nns_subnet.subnet_id,
+            vec![make_key(KEY_ID1)],
+            &log,
+        )
+        .await;
 
         let msg_can =
             MessageCanister::new(&nns_agent, nns_honest_node.effective_canister_id()).await;
