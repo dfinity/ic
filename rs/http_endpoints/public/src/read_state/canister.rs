@@ -302,7 +302,7 @@ fn verify_paths(
                                 return Err(HttpError {
                                     status: StatusCode::FORBIDDEN,
                                     message:
-                                        "Request IDs must be for requests to canisters in the valid canister range of this subnet."
+                                        "Request IDs must be for requests to canisters belonging to sender delegation targets."
                                             .to_string(),
                                 });
                             }
