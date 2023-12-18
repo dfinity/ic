@@ -7543,7 +7543,7 @@ impl Governance {
             let refund = initial_neurons_fund_participation
                 .into_snapshot()
                 .diff(participated_reserves)?;
-            let total_refund_amount_icp_e8s = refund.total_amount_icp_e8s();
+            let total_refund_amount_icp_e8s = refund.total_amount_icp_e8s()?;
             if total_refund_amount_icp_e8s > 0 {
                 println!(
                     "{}INFO: About to refund {} Neurons' Fund neurons with a total of {} \

@@ -9,6 +9,7 @@ use crate::interleaving::{
     },
     EnvironmentControlMessage, InterleavingTestEnvironment,
 };
+use assert_matches::assert_matches;
 use common::{increase_dissolve_delay_raw, set_dissolve_delay_raw};
 use fixtures::{principal, NNSBuilder, NeuronBuilder, NNS};
 use futures::{channel::mpsc, future::FutureExt, StreamExt};
@@ -160,10 +161,10 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
     let sns_governance_canister_id = principal(2);
     let nf_neurons_controller = principal(3);
     let nf_neuron_id_u64 = 42_u64;
-    let nf_neuron_maturity = 1_000_000 * E8;
+    let nf_neuron_maturity = 2_000_000 * E8;
     let proposal_id = ProposalId { id: 1 };
     let sns_governance_treasury_account = AccountIdentifier::new(sns_governance_canister_id, None);
-    let total_nf_maturity_equivalent_icp_e8s = 1_000_000 * E8;
+    let total_nf_maturity_equivalent_icp_e8s = 2_000_000 * E8;
     let min_direct_participation_icp_e8s = 50_000 * E8;
     let max_direct_participation_icp_e8s = 200_000 * E8;
     let effective_direct_participation_icp_e8s = 100_000 * E8;
@@ -178,8 +179,38 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
     // channel to terminate the test.
     let finish_tx = tx.clone();
 
+    let initial_neurons_fund_participation = NeuronsFundParticipation {
+        ideal_matched_participation_function: Some(IdealMatchedParticipationFunction {
+            serialized_representation: Some(matching_function.serialize()),
+        }),
+        neurons_fund_reserves: Some(NeuronsFundSnapshot {
+            neurons_fund_neuron_portions: vec![NeuronsFundNeuronPortion {
+                nns_neuron_id: Some(NeuronId {
+                    id: nf_neuron_id_u64,
+                }),
+                amount_icp_e8s: Some(max_direct_participation_icp_e8s),
+                maturity_equivalent_icp_e8s: Some(nf_neuron_maturity),
+                hotkey_principal: Some(nf_neurons_controller),
+                is_capped: Some(false),
+            }],
+        }),
+        swap_participation_limits: Some(SwapParticipationLimits {
+            min_direct_participation_icp_e8s: Some(min_direct_participation_icp_e8s),
+            max_direct_participation_icp_e8s: Some(max_direct_participation_icp_e8s),
+            min_participant_icp_e8s: Some(E8),
+            max_participant_icp_e8s: Some(max_participant_icp_e8s),
+        }),
+        direct_participation_icp_e8s: Some(max_direct_participation_icp_e8s),
+        total_maturity_equivalent_icp_e8s: Some(total_nf_maturity_equivalent_icp_e8s),
+        max_neurons_fund_swap_participation_icp_e8s: Some(max_direct_participation_icp_e8s),
+        intended_neurons_fund_participation_icp_e8s: Some(max_direct_participation_icp_e8s),
+        allocated_neurons_fund_participation_icp_e8s: Some(max_direct_participation_icp_e8s),
+    };
+
+    assert_matches!(initial_neurons_fund_participation.validate(), Ok(_));
+
     let mut nns = NNSBuilder::new()
-        // Add the proposal that will be used in the settle_cf_participant method
+        // Add the proposal that will be used in `settle_neurons_fund_participation`.
         .add_proposal(ProposalData {
             id: Some(proposal_id),
             proposal: Some(Proposal {
@@ -192,37 +223,7 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
             }),
             cf_participants: vec![],
             neurons_fund_data: Some(NeuronsFundData {
-                initial_neurons_fund_participation: Some(NeuronsFundParticipation {
-                    ideal_matched_participation_function: Some(IdealMatchedParticipationFunction {
-                        serialized_representation: Some(matching_function.serialize()),
-                    }),
-                    neurons_fund_reserves: Some(NeuronsFundSnapshot {
-                        neurons_fund_neuron_portions: vec![NeuronsFundNeuronPortion {
-                            nns_neuron_id: Some(NeuronId {
-                                id: nf_neuron_id_u64,
-                            }),
-                            amount_icp_e8s: Some(nf_neuron_maturity),
-                            maturity_equivalent_icp_e8s: Some(nf_neuron_maturity),
-                            hotkey_principal: Some(nf_neurons_controller),
-                            is_capped: Some(false),
-                        }],
-                    }),
-                    swap_participation_limits: Some(SwapParticipationLimits {
-                        min_direct_participation_icp_e8s: Some(min_direct_participation_icp_e8s),
-                        max_direct_participation_icp_e8s: Some(max_direct_participation_icp_e8s),
-                        min_participant_icp_e8s: Some(E8),
-                        max_participant_icp_e8s: Some(max_participant_icp_e8s),
-                    }),
-                    direct_participation_icp_e8s: Some(max_direct_participation_icp_e8s),
-                    total_maturity_equivalent_icp_e8s: Some(total_nf_maturity_equivalent_icp_e8s),
-                    max_neurons_fund_swap_participation_icp_e8s: Some(
-                        max_direct_participation_icp_e8s,
-                    ),
-                    intended_neurons_fund_participation_icp_e8s: Some(
-                        max_direct_participation_icp_e8s,
-                    ),
-                    allocated_neurons_fund_participation_icp_e8s: Some(nf_neuron_maturity),
-                }),
+                initial_neurons_fund_participation: Some(initial_neurons_fund_participation),
                 final_neurons_fund_participation: None,
                 neurons_fund_refunds: None,
             }),
@@ -291,7 +292,7 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
 
         let expected_sns_treasury_balance_icp_e8s: u64 = if let Ok(ref snapshot) = settle_nf_result
         {
-            snapshot.total_amount_icp_e8s()
+            snapshot.total_amount_icp_e8s().unwrap()
         } else {
             panic!("Expected Ok settle result, got {:?}", settle_nf_result);
         };
