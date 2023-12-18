@@ -1,5 +1,5 @@
 {
-  "checksum": "d92bf493d25dea8651eb1e530a6276465bf8e411e2ee820cbf1f1c45563d9f03",
+  "checksum": "e860ff98b02e44f034bb96930fa6b5d05b681138ea2216c157c363a00439adbe",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -28469,27 +28469,12 @@
         ],
         "crate_features": {
           "common": [
+            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
-          "selects": {
-            "aarch64-unknown-linux-gnu": [
-              "errno"
-            ],
-            "arm-unknown-linux-gnueabi": [
-              "errno"
-            ],
-            "armv7-unknown-linux-gnueabi": [
-              "errno"
-            ],
-            "i686-unknown-linux-gnu": [
-              "errno"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "errno"
-            ]
-          }
+          "selects": {}
         },
         "edition": "2018",
         "version": "0.3.8"
@@ -28523,25 +28508,22 @@
         ],
         "crate_features": {
           "common": [
+            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
           "selects": {
             "aarch64-unknown-linux-gnu": [
-              "errno",
               "prctl"
             ],
             "arm-unknown-linux-gnueabi": [
-              "errno",
               "prctl"
             ],
             "armv7-unknown-linux-gnueabi": [
-              "errno",
               "prctl"
             ],
             "i686-unknown-linux-gnu": [
-              "errno",
               "prctl"
             ],
             "powerpc-unknown-linux-gnu": [
@@ -28551,7 +28533,6 @@
               "prctl"
             ],
             "x86_64-unknown-linux-gnu": [
-              "errno",
               "prctl"
             ]
           }

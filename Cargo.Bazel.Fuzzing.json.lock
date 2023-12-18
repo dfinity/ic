@@ -1,5 +1,5 @@
 {
-  "checksum": "ab8f5d943a20a9d4f188f85bd1073c778fc5f3fb1570ba5464e585df3ba7f2a5",
+  "checksum": "a053c9b8f2ecd75caf2c77e249fa50e58a46fe86f3a0c8c62f884e67b1dec7ec",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -28635,29 +28635,23 @@
         ],
         "crate_features": {
           "common": [
+            "elf",
+            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
           "selects": {
             "aarch64-unknown-linux-gnu": [
-              "elf",
-              "errno",
               "prctl"
             ],
             "arm-unknown-linux-gnueabi": [
-              "elf",
-              "errno",
               "prctl"
             ],
             "armv7-unknown-linux-gnueabi": [
-              "elf",
-              "errno",
               "prctl"
             ],
             "i686-unknown-linux-gnu": [
-              "elf",
-              "errno",
               "prctl"
             ],
             "powerpc-unknown-linux-gnu": [
@@ -28667,8 +28661,6 @@
               "prctl"
             ],
             "x86_64-unknown-linux-gnu": [
-              "elf",
-              "errno",
               "prctl"
             ]
           }
@@ -34005,12 +33997,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "data": {
-          "common": [
-            "@openssl"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
             {
@@ -34024,26 +34010,12 @@
           ],
           "selects": {}
         },
-        "extra_deps": {
-          "common": [
-            "@openssl"
-          ],
-          "selects": {}
-        },
         "edition": "2018",
         "version": "0.9.97"
       },
       "build_script_attrs": {
-        "data": {
-          "common": [
-            "@openssl//:gen_dir",
-            "@openssl//:openssl"
-          ],
-          "selects": {}
-        },
         "data_glob": [
-          "**",
-          "build/**/*.c"
+          "**"
         ],
         "deps": {
           "common": [
@@ -34060,13 +34032,6 @@
               "target": "vcpkg"
             }
           ],
-          "selects": {}
-        },
-        "build_script_env": {
-          "common": {
-            "OPENSSL_DIR": "$(execpath @openssl//:gen_dir)",
-            "OPENSSL_STATIC": "true"
-          },
           "selects": {}
         },
         "links": "openssl"
