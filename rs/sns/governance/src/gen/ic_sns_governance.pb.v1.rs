@@ -394,6 +394,15 @@ pub mod transfer_sns_treasury_funds {
         }
     }
 }
+/// A proposal function that changes the ledger's parameters.
+/// Fields with None values will remain unchanged.
+#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ManageLedgerParameters {
+    #[prost(uint64, optional, tag = "1")]
+    pub transfer_fee: ::core::option::Option<u64>,
+}
 /// A proposal to mint SNS tokens to (optionally a Subaccount of) the
 /// target principal.
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
@@ -493,7 +502,7 @@ pub struct Proposal {
     /// of this mapping.
     #[prost(
         oneof = "proposal::Action",
-        tags = "4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16"
+        tags = "4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -589,6 +598,11 @@ pub mod proposal {
         /// Id = 12.
         #[prost(message, tag = "16")]
         MintSnsTokens(super::MintSnsTokens),
+        /// Change some parameters on the ledger.
+        ///
+        /// Id = 13
+        #[prost(message, tag = "17")]
+        ManageLedgerParameters(super::ManageLedgerParameters),
     }
 }
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
@@ -795,6 +809,7 @@ pub struct ProposalData {
     /// Id 7 - UpgradeSnsToNextVersion proposals.
     /// Id 8 - ManageSnsMetadata proposals.
     /// Id 9 - TransferSnsTreasuryFunds proposals.
+    /// Id 13 - ManageLedgerParameters proposals.
     #[prost(uint64, tag = "1")]
     pub action: u64,
     /// This is stored here temporarily. It is also stored on the map

@@ -1206,14 +1206,18 @@ pub(crate) fn empty_ecdsa_payload(subnet_id: SubnetId) -> EcdsaPayload {
         key_transcript: EcdsaKeyTranscript {
             current: None,
             next_in_creation: KeyTranscriptCreation::Begin,
-            key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
+            key_id: fake_ecdsa_key_id(),
         },
     }
 }
 
+pub(crate) fn fake_ecdsa_key_id() -> EcdsaKeyId {
+    EcdsaKeyId::from_str("Secp256k1:some_key").unwrap()
+}
+
 pub(crate) fn create_reshare_request(num_nodes: u64, registry_version: u64) -> EcdsaReshareRequest {
     EcdsaReshareRequest {
-        key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
+        key_id: fake_ecdsa_key_id(),
         receiving_node_ids: (0..num_nodes).map(node_test_id).collect::<Vec<_>>(),
         registry_version: RegistryVersion::from(registry_version),
     }

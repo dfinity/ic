@@ -45,22 +45,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
         "ic-wasm": [crate.annotation(
             gen_binaries = True,
         )],
-        # OpenSSL is still an indirect dependency of some tests that require ssh2.
-        # It shouldn't be used by any main binaries however.
-        "openssl-sys": [crate.annotation(
-            build_script_data = [
-                "@openssl//:gen_dir",
-                "@openssl//:openssl",
-            ],
-            # https://github.com/sfackler/rust-openssl/tree/master/openssl-sys/build
-            build_script_data_glob = ["build/**/*.c"],
-            build_script_env = {
-                "OPENSSL_DIR": "$(execpath @openssl//:gen_dir)",
-                "OPENSSL_STATIC": "true",
-            },
-            data = ["@openssl"],
-            deps = ["@openssl"],
-        )] if sanitizers_enabled else [],
         "librocksdb-sys": [crate.annotation(
             build_script_env = {
                 # Bazel executors assign only one core when executing
@@ -168,6 +152,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = [
                     "headers",
                 ],
+            ),
+            "axum-extra": crate.spec(
+                version = "^0.9.0",
             ),
             "axum-server": crate.spec(
                 version = "^0.5.1",
@@ -917,6 +904,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "randomkit": crate.spec(
                 version = "^0.1.1",
             ),
+            "ratelimit": crate.spec(
+                version = "^0.7.1",
+            ),
             "rayon": crate.spec(
                 version = "^1.5.1",
             ),
@@ -1379,11 +1369,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "x509-parser": crate.spec(
                 version = "^0.15.1",
-                features = ["verify"],
-            ),
-            "x509-parser-without-verify": crate.spec(
-                package = "x509-parser",
-                version = "^0.14.0",
             ),
             "yansi": crate.spec(
                 version = "^0.5.0",

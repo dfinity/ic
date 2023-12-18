@@ -828,6 +828,7 @@ fn test_query_endpoint_returns_service_unavailable_on_missing_state() {
 
     let agent = Agent::builder()
         .with_transport(ReqwestHttpReplicaV2Transport::create(format!("http://{}", addr)).unwrap())
+        .with_verify_query_signatures(false)
         .build()
         .unwrap();
 

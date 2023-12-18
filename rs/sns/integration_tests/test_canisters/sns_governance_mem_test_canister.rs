@@ -255,12 +255,18 @@ fn allocate_proposal_data(
 ) -> ProposalData {
     // As Proposal Actions are keyed on u64, below is a map of those keys to ~estimated~ payload size
     let payload_size: usize = match action {
-        native_action_ids::UNSPECIFIED => 10_000, // Max size of motion_text payload = 10_000 bytes
+        native_action_ids::UNSPECIFIED | native_action_ids::MOTION => 10_000, // Max size of motion_text payload = 10_000 bytes
         native_action_ids::MANAGE_NERVOUS_SYSTEM_PARAMETERS => 280, // sizeof(NervousSystemParameter) = 280 bytes
         native_action_ids::UPGRADE_SNS_CONTROLLER_CANISTER => 1_500_000, // Governance wasm is 1.5 MB
         native_action_ids::ADD_GENERIC_NERVOUS_SYSTEM_FUNCTION => 200, // sizeof(NervousSystemFunction) = ~200 bytes
         native_action_ids::REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION => 8, // sizeof(u64) = 8 bytes
         native_action_ids::EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION => 1_000_000, // Estimate of average payload size = 1MB
+        native_action_ids::MANAGE_SNS_METADATA => 2 * 1024 * 1024,
+        native_action_ids::UPGRADE_SNS_TO_NEXT_VERSION => 100,
+        native_action_ids::TRANSFER_SNS_TREASURY_FUNDS => 100,
+        native_action_ids::REGISTER_DAPP_CANISTERS => 100,
+        native_action_ids::DEREGISTER_DAPP_CANISTERS => 100,
+        native_action_ids::MANAGE_LEDGER_PARAMETERS => 100,
         _ => panic!("Undefined proposal action"),
     };
 

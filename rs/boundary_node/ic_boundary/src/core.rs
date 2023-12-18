@@ -14,6 +14,7 @@ use axum::{
     routing::method_routing::{get, post},
     Router,
 };
+use axum_extra::middleware::option_layer;
 use axum_server::{accept::DefaultAcceptor, Server};
 use futures::TryFutureExt;
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
@@ -251,6 +252,22 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                 ))
                 .layer(middleware::from_fn(routes::preprocess_request))
                 .layer(middleware::from_fn(management::btc_mw))
+                .layer(option_layer(cli.rate_limiting.rate_limit_ledger_call.map(
+                    |x| {
+                        middleware::from_fn_with_state(
+                            Arc::new(management::LedgerRatelimitState::new(x)),
+                            management::ledger_ratelimit_mw,
+                        )
+                    },
+                )))
+                .layer(option_layer(
+                    cli.rate_limiting.rate_limit_ledger_transfer.map(|x| {
+                        middleware::from_fn_with_state(
+                            Arc::new(management::LedgerRatelimitState::new(x)),
+                            management::ledger_ratelimit_transfer_mw,
+                        )
+                    }),
+                ))
                 .layer(middleware::from_fn_with_state(
                     lookup.clone(),
                     routes::lookup_subnet,

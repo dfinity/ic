@@ -54,9 +54,7 @@ use ic_nns_governance::{
     init::GovernanceCanisterInitPayloadBuilder,
     pb::v1::{
         add_or_remove_node_provider::Change,
-        governance::{
-            GovernanceCachedMetrics, GovernanceCachedMetricsChange, MigrationsDesc, SeedAccounts,
-        },
+        governance::{GovernanceCachedMetrics, GovernanceCachedMetricsChange, MigrationsDesc},
         governance_error::ErrorType::{
             self, InsufficientFunds, NotAuthorized, NotFound, PreconditionFailed, ResourceExhausted,
         },
@@ -4077,7 +4075,6 @@ fn test_get_neuron_ids_by_principal() {
 fn empty_fixture() -> GovernanceProto {
     GovernanceProto {
         economics: Some(NetworkEconomics::with_default_values()),
-        seed_accounts: Some(SeedAccounts::default()),
         ..Default::default()
     }
 }
@@ -11802,7 +11799,7 @@ lazy_static! {
             21342385865,
         ),
         allocated_neurons_fund_participation_icp_e8s: Some(
-            19208147279,
+            19208147278,
         ),
     });
 

@@ -197,7 +197,7 @@ impl StateSyncClient for FakeStateSync {
     fn start_state_sync(
         &self,
         id: &StateSyncArtifactId,
-    ) -> Option<Box<dyn Chunkable + Send + Sync>> {
+    ) -> Option<Box<dyn Chunkable<StateSyncMessage> + Send + Sync>> {
         if !self.uses_global() && id.height > self.current_height() && !self.disconnected() {
             return Some(Box::new(FakeChunkable::new(
                 self.local_state.clone(),
@@ -263,7 +263,7 @@ impl FakeChunkable {
     }
 }
 
-impl Chunkable for FakeChunkable {
+impl Chunkable<StateSyncMessage> for FakeChunkable {
     /// Returns iterator for chunks to download.
     /// Tries to first download metamanifest, then manifest and then chunks. Does not advance if previous didn't complete.
     fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>> {
@@ -311,7 +311,7 @@ impl Chunkable for FakeChunkable {
 
 #[derive(Clone, Default)]
 pub struct SharableMockChunkable {
-    mock: Arc<Mutex<MockChunkable>>,
+    mock: Arc<Mutex<MockChunkable<StateSyncMessage>>>,
     chunks_to_download_calls: Arc<AtomicUsize>,
     add_chunks_calls: Arc<AtomicUsize>,
 }
@@ -323,7 +323,7 @@ impl SharableMockChunkable {
             ..Default::default()
         }
     }
-    pub fn get_mut(&self) -> MutexGuard<'_, MockChunkable> {
+    pub fn get_mut(&self) -> MutexGuard<'_, MockChunkable<StateSyncMessage>> {
         self.mock.lock().unwrap()
     }
     pub fn add_chunks_calls(&self) -> usize {
@@ -335,7 +335,7 @@ impl SharableMockChunkable {
     }
 }
 
-impl Chunkable for SharableMockChunkable {
+impl Chunkable<StateSyncMessage> for SharableMockChunkable {
     fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>> {
         self.chunks_to_download_calls.fetch_add(1, Ordering::SeqCst);
         self.mock.lock().unwrap().chunks_to_download()
@@ -390,7 +390,7 @@ impl StateSyncClient for SharableMockStateSync {
     fn start_state_sync(
         &self,
         id: &StateSyncArtifactId,
-    ) -> Option<Box<dyn Chunkable + Send + Sync>> {
+    ) -> Option<Box<dyn Chunkable<StateSyncMessage> + Send + Sync>> {
         self.start_state_sync_calls.fetch_add(1, Ordering::SeqCst);
         self.mock.lock().unwrap().start_state_sync(id)
     }

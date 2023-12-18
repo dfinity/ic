@@ -45,3 +45,6 @@ mod payment_flow;
 
 #[cfg(test)]
 mod initialization_flow;
+
+#[cfg(test)]
+mod manage_ledger_parameters;

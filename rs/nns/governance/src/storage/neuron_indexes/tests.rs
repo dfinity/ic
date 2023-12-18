@@ -5,7 +5,7 @@ use crate::{
         neuron::{DissolveState, Followees},
         Governance as GovernanceProto, KnownNeuronData,
     },
-    storage::{reset_stable_memory, Signed32},
+    storage::reset_stable_memory,
 };
 use assert_matches::assert_matches;
 use ic_nervous_system_common::{cmc::MockCMC, ledger::MockIcpLedger};
@@ -60,10 +60,11 @@ fn add_remove_neuron() {
         hashset! {}
     );
     assert_eq!(
-        indexes
-            .following()
-            .get_followers_by_followee_and_category(&2, Signed32::from(1)),
-        Vec::<u64>::default()
+        indexes.following().get_followers_by_followee_and_category(
+            &NeuronId { id: 2 },
+            Topic::try_from(1).unwrap()
+        ),
+        vec![]
     );
     assert_eq!(indexes.known_neuron().list_known_neuron_ids(), vec![]);
     assert_eq!(
@@ -88,15 +89,16 @@ fn add_remove_neuron() {
             indexes
                 .principal()
                 .get_neuron_ids(PrincipalId::new_user_test_id(principal_num)),
-            hashset! { 1 }
+            hashset! { NeuronId {id: 1} }
         );
     }
     for followee_id in 2..=4 {
         assert_eq!(
-            indexes
-                .following()
-                .get_followers_by_followee_and_category(&followee_id, Signed32::from(1)),
-            vec![1]
+            indexes.following().get_followers_by_followee_and_category(
+                &NeuronId { id: followee_id },
+                Topic::try_from(1).unwrap()
+            ),
+            vec![NeuronId { id: 1 }]
         );
     }
     assert_eq!(
@@ -127,10 +129,11 @@ fn add_remove_neuron() {
         hashset! {}
     );
     assert_eq!(
-        indexes
-            .following()
-            .get_followers_by_followee_and_category(&2, Signed32::from(1)),
-        Vec::<u64>::default()
+        indexes.following().get_followers_by_followee_and_category(
+            &NeuronId { id: 2 },
+            Topic::try_from(1).unwrap()
+        ),
+        vec![]
     );
     assert_eq!(indexes.known_neuron().list_known_neuron_ids(), vec![]);
     assert_eq!(
@@ -219,7 +222,7 @@ fn update_neuron_replace_controller() {
         hot_keys: vec![],
         ..MODEL_NEURON.clone()
     };
-    let neuron_id = MODEL_NEURON.id.unwrap().id;
+    let neuron_id = MODEL_NEURON.id.unwrap();
     // Before updating, the neuron can be looked up by the old controller but cannot be by the new
     // one.
     assert_eq!(
@@ -274,7 +277,7 @@ fn update_neuron_add_hot_key() {
         ],
         ..MODEL_NEURON.clone()
     };
-    let neuron_id = MODEL_NEURON.id.unwrap().id;
+    let neuron_id = MODEL_NEURON.id.unwrap();
     // Before updating, the neuron can be looked up by 101, 102 but not 103
     for i in 101..=102 {
         assert_eq!(
@@ -321,7 +324,7 @@ fn update_neuron_remove_hot_key() {
         hot_keys: vec![PrincipalId::new_user_test_id(102)],
         ..MODEL_NEURON.clone()
     };
-    let neuron_id = MODEL_NEURON.id.unwrap().id;
+    let neuron_id = MODEL_NEURON.id.unwrap();
     // Before updating, the neuron can be looked up by 101, 102
     for i in 101..=102 {
         assert_eq!(
@@ -369,7 +372,7 @@ fn update_neuron_remove_controller_as_hot_key() {
         hot_keys: vec![PrincipalId::new_user_test_id(101)],
         ..MODEL_NEURON.clone()
     };
-    let neuron_id = MODEL_NEURON.id.unwrap().id;
+    let neuron_id = MODEL_NEURON.id.unwrap();
     // Before updating, the neuron can be looked up by 100, 101
     for i in 100..=101 {
         assert_eq!(
@@ -398,14 +401,14 @@ fn update_neuron_set_followees() {
     let mut indexes = new_heap_based();
     let old_neuron = Neuron {
         followees: hashmap! {
-            1 => Followees{
+            Topic::NeuronManagement as i32 => Followees{
                 followees: vec![
                     NeuronId { id: 2 },
                     NeuronId { id: 3 },
                     NeuronId { id: 4 },
                 ],
             },
-            2 => Followees{
+            Topic::ExchangeRate as i32 => Followees{
                 followees: vec![
                     NeuronId { id: 5 },
                     NeuronId { id: 6 },
@@ -417,14 +420,14 @@ fn update_neuron_set_followees() {
     assert_eq!(indexes.add_neuron(&old_neuron), Ok(()));
     let new_neuron = Neuron {
         followees: hashmap! {
-            1 => Followees{
+            Topic::NeuronManagement as i32 => Followees{
                 followees: vec![
                     NeuronId { id: 2 },
                     NeuronId { id: 3 },
                     NeuronId { id: 4 },
                 ],
             },
-            2 => Followees{
+            Topic::ExchangeRate as i32 => Followees{
                 followees: vec![
                     NeuronId { id: 7 },
                     NeuronId { id: 8 },
@@ -433,13 +436,14 @@ fn update_neuron_set_followees() {
         },
         ..MODEL_NEURON.clone()
     };
-    let neuron_id = MODEL_NEURON.id.unwrap().id;
+    let neuron_id = MODEL_NEURON.id.unwrap();
     // Before updating, the neuron can be looked up by 2, 3, 4 for topic 1.
     for i in 2..=4 {
         assert_eq!(
-            indexes
-                .following()
-                .get_followers_by_followee_and_category(&i, Signed32::from(1)),
+            indexes.following().get_followers_by_followee_and_category(
+                &NeuronId { id: i },
+                Topic::NeuronManagement
+            ),
             vec![neuron_id],
         );
     }
@@ -448,7 +452,7 @@ fn update_neuron_set_followees() {
         assert_eq!(
             indexes
                 .following()
-                .get_followers_by_followee_and_category(&i, Signed32::from(2)),
+                .get_followers_by_followee_and_category(&NeuronId { id: i }, Topic::ExchangeRate),
             vec![neuron_id],
         );
     }
@@ -458,27 +462,30 @@ fn update_neuron_set_followees() {
     // After updating, the neuron can still be looked up by 2, 3, 4 for topic 1.
     for i in 2..=4 {
         assert_eq!(
-            indexes
-                .following()
-                .get_followers_by_followee_and_category(&i, Signed32::from(1)),
+            indexes.following().get_followers_by_followee_and_category(
+                &NeuronId { id: i },
+                Topic::NeuronManagement
+            ),
             vec![neuron_id],
         );
     }
     // After updating, the neuron can no longer be looked up by 5, 6 for topic 2.
     for i in 5..=6 {
         assert_eq!(
-            indexes
-                .following()
-                .get_followers_by_followee_and_category(&i, Signed32::from(2)),
-            Vec::<u64>::new(),
+            indexes.following().get_followers_by_followee_and_category(
+                &NeuronId { id: i },
+                Topic::try_from(2).unwrap()
+            ),
+            vec![],
         );
     }
     // After updating, the neuron can be looked up by 7, 8 for topic 2.
     for i in 7..=8 {
         assert_eq!(
-            indexes
-                .following()
-                .get_followers_by_followee_and_category(&i, Signed32::from(2)),
+            indexes.following().get_followers_by_followee_and_category(
+                &NeuronId { id: i },
+                Topic::try_from(2).unwrap()
+            ),
             vec![neuron_id],
         );
     }

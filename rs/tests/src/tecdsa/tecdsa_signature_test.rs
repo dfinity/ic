@@ -37,7 +37,7 @@ use ic_ic00_types::{
     SignWithECDSAArgs, SignWithECDSAReply,
 };
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
-use ic_nns_common::types::{NeuronId, ProposalId};
+use ic_nns_common::types::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::{governance::submit_external_update_proposal, ids::TEST_NEURON_1_ID};
@@ -221,6 +221,10 @@ pub(crate) async fn get_public_key_with_retries(
         derivation_path: DerivationPath::new(vec![]),
         key_id,
     };
+    info!(
+        logger,
+        "Sending a 'get public key' request: {:?}", public_key_request
+    );
 
     let mut count = 0;
     let public_key = loop {
@@ -240,8 +244,11 @@ pub(crate) async fn get_public_key_with_retries(
             Err(err) => {
                 count += 1;
                 if count < retries {
-                    debug!(logger, "ecdsa_public_key returns {}, try again...", err);
-                    tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+                    debug!(
+                        logger,
+                        "ecdsa_public_key returns `{}`. Trying again...", err
+                    );
+                    tokio::time::sleep(Duration::from_millis(1000)).await;
                 } else {
                     return Err(err);
                 }
@@ -257,45 +264,68 @@ pub(crate) async fn get_public_key_with_logger(
     msg_can: &MessageCanister<'_>,
     logger: &Logger,
 ) -> Result<VerifyingKey, AgentError> {
-    get_public_key_with_retries(key_id, msg_can, logger, 10).await
+    get_public_key_with_retries(key_id, msg_can, logger, /*retries=*/ 10).await
 }
 
 pub(crate) async fn execute_update_subnet_proposal(
     governance: &Canister<'_>,
     proposal_payload: UpdateSubnetPayload,
+    title: &str,
+    logger: &Logger,
 ) {
-    let proposal_id: ProposalId = submit_external_update_proposal(
+    info!(
+        logger,
+        "Executing Subnet Update proposal: {:?}", proposal_payload
+    );
+
+    let proposal_id = submit_external_update_proposal(
         governance,
         Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
         NeuronId(TEST_NEURON_1_ID),
         NnsFunction::UpdateConfigOfSubnet,
         proposal_payload,
-        "<proposal created by threshold ecdsa test>".to_string(),
-        "".to_string(),
+        format!(
+            "<subnet update proposal created by threshold ecdsa test>: {}",
+            title
+        ),
+        /*summary=*/ String::default(),
     )
     .await;
 
     let proposal_result = vote_and_execute_proposal(governance, proposal_id).await;
-    println!("{:?}", proposal_result);
+    info!(
+        logger,
+        "Subnet Update proposal result: {:?}", proposal_result
+    );
     assert_eq!(proposal_result.status(), ProposalStatus::Executed);
 }
 
-async fn execute_create_subnet_proposal(
+pub(crate) async fn execute_create_subnet_proposal(
     governance: &Canister<'_>,
     proposal_payload: CreateSubnetPayload,
+    logger: &Logger,
 ) {
-    let proposal_id: ProposalId = submit_external_update_proposal(
+    info!(
+        logger,
+        "Executing Subnet creation proposal: {:?}", proposal_payload
+    );
+
+    let proposal_id = submit_external_update_proposal(
         governance,
         Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
         NeuronId(TEST_NEURON_1_ID),
         NnsFunction::CreateSubnet,
         proposal_payload,
-        "<proposal created by threshold ecdsa test>".to_string(),
-        "".to_string(),
+        "<subnet creation proposal created by threshold ecdsa test>".to_string(),
+        /*summary=*/ String::default(),
     )
     .await;
 
     let proposal_result = vote_and_execute_proposal(governance, proposal_id).await;
+    info!(
+        logger,
+        "Subnet Creation proposal result: {:?}", proposal_result
+    );
     assert_eq!(proposal_result.status(), ProposalStatus::Executed);
 }
 
@@ -311,6 +341,7 @@ pub(crate) async fn get_signature_with_logger(
         derivation_path: DerivationPath::new(Vec::new()),
         key_id,
     };
+    info!(logger, "Sending a signing request: {:?}", signature_request);
 
     let mut count = 0;
     let signature = loop {
@@ -333,8 +364,8 @@ pub(crate) async fn get_signature_with_logger(
             Err(err) => {
                 count += 1;
                 if count < 20 {
-                    debug!(logger, "sign_with_ecdsa returns {}, try again...", err);
-                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                    debug!(logger, "sign_with_ecdsa returns `{}`. Trying again...", err);
+                    tokio::time::sleep(Duration::from_millis(500)).await;
                 } else {
                     return Err(err);
                 }
@@ -358,69 +389,78 @@ pub(crate) fn verify_signature(
 pub(crate) async fn enable_ecdsa_signing(
     governance: &Canister<'_>,
     subnet_id: SubnetId,
-    key_id: EcdsaKeyId,
+    key_ids: Vec<EcdsaKeyId>,
+    logger: &Logger,
 ) {
-    enable_ecdsa_signing_with_timeout(governance, subnet_id, key_id, None).await
+    enable_ecdsa_signing_with_timeout(
+        governance, subnet_id, key_ids, /*timeout=*/ None, logger,
+    )
+    .await
 }
 
 pub(crate) async fn enable_ecdsa_signing_with_timeout(
     governance: &Canister<'_>,
     subnet_id: SubnetId,
-    key_id: EcdsaKeyId,
+    key_ids: Vec<EcdsaKeyId>,
     timeout: Option<Duration>,
+    logger: &Logger,
 ) {
     enable_ecdsa_signing_with_timeout_and_rotation_period(
-        governance, subnet_id, key_id, timeout, None,
+        governance, subnet_id, key_ids, timeout, /*period=*/ None, logger,
     )
     .await
 }
 
-pub(crate) async fn add_ecdsa_key_with_timeout_and_rotation_period(
+pub(crate) async fn add_ecdsa_keys_with_timeout_and_rotation_period(
     governance: &Canister<'_>,
     subnet_id: SubnetId,
-    key_id: EcdsaKeyId,
+    key_ids: Vec<EcdsaKeyId>,
     timeout: Option<Duration>,
     period: Option<Duration>,
+    logger: &Logger,
 ) {
     let proposal_payload = UpdateSubnetPayload {
         subnet_id,
         ecdsa_config: Some(EcdsaConfig {
             quadruples_to_create_in_advance: 5,
-            key_ids: vec![key_id],
+            key_ids,
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             signature_request_timeout_ns: timeout.map(|t| t.as_nanos() as u64),
             idkg_key_rotation_period_ms: period.map(|t| t.as_millis() as u64),
         }),
         ..empty_subnet_update()
     };
-    execute_update_subnet_proposal(governance, proposal_payload).await;
+    execute_update_subnet_proposal(governance, proposal_payload, "Add ECDSA keys", logger).await;
 }
 
 pub(crate) async fn enable_ecdsa_signing_with_timeout_and_rotation_period(
     governance: &Canister<'_>,
     subnet_id: SubnetId,
-    key_id: EcdsaKeyId,
+    key_ids: Vec<EcdsaKeyId>,
     timeout: Option<Duration>,
     period: Option<Duration>,
+    logger: &Logger,
 ) {
     // The ECDSA key sharing process requires that a key first be added to a
     // subnet, and then enabling signing with that key must happen in a separate
     // proposal.
-    add_ecdsa_key_with_timeout_and_rotation_period(
+    add_ecdsa_keys_with_timeout_and_rotation_period(
         governance,
         subnet_id,
-        key_id.clone(),
+        key_ids.clone(),
         timeout,
         period,
+        logger,
     )
     .await;
 
     let proposal_payload = UpdateSubnetPayload {
         subnet_id,
-        ecdsa_key_signing_enable: Some(vec![key_id]),
+        ecdsa_key_signing_enable: Some(key_ids),
         ..empty_subnet_update()
     };
-    execute_update_subnet_proposal(governance, proposal_payload).await;
+    execute_update_subnet_proposal(governance, proposal_payload, "Enable ECDSA signing", logger)
+        .await;
 }
 
 pub(crate) async fn create_new_subnet_with_keys(
@@ -428,6 +468,7 @@ pub(crate) async fn create_new_subnet_with_keys(
     node_ids: Vec<NodeId>,
     keys: Vec<EcdsaKeyRequest>,
     replica_version: ReplicaVersion,
+    logger: &Logger,
 ) {
     let config = ic_prep_lib::subnet_configuration::get_default_config_params(
         SubnetType::Application,
@@ -475,11 +516,9 @@ pub(crate) async fn create_new_subnet_with_keys(
             idkg_key_rotation_period_ms: None,
         }),
     };
-    execute_create_subnet_proposal(governance, payload).await;
+    execute_create_subnet_proposal(governance, payload, logger).await;
 }
 
-/// Tests whether a call to `sign_with_ecdsa` is responded with a signature
-/// that is verifiable with the result from `ecdsa_public_key`.
 pub fn test_threshold_ecdsa_signature_same_subnet(env: TestEnv) {
     let log = env.logger();
     let topology = env.topology_snapshot();
@@ -494,7 +533,13 @@ pub fn test_threshold_ecdsa_signature_same_subnet(env: TestEnv) {
     block_on(async move {
         let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
-        enable_ecdsa_signing(&governance, app_subnet.subnet_id, make_key(KEY_ID1)).await;
+        enable_ecdsa_signing(
+            &governance,
+            app_subnet.subnet_id,
+            vec![make_key(KEY_ID1)],
+            &log,
+        )
+        .await;
         let msg_can = MessageCanister::new(&app_agent, app_node.effective_canister_id()).await;
         let message_hash = [0xabu8; 32];
         let public_key = get_public_key_with_logger(make_key(KEY_ID1), &msg_can, &log)
@@ -533,7 +578,13 @@ pub fn test_threshold_ecdsa_signature_from_other_subnet(env: TestEnv) {
     block_on(async move {
         let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
-        enable_ecdsa_signing(&governance, app_subnet_2.subnet_id, make_key(KEY_ID2)).await;
+        enable_ecdsa_signing(
+            &governance,
+            app_subnet_2.subnet_id,
+            vec![make_key(KEY_ID2)],
+            &log,
+        )
+        .await;
         let msg_can = MessageCanister::new(
             &agent_for_app_subnet_1,
             node_from_app_subnet_1.effective_canister_id(),
@@ -572,7 +623,13 @@ pub fn test_threshold_ecdsa_signature_fails_without_cycles(env: TestEnv) {
     block_on(async move {
         let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
-        enable_ecdsa_signing(&governance, app_subnet.subnet_id, make_key(KEY_ID1)).await;
+        enable_ecdsa_signing(
+            &governance,
+            app_subnet.subnet_id,
+            vec![make_key(KEY_ID1)],
+            &log,
+        )
+        .await;
 
         // Cycles are only required for application subnets.
         let msg_can = MessageCanister::new(&app_agent, app_node.effective_canister_id()).await;
@@ -623,7 +680,13 @@ pub fn test_threshold_ecdsa_signature_from_nns_without_cycles(env: TestEnv) {
     block_on(async move {
         let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
-        enable_ecdsa_signing(&governance, app_subnet.subnet_id, make_key(KEY_ID2)).await;
+        enable_ecdsa_signing(
+            &governance,
+            app_subnet.subnet_id,
+            vec![make_key(KEY_ID2)],
+            &log,
+        )
+        .await;
         let msg_can = MessageCanister::new(&nns_agent, nns_node.effective_canister_id()).await;
         let message_hash = [0xabu8; 32];
         let public_key = get_public_key_with_logger(make_key(KEY_ID2), &msg_can, &log)
@@ -691,7 +754,13 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
 
         let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
-        enable_ecdsa_signing(&governance, app_subnet.subnet_id, make_key(KEY_ID2)).await;
+        enable_ecdsa_signing(
+            &governance,
+            app_subnet.subnet_id,
+            vec![make_key(KEY_ID2)],
+            log,
+        )
+        .await;
 
         let public_key = get_public_key_with_logger(make_key(KEY_ID2), &msg_can, log)
             .await
@@ -736,6 +805,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
                 subnet_id: Some(app_subnet.subnet_id.get()),
             }],
             replica_version,
+            log,
         )
         .await;
         let new_subnets: HashSet<_> = get_subnet_list_from_registry(&registry_client)
@@ -752,7 +822,13 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
             ecdsa_key_signing_disable: Some(vec![make_key(KEY_ID2)]),
             ..empty_subnet_update()
         };
-        execute_update_subnet_proposal(&governance, disable_signing_payload).await;
+        execute_update_subnet_proposal(
+            &governance,
+            disable_signing_payload,
+            "Disable ECDSA signing",
+            log,
+        )
+        .await;
 
         // Try several times because signing won't fail until new registry data
         // is picked up.
@@ -796,7 +872,8 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
             ecdsa_key_signing_enable: Some(vec![make_key(KEY_ID2)]),
             ..empty_subnet_update()
         };
-        execute_update_subnet_proposal(&governance, proposal_payload).await;
+        execute_update_subnet_proposal(&governance, proposal_payload, "Enable ECDSA signing", log)
+            .await;
 
         let topology_snapshot = env
             .topology_snapshot()
@@ -846,8 +923,9 @@ pub fn test_threshold_ecdsa_signature_timeout(env: TestEnv) {
         enable_ecdsa_signing_with_timeout(
             &governance,
             app_subnet.subnet_id,
-            make_key(KEY_ID1),
+            vec![make_key(KEY_ID1)],
             Some(Duration::from_secs(1)),
+            &log,
         )
         .await;
         let msg_can = MessageCanister::new(&app_agent, app_node.effective_canister_id()).await;
@@ -898,9 +976,10 @@ pub fn test_threshold_ecdsa_key_rotation(test_env: TestEnv) {
         enable_ecdsa_signing_with_timeout_and_rotation_period(
             &governance,
             app_subnet.subnet_id,
-            make_key(KEY_ID1),
+            vec![make_key(KEY_ID1)],
             None,
             Some(Duration::from_secs(50)),
+            &log,
         )
         .await;
         let msg_can = MessageCanister::new(&app_agent, app_node.effective_canister_id()).await;

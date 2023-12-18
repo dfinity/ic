@@ -1,5 +1,5 @@
 {
-  "checksum": "ab8f5d943a20a9d4f188f85bd1073c778fc5f3fb1570ba5464e585df3ba7f2a5",
+  "checksum": "7d1e697dbdd54a307e6975bc9030505c3b57443db18aeef40537255bc4afc0a9",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -4071,6 +4071,99 @@
           ],
           "selects": {}
         }
+      },
+      "license": "MIT"
+    },
+    "axum-extra 0.9.0": {
+      "name": "axum-extra",
+      "version": "0.9.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/axum-extra/0.9.0/download",
+          "sha256": "523ae92256049a3b02d3bb4df80152386cd97ddba0c8c5077619bdc8c4b1859b"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "axum_extra",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "axum_extra",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "axum 0.7.2",
+              "target": "axum"
+            },
+            {
+              "id": "axum-core 0.4.1",
+              "target": "axum_core"
+            },
+            {
+              "id": "bytes 1.5.0",
+              "target": "bytes"
+            },
+            {
+              "id": "futures-util 0.3.29",
+              "target": "futures_util"
+            },
+            {
+              "id": "http 1.0.0",
+              "target": "http"
+            },
+            {
+              "id": "http-body 1.0.0",
+              "target": "http_body"
+            },
+            {
+              "id": "http-body-util 0.1.0",
+              "target": "http_body_util"
+            },
+            {
+              "id": "mime 0.3.17",
+              "target": "mime"
+            },
+            {
+              "id": "pin-project-lite 0.2.13",
+              "target": "pin_project_lite"
+            },
+            {
+              "id": "serde 1.0.190",
+              "target": "serde"
+            },
+            {
+              "id": "tower 0.4.13",
+              "target": "tower"
+            },
+            {
+              "id": "tower-layer 0.3.2",
+              "target": "tower_layer"
+            },
+            {
+              "id": "tower-service 0.3.2",
+              "target": "tower_service"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.9.0"
       },
       "license": "MIT"
     },
@@ -9374,6 +9467,72 @@
       },
       "license": "MIT OR Apache-2.0"
     },
+    "clocksource 0.6.0": {
+      "name": "clocksource",
+      "version": "0.6.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/clocksource/0.6.0/download",
+          "sha256": "b90cc4cec392a6d97223f008b5da7a3c2c71aa6d5ffdf0e3e14d8b2432738387"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "clocksource",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "clocksource",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "libc 0.2.149",
+              "target": "libc"
+            },
+            {
+              "id": "time 0.3.30",
+              "target": "time"
+            }
+          ],
+          "selects": {
+            "cfg(all(not(windows), not(unix), not(target_os = \"macos\"), not(target_os = \"ios\")))": [
+              {
+                "id": "lazy_static 1.4.0",
+                "target": "lazy_static"
+              }
+            ],
+            "cfg(any(target_os = \"macos\", target_os = \"ios\"))": [
+              {
+                "id": "mach 0.3.2",
+                "target": "mach"
+              }
+            ],
+            "cfg(windows)": [
+              {
+                "id": "lazy_static 1.4.0",
+                "target": "lazy_static"
+              },
+              {
+                "id": "winapi 0.3.9",
+                "target": "winapi"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "version": "0.6.0"
+      },
+      "license": "Apache-2.0"
+    },
     "cloudabi 0.0.3": {
       "name": "cloudabi",
       "version": "0.0.3",
@@ -13728,6 +13887,10 @@
               "target": "axum"
             },
             {
+              "id": "axum-extra 0.9.0",
+              "target": "axum_extra"
+            },
+            {
               "id": "axum-server 0.5.1",
               "target": "axum_server"
             },
@@ -14475,6 +14638,10 @@
               "target": "randomkit"
             },
             {
+              "id": "ratelimit 0.7.1",
+              "target": "ratelimit"
+            },
+            {
               "id": "rayon 1.8.0",
               "target": "rayon"
             },
@@ -14915,11 +15082,6 @@
             {
               "id": "x509-cert 0.2.4",
               "target": "x509_cert"
-            },
-            {
-              "id": "x509-parser 0.14.0",
-              "target": "x509_parser",
-              "alias": "x509_parser_without_verify"
             },
             {
               "id": "x509-parser 0.15.1",
@@ -28635,29 +28797,23 @@
         ],
         "crate_features": {
           "common": [
+            "elf",
+            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
           "selects": {
             "aarch64-unknown-linux-gnu": [
-              "elf",
-              "errno",
               "prctl"
             ],
             "arm-unknown-linux-gnueabi": [
-              "elf",
-              "errno",
               "prctl"
             ],
             "armv7-unknown-linux-gnueabi": [
-              "elf",
-              "errno",
               "prctl"
             ],
             "i686-unknown-linux-gnu": [
-              "elf",
-              "errno",
               "prctl"
             ],
             "powerpc-unknown-linux-gnu": [
@@ -28667,8 +28823,6 @@
               "prctl"
             ],
             "x86_64-unknown-linux-gnu": [
-              "elf",
-              "errno",
               "prctl"
             ]
           }
@@ -34005,12 +34159,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "data": {
-          "common": [
-            "@openssl"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
             {
@@ -34024,26 +34172,12 @@
           ],
           "selects": {}
         },
-        "extra_deps": {
-          "common": [
-            "@openssl"
-          ],
-          "selects": {}
-        },
         "edition": "2018",
         "version": "0.9.97"
       },
       "build_script_attrs": {
-        "data": {
-          "common": [
-            "@openssl//:gen_dir",
-            "@openssl//:openssl"
-          ],
-          "selects": {}
-        },
         "data_glob": [
-          "**",
-          "build/**/*.c"
+          "**"
         ],
         "deps": {
           "common": [
@@ -34060,13 +34194,6 @@
               "target": "vcpkg"
             }
           ],
-          "selects": {}
-        },
-        "build_script_env": {
-          "common": {
-            "OPENSSL_DIR": "$(execpath @openssl//:gen_dir)",
-            "OPENSSL_STATIC": "true"
-          },
           "selects": {}
         },
         "links": "openssl"
@@ -41936,6 +42063,53 @@
         "version": "1.4.0"
       },
       "license": "MIT/Apache-2.0"
+    },
+    "ratelimit 0.7.1": {
+      "name": "ratelimit",
+      "version": "0.7.1",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/ratelimit/0.7.1/download",
+          "sha256": "bf5bcfab8fa35f78da44c3ebb3437381c0ae11e9fab355b7a27f581d8d2028a2"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ratelimit",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "ratelimit",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "clocksource 0.6.0",
+              "target": "clocksource"
+            },
+            {
+              "id": "parking_lot 0.12.1",
+              "target": "parking_lot"
+            },
+            {
+              "id": "thiserror 1.0.49",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.7.1"
+      },
+      "license": "MIT OR Apache-2.0"
     },
     "raw-cpuid 10.7.0": {
       "name": "raw-cpuid",
@@ -61393,13 +61567,13 @@
       },
       "license": "Apache-2.0 OR MIT"
     },
-    "x509-parser 0.14.0": {
+    "x509-parser 0.15.1": {
       "name": "x509-parser",
-      "version": "0.14.0",
+      "version": "0.15.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/x509-parser/0.14.0/download",
-          "sha256": "e0ecbeb7b67ce215e40e3cc7f2ff902f94a223acf44995934763467e7b1febc8"
+          "url": "https://crates.io/api/v1/crates/x509-parser/0.15.1/download",
+          "sha256": "7069fba5b66b9193bd2c5d3d4ff12b839118f6bcbef5328efafafb5395cf63da"
         }
       },
       "targets": [
@@ -61431,10 +61605,6 @@
               "target": "asn1_rs"
             },
             {
-              "id": "base64 0.13.1",
-              "target": "base64"
-            },
-            {
               "id": "data-encoding 2.4.0",
               "target": "data_encoding"
             },
@@ -61453,89 +61623,6 @@
             {
               "id": "oid-registry 0.6.1",
               "target": "oid_registry"
-            },
-            {
-              "id": "rusticata-macros 4.1.0",
-              "target": "rusticata_macros"
-            },
-            {
-              "id": "thiserror 1.0.49",
-              "target": "thiserror"
-            },
-            {
-              "id": "time 0.3.30",
-              "target": "time"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.14.0"
-      },
-      "license": "MIT/Apache-2.0"
-    },
-    "x509-parser 0.15.1": {
-      "name": "x509-parser",
-      "version": "0.15.1",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/x509-parser/0.15.1/download",
-          "sha256": "7069fba5b66b9193bd2c5d3d4ff12b839118f6bcbef5328efafafb5395cf63da"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "x509_parser",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "x509_parser",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "ring",
-            "verify"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "asn1-rs 0.5.2",
-              "target": "asn1_rs"
-            },
-            {
-              "id": "data-encoding 2.4.0",
-              "target": "data_encoding"
-            },
-            {
-              "id": "der-parser 8.2.0",
-              "target": "der_parser"
-            },
-            {
-              "id": "lazy_static 1.4.0",
-              "target": "lazy_static"
-            },
-            {
-              "id": "nom 7.1.3",
-              "target": "nom"
-            },
-            {
-              "id": "oid-registry 0.6.1",
-              "target": "oid_registry"
-            },
-            {
-              "id": "ring 0.16.20",
-              "target": "ring"
             },
             {
               "id": "rusticata-macros 4.1.0",
@@ -62259,6 +62346,15 @@
       "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-none"
+    ],
+    "cfg(all(not(windows), not(unix), not(target_os = \"macos\"), not(target_os = \"ios\")))": [
+      "riscv32imc-unknown-none-elf",
+      "riscv64gc-unknown-none-elf",
+      "thumbv7em-none-eabi",
+      "thumbv8m.main-none-eabi",
+      "wasm32-unknown-unknown",
+      "wasm32-wasi",
       "x86_64-unknown-none"
     ],
     "cfg(all(target_arch = \"aarch64\", target_env = \"msvc\", not(windows_raw_dylib)))": [

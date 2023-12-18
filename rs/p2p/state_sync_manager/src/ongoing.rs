@@ -70,7 +70,7 @@ struct OngoingStateSync {
     downloading_chunks: JoinMap<ChunkId, DownloadResult>,
     // State sync
     state_sync: Arc<dyn StateSyncClient>,
-    tracker: Arc<Mutex<Box<dyn Chunkable + Send + Sync>>>,
+    tracker: Arc<Mutex<Box<dyn Chunkable<StateSyncMessage> + Send + Sync>>>,
     state_sync_finished: bool,
 }
 
@@ -88,7 +88,7 @@ pub(crate) fn start_ongoing_state_sync(
     log: ReplicaLogger,
     rt: &Handle,
     metrics: OngoingStateSyncMetrics,
-    tracker: Arc<Mutex<Box<dyn Chunkable + Send + Sync>>>,
+    tracker: Arc<Mutex<Box<dyn Chunkable<StateSyncMessage> + Send + Sync>>>,
     artifact_id: StateSyncArtifactId,
     state_sync: Arc<dyn StateSyncClient>,
     transport: Arc<dyn Transport>,
@@ -296,7 +296,7 @@ impl OngoingStateSync {
     async fn download_chunk_task(
         peer_id: NodeId,
         client: Arc<dyn Transport>,
-        tracker: Arc<Mutex<Box<dyn Chunkable + Send + Sync>>>,
+        tracker: Arc<Mutex<Box<dyn Chunkable<StateSyncMessage> + Send + Sync>>>,
         artifact_id: StateSyncArtifactId,
         chunk_id: ChunkId,
         metrics: OngoingStateSyncMetrics,
@@ -409,7 +409,7 @@ mod tests {
                     .body(compress_empty_bytes())
                     .unwrap())
             });
-            let mut c = MockChunkable::default();
+            let mut c = MockChunkable::<StateSyncMessage>::default();
             c.expect_chunks_to_download()
                 .returning(|| Box::new(std::iter::once(ChunkId::from(1))));
 
@@ -448,7 +448,7 @@ mod tests {
                     .body(compress_empty_bytes())
                     .unwrap())
             });
-            let mut c = MockChunkable::default();
+            let mut c = MockChunkable::<StateSyncMessage>::default();
             c.expect_chunks_to_download()
                 .returning(|| Box::new(std::iter::once(ChunkId::from(1))));
             c.expect_add_chunk()
@@ -494,7 +494,7 @@ mod tests {
                     .body(compress_empty_bytes())
                     .unwrap())
             });
-            let mut c = MockChunkable::default();
+            let mut c = MockChunkable::<StateSyncMessage>::default();
             // Endless iterator
             c.expect_chunks_to_download()
                 .returning(|| Box::new(std::iter::once(ChunkId::from(1))));

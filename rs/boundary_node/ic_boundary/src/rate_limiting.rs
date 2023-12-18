@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use anyhow::anyhow;
 use axum::{error_handling::HandleErrorLayer, response::IntoResponse, BoxError, Router};
 use http::request::Request;
@@ -9,7 +11,7 @@ use tower_governor::{
     GovernorLayer,
 };
 
-use crate::{routes::ApiError, snapshot::Node};
+use crate::{persist::RouteSubnet, routes::ApiError};
 
 pub struct RateLimit {
     requests_per_second: u32, // requests per second allowed
@@ -32,14 +34,16 @@ impl TryFrom<u32> for RateLimit {
 struct SubnetRateToken;
 
 impl KeyExtractor for SubnetRateToken {
-    type Key = candid::types::principal::Principal;
+    type Key = String;
+
     fn extract<B>(&self, req: &Request<B>) -> Result<Self::Key, GovernorError> {
         // This should always work, because we extract the subnet id after preprocess_request puts it there.
         Ok(req
             .extensions()
-            .get::<Node>()
+            .get::<Arc<RouteSubnet>>()
             .ok_or(GovernorError::UnableToExtractKey)?
-            .subnet_id)
+            .id
+            .clone())
     }
 }
 

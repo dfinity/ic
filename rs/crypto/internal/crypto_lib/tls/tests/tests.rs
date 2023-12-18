@@ -77,10 +77,6 @@ fn should_generate_self_signed_certificate() {
 
     let (_remainder, x509) = X509Certificate::from_der(&cert.bytes).unwrap();
 
-    // Verify with x509_parser's method, which uses the ring library underneath
-    assert_eq!(x509.verify_signature(None), Ok(()));
-
-    // Verify manually with our own internal library
     let public_key = Ed25519PublicKeyBytes::try_from(
         x509.tbs_certificate
             .subject_pki

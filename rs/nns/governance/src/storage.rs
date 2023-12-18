@@ -1,15 +1,12 @@
-use crate::{
-    governance::LOG_PREFIX,
-    pb::v1::{AuditEvent, Topic},
-};
+use crate::{governance::LOG_PREFIX, pb::v1::AuditEvent};
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
-    BoundedStorable, DefaultMemoryImpl, Memory, StableLog, Storable,
+    DefaultMemoryImpl, Memory, StableLog,
 };
-use std::{borrow::Cow, cell::RefCell};
+use std::cell::RefCell;
 
 /// Constants to define memory segments.  Must not change.
 const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
@@ -190,70 +187,6 @@ pub fn grow_upgrades_memory_to(target_pages: u64) {
             );
         }
     });
-}
-
-// Implement BoundedStorable
-// =========================
-
-// Signed32
-// --------
-
-// ic_stable_structures should implement (Bounded)Storable on i32, but does not. Therefore, we do it
-// here. Unfortunately, we must wrap it first, because only ic_stable_structures can implement their
-// traits on foreign types, such as i32.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Signed32(pub i32);
-
-impl Signed32 {
-    const MIN: Signed32 = Signed32(i32::MIN);
-    const MAX: Signed32 = Signed32(i32::MAX);
-}
-
-impl From<i32> for Signed32 {
-    fn from(source: i32) -> Self {
-        Self(source)
-    }
-}
-
-impl From<Signed32> for i32 {
-    fn from(source: Signed32) -> i32 {
-        source.0
-    }
-}
-
-// The choice of little endian is somewhat arbitrary here; native or big endian would also be fine.
-// Little endian is chosen simply because that is what WASM uses:
-// https://webassembly.org/docs/portability/
-impl Storable for Signed32 {
-    fn to_bytes(&self) -> Cow<'_, [u8]> {
-        let serialized = Vec::from(self.0.to_le_bytes());
-        Cow::from(serialized)
-    }
-
-    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
-        let bytes = <[u8; Signed32::MAX_SIZE as usize]>::try_from(&bytes[..])
-            .expect("Unable to convert to array (of size 4) to i32 for Signed32.");
-        Self(i32::from_le_bytes(bytes))
-    }
-}
-
-impl BoundedStorable for Signed32 {
-    const IS_FIXED_SIZE: bool = true;
-    const MAX_SIZE: u32 =
-        // A very long-winded way of saying "4".
-        std::mem::size_of::<i32>() as u32;
-}
-
-// Types used in both NeuronStore and NeuronIndexes.  This indicates the need for some refactoring
-// so that neuron indexes are correctly owned by NeuronStore, which is blocked by changes needed in
-// Governance.
-pub type NeuronIdU64 = u64;
-pub type TopicSigned32 = Signed32;
-
-impl From<Topic> for TopicSigned32 {
-    fn from(topic: Topic) -> Self {
-        Self(topic as i32)
-    }
 }
 
 #[cfg(test)]

@@ -11,7 +11,6 @@
 //!
 //! For more context please check `<https://youtu.be/WaNJINjGleg>`
 //!
-use crate::state_sync::StateSyncMessage;
 use phantom_newtype::Id;
 
 pub type Chunk = Vec<u8>;
@@ -27,11 +26,7 @@ pub enum ArtifactErrorCode {
 pub struct ChunkIdTag;
 pub type ChunkId = Id<ChunkIdTag, u32>;
 
-pub trait Chunkable {
+pub trait Chunkable<T> {
     fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>>;
-    fn add_chunk(
-        &mut self,
-        chunk_id: ChunkId,
-        chunk: Chunk,
-    ) -> Result<StateSyncMessage, ArtifactErrorCode>;
+    fn add_chunk(&mut self, chunk_id: ChunkId, chunk: Chunk) -> Result<T, ArtifactErrorCode>;
 }

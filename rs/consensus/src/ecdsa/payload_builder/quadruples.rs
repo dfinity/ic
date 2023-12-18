@@ -175,7 +175,7 @@ pub(super) fn update_quadruples_in_creation(
                 &quadruple.key_times_lambda,
                 &quadruple.kappa_times_lambda,
             ) {
-                newly_available.push(*key);
+                newly_available.push(key.clone());
             }
         }
         for key in newly_available.into_iter() {
@@ -298,7 +298,7 @@ pub(super) mod test_utils {
         let quadruple_ref = &sig_inputs.sig_inputs_ref.presig_quadruple_ref;
         ecdsa_payload
             .available_quadruples
-            .insert(quadruple_id, quadruple_ref.clone());
+            .insert(quadruple_id.clone(), quadruple_ref.clone());
 
         quadruple_id
     }

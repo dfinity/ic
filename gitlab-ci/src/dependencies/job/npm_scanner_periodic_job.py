@@ -131,7 +131,7 @@ REPOS_TO_SCAN = [
                 owner=Team.GIX_TEAM,
             )
         ],
-        DEFAULT_NODE_VERSION,
+        "18.17.1",
     ),
     # Removing ic-docutrack temporarily since it supports
     # only pnpm and not npm
