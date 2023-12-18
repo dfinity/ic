@@ -45,14 +45,12 @@ pub(crate) fn update_signature_agreements(
     // Then we collect new signatures into the signature_agreements
     let mut completed = BTreeMap::new();
     for request_id in payload.ongoing_signatures.keys() {
-        let (callback_id, context) = match all_random_ids.get(&request_id.pseudo_random_id) {
-            Some((callback_id, context)) => (callback_id, context),
-            None => continue,
+        let Some((callback_id, context)) = all_random_ids.get(&request_id.pseudo_random_id) else {
+            continue;
         };
 
-        let signature = match signature_builder.get_completed_signature(request_id) {
-            Some(signature) => signature,
-            None => continue,
+        let Some(signature) = signature_builder.get_completed_signature(request_id) else {
+            continue;
         };
 
         let response = ic_types::messages::Response {
@@ -70,7 +68,11 @@ pub(crate) fn update_signature_agreements(
                 .encode(),
             ),
         };
-        completed.insert(*request_id, ecdsa::CompletedSignature::Unreported(response));
+
+        completed.insert(
+            request_id.clone(),
+            ecdsa::CompletedSignature::Unreported(response),
+        );
     }
 
     for (request_id, signature) in completed {
@@ -250,7 +252,8 @@ mod tests {
             /*should_create_key_transcript=*/ true,
             /*pseudo_random_ids=*/ vec![pseudo_random_id],
         );
-        let valid_key_ids = BTreeSet::from([ecdsa_payload.key_transcript.key_id.clone()]);
+        let valid_key_id = ecdsa_payload.key_transcript.key_id.clone();
+        let valid_key_ids = BTreeSet::from([valid_key_id.clone()]);
         // Add a quadruple
         let quadruple_id = create_available_quadruple(&mut ecdsa_payload, 10);
         let _quadruple_id_2 = create_available_quadruple(&mut ecdsa_payload, 11);

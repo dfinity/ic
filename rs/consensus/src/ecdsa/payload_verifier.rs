@@ -843,7 +843,7 @@ mod test {
             CallbackId::from(2),
             SignWithEcdsaContext {
                 request: RequestBuilder::new().build(),
-                key_id,
+                key_id: key_id.clone(),
                 pseudo_random_id: [2; 32],
                 message_hash: [0; 32],
                 derivation_path: vec![],
@@ -922,7 +922,12 @@ mod test {
 
         let mut signature_builder = TestEcdsaSignatureBuilder::new();
         signature_builder.signatures.insert(
-            *ecdsa_payload.ongoing_signatures.keys().next().unwrap(),
+            ecdsa_payload
+                .ongoing_signatures
+                .keys()
+                .next()
+                .unwrap()
+                .clone(),
             ThresholdEcdsaCombinedSignature {
                 signature: vec![1; 32],
             },
@@ -935,7 +940,12 @@ mod test {
 
         let prev_payload = ecdsa_payload.clone();
         signature_builder.signatures.insert(
-            *ecdsa_payload.ongoing_signatures.keys().next().unwrap(),
+            ecdsa_payload
+                .ongoing_signatures
+                .keys()
+                .next()
+                .unwrap()
+                .clone(),
             ThresholdEcdsaCombinedSignature {
                 signature: vec![1; 32],
             },
@@ -1038,7 +1048,7 @@ mod test {
                 ecdsa::UnmaskedTranscript::try_from((Height::new(i as u64), &transcript_0))
                     .unwrap();
             curr_payload.available_quadruples.insert(
-                QuadrupleId(i as u64),
+                curr_payload.uid_generator.next_quadruple_id(),
                 PreSignatureQuadrupleRef {
                     kappa_unmasked_ref: malicious_transcript_ref,
                     lambda_masked_ref: masked_transcript_1,

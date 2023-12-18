@@ -751,7 +751,7 @@ pub(crate) fn get_signing_requests<'a>(
     let known_random_ids_ongoing = ecdsa_payload
         .ongoing_signatures
         .keys()
-        .map(|id| (id.pseudo_random_id, *id))
+        .map(|id| (id.pseudo_random_id, id.clone()))
         .collect::<BTreeMap<_, _>>();
     let mut unassigned_quadruple_ids = ecdsa_payload.unassigned_quadruple_ids().collect::<Vec<_>>();
     // sort in reverse order (bigger to smaller).
@@ -809,7 +809,7 @@ pub(crate) fn get_signing_requests<'a>(
         // If not, we create one by pairing the pseudo_random_id with a quadruple id
         // if there are still unassigned quadruples.
         let known_request_id = known_random_ids_ongoing.get(&context.pseudo_random_id);
-        let request_id = known_request_id.copied().or_else(|| {
+        let request_id = known_request_id.cloned().or_else(|| {
             unassigned_quadruple_ids
                 .pop()
                 .map(|quadruple_id| ecdsa::RequestId {
@@ -1207,7 +1207,7 @@ mod tests {
         let subnet_nodes: Vec<_> = env.nodes.ids();
         let registry_version = env.newest_registry_version;
 
-        let valid_keys = BTreeSet::from([key_id]);
+        let valid_keys = BTreeSet::from([key_id.clone()]);
 
         let max_ongoing_signatures = 2;
 
@@ -1250,7 +1250,7 @@ mod tests {
         );
         assert_eq!(new_requests.len(), 1);
         // Check if it is matched with the smaller quadruple ID
-        let request_id_0 = *new_requests.keys().next().unwrap();
+        let request_id_0 = new_requests.keys().next().unwrap().clone();
         assert_eq!(request_id_0.quadruple_id, quadruple_id_0);
 
         // Now we are going to make quadruple_id_1 available.
@@ -1258,7 +1258,7 @@ mod tests {
         let quadruple_ref = &sig_inputs.sig_inputs_ref.presig_quadruple_ref;
         ecdsa_payload
             .available_quadruples
-            .insert(quadruple_id_1, quadruple_ref.clone());
+            .insert(quadruple_id_1.clone(), quadruple_ref.clone());
         ecdsa_payload.quadruples_in_creation.remove(&quadruple_id_1);
         let result = signatures::update_ongoing_signatures(
             signing_requets,
@@ -1288,7 +1288,11 @@ mod tests {
             /*ecdsa_payload_metrics=*/ None,
         );
         assert_eq!(new_requests.len(), 2);
-        let request_id_1 = *new_requests.keys().find(|x| x != &&request_id_0).unwrap();
+        let request_id_1 = new_requests
+            .keys()
+            .find(|x| x != &&request_id_0)
+            .unwrap()
+            .clone();
         // We should be able to move the 2nd request into ongoing_signatures.
         let result = signatures::update_ongoing_signatures(
             new_requests,
@@ -1351,7 +1355,7 @@ mod tests {
         let (mut ecdsa_payload, _env, contexts) = set_up_ecdsa_payload_and_sign_with_ecdsa_contexts(
             vec![(invalid_key_id, [0; 32], mock_time())],
         );
-        let valid_keys = BTreeSet::from([valid_key_id]);
+        let valid_keys = BTreeSet::from([valid_key_id.clone()]);
         let height = Height::from(1);
 
         let result = get_signing_requests(
@@ -1800,7 +1804,7 @@ mod tests {
                 mock_time(),
             )]);
 
-        let valid_keys = BTreeSet::from([key_id]);
+        let valid_keys = BTreeSet::from([key_id.clone()]);
 
         let block_reader = TestEcdsaBlockReader::new();
         let transcript_builder = TestEcdsaTranscriptBuilder::new();
@@ -1827,7 +1831,12 @@ mod tests {
 
         let mut signature_builder = TestEcdsaSignatureBuilder::new();
         signature_builder.signatures.insert(
-            *ecdsa_payload.ongoing_signatures.keys().next().unwrap(),
+            ecdsa_payload
+                .ongoing_signatures
+                .keys()
+                .next()
+                .unwrap()
+                .clone(),
             ThresholdEcdsaCombinedSignature {
                 signature: vec![1; 32],
             },
@@ -1984,12 +1993,12 @@ mod tests {
                 ecdsa_payload.uid_generator.next_quadruple_id(),
             );
             let req_id_1 = ecdsa::RequestId {
-                quadruple_id: quadruple_id_1,
+                quadruple_id: quadruple_id_1.clone(),
                 pseudo_random_id: [0; 32],
                 height: payload_height_1,
             };
             let req_id_2 = ecdsa::RequestId {
-                quadruple_id: quadruple_id_2,
+                quadruple_id: quadruple_id_2.clone(),
                 pseudo_random_id: [1; 32],
                 height: payload_height_1,
             };
@@ -2265,17 +2274,17 @@ mod tests {
 
             // Create a payload block with references to these past blocks
             let mut ecdsa_payload = empty_ecdsa_payload(subnet_id);
-            ecdsa_payload.key_transcript.current = Some(current_key_transcript.clone());
             let uid_generator = &mut ecdsa_payload.uid_generator;
             let quadruple_id_1 = uid_generator.next_quadruple_id();
             let quadruple_id_2 = uid_generator.next_quadruple_id();
+            ecdsa_payload.key_transcript.current = Some(current_key_transcript.clone());
             let req_id_1 = ecdsa::RequestId {
-                quadruple_id: quadruple_id_1,
+                quadruple_id: quadruple_id_1.clone(),
                 pseudo_random_id: [0; 32],
                 height: payload_height_1,
             };
             let req_id_2 = ecdsa::RequestId {
-                quadruple_id: quadruple_id_2,
+                quadruple_id: quadruple_id_2.clone(),
                 pseudo_random_id: [1; 32],
                 height: payload_height_1,
             };

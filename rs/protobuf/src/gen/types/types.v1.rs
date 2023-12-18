@@ -374,14 +374,28 @@ pub struct EcdsaPayload {
     pub ongoing_xnet_reshares: ::prost::alloc::vec::Vec<OngoingXnetReshare>,
     #[prost(message, repeated, tag = "8")]
     pub xnet_reshare_agreements: ::prost::alloc::vec::Vec<XnetReshareAgreement>,
-    #[prost(message, optional, tag = "9")]
-    pub current_key_transcript: ::core::option::Option<UnmaskedTranscriptWithAttributes>,
     #[prost(uint64, tag = "10")]
     pub next_unused_quadruple_id: u64,
+    #[prost(message, repeated, tag = "13")]
+    pub key_transcripts: ::prost::alloc::vec::Vec<EcdsaKeyTranscript>,
+    /// TODO: retire these fields, once we start using `key_transcripts`.
+    #[prost(message, optional, tag = "9")]
+    pub current_key_transcript: ::core::option::Option<UnmaskedTranscriptWithAttributes>,
     #[prost(message, optional, tag = "11")]
     pub next_key_in_creation: ::core::option::Option<KeyTranscriptCreation>,
     #[prost(message, optional, tag = "12")]
     pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct EcdsaKeyTranscript {
+    #[prost(message, optional, tag = "1")]
+    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
+    #[prost(message, optional, tag = "2")]
+    pub current: ::core::option::Option<UnmaskedTranscriptWithAttributes>,
+    #[prost(message, optional, tag = "3")]
+    pub next_in_creation: ::core::option::Option<KeyTranscriptCreation>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -400,6 +414,8 @@ pub struct AvailableQuadruple {
     pub quadruple_id: u64,
     #[prost(message, optional, tag = "2")]
     pub quadruple: ::core::option::Option<PreSignatureQuadrupleRef>,
+    #[prost(message, optional, tag = "3")]
+    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -409,6 +425,8 @@ pub struct QuadrupleInProgress {
     pub quadruple_id: u64,
     #[prost(message, optional, tag = "2")]
     pub quadruple: ::core::option::Option<QuadrupleInCreation>,
+    #[prost(message, optional, tag = "3")]
+    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -438,6 +456,8 @@ pub struct RequestId {
     pub quadruple_id: u64,
     #[prost(uint64, tag = "3")]
     pub height: u64,
+    #[prost(message, optional, tag = "4")]
+    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]

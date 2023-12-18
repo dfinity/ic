@@ -430,7 +430,7 @@ impl EcdsaPriorityFnArgs {
 
         let mut requested_signatures = BTreeSet::new();
         for (request_id, _) in block_reader.requested_signatures() {
-            requested_signatures.insert(*request_id);
+            requested_signatures.insert(request_id.clone());
         }
 
         let mut active_transcripts = BTreeSet::new();
@@ -539,11 +539,9 @@ fn compute_priority(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ic_types::consensus::ecdsa::EcdsaUIDGenerator;
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
-    use ic_types::{
-        consensus::ecdsa::{QuadrupleId, RequestId},
-        PrincipalId, SubnetId,
-    };
+    use ic_types::{consensus::ecdsa::RequestId, PrincipalId, SubnetId};
 
     // Tests the priority computation for dealings/support.
     #[test]
@@ -625,23 +623,24 @@ mod tests {
     #[test]
     fn test_ecdsa_priority_fn_sig_shares() {
         let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(2));
+        let mut uid_generator = EcdsaUIDGenerator::new(subnet_id, Height::new(0));
         let request_id_fetch_1 = RequestId {
-            quadruple_id: QuadrupleId(80),
+            quadruple_id: uid_generator.next_quadruple_id(),
             pseudo_random_id: [1; 32],
             height: Height::from(80),
         };
         let request_id_drop = RequestId {
-            quadruple_id: QuadrupleId(70),
+            quadruple_id: uid_generator.next_quadruple_id(),
             pseudo_random_id: [2; 32],
             height: Height::from(70),
         };
         let request_id_fetch_2 = RequestId {
-            quadruple_id: QuadrupleId(102),
+            quadruple_id: uid_generator.next_quadruple_id(),
             pseudo_random_id: [3; 32],
             height: Height::from(102),
         };
         let request_id_stash = RequestId {
-            quadruple_id: QuadrupleId(200),
+            quadruple_id: uid_generator.next_quadruple_id(),
             pseudo_random_id: [4; 32],
             height: Height::from(200),
         };
@@ -650,7 +649,7 @@ mod tests {
         let metrics = EcdsaGossipMetrics::new(metrics_registry);
 
         let mut requested_signatures = BTreeSet::new();
-        requested_signatures.insert(request_id_fetch_1);
+        requested_signatures.insert(request_id_fetch_1.clone());
         let args = EcdsaPriorityFnArgs {
             finalized_height: Height::from(100),
             requested_transcripts: BTreeSet::new(),
@@ -660,19 +659,19 @@ mod tests {
 
         let tests = vec![
             (
-                EcdsaMessageAttribute::EcdsaSigShare(request_id_fetch_1),
+                EcdsaMessageAttribute::EcdsaSigShare(request_id_fetch_1.clone()),
                 Priority::Fetch,
             ),
             (
-                EcdsaMessageAttribute::EcdsaSigShare(request_id_drop),
+                EcdsaMessageAttribute::EcdsaSigShare(request_id_drop.clone()),
                 Priority::Drop,
             ),
             (
-                EcdsaMessageAttribute::EcdsaSigShare(request_id_fetch_2),
+                EcdsaMessageAttribute::EcdsaSigShare(request_id_fetch_2.clone()),
                 Priority::Fetch,
             ),
             (
-                EcdsaMessageAttribute::EcdsaSigShare(request_id_stash),
+                EcdsaMessageAttribute::EcdsaSigShare(request_id_stash.clone()),
                 Priority::Stash,
             ),
         ];
