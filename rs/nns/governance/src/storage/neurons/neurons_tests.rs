@@ -375,32 +375,32 @@ fn test_store_simplest_nontrivial_case() {
     assert_no_zombie_references_in(
         "hot_keys",
         &store.hot_keys_map,
-        |key, _| NeuronId { id: key.0 },
+        |key, _| key.0,
         original_neuron_id,
     );
     assert_no_zombie_references_in(
         "recent_ballots",
         &store.recent_ballots_map,
-        |key, _| NeuronId { id: key.0 },
+        |key, _| key.0,
         original_neuron_id,
     );
     assert_no_zombie_references_in(
         "followees",
         &store.followees_map,
-        |_, followee_id| NeuronId { id: followee_id },
+        |_, followee_id| followee_id,
         original_neuron_id,
     );
 
     assert_no_zombie_references_in(
         "known_neuron_data",
         &store.known_neuron_data_map,
-        |key, _| NeuronId { id: key },
+        |key, _| key,
         original_neuron_id,
     );
     assert_no_zombie_references_in(
         "transfer",
         &store.transfer_map,
-        |key, _| NeuronId { id: key },
+        |key, _| key,
         original_neuron_id,
     );
 }

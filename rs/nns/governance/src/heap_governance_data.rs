@@ -1,14 +1,11 @@
-use crate::{
-    pb::v1::{
-        governance::{
-            followers_map::Followers, FollowersMap, GovernanceCachedMetrics, MakingSnsProposal,
-            Migrations, NeuronInFlightCommand, SeedAccounts,
-        },
-        neuron::Followees,
-        Governance as GovernanceProto, MostRecentMonthlyNodeProviderRewards, NetworkEconomics,
-        Neuron, NeuronStakeTransfer, NodeProvider, ProposalData, RewardEvent,
+use crate::pb::v1::{
+    governance::{
+        followers_map::Followers, FollowersMap, GovernanceCachedMetrics, MakingSnsProposal,
+        Migrations, NeuronInFlightCommand, SeedAccounts,
     },
-    storage::{NeuronIdU64, Signed32, TopicSigned32},
+    neuron::Followees,
+    Governance as GovernanceProto, MostRecentMonthlyNodeProviderRewards, NetworkEconomics, Neuron,
+    NeuronStakeTransfer, NodeProvider, ProposalData, RewardEvent, Topic,
 };
 use ic_nervous_system_governance::index::neuron_following::HeapNeuronFollowingIndex;
 use ic_nns_common::pb::v1::NeuronId;
@@ -42,22 +39,19 @@ pub struct HeapGovernanceData {
 
 fn proto_to_heap_topic_followee_index(
     proto: HashMap<i32, FollowersMap>,
-) -> HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32> {
+) -> HeapNeuronFollowingIndex<NeuronId, Topic> {
     let map = proto
         .into_iter()
         .map(|(topic_i32, followers_map)| {
-            let topic = Signed32(topic_i32);
+            // The potential panic is OK to be called in post_upgrade.
+            let topic = Topic::try_from(topic_i32).expect("Invalid topic");
 
             let followers_map = followers_map
                 .followers_map
                 .into_iter()
                 .map(|(neuron_id, followers)| {
-                    let followers = followers
-                        .followers
-                        .into_iter()
-                        .map(|neuron_id| neuron_id.id)
-                        .collect();
-                    (neuron_id, followers)
+                    let followers = followers.followers.into_iter().collect();
+                    (NeuronId { id: neuron_id }, followers)
                 })
                 .collect();
             (topic, followers_map)
@@ -67,25 +61,25 @@ fn proto_to_heap_topic_followee_index(
 }
 
 fn heap_topic_followee_index_to_proto(
-    heap: HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32>,
+    heap: HeapNeuronFollowingIndex<NeuronId, Topic>,
 ) -> HashMap<i32, FollowersMap> {
     heap.into_inner()
         .into_iter()
         .map(|(topic, followers_map)| {
-            let topic = topic.0;
+            let topic_i32 = topic as i32;
             let followers_map = followers_map
                 .into_iter()
                 .map(|(followee, followers)| {
                     let followers = Followers {
-                        followers: followers.into_iter().map(|id| NeuronId { id }).collect(),
+                        followers: followers.into_iter().collect(),
                     };
-                    (followee, followers)
+                    (followee.id, followers)
                 })
                 .collect();
 
             let followers_map = FollowersMap { followers_map };
 
-            (topic, followers_map)
+            (topic_i32, followers_map)
         })
         .collect()
 }
@@ -98,7 +92,7 @@ pub fn split_governance_proto(
     governance_proto: GovernanceProto,
 ) -> (
     BTreeMap<u64, Neuron>,
-    HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32>,
+    HeapNeuronFollowingIndex<NeuronId, Topic>,
     HeapGovernanceData,
 ) {
     // DO NOT USE THE .. CATCH-ALL SYNTAX HERE.
@@ -165,7 +159,7 @@ pub fn split_governance_proto(
 /// it can be serialized into UPGRADES_MEMORY.
 pub fn reassemble_governance_proto(
     neurons: BTreeMap<u64, Neuron>,
-    topic_followee_index: HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32>,
+    topic_followee_index: HeapNeuronFollowingIndex<NeuronId, Topic>,
     heap_governance_proto: HeapGovernanceData,
 ) -> GovernanceProto {
     // DO NOT USE THE .. CATCH-ALL SYNTAX HERE.

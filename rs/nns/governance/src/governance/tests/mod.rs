@@ -2354,3 +2354,13 @@ fn can_spawn_neurons_only_true_when_not_spawning_and_neurons_ready_to_spawn() {
     // Work to do, no lock, should say yes.
     assert!(governance.can_spawn_neurons());
 }
+
+#[test]
+fn topic_min_max_test() {
+    use strum::IntoEnumIterator;
+
+    for topic in Topic::iter() {
+        assert!(topic >= Topic::MIN, "Topic::MIN needs to be updated");
+        assert!(topic <= Topic::MAX, "Topic::MAX needs to be updated");
+    }
+}

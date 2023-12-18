@@ -172,7 +172,7 @@ fn test_modify_neuron_update_indexes() {
     });
     assert_eq!(
         neuron_ids_found_by_new_controller,
-        hashset! {neuron.id.unwrap().id}
+        hashset! {neuron.id.unwrap()}
     );
     let neuron_ids_found_by_old_controller = with_stable_neuron_indexes(|indexes| {
         indexes

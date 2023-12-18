@@ -1,7 +1,7 @@
 use crate::{
     neuron_store::NeuronStore,
     pb::v1::{Neuron, Topic},
-    storage::{with_stable_neuron_indexes, with_stable_neuron_store, Signed32},
+    storage::{with_stable_neuron_indexes, with_stable_neuron_store},
 };
 
 use candid::{CandidType, Deserialize};
@@ -519,7 +519,7 @@ impl CardinalityAndRangeValidator for PrincipalIndexValidator {
                 let pair_exists_in_index = with_stable_neuron_indexes(|indexes| {
                     indexes
                         .principal()
-                        .contains_entry(&neuron_id.id, *principal_id)
+                        .contains_entry(&neuron_id, *principal_id)
                 });
                 !pair_exists_in_index
             })
@@ -575,11 +575,9 @@ impl CardinalityAndRangeValidator for FollowingIndexValidator {
             .into_iter()
             .filter(|(topic, followee)| {
                 let pair_exists_in_index = with_stable_neuron_indexes(|indexes| {
-                    indexes.following().contains_entry(
-                        Signed32::from(*topic as i32),
-                        &followee.id,
-                        &neuron_id.id,
-                    )
+                    indexes
+                        .following()
+                        .contains_entry(*topic, followee, &neuron_id)
                 });
                 !pair_exists_in_index
             })

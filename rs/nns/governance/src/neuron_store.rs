@@ -7,7 +7,7 @@ use crate::{
     storage::{
         neuron_indexes::{CorruptedNeuronIndexes, NeuronIndex},
         with_stable_neuron_indexes, with_stable_neuron_indexes_mut, with_stable_neuron_store,
-        with_stable_neuron_store_mut, NeuronIdU64, TopicSigned32,
+        with_stable_neuron_store_mut,
     },
     Clock, IcClock,
 };
@@ -211,7 +211,7 @@ pub struct NeuronStore {
     /// is saved and restored.
     ///
     /// (Topic, Followee) -> set of followers.
-    topic_followee_index: HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32>,
+    topic_followee_index: HeapNeuronFollowingIndex<NeuronId, Topic>,
 
     // In non-test builds, Box would suffice. However, in test, the containing struct (to wit,
     // NeuronStore) implements additional traits. Therefore, more elaborate wrapping is needed.
@@ -265,7 +265,7 @@ impl NeuronStore {
     // topic_followee_index).
     pub fn new_restored(
         heap_neurons: BTreeMap<u64, Neuron>,
-        topic_followee_index: HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32>,
+        topic_followee_index: HeapNeuronFollowingIndex<NeuronId, Topic>,
     ) -> Self {
         let clock = Box::new(IcClock::new());
 
@@ -284,9 +284,7 @@ impl NeuronStore {
 
     /// Takes the HeapNeuronFollowingIndex.  The `self.topic_followee_index` will become empty, so
     /// it should only be called once at pre_upgrade.
-    pub fn take_heap_topic_followee_index(
-        &mut self,
-    ) -> HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32> {
+    pub fn take_heap_topic_followee_index(&mut self) -> HeapNeuronFollowingIndex<NeuronId, Topic> {
         std::mem::take(&mut self.topic_followee_index)
     }
 
@@ -330,9 +328,7 @@ impl NeuronStore {
         self.heap_neurons.clone()
     }
 
-    pub fn clone_topic_followee_index(
-        &self,
-    ) -> HeapNeuronFollowingIndex<NeuronIdU64, TopicSigned32> {
+    pub fn clone_topic_followee_index(&self) -> HeapNeuronFollowingIndex<NeuronId, Topic> {
         self.topic_followee_index.clone()
     }
 
@@ -391,7 +387,7 @@ impl NeuronStore {
                  neuron indexes are out-of-sync with neurons: {}",
                 LOG_PREFIX,
                 NeuronStoreError::CorruptedNeuronIndexes(CorruptedNeuronIndexes {
-                    neuron_id: neuron.id.unwrap().id,
+                    neuron_id: neuron.id.unwrap(),
                     indexes: vec![defects],
                 })
             );
@@ -446,7 +442,7 @@ impl NeuronStore {
                  neuron indexes are out-of-sync with neurons: {}",
                 LOG_PREFIX,
                 NeuronStoreError::CorruptedNeuronIndexes(CorruptedNeuronIndexes {
-                    neuron_id: neuron_id.id,
+                    neuron_id,
                     indexes: vec![defects],
                 })
             );
@@ -731,7 +727,7 @@ impl NeuronStore {
                  neuron indexes are out-of-sync with neurons: {}",
                 LOG_PREFIX,
                 NeuronStoreError::CorruptedNeuronIndexes(CorruptedNeuronIndexes {
-                    neuron_id: old_neuron.id.unwrap().id,
+                    neuron_id: old_neuron.id.unwrap(),
                     indexes: defects,
                 })
             );
@@ -760,12 +756,8 @@ impl NeuronStore {
         topic: Topic,
     ) -> Vec<NeuronId> {
         self.topic_followee_index
-            .get_followers_by_followee_and_category(
-                &NeuronIdU64::from(followee),
-                TopicSigned32::from(topic),
-            )
+            .get_followers_by_followee_and_category(&followee, topic)
             .into_iter()
-            .map(|id| NeuronId { id })
             .collect()
     }
 
@@ -779,7 +771,6 @@ impl NeuronStore {
                 .principal()
                 .get_neuron_ids(principal_id)
                 .into_iter()
-                .map(|id| NeuronId { id })
                 .collect()
         })
     }

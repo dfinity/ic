@@ -11,7 +11,7 @@ use ic_stable_structures::{BoundedStorable, Memory, StableBTreeMap, Storable};
 /// is removed or its name is changed.
 
 pub struct KnownNeuronIndex<M: Memory> {
-    known_neuron_name_to_id: StableBTreeMap<KnownNeuronName, u64, M>,
+    known_neuron_name_to_id: StableBTreeMap<KnownNeuronName, NeuronId, M>,
 }
 
 #[derive(Debug)]
@@ -45,7 +45,7 @@ impl<M: Memory> KnownNeuronIndex<M> {
     pub fn contains_entry(&self, neuron_id: NeuronId, known_neuron_name: &str) -> bool {
         KnownNeuronName::new(known_neuron_name)
             .and_then(|known_neuron_name| self.known_neuron_name_to_id.get(&known_neuron_name))
-            .map(|value| value == neuron_id.id)
+            .map(|known_neuron_id| known_neuron_id == neuron_id)
             .unwrap_or_default()
     }
 
@@ -69,7 +69,7 @@ impl<M: Memory> KnownNeuronIndex<M> {
             return Err(AddKnownNeuronError::AlreadyExists);
         }
         self.known_neuron_name_to_id
-            .insert(known_neuron_name, neuron_id.id);
+            .insert(known_neuron_name, neuron_id);
         Ok(())
     }
 
@@ -93,7 +93,7 @@ impl<M: Memory> KnownNeuronIndex<M> {
         match removed_neuron_id {
             None => Err(RemoveKnownNeuronError::AlreadyAbsent),
             Some(removed_neuron_id) => {
-                if removed_neuron_id == neuron_id.id {
+                if removed_neuron_id == neuron_id {
                     Ok(())
                 } else {
                     // The removed known neuron id does not match the given neuron id. There is
@@ -102,9 +102,7 @@ impl<M: Memory> KnownNeuronIndex<M> {
                     self.known_neuron_name_to_id
                         .insert(known_neuron_name, removed_neuron_id);
                     Err(RemoveKnownNeuronError::NameExistsWithDifferentNeuronId(
-                        NeuronId {
-                            id: removed_neuron_id,
-                        },
+                        removed_neuron_id,
                     ))
                 }
             }
@@ -125,7 +123,7 @@ impl<M: Memory> KnownNeuronIndex<M> {
     pub fn list_known_neuron_ids(&self) -> Vec<NeuronId> {
         self.known_neuron_name_to_id
             .iter()
-            .map(|(_name, id)| NeuronId { id })
+            .map(|(_name, neuron_id)| neuron_id)
             .collect()
     }
 }
