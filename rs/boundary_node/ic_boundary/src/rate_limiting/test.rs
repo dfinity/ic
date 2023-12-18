@@ -10,12 +10,11 @@ use axum::{
     routing::method_routing::post,
     Router,
 };
-use candid::Principal;
 use http::StatusCode;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tower::Service;
 
-use crate::persist::test::node;
+use crate::routes::test::test_route_subnet_with_id;
 
 async fn dummy_call(_request: Request<Body>) -> Result<impl IntoResponse, ApiError> {
     Ok("foo".into_response())
@@ -29,8 +28,9 @@ async fn body_to_subnet_context(
     let body_vec = hyper::body::to_bytes(body).await.unwrap().to_vec();
     let subnet_id = String::from_utf8(body_vec.clone()).unwrap();
     let mut request = Request::from_parts(parts, hyper::Body::from(body_vec));
-    let node = node(0, Principal::from_text(subnet_id).unwrap());
-    request.extensions_mut().insert(node);
+    request
+        .extensions_mut()
+        .insert(Arc::new(test_route_subnet_with_id(subnet_id, 0)));
     let resp = next.run(request).await;
     Ok(resp)
 }
@@ -130,5 +130,6 @@ async fn test_subnet_rate_limit() -> Result<(), Error> {
     assert_eq!(response4.status(), StatusCode::OK);
     assert_eq!(response5.status(), StatusCode::TOO_MANY_REQUESTS);
     assert_eq!(response6.status(), StatusCode::TOO_MANY_REQUESTS);
+
     Ok(())
 }

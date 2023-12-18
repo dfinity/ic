@@ -30,6 +30,7 @@ use ic_types::{
 use lazy_static::lazy_static;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use strum::Display;
 use tower_governor::errors::GovernorError;
 use url::Url;
 
@@ -108,6 +109,14 @@ impl fmt::Display for RequestType {
     }
 }
 
+#[derive(Debug, Clone, Display)]
+#[strum(serialize_all = "snake_case")]
+pub enum RateLimitCause {
+    Normal,
+    LedgerCall,
+    LedgerZeroTransfer,
+}
+
 // Categorized possible causes for request processing failures
 // Not using Error as inner type since it's not cloneable
 #[derive(Debug, Clone)]
@@ -126,7 +135,7 @@ pub enum ErrorCause {
     ReplicaTLSErrorOther(String),
     ReplicaTLSErrorCert(String),
     ReplicaErrorOther(String),
-    TooManyRequests,
+    RateLimited(RateLimitCause),
     Other(String),
 }
 
@@ -148,7 +157,7 @@ impl ErrorCause {
             Self::ReplicaTLSErrorOther(_) => StatusCode::SERVICE_UNAVAILABLE,
             Self::ReplicaTLSErrorCert(_) => StatusCode::SERVICE_UNAVAILABLE,
             Self::ReplicaErrorOther(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            Self::TooManyRequests => StatusCode::TOO_MANY_REQUESTS,
+            Self::RateLimited(_) => StatusCode::TOO_MANY_REQUESTS,
         }
     }
 
@@ -197,7 +206,7 @@ impl fmt::Display for ErrorCause {
             Self::ReplicaTLSErrorOther(_) => write!(f, "replica_tls_error"),
             Self::ReplicaTLSErrorCert(_) => write!(f, "replica_tls_error_cert"),
             Self::ReplicaErrorOther(_) => write!(f, "replica_error_other"),
-            Self::TooManyRequests => write!(f, "rate_limited"),
+            Self::RateLimited(x) => write!(f, "rate_limited_{x}"),
         }
     }
 }
@@ -455,11 +464,16 @@ impl From<BoxError> for ApiError {
         // it's a GovernorError
         let error = item.downcast_ref::<GovernorError>().unwrap().to_owned();
         match error {
-            GovernorError::TooManyRequests { .. } => ApiError::from(ErrorCause::TooManyRequests),
-            GovernorError::UnableToExtractKey => {
-                ApiError::Unspecified(anyhow!("unable to extract rate-limiting key"))
+            GovernorError::TooManyRequests { .. } => {
+                ApiError::from(ErrorCause::RateLimited(RateLimitCause::Normal))
             }
-            GovernorError::Other { .. } => ApiError::Unspecified(anyhow!("GovernorError")),
+            GovernorError::UnableToExtractKey => ApiError::from(ErrorCause::Other(
+                "unable to extract rate-limiting key".into(),
+            )),
+            GovernorError::Other { msg, .. } => ApiError::from(ErrorCause::Other(format!(
+                "governor_error: {}",
+                msg.unwrap_or_default()
+            ))),
         }
     }
 }

@@ -153,6 +153,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "headers",
                 ],
             ),
+            "axum-extra": crate.spec(
+                version = "^0.9.0",
+            ),
             "axum-server": crate.spec(
                 version = "^0.5.1",
                 features = [
@@ -900,6 +903,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "randomkit": crate.spec(
                 version = "^0.1.1",
+            ),
+            "ratelimit": crate.spec(
+                version = "^0.7.1",
             ),
             "rayon": crate.spec(
                 version = "^1.5.1",

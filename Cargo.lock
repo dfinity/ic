@@ -301,7 +301,7 @@ version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0b9ab2c8531a5ac6bcc579cc4c308d1b4bd5b9910a0f08bf4e65b3452407400"
 dependencies = [
- "axum",
+ "axum 0.6.20",
  "bytes",
  "cfg-if 1.0.0",
  "derive_more 0.99.17",
@@ -739,7 +739,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3b829e4e32b91e643de6eafe82b1d90675f5874230191a4ffbc1b336dec4d6bf"
 dependencies = [
  "async-trait",
- "axum-core",
+ "axum-core 0.3.4",
  "bitflags 1.3.2",
  "bytes",
  "futures-util",
@@ -766,6 +766,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "axum"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "202651474fe73c62d9e0a56c6133f7a0ff1dc1c8cf7a5b03381af2a26553ac9d"
+dependencies = [
+ "async-trait",
+ "axum-core 0.4.1",
+ "bytes",
+ "futures-util",
+ "http 1.0.0",
+ "http-body 1.0.0",
+ "http-body-util",
+ "itoa",
+ "matchit",
+ "memchr",
+ "mime",
+ "percent-encoding 2.3.0",
+ "pin-project-lite",
+ "rustversion",
+ "serde",
+ "sync_wrapper",
+ "tower",
+ "tower-layer",
+ "tower-service",
+]
+
+[[package]]
 name = "axum-core"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -778,6 +805,47 @@ dependencies = [
  "http-body 0.4.5",
  "mime",
  "rustversion",
+ "tower-layer",
+ "tower-service",
+]
+
+[[package]]
+name = "axum-core"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77cb22c689c44d4c07b0ab44ebc25d69d8ae601a2f28fb8d672d344178fa17aa"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "futures-util",
+ "http 1.0.0",
+ "http-body 1.0.0",
+ "http-body-util",
+ "mime",
+ "pin-project-lite",
+ "rustversion",
+ "sync_wrapper",
+ "tower-layer",
+ "tower-service",
+]
+
+[[package]]
+name = "axum-extra"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "523ae92256049a3b02d3bb4df80152386cd97ddba0c8c5077619bdc8c4b1859b"
+dependencies = [
+ "axum 0.7.2",
+ "axum-core 0.4.1",
+ "bytes",
+ "futures-util",
+ "http 1.0.0",
+ "http-body 1.0.0",
+ "http-body-util",
+ "mime",
+ "pin-project-lite",
+ "serde",
+ "tower",
  "tower-layer",
  "tower-service",
 ]
@@ -1239,7 +1307,7 @@ dependencies = [
  "arc-swap",
  "async-scoped 0.8.0",
  "async-trait",
- "axum",
+ "axum 0.6.20",
  "bytes",
  "candid",
  "clap 3.2.25",
@@ -1274,7 +1342,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "axum",
+ "axum 0.6.20",
  "candid",
  "clap 3.2.25",
  "futures",
@@ -1748,7 +1816,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "axum",
+ "axum 0.6.20",
  "candid",
  "certificate_orchestrator_interface",
  "chacha20poly1305",
@@ -1787,7 +1855,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "axum",
+ "axum 0.6.20",
  "candid",
  "clap 4.4.6",
  "futures",
@@ -2039,6 +2107,19 @@ name = "clap_lex"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2da6da31387c7e4ef160ffab6d5e7f00c42626fe39aea70a7b0f1773f7dd6c1b"
+
+[[package]]
+name = "clocksource"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b90cc4cec392a6d97223f008b5da7a3c2c71aa6d5ffdf0e3e14d8b2432738387"
+dependencies = [
+ "lazy_static",
+ "libc",
+ "mach",
+ "time 0.3.22",
+ "winapi",
+]
 
 [[package]]
 name = "cloudabi"
@@ -2865,7 +2946,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "axum",
+ "axum 0.6.20",
  "chacha20poly1305",
  "clap 3.2.25",
  "flate2",
@@ -4542,7 +4623,7 @@ checksum = "d897f394bad6a705d5f4104762e116a75639e470d80901eed05a860a95cb1904"
 name = "httpbin-rs"
 version = "0.9.0"
 dependencies = [
- "axum",
+ "axum 0.6.20",
  "axum-server",
  "clap 4.4.6",
  "rustls",
@@ -5006,7 +5087,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "axum",
+ "axum 0.6.20",
  "candid",
  "clap 3.2.25",
  "dashmap",
@@ -5093,7 +5174,8 @@ dependencies = [
  "arc-swap",
  "async-scoped 0.7.1",
  "async-trait",
- "axum",
+ "axum 0.6.20",
+ "axum-extra",
  "axum-server",
  "bytes",
  "candid",
@@ -5132,6 +5214,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-test-utilities-registry",
  "ic-types",
+ "icrc-ledger-types",
  "instant-acme",
  "jemalloc-ctl",
  "jemallocator",
@@ -5140,6 +5223,7 @@ dependencies = [
  "moka",
  "prometheus",
  "rand 0.8.5",
+ "ratelimit",
  "rayon",
  "rcgen",
  "regex",
@@ -5149,6 +5233,7 @@ dependencies = [
  "serde_cbor",
  "serde_json",
  "slog",
+ "strum 0.25.0",
  "tempfile",
  "thiserror",
  "tokio",
@@ -5941,7 +6026,7 @@ dependencies = [
 name = "ic-consensus-manager"
 version = "0.1.0"
 dependencies = [
- "axum",
+ "axum 0.6.20",
  "backoff",
  "bytes",
  "crossbeam-channel",
@@ -7812,7 +7897,7 @@ name = "ic-icrc-rosetta"
 version = "0.9.0"
 dependencies = [
  "anyhow",
- "axum",
+ "axum 0.6.20",
  "candid",
  "ciborium",
  "clap 4.4.6",
@@ -8510,7 +8595,7 @@ name = "ic-memory-transport"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "axum",
+ "axum 0.6.20",
  "bytes",
  "futures",
  "http 0.2.9",
@@ -9401,7 +9486,7 @@ name = "ic-p2p-test-utils"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "axum",
+ "axum 0.6.20",
  "bytes",
  "crossbeam-channel",
  "either",
@@ -9636,7 +9721,7 @@ name = "ic-quic-transport"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "axum",
+ "axum 0.6.20",
  "bincode",
  "bytes",
  "criterion",
@@ -10140,7 +10225,7 @@ dependencies = [
 name = "ic-replica-setup-ic-network"
 version = "0.9.0"
 dependencies = [
- "axum",
+ "axum 0.6.20",
  "crossbeam-channel",
  "either",
  "ic-artifact-manager",
@@ -11074,7 +11159,7 @@ dependencies = [
 name = "ic-state-sync-manager"
 version = "0.1.0"
 dependencies = [
- "axum",
+ "axum 0.6.20",
  "base64 0.13.1",
  "bytes",
  "futures",
@@ -12086,7 +12171,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "axum",
+ "axum 0.6.20",
  "base64 0.13.1",
  "bytes",
  "candid",
@@ -14687,7 +14772,7 @@ name = "pocket-ic-server"
 version = "2.0.1"
 dependencies = [
  "aide",
- "axum",
+ "axum 0.6.20",
  "base64 0.13.1",
  "candid",
  "clap 3.2.25",
@@ -15568,6 +15653,17 @@ name = "rangemap"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "977b1e897f9d764566891689e642653e5ed90c6895106acd005eb4c1d0203991"
+
+[[package]]
+name = "ratelimit"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf5bcfab8fa35f78da44c3ebb3437381c0ae11e9fab355b7a27f581d8d2028a2"
+dependencies = [
+ "clocksource",
+ "parking_lot 0.12.1",
+ "thiserror",
+]
 
 [[package]]
 name = "raw-cpuid"
@@ -16644,7 +16740,7 @@ version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0431a35568651e363364210c91983c1da5eb29404d9f0928b67d4ebcfa7d330c"
 dependencies = [
- "axum",
+ "axum 0.6.20",
  "futures",
  "percent-encoding 2.3.0",
  "serde",
@@ -17496,7 +17592,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "axum",
+ "axum 0.6.20",
  "clap 4.4.6",
  "http 0.2.9",
  "itertools 0.12.0",
@@ -18194,7 +18290,7 @@ checksum = "d560933a0de61cf715926b9cac824d4c883c2c43142f787595e48280c40a1d0e"
 dependencies = [
  "async-stream",
  "async-trait",
- "axum",
+ "axum 0.6.20",
  "base64 0.21.2",
  "bytes",
  "h2 0.3.19",
@@ -18334,7 +18430,7 @@ version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db81d9313372d714152194f3f2b66badda23a783fb6a97462e35f632814f4cff"
 dependencies = [
- "axum",
+ "axum 0.6.20",
  "forwarded-header-value",
  "futures",
  "futures-core",

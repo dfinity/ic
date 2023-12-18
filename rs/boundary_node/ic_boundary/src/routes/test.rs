@@ -71,7 +71,7 @@ pub fn test_node(id: u64) -> Node {
     node(id, Principal::from_text("f7crg-kabae").unwrap())
 }
 
-pub fn test_route_subnet(n: usize) -> RouteSubnet {
+pub fn test_route_subnet_with_id(id: String, n: usize) -> RouteSubnet {
     let mut nodes = Vec::new();
 
     for i in 0..n {
@@ -83,11 +83,15 @@ pub fn test_route_subnet(n: usize) -> RouteSubnet {
     let zero = 0u32;
 
     RouteSubnet {
-        id: Principal::from_text("f7crg-kabae").unwrap().to_string(),
+        id: Principal::from_text(id).unwrap().to_string(),
         range_start: u256::from(zero),
         range_end: u256::from(zero),
         nodes,
     }
+}
+
+pub fn test_route_subnet(n: usize) -> RouteSubnet {
+    test_route_subnet_with_id("f7crg-kabae".into(), n)
 }
 
 #[async_trait]

@@ -179,6 +179,12 @@ pub struct RateLimitingConfig {
     /// Allowed number of update calls per second per ip per boundary node. Panics if 0 is passed!
     #[clap(long)]
     pub rate_limit_per_second_per_ip: Option<u32>,
+    /// Allowed number of ledger update calls per second
+    #[clap(long, value_parser = clap::value_parser!(u32).range(1..))]
+    pub rate_limit_ledger_call: Option<u32>,
+    /// Allowed number of ledger transfer calls with memo per second
+    #[clap(long, value_parser = clap::value_parser!(u32).range(1..))]
+    pub rate_limit_ledger_transfer: Option<u32>,
 }
 
 #[derive(Args)]

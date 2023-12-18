@@ -652,13 +652,7 @@ pub async fn metrics_middleware(
     let sender = ctx.sender.map(|x| x.to_string());
     let node_id = node.as_ref().map(|x| x.id.to_string());
     let subnet_id = node.as_ref().map(|x| x.subnet_id.to_string());
-    let ip_family = String::from({
-        if addr.is_ipv4() {
-            "IPv4"
-        } else {
-            "IPv6"
-        }
-    });
+    let ip_family = if addr.is_ipv4() { "4" } else { "6" };
 
     let HttpMetricParams {
         action,
@@ -684,7 +678,13 @@ pub async fn metrics_middleware(
 
         let retry_result = retry_result.clone();
 
-        let retry_label =
+        // Prepare labels
+        // Otherwise "temporary value dropped" error occurs
+        let error_cause_lbl = error_cause.clone().unwrap_or("none".to_string());
+        let subnet_id_lbl = subnet_id.clone().unwrap_or("unknown".to_string());
+        let cache_status_lbl = &cache_status.to_string();
+        let cache_bypass_reason_lbl = cache_bypass_reason.clone().unwrap_or("none".to_string());
+        let retry_lbl =
             // Check if retry happened and if it succeeded
             if let Some(v) = &retry_result {
                 if v.success {
@@ -696,13 +696,6 @@ pub async fn metrics_middleware(
                 "no"
             };
 
-        // Prepare labels
-        // Otherwise "temporary value dropped" error occurs
-        let error_cause_lbl = error_cause.clone().unwrap_or("none".to_string());
-        let subnet_id_lbl = subnet_id.clone().unwrap_or("unknown".to_string());
-        let cache_status_lbl = &cache_status.to_string();
-        let cache_bypass_reason_lbl = cache_bypass_reason.clone().unwrap_or("none".to_string());
-
         // Average cardinality up to 150k
         let labels = &[
             request_type.as_str(),            // x3
@@ -711,7 +704,7 @@ pub async fn metrics_middleware(
             error_cause_lbl.as_str(),         // x15 but usually x6
             cache_status_lbl.as_str(),        // x4
             cache_bypass_reason_lbl.as_str(), // x6 but since it relates only to BYPASS cache status -> total for 2 fields is x9
-            retry_label,                      // x3
+            retry_lbl,                        // x3
         ];
 
         counter.with_label_values(labels).inc();
