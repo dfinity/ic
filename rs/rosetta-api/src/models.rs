@@ -372,6 +372,27 @@ impl ConstructionMetadataRequest {
     }
 }
 
+impl From<ConstructionMetadataRequestOptions> for ObjectMap {
+    fn from(p: ConstructionMetadataRequestOptions) -> Self {
+        match serde_json::to_value(p) {
+            Ok(serde_json::Value::Object(o)) => o,
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl TryFrom<Option<ObjectMap>> for ConstructionMetadataRequestOptions {
+    type Error = ApiError;
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
+        serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
+            ApiError::internal_error(format!(
+                "Could not parse ConstructionMetadataRequestOptions metadata from metadata JSON object: {}",
+                e
+            ))
+        })
+    }
+}
+
 /// The ConstructionMetadataResponse returns network-specific metadata used for
 /// transaction construction.  Optionally, the implementer can return the
 /// suggested fee associated with the transaction being constructed. The caller
@@ -577,91 +598,6 @@ impl ConstructionPayloadsResponse {
 pub struct UnsignedTransaction {
     pub updates: Vec<(RequestType, HttpCanisterUpdate)>,
     pub ingress_expiries: Vec<u64>,
-}
-
-/// ConstructionPreprocessRequest is passed to the `/construction/preprocess`
-/// endpoint so that a Rosetta implementation can determine which metadata it
-/// needs to request for construction.  Metadata provided in this object should
-/// NEVER be a product of live data (i.e. the caller must follow some
-/// network-specific data fetching strategy outside of the Construction API to
-/// populate required Metadata). If live data is required for construction, it
-/// MUST be fetched in the call to `/construction/metadata`.  The caller can
-/// provide a max fee they are willing to pay for a transaction. This is an
-/// array in the case fees must be paid in multiple currencies.  The caller can
-/// also provide a suggested fee multiplier to indicate that the suggested fee
-/// should be scaled. This may be used to set higher fees for urgent
-/// transactions or to pay lower fees when there is less urgency. It is assumed
-/// that providing a very low multiplier (like 0.0001) will never lead to a
-/// transaction being created with a fee less than the minimum network fee (if
-/// applicable).  In the case that the caller provides both a max fee and a
-/// suggested fee multiplier, the max fee will set an upper bound on the
-/// suggested fee (regardless of the multiplier provided).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct ConstructionPreprocessRequest {
-    #[serde(rename = "network_identifier")]
-    pub network_identifier: NetworkIdentifier,
-
-    #[serde(rename = "operations")]
-    pub operations: Vec<Operation>,
-
-    #[serde(rename = "metadata")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<ObjectMap>,
-
-    #[serde(rename = "max_fee")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_fee: Option<Vec<Amount>>,
-
-    #[serde(rename = "suggested_fee_multiplier")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub suggested_fee_multiplier: Option<f64>,
-}
-
-impl ConstructionPreprocessRequest {
-    pub fn new(
-        network_identifier: NetworkIdentifier,
-        operations: Vec<Operation>,
-    ) -> ConstructionPreprocessRequest {
-        ConstructionPreprocessRequest {
-            network_identifier,
-            operations,
-            metadata: None,
-            max_fee: None,
-            suggested_fee_multiplier: None,
-        }
-    }
-}
-
-/// ConstructionPreprocessResponse contains `options` that will be sent
-/// unmodified to `/construction/metadata`. If it is not necessary to make a
-/// request to `/construction/metadata`, `options` should be omitted.   Some
-/// blockchains require the PublicKey of particular AccountIdentifiers to
-/// construct a valid transaction. To fetch these PublicKeys, populate
-/// `required_public_keys` with the AccountIdentifiers associated with the
-/// desired PublicKeys. If it is not necessary to retrieve any PublicKeys for
-/// construction, `required_public_keys` should be omitted.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct ConstructionPreprocessResponse {
-    /// The options that will be sent directly to `/construction/metadata` by
-    /// the caller.
-    #[serde(rename = "options")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub options: Option<ConstructionMetadataRequestOptions>,
-
-    #[serde(rename = "required_public_keys")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub required_public_keys: Option<Vec<AccountIdentifier>>,
-}
-
-impl ConstructionPreprocessResponse {
-    pub fn new() -> ConstructionPreprocessResponse {
-        ConstructionPreprocessResponse {
-            options: None,
-            required_public_keys: None,
-        }
-    }
 }
 
 /// The transaction submission request includes a signed transaction.

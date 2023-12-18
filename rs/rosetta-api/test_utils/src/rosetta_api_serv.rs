@@ -239,7 +239,7 @@ impl RosettaApiHandle {
         &self,
         ops: Vec<Operation>,
     ) -> Result<Result<ConstructionPreprocessResponse, RosettaError>, String> {
-        let req = ConstructionPreprocessRequest::new(self.network_id(), ops);
+        let req = ConstructionPreprocessRequest::new(self.network_id().into(), ops);
         to_rosetta_response(
             self.post_json_request(
                 &format!("http://{}/construction/preprocess", self.api_url),

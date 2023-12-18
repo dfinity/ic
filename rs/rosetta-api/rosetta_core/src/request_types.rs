@@ -144,3 +144,29 @@ impl ConstructionDeriveRequest {
         }
     }
 }
+
+/// ConstructionPreprocessRequest is passed to the /construction/preprocess endpoint so that a Rosetta implementation can determine which metadata it needs to request for construction. Metadata provided in this object should NEVER be a product of live data (i.e. the caller must follow some network-specific data fetching strategy outside of the Construction API to populate required Metadata). If live data is required for construction, it MUST be fetched in the call to /construction/metadata.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct ConstructionPreprocessRequest {
+    // The network_identifier specifies which network a particular object is associated with.
+    pub network_identifier: NetworkIdentifier,
+
+    pub operations: Vec<Operation>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<ObjectMap>,
+}
+
+impl ConstructionPreprocessRequest {
+    pub fn new(
+        network_identifier: NetworkIdentifier,
+        operations: Vec<Operation>,
+    ) -> ConstructionPreprocessRequest {
+        ConstructionPreprocessRequest {
+            network_identifier,
+            operations,
+            metadata: None,
+        }
+    }
+}
