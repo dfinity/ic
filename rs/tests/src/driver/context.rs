@@ -23,6 +23,7 @@ pub struct GroupContext {
     pub debug_keepalive: bool,
     pub no_farm_keepalive: bool,
     pub group_base_name: String,
+    pub k8s: bool,
 }
 
 impl GroupContext {
@@ -38,6 +39,7 @@ impl GroupContext {
         debug_keepalive: bool,
         no_farm_keepalive: bool,
         group_base_name: String,
+        k8s: bool,
     ) -> Result<Self> {
         let task_id = subproc_info.as_ref().map(|t| t.0.clone());
         let sock_id = subproc_info.map(|t| t.1).unwrap_or_default();
@@ -61,6 +63,7 @@ impl GroupContext {
             debug_keepalive,
             no_farm_keepalive,
             group_base_name,
+            k8s,
         })
     }
 

@@ -2,12 +2,16 @@
 Rules for system-tests.
 """
 
+load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//bazel:defs.bzl", "mcopy", "zstd_compress")
 load("//rs/tests:common.bzl", "GUESTOS_DEV_VERSION", "UNIVERSAL_VM_RUNTIME_DEPS")
 
 def _run_system_test(ctx):
     run_test_script_file = ctx.actions.declare_file(ctx.label.name + "/run-test.sh")
+
+    # whether to use k8s instead of farm
+    k8s = ctx.attr._k8s[BuildSettingInfo].value
 
     ctx.actions.write(
         output = run_test_script_file,
@@ -24,7 +28,7 @@ def _run_system_test(ctx):
             "$RUNFILES/{test_executable}" --working-dir . {k8s} --group-base-name {group_base_name} {no_summary_report} "$@" run
         """.format(
             test_executable = ctx.executable.src.short_path,
-            k8s = "--k8s" if ctx.attr.k8s else "",
+            k8s = "--k8s" if k8s else "",
             group_base_name = ctx.label.name,
             no_summary_report = "--no-summary-report" if ctx.executable.colocated_test_bin != None else "",
         ),
@@ -36,7 +40,7 @@ def _run_system_test(ctx):
     if ctx.executable.colocated_test_bin != None:
         env["COLOCATED_TEST_BIN"] = ctx.executable.colocated_test_bin.short_path
 
-    if ctx.attr.k8s:
+    if k8s:
         env["KUBECONFIG"] = ctx.file._k8sconfig.path
 
     # version_file_path contains the "direct" path to the volatile status file.
@@ -76,7 +80,7 @@ run_system_test = rule(
         "src": attr.label(executable = True, cfg = "exec"),
         "colocated_test_bin": attr.label(executable = True, cfg = "exec", default = None),
         "env": attr.string_dict(allow_empty = True),
-        "k8s": attr.bool(default = False, doc = "Use k8s as infra provider."),
+        "_k8s": attr.label(default = "//rs/tests:k8s"),
         "_k8sconfig": attr.label(allow_single_file = True, default = "@kubeconfig//:kubeconfig.yaml"),
         "runtime_deps": attr.label_list(allow_files = True),
         "env_deps": attr.label_keyed_string_dict(allow_files = True),
@@ -106,7 +110,6 @@ def system_test(
         uses_guestos_dev_test = False,
         uses_setupos_dev = False,
         uses_hostos_dev_test = False,
-        k8s = False,
         env_inherit = [],
         **kwargs):
     """Declares a system-test.
@@ -135,7 +138,6 @@ def system_test(
       uses_guestos_dev_test: the test uses //ic-os/guestos/envs/dev:update-img-test (will be also automatically added as dependency).
       uses_setupos_dev: the test uses ic-os/setupos/envs/dev (will be also automatically added as dependency).
       uses_hostos_dev_test: the test uses ic-os/hostos/envs/dev:update-img-test (will be also automatically added as dependency).
-      k8s: use k8s infra provider.
       env_inherit: specifies additional environment variables to inherit from the external environment when the test is executed by bazel test.
       **kwargs: additional arguments to pass to the rust_binary rule.
     """
@@ -169,9 +171,12 @@ def system_test(
     _env_deps[_guestos + "version.txt"] = "ENV_DEPS__IC_VERSION_FILE"
 
     if uses_guestos_dev:
-        _env_deps[_guestos + "disk-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL"
+        # TODO: remove GZ after CDI is upgraded to version that supports ZST
+        _env_deps[_guestos + "disk-img-url-gz"] = "ENV_DEPS__DEV_DISK_IMG_TAR_GZ_CAS_URL"
+        _env_deps[_guestos + "disk-img.tar.gz.sha256"] = "ENV_DEPS__DEV_DISK_IMG_TAR_GZ_SHA256"
+        _env_deps[_guestos + "disk-img-url"] = "ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL"
         _env_deps[_guestos + "disk-img.tar.zst.sha256"] = "ENV_DEPS__DEV_DISK_IMG_TAR_ZST_SHA256"
-        _env_deps[_guestos + "update-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_CAS_URL"
+        _env_deps[_guestos + "update-img-url"] = "ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_CAS_URL"
         _env_deps[_guestos + "update-img.tar.zst.sha256"] = "ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_SHA256"
 
     if uses_hostos_dev_test:
@@ -201,7 +206,6 @@ def system_test(
         runtime_deps = runtime_deps,
         env_deps = _env_deps,
         env_inherit = env_inherit,
-        k8s = k8s,
         tags = tags + ["requires-network", "system_test"] +
                (["manual"] if "experimental_system_test_colocation" in tags else []),
         timeout = test_timeout,
@@ -237,7 +241,6 @@ def system_test(
         env_deps = _env_deps,
         env_inherit = env_inherit,
         env = env,
-        k8s = k8s,
         tags = tags + ["requires-network", "system_test"] +
                ([] if "experimental_system_test_colocation" in tags else ["manual"]),
         timeout = test_timeout,

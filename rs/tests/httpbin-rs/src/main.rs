@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::BTreeMap,
     net::{Ipv6Addr, SocketAddr},
     str::FromStr,
 };
@@ -79,7 +79,7 @@ async fn anything_handler(method: Method, uri: Uri, headers: HeaderMap, body: St
     let headers = headers
         .iter()
         .map(|h| (h.0.to_string(), h.1.to_str().unwrap().to_string()))
-        .collect::<HashMap<String, String>>();
+        .collect::<BTreeMap<String, String>>();
 
     let body = json!({
         "method": method.to_string(),

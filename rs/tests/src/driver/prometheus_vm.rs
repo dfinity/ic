@@ -28,7 +28,7 @@ use crate::driver::{
     test_env_api::{
         retry, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SshSession, TopologySnapshot,
     },
-    test_setup::GroupSetup,
+    test_setup::{GroupSetup, InfraProvider},
     universal_vm::{UniversalVm, UniversalVms},
 };
 
@@ -136,6 +136,13 @@ impl PrometheusVm {
     }
 
     pub fn start(&self, env: &TestEnv) -> Result<()> {
+        let infra_provider = InfraProvider::read_attribute(env);
+        let use_k8s = infra_provider == InfraProvider::K8s;
+        if use_k8s {
+            // TODO: k8s
+            return Ok(());
+        }
+
         // Create a config directory containing the prometheus.yml configuration file.
         let vm_name = String::from(PROMETHEUS_VM_NAME);
         let log = env.logger();
@@ -225,6 +232,13 @@ impl HasPrometheus for TestEnv {
     }
 
     fn sync_with_prometheus_by_name(&self, name: &str) {
+        let infra_provider = InfraProvider::read_attribute(self);
+        let use_k8s = infra_provider == InfraProvider::K8s;
+        if use_k8s {
+            // TODO: k8s
+            return;
+        }
+
         let vm_name = PROMETHEUS_VM_NAME.to_string();
         // Write the scraping target JSON files to the local prometheus config directory.
         let prometheus_config_dir = self.get_universal_vm_config_dir(&vm_name);
