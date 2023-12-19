@@ -678,7 +678,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "metrics-proxy": crate.spec(
                 git = "https://github.com/dfinity/metrics-proxy.git",
-                rev = "b9e1c264fc9198f5dde704463b5acf2f34debf2d",
+                rev = "14915111a42b9990747a020edffe9b875a81c814",
                 default_features = False,
                 features = [
                     "rustls-tls-webpki-roots",
