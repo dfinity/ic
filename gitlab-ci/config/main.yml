@@ -548,18 +548,6 @@ cargo-clippy-linux:
       buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
           "$CI_PROJECT_DIR"/gitlab-ci/src/rust_lint/lint.sh
 
-# Cargo is deprecated and will be replaced with Bazel.
-# Until the migration is complete, run a simple check for build failures.
-legacy-cargo-check:
-  needs: [] # don't wait on other jobs
-  extends:
-    - .build-k8s
-    - .rules-master-pipeline-and-merge-request
-  script:
-    - |
-      set -eExuo pipefail
-      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- cargo check --tests --benches
-
 cargo-build-release-linux:
   needs: [] # don't wait on other jobs
   extends:
