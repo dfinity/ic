@@ -199,7 +199,7 @@ where
                     }
                     table.arrival_queue.insert((now, key));
                     e.insert(Allowance {
-                        amount,
+                        amount: amount.clone(),
                         expires_at,
                         arrived_at: now,
                     });
@@ -210,7 +210,7 @@ where
                     if let Some(expected_allowance) = expected_allowance {
                         if expected_allowance != allowance.amount {
                             return Err(ApproveError::AllowanceChanged {
-                                current_allowance: allowance.amount,
+                                current_allowance: allowance.amount.clone(),
                             });
                         }
                     }
@@ -239,7 +239,7 @@ where
                             table.expiration_queue.insert((expires_at, key));
                         }
                     }
-                    Ok(e.get().amount)
+                    Ok(e.get().amount.clone())
                 }
             }
         })
@@ -263,13 +263,13 @@ where
                     } else {
                         let allowance = e.get_mut();
                         if allowance.amount < amount {
-                            return Err(InsufficientAllowance(allowance.amount));
+                            return Err(InsufficientAllowance(allowance.amount.clone()));
                         }
                         allowance.amount = allowance
                             .amount
                             .checked_sub(&amount)
                             .expect("Underflow when using allowance");
-                        let rest = allowance.amount;
+                        let rest = allowance.amount.clone();
                         if rest.is_zero() {
                             if let Some(expires_at) = e.get().expires_at {
                                 table.expiration_queue.remove(&(expires_at, key.clone()));

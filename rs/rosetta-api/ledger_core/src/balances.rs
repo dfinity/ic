@@ -46,7 +46,7 @@ where
             Entry::Occupied(mut entry) => {
                 let new_v = f(Some(entry.get()))?;
                 if !new_v.is_zero() {
-                    *entry.get_mut() = new_v;
+                    *entry.get_mut() = new_v.clone();
                 } else {
                     entry.remove_entry();
                 }
@@ -55,7 +55,7 @@ where
             Entry::Vacant(entry) => {
                 let new_v = f(None)?;
                 if !new_v.is_zero() {
-                    entry.insert(new_v);
+                    entry.insert(new_v.clone());
                 }
                 Ok(new_v)
             }
@@ -155,7 +155,7 @@ where
         from: &S::AccountId,
         amount: S::Tokens,
     ) -> Result<(), BalanceError<S::Tokens>> {
-        self.debit(from, amount)?;
+        self.debit(from, amount.clone())?;
         self.token_pool = self
             .token_pool
             .checked_add(&amount)
@@ -185,7 +185,7 @@ where
     ) -> Result<S::Tokens, BalanceError<S::Tokens>> {
         self.store.update(from.clone(), |prev| {
             let mut balance = match prev {
-                Some(x) => *x,
+                Some(x) => x.clone(),
                 None => {
                     return Err(BalanceError::InsufficientFunds {
                         balance: S::Tokens::zero(),

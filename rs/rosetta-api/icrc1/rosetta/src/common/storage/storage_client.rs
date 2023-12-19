@@ -1,15 +1,12 @@
 use super::{
     storage_operations,
-    types::{MetadataEntry, RosettaBlock},
+    types::{MetadataEntry, RosettaBlock, Tokens},
 };
 use anyhow::Result;
 use ic_icrc1::Transaction;
-use ic_icrc1_tokens_u64::U64;
 use rusqlite::Connection;
 use serde_bytes::ByteBuf;
 use std::{path::Path, sync::Mutex};
-
-type Tokens = U64;
 
 #[derive(Debug)]
 pub struct StorageClient {
@@ -175,14 +172,98 @@ impl StorageClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::{common::utils::unit_test_utils::create_tmp_dir, Metadata};
-    use ic_icrc1::Block;
+    use ic_icrc1::{Block, Operation, Transaction};
     use ic_icrc1_test_utils::{
         arb_amount, blocks_strategy, metadata_strategy, valid_blockchain_with_gaps_strategy,
     };
-    use ic_ledger_core::block::BlockType;
+    use ic_icrc1_tokens_u256::U256;
+    use ic_icrc1_tokens_u64::U64;
+    use ic_ledger_core::{block::BlockType, tokens::TokensType};
     use proptest::prelude::*;
+
+    fn convert_operation_type<A, B>(value: Operation<A>) -> Operation<B>
+    where
+        A: TokensType,
+        B: TokensType,
+        A: TryInto<B>,
+        <A as TryInto<B>>::Error: std::fmt::Debug,
+    {
+        match value {
+            Operation::Mint { to, amount } => Operation::Mint {
+                to,
+                amount: amount.try_into().unwrap(),
+            },
+            Operation::Transfer {
+                from,
+                to,
+                spender,
+                amount,
+                fee,
+            } => Operation::Transfer {
+                from,
+                to,
+                spender,
+                amount: amount.try_into().unwrap(),
+                fee: fee.map(|x| x.try_into().unwrap()),
+            },
+            Operation::Burn {
+                from,
+                spender,
+                amount,
+            } => Operation::Burn {
+                from,
+                spender,
+                amount: amount.try_into().unwrap(),
+            },
+            Operation::Approve {
+                from,
+                spender,
+                amount,
+                expected_allowance,
+                expires_at,
+                fee,
+            } => Operation::Approve {
+                from,
+                spender,
+                amount: amount.try_into().unwrap(),
+                expected_allowance: expected_allowance.map(|x| x.try_into().unwrap()),
+                expires_at,
+                fee: fee.map(|x| x.try_into().unwrap()),
+            },
+        }
+    }
+
+    fn convert_transaction_type<A, B>(value: Transaction<A>) -> Transaction<B>
+    where
+        A: TokensType,
+        B: TokensType,
+        A: TryInto<B>,
+        <A as TryInto<B>>::Error: std::fmt::Debug,
+    {
+        Transaction {
+            operation: convert_operation_type(value.operation),
+            created_at_time: value.created_at_time,
+            memo: value.memo,
+        }
+    }
+
+    fn convert_block_type<A, B>(value: Block<A>) -> Block<B>
+    where
+        A: TokensType,
+        B: TokensType,
+        A: TryInto<B>,
+        <A as TryInto<B>>::Error: std::fmt::Debug,
+    {
+        Block {
+            transaction: convert_transaction_type(value.transaction),
+            parent_hash: value.parent_hash,
+            effective_fee: value.effective_fee.map(|x| x.try_into().unwrap()),
+            timestamp: value.timestamp,
+            fee_collector: value.fee_collector,
+            fee_collector_block_index: value.fee_collector_block_index,
+        }
+    }
 
     #[test]
     fn smoke_test() {
@@ -195,121 +276,165 @@ mod tests {
     }
 
     proptest! {
-       #[test]
-       fn test_read_and_write_blocks(block in blocks_strategy(arb_amount()),index in (0..10000u64)){
+          #[test]
+          fn test_read_and_write_blocks_u64(blockchain in prop::collection::vec(blocks_strategy::<U64>(arb_amount()),0..5)){
            let storage_client_memory = StorageClient::new_in_memory().unwrap();
-           let rosetta_block = RosettaBlock::from_icrc_ledger_block(block,index).unwrap();
-           storage_client_memory.store_blocks(vec![rosetta_block.clone()]).unwrap();
-           let block_read = storage_client_memory.get_block_at_idx(index).unwrap().unwrap();
-           assert_eq!(block_read,rosetta_block);
-           let block_read = storage_client_memory.get_block_by_hash(rosetta_block.clone().block_hash).unwrap().unwrap();
-           assert_eq!(block_read,rosetta_block);
+           let mut rosetta_blocks = vec![];
+           for (index,block) in blockchain.into_iter().enumerate(){
+               // Make sure the conversion functions work
+               assert_eq!(convert_block_type::<Tokens,U64>(convert_block_type::<U64,Tokens>(block.clone())),block);
+               // Make sure the block decoding Block<U64> -> Block<Tokens> works
+               let decoded_rosetta_token_block = Block::<Tokens>::decode(block.clone().encode()).unwrap();
+               assert_eq!(decoded_rosetta_token_block.clone(),convert_block_type::<U64,Tokens>(block.clone()));
+
+               // Make sure rosetta blocks store the correct transactions
+               let rosetta_block = RosettaBlock::from_encoded_block(block.clone().encode(),index as u64).unwrap();
+               assert_eq!(rosetta_block.block_hash,ByteBuf::from(<Block<U64> as BlockType>::block_hash(&block.clone().encode()).as_slice().to_vec()));
+               assert_eq!(rosetta_block.get_transaction().unwrap(),decoded_rosetta_token_block.clone().transaction.clone());
+               // Make sure the encoding and decoding works
+               rosetta_blocks.push(rosetta_block)
+           }
+
+           storage_client_memory.store_blocks(rosetta_blocks.clone()).unwrap();
+           for rosetta_block in rosetta_blocks.into_iter(){
+               let block_read = storage_client_memory.get_block_at_idx(rosetta_block.clone().index).unwrap().unwrap();
+               assert_eq!(block_read,rosetta_block);
+               let block_read = storage_client_memory.get_block_by_hash(rosetta_block.clone().block_hash).unwrap().unwrap();
+               assert_eq!(block_read,rosetta_block);
+           }
        }
 
        #[test]
-       fn test_read_and_write_transactions(blockchain in valid_blockchain_with_gaps_strategy(1000)){
-           let storage_client_memory = StorageClient::new_in_memory().unwrap();
-           let rosetta_blocks: Vec<_> = blockchain.0.iter().zip(blockchain.1.iter())
-               .map(|(block, index)| RosettaBlock::from_icrc_ledger_block(block.clone(), *index as u64).unwrap())
-               .collect();
-           storage_client_memory.store_blocks(rosetta_blocks.clone()).unwrap();
-           for block in rosetta_blocks.clone(){
-               let tx0 = Block::decode(block.encoded_block).unwrap().transaction;
-               let tx1 = Block::decode(storage_client_memory.get_block_at_idx(block.index).unwrap().unwrap().encoded_block).unwrap().transaction;
-               let tx2 = storage_client_memory.get_transaction_at_idx(block.index).unwrap().unwrap();
-               let tx3 = &storage_client_memory.get_transaction_by_hash(block.transaction_hash).unwrap().clone()[0];
-               assert_eq!(tx0,tx1);
-               assert_eq!(tx1,tx2);
-               assert_eq!(tx2,*tx3);
-           }
+       fn test_read_and_write_blocks_u256(blockchain in prop::collection::vec(blocks_strategy::<U256>(arb_amount()),0..5)){
+        let storage_client_memory = StorageClient::new_in_memory().unwrap();
+        let mut rosetta_blocks = vec![];
+        for (index,block) in blockchain.into_iter().enumerate(){
+            // Make sure the conversion functions work
+            assert_eq!(convert_block_type::<Tokens,U256>(convert_block_type::<U256,Tokens>(block.clone())),block);
+            // Make sure the block decoding Block<U256> -> Block<Tokens> works
+            let decoded_rosetta_token_block = Block::<Tokens>::decode(block.clone().encode()).unwrap();
+            assert_eq!(decoded_rosetta_token_block.clone(),convert_block_type::<U256,Tokens>(block.clone()));
 
-           if !rosetta_blocks.is_empty() {
-            let last_block = &rosetta_blocks[rosetta_blocks.len().saturating_sub(1)];
-           // If the index is out of range the function should return `None`.
-           assert!(storage_client_memory.get_transaction_at_idx(last_block.index+1).unwrap().is_none());
-
-           // Duplicate the last transaction generated
-           let duplicate_tx_block = RosettaBlock::from_icrc_ledger_block(Block::decode(last_block.encoded_block.clone()).unwrap(), last_block.index + 1).unwrap();
-           storage_client_memory.store_blocks([duplicate_tx_block.clone()].to_vec()).unwrap();
-
-           // The hash of the duplicated transaction should still be the same --> There should be two transactions with the same transaction hash.
-           assert_eq!(storage_client_memory.get_transaction_by_hash(duplicate_tx_block.transaction_hash).unwrap().len(),2  );
-           }
+            // Make sure rosetta blocks store the correct transactions
+            let rosetta_block = RosettaBlock::from_encoded_block(block.clone().encode(),index as u64).unwrap();
+            assert_eq!(rosetta_block.get_transaction().unwrap(),decoded_rosetta_token_block.clone().transaction.clone());
+            assert_eq!(rosetta_block.block_hash,ByteBuf::from(<Block<U256> as BlockType>::block_hash(&block.clone().encode()).as_slice().to_vec()));
+            // Make sure the encoding and decoding works
+            rosetta_blocks.push(rosetta_block)
         }
-
-       #[test]
-       fn test_highest_lowest_block_index(blocks in prop::collection::vec(blocks_strategy(arb_amount()),1..100)){
-           let storage_client_memory = StorageClient::new_in_memory().unwrap();
-           let mut rosetta_blocks = vec![];
-           for (index,block) in blocks.clone().into_iter().enumerate(){
-               rosetta_blocks.push(RosettaBlock::from_icrc_ledger_block(block,index as u64).unwrap());
-           }
-           storage_client_memory.store_blocks(rosetta_blocks).unwrap();
-           let block_read = storage_client_memory.get_block_with_highest_block_idx().unwrap().unwrap();
-           // Indexing starts at 0.
-           assert_eq!(block_read.index,(blocks.len() as u64)-1);
-           let block_read = storage_client_memory.get_block_with_lowest_block_idx().unwrap().unwrap();
-           assert_eq!(block_read.index,0);
-           let blocks_read = storage_client_memory.get_blocks_by_index_range(0,blocks.len() as u64).unwrap();
-           // Storage should return all blocks that are stored.
-           assert_eq!(blocks_read.len(),blocks.len());
-           let blocks_read = storage_client_memory.get_blocks_by_index_range(blocks.len() as u64 +1,blocks.len() as u64 +2).unwrap();
-           // Start index is outside of the index range of the blocks stored in the database -> Should return an empty vector.
-           assert!(blocks_read.is_empty());
-           let blocks_read = storage_client_memory.get_blocks_by_index_range(1,blocks.len() as u64 + 2).unwrap();
-           // End index is outside of the blocks stored in the database --> Returns subset of blocks stored in the database.
-           assert_eq!(blocks_read.len(),blocks.len().saturating_sub(1));
-        }
-
-       #[test]
-       fn test_deriving_gaps_from_storage(blockchain in valid_blockchain_with_gaps_strategy(1000)){
-           let storage_client_memory = StorageClient::new_in_memory().unwrap();
-           let mut rosetta_blocks = vec![];
-           for i in 0..blockchain.0.len() {
-            rosetta_blocks.push(RosettaBlock::from_icrc_ledger_block(blockchain.0[i].clone(),blockchain.1[i] as u64).unwrap());
-           }
-
-           storage_client_memory.store_blocks(rosetta_blocks.clone()).unwrap();
-
-           // This function will return a list of all the non consecutive intervals.
-           let non_consecutive_intervals = |blocks: Vec<u64>| {
-                   if blocks.is_empty() {
-                   return vec![];
-               }
-               let mut block_ranges = vec![];
-               for i in 1..blocks.len() {
-                   if blocks[i] != blocks[i - 1] + 1 {
-                        block_ranges.push((blocks[i - 1], blocks[i]));
-                   }
-               }
-               block_ranges
-           };
-
-           // Fetch the database gaps and map them to indices tuples.
-           let derived_gaps = storage_client_memory.get_blockchain_gaps().unwrap().into_iter().map(|(a,b)| (a.index,b.index)).collect::<Vec<(u64,u64)>>();
-
-           // If the database is empty the returned gaps vector should simply be empty.
-           if rosetta_blocks.last().is_some(){
-               let gaps = non_consecutive_intervals(rosetta_blocks.clone().into_iter().map(|b|b.index).collect());
-
-               // Compare the storage with the test function.
-               assert_eq!(gaps,derived_gaps);
-           }
-           else{
-               assert!(derived_gaps.is_empty())
-           }
-        }
-
-        #[test]
-        fn test_read_and_write_metadata(metadata in metadata_strategy()) {
-            let storage_client_memory = StorageClient::new_in_memory().unwrap();
-            let entries_write = metadata.iter().map(|(key, value)| MetadataEntry::from_metadata_value(key, value)).collect::<Result<Vec<MetadataEntry>>>().unwrap();
-            let metadata_write = Metadata::from_metadata_entries(&entries_write).unwrap();
-            storage_client_memory.write_metadata(entries_write).unwrap();
-            let entries_read = storage_client_memory.read_metadata().unwrap();
-            let metadata_read = Metadata::from_metadata_entries(&entries_read).unwrap();
-
-            assert_eq!(metadata_write, metadata_read);
+        storage_client_memory.store_blocks(rosetta_blocks.clone()).unwrap();
+        for rosetta_block in rosetta_blocks.into_iter(){
+            let block_read = storage_client_memory.get_block_at_idx(rosetta_block.clone().index).unwrap().unwrap();
+            assert_eq!(block_read,rosetta_block);
+            let block_read = storage_client_memory.get_block_by_hash(rosetta_block.clone().block_hash).unwrap().unwrap();
+            assert_eq!(block_read,rosetta_block);
         }
     }
+
+          #[test]
+          fn test_read_and_write_transactions(blockchain in valid_blockchain_with_gaps_strategy::<Tokens>(1000)){
+              let storage_client_memory = StorageClient::new_in_memory().unwrap();
+              let rosetta_blocks: Vec<_> = blockchain.0.iter().zip(blockchain.1.iter())
+                  .map(|(block, index)| RosettaBlock::from_icrc_ledger_block(block.clone(), *index as u64).unwrap())
+                  .collect();
+              storage_client_memory.store_blocks(rosetta_blocks.clone()).unwrap();
+              for block in rosetta_blocks.clone(){
+                  let tx0 = Block::decode(block.encoded_block).unwrap().transaction;
+                  let tx1 = Block::decode(storage_client_memory.get_block_at_idx(block.index).unwrap().unwrap().encoded_block).unwrap().transaction;
+                  let tx2 = storage_client_memory.get_transaction_at_idx(block.index).unwrap().unwrap();
+                  let tx3 = &storage_client_memory.get_transaction_by_hash(block.transaction_hash).unwrap().clone()[0];
+                  assert_eq!(tx0,tx1);
+                  assert_eq!(tx1,tx2);
+                  assert_eq!(tx2,*tx3);
+              }
+
+              if !rosetta_blocks.is_empty() {
+               let last_block = &rosetta_blocks[rosetta_blocks.len().saturating_sub(1)];
+              // If the index is out of range the function should return `None`.
+              assert!(storage_client_memory.get_transaction_at_idx(last_block.index+1).unwrap().is_none());
+
+              // Duplicate the last transaction generated
+              let duplicate_tx_block = RosettaBlock::from_icrc_ledger_block::<Tokens>(Block::decode(last_block.encoded_block.clone()).unwrap(), last_block.index + 1).unwrap();
+              storage_client_memory.store_blocks([duplicate_tx_block.clone()].to_vec()).unwrap();
+
+              // The hash of the duplicated transaction should still be the same --> There should be two transactions with the same transaction hash.
+              assert_eq!(storage_client_memory.get_transaction_by_hash(duplicate_tx_block.transaction_hash).unwrap().len(),2  );
+              }
+           }
+
+          #[test]
+          fn test_highest_lowest_block_index(blocks in prop::collection::vec(blocks_strategy::<Tokens>(arb_amount::<Tokens>()),1..100)){
+              let storage_client_memory = StorageClient::new_in_memory().unwrap();
+              let mut rosetta_blocks = vec![];
+              for (index,block) in blocks.clone().into_iter().enumerate(){
+                  rosetta_blocks.push(RosettaBlock::from_icrc_ledger_block(block,index as u64).unwrap());
+              }
+              storage_client_memory.store_blocks(rosetta_blocks).unwrap();
+              let block_read = storage_client_memory.get_block_with_highest_block_idx().unwrap().unwrap();
+              // Indexing starts at 0.
+              assert_eq!(block_read.index,(blocks.len() as u64)-1);
+              let block_read = storage_client_memory.get_block_with_lowest_block_idx().unwrap().unwrap();
+              assert_eq!(block_read.index,0);
+              let blocks_read = storage_client_memory.get_blocks_by_index_range(0,blocks.len() as u64).unwrap();
+              // Storage should return all blocks that are stored.
+              assert_eq!(blocks_read.len(),blocks.len());
+              let blocks_read = storage_client_memory.get_blocks_by_index_range(blocks.len() as u64 +1,blocks.len() as u64 +2).unwrap();
+              // Start index is outside of the index range of the blocks stored in the database -> Should return an empty vector.
+              assert!(blocks_read.is_empty());
+              let blocks_read = storage_client_memory.get_blocks_by_index_range(1,blocks.len() as u64 + 2).unwrap();
+              // End index is outside of the blocks stored in the database --> Returns subset of blocks stored in the database.
+              assert_eq!(blocks_read.len(),blocks.len().saturating_sub(1));
+           }
+
+          #[test]
+          fn test_deriving_gaps_from_storage(blockchain in valid_blockchain_with_gaps_strategy::<Tokens>(1000)){
+              let storage_client_memory = StorageClient::new_in_memory().unwrap();
+              let mut rosetta_blocks = vec![];
+              for i in 0..blockchain.0.len() {
+               rosetta_blocks.push(RosettaBlock::from_icrc_ledger_block(blockchain.0[i].clone(),blockchain.1[i] as u64).unwrap());
+              }
+
+              storage_client_memory.store_blocks(rosetta_blocks.clone()).unwrap();
+
+              // This function will return a list of all the non consecutive intervals.
+              let non_consecutive_intervals = |blocks: Vec<u64>| {
+                      if blocks.is_empty() {
+                      return vec![];
+                  }
+                  let mut block_ranges = vec![];
+                  for i in 1..blocks.len() {
+                      if blocks[i] != blocks[i - 1] + 1 {
+                           block_ranges.push((blocks[i - 1], blocks[i]));
+                      }
+                  }
+                  block_ranges
+              };
+
+              // Fetch the database gaps and map them to indices tuples.
+              let derived_gaps = storage_client_memory.get_blockchain_gaps().unwrap().into_iter().map(|(a,b)| (a.index,b.index)).collect::<Vec<(u64,u64)>>();
+
+              // If the database is empty the returned gaps vector should simply be empty.
+              if rosetta_blocks.last().is_some(){
+                  let gaps = non_consecutive_intervals(rosetta_blocks.clone().into_iter().map(|b|b.index).collect());
+
+                  // Compare the storage with the test function.
+                  assert_eq!(gaps,derived_gaps);
+              }
+              else{
+                  assert!(derived_gaps.is_empty())
+              }
+           }
+
+           #[test]
+           fn test_read_and_write_metadata(metadata in metadata_strategy()) {
+               let storage_client_memory = StorageClient::new_in_memory().unwrap();
+               let entries_write = metadata.iter().map(|(key, value)| MetadataEntry::from_metadata_value(key, value)).collect::<Result<Vec<MetadataEntry>>>().unwrap();
+               let metadata_write = Metadata::from_metadata_entries(&entries_write).unwrap();
+               storage_client_memory.write_metadata(entries_write).unwrap();
+               let entries_read = storage_client_memory.read_metadata().unwrap();
+               let metadata_read = Metadata::from_metadata_entries(&entries_read).unwrap();
+
+               assert_eq!(metadata_write, metadata_read);
+           }
+       }
 }

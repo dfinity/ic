@@ -74,47 +74,58 @@ fn operation_strategy<Tokens: TokensType>(
     amount_strategy: impl Strategy<Value = Tokens>,
 ) -> impl Strategy<Value = Operation<Tokens>> {
     amount_strategy.prop_flat_map(|amount| {
+        // Clone amount due to move
+        let mint_amount = amount.clone();
+        let mint_strategy = account_strategy().prop_map(move |to| Operation::Mint {
+            to,
+            amount: mint_amount.clone(),
+        });
+        let burn_amount = amount.clone();
+        let burn_strategy = account_strategy().prop_map(move |from| Operation::Burn {
+            from,
+            spender: None,
+            amount: burn_amount.clone(),
+        });
+        let transfer_amount = amount.clone();
+        let transfer_strategy = (
+            account_strategy(),
+            account_strategy(),
+            prop::option::of(Just(token_amount(DEFAULT_TRANSFER_FEE))),
+        )
+            .prop_map(move |(to, from, fee)| Operation::Transfer {
+                from,
+                to,
+                spender: None,
+                amount: transfer_amount.clone(),
+                fee,
+            });
+        let approve_amount = amount.clone();
+        let approve_strategy = (
+            account_strategy(),
+            account_strategy(),
+            prop::option::of(Just(token_amount(DEFAULT_TRANSFER_FEE))),
+            prop::option::of(Just({
+                (SystemTime::now()
+                    + Duration::from_secs(rand::thread_rng().gen_range(0..=u32::MAX as u64)))
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos() as u64
+            })),
+        )
+            .prop_map(move |(spender, from, fee, expires_at)| Operation::Approve {
+                from,
+                spender,
+                amount: approve_amount.clone(),
+                expected_allowance: Some(amount.clone()),
+                expires_at,
+                fee,
+            });
+
         prop_oneof![
-            account_strategy().prop_map(move |to| Operation::Mint { to, amount }),
-            account_strategy().prop_map(move |from| {
-                Operation::Burn {
-                    from,
-                    spender: None,
-                    amount,
-                }
-            }),
-            (
-                account_strategy(),
-                account_strategy(),
-                prop::option::of(Just(token_amount(DEFAULT_TRANSFER_FEE)))
-            )
-                .prop_map(move |(to, from, fee)| Operation::Transfer {
-                    from,
-                    to,
-                    spender: None,
-                    amount,
-                    fee
-                }),
-            (
-                account_strategy(),
-                account_strategy(),
-                prop::option::of(Just(token_amount(DEFAULT_TRANSFER_FEE))),
-                prop::option::of(Just({
-                    (SystemTime::now()
-                        + Duration::from_secs(rand::thread_rng().gen_range(0..=u32::MAX as u64)))
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos() as u64
-                }))
-            )
-                .prop_map(move |(spender, from, fee, expires_at)| Operation::Approve {
-                    from,
-                    spender,
-                    amount,
-                    expected_allowance: Some(amount),
-                    expires_at,
-                    fee
-                }),
+            mint_strategy,
+            burn_strategy,
+            transfer_strategy,
+            approve_strategy,
         ]
     })
 }
@@ -186,21 +197,21 @@ pub fn blocks_strategy<Tokens: TokensType>(
         .prop_map(
             |(transaction, fee, timestamp, fee_collector, fee_collector_block_index)| {
                 let transaction_fee = match transaction.operation {
-                    Operation::Transfer { fee, .. } => fee,
-                    Operation::Approve { fee, .. } => fee,
+                    Operation::Transfer { ref fee, .. } => fee.clone(),
+                    Operation::Approve { ref fee, .. } => fee.clone(),
                     Operation::Burn { .. } => None,
                     Operation::Mint { .. } => None,
                 };
                 let effective_fee = transaction_fee
                     .is_none()
-                    .then(|| fee.unwrap_or(token_amount(DEFAULT_TRANSFER_FEE)));
+                    .then(|| fee.clone().unwrap_or(token_amount(DEFAULT_TRANSFER_FEE)));
                 assert!(effective_fee.is_some() || transaction_fee.is_some());
                 Block {
                     parent_hash: Some(Block::<Tokens>::block_hash(
                         &Block {
                             parent_hash: None,
                             transaction: transaction.clone(),
-                            effective_fee,
+                            effective_fee: effective_fee.clone(),
                             timestamp,
                             fee_collector,
                             fee_collector_block_index,
