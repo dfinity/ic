@@ -293,17 +293,6 @@ where
             .map(|(_neuron_id, neuron)| self.reconstitute_neuron(neuron))
     }
 
-    /// Returns the next NeuronId and Neuron equal to or higher than the provided neuron_id. This
-    /// method differs from `range_neurons` in that it does not reconstitute the neuron or read
-    /// any attributes from other stable memory collections.
-    // TODO[NNS1-2784] - remove method after index has been built
-    pub fn range_neurons_map<R>(&self, range: R) -> impl Iterator<Item = (NeuronId, Neuron)> + '_
-    where
-        R: RangeBounds<NeuronId>,
-    {
-        self.main.range(range)
-    }
-
     /// Returns the number of entries for some of the storage sections.
     pub fn lens(&self) -> NeuronStorageLens {
         NeuronStorageLens {

@@ -835,13 +835,6 @@ impl NeuronStore {
             account_id: indexes.account_id().num_entries(),
         })
     }
-
-    /// This method is used in testing to reset the AccountId index to properly test the upgrade path.
-    // TODO(NNS1-2784) - Remove test after 1-time upgrade
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn reset_account_id_index(&mut self) {
-        with_stable_neuron_indexes_mut(|indexes| indexes.account_id_mut().reset())
-    }
 }
 
 /// Number of entries for each neuron indexes (in stable storage)

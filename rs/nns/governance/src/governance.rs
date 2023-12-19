@@ -52,9 +52,7 @@ use crate::{
         UpdateNodeProvider, Vote, WaitForQuietState,
     },
     proposals::create_service_nervous_system::ExecutedCreateServiceNervousSystemProposal,
-    storage::{
-        with_stable_neuron_indexes, with_stable_neuron_indexes_mut, with_stable_neuron_store,
-    },
+    storage::with_stable_neuron_store,
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -1555,84 +1553,6 @@ impl TryFrom<SettleNeuronsFundParticipationRequest>
     }
 }
 
-fn maybe_build_initial_account_id_neuron_index(heap_neurons: &BTreeMap<u64, Neuron>) {
-    let is_account_id_index_empty =
-        with_stable_neuron_indexes_mut(|indexes| indexes.account_id().num_entries() == 0);
-    // This indicates that this is the first upgrade since introducing the new index
-    if !is_account_id_index_empty {
-        return;
-    }
-
-    println!("{}Starting to build AccountId Neuron Index", LOG_PREFIX);
-
-    for (id, neuron) in heap_neurons.iter() {
-        let subaccount = match neuron.subaccount() {
-            Ok(subaccount) => Some(subaccount),
-            Err(governance_error) => {
-                panic!(
-                    "{}WARNING: issues encountered when adding neuron to NeuronAccountIdIndex. {}",
-                    LOG_PREFIX, governance_error
-                );
-            }
-        };
-        let account_id = AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), subaccount);
-        if let Err(governance_error) = with_stable_neuron_indexes_mut(|indexes| {
-            indexes
-                .account_id_mut()
-                .add_neuron_account_id(NeuronId { id: *id }, account_id)
-        }) {
-            panic!(
-                "{}WARNING: issues encountered when adding neuron to NeuronAccountIdIndex. {}",
-                LOG_PREFIX, governance_error
-            );
-        }
-    }
-
-    println!(
-        "{}Finished building AccountId Neuron Index for heap neurons",
-        LOG_PREFIX
-    );
-
-    let stable_neurons = with_stable_neuron_store(|neuron_store| {
-        neuron_store
-            .range_neurons_map(..)
-            .map(|(id, neuron)| {
-                let subaccount = match neuron.subaccount() {
-                    Ok(subaccount) => Some(subaccount),
-                    Err(governance_error) => {
-                        panic!("{}WARNING: issues encountered when adding neuron to NeuronAccountIdIndex. {}", 
-                               LOG_PREFIX, governance_error);
-                    }
-                };
-                (id, subaccount)
-            })
-            .collect::<Vec<_>>()
-    });
-
-    with_stable_neuron_indexes_mut(|indexes| {
-        for (id, subaccount) in stable_neurons {
-            let account_id = AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), subaccount);
-            if let Err(governance_error) = indexes
-                .account_id_mut()
-                .add_neuron_account_id(id, account_id)
-            {
-                panic!(
-                    "{}WARNING: issues encountered when adding neuron to NeuronAccountIdIndex. {}",
-                    LOG_PREFIX, governance_error
-                );
-            }
-        }
-    });
-
-    let account_id_index_size =
-        with_stable_neuron_indexes(|indexes| indexes.account_id().num_entries());
-
-    println!(
-        "{}Finished building AccountId Neuron Index. Number of entries={}",
-        LOG_PREFIX, account_id_index_size
-    );
-}
-
 impl Governance {
     /// Initializes Governance for the first time from init payload. When restoring after an upgrade
     /// with its persisted state, `Governance::new_restored` should be called instead.
@@ -1702,8 +1622,6 @@ impl Governance {
     ) -> Self {
         let (heap_neurons, topic_followee_map, heap_governance_proto) =
             split_governance_proto(governance_proto);
-
-        maybe_build_initial_account_id_neuron_index(&heap_neurons);
 
         Self {
             heap_data: heap_governance_proto,

@@ -82,21 +82,6 @@ impl<M: Memory> NeuronAccountIdIndex<M> {
             .get(&account_id.hash)
             .map(|id| NeuronId { id })
     }
-
-    /// This method is used in testing to reset the AccountId index to properly test the upgrade path.
-    /// The `.clear()` method does not work given a mutable reference, so instead, iterate the map,
-    /// collect all keys, and remove all keys.
-    // TODO(NNS1-2784) - Remove test after 1-time upgrade
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn reset(&mut self) {
-        self.account_id_to_id
-            .range(..)
-            .collect::<Vec<_>>()
-            .iter()
-            .for_each(|(key, _)| {
-                self.account_id_to_id.remove(key);
-            });
-    }
 }
 
 #[cfg(test)]
