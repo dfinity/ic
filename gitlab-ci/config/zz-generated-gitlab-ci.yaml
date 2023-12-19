@@ -3458,35 +3458,6 @@ large-response-downloading-nightly:
     TESTNET: cdrc02
     WG_TESTNET: cdrc02
     cd_target_env: BENCHMARK_NIGHTLY
-legacy-cargo-check:
-  artifacts:
-    expire_in: 3 days
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
-    when: always
-  extends:
-    - ".build-k8s"
-    - ".rules-master-pipeline-and-merge-request"
-  image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:05d4f93d618d6f9b9d4260db3aa0b7809165430b00a7f8d3ad03e0daee7bfdcc
-  needs: []
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
-  script:
-    - |
-      set -eExuo pipefail
-      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- cargo check --tests --benches
-  tags:
-    - dfinity-ic
-  variables:
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
 lock-generate:
   artifacts:
     expire_in: 3 days
