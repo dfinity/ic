@@ -31,12 +31,18 @@ use ic_nns_governance::pb::v1::NnsFunction;
 use ic_nns_test_utils::governance::submit_external_update_proposal;
 use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
 use registry_canister::mutations::do_add_api_boundary_node::AddApiBoundaryNodePayload;
+use reqwest::{redirect::Policy, ClientBuilder};
 use serde::Deserialize;
 use slog::{error, info};
-use std::{net::SocketAddrV6, time::Duration};
+use std::{
+    net::{SocketAddr, SocketAddrV6},
+    time::Duration,
+};
 use tokio::runtime::Runtime;
+
 const CANISTER_RETRY_TIMEOUT: Duration = Duration::from_secs(30);
 const CANISTER_RETRY_BACKOFF: Duration = Duration::from_secs(2);
+
 /* tag::catalog[]
 Title:: API BN binary canister test
 
@@ -721,8 +727,8 @@ pub fn decentralization_test(env: TestEnv) {
             NeuronId(TEST_NEURON_1_ID),
             NnsFunction::AddApiBoundaryNode,
             proposal_payload,
-            String::from("add api boundary node"),
-            "Motivation: api bn decentralization testing".to_string(),
+            String::from("Add an API boundary node"),
+            "Motivation: API boundary node testing".to_string(),
         ));
         block_on(vote_execute_proposal_assert_executed(
             &governance,
@@ -735,6 +741,7 @@ pub fn decentralization_test(env: TestEnv) {
             node.node_id
         );
     }
+
     info!(
         log,
         "Asserting API BN domains are now present in the registry"
@@ -742,4 +749,88 @@ pub fn decentralization_test(env: TestEnv) {
     let api_domains: Vec<String> =
         block_on(fetcher.api_node_domains_from_registry()).expect("failed to get API BN domains");
     assert_eq!(api_domains, vec!["api1.com", "api2.com"]);
+
+    // open the firewall ports - this is temporary until we complete the firewall for API BNs in the orchestrator
+    for node in unassigned_nodes.iter() {
+        node.block_on_bash_script(&indoc::formatdoc! {r#"
+            sudo nft add rule ip6 filter INPUT tcp dport 4444 accept
+        "#})
+            .expect("unable to open firewall port");
+    }
+
+    // create an HTTP client for the two API BNs
+    let http_client = {
+        let mut client_builder = ClientBuilder::new()
+            .redirect(Policy::none())
+            .danger_accept_invalid_certs(true);
+        for (idx, node) in unassigned_nodes.iter().enumerate() {
+            // set port to 0 as it is being ignored by the client
+            let node_addr = SocketAddr::new(node.get_ip_addr(), 0);
+            client_builder = client_builder.resolve(&api_domains[idx], node_addr);
+            info!(
+                log,
+                "API BN {:?}: url {:?}, node addr {:?}", idx, api_domains[idx], node_addr
+            );
+        }
+        client_builder.build().expect("failed to build http client")
+    };
+
+    info!(log, "Checking API BNs health ...");
+    for (idx, node) in unassigned_nodes.iter().enumerate() {
+        block_on(retry_async(
+            &log,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                let response = http_client
+                    .get(format!("http://{}:4444/health", api_domains[idx]))
+                    .send()
+                    .await?;
+                if response.status().is_success() {
+                    info!(log, "API BN {:?} ({:?}) came up healthy", idx, node.node_id);
+                    return Ok(());
+                }
+                bail!("API BN {:?} ({:?}) is not yet healthy", idx, node.node_id);
+            },
+        ))
+        .expect("API BNs didn't report healthy");
+    }
+    info!(log, "Installing counter canisters");
+    let canister_values: Vec<u32> = vec![1, 3];
+    let canister_ids: Vec<Principal> = block_on(install_canisters(
+        env.topology_snapshot(),
+        wat::parse_str(COUNTER_CANISTER_WAT).unwrap().as_slice(),
+        1,
+    ));
+    info!(
+        log,
+        "Successfully installed {} counter canisters",
+        canister_ids.len()
+    );
+    let api_bn_agent = {
+        let api_bn_url = format!(
+            "http://[{:?}]:4444",
+            unassigned_nodes.first().unwrap().get_ip_addr()
+        );
+        info!(log, "Creating an agent for the API BN {api_bn_url:?}");
+        block_on(assert_create_agent(&api_bn_url))
+    };
+    info!(log, "Incrementing counters on canisters");
+    block_on(set_counters_on_counter_canisters(
+        &log,
+        api_bn_agent.clone(),
+        canister_ids.clone(),
+        canister_values.clone(),
+        CANISTER_RETRY_BACKOFF,
+        CANISTER_RETRY_TIMEOUT,
+    ));
+    info!(log, "Asserting expected counter values on canisters");
+    let counters = block_on(read_counters_on_counter_canisters(
+        &log,
+        api_bn_agent,
+        canister_ids,
+        CANISTER_RETRY_BACKOFF,
+        CANISTER_RETRY_TIMEOUT,
+    ));
+    assert_eq!(counters, canister_values);
 }

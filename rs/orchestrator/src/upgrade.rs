@@ -326,9 +326,18 @@ impl Upgrade {
 
     async fn check_for_upgrade_as_unassigned(&mut self) -> OrchestratorResult<()> {
         let registry_version = self.registry.get_latest_version();
+
+        // If the node is a boundary node, we upgrade to that version, otherwise we upgrade to the unassigned version
         let replica_version = self
             .registry
-            .get_unassigned_replica_version(registry_version)?;
+            .get_api_boundary_node_version(self.node_id, registry_version)
+            .or_else(|err| match err {
+                OrchestratorError::NodeUnassignedError(_, _) => self
+                    .registry
+                    .get_unassigned_replica_version(registry_version),
+                err => Err(err),
+            })?;
+
         if self.replica_version == replica_version {
             return Ok(());
         }
