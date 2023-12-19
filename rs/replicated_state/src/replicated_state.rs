@@ -777,6 +777,14 @@ impl ReplicatedState {
         &self.subnet_queues
     }
 
+    /// See `IngressQueue::filter_messages()` for documentation.
+    pub fn filter_subnet_queues_ingress_messages<F>(&mut self, filter: F) -> Vec<Arc<Ingress>>
+    where
+        F: FnMut(&Arc<Ingress>) -> bool,
+    {
+        self.subnet_queues.filter_ingress_messages(filter)
+    }
+
     /// Returns an immutable reference to `self.epoch_query_stats`.
     pub fn query_stats(&self) -> &RawQueryStats {
         &self.epoch_query_stats

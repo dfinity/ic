@@ -24,7 +24,6 @@ use ic_replicated_state::{
         execution_state::NextScheduledMethod, system_state::CyclesUseCase, NextExecution,
     },
     page_map::PageAllocatorFileDescriptor,
-    testing::ReplicatedStateTesting,
     CanisterState, CanisterStatus, ExecutionTask, InputQueueType, NetworkTopology, ReplicatedState,
 };
 use ic_system_api::InstructionLimits;
@@ -999,9 +998,8 @@ impl SchedulerImpl {
     fn purge_expired_ingress_messages(&self, state: &mut ReplicatedState) {
         let current_time = state.time();
         let not_expired_yet = |ingress: &Arc<Ingress>| ingress.expiry_time >= current_time;
-        let mut expired_ingress_messages = state
-            .subnet_queues_mut()
-            .filter_ingress_messages(not_expired_yet);
+        let mut expired_ingress_messages =
+            state.filter_subnet_queues_ingress_messages(not_expired_yet);
         let mut canisters = state.take_canister_states();
         for canister in canisters.values_mut() {
             expired_ingress_messages.extend(

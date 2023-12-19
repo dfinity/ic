@@ -1188,7 +1188,7 @@ impl SystemState {
         }
     }
 
-    /// See IngressQueue::filter_messages() for documentation
+    /// See `IngressQueue::filter_messages()` for documentation.
     pub fn filter_ingress_messages<F>(&mut self, filter: F) -> Vec<Arc<Ingress>>
     where
         F: FnMut(&Arc<Ingress>) -> bool,
