@@ -85,7 +85,6 @@ pub enum PerformanceCounterType {
 }
 
 /// System API call ids to track their execution (in alphabetical order).
-#[derive(Debug)]
 pub enum SystemApiCallId {
     /// Tracker for `ic0.accept_message())`
     AcceptMessage,
@@ -197,7 +196,6 @@ pub enum SystemApiCallId {
 
 /// System API call counters, i.e. how many times each tracked System API call
 /// was invoked.
-// #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct SystemApiCallCounters {
     /// Counter for `ic0.call_perform()`
