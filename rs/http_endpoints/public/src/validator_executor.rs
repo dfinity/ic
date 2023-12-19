@@ -20,7 +20,7 @@ use tokio::sync::oneshot;
 const VALIDATOR_EXECUTOR_THREADS: usize = 1;
 
 #[derive(Clone)]
-pub(crate) struct ValidatorExecutor<C> {
+pub struct ValidatorExecutor<C> {
     registry_client: Arc<dyn RegistryClient>,
     validator: Arc<dyn HttpRequestVerifier<C, RegistryRootOfTrustProvider>>,
     threadpool: ThreadPool,
