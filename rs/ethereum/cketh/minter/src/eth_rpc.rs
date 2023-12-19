@@ -669,6 +669,8 @@ pub enum ProviderError {
     TooFewCycles { expected: u128, received: u128 },
     // #[error("provider not found")]
     ProviderNotFound,
+    // #[error("missing required provider")]
+    MissingRequiredProvider,
 }
 
 #[derive(Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord, CandidType, Deserialize)]
@@ -718,8 +720,6 @@ pub enum ValidationError {
     CredentialPathNotAllowed(String),
     // #[error("credential header not allowed: {0}")]
     CredentialHeaderNotAllowed(String),
-    // #[error("missing required provider")]
-    MissingRequiredProvider,
 }
 
 pub fn are_errors_consistent<T: PartialEq>(
