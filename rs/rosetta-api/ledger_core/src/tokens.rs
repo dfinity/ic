@@ -71,7 +71,6 @@ pub trait TokensType:
     + CheckedSub
     + Zero
     + Clone
-    + Copy
     + Debug
     + Into<Nat>
     + TryFrom<Nat, Error = String>
@@ -91,7 +90,6 @@ impl<T> TokensType for T where
         + CheckedSub
         + Zero
         + Clone
-        + Copy
         + Debug
         + Into<Nat>
         + TryFrom<Nat, Error = String>

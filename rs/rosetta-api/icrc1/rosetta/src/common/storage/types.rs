@@ -1,16 +1,24 @@
-use candid::Deserialize;
-use ic_icrc1::blocks::{generic_block_to_encoded_block, generic_transaction_from_generic_block};
+use candid::Nat;
+use ic_icrc1::blocks::{
+    encoded_block_to_generic_block, generic_block_to_encoded_block,
+    generic_transaction_from_generic_block,
+};
 use ic_icrc1::{Block, Transaction};
+use ic_icrc1_tokens_u256::U256;
 use ic_icrc1_tokens_u64::U64;
-use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_core::block::{BlockType, EncodedBlock};
+use ic_ledger_core::tokens::{CheckedAdd, CheckedSub, TokensType, Zero};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc3::blocks::GenericBlock;
+use num_bigint::BigUint;
+use num_traits::Bounded;
 use rosetta_core::identifiers::BlockIdentifier;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
+use std::fmt;
+use std::str::FromStr;
 
-type Tokens = U64;
+pub type Tokens = RosettaToken;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct RosettaBlock {
@@ -23,11 +31,13 @@ pub struct RosettaBlock {
 }
 
 impl RosettaBlock {
+    // Converts a generic block to a RosettaBlock
+    // Use this method for blocks that come directly from an ICRC-1 Ledger, because only then can be guarenteed that the block hash is correct
     pub fn from_generic_block(generic_block: GenericBlock, block_idx: u64) -> anyhow::Result<Self> {
         let block_hash = ByteBuf::from(generic_block.hash());
-        let block =
+        let encoded_block =
             generic_block_to_encoded_block(generic_block.clone()).map_err(anyhow::Error::msg)?;
-        let block = Block::<Tokens>::decode(block).map_err(anyhow::Error::msg)?;
+        let block = Block::<Tokens>::decode(encoded_block.clone()).map_err(anyhow::Error::msg)?;
         let transaction_hash = ByteBuf::from(
             generic_transaction_from_generic_block(generic_block)
                 .map_err(anyhow::Error::msg)?
@@ -40,35 +50,20 @@ impl RosettaBlock {
             parent_hash: Block::parent_hash(&block).map(|eb| ByteBuf::from(eb.as_slice().to_vec())),
             block_hash,
             timestamp,
-            encoded_block: block.encode(),
+            encoded_block,
             transaction_hash,
         })
     }
-    pub fn from_icrc_ledger_block(block: Block<Tokens>, block_idx: u64) -> anyhow::Result<Self> {
-        let eb = block.clone().encode();
-        Ok(Self {
-            index: block_idx,
-            parent_hash: Block::parent_hash(&block).map(|eb| ByteBuf::from(eb.as_slice().to_vec())),
-            block_hash: ByteBuf::from(
-                <Block<Tokens> as BlockType>::block_hash(&eb)
-                    .as_slice()
-                    .to_vec(),
-            ),
-            encoded_block: eb,
-            transaction_hash: ByteBuf::from(
-                <Transaction<Tokens> as LedgerTransaction>::hash(&block.transaction)
-                    .as_slice()
-                    .to_vec(),
-            ),
-            timestamp: block.timestamp,
-        })
+
+    pub fn from_icrc_ledger_block<T>(block: Block<T>, block_idx: u64) -> anyhow::Result<Self>
+    where
+        T: TokensType,
+    {
+        Self::from_encoded_block(block.encode(), block_idx)
     }
 
     pub fn from_encoded_block(eb: EncodedBlock, block_idx: u64) -> anyhow::Result<Self> {
-        RosettaBlock::from_icrc_ledger_block(
-            Block::decode(eb).map_err(anyhow::Error::msg)?,
-            block_idx,
-        )
+        Self::from_generic_block(encoded_block_to_generic_block(&eb), block_idx)
     }
 
     pub fn get_effective_fee(&self) -> anyhow::Result<Option<Tokens>> {
@@ -78,7 +73,7 @@ impl RosettaBlock {
     }
 
     pub fn get_transaction(&self) -> anyhow::Result<Transaction<Tokens>> {
-        Ok(Block::decode(self.encoded_block.clone())
+        Ok(Block::<Tokens>::decode(self.encoded_block.clone())
             .map_err(anyhow::Error::msg)?
             .transaction)
     }
@@ -111,5 +106,105 @@ impl MetadataEntry {
 
     pub fn value(&self) -> anyhow::Result<MetadataValue> {
         Ok(candid::decode_one(&self.value)?)
+    }
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Hash, Deserialize)]
+#[serde(transparent)]
+pub struct RosettaToken(Nat);
+
+impl FromStr for RosettaToken {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<RosettaToken, Self::Err> {
+        Ok(Self(Nat::from_str(s).map_err(|err| {
+            anyhow::Error::msg(format!("Cannot parse Nat from String: {}", err))
+        })?))
+    }
+}
+
+impl CheckedAdd for RosettaToken {
+    fn checked_add(&self, other: &Self) -> Option<Self> {
+        self.0
+             .0
+            .checked_add(&other.0 .0)
+            .map(|biguint| Self(Nat(biguint)))
+    }
+}
+
+impl CheckedSub for RosettaToken {
+    fn checked_sub(&self, other: &Self) -> Option<Self> {
+        self.0
+             .0
+            .checked_sub(&other.0 .0)
+            .map(|biguint| Self(Nat(biguint)))
+    }
+}
+
+impl From<U64> for RosettaToken {
+    fn from(value: U64) -> Self {
+        Self(value.into())
+    }
+}
+
+impl TryFrom<RosettaToken> for U64 {
+    type Error = String;
+    fn try_from(value: RosettaToken) -> Result<Self, Self::Error> {
+        value.0.try_into()
+    }
+}
+
+impl From<U256> for RosettaToken {
+    fn from(value: U256) -> Self {
+        Self(value.into())
+    }
+}
+
+impl TryFrom<RosettaToken> for U256 {
+    type Error = String;
+    fn try_from(value: RosettaToken) -> Result<Self, Self::Error> {
+        value.0.try_into()
+    }
+}
+
+impl Bounded for RosettaToken {
+    fn min_value() -> Self {
+        RosettaToken(Nat(BigUint::zero()))
+    }
+
+    fn max_value() -> Self {
+        // The max value of BigUnit is only limited by how much memory is available
+        // For now u256::MAX is the biggest number that RosettaToken will ever have to represent
+        U256::MAX.into()
+    }
+}
+
+impl Zero for RosettaToken {
+    fn zero() -> Self {
+        RosettaToken(Nat(BigUint::zero()))
+    }
+
+    fn is_zero(&self) -> bool {
+        self.0 .0.is_zero()
+    }
+}
+
+impl From<RosettaToken> for Nat {
+    fn from(value: RosettaToken) -> Self {
+        value.0
+    }
+}
+
+impl TryFrom<Nat> for RosettaToken {
+    type Error = String;
+
+    fn try_from(n: Nat) -> Result<Self, Self::Error> {
+        Ok(RosettaToken(n))
+    }
+}
+
+impl std::fmt::Display for RosettaToken {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0 .0.fmt(f)
     }
 }

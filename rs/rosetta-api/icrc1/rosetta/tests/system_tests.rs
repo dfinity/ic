@@ -360,7 +360,7 @@ fn expected_operations(
                         spender: icrc1_account_to_rosetta_accountidentifier(
                             &icrc_ledger_canister_id.get().0.into(),
                         ),
-                        allowance: U64::new(100_000_000),
+                        allowance: U64::new(100_000_000).into(),
                         expected_allowance: None,
                         expires_at: None,
                     }

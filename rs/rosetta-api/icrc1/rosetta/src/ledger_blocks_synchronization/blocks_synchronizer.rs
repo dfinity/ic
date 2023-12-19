@@ -410,7 +410,7 @@ async fn fetch_blocks_interval(
 }
 
 pub mod blocks_verifier {
-    use crate::common::storage::types::RosettaBlock;
+    use crate::ledger_blocks_synchronization::blocks_synchronizer::RosettaBlock;
     use serde_bytes::ByteBuf;
 
     pub fn is_valid_blockchain(
@@ -444,6 +444,8 @@ pub mod blocks_verifier {
 
 #[cfg(test)]
 mod tests {
+    use crate::common::storage::types::Tokens;
+
     use super::*;
     use ic_icrc1_test_utils::valid_blockchain_strategy;
     use proptest::prelude::*;
@@ -452,7 +454,7 @@ mod tests {
 
     proptest! {
             #[test]
-        fn test_valid_blockchain(blockchain in valid_blockchain_strategy(1000)){
+        fn test_valid_blockchain(blockchain in valid_blockchain_strategy::<Tokens>(1000)){
             let num_blocks = blockchain.len();
             let mut rosetta_blocks = vec![];
             for (index,block) in blockchain.into_iter().enumerate(){
