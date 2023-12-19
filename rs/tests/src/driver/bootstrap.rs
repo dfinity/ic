@@ -12,7 +12,9 @@ use crate::driver::{
         HasDependencies, HasIcDependencies, HasTopologySnapshot, IcNodeContainer,
         InitialReplicaVersion, NodesInfo,
     },
+    test_setup::InfraProvider,
 };
+use crate::util::block_on;
 use anyhow::{bail, Result};
 use flate2::{write::GzEncoder, Compression};
 use ic_base_types::NodeId;
@@ -25,6 +27,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::ReplicaVersion;
+use k8s::tnet::TNet;
 use slog::{info, warn, Logger};
 use std::{
     collections::BTreeMap,
@@ -79,6 +82,7 @@ pub fn init_ic(
     } else {
         test_env.read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")?
     };
+
     let replica_version = ReplicaVersion::try_from(replica_version.clone())?;
     let initial_replica_version = InitialReplicaVersion {
         version: replica_version.clone(),
@@ -201,9 +205,85 @@ pub fn init_ic(
 
     ic_config.set_use_specified_ids_allocation_range(specific_ids);
 
+    if InfraProvider::read_attribute(test_env) == InfraProvider::K8s {
+        // K8s IPv6 subnet used for pods
+        ic_config.set_whitelisted_prefixes(Some("fda6:8d22:43e1::/48".to_string()));
+    }
+
     info!(test_env.logger(), "Initializing via {:?}", &ic_config);
 
     Ok(ic_config.initialize()?)
+}
+
+pub fn setup_and_start_vms_k8s(
+    initialized_ic: &InitializedIc,
+    ic: &InternetComputer,
+    env: &TestEnv,
+    group_name: &str,
+    tnet: &TNet,
+) -> anyhow::Result<()> {
+    let mut nodes = vec![];
+    for subnet in initialized_ic.initialized_topology.values() {
+        for node in subnet.initialized_nodes.values() {
+            nodes.push(node.clone());
+        }
+    }
+    for node in initialized_ic.unassigned_nodes.values() {
+        nodes.push(node.clone());
+    }
+
+    let mut join_handles: Vec<JoinHandle<anyhow::Result<()>>> = vec![];
+    let mut nodes_info = NodesInfo::new();
+    for node in nodes {
+        let group_name = group_name.to_string();
+        // let vm_name = node.node_id.to_string();
+        let t_env = env.clone();
+        let ic_name = ic.name();
+        let malicious_behaviour = ic.get_malicious_behavior_of_node(node.node_id);
+        nodes_info.insert(node.node_id, malicious_behaviour.clone());
+
+        let mut upload_url = "".to_string();
+        let ip = node.node_config.public_api.ip().to_string();
+        for tnet_node in tnet.nns_nodes.iter().chain(tnet.app_nodes.iter()) {
+            if tnet_node.ipv6_addr.unwrap().to_string() == ip {
+                upload_url = tnet_node.config_url.clone().unwrap();
+            }
+        }
+
+        let conf_img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
+        join_handles.push(thread::spawn(move || {
+            create_config_disk_image(
+                &ic_name,
+                &node,
+                malicious_behaviour,
+                None,
+                &t_env,
+                &group_name,
+            )?;
+
+            block_on(TNet::upload_url(conf_img_path.as_path(), &upload_url))
+                .expect("Failed to upload config image");
+            std::fs::remove_file(conf_img_path)?;
+            Ok(())
+        }));
+    }
+    // In the tests we may need to identify, which node/s have malicious behavior.
+    // We dump this info into a file.
+    env.write_json_object(NODES_INFO, &nodes_info)?;
+
+    let mut result = Ok(());
+    // Wait for all threads to finish and return an error if any of them fails.
+    for jh in join_handles {
+        if let Err(e) = jh.join().expect("waiting for a thread failed") {
+            result = Err(anyhow::anyhow!(
+                "failed to set up and start a VM pool: {:?}",
+                e
+            ));
+        }
+    }
+    block_on(tnet.deploy_config_drives()).expect("Failed to deploy config drives");
+    block_on(tnet.start()).expect("Failed to start tnet");
+    result
 }
 
 pub fn setup_and_start_vms(

@@ -141,6 +141,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "async-socks5": crate.spec(
                 version = "^0.5.1",
             ),
+            "async-std": crate.spec(
+                version = "^1.12.0",
+            ),
             "async-stream": crate.spec(
                 version = "^0.3.5",
             ),
@@ -164,6 +167,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "backoff": crate.spec(
                 version = "^0.4.0",
+            ),
+            "backon": crate.spec(
+                version = "^0.4.1",
             ),
             "base32": crate.spec(
                 version = "^0.4.0",
@@ -275,6 +281,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ciborium": crate.spec(
                 version = "^0.2.1",
+            ),
+            "cidr": crate.spec(
+                version = "^0.2.2",
             ),
             "clap": crate.spec(
                 version = "^3.2.25",
@@ -640,6 +649,20 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "std",
                 ],
                 default_features = False,
+            ),
+            "k8s-openapi": crate.spec(
+                version = "=0.20.0",
+                features = [
+                    "v1_22",
+                ],
+            ),
+            "kube": crate.spec(
+                version = "=0.87.1",
+                features = [
+                    "runtime",
+                    "derive",
+                    "ws",
+                ],
             ),
             "lazy_static": crate.spec(
                 version = "^1.4.0",

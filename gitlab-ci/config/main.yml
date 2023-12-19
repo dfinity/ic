@@ -239,6 +239,25 @@ bazel-test-all:
     BAZEL_EXTRA_ARGS: "--keep_going $BAZEL_EXTRA_ARGS_RULES"
   timeout: 80 minutes
 
+bazel-system-tests-k8s:
+  extends:
+    - .bazel-test-all
+  tags:
+    - dfinity-ic
+    - ch
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
+      when: manual
+      allow_failure: true
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
+      when: manual
+      allow_failure: true
+  variables:
+    RUST_LOG: info
+    KUBECONFIG: "$KUBECONFIG_TNET_CREATOR"
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel $BAZEL_EXTRA_ARGS_RULES --test_tag_filters=k8s --k8s"
+  timeout: 80 minutes
+
 bazel-system-test-hotfix:
   extends:
     - .bazel-test-all
@@ -872,84 +891,3 @@ zz-generated-gitlab:
       else
           echo "git working tree clean - no changes to be committed"
       fi
-
-tnet-test:
-  needs:
-    - job: bazel-test-all
-      artifacts: false
-  tags:
-    - dfinity-ic
-    - ch
-  extends:
-    - .bazel-test-all
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "tnet-test"'
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
-      changes:
-        - rs/tests/k8s/**/*
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
-      when: manual
-      allow_failure: true
-  variables:
-    BAZEL_COMMAND: "build"
-    BAZEL_TARGETS: "//rs/tests/k8s:tnetctl"
-  allow_failure: true
-  script:
-    - |
-      # TODO: switch to bazel after chrono issue is handled
-      #bazel build //rs/tests/k8s:tnetctl
-      #TNETCTL=$(bazel cquery --output=files //rs/tests/k8s:tnetctl)
-      cd rs/tests/k8s
-      cargo build --release
-      TNETCTL=target/release/tnetctl
-
-      export KUBECONFIG=$KUBECONFIG_TNET_CREATOR
-      export RUST_LOG=info
-      export NAME="CI-$CI_JOB_ID"
-
-      # Build a subnet with a "zero" version, unless our built images actually
-      # contain a "real" version.
-      use_zero_version="true"
-      if [ "$CI_COMMIT_REF_PROTECTED" = "true" ]; then
-          use_zero_version="false"
-      fi
-      if [[ "$CI_COMMIT_REF_NAME" =~ ^hotfix-.+-rc--.+ ]]; then
-          use_zero_version="false"
-      fi
-
-      echo "Testing tnetctl on the following environment"
-      kubectl config get-contexts
-
-      ./$TNETCTL list
-      N=$(./$TNETCTL list | grep 'CI-' -c) || true
-      N_LIMIT=20
-      if [ "$N" -gt "$N_LIMIT" ]; then
-          echo "Seeing already $N_LIMIT CI-* testnets deployed."
-          echo "They should have been deleted by GC. Investigate and purge them."
-          exit 1
-      fi
-
-      if [ "${use_zero_version}" == "true" ]; then
-        ./$TNETCTL create \
-            --version "$CI_COMMIT_SHA" \
-            --use-zero-version \
-            --init \
-            --nns 2 \
-            --app 1 \
-            -n "$NAME"
-      else
-        ./$TNETCTL create \
-            --version "$CI_COMMIT_SHA" \
-            --init \
-            --nns 2 \
-            --app 1 \
-            -n "$NAME"
-      fi
-
-      TNET_OPERATOR=$(./$TNETCTL list | grep $NAME | awk '{ print $1 }')-operator
-      kubectl -n tnets wait --timeout=120s --for=condition=PodScheduled pod/"$TNET_OPERATOR"
-      sleep 30
-      kubectl -n tnets logs -f "$TNET_OPERATOR" -c init &
-      timeout 10m \
-          bash -c "kubectl -n tnets logs -f $TNET_OPERATOR -c init | grep -q 'All NNS canisters have been set up'"
-      kill "$(jobs -p)" || true

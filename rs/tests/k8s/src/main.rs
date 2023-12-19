@@ -106,10 +106,10 @@ async fn main() -> Result<()> {
             }
         }
         Some(Commands::Start { index }) => {
-            TNet::start(*index).await?;
+            TNet::vms_action(*index, "start").await?;
         }
         Some(Commands::Stop { index }) => {
-            TNet::stop(*index).await?;
+            TNet::vms_action(*index, "stop").await?;
         }
         None => {}
     }

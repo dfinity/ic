@@ -1165,6 +1165,79 @@ bazel-system-test-staging:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
+bazel-system-tests-k8s:
+  after_script:
+    - |
+      set +e # Do not fail in the after_script, try to do as much as possible instead.
+      echo -e "\033[0;31m"
+      echo -e "************************************************************************"
+      echo -e "*** NEED BAZEL HELP? See #project-bazel and                          ***"
+      echo -e "***  https://github.com/dfinity/ic/blob/master/bazel/README.md       ***"
+      echo -e "*** (NEW) To regenerate Cargo Bazel lockfiles run ./bin/bazel-pin.sh ***"
+      echo -e "************************************************************************"
+      echo -e "\033[0m"
+    - cp -R "$(realpath bazel-testlogs)" bazel-testlogs-gitlab
+    - gzip bazel-build-log*.json
+    - |
+      echo -e "\e[0Ksection_start:$(date +%s):bazel_exporter_logs[collapsed=true]\r\e[0KClick to see Bazel exporter logs"
+      bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb"
+      echo -e "\e[0Ksection_end:$(date +%s):bazel_exporter_logs\r\e[0K"
+    - |
+      if [ "$(uname)" == "Linux" ]; then
+          bazel clean --expunge
+      fi
+    - - |
+        # Start the after_script section
+        echo -e "\e[0Ksection_start:$(date +%s):after_script[collapsed=true]\r\e[0KClick here to see the after_script section. It does not affect the job success status"
+
+        # Export all the environmental variables so that the GITLAB configured variables are available to after_script.sh
+        export ROOT_PIPELINE_ID=${PARENT_PIPELINE_ID:-$CI_PIPELINE_ID}
+        buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" after-script -- "${CI_PROJECT_DIR}"/gitlab-ci/src/after_script/after_script.sh
+
+        rm -rf "${CI_PROJECT_DIR}/target"
+
+        # Finish and collapse the after_script section
+        echo -e "\e[0Ksection_end:$(date +%s):after_script\r\e[0K"
+  artifacts:
+    expire_in: 3 days
+    paths:
+      - bazel-build-log*.json*
+      - bazel-bep.pb
+    reports:
+      junit:
+        - bazel-testlogs-gitlab/**/test.xml
+    when: always
+  extends:
+    - ".bazel-test-all"
+  image:
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:05d4f93d618d6f9b9d4260db3aa0b7809165430b00a7f8d3ad03e0daee7bfdcc
+  needs: []
+  rules:
+    - allow_failure: true
+      if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
+      when: manual
+    - allow_failure: true
+      if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
+      when: manual
+  script:
+    - "./gitlab-ci/src/bazel-ci/main.sh"
+  tags:
+    - dfinity-ic
+    - ch
+  timeout: 80 minutes
+  variables:
+    BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
+    BAZEL_COMMAND: test
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel $BAZEL_EXTRA_ARGS_RULES --test_tag_filters=k8s --k8s"
+    BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
+    BAZEL_TARGETS: "//..."
+    GET_SOURCES_ATTEMPTS: 5
+    GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
+    GIT_DEPTH: 0
+    GIT_STRATEGY: fetch
+    KUBECONFIG: "$KUBECONFIG_TNET_CREATOR"
+    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
+    RUST_LOG: info
 bazel-test-all:
   after_script:
     - |
@@ -4647,136 +4720,6 @@ test-push-branch:
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
-tnet-test:
-  after_script:
-    - |
-      set +e # Do not fail in the after_script, try to do as much as possible instead.
-      echo -e "\033[0;31m"
-      echo -e "************************************************************************"
-      echo -e "*** NEED BAZEL HELP? See #project-bazel and                          ***"
-      echo -e "***  https://github.com/dfinity/ic/blob/master/bazel/README.md       ***"
-      echo -e "*** (NEW) To regenerate Cargo Bazel lockfiles run ./bin/bazel-pin.sh ***"
-      echo -e "************************************************************************"
-      echo -e "\033[0m"
-    - cp -R "$(realpath bazel-testlogs)" bazel-testlogs-gitlab
-    - gzip bazel-build-log*.json
-    - |
-      echo -e "\e[0Ksection_start:$(date +%s):bazel_exporter_logs[collapsed=true]\r\e[0KClick to see Bazel exporter logs"
-      bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb"
-      echo -e "\e[0Ksection_end:$(date +%s):bazel_exporter_logs\r\e[0K"
-    - |
-      if [ "$(uname)" == "Linux" ]; then
-          bazel clean --expunge
-      fi
-    - - |
-        # Start the after_script section
-        echo -e "\e[0Ksection_start:$(date +%s):after_script[collapsed=true]\r\e[0KClick here to see the after_script section. It does not affect the job success status"
-
-        # Export all the environmental variables so that the GITLAB configured variables are available to after_script.sh
-        export ROOT_PIPELINE_ID=${PARENT_PIPELINE_ID:-$CI_PIPELINE_ID}
-        buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" after-script -- "${CI_PROJECT_DIR}"/gitlab-ci/src/after_script/after_script.sh
-
-        rm -rf "${CI_PROJECT_DIR}/target"
-
-        # Finish and collapse the after_script section
-        echo -e "\e[0Ksection_end:$(date +%s):after_script\r\e[0K"
-  allow_failure: true
-  artifacts:
-    expire_in: 3 days
-    paths:
-      - bazel-build-log*.json*
-      - bazel-bep.pb
-    reports:
-      junit:
-        - bazel-testlogs-gitlab/**/test.xml
-    when: always
-  extends:
-    - ".bazel-test-all"
-  image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:05d4f93d618d6f9b9d4260db3aa0b7809165430b00a7f8d3ad03e0daee7bfdcc
-  needs:
-    - artifacts: false
-      job: bazel-test-all
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "tnet-test"
-    - changes:
-        - rs/tests/k8s/**/*
-      if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
-    - allow_failure: true
-      if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
-      when: manual
-  script:
-    - |
-      # TODO: switch to bazel after chrono issue is handled
-      #bazel build //rs/tests/k8s:tnetctl
-      #TNETCTL=$(bazel cquery --output=files //rs/tests/k8s:tnetctl)
-      cd rs/tests/k8s
-      cargo build --release
-      TNETCTL=target/release/tnetctl
-
-      export KUBECONFIG=$KUBECONFIG_TNET_CREATOR
-      export RUST_LOG=info
-      export NAME="CI-$CI_JOB_ID"
-
-      # Build a subnet with a "zero" version, unless our built images actually
-      # contain a "real" version.
-      use_zero_version="true"
-      if [ "$CI_COMMIT_REF_PROTECTED" = "true" ]; then
-          use_zero_version="false"
-      fi
-      if [[ "$CI_COMMIT_REF_NAME" =~ ^hotfix-.+-rc--.+ ]]; then
-          use_zero_version="false"
-      fi
-
-      echo "Testing tnetctl on the following environment"
-      kubectl config get-contexts
-
-      ./$TNETCTL list
-      N=$(./$TNETCTL list | grep 'CI-' -c) || true
-      N_LIMIT=20
-      if [ "$N" -gt "$N_LIMIT" ]; then
-          echo "Seeing already $N_LIMIT CI-* testnets deployed."
-          echo "They should have been deleted by GC. Investigate and purge them."
-          exit 1
-      fi
-
-      if [ "${use_zero_version}" == "true" ]; then
-        ./$TNETCTL create \
-            --version "$CI_COMMIT_SHA" \
-            --use-zero-version \
-            --init \
-            --nns 2 \
-            --app 1 \
-            -n "$NAME"
-      else
-        ./$TNETCTL create \
-            --version "$CI_COMMIT_SHA" \
-            --init \
-            --nns 2 \
-            --app 1 \
-            -n "$NAME"
-      fi
-
-      TNET_OPERATOR=$(./$TNETCTL list | grep $NAME | awk '{ print $1 }')-operator
-      kubectl -n tnets wait --timeout=120s --for=condition=PodScheduled pod/"$TNET_OPERATOR"
-      sleep 30
-      kubectl -n tnets logs -f "$TNET_OPERATOR" -c init &
-      timeout 10m \
-          bash -c "kubectl -n tnets logs -f $TNET_OPERATOR -c init | grep -q 'All NNS canisters have been set up'"
-      kill "$(jobs -p)" || true
-  tags:
-    - dfinity-ic
-    - ch
-  variables:
-    BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
-    BAZEL_COMMAND: build
-    BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
-    BAZEL_TARGETS: "//rs/tests/k8s:tnetctl"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
 variables:
   TEST_ES_HOSTNAMES: elasticsearch.testnet.dfinity.network:443
 xnet-nightly:

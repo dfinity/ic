@@ -423,6 +423,14 @@ def icos_build(
             tags = ["manual"],
         )
 
+        output_files(
+            name = "disk-img-url-gz",
+            target = ":upload_disk-img",
+            basenames = ["upload_disk-img_disk-img.tar.gz.url"],
+            visibility = visibility,
+            tags = ["manual"],
+        )
+
         if upgrades:
             upload_artifacts(
                 name = "upload_update-img",
