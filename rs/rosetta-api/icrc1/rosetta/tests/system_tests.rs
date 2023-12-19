@@ -11,6 +11,7 @@ use ic_icrc_rosetta::{
         types::{ApproveMetadata, OperationType},
         utils::utils::icrc1_account_to_rosetta_accountidentifier,
     },
+    construction_api::types::MetadataOptions,
     Metadata,
 };
 use ic_icrc_rosetta_client::RosettaClient;
@@ -698,4 +699,50 @@ async fn test_mempool() {
         response.expect_err("expected an error").status().unwrap(),
         StatusCode::INTERNAL_SERVER_ERROR
     );
+}
+
+#[tokio::test]
+async fn test_construction_preprocess() {
+    let replica_context = local_replica::start_new_local_replica().await;
+    let replica_url = format!("http://localhost:{}", replica_context.port);
+
+    let icrc_ledger_canister_id =
+        local_replica::deploy_icrc_ledger_with_default_args(&replica_context).await;
+    let ledger_id = Principal::from(icrc_ledger_canister_id);
+
+    let context = start_rosetta(
+        &rosetta_bin(),
+        RosettaOptions {
+            ledger_id,
+            network_url: Some(replica_url),
+            offline: false,
+            ..RosettaOptions::default()
+        },
+    )
+    .await;
+
+    let network_identifier = NetworkIdentifier::new(
+        DEFAULT_BLOCKCHAIN.to_owned(),
+        CanisterId::try_from(ledger_id.as_slice())
+            .unwrap()
+            .to_string(),
+    );
+
+    let client = RosettaClient::from_str_url(&format!("http://0.0.0.0:{}", context.port))
+        .expect("Unable to parse url");
+
+    let construction_preprocess_response = client
+        .construction_preprocess(vec![], network_identifier)
+        .await
+        .expect("Unable to call Construction Preprocess");
+    let expected = ConstructionPreprocessResponse {
+        options: Some(
+            MetadataOptions {
+                suggested_fee: true,
+            }
+            .into(),
+        ),
+        required_public_keys: None,
+    };
+    assert_eq!(construction_preprocess_response, expected);
 }
