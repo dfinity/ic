@@ -13,6 +13,7 @@ use ic_agent::{
 use ic_base_types::CanisterId;
 use ic_icrc_rosetta::{
     common::storage::{storage_client::StorageClient, types::MetadataEntry},
+    construction_api::endpoints::*,
     data_api::endpoints::*,
     ledger_blocks_synchronization::blocks_synchronizer::start_synching_blocks,
     AppState, Metadata,
@@ -310,6 +311,7 @@ async fn main() -> Result<()> {
         .route("/block/transaction", post(block_transaction))
         .route("/mempool", post(mempool))
         .route("/mempool/transaction", post(mempool_transaction))
+        .route("/construction/preprocess", post(construction_preprocess))
         // This layer creates a span for each http request and attaches
         // the request_id, HTTP Method and path to it.
         .layer(add_request_span())

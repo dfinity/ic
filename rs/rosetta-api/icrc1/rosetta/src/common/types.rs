@@ -27,6 +27,8 @@ const ERROR_CODE_INVALID_BLOCK_IDENTIFIER: u32 = 3;
 const ERROR_CODE_FAILED_TO_BUILD_BLOCK_RESPONSE: u32 = 4;
 const ERROR_CODE_INVALID_TRANSACTION_IDENTIFIER: u32 = 5;
 const ERROR_CODE_MEMPOOL_TRANSACTION_MISSING: u32 = 6;
+const ERROR_CODE_PARSING_ERROR: u32 = 7;
+const ERROR_CODE_UNSUPPORTED_OPERATION: u32 = 8;
 
 impl IntoResponse for Error {
     fn into_response(self) -> axum::response::Response {
@@ -43,6 +45,13 @@ impl From<rosetta_core::miscellaneous::Error> for Error {
         Error(value)
     }
 }
+
+impl From<strum::ParseError> for Error {
+    fn from(value: strum::ParseError) -> Self {
+        Error::parsing_unsuccessful(&value.to_string())
+    }
+}
+
 impl Error {
     pub fn invalid_network_id(expected: &NetworkIdentifier) -> Self {
         Self(rosetta_core::miscellaneous::Error {
@@ -102,6 +111,29 @@ impl Error {
             code: ERROR_CODE_MEMPOOL_TRANSACTION_MISSING,
             message: "Mempool transaction not found".into(),
             description: Some("Mempool transaction not found.".into()),
+            retriable: false,
+            details: None,
+        })
+    }
+
+    pub fn parsing_unsuccessful(description: &str) -> Self {
+        Self(rosetta_core::miscellaneous::Error {
+            code: ERROR_CODE_PARSING_ERROR,
+            message: "Failed trying to parse types.".to_owned(),
+            description: Some(description.to_owned()),
+            retriable: false,
+            details: None,
+        })
+    }
+
+    pub fn unsupported_operation(op_type: OperationType) -> Self {
+        Self(rosetta_core::miscellaneous::Error {
+            code: ERROR_CODE_UNSUPPORTED_OPERATION,
+            message: format!(
+                "The operation {} is not supported by ICRC Rosetta.",
+                op_type
+            ),
+            description: None,
             retriable: false,
             details: None,
         })
