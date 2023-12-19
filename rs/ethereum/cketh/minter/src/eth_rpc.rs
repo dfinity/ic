@@ -718,6 +718,8 @@ pub enum ValidationError {
     CredentialPathNotAllowed(String),
     // #[error("credential header not allowed: {0}")]
     CredentialHeaderNotAllowed(String),
+    // #[error("missing required provider")]
+    MissingRequiredProvider,
 }
 
 pub fn are_errors_consistent<T: PartialEq>(
