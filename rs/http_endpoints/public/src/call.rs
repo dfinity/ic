@@ -38,7 +38,7 @@ use tower::{
 };
 
 #[derive(Clone)]
-pub(crate) struct CallService {
+pub struct CallService {
     log: ReplicaLogger,
     metrics: HttpHandlerMetrics,
     node_id: NodeId,
@@ -52,7 +52,7 @@ pub(crate) struct CallService {
 
 impl CallService {
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new_service(
+    pub fn new_service(
         config: Config,
         log: ReplicaLogger,
         metrics: HttpHandlerMetrics,

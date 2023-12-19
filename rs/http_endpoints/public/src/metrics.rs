@@ -22,7 +22,7 @@ pub const REQUESTS_LABEL_NAMES: [&str; REQUESTS_NUM_LABELS] = [LABEL_REQUEST_TYP
 // Struct holding only Prometheus metric objects. Hence, it is thread-safe iff
 // the data members are thread-safe.
 #[derive(Clone)]
-pub(crate) struct HttpHandlerMetrics {
+pub struct HttpHandlerMetrics {
     pub requests: HistogramVec,
     pub request_body_size_bytes: HistogramVec,
     pub response_body_size_bytes: HistogramVec,
