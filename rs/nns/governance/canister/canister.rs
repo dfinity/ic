@@ -56,6 +56,7 @@ use ic_nns_governance::{
         SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
         UpdateNodeProvider, Vote,
     },
+    storage::validate_stable_storage,
     storage::{grow_upgrades_memory_to, with_upgrades_memory},
 };
 use prost::Message;
@@ -372,6 +373,8 @@ fn canister_post_upgrade() {
         Box::new(IcpLedgerCanister::new(LEDGER_CANISTER_ID)),
         Box::new(CMCCanister::<DfnRuntime>::new()),
     ));
+
+    validate_stable_storage();
 }
 
 #[cfg(feature = "test")]

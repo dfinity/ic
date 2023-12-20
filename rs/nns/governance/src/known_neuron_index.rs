@@ -1,4 +1,4 @@
-use crate::governance::KNOWN_NEURON_NAME_MAX_LEN;
+use crate::{governance::KNOWN_NEURON_NAME_MAX_LEN, storage::validate_stable_btree_map};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_stable_structures::{BoundedStorable, Memory, StableBTreeMap, Storable};
 
@@ -123,6 +123,12 @@ impl<M: Memory> KnownNeuronIndex<M> {
             .iter()
             .map(|(_name, neuron_id)| neuron_id)
             .collect()
+    }
+
+    /// Validates that some of the data in stable storage can be read, in order to prevent broken
+    /// schema. Should only be called in post_upgrade.
+    pub fn validate(&self) {
+        validate_stable_btree_map(&self.known_neuron_name_to_id);
     }
 }
 

@@ -1,4 +1,7 @@
-use crate::pb::v1::{governance_error::ErrorType, GovernanceError};
+use crate::{
+    pb::v1::{governance_error::ErrorType, GovernanceError},
+    storage::validate_stable_btree_map,
+};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_stable_structures::{Memory, StableBTreeMap};
 use icp_ledger::AccountIdentifier;
@@ -81,6 +84,12 @@ impl<M: Memory> NeuronAccountIdIndex<M> {
         self.account_id_to_id
             .get(&account_id.hash)
             .map(|id| NeuronId { id })
+    }
+
+    /// Validates that some of the data in stable storage can be read, in order to prevent broken
+    /// schema. Should only be called in post_upgrade.
+    pub fn validate(&self) {
+        validate_stable_btree_map(&self.account_id_to_id);
     }
 }
 
