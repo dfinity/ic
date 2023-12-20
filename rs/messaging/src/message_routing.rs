@@ -155,7 +155,7 @@ impl StreamTimeline {
                     // Discard all timeline entries with indexes smaller than the
                     // observed index.
                     Some(entry) if entry.index <= index.into() => {
-                        self.entries.pop_front().unwrap();
+                        self.entries.pop_front();
                         continue;
                     }
                     Some(entry) => break entry,
