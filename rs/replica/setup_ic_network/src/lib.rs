@@ -65,6 +65,7 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     p2p::GossipAdvert,
     replica_config::ReplicaConfig,
+    state_sync::StateSyncMessage,
     NodeId, SubnetId,
 };
 use std::{
@@ -147,7 +148,7 @@ pub fn setup_consensus_and_p2p(
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
     catch_up_package: CatchUpPackage,
-    state_sync_client: Arc<dyn StateSyncClient>,
+    state_sync_client: Arc<dyn StateSyncClient<Message = StateSyncMessage>>,
     xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
     self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
     query_stats_payload_builder: Box<dyn BatchPayloadBuilder>,
