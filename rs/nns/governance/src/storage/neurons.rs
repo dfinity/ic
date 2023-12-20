@@ -278,11 +278,6 @@ where
         self.main.len().min(usize::MAX as u64) as usize
     }
 
-    #[allow(dead_code)] // TODO(NNS1-2416): Re-enable clippy once we start actually using this code.
-    pub fn is_empty(&self) -> bool {
-        self.main.is_empty()
-    }
-
     /// Returns the next neuron_id equal to or higher than the provided neuron_id
     pub fn range_neurons<R>(&self, range: R) -> impl Iterator<Item = Neuron> + '_
     where

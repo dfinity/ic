@@ -1,5 +1,3 @@
-#![allow(dead_code)] // TODO(NNS1-2409): remove when it is used by NNS Governance.
-
 use crate::governance::KNOWN_NEURON_NAME_MAX_LEN;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_stable_structures::{BoundedStorable, Memory, StableBTreeMap, Storable};

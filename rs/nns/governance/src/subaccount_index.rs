@@ -1,5 +1,3 @@
-#![allow(dead_code)] // TODO(NNS1-2409): remove when it is used by NNS Governance.
-
 use crate::pb::v1::{governance_error::ErrorType, GovernanceError};
 
 use ic_nns_common::pb::v1::NeuronId;
