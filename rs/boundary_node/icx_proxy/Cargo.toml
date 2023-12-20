@@ -52,7 +52,8 @@ serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 sha2 = "0.10"
 tokio = { workspace = true }
-ic-response-verification = "1.2.0"
+ic-response-verification = "2.0"
+ic-http-certification = "2.0"
 thiserror = "1.0.40"
 
 [features]
