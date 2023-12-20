@@ -199,19 +199,21 @@ impl LedgerAccess for TestLedger {
                 Some(hb) => (Some(hb.hash), hb.index + 1),
             };
 
+            let timestamp = self.next_block_timestamp();
+
             let block = Block::new(
                 parent_hash,
                 transaction.clone(),
                 memo,
                 created_at_time,
-                self.next_block_timestamp(),
+                timestamp,
                 DEFAULT_TRANSFER_FEE,
             )
             .map_err(ApiError::internal_error)?;
 
             let raw_block = block.clone().encode();
 
-            let hb = HashedBlock::hash_block(raw_block, parent_hash, index);
+            let hb = HashedBlock::hash_block(raw_block, parent_hash, index, timestamp);
 
             self.submit_queue.write().await.push(hb.clone());
 
