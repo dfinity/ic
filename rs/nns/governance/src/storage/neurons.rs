@@ -1,6 +1,7 @@
 use crate::{
     neuron_store::NeuronStoreError,
     pb::v1::{neuron::Followees, BallotInfo, KnownNeuronData, Neuron, NeuronStakeTransfer, Topic},
+    storage::validate_stable_btree_map,
 };
 use candid::Principal;
 use ic_base_types::PrincipalId;
@@ -295,6 +296,17 @@ where
             followees: self.followees_map.len(),
             known_neuron_data: self.known_neuron_data_map.len(),
         }
+    }
+
+    /// Validates that some of the data in stable storage can be read, in order to prevent broken
+    /// schema. Should only be called in post_upgrade.
+    pub fn validate(&self) {
+        validate_stable_btree_map(&self.main);
+        validate_stable_btree_map(&self.hot_keys_map);
+        validate_stable_btree_map(&self.recent_ballots_map);
+        validate_stable_btree_map(&self.followees_map);
+        validate_stable_btree_map(&self.known_neuron_data_map);
+        validate_stable_btree_map(&self.transfer_map);
     }
 
     /// Internal function to take what's in the main map and fill in the remaining data from

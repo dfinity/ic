@@ -5,6 +5,7 @@ use crate::{
     known_neuron_index::{AddKnownNeuronError, KnownNeuronIndex, RemoveKnownNeuronError},
     neuron_store::NeuronStoreError,
     pb::v1::{Neuron, Topic},
+    storage::validate_stable_btree_map,
     subaccount_index::NeuronSubaccountIndex,
 };
 use ic_base_types::PrincipalId;
@@ -691,6 +692,16 @@ where
 
     pub fn account_id_mut(&mut self) -> &mut NeuronAccountIdIndex<Memory> {
         &mut self.account_id
+    }
+
+    /// Validates that some of the data in stable storage can be read, in order to prevent broken
+    /// schema. Should only be called in post_upgrade.
+    pub fn validate(&self) {
+        self.subaccount.validate();
+        self.principal.validate();
+        self.following.validate();
+        self.known_neuron.validate();
+        self.account_id.validate();
     }
 }
 

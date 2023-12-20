@@ -158,6 +158,12 @@ where
         let key = (principal_id, neuron_id.clone());
         self.principal_id_and_neuron_id_set.contains_key(&key)
     }
+
+    /// Validates that some of the data in stable storage can be read, in order to prevent broken
+    /// schema. Should only be called in post_upgrade.
+    pub fn validate(&self) {
+        super::validate_stable_btree_map(&self.principal_id_and_neuron_id_set);
+    }
 }
 
 impl<NeuronId, M> NeuronPrincipalIndex<NeuronId> for StableNeuronPrincipalIndex<NeuronId, M>
