@@ -119,7 +119,7 @@ REPOS_TO_SCAN = [
                 owner=Team.GIX_TEAM,
             )
         ],
-        DEFAULT_NODE_VERSION,
+        "18.17.1",
     ),
     Repository(
         "oisy-wallet",
