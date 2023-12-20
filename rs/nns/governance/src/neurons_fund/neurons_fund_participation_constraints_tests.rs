@@ -53,7 +53,7 @@ struct LogisticFunction {
 
 impl NonDecreasingFunction for LogisticFunction {
     fn apply(&self, x_icp_e8s: u64) -> Result<Decimal, String> {
-        let x_icp = f64::try_from(rescale_to_icp(x_icp_e8s))
+        let x_icp = f64::try_from(rescale_to_icp(x_icp_e8s)?)
             .map_err(|err| format!("cannot convert {} to f64: {}", x_icp_e8s, err))?;
         let res_icp = self.supremum_icp
             / (1.0 + (-1.0 * self.steepness_inv_icp * (x_icp - self.midpoint_icp)).exp());
@@ -442,11 +442,14 @@ fn compute_intervals_test() {
         .collect();
 
     let eligibility_intervals = participation
-        .compute_neuron_partition_intervals(rescale_to_icp(
-            participation
-                .swap_participation_limits
-                .min_participant_icp_e8s,
-        ))
+        .compute_neuron_partition_intervals(
+            rescale_to_icp(
+                participation
+                    .swap_participation_limits
+                    .min_participant_icp_e8s,
+            )
+            .unwrap(),
+        )
         .unwrap();
     assert_eq!(
         eligibility_intervals,
@@ -508,11 +511,14 @@ fn compute_intervals_test() {
     );
 
     let capping_intervals = participation
-        .compute_neuron_partition_intervals(rescale_to_icp(
-            participation
-                .swap_participation_limits
-                .max_participant_icp_e8s,
-        ))
+        .compute_neuron_partition_intervals(
+            rescale_to_icp(
+                participation
+                    .swap_participation_limits
+                    .max_participant_icp_e8s,
+            )
+            .unwrap(),
+        )
         .unwrap();
     assert_eq!(
         capping_intervals,

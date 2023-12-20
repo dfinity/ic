@@ -801,13 +801,13 @@ where
                 // Unlike in most other places, here we keep the ICP values in e8s (even after converting
                 // to Decimal). This mitigates rounding errors.
                 let intended_neurons_fund_participation_icp_e8s =
-                    u64_to_dec(intended_neurons_fund_participation_icp_e8s);
+                    u64_to_dec(intended_neurons_fund_participation_icp_e8s)?;
                 let total_maturity_equivalent_icp_e8s =
-                    u64_to_dec(total_maturity_equivalent_icp_e8s);
+                    u64_to_dec(total_maturity_equivalent_icp_e8s)?;
                 let min_participant_icp_e8s =
-                    u64_to_dec(swap_participation_limits.min_participant_icp_e8s);
+                    u64_to_dec(swap_participation_limits.min_participant_icp_e8s)?;
                 let max_participant_icp_e8s =
-                    u64_to_dec(swap_participation_limits.max_participant_icp_e8s);
+                    u64_to_dec(swap_participation_limits.max_participant_icp_e8s)?;
 
                 // `try_fold` will short-circuit if an error occurs; otherwise, collect eligible neuron
                 // portions into a `BTreeMap` with neuron ID keys and `NeuronsFundNeuronPortion` values.
@@ -819,7 +819,7 @@ where
                      controller,
                  }| {
                     // Division is safe, as `total_maturity_equivalent_icp_e8s != 0` in this branch.
-                    let proportion_to_overall_neurons_fund = u64_to_dec(maturity_equivalent_icp_e8s)
+                    let proportion_to_overall_neurons_fund = u64_to_dec(maturity_equivalent_icp_e8s)?
                         .checked_div(total_maturity_equivalent_icp_e8s)
                         .ok_or_else(|| {
                             "NeuronsFundParticipation cannot be created due to division error."
@@ -969,15 +969,15 @@ where
     ///    `ideal_matched_participation_function.invert`.
     /// 4. Failure in `Interval::find` (this should not happen, unless there is a bug).
     fn compute_linear_scaling_coefficients(&self) -> Result<Vec<LinearScalingCoefficient>, String> {
+        let min_participant_icp =
+            rescale_to_icp(self.swap_participation_limits.min_participant_icp_e8s)?;
+        let max_participant_icp =
+            rescale_to_icp(self.swap_participation_limits.max_participant_icp_e8s)?;
         let eligibility_intervals = self
-            .compute_neuron_partition_intervals(rescale_to_icp(
-                self.swap_participation_limits.min_participant_icp_e8s,
-            ))
+            .compute_neuron_partition_intervals(min_participant_icp)
             .map_err(|err| format!("Error while computing eligibility intervals: {}", err))?;
         let capping_intervals = self
-            .compute_neuron_partition_intervals(rescale_to_icp(
-                self.swap_participation_limits.max_participant_icp_e8s,
-            ))
+            .compute_neuron_partition_intervals(max_participant_icp)
             .map_err(|err| format!("Error while computing capping intervals: {}", err))?;
         // Merge all steps into a single vector, removing duplicates (a duplicate step occurs if
         // a neuron becomes eligible exactly exactly when another neuron becomes capped).
@@ -1103,7 +1103,7 @@ where
 
         // Unlike in most other places, here we keep the ICP value in e8s (even after converting to
         // Decimal). This mitigates rounding errors in the calculation of `proportion_to_overall_neurons_fund`.
-        let total_maturity_equivalent_icp_e8s = u64_to_dec(self.total_maturity_equivalent_icp_e8s);
+        let total_maturity_equivalent_icp_e8s = u64_to_dec(self.total_maturity_equivalent_icp_e8s)?;
 
         // Start with `direct_participation_icp_e8s == 0`, then increase in the loop.
         let mut direct_participation_icp_e8s = 0;
@@ -1113,7 +1113,7 @@ where
             .apply(direct_participation_icp_e8s)?;
 
         let matching_function_max_value_icp =
-            rescale_to_icp(self.max_neurons_fund_swap_participation_icp_e8s);
+            rescale_to_icp(self.max_neurons_fund_swap_participation_icp_e8s)?;
 
         // Track the intended amount, matching `direct_participation_icp`, that is to be allocated.
         // initialize `intended_amount_icp` with the minimal direct participation amount starting
@@ -1138,7 +1138,7 @@ where
         } in sorted_neurons
         {
             let proportion_to_overall_neurons_fund: Decimal =
-                u64_to_dec(maturity_equivalent_icp_e8s) / total_maturity_equivalent_icp_e8s;
+                u64_to_dec(maturity_equivalent_icp_e8s)? / total_maturity_equivalent_icp_e8s;
             let ideal_participation_icp = intended_amount_icp * proportion_to_overall_neurons_fund;
             if ideal_participation_icp < threshold_icp {
                 // This neuron starts participating exactly at `threshold_icp`. This corresponds
@@ -1241,8 +1241,9 @@ impl PolynomialNeuronsFundParticipation {
     ) -> Result<Self, String> {
         let total_maturity_equivalent_icp_e8s =
             Self::count_neurons_fund_total_maturity_equivalent_icp_e8s(&neurons_fund)?;
-        let ideal_matched_participation_function =
-            Box::from(PolynomialMatchingFunction::new(total_maturity_equivalent_icp_e8s).unwrap());
+        let ideal_matched_participation_function = Box::from(PolynomialMatchingFunction::new(
+            total_maturity_equivalent_icp_e8s,
+        )?);
         Self::new_impl(
             total_maturity_equivalent_icp_e8s,
             swap_participation_limits.max_direct_participation_icp_e8s, // best case scenario
@@ -1708,7 +1709,7 @@ mod test_functions_tests {
     fn test_simple_linear_function() {
         let f = SimpleLinearFunction {};
         let run_test_for_a = |x_icp_e8s: u64| {
-            let y_icp = f.apply_unchecked(x_icp_e8s);
+            let y_icp = f.apply(x_icp_e8s).unwrap();
             println!("({}, {})", x_icp_e8s, y_icp);
             let x1_icp_e8s = f.invert(y_icp).unwrap();
             assert_eq!(x_icp_e8s, x1_icp_e8s);
@@ -1716,7 +1717,7 @@ mod test_functions_tests {
         let run_test_for_b = |y_icp: Decimal| {
             let x1_icp_e8s = f.invert(y_icp).unwrap();
             println!("({}, {})", x1_icp_e8s, y_icp);
-            let y1_icp = f.apply_unchecked(x1_icp_e8s);
+            let y1_icp = f.apply(x1_icp_e8s).unwrap();
             assert_eq!(y_icp, y1_icp);
         };
         run_test_for_a(0);
@@ -1789,32 +1790,29 @@ mod test_functions_tests {
 
         // Below min_direct_participation_threshold_icp_e8s, but falls into Interval A.
         // Thus, we expect slope(0.5) * x + intercept_icp_e8s(111)
-        assert_eq!(participation.apply_unchecked(0), 111);
+        assert_eq!(participation.apply(0), Ok(111));
         // Falls into Interval A, thus we expect slope(0.5) * x + intercept_icp_e8s(111)
-        assert_eq!(participation.apply_unchecked(90 * E8), 45 * E8 + 111);
+        assert_eq!(participation.apply(90 * E8), Ok(45 * E8 + 111));
         // Falls into Interval B, thus we expect slope(0.6) * x + intercept_icp_e8s(222)
-        assert_eq!(participation.apply_unchecked(100 * E8), 60 * E8 + 222);
+        assert_eq!(participation.apply(100 * E8), Ok(60 * E8 + 222));
         // Falls into Interval C, thus we expect slope(0.7) * x + intercept_icp_e8s(333)
-        assert_eq!(participation.apply_unchecked(5_000 * E8), 3_500 * E8 + 333);
+        assert_eq!(participation.apply(5_000 * E8), Ok(3_500 * E8 + 333));
         // Falls into Interval D, thus we expect slope(0.8) * x + intercept_icp_e8s(444)
         assert_eq!(
-            participation.apply_unchecked(100_000 * E8 - 1),
-            80_000 * E8 - 1 + 444
+            participation.apply(100_000 * E8 - 1),
+            Ok(80_000 * E8 - 1 + 444)
         );
         // Falls into Interval E, thus we expect slope(0.9) * x + intercept_icp_e8s(555)
-        assert_eq!(
-            participation.apply_unchecked(100_000 * E8),
-            90_000 * E8 + 555
-        );
+        assert_eq!(participation.apply(100_000 * E8), Ok(90_000 * E8 + 555),);
         // Beyond the last interval
         assert_eq!(
-            participation.apply_unchecked(1_000_000 * E8),
-            max_neurons_fund_participation_icp_e8s
+            participation.apply(1_000_000 * E8),
+            Ok(max_neurons_fund_participation_icp_e8s),
         );
         // Extremely high value
         assert_eq!(
-            participation.apply_unchecked(u64::MAX),
-            max_neurons_fund_participation_icp_e8s
+            participation.apply(u64::MAX),
+            Ok(max_neurons_fund_participation_icp_e8s),
         );
     }
 
@@ -1865,7 +1863,7 @@ mod test_functions_tests {
     fn test_inverse_corner_cases_with_basic_linear_function() {
         let f = SimpleLinearFunction {};
         for i in generate_potentially_intresting_target_values() {
-            run_inverse_function_test(&f, u64_to_dec(i));
+            run_inverse_function_test(&f, u64_to_dec(i).unwrap());
         }
     }
 
@@ -1923,7 +1921,7 @@ mod test_functions_tests {
             for slope in slopes.iter().cloned() {
                 let f = LinearFunction { slope, intercept };
                 for i in generate_potentially_intresting_target_values() {
-                    let target_y = u64_to_dec(i);
+                    let target_y = u64_to_dec(i).unwrap();
                     println!("Inverting linear function {target_y} = f(x) = {slope} * x + {intercept} ...");
                     run_inverse_function_test(&f, target_y);
                 }
@@ -1937,7 +1935,7 @@ mod test_functions_tests {
             slope: dec!(1),
             intercept: dec!(0),
         };
-        let target_y = u64_to_dec(u64::MAX);
+        let target_y = u64_to_dec(u64::MAX).unwrap();
         let observed = function.invert(target_y).unwrap();
         assert_eq!(observed, u64::MAX);
     }
@@ -1948,7 +1946,7 @@ mod test_functions_tests {
             slope: dec!(1),
             intercept: dec!(-1),
         };
-        let target_y = u64_to_dec(u64::MAX);
+        let target_y = u64_to_dec(u64::MAX).unwrap();
         let error = function.invert(target_y).unwrap_err();
         assert_eq!(
             error,

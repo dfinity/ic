@@ -43,16 +43,17 @@ pub const MAX_MATCHING_FUNCTION_SERIALIZED_REPRESENTATION_SIZE_BYTES: usize = 1_
 // SnsInitPayload.coefficient_intervals structure with obviously too many elements.
 pub const MAX_LINEAR_SCALING_COEFFICIENT_VEC_LEN: usize = 100_000;
 
-/// The implementation of `Decimal::from_u64` cannot fail.
-pub fn u64_to_dec(x: u64) -> Decimal {
-    Decimal::from_u64(x).unwrap()
+/// The implementation of `Decimal::from_u64` cannot fail, but we propagate the result to the caller
+/// to protect against library implementation changes.
+pub fn u64_to_dec(x: u64) -> Result<Decimal, String> {
+    Decimal::from_u64(x).ok_or_else(|| format!("Cannot convert {:?} to Decimal.", x))
 }
 
 pub fn dec_to_u64(x: Decimal) -> Result<u64, String> {
     if x.is_sign_negative() {
         return Err(format!("Cannot convert negative value {:?} to u64.", x));
     }
-    if x > u64_to_dec(u64::MAX) {
+    if x > u64_to_dec(u64::MAX)? {
         return Err(format!(
             "cannot convert value {x} to u64 as it is above u64::MAX ({}).",
             u64::MAX,
@@ -65,14 +66,14 @@ pub fn dec_to_u64(x: Decimal) -> Result<u64, String> {
         .ok_or_else(|| format!("Overflow while trying to convert value {:?} to u64.", x))
 }
 
-pub fn rescale_to_icp(x_icp_e8s: u64) -> Decimal {
-    u64_to_dec(x_icp_e8s) * dec!(0.000_000_01)
+pub fn rescale_to_icp(x_icp_e8s: u64) -> Result<Decimal, String> {
+    u64_to_dec(x_icp_e8s).map(|x_icp_e8s| x_icp_e8s * dec!(0.000_000_01))
 }
 
 /// Attempts to rescale a decimal amount of ICPs to ICP e8s. Warning: this operation is lossy.
 pub fn rescale_to_icp_e8s(x_icp: Decimal) -> Result<u64, String> {
     x_icp
-        .checked_mul(u64_to_dec(E8))
+        .checked_mul(u64_to_dec(E8)?)
         .ok_or_else(|| {
             format!(
                 "Overflow while rescaling {} ICP to e8s within Decimal.",
@@ -103,11 +104,6 @@ impl<F: InvertibleFunction + SerializableFunction + std::fmt::Debug> IdealMatchi
 pub trait NonDecreasingFunction {
     /// Applies `self` over the specified amount in ICP e8s, returning an amount in ICP (not e8s).
     fn apply(&self, x_icp_e8s: u64) -> Result<Decimal, String>;
-
-    /// Simply unwraps the result from `self.apply()`.
-    fn apply_unchecked(&self, x_icp_e8s: u64) -> Decimal {
-        self.apply(x_icp_e8s).unwrap()
-    }
 
     /// Returns `self.apply(x)` with the Ok result rescaled to ICP e8s.
     fn apply_and_rescale_to_icp_e8s(&self, x_icp_e8s: u64) -> Result<u64, String> {
@@ -268,7 +264,7 @@ pub trait InvertibleFunction: NonDecreasingFunction {
             .map(|i| {
                 let x_icp_e8s = i * step;
                 let y_icp = self.apply(x_icp_e8s)?;
-                let x_icp = rescale_to_icp(x_icp_e8s);
+                let x_icp = rescale_to_icp(x_icp_e8s)?;
                 Ok((x_icp, y_icp))
             })
             .collect::<Result<Vec<(Decimal, Decimal)>, String>>()
@@ -744,11 +740,41 @@ pub struct PolynomialMatchingFunction {
     cache: PolynomialMatchingFunctionCache,
 }
 
+/// Notes on the robustness of this implementation.
+///
+/// In principle, a machine-readable serialization of the bounded type `PolynomialMatchingFunction`
+/// should never fail, and there should be tests that demonstrate that this succeeds. However, in
+/// the highly unexpected event that the serialization somehow still fails, this implementation
+/// should fall back to a human-readable serialization of this function. This would likely push
+/// the failure onto the deserialization phase, which is expected to happen only upon an upgrade of
+/// the canister that hosts the Neurons' Fund. In that case, the upgrade would fail (due to a stable
+/// memory deserialization error, which would likely expect JSON while just a human-readable string
+/// would be present), and an engineer would need to intervene. The reason we pay this cost is to
+/// avoid complicating the API, e.g., one would need to implement
+/// ```
+/// impl<F> TryFrom<NeuronsFundParticipation<F>> for NeuronsFundParticipationPb
+/// ```
+/// instead of
+/// ```
+/// impl<F> From<NeuronsFundParticipation<F>> for NeuronsFundParticipationPb
+/// ```
+/// Instead of complicting the API, a better way forward would be to use a fail-safe JSON
+/// serialization algorithm for bounded structures.
 impl SerializableFunction for PolynomialMatchingFunction {
     fn serialize(&self) -> String {
-        // Serialization should never fail, as structure is bounded, and there should be tests
-        // that demonstrate that this succeeds.
-        serde_json::to_string(&self.persistent_data).unwrap()
+        match serde_json::to_string(&self.persistent_data) {
+            Ok(serialization) => serialization,
+            Err(err) => {
+                // Fallback in the unlikely event that `serde_json::to_string` fails.
+                let fallback_serialization = format!("{:?}", self);
+                println!(
+                    "{}ERROR: cannot serialize a PolynomialMatchingFunction instance {} into JSON: \
+                    {}. Falling back to debug serialization.",
+                    LOG_PREFIX, fallback_serialization, err,
+                );
+                fallback_serialization
+            }
+        }
     }
 }
 
@@ -771,8 +797,8 @@ impl PolynomialMatchingFunction {
         // Computations defined in ICP rather than ICP e8s to avoid multiplication overflows for
         // the `Decimal` type for the range of values that this type is expected to operate on.
         let global_cap_icp =
-            rescale_to_icp(MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S);
-        let total_maturity_equivalent_icp = rescale_to_icp(total_maturity_equivalent_icp_e8s);
+            rescale_to_icp(MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S)?;
+        let total_maturity_equivalent_icp = rescale_to_icp(total_maturity_equivalent_icp_e8s)?;
         let cap = global_cap_icp.min(
             dec!(0.1) * total_maturity_equivalent_icp, // 10%
         );
@@ -815,7 +841,7 @@ impl DeserializableFunction for PolynomialMatchingFunction {
 impl NonDecreasingFunction for PolynomialMatchingFunction {
     fn apply(&self, x_icp_e8s: u64) -> Result<Decimal, String> {
         // Local variables in this function without the _icp_e8s postfix are in ICP.
-        let x = rescale_to_icp(x_icp_e8s);
+        let x = rescale_to_icp(x_icp_e8s)?;
         let (t1, t2, t3, t4) = (
             self.persistent_data.t_1,
             self.persistent_data.t_2,
@@ -900,11 +926,6 @@ impl Interval for ValidatedLinearScalingCoefficient {
 
 pub trait MatchedParticipationFunction {
     fn apply(&self, direct_participation_icp_e8s: u64) -> Result<u64, String>;
-
-    /// Simply unwraps the result from `self.apply()`.
-    fn apply_unchecked(&self, direct_participation_icp_e8s: u64) -> u64 {
-        self.apply(direct_participation_icp_e8s).unwrap()
-    }
 }
 
 impl<F> MatchedParticipationFunction for ValidatedNeuronsFundParticipationConstraints<F>
@@ -920,18 +941,22 @@ where
             return Err("There must be at least one interval.".to_string());
         }
 
+        let first_interval = intervals
+            .first()
+            .ok_or_else(|| "cannot find the first interval".to_string())?;
+        let last_interval = intervals
+            .last()
+            .ok_or_else(|| "cannot find the first interval".to_string())?;
+
         // Special case A: direct_participation_icp_e8s is less than the first interval.
-        if direct_participation_icp_e8s
-            < intervals.first().unwrap().from_direct_participation_icp_e8s
-        {
+        if direct_participation_icp_e8s < first_interval.from_direct_participation_icp_e8s {
             // This should not happen in practice, as the first interval should contain 0.
             return Ok(0);
         }
 
         // Special case B: direct_participation_icp_e8s is greated than or equal to the last
         // interval's upper bound.
-        if intervals.last().unwrap().to_direct_participation_icp_e8s <= direct_participation_icp_e8s
-        {
+        if last_interval.to_direct_participation_icp_e8s <= direct_participation_icp_e8s {
             return Ok(u64::min(
                 self.max_neurons_fund_participation_icp_e8s,
                 MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S,
@@ -952,9 +977,9 @@ where
                 .apply(direct_participation_icp_e8s)?;
 
             // Convert to Decimal
-            let intercept_icp = rescale_to_icp(*intercept_icp_e8s);
-            let slope_numerator = u64_to_dec(*slope_numerator);
-            let slope_denominator = u64_to_dec(*slope_denominator);
+            let intercept_icp = rescale_to_icp(*intercept_icp_e8s)?;
+            let slope_numerator = u64_to_dec(*slope_numerator)?;
+            let slope_denominator = u64_to_dec(*slope_denominator)?;
 
             // Normally, `self.max_neurons_fund_participation_icp_e8s` should be set to a
             // *reasonable* value. Since this value is computed based on the overall amount of
@@ -967,7 +992,7 @@ where
             let hard_cap = u64_to_dec(u64::min(
                 self.max_neurons_fund_participation_icp_e8s,
                 MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S,
-            ));
+            ))?;
 
             // This value is how much of Neurons' Fund maturity can "effectively" be allocated.
             // This value may be less than or equal to the `ideal_icp` value above, due to:
