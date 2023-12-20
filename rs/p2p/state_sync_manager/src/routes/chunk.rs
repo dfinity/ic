@@ -22,16 +22,16 @@ pub const STATE_SYNC_CHUNK_PATH: &str = "/state-sync/chunk";
 /// State sync uses 1Mb chunks. To be safe we use 8Mib here same as transport.
 const MAX_CHUNK_SIZE: usize = 8 * 1024 * 1024;
 
-pub(crate) struct StateSyncChunkHandler {
+pub(crate) struct StateSyncChunkHandler<T> {
     _log: ReplicaLogger,
-    state_sync: Arc<dyn StateSyncClient>,
+    state_sync: Arc<dyn StateSyncClient<Message = T>>,
     metrics: StateSyncManagerHandlerMetrics,
 }
 
-impl StateSyncChunkHandler {
+impl<T> StateSyncChunkHandler<T> {
     pub fn new(
         log: ReplicaLogger,
-        state_sync: Arc<dyn StateSyncClient>,
+        state_sync: Arc<dyn StateSyncClient<Message = T>>,
         metrics: StateSyncManagerHandlerMetrics,
     ) -> Self {
         Self {
@@ -42,8 +42,8 @@ impl StateSyncChunkHandler {
     }
 }
 
-pub(crate) async fn state_sync_chunk_handler(
-    State(state): State<Arc<StateSyncChunkHandler>>,
+pub(crate) async fn state_sync_chunk_handler<T: 'static>(
+    State(state): State<Arc<StateSyncChunkHandler<T>>>,
     payload: Bytes,
 ) -> Result<Bytes, StatusCode> {
     // Parse payload

@@ -12,27 +12,28 @@ use ic_types::{
     artifact::StateSyncArtifactId,
     chunkable::{ArtifactErrorCode, Chunkable},
     chunkable::{Chunk, ChunkId},
-    state_sync::StateSyncMessage,
     NodeId,
 };
 use mockall::mock;
 
 mock! {
-    pub StateSync {}
+    pub StateSync<T: Send> {}
 
-    impl StateSyncClient for StateSync {
+    impl<T: Send + Sync> StateSyncClient for StateSync<T> {
+        type Message = T;
+
         fn available_states(&self) -> Vec<StateSyncArtifactId>;
 
         fn start_state_sync(
             &self,
             id: &StateSyncArtifactId,
-        ) -> Option<Box<dyn Chunkable<StateSyncMessage> + Send + Sync>>;
+        ) -> Option<Box<dyn Chunkable<T> + Send>>;
 
         fn should_cancel(&self, id: &StateSyncArtifactId) -> bool;
 
         fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<Chunk>;
 
-        fn deliver_state_sync(&self, msg: StateSyncMessage);
+        fn deliver_state_sync(&self, msg: T);
     }
 }
 
