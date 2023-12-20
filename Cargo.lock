@@ -8555,6 +8555,7 @@ dependencies = [
  "ic-types",
  "icp-ledger",
  "on_wire",
+ "proptest",
  "rusqlite",
  "serde",
  "serde_bytes",

@@ -119,8 +119,14 @@ impl Scribe {
             None,
         );
 
-        self.blockchain
-            .push_back(HashedBlock::hash_block(block.encode(), parent_hash, index));
+        let timestamp = block.timestamp;
+
+        self.blockchain.push_back(HashedBlock::hash_block(
+            block.encode(),
+            parent_hash,
+            index,
+            timestamp,
+        ));
     }
 
     pub fn buy(&mut self, uid: AccountIdentifier, amount: u64) {

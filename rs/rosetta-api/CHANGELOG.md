@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 ### Fixes
 ### Added
+- Add `timestamp` to the `blocks` table
 
 ## [1.9.0] - 2023-11-16
 ### Fixes
