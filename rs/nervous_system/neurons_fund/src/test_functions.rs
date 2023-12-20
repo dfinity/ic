@@ -23,7 +23,7 @@ impl DeserializableFunction for SimpleLinearFunction {
 
 impl NonDecreasingFunction for SimpleLinearFunction {
     fn apply(&self, x_icp_e8s: u64) -> Result<Decimal, String> {
-        Ok(rescale_to_icp(x_icp_e8s))
+        rescale_to_icp(x_icp_e8s)
     }
 }
 
@@ -61,7 +61,7 @@ impl AnalyticallyInvertibleFunction for LinearFunction {
 
 impl NonDecreasingFunction for LinearFunction {
     fn apply(&self, x_icp_e8s: u64) -> Result<Decimal, String> {
-        let x = u64_to_dec(x_icp_e8s);
+        let x = u64_to_dec(x_icp_e8s)?;
         let Some(x_times_slope) = x.checked_mul(self.slope) else {
             return Err(format!(
                 "Cannot apply linear function over {} due to multiplication overflow.",

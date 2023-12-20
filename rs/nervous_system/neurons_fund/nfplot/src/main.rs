@@ -33,7 +33,7 @@ fn f32_to_dec(x_icp: f32) -> Decimal {
 }
 
 fn e8s_to_f32(x_icp_e8s: u64) -> f32 {
-    dec_to_f32(rescale_to_icp(x_icp_e8s))
+    dec_to_f32(rescale_to_icp(x_icp_e8s).unwrap())
 }
 
 fn colored(text: &str, color: RGB8) -> ColoredString {
@@ -157,7 +157,7 @@ async fn main() -> Result<(), String> {
             swap_init.neuron_basket_construction_parameters.unwrap();
         let buyer_total_icp_e8s = swap_derived_state.buyer_total_icp_e8s.unwrap();
         let sns_token_e8s = swap_init.sns_token_e8s.unwrap();
-        let sns_tokens_per_icp = u64_to_dec(sns_token_e8s) / u64_to_dec(buyer_total_icp_e8s);
+        let sns_tokens_per_icp = u64_to_dec(sns_token_e8s)? / u64_to_dec(buyer_total_icp_e8s)?;
 
         let response = agent
             .query(&swap_canister_id, "list_sns_neuron_recipes")
@@ -301,12 +301,12 @@ async fn main() -> Result<(), String> {
                 .unwrap()
                 .to_string();
             let amount_icp_e8s =
-                u64_to_dec(*expected_neuron_portion.amount_icp_e8s.as_ref().unwrap());
+                u64_to_dec(*expected_neuron_portion.amount_icp_e8s.as_ref().unwrap())?;
             let amount_sns_e8s = u64_to_dec(
                 *sns_neuron_recipes_per_controller
                     .get(&hotkey_principal)
                     .unwrap(),
-            );
+            )?;
             let absolute_error_sns_e8s =
                 (amount_icp_e8s * sns_tokens_per_icp - amount_sns_e8s).abs();
             let error_per_cent = (Decimal::new(100, 0) * absolute_error_sns_e8s) / amount_sns_e8s;
@@ -329,7 +329,7 @@ async fn main() -> Result<(), String> {
     let ideal_matching_function = participation.ideal_matched_participation_function.clone();
     let max_x_value = dec_to_f32(rescale_to_icp(
         ideal_matching_function.max_argument_icp_e8s().unwrap(),
-    ));
+    )?);
     let max_y_value = dec_to_f32(
         ideal_matching_function
             .apply(ideal_matching_function.max_argument_icp_e8s().unwrap())
