@@ -576,7 +576,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.0",
             ),
             "ic-response-verification": crate.spec(
-                version = "^1.2.0",
+                version = "^2.0",
+            ),
+            "ic-http-certification": crate.spec(
+                version = "^2.0",
             ),
             "ic-test-state-machine-client": crate.spec(
                 version = "^3.0.0",

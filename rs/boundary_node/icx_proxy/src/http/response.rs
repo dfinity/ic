@@ -2,7 +2,7 @@ use crate::http::headers::IC_CERTIFICATE_HEADER_NAME;
 use futures::{stream, Stream, StreamExt, TryStreamExt};
 use hyper::Body;
 use ic_agent::{Agent, AgentError};
-use ic_response_verification::types::Response;
+use ic_http_certification::HttpResponse as Response;
 use ic_utils::{
     call::SyncCall,
     interfaces::http_request::{
