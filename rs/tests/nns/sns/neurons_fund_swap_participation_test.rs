@@ -1,4 +1,5 @@
 use anyhow::Result;
+use ic_nns_governance::pb::v1::create_service_nervous_system::SwapParameters;
 use ic_nns_governance::pb::v1::CreateServiceNervousSystem;
 use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::driver::test_env::TestEnv;
@@ -28,7 +29,15 @@ const NEURONS_FUND_NUM_PARTICIPANTS: u64 = 1500;
 
 fn create_service_nervous_system_proposal() -> CreateServiceNervousSystem {
     const MIN_PARTICIPANTS: u64 = 4;
-    test_create_service_nervous_system_proposal(MIN_PARTICIPANTS)
+    let csns = test_create_service_nervous_system_proposal(MIN_PARTICIPANTS);
+    let swap_parameters = csns.swap_parameters.clone().unwrap();
+    CreateServiceNervousSystem {
+        swap_parameters: Some(SwapParameters {
+            neurons_fund_participation: Some(true),
+            ..swap_parameters
+        }),
+        ..csns
+    }
 }
 
 fn nns_nf_neurons() -> Vec<NnsNfNeuron> {
@@ -106,7 +115,8 @@ fn finalize_swap(env: TestEnv) {
     ));
 }
 
-/// This test is similar to //rs/tests/nns/sns:payment_flow_test, except it also finalizes the swap.
+/// This test is similar to //rs/tests/nns/sns:payment_flow_with_finalization_test,
+/// but includes neurons' fund participation.
 /// A load test is currently not possible because finalization is too slow. This will be fixed during
 /// one-proposal, so a load test will be added then.
 ///
