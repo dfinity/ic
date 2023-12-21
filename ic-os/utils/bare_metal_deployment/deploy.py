@@ -319,7 +319,7 @@ def deploy_server(bmc_info: BMCInfo, wait_time_mins: int, idrac_script_dir: Path
             f"GetSetPowerStateREDFISH.py {cli_creds} -p {bmc_info.password} --set On",
         )
         # Waiting to make sure the machine gets back to a steady state, so that next reboot is done consistently
-        for i in tqdm.tqdm(range(int(300))):  # 1/10 seconds
+        for i in tqdm.tqdm(range(int(90))):
             time.sleep(1)
 
         log.info("Setting next boot device to virtual floppy, and restarting")
