@@ -115,7 +115,7 @@ PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh"
     --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws"
     --mount type=bind,source="/var/lib/containers",target="/var/lib/containers"
-    --mount type=bind,source="/tmp",target="/tmp"
+    --mount type=bind,source="$(mktemp -d)",target="/tmp"
 )
 
 if [ "$(id -u)" = "1000" ]; then
@@ -155,6 +155,16 @@ if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -e "${SSH_AUTH_SOCK:-}" ]; then
 else
     echo "No ssh-agent to forward."
 fi
+
+# Create dynamic subuid/subgid files for the user to run nested containers
+SUBUID_FILE=$(mktemp)
+SUBGID_FILE=$(mktemp)
+echo "$(id -u):100000:65536" > $SUBUID_FILE
+echo "$(id -u):100000:65536" > $SUBGID_FILE
+PODMAN_RUN_ARGS+=(
+    --mount type=bind,source="${SUBUID_FILE}",target="/etc/subuid"
+    --mount type=bind,source="${SUBGID_FILE}",target="/etc/subgid"
+)
 
 # make sure we have all bind-mounts
 mkdir -p ~/.{aws,ssh,cache,local/share/fish} && touch ~/.{zsh,bash}_history
