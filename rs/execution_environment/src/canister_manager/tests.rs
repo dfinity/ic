@@ -42,6 +42,7 @@ use ic_replicated_state::{
     CallContextManager, CallOrigin, CanisterState, CanisterStatus, NumWasmPages, PageMap,
     ReplicatedState, SystemState,
 };
+use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig};
 use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
@@ -7580,4 +7581,51 @@ fn chunk_store_methods_succeed_from_canister_itself() {
 
         let _result = get_reply(test.ingress(uc, "update", wasm));
     }
+}
+
+/// Subnet available memory is recalculated at the beginning of each round.
+/// This test checks that the wasm chunk store is accounted for then.
+#[test]
+fn chunk_store_counts_against_subnet_memory_in_initial_round_computation() {
+    let subnet_config = ic_config::subnet_config::SubnetConfig::new(SubnetType::Application);
+    // Initialize subnet with enough memory for one chunk but not two (the
+    // canister history will take up some memory).
+    let hypervisor_config = Config {
+        wasm_chunk_store: FlagStatus::Enabled,
+        subnet_memory_capacity: wasm_chunk_store::chunk_size() * 2,
+        subnet_memory_threshold: NumBytes::from(0),
+        subnet_memory_reservation: NumBytes::from(0),
+        ..Config::default()
+    };
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            subnet_config,
+            hypervisor_config,
+        )))
+        .build();
+    let canister_id = env.create_canister_with_cycles(None, Cycles::new(1 << 64), None);
+
+    // Uploading one chunk is ok.
+    let payload = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk: vec![0x42; 1024 * 1024],
+    }
+    .encode();
+    env.execute_ingress(CanisterId::ic_00(), "upload_chunk", payload)
+        .unwrap();
+
+    // Start a new round.
+    env.tick();
+
+    // The previous chunk should take up subnet memory so there isn't space for
+    // a second.
+    let payload = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk: vec![0x42; 1024 * 1024],
+    }
+    .encode();
+    let error = env
+        .execute_ingress(CanisterId::ic_00(), "upload_chunk", payload)
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::SubnetOversubscribed);
 }

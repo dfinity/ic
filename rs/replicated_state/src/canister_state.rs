@@ -417,7 +417,7 @@ impl CanisterState {
     }
 
     /// Returns the memory usage of the wasm chunk store in bytes.
-    fn wasm_chunk_store_memory_usage(&self) -> NumBytes {
+    pub(super) fn wasm_chunk_store_memory_usage(&self) -> NumBytes {
         self.system_state.wasm_chunk_store.memory_usage()
     }
 
