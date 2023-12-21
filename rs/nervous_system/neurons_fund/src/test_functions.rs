@@ -1,6 +1,6 @@
 use super::{
     dec_to_u64, rescale_to_icp, rescale_to_icp_e8s, u64_to_dec, DeserializableFunction,
-    NonDecreasingFunction, SerializableFunction,
+    MatchingFunction, SerializableFunction,
 };
 use rust_decimal::Decimal;
 
@@ -21,7 +21,7 @@ impl DeserializableFunction for SimpleLinearFunction {
     }
 }
 
-impl NonDecreasingFunction for SimpleLinearFunction {
+impl MatchingFunction for SimpleLinearFunction {
     fn apply(&self, x_icp_e8s: u64) -> Result<Decimal, String> {
         rescale_to_icp(x_icp_e8s)
     }
@@ -59,7 +59,7 @@ impl AnalyticallyInvertibleFunction for LinearFunction {
     }
 }
 
-impl NonDecreasingFunction for LinearFunction {
+impl MatchingFunction for LinearFunction {
     fn apply(&self, x_icp_e8s: u64) -> Result<Decimal, String> {
         let x = u64_to_dec(x_icp_e8s)?;
         let Some(x_times_slope) = x.checked_mul(self.slope) else {

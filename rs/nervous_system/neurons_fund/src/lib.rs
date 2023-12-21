@@ -100,8 +100,8 @@ pub trait IdealMatchingFunction:
 
 impl<F: InvertibleFunction + SerializableFunction + std::fmt::Debug> IdealMatchingFunction for F {}
 
-/// A monotonically non-decreasing function. Returns a decimal amount of ICP (not e8s).
-pub trait NonDecreasingFunction {
+/// A function for matching ICP amounts.
+pub trait MatchingFunction {
     /// Applies `self` over the specified amount in ICP e8s, returning an amount in ICP (not e8s).
     fn apply(&self, x_icp_e8s: u64) -> Result<Decimal, String>;
 
@@ -176,7 +176,7 @@ impl ToString for InvertError {
 /// Then the equality `g(f(x)) = x` must hold for all `x` s.t. `g(f(x))` is defined.
 ///
 /// Additionally, the equality `f(g(y)) = y` must hold for all `y` s.t. `f(g(y))` is defined.
-pub trait InvertibleFunction: NonDecreasingFunction {
+pub trait InvertibleFunction: MatchingFunction {
     /// This method searches an inverse of `y` given the function defined by `self.apply`.
     ///
     /// An error is returned if the function defined by `self.apply` is not monotonically increasing.
@@ -281,7 +281,7 @@ pub trait InvertibleFunction: NonDecreasingFunction {
     }
 }
 
-impl<T: NonDecreasingFunction> InvertibleFunction for T {}
+impl<T: MatchingFunction> InvertibleFunction for T {}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ValidatedLinearScalingCoefficient {
@@ -838,7 +838,7 @@ impl DeserializableFunction for PolynomialMatchingFunction {
     }
 }
 
-impl NonDecreasingFunction for PolynomialMatchingFunction {
+impl MatchingFunction for PolynomialMatchingFunction {
     fn apply(&self, x_icp_e8s: u64) -> Result<Decimal, String> {
         // Local variables in this function without the _icp_e8s postfix are in ICP.
         let x = rescale_to_icp(x_icp_e8s)?;
@@ -867,10 +867,10 @@ pub type PolynomialNeuronsFundParticipation =
     ValidatedNeuronsFundParticipationConstraints<PolynomialMatchingFunction>;
 
 // -------------------------------------------------------------------------------------------------
-// ------------------- Interval --------------------------------------------------------------------
+// ------------------- HalfOpenInterval ------------------------------------------------------------
 // -------------------------------------------------------------------------------------------------
 
-pub trait Interval {
+pub trait HalfOpenInterval {
     fn from(&self) -> u64;
     fn to(&self) -> u64;
     fn contains(&self, x: u64) -> bool {
@@ -914,7 +914,7 @@ pub trait Interval {
     }
 }
 
-impl Interval for ValidatedLinearScalingCoefficient {
+impl HalfOpenInterval for ValidatedLinearScalingCoefficient {
     fn from(&self) -> u64 {
         self.from_direct_participation_icp_e8s
     }
@@ -930,7 +930,7 @@ pub trait MatchedParticipationFunction {
 
 impl<F> MatchedParticipationFunction for ValidatedNeuronsFundParticipationConstraints<F>
 where
-    F: NonDecreasingFunction,
+    F: MatchingFunction,
 {
     /// Returns a decimal amount of ICP e8s, i.e., a number with a whole and a fractional part.
     fn apply(&self, direct_participation_icp_e8s: u64) -> Result<u64, String> {
@@ -969,7 +969,7 @@ where
             slope_denominator,
             intercept_icp_e8s,
             ..
-        }) = Interval::find(&self.coefficient_intervals, direct_participation_icp_e8s)
+        }) = HalfOpenInterval::find(&self.coefficient_intervals, direct_participation_icp_e8s)
         {
             // This value is how much of Neurons' Fund maturity we should "ideally" allocate.
             let ideal_icp = self

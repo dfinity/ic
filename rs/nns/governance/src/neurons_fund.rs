@@ -3,8 +3,8 @@
 use ic_base_types::PrincipalId;
 use ic_nervous_system_governance::maturity_modulation::BASIS_POINTS_PER_UNITY;
 use ic_neurons_fund::{
-    dec_to_u64, rescale_to_icp, u64_to_dec, DeserializableFunction, IdealMatchingFunction,
-    Interval, PolynomialMatchingFunction,
+    dec_to_u64, rescale_to_icp, u64_to_dec, DeserializableFunction, HalfOpenInterval,
+    IdealMatchingFunction, PolynomialMatchingFunction,
     MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S,
 };
 use ic_nns_common::pb::v1::NeuronId;
@@ -967,7 +967,7 @@ where
     /// 2. `ideal_matched_participation_function` is not non-decreasing.
     /// 3. Arithmetic error while computing `ideal_matched_participation_function.apply` or
     ///    `ideal_matched_participation_function.invert`.
-    /// 4. Failure in `Interval::find` (this should not happen, unless there is a bug).
+    /// 4. Failure in `HalfOpenInterval::find` (this should not happen, unless there is a bug).
     fn compute_linear_scaling_coefficients(&self) -> Result<Vec<LinearScalingCoefficient>, String> {
         let min_participant_icp =
             rescale_to_icp(self.swap_participation_limits.min_participant_icp_e8s)?;
@@ -1008,25 +1008,28 @@ where
                     // This search should not fail unless there is a bug, as
                     // `from_direct_participation_icp_e8s` comes either from `eligibility_intervals`
                     // or `capping_intervals`, which we merged to create `steps`.
-                    let eligible =
-                        Interval::find(&eligibility_intervals, from_direct_participation_icp_e8s)
-                            .ok_or_else(|| {
-                            format!(
-                                "Cannot find the set of eligible neurons for \
+                    let eligible = HalfOpenInterval::find(
+                        &eligibility_intervals,
+                        from_direct_participation_icp_e8s,
+                    )
+                    .ok_or_else(|| {
+                        format!(
+                            "Cannot find the set of eligible neurons for \
                         direct_participation_icp_e8s in [{}, {})",
-                                from_direct_participation_icp_e8s, to_direct_participation_icp_e8s
-                            )
-                        })?;
-                    let capped =
-                        Interval::find(&capping_intervals, from_direct_participation_icp_e8s)
-                            .ok_or_else(|| {
-                                format!(
-                                    "Cannot find the set of capped neurons for \
+                            from_direct_participation_icp_e8s, to_direct_participation_icp_e8s
+                        )
+                    })?;
+                    let capped = HalfOpenInterval::find(
+                        &capping_intervals,
+                        from_direct_participation_icp_e8s,
+                    )
+                    .ok_or_else(|| {
+                        format!(
+                            "Cannot find the set of capped neurons for \
                         direct_participation_icp_e8s in [{}, {})",
-                                    from_direct_participation_icp_e8s,
-                                    to_direct_participation_icp_e8s
-                                )
-                            })?;
+                            from_direct_participation_icp_e8s, to_direct_participation_icp_e8s
+                        )
+                    })?;
                     let intercept_icp_e8s = Some(
                         (capped.neurons.len() as u64)
                             .saturating_mul(self.swap_participation_limits.max_participant_icp_e8s),
@@ -1222,7 +1225,7 @@ struct NeuronParticipationInterval {
     pub neurons: BTreeSet<(NeuronId, u64)>,
 }
 
-impl Interval for NeuronParticipationInterval {
+impl HalfOpenInterval for NeuronParticipationInterval {
     fn from(&self) -> u64 {
         self.from_direct_participation_icp_e8s
     }
@@ -1696,7 +1699,7 @@ mod test_functions_tests {
     use ic_neurons_fund::{
         test_functions::{AnalyticallyInvertibleFunction, LinearFunction, SimpleLinearFunction},
         u64_to_dec, InvertError, InvertibleFunction, MatchedParticipationFunction,
-        NonDecreasingFunction, SerializableFunction, ValidatedNeuronsFundParticipationConstraints,
+        MatchingFunction, SerializableFunction, ValidatedNeuronsFundParticipationConstraints,
     };
     use ic_sns_swap::pb::v1::{
         IdealMatchedParticipationFunction as IdealMatchedParticipationFunctionSwapPb,
