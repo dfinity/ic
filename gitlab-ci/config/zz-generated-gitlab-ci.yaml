@@ -1453,6 +1453,8 @@ bazel-test-bare-metal:
       --file_share_ssh_key "$ZH2_FILE_SHARE_KEY_PATH" \
       --file_share_username ci_interim
   tags:
+    - dfinity-ic
+    - bazel
     - zh
   variables:
     BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
