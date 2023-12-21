@@ -34,8 +34,8 @@ use ic_ledger_core::Tokens;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1::Canister;
 use ic_nns_governance::pb::v1::CreateServiceNervousSystem;
-use ic_rosetta_api::models::RosettaSupportedKeyPair;
 use ic_rosetta_test_utils::EdKeypair;
+use rosetta_core::models::RosettaSupportedKeyPair;
 
 use ic_sns_governance::pb::v1::governance::Mode;
 use ic_sns_swap::pb::v1::{new_sale_ticket_response, Lifecycle};

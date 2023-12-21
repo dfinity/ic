@@ -311,6 +311,7 @@ async fn main() -> Result<()> {
         .route("/block/transaction", post(block_transaction))
         .route("/mempool", post(mempool))
         .route("/mempool/transaction", post(mempool_transaction))
+        .route("/construction/derive", post(construction_derive))
         .route("/construction/preprocess", post(construction_preprocess))
         // This layer creates a span for each http request and attaches
         // the request_id, HTTP Method and path to it.

@@ -4,7 +4,6 @@ use crate::convert::state::State;
 use crate::errors::ApiError;
 use crate::models::amount::{from_amount, ledgeramount_from_amount};
 use crate::models::operation::OperationType;
-use crate::models::RosettaSupportedKeyPair;
 use crate::models::{self, AccountIdentifier, BlockIdentifier, Operation};
 use crate::request::request_result::RequestResult;
 use crate::request::transaction_operation_results::TransactionOperationResults;
@@ -19,8 +18,6 @@ use crate::request_types::{
 use crate::transaction_id::TransactionIdentifier;
 use crate::{convert, errors};
 use dfn_protobuf::ProtoBuf;
-use ic_canister_client_sender::Ed25519KeyPair as EdKeypair;
-use ic_canister_client_sender::Secp256k1KeyPair;
 use ic_crypto_tree_hash::Path;
 use ic_ledger_canister_blocks_synchronizer::blocks::HashedBlock;
 use ic_ledger_core::block::BlockType;
@@ -29,6 +26,7 @@ use ic_types::messages::{HttpCanisterUpdate, HttpReadState};
 use ic_types::{CanisterId, PrincipalId};
 use icp_ledger::{Block, BlockIndex, Operation as LedgerOperation, SendArgs, Subaccount, Tokens};
 use on_wire::{FromWire, IntoWire};
+use rosetta_core::convert::principal_id_from_public_key;
 use serde_json::map::Map;
 use serde_json::{from_value, Number, Value};
 use std::convert::{TryFrom, TryInto};
@@ -379,18 +377,7 @@ pub fn principal_id_from_public_key_or_principal(
 ) -> Result<PrincipalId, ApiError> {
     match pkp {
         PublicKeyOrPrincipal::Principal(p) => Ok(p),
-        PublicKeyOrPrincipal::PublicKey(pk) => principal_id_from_public_key(&pk),
-    }
-}
-
-pub fn principal_id_from_public_key(pk: &models::PublicKey) -> Result<PrincipalId, ApiError> {
-    match pk.curve_type {
-        models::CurveType::Edwards25519 => EdKeypair::get_principal_id(&pk.hex_bytes),
-        models::CurveType::Secp256K1 => Secp256k1KeyPair::get_principal_id(&pk.hex_bytes),
-        _ => Err(ApiError::InvalidPublicKey(
-            false,
-            format!("Curve Type {} is not supported", pk.curve_type).into(),
-        )),
+        PublicKeyOrPrincipal::PublicKey(pk) => Ok(principal_id_from_public_key(&pk)?),
     }
 }
 
