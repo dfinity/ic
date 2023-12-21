@@ -1,18 +1,10 @@
 use super::*;
 
-use std::{
-    net::SocketAddr,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 use anyhow::Error;
 use axum::{
-    body::Body,
-    extract::connect_info::MockConnectInfo,
-    http::Request,
-    middleware,
-    response::IntoResponse,
-    routing::method_routing::{get, post},
+    body::Body, http::Request, middleware, response::IntoResponse, routing::method_routing::get,
     Router,
 };
 use ethnum::u256;
@@ -22,16 +14,40 @@ use ic_types::messages::{
 };
 use prometheus::Registry;
 use tower::{Service, ServiceBuilder};
-use tower_http::{compression::CompressionLayer, request_id::MakeRequestUuid, ServiceBuilderExt};
+use tower_http::{request_id::MakeRequestUuid, ServiceBuilderExt};
 
 use crate::{
-    management::btc_mw,
-    metrics::{
-        metrics_middleware, metrics_middleware_status, HttpMetricParams, HttpMetricParamsStatus,
-    },
+    metrics::{metrics_middleware_status, HttpMetricParamsStatus},
     persist::test::node,
-    retry::{retry_request, RetryParams},
+    test_utils::setup_test_router,
 };
+
+pub fn test_node(id: u64) -> Node {
+    node(id, Principal::from_text("f7crg-kabae").unwrap())
+}
+
+pub fn test_route_subnet_with_id(id: String, n: usize) -> RouteSubnet {
+    let mut nodes = Vec::new();
+
+    for i in 0..n {
+        nodes.push(test_node(i as u64));
+    }
+
+    // "casting integer literal to `u32` is unnecessary"
+    // fck clippy
+    let zero = 0u32;
+
+    RouteSubnet {
+        id: Principal::from_text(id).unwrap().to_string(),
+        range_start: u256::from(zero),
+        range_end: u256::from(zero),
+        nodes,
+    }
+}
+
+pub fn test_route_subnet(n: usize) -> RouteSubnet {
+    test_route_subnet_with_id("f7crg-kabae".into(), n)
+}
 
 #[derive(Clone)]
 struct ProxyRouter {
@@ -65,33 +81,6 @@ impl Proxy for ProxyRouter {
         *resp.status_mut() = status;
         Ok(resp)
     }
-}
-
-pub fn test_node(id: u64) -> Node {
-    node(id, Principal::from_text("f7crg-kabae").unwrap())
-}
-
-pub fn test_route_subnet_with_id(id: String, n: usize) -> RouteSubnet {
-    let mut nodes = Vec::new();
-
-    for i in 0..n {
-        nodes.push(test_node(i as u64));
-    }
-
-    // "casting integer literal to `u32` is unnecessary"
-    // fck clippy
-    let zero = 0u32;
-
-    RouteSubnet {
-        id: Principal::from_text(id).unwrap().to_string(),
-        range_start: u256::from(zero),
-        range_end: u256::from(zero),
-        nodes,
-    }
-}
-
-pub fn test_route_subnet(n: usize) -> RouteSubnet {
-    test_route_subnet_with_id("f7crg-kabae".into(), n)
 }
 
 #[async_trait]
@@ -328,60 +317,16 @@ async fn test_status() -> Result<(), Error> {
 
 #[tokio::test]
 async fn test_all_call_types() -> Result<(), Error> {
-    let node = test_node(0);
-    let root_key = vec![8, 6, 7, 5, 3, 0, 9];
-    let state = Arc::new(ProxyRouter {
-        root_key,
-        health: Arc::new(Mutex::new(ReplicaHealthStatus::Healthy)),
-    });
-
-    let (state_lookup, state_proxy) = (
-        state.clone() as Arc<dyn Lookup>,
-        state.clone() as Arc<dyn Proxy>,
-    );
-
-    let registry: Registry = Registry::new_custom(None, None)?;
-    let metric_params = HttpMetricParams::new(&registry, "foo");
-
-    let mut app = Router::new()
-        .route(
-            PATH_QUERY,
-            post(handle_call).with_state(state_proxy.clone()),
-        )
-        .route(PATH_CALL, post(handle_call).with_state(state_proxy.clone()))
-        .route(PATH_READ_STATE, post(handle_call).with_state(state_proxy))
-        .layer(
-            ServiceBuilder::new()
-                .layer(middleware::from_fn(validate_request))
-                .layer(middleware::from_fn(postprocess_response))
-                .layer(CompressionLayer::new())
-                .layer(middleware::from_fn(pre_compression))
-                .set_x_request_id(MakeRequestUuid)
-                .propagate_x_request_id()
-                .layer(MockConnectInfo(SocketAddr::from(([0, 0, 0, 0], 1337))))
-                .layer(middleware::from_fn_with_state(
-                    metric_params,
-                    metrics_middleware,
-                ))
-                .layer(middleware::from_fn(preprocess_request))
-                .layer(middleware::from_fn(btc_mw))
-                .layer(middleware::from_fn_with_state(state_lookup, lookup_subnet))
-                .layer(middleware::from_fn_with_state(
-                    RetryParams {
-                        retry_count: 1,
-                        retry_update_call: false,
-                    },
-                    retry_request,
-                )),
-        );
+    let (mut app, subnets) = setup_test_router(false, 10, 1);
+    let node = subnets[0].nodes[0].clone();
 
     let sender = Principal::from_text("sqjm4-qahae-aq").unwrap();
-    let canister_id = Principal::from_text("sxiki-5ygae-aq").unwrap();
+    let canister_id = CanisterId::from_u64(100);
 
     // Test query
     let content = HttpQueryContent::Query {
         query: HttpUserQuery {
-            canister_id: Blob(canister_id.as_slice().to_vec()),
+            canister_id: Blob(canister_id.get().as_slice().to_vec()),
             method_name: "foobar".to_string(),
             arg: Blob(vec![]),
             sender: Blob(sender.as_slice().to_vec()),
@@ -477,12 +422,12 @@ async fn test_all_call_types() -> Result<(), Error> {
     let (_parts, body) = resp.into_parts();
     let body = hyper::body::to_bytes(body).await.unwrap().to_vec();
     let body = String::from_utf8_lossy(&body);
-    assert_eq!(body, "test_response");
+    assert_eq!(body, "a".repeat(1024));
 
     // Test call
     let content = HttpCallContent::Call {
         update: HttpCanisterUpdate {
-            canister_id: Blob(canister_id.as_slice().to_vec()),
+            canister_id: Blob(canister_id.get().as_slice().to_vec()),
             method_name: "foobar".to_string(),
             arg: Blob(vec![]),
             sender: Blob(sender.as_slice().to_vec()),
@@ -514,7 +459,7 @@ async fn test_all_call_types() -> Result<(), Error> {
     let (_parts, body) = resp.into_parts();
     let body = hyper::body::to_bytes(body).await.unwrap().to_vec();
     let body = String::from_utf8_lossy(&body);
-    assert_eq!(body, "test_response");
+    assert_eq!(body, "a".repeat(1024));
 
     // Test read_state
     let content = HttpReadStateContent::ReadState {
@@ -559,7 +504,7 @@ async fn test_all_call_types() -> Result<(), Error> {
     let (_parts, body) = resp.into_parts();
     let body = hyper::body::to_bytes(body).await.unwrap().to_vec();
     let body = String::from_utf8_lossy(&body);
-    assert_eq!(body, "test_response");
+    assert_eq!(body, "a".repeat(1024));
 
     Ok(())
 }

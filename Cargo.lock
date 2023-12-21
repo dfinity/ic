@@ -5267,6 +5267,7 @@ dependencies = [
  "bytes",
  "candid",
  "clap 4.4.6",
+ "criterion",
  "dashmap",
  "ethnum",
  "futures",

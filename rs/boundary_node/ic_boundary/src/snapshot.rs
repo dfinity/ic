@@ -84,15 +84,14 @@ impl SnapshotPersister {
         }
     }
 
-    pub async fn persist(&self, s: RegistrySnapshot) -> Result<(), Error> {
+    pub fn persist(&self, s: RegistrySnapshot) -> Result<(), Error> {
         self.generator.generate(s)?;
-        self.reloader.reload().await
+        self.reloader.reload()
     }
 }
 
-#[async_trait]
 pub trait Snapshot: Send + Sync {
-    async fn snapshot(&mut self) -> Result<SnapshotResult, Error>;
+    fn snapshot(&mut self) -> Result<SnapshotResult, Error>;
 }
 
 #[derive(Debug, Clone)]
@@ -302,9 +301,8 @@ impl Snapshotter {
     }
 }
 
-#[async_trait]
 impl Snapshot for Snapshotter {
-    async fn snapshot(&mut self) -> Result<SnapshotResult, Error> {
+    fn snapshot(&mut self) -> Result<SnapshotResult, Error> {
         // Fetch latest available registry version
         let version = self.registry_client.get_latest_version();
 
@@ -360,7 +358,7 @@ impl Snapshot for Snapshotter {
 
         // Persist the firewall rules if configured
         if let Some(v) = &self.persister {
-            v.persist(snapshot).await?;
+            v.persist(snapshot)?;
         }
 
         Ok(SnapshotResult::Published(result))
@@ -370,7 +368,7 @@ impl Snapshot for Snapshotter {
 #[async_trait]
 impl<T: Snapshot> Run for WithMetricsSnapshot<T> {
     async fn run(&mut self) -> Result<(), Error> {
-        let r = self.0.snapshot().await?;
+        let r = self.0.snapshot()?;
 
         match r {
             SnapshotResult::Published(v) => {

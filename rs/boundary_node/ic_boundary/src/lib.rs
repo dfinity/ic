@@ -13,6 +13,8 @@ mod rate_limiting;
 mod retry;
 mod routes;
 mod snapshot;
+#[cfg(any(test, feature = "bench"))]
+pub mod test_utils;
 mod tls_verify;
 
 #[cfg(feature = "tls")]

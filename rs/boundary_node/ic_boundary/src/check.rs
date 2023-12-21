@@ -249,7 +249,7 @@ impl<P: Persist, C: Check> Run for Runner<P, C> {
             .retain(|_, x| x.last_check_id == self.last_check_id);
 
         // Persist the routing table
-        self.persist.persist(subnets).await;
+        self.persist.persist(subnets);
 
         Ok(())
     }
