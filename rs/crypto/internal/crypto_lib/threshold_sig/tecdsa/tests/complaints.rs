@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 
 #[test]
 fn should_complaint_system_work() -> ThresholdEcdsaResult<()> {
+    use strum::IntoEnumIterator;
     let rng = &mut reproducible_rng();
 
     for curve in EccCurveType::all() {
@@ -64,9 +65,9 @@ fn should_complaint_system_work() -> ThresholdEcdsaResult<()> {
                 )
                 .unwrap();
 
-            // the complaint is invalid if we corrupt its ZK proof
-            {
-                let corrupted_complaint = test_utils::corrupt_complaint_zk_proof(complaint)?;
+            for complaint_corrupter in test_utils::ComplaintCorrupter::iter() {
+                let corrupted_complaint =
+                    complaint_corrupter.clone_and_corrupt_complaint(complaint)?;
                 assert_eq!(
                     corrupted_complaint
                         .verify(
@@ -77,24 +78,8 @@ fn should_complaint_system_work() -> ThresholdEcdsaResult<()> {
                             associated_data,
                         )
                         .unwrap_err(),
-                    ThresholdEcdsaError::InvalidProof
-                );
-            }
-
-            // the complaint is invalid if we corrupt its shared secret
-            {
-                let corrupted_complaint = test_utils::corrupt_complaint_shared_secret(complaint)?;
-                assert_eq!(
-                    corrupted_complaint
-                        .verify(
-                            dealing,
-                            dealer_index,
-                            corruption_target,
-                            &pk0,
-                            associated_data,
-                        )
-                        .unwrap_err(),
-                    ThresholdEcdsaError::InvalidProof
+                    ThresholdEcdsaError::InvalidProof,
+                    "failed for {complaint_corrupter:?}"
                 );
             }
 

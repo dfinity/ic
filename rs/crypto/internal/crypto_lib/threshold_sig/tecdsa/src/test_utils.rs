@@ -1,4 +1,5 @@
 use crate::{zk::ProofOfDLogEquivalence, *};
+use strum::EnumIter;
 
 /// Corrupts this dealing by modifying the ciphertext intended for
 /// recipient(s) indicated with `corruption_targets`.
@@ -57,49 +58,65 @@ pub fn corrupt_dealing(
     })
 }
 
-/// Corrupts ZK proof in the complaint by incrementing the underlying ECC scalars by 1,
-/// `shared_secret` remains correct
+/// Corrupts a complaint using the functionality that corresponds to the enum variant.
 ///
-/// This is only intended for testing and should not be called in
-/// production code.
-pub fn corrupt_complaint_zk_proof(
-    complaint: &IDkgComplaintInternal,
-) -> ThresholdEcdsaResult<IDkgComplaintInternal> {
-    let curve_type = complaint.proof.challenge.curve_type();
-
-    // corrupt challenge and response
-    let corrupted_challenge = complaint.proof.challenge.add(&EccScalar::one(curve_type))?;
-    let corrupted_response = complaint.proof.response.add(&EccScalar::one(curve_type))?;
-
-    // construct `ProofOfDLogEquivalence` from corrupted `challenge` and `response`
-    let corrupted_zk_proof = ProofOfDLogEquivalence {
-        challenge: corrupted_challenge,
-        response: corrupted_response,
-    };
-
-    // return a corrupted `IDkgComplaintInternal` instance
-    Ok(IDkgComplaintInternal {
-        proof: corrupted_zk_proof,
-        shared_secret: complaint.shared_secret.clone(),
-    })
+/// This is only intended for testing and should not be called in production code.
+#[derive(EnumIter, Debug)]
+pub enum ComplaintCorrupter {
+    /// Corrupts ZK proof in the complaint by incrementing the underlying ECC scalars by 1,
+    /// `shared_secret` remains correct.
+    CorruptZkProof,
+    /// Overwhelmingly likely corrupts `shared_secret` in `complaint` by
+    /// doubling it, ZK proof remains correct.
+    CorruptSharedSecret,
 }
 
-/// Likely corrupts `shared_secret` in `complaint` by doubling it,
-/// ZK proof remains correct
-///
-/// This is only intended for testing and should not be called in
-/// production code.
-pub fn corrupt_complaint_shared_secret(
-    complaint: &IDkgComplaintInternal,
-) -> ThresholdEcdsaResult<IDkgComplaintInternal> {
-    // double `shared_secret` which likely invalides it
-    let corrupted_shared_secret = complaint.shared_secret.mul_by_node_index(1u32)?;
+impl ComplaintCorrupter {
+    /// Corrupts a complaint using the function that this sturct was initialized with.
+    pub fn clone_and_corrupt_complaint(
+        &self,
+        complaint: &IDkgComplaintInternal,
+    ) -> Result<IDkgComplaintInternal, ThresholdEcdsaError> {
+        match self {
+            Self::CorruptZkProof => Self::corrupt_complaint_zk_proof(complaint),
+            Self::CorruptSharedSecret => Self::corrupt_complaint_shared_secret(complaint),
+        }
+    }
 
-    // return a corrupted `IDkgComplaintInternal` instance
-    Ok(IDkgComplaintInternal {
-        proof: complaint.proof.clone(),
-        shared_secret: corrupted_shared_secret,
-    })
+    fn corrupt_complaint_zk_proof(
+        complaint: &IDkgComplaintInternal,
+    ) -> ThresholdEcdsaResult<IDkgComplaintInternal> {
+        let curve_type = complaint.proof.challenge.curve_type();
+
+        // corrupt challenge and response
+        let corrupted_challenge = complaint.proof.challenge.add(&EccScalar::one(curve_type))?;
+        let corrupted_response = complaint.proof.response.add(&EccScalar::one(curve_type))?;
+
+        // construct `ProofOfDLogEquivalence` from corrupted `challenge` and `response`
+        let corrupted_zk_proof = ProofOfDLogEquivalence {
+            challenge: corrupted_challenge,
+            response: corrupted_response,
+        };
+
+        // return a corrupted `IDkgComplaintInternal` instance
+        Ok(IDkgComplaintInternal {
+            proof: corrupted_zk_proof,
+            shared_secret: complaint.shared_secret.clone(),
+        })
+    }
+
+    fn corrupt_complaint_shared_secret(
+        complaint: &IDkgComplaintInternal,
+    ) -> ThresholdEcdsaResult<IDkgComplaintInternal> {
+        // double `shared_secret` which likely invalides it
+        let corrupted_shared_secret = complaint.shared_secret.mul_by_node_index(1u32)?;
+
+        // return a corrupted `IDkgComplaintInternal` instance
+        Ok(IDkgComplaintInternal {
+            proof: complaint.proof.clone(),
+            shared_secret: corrupted_shared_secret,
+        })
+    }
 }
 
 /// Corrupts `opening` by incrementing the contained scalar(s) by one

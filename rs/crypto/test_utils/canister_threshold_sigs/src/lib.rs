@@ -1,8 +1,10 @@
 //! Utilities for testing IDkg and canister threshold signature operations.
 
 use crate::node::{Node, Nodes};
-use ic_crypto_internal_threshold_sig_ecdsa::test_utils::corrupt_dealing;
-use ic_crypto_internal_threshold_sig_ecdsa::{IDkgDealingInternal, NodeIndex, Seed};
+use ic_crypto_internal_threshold_sig_ecdsa::test_utils::{corrupt_dealing, ComplaintCorrupter};
+use ic_crypto_internal_threshold_sig_ecdsa::{
+    IDkgComplaintInternal, IDkgDealingInternal, NodeIndex, Seed,
+};
 use ic_crypto_temp_crypto::{TempCryptoComponent, TempCryptoComponentGeneric};
 use ic_interfaces::crypto::{
     BasicSigner, KeyManager, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
@@ -2009,5 +2011,24 @@ impl IntoBuilder for IDkgTranscript {
             algorithm_id: self.algorithm_id,
             internal_transcript_raw: self.internal_transcript_raw,
         }
+    }
+}
+
+/// Creates a clone of `complaint` and corrupts it using `complaint_corrupter`.
+pub fn to_corrupt_complaint(
+    complaint: &IDkgComplaint,
+    complaint_corrupter: &ComplaintCorrupter,
+) -> IDkgComplaint {
+    let internal_complaint =
+        IDkgComplaintInternal::deserialize(complaint.internal_complaint_raw.as_slice())
+            .expect("failed to deserialize internal complaint");
+    let corrupt_internal_complaint = complaint_corrupter
+        .clone_and_corrupt_complaint(&internal_complaint)
+        .expect("failed to corrupt internal complaint");
+    IDkgComplaint {
+        internal_complaint_raw: corrupt_internal_complaint
+            .serialize()
+            .expect("failed to serialize internal complaint"),
+        ..complaint.clone()
     }
 }
