@@ -20,7 +20,7 @@ The config files must be accessible from inside the container - e.g., at the roo
 
 ```
 bazel run //ic-os/setupos/envs/dev:launch_bare_metal --config=local -- \
-    --config_path $(realpath ./ic-os/utils/bare_metal_deployment/example_config.yaml) \
+    --config_path $(realpath ./ic-os/utils/bare_metal_deployment/zh2-dll01.yaml) \
     --csv_filename $(realpath ./zh2-dll01.csv)
 ```
 

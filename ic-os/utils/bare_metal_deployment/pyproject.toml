@@ -26,7 +26,14 @@ tqdm = "^4.65.0"
 [tool.poetry.group.dev.dependencies]
 black = "^23.3.0"
 ipython = "^8.12.0"
+pylsp-mypy = "^0.6.8"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pylsp-mypy]
+enabled = true
+live_mode = true
+strict = false
+exclude = []
