@@ -2,7 +2,7 @@ use super::*;
 use assert_matches::assert_matches;
 use ic_nervous_system_common::E8;
 use ic_neurons_fund::{
-    rescale_to_icp, NonDecreasingFunction, SerializableFunction, ValidatedLinearScalingCoefficient,
+    rescale_to_icp, MatchingFunction, SerializableFunction, ValidatedLinearScalingCoefficient,
 };
 use maplit::{btreemap, btreeset};
 
@@ -51,7 +51,7 @@ struct LogisticFunction {
     pub midpoint_icp: f64,
 }
 
-impl NonDecreasingFunction for LogisticFunction {
+impl MatchingFunction for LogisticFunction {
     fn apply(&self, x_icp_e8s: u64) -> Result<Decimal, String> {
         let x_icp = f64::try_from(rescale_to_icp(x_icp_e8s)?)
             .map_err(|err| format!("cannot convert {} to f64: {}", x_icp_e8s, err))?;

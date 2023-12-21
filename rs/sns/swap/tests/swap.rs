@@ -34,7 +34,7 @@ use ic_nervous_system_common_test_utils::{
 };
 use ic_nervous_system_proto::pb::v1::Countries;
 use ic_neurons_fund::{
-    InvertibleFunction, NonDecreasingFunction, PolynomialMatchingFunction, SerializableFunction,
+    InvertibleFunction, MatchingFunction, PolynomialMatchingFunction, SerializableFunction,
 };
 use ic_sns_governance::{
     pb::v1::{
