@@ -1,6 +1,7 @@
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_crypto::get_tecdsa_master_public_key;
+use ic_crypto_internal_threshold_sig_ecdsa::test_utils::ComplaintCorrupter;
 use ic_crypto_internal_threshold_sig_ecdsa::{EccScalar, IDkgDealingInternal, MEGaCiphertext};
 use ic_crypto_tecdsa::derive_tecdsa_public_key;
 use ic_crypto_temp_crypto::TempCryptoComponent;
@@ -668,6 +669,7 @@ mod load_transcript {
 
 mod verify_complaint {
     use super::*;
+    use ic_crypto_test_utils_canister_threshold_sigs::to_corrupt_complaint;
 
     #[test]
     fn should_verify_complaint() {
@@ -914,6 +916,41 @@ mod verify_complaint {
                 complainer.verify_complaint(&transcript, complainer_id, &complaint_2,),
                 Err(IDkgVerifyComplaintError::InvalidComplaint)
             );
+        }
+    }
+
+    #[test]
+    fn should_fail_to_verify_corrupt_complaint() {
+        use strum::IntoEnumIterator;
+        const MIN_NUM_NODES: usize = 2; //1 complainer and 1 other receiver
+        let rng = &mut reproducible_rng();
+        let subnet_size = rng.gen_range(MIN_NUM_NODES..6);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
+        let (dealers, receivers) = env.choose_dealers_and_receivers(
+            &IDkgParticipants::RandomWithAtLeast {
+                min_num_dealers: 1,
+                min_num_receivers: MIN_NUM_NODES,
+            },
+            rng,
+        );
+
+        for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
+            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let mut transcript = env
+                .nodes
+                .run_idkg_and_create_and_verify_transcript(&params, rng);
+            let (complainer, complaint) =
+                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
+            for complaint_corrupter in ComplaintCorrupter::iter() {
+                let corrupt_complaint = to_corrupt_complaint(&complaint, &complaint_corrupter);
+                assert_matches!(
+                    env.nodes
+                        .random_receiver(params.receivers(), rng)
+                        .verify_complaint(&transcript, complainer.id(), &corrupt_complaint),
+                    Err(IDkgVerifyComplaintError::InvalidComplaint),
+                    "failed for {complaint_corrupter:?}"
+                );
+            }
         }
     }
 }
