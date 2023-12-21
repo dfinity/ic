@@ -262,7 +262,11 @@ pub(crate) fn spawn_tip_thread(
                                     },
                                 )| {
                                     if *truncate {
-                                        truncate_pagemap(&log, base_file_path, existing_overlays);
+                                        delete_pagemap_files(
+                                            &log,
+                                            base_file_path,
+                                            existing_overlays,
+                                        );
                                     }
                                     if page_map.is_some()
                                         && !page_map.as_ref().unwrap().unflushed_delta_is_empty()
@@ -510,12 +514,12 @@ fn serialize_canister_to_tip(
             })
         }
         None => {
-            truncate_pagemap(
+            delete_pagemap_files(
                 log,
                 &canister_layout.vmemory_0(),
                 &canister_layout.vmemory_0_overlays()?,
             );
-            truncate_pagemap(
+            delete_pagemap_files(
                 log,
                 &canister_layout.stable_memory_blob(),
                 &canister_layout.stable_memory_overlays()?,
@@ -675,17 +679,16 @@ pub fn defrag_tip(
     Ok(())
 }
 
-fn truncate_pagemap(log: &ReplicaLogger, path: &Path, overlays: &[PathBuf]) {
-    if let Err(err) = nix::unistd::truncate(path, 0) {
-        // It's OK if the file doesn't exist, everything else is a fatal error.
-        if err != nix::errno::Errno::ENOENT {
+fn delete_pagemap_files(log: &ReplicaLogger, base: &Path, overlays: &[PathBuf]) {
+    if base.exists() {
+        std::fs::remove_file(base).unwrap_or_else(|err| {
             fatal!(
                 log,
-                "failed to truncate page map stored at {}: {}",
-                path.display(),
+                "Failed to remove base file at {}: {}",
+                base.display(),
                 err
-            )
-        }
+            );
+        });
     }
 
     for overlay in overlays {
