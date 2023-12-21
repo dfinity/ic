@@ -258,7 +258,7 @@ pub trait InvertibleFunction: NonDecreasingFunction {
     /// with `num_samples` steps. Returned pairs are in ICP. Used in debugging.
     fn plot(&self, num_samples: NonZeroU64) -> Result<Vec<(Decimal, Decimal)>, String> {
         let max_argument_icp_e8s = self.max_argument_icp_e8s()?;
-        let num_samples: u64 = num_samples.into();
+        let num_samples = u64::from(num_samples);
         let step = max_argument_icp_e8s / num_samples;
         (0..=num_samples)
             .map(|i| {
@@ -425,7 +425,8 @@ impl BinomialFormula {
         right_param: Decimal,
     ) -> Result<Self, String>
     where
-        T: Into<Decimal> + std::fmt::Debug,
+        T: std::fmt::Debug,
+        Decimal: From<T>,
     {
         let name = name.to_string();
         // Width of the Nth row of Pascal's triangle.
@@ -442,7 +443,7 @@ impl BinomialFormula {
             .into_iter()
             .enumerate()
             .map(|(i, coefficient)| {
-                let coefficient = coefficient.into();
+                let coefficient = Decimal::from(coefficient);
                 // Casting `i` to `u8` and computing `degree - i` is safe becasue we checked above
                 // that `coefficients.len() == degree + 1`, so `i <= degree: u8`.
                 let i = i as u8;
