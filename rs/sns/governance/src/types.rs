@@ -1,6 +1,6 @@
 use crate::{
     governance::{Governance, TimeWarp, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER},
-    logs::INFO,
+    logs::{ERROR, INFO},
     pb::{
         sns_root_types::{
             set_dapp_controllers_request::CanisterIds, RegisterDappCanistersRequest,
@@ -46,7 +46,7 @@ use ic_sns_governance_proposal_criticality::{
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use std::{
-    collections::{BTreeMap, BTreeSet, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     convert::TryFrom,
     fmt,
 };
@@ -1488,7 +1488,7 @@ impl Action {
     pub(crate) fn voting_power_thresholds(&self) -> VotingPowerThresholds {
         // This just reduces to the method of the same name in
         // ProposalCriticality
-        self.criticality().voting_power_thresholds()
+        self.proposal_criticality().voting_power_thresholds()
     }
 
     pub(crate) fn voting_duration_parameters(
@@ -1499,7 +1499,7 @@ impl Action {
         let wait_for_quiet_deadline_increase_seconds =
             nervous_system_parameters.wait_for_quiet_deadline_increase_seconds;
 
-        match self.criticality() {
+        match self.proposal_criticality() {
             ProposalCriticality::Normal => VotingDurationParameters {
                 initial_voting_period: PbDuration {
                     seconds: initial_voting_period_seconds,
@@ -1529,7 +1529,7 @@ impl Action {
         }
     }
 
-    fn criticality(&self) -> ProposalCriticality {
+    fn proposal_criticality(&self) -> ProposalCriticality {
         use Action::*;
         match self {
             DeregisterDappCanisters(_) | TransferSnsTreasuryFunds(_) | MintSnsTokens(_) => {
@@ -1549,6 +1549,45 @@ impl Action {
             | RegisterDappCanisters(_) => ProposalCriticality::Normal,
         }
     }
+}
+
+pub(crate) fn function_id_to_proposal_criticality(function_id: u64) -> ProposalCriticality {
+    lazy_static! {
+        static ref FUNCTION_ID_TO_PROPOSAL_CRITICALITY: HashMap</* function_id */ u64, ProposalCriticality> = {
+            let mut result = HashMap::new();
+
+            for action in Action::iter() {
+                // Skip non-native, aka generic functions.
+                if let Action::ExecuteGenericNervousSystemFunction(_) = action {
+                    continue;
+                }
+
+                let function_id = u64::from(&action);
+                let previous_value = result.insert(function_id, action.proposal_criticality());
+                debug_assert!(previous_value.is_none(), "{:#?}", previous_value);
+            }
+
+            result
+        };
+    }
+
+    if let Some(result) = FUNCTION_ID_TO_PROPOSAL_CRITICALITY.get(&function_id) {
+        return *result;
+    }
+
+    // Default to Normal. This is not unusual; it happens when the function is a generic
+    // (user-defined) nervous system functions. Such functions have IDs that are >= MIN_ID.
+
+    if function_id < ValidGenericNervousSystemFunction::MIN_ID {
+        log!(
+            ERROR,
+            "Defaulting to ProposalCriticality::Normal, but the function ID is too small \
+             to be that of a generic nervous system function: {}",
+            function_id,
+        );
+    }
+
+    ProposalCriticality::Normal
 }
 
 impl UpgradeSnsControlledCanister {
