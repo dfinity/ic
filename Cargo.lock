@@ -6146,7 +6146,6 @@ dependencies = [
  "ic-async-utils",
  "ic-interfaces",
  "ic-logger",
- "ic-memory-transport",
  "ic-metrics",
  "ic-p2p-test-utils",
  "ic-peer-manager",
