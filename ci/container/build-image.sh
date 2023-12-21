@@ -38,10 +38,8 @@ else
     ARGS=()
 fi
 
-DOCKER_BUILDKIT=1 docker "${ARGS[@]}" build "${BUILD_ARGS[@]}" \
+DOCKER_BUILDKIT=1 podman "${ARGS[@]}" build "${BUILD_ARGS[@]}" \
     -t ic-build:"$DOCKER_IMG_TAG" \
-    -t ghcr.io/dfinity/ic-build:"$DOCKER_IMG_TAG" \
-    -t ghcr.io/dfinity/ic-build:latest \
     -f ci/container/Dockerfile .
 
 popd

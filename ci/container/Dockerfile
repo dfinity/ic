@@ -131,6 +131,15 @@ RUN USE_BAZEL_VERSION=$(tail -1 /tmp/bazel/.bazelversion) /tmp/generate-bazel-co
 
 COPY ./ci/container/files/containers.conf /etc/containers/containers.conf
 
+# We nest containers and map in the user's homedir, so we need to configuire a
+# new default storage location, as the top level is already in use.
+RUN sed -i -e 's|^.*rootless_storage_path.*$|rootless_storage_path = "/tmp/nested/storage"|g' /etc/containers/storage.conf
+
+# Fix caps on uidmap binaries, broken on this ubuntu
+RUN setcap cap_setuid=ep /usr/bin/newuidmap && \
+    setcap cap_setgid=ep /usr/bin/newgidmap
+
+# Setup preloaded ubuntu user
 USER ubuntu
 
 # Set PATH for ubuntu user
@@ -162,9 +171,4 @@ COPY --chown=ubuntu:ubuntu ./ci/container/files/zshrc /home/ubuntu/.zshrc
 # Read in the build-ci script
 COPY ./ci/container/TAG /home/ubuntu/.DFINITY-TAG
 
-WORKDIR /
-# Use buildifier (uid 1001) if /entrypoint.sh is overriden
-# In GitHub that is the case and we need 1001 and we set it via ARG.
-ARG CI_USER="root"
-USER $CI_USER
 CMD ["/bin/bash"]

@@ -65,18 +65,10 @@ done
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 IMAGE_TAG=$("$REPO_ROOT"/ci/container/get-image-tag.sh)
 IMAGE="$IMAGE:$IMAGE_TAG"
-if ! sudo podman "${PODMAN_ARGS[@]}" image exists $IMAGE; then
-    if ! sudo podman "${PODMAN_ARGS[@]}" pull $IMAGE; then
+if ! podman "${PODMAN_ARGS[@]}" image exists $IMAGE; then
+    if ! podman "${PODMAN_ARGS[@]}" pull $IMAGE; then
         # fallback to building the image
-        docker() {
-            # Preserve "${PODMAN_ARGS[@]}" in the exported function by passing
-            # them through a single variable, and unpacking them here.
-            PODMAN_ARGS=(${PODMAN_ARGS})
-            sudo podman "${PODMAN_ARGS[@]}" "$@" --network=host
-        }
-        export -f docker
-        PODMAN_ARGS="${PODMAN_ARGS[@]}" "$REPO_ROOT"/ci/container/build-image.sh
-        unset -f docker
+        "$REPO_ROOT"/ci/container/build-image.sh
     fi
 fi
 
@@ -85,13 +77,13 @@ if findmnt /hoststorage >/dev/null; then
     sudo podman "${PODMAN_ARGS[@]}" image prune -a -f --filter "reference!=$IMAGE"
 fi
 
-WORKDIR="/ic"
 USER=$(whoami)
 
 PODMAN_RUN_ARGS=(
-    -w "$WORKDIR"
-
-    -u "ubuntu:ubuntu"
+    --device /dev/fuse
+    --user="ubuntu:ubuntu"
+    --workdir="/home/ubuntu"
+    --userns=keep-id
     -e HOSTUSER="$USER"
     -e HOSTHOSTNAME="$HOSTNAME"
     -e VERSION="${VERSION:-$(git rev-parse HEAD)}"
@@ -129,7 +121,7 @@ SUBGID_FILE=$(mktemp --suffix=containerrun)
 IDMAP="uids=$(id -u)-1000-1;gids=$(id -g)-1000-1"
 
 PODMAN_RUN_ARGS+=(
-    --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}",idmap="${IDMAP}"
+    --mount type=bind,source="${REPO_ROOT}",target="/ic",idmap="${IDMAP}"
     --mount type=bind,source="${CACHE_DIR:-${HOME}/.cache}",target="${CTR_HOME}/.cache",idmap="${IDMAP}"
     --mount type=bind,source="${ZIG_CACHE}",target="/tmp/zig-cache",idmap="${IDMAP}"
     --mount type=bind,source="${ICT_TESTNETS_DIR}",target="${ICT_TESTNETS_DIR}",idmap="${IDMAP}"
@@ -191,9 +183,11 @@ else
 fi
 
 # Create dynamic subuid/subgid files for the user to run nested containers
-echo "ubuntu:100000:65536" >$SUBUID_FILE
+echo "$USER:0:$(($(id -u)-1))" > $SUBUID_FILE
+echo "$USER:$(($(id -u)+1)):$((65536-$(id -u)))" >> $SUBUID_FILE
 chmod +r ${SUBUID_FILE}
-echo "ubuntu:100000:65536" >$SUBGID_FILE
+echo "$USER:0:$(($(id -g)-1))" > $SUBGID_FILE
+echo "$USER:$(($(id -g)+1)):$((65536-$(id -g)))" >> $SUBGID_FILE
 chmod +r ${SUBGID_FILE}
 PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${SUBUID_FILE}",target="/etc/subuid"
@@ -221,13 +215,13 @@ if tty >/dev/null 2>&1; then
 else
     tty_arg=
 fi
-other_args="--pids-limit=-1 -i $tty_arg --log-driver=none --rm --privileged --network=host --cgroupns=host"
-# Privileged rootful podman is required due to requirements of IC-OS guest build;
-# additionally, we need to use hosts's cgroups and network.
+# We need to use hosts's cgroups and network
+other_args="--pids-limit=-1 -i $tty_arg --log-driver=none --rm --network=host --cgroupns=host"
+
 if [ $# -eq 0 ]; then
     set -x
-    exec sudo podman "${PODMAN_ARGS[@]}" run $other_args "${PODMAN_RUN_ARGS[@]}" ${PODMAN_RUN_USR_ARGS[@]} -w "$WORKDIR" "$IMAGE" "${USHELL:-/usr/bin/bash}"
+    exec podman "${PODMAN_ARGS[@]}" run $other_args "${PODMAN_RUN_ARGS[@]}" ${PODMAN_RUN_USR_ARGS[@]} "$IMAGE" "${USHELL:-/usr/bin/bash}"
 else
     set -x
-    exec sudo podman "${PODMAN_ARGS[@]}" run $other_args "${PODMAN_RUN_ARGS[@]}" ${PODMAN_RUN_USR_ARGS[@]} -w "$WORKDIR" "$IMAGE" "$@"
+    exec podman "${PODMAN_ARGS[@]}" run $other_args "${PODMAN_RUN_ARGS[@]}" ${PODMAN_RUN_USR_ARGS[@]} "$IMAGE" "$@"
 fi
