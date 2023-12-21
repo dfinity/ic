@@ -18,7 +18,7 @@ use crate::orchestrator::utils::rw_message::install_nns_with_customizations_and_
 use crate::orchestrator::utils::subnet_recovery::{
     enable_ecdsa_signing_on_subnet, run_ecdsa_signature_test,
 };
-use crate::tecdsa::tecdsa_signature_test::{make_key, KEY_ID1};
+use crate::tecdsa::{make_key, KEY_ID1};
 use crate::util::{block_on, get_app_subnet_and_node, get_nns_node, MessageCanister};
 
 use candid::{Encode, Principal};

@@ -16,17 +16,18 @@ Success::
 
 end::catalog[] */
 
+use super::DKG_INTERVAL;
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, NnsInstallationBuilder,
 };
 use crate::nns::remove_nodes_via_endpoint;
-use crate::tecdsa::tecdsa_signature_test::{
+use crate::tecdsa::{
     enable_ecdsa_signing, get_public_key_with_logger, get_signature_with_logger, make_key,
 };
 use crate::{
-    tecdsa::tecdsa_signature_test::{verify_signature, KEY_ID1},
+    tecdsa::{verify_signature, KEY_ID1},
     util::*,
 };
 use canister_test::{Canister, Cycles};
@@ -37,8 +38,6 @@ use ic_types::Height;
 use rand::seq::SliceRandom;
 use rand_chacha::ChaCha8Rng;
 use slog::info;
-
-use super::tecdsa_signature_test::DKG_INTERVAL;
 
 const NODES_COUNT: usize = 4;
 const REMOVE_NODES_COUNT: usize = (NODES_COUNT / 3) + 1;
