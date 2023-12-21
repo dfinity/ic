@@ -19,20 +19,21 @@ Must be run inside the devenv container. Use `./gitlab-ci/container/container-ru
 
 The config files must be accessible from inside the container - e.g., at the root of the ic directory, which maps to `/ic` inside the container.
 
-```
+```bash
 bazel run //ic-os/setupos/envs/dev:launch_bare_metal --config=local -- \
     --config_path $(realpath ./ic-os/utils/bare_metal_deployment/zh2-dll01.yaml) \
     --csv_filename $(realpath ./zh2-dll01.csv)
 ```
 
 If your current username does not match the username used to log into the file shares, you must specify it:
-```
-
+```bash
 bazel run //ic-os/setupos/envs/dev:launch_bare_metal --config=local -- \
-    --file_share_username <your username per infrasec>
-    --config_path $(realpath ./ic-os/utils/bare_metal_deployment/example_config.yaml) \
+    --file_share_username <your username per infrasec> \
+    # --file_share_ssh_key <custom ssh private key> # Specify if a special ssh key is needed \
+    --config_path $(realpath ./ic-os/utils/bare_metal_deployment/zh2-dll01.yaml) \
     --csv_filename $(realpath ./zh2-dll01.csv)
 ```
+
 
 #### What's in the yaml configuration file? 
 
