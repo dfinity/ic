@@ -407,11 +407,13 @@ def upload_to_file_share(
     file_share_endpoint: str,
     file_share_dir: str,
     file_share_image_name: str,
-    file_share_ssh_key: str,
+    file_share_ssh_key: Optional[str] = None,
 ):
     log.info(f'''Uploading "{upload_img}" to "{file_share_endpoint}"''')
 
-    conn = fabric.Connection(file_share_endpoint)
+    connect_kw_args = {"key_filename": file_share_ssh_key} if file_share_ssh_key else None
+    conn = fabric.Connection(host=file_share_endpoint,
+                             connect_kwargs=connect_kw_args)
     tmp_dir = None
     try:
         result = conn.run("mktemp --directory", hide="both", echo=True)
