@@ -19,17 +19,18 @@ Success::
 
 end::catalog[] */
 
+use super::DKG_INTERVAL;
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
 };
-use crate::tecdsa::tecdsa_signature_test::{
+use crate::tecdsa::{
     enable_ecdsa_signing, get_public_key_with_logger, get_signature_with_logger, make_key,
 };
 use crate::{
     nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed},
-    tecdsa::tecdsa_signature_test::{verify_signature, KEY_ID1},
+    tecdsa::{verify_signature, KEY_ID1},
     util::*,
 };
 use canister_test::{Canister, Cycles};
@@ -39,8 +40,6 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
 use slog::info;
-
-use super::tecdsa_signature_test::DKG_INTERVAL;
 
 const NODES_COUNT: usize = 4;
 const UNASSIGNED_NODES_COUNT: usize = 3;

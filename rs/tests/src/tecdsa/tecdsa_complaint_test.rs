@@ -1,12 +1,13 @@
 /* tag::catalog[]
 end::catalog[] */
 
+use super::{enable_ecdsa_signing, DKG_INTERVAL};
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
 };
-use crate::tecdsa::tecdsa_signature_test::{
+use crate::tecdsa::{
     get_public_key_with_logger, get_signature_with_logger, make_key, verify_signature, KEY_ID1,
 };
 use crate::util::{assert_malicious_from_topo, runtime_from_url, MessageCanister};
@@ -16,8 +17,6 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::Height;
 use slog::info;
-
-use super::tecdsa_signature_test::{enable_ecdsa_signing, DKG_INTERVAL};
 
 pub fn config(env: TestEnv) {
     let malicious_behaviour =
