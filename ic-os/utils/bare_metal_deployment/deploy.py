@@ -426,7 +426,7 @@ def upload_to_file_share(
         # Decompress in place. disk.img should appear in the same directory
         conn.run(f"tar --extract --zstd --file {tmp_dir}/{upload_img_filename} --directory {tmp_dir}", echo=True)
         conn.run(
-            f"sudo mv {tmp_dir}/disk.img /{file_share_dir}/{file_share_image_name}",
+            f"mv {tmp_dir}/disk.img /{file_share_dir}/{file_share_image_name}",
             echo=True
         )
     finally:
