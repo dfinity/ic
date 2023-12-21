@@ -207,7 +207,7 @@ pub fn setup_consensus_and_p2p(
     let mut new_p2p_consensus = ic_consensus_manager::ConsensusManagerBuilder::new(
         log.clone(),
         rt_handle.clone(),
-        metrics_registry,
+        metrics_registry.clone(),
     );
 
     let mut p2p_router = None;
