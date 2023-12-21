@@ -31,7 +31,7 @@ use ic_interfaces_state_manager::{StateManager, StateManagerError};
 use ic_logger::{error, info, log, warn, ReplicaLogger};
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero},
-    MetricsRegistry, Timer,
+    MetricsRegistry,
 };
 use ic_protobuf::messaging::xnet::v1 as pb;
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
@@ -203,10 +203,10 @@ impl XNetPayloadBuilderMetrics {
     }
 
     /// Records the status and duration of a `get_xnet_payload()` call.
-    fn observe_build_duration(&self, status: &str, timer: Timer) {
+    fn observe_build_duration(&self, status: &str, since: Instant) {
         self.build_payload_duration
             .with_label_values(&[status])
-            .observe(timer.elapsed());
+            .observe(since.elapsed().as_secs_f64());
     }
 
     /// Increments the `pull_attempt_count` counter for the given status.
@@ -215,17 +215,17 @@ impl XNetPayloadBuilderMetrics {
     }
 
     /// Observes the elapsed `query_slice_duration` under the given status.
-    fn observe_query_slice_duration(&self, status: &str, proximity: &str, timer: Timer) {
+    fn observe_query_slice_duration(&self, status: &str, proximity: &str, since: Instant) {
         self.query_slice_duration
             .with_label_values(&[status, proximity])
-            .observe(timer.elapsed());
+            .observe(since.elapsed().as_secs_f64());
     }
 
     /// Records the status and duration of a `validate_xnet_payload()` call.
-    fn observe_validate_duration(&self, status: &str, timer: Timer) {
+    fn observe_validate_duration(&self, status: &str, since: Instant) {
         self.validate_payload_duration
             .with_label_values(&[status])
-            .observe(timer.elapsed());
+            .observe(since.elapsed().as_secs_f64());
     }
 }
 
@@ -1018,18 +1018,18 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
         past_payloads: &[&XNetPayload],
         byte_limit: NumBytes,
     ) -> (XNetPayload, NumBytes) {
-        let timer = Timer::start();
+        let since = Instant::now();
         let payload =
             match self.get_xnet_payload_impl(validation_context, past_payloads, byte_limit) {
                 Ok((payload, byte_size)) => {
-                    self.metrics.observe_build_duration(STATUS_SUCCESS, timer);
+                    self.metrics.observe_build_duration(STATUS_SUCCESS, since);
                     (payload, byte_size)
                 }
 
                 Err(e) => {
                     log!(self.log, e.log_level(), "{}", e);
                     self.metrics
-                        .observe_build_duration(e.to_label_value(), timer);
+                        .observe_build_duration(e.to_label_value(), since);
 
                     (XNetPayload::default(), 0.into())
                 }
@@ -1048,7 +1048,7 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
         validation_context: &ValidationContext,
         past_payloads: &[&XNetPayload],
     ) -> Result<NumBytes, XNetPayloadValidationError> {
-        let timer = Timer::start();
+        let since = Instant::now();
         let state = match self
             .state_manager
             .get_state_at(validation_context.certified_height)
@@ -1056,7 +1056,7 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
             Ok(state) => state.take(),
             Err(err) => {
                 self.metrics
-                    .observe_validate_duration(VALIDATION_STATUS_ERROR, timer);
+                    .observe_validate_duration(VALIDATION_STATUS_ERROR, since);
                 return Err(from_state_manager_error(err));
             }
         };
@@ -1075,14 +1075,14 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
             ) {
                 SliceValidationResult::Invalid(reason) => {
                     self.metrics
-                        .observe_validate_duration(VALIDATION_STATUS_INVALID, timer);
+                        .observe_validate_duration(VALIDATION_STATUS_INVALID, since);
                     return Err(ValidationError::Permanent(
                         InvalidXNetPayload::InvalidSlice(reason),
                     ));
                 }
                 SliceValidationResult::Empty => {
                     self.metrics
-                        .observe_validate_duration(VALIDATION_STATUS_EMPTY_SLICE, timer);
+                        .observe_validate_duration(VALIDATION_STATUS_EMPTY_SLICE, since);
                     return Err(ValidationError::Permanent(
                         InvalidXNetPayload::InvalidSlice("Empty slice".to_string()),
                     ));
@@ -1116,7 +1116,7 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
         self.refill_task_handle.trigger_refill();
 
         self.metrics
-            .observe_validate_duration(VALIDATION_STATUS_VALID, timer);
+            .observe_validate_duration(VALIDATION_STATUS_VALID, since);
         Ok(NumBytes::new(payload_byte_size as u64))
     }
 }
@@ -1289,7 +1289,7 @@ impl PoolRefillTask {
             let pool = Arc::clone(&self.pool);
             let log = self.log.clone();
             self.runtime_handle.spawn(async move {
-                let timer = Timer::start();
+                let since = Instant::now();
                 metrics.outstanding_queries.inc();
                 let query_result = xnet_client.query(&endpoint_locator).await;
                 metrics.outstanding_queries.dec();
@@ -1309,12 +1309,12 @@ impl PoolRefillTask {
                             Err(e) => e.to_label_value(),
                         };
 
-                        metrics.observe_query_slice_duration(status, proximity, timer);
+                        metrics.observe_query_slice_duration(status, proximity, since);
                         metrics.observe_pull_attempt(status);
                     }
 
                     Err(e) => {
-                        metrics.observe_query_slice_duration(&e.to_label_value(), proximity, timer);
+                        metrics.observe_query_slice_duration(&e.to_label_value(), proximity, since);
                         metrics.observe_pull_attempt(&e.to_label_value());
                         if let XNetClientError::NoContent = e {
                         } else if Self::pass_log_sampling() {
