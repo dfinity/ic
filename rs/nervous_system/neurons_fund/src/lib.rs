@@ -259,6 +259,7 @@ pub trait InvertibleFunction: MatchingFunction {
     fn plot(&self, num_samples: NonZeroU64) -> Result<Vec<(Decimal, Decimal)>, String> {
         let max_argument_icp_e8s = self.max_argument_icp_e8s()?;
         let num_samples = u64::from(num_samples);
+        // Integer division is justified in this case as max_argument_icp_e8s >> num_samples.
         let step = max_argument_icp_e8s / num_samples;
         (0..=num_samples)
             .map(|i| {
@@ -459,20 +460,36 @@ impl BinomialFormula {
         })
     }
 
+    #[allow(clippy::manual_try_fold)]
     pub fn eval(&self) -> Result<Decimal, String> {
         self.members
             .iter()
             .enumerate()
-            .try_fold(Decimal::ZERO, |total, (i, member)| {
-                let member = member.eval().map_err(|e| {
+            // Avoid using `try_fold` here as we should not short-circuit errors.
+            .fold(Ok(Decimal::ZERO), |overall_result, (i, member)| {
+                let sub_result = member.eval().map_err(|e| {
                     format!(
                         "Cannot evaluate binomial member #{} of {:?}: {}",
                         i, self, e
                     )
-                })?;
-                total
-                    .checked_add(member)
-                    .ok_or_else(|| format!("Decimal overflow while computing {:?}.", self))
+                });
+                match (overall_result, sub_result) {
+                    (Ok(total), Ok(sub_total)) => total.checked_add(sub_total).ok_or_else(|| {
+                        vec![format!("Decimal overflow while computing {:?}.", self)]
+                    }),
+                    (Ok(_), Err(err)) => Err(vec![err]),
+                    (Err(errs), Ok(_)) => Err(errs),
+                    (Err(mut errs), Err(err)) => {
+                        errs.push(err);
+                        Err(errs)
+                    }
+                }
+            })
+            .map_err(|errs| {
+                format!(
+                    "Cannot evaluate BinomialFormula:\n  - {}",
+                    errs.join("\n  - ")
+                )
             })
     }
 }
