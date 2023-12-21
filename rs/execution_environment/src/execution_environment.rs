@@ -43,7 +43,7 @@ use ic_interfaces::execution_environment::{
     ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings, SubnetAvailableMemory,
 };
 use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_metrics::{MetricsRegistry, Timer};
+use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -76,14 +76,15 @@ use ic_wasm_types::WasmHash;
 use phantom_newtype::AmountOf;
 use prometheus::IntCounter;
 use rand::RngCore;
-use std::fmt;
-use std::str::FromStr;
-use std::sync::Mutex;
 use std::{
     collections::{BTreeMap, HashMap},
-    mem,
+    convert::Into,
+    convert::TryFrom,
+    fmt, mem,
+    str::FromStr,
+    sync::{Arc, Mutex},
+    time::Instant,
 };
-use std::{convert::Into, convert::TryFrom, sync::Arc};
 use strum::ParseError;
 
 #[cfg(test)]
@@ -415,7 +416,7 @@ impl ExecutionEnvironment {
         registry_settings: &RegistryExecutionSettings,
         round_limits: &mut RoundLimits,
     ) -> (ReplicatedState, Option<NumInstructions>) {
-        let timer = Timer::start(); // Start logging execution time.
+        let since = Instant::now(); // Start logging execution time.
 
         let mut msg = match msg {
             CanisterMessage::Response(response) => {
@@ -473,7 +474,7 @@ impl ExecutionEnvironment {
             if let Err(err) = permissions.verify(&msg, &state) {
                 let refund = msg.take_cycles();
                 let state =
-                    self.finish_subnet_message_execution(state, msg, Err(err), refund, timer);
+                    self.finish_subnet_message_execution(state, msg, Err(err), refund, since);
                 return (state, Some(NumInstructions::from(0)));
             }
         }
@@ -581,7 +582,7 @@ impl ExecutionEnvironment {
                             Err(err) => Some((Err(err), cycles)),
                             Ok(args) => {
                                 // Start logging execution time for `create_canister`.
-                                let timer = Timer::start();
+                                let since = Instant::now();
 
                                 let sender_canister_version = args.get_sender_canister_version();
 
@@ -603,7 +604,7 @@ impl ExecutionEnvironment {
                                 info!(
                                             self.log,
                                             "Finished executing create_canister message after {:?} with result: {:?}",
-                                            timer.elapsed(),
+                                            since.elapsed().as_secs_f64(),
                                             result
                                         );
 
@@ -636,7 +637,7 @@ impl ExecutionEnvironment {
                     Err(err) => Err(err),
                     Ok(args) => {
                         // Start logging execution time for `update_settings`.
-                        let timer = Timer::start();
+                        let since = Instant::now();
 
                         let canister_id = args.get_canister_id();
                         let sender_canister_version = args.get_sender_canister_version();
@@ -693,7 +694,7 @@ impl ExecutionEnvironment {
                             self.log,
                             "Finished executing update_settings message on canister {:?} after {:?} with result: {:?}",
                             canister_id,
-                            timer.elapsed(),
+                            since.elapsed().as_secs_f64(),
                             result
                         );
                         result
@@ -752,7 +753,7 @@ impl ExecutionEnvironment {
                     Err(err) => Err(err),
                     Ok(args) => {
                         // Start logging execution time for `delete_canister`.
-                        let timer = Timer::start();
+                        let since = Instant::now();
 
                         let result = self
                             .canister_manager
@@ -764,7 +765,7 @@ impl ExecutionEnvironment {
                             self.log,
                             "Finished executing delete_canister message on canister {:?} after {:?} with result: {:?}",
                             args.get_canister_id(),
-                            timer.elapsed(),
+                            since.elapsed().as_secs_f64(),
                             result
                         );
                         result
@@ -841,7 +842,7 @@ impl ExecutionEnvironment {
                                         );
                                         self.metrics.observe_message_with_label(
                                             &request.method_name,
-                                            timer.elapsed(),
+                                            since.elapsed().as_secs_f64(),
                                             SUBMITTED_OUTCOME_LABEL.into(),
                                             SUCCESS_STATUS_LABEL.into(),
                                         );
@@ -1101,7 +1102,7 @@ impl ExecutionEnvironment {
         // these cases.
         let state = match result {
             Some((res, refund)) => {
-                self.finish_subnet_message_execution(state, msg, res, refund, timer)
+                self.finish_subnet_message_execution(state, msg, res, refund, since)
             }
             None => {
                 // This scenario happens when calling ic00::stop_canister on a
@@ -1129,13 +1130,13 @@ impl ExecutionEnvironment {
         message: CanisterCall,
         response: Result<Vec<u8>, UserError>,
         refund: Cycles,
-        timer: Timer,
+        since: Instant,
     ) -> ReplicatedState {
         // Request has been executed. Observe metrics and respond.
         let method_name = String::from(message.method_name());
         self.metrics.observe_subnet_message(
             method_name.as_str(),
-            timer.elapsed(),
+            since.elapsed().as_secs_f64(),
             &response.as_ref().map_err(|err| err.code()),
         );
         self.output_subnet_response(message, state, response, refund)
@@ -2257,7 +2258,7 @@ impl ExecutionEnvironment {
         subnet_size: usize,
     ) -> (ReplicatedState, Option<NumInstructions>) {
         // Start logging execution time for `install_code`.
-        let timer = Timer::start();
+        let since = Instant::now();
 
         let (install_context, old_canister) =
             match Self::decode_input_and_take_canister(&msg, &mut state) {
@@ -2265,7 +2266,7 @@ impl ExecutionEnvironment {
                 Err(err) => {
                     let refund = msg.take_cycles();
                     let state =
-                        self.finish_subnet_message_execution(state, msg, Err(err), refund, timer);
+                        self.finish_subnet_message_execution(state, msg, Err(err), refund, since);
                     return (state, Some(NumInstructions::from(0)));
                 }
             };
@@ -2360,7 +2361,7 @@ impl ExecutionEnvironment {
             round_counters,
             subnet_size,
         );
-        self.process_install_code_result(state, dts_result, dts_status, timer)
+        self.process_install_code_result(state, dts_result, dts_status, since)
     }
 
     /// Processes the result of install code message that was executed using
@@ -2375,9 +2376,9 @@ impl ExecutionEnvironment {
         mut state: ReplicatedState,
         dts_result: DtsInstallCodeResult,
         dts_status: DtsInstallCodeStatus,
-        timer: Timer,
+        since: Instant,
     ) -> (ReplicatedState, Option<NumInstructions>) {
-        let execution_duration = timer.elapsed();
+        let execution_duration = since.elapsed().as_secs_f64();
         match dts_result {
             DtsInstallCodeResult::Finished {
                 canister,
@@ -2434,7 +2435,7 @@ impl ExecutionEnvironment {
                         );
                 }
                 let state =
-                    self.finish_subnet_message_execution(state, message, result, refund, timer);
+                    self.finish_subnet_message_execution(state, message, result, refund, since);
                 (state, Some(instructions_used))
             }
             DtsInstallCodeResult::Paused {
@@ -2503,7 +2504,7 @@ impl ExecutionEnvironment {
                 );
             }
             ExecutionTask::PausedInstallCode(id) => {
-                let timer = Timer::start();
+                let since = Instant::now();
                 let paused = self.take_paused_install_code(id).unwrap();
                 let canister = state.take_canister_state(canister_id).unwrap();
                 let round_counters = RoundCounters {
@@ -2526,7 +2527,7 @@ impl ExecutionEnvironment {
                 };
                 let dts_result = paused.resume(canister, round, round_limits);
                 let dts_status = DtsInstallCodeStatus::ResumingPausedOrAbortedExecution;
-                self.process_install_code_result(state, dts_result, dts_status, timer)
+                self.process_install_code_result(state, dts_result, dts_status, since)
             }
             ExecutionTask::AbortedInstallCode {
                 message,
