@@ -30,23 +30,18 @@ mod metrics;
 mod receiver;
 mod sender;
 
-type StartConsensusManagerFn<'a> =
-    Box<dyn FnOnce(Arc<dyn Transport>, watch::Receiver<SubnetTopology>) + 'a>;
+type StartConsensusManagerFn = Box<dyn FnOnce(Arc<dyn Transport>, watch::Receiver<SubnetTopology>)>;
 
-pub struct ConsensusManagerBuilder<'r> {
+pub struct ConsensusManagerBuilder {
     log: ReplicaLogger,
-    metrics_registry: &'r MetricsRegistry,
+    metrics_registry: MetricsRegistry,
     rt_handle: Handle,
-    clients: Vec<StartConsensusManagerFn<'r>>,
+    clients: Vec<StartConsensusManagerFn>,
     router: Option<Router>,
 }
 
-impl<'r> ConsensusManagerBuilder<'r> {
-    pub fn new(
-        log: ReplicaLogger,
-        rt_handle: Handle,
-        metrics_registry: &'r MetricsRegistry,
-    ) -> Self {
+impl ConsensusManagerBuilder {
+    pub fn new(log: ReplicaLogger, rt_handle: Handle, metrics_registry: MetricsRegistry) -> Self {
         Self {
             log,
             metrics_registry,
@@ -70,12 +65,12 @@ impl<'r> ConsensusManagerBuilder<'r> {
 
         let log = self.log.clone();
         let rt_handle = self.rt_handle.clone();
-        let metrics_registry = self.metrics_registry;
+        let metrics_registry = self.metrics_registry.clone();
 
         let builder = move |transport: Arc<dyn Transport>, topology_watcher| {
             start_consensus_manager(
                 log,
-                metrics_registry,
+                &metrics_registry,
                 rt_handle,
                 adverts_to_send,
                 adverts_from_peers_rx,

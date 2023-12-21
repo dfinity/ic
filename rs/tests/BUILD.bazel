@@ -1,3 +1,4 @@
+load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@bazel_skylib//rules:run_binary.bzl", "run_binary")
 load("@io_bazel_rules_docker//docker/package_managers:download_pkgs.bzl", "download_pkgs")
@@ -18,6 +19,11 @@ ALIASES = {
     "//rs/utils": "utils",
 }
 
+bool_flag(
+    name = "k8s",
+    build_setting_default = False,
+)
+
 rust_library(
     name = "tests",
     srcs = glob(["src/**/*.rs"]),
@@ -32,7 +38,7 @@ rust_library(
     crate_name = "ic_tests",
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    deps = DEPENDENCIES,
+    deps = DEPENDENCIES + ["//rs/tests/k8s:tnet"],
 )
 
 download_pkgs(

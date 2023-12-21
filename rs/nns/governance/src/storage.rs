@@ -4,7 +4,7 @@ use crate::{governance::LOG_PREFIX, pb::v1::AuditEvent};
 use dfn_core::println;
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
-    DefaultMemoryImpl, Memory, StableLog,
+    BoundedStorable, DefaultMemoryImpl, Memory, StableBTreeMap, StableLog, Storable,
 };
 use std::cell::RefCell;
 
@@ -100,6 +100,13 @@ impl State {
             stable_neuron_indexes,
         }
     }
+
+    /// Validates that some of the data in stable storage can be read, in order to prevent broken
+    /// schema. Should only be called in post_upgrade.
+    fn validate(&self) {
+        self.stable_neuron_store.validate();
+        self.stable_neuron_indexes.validate();
+    }
 }
 
 pub fn with_upgrades_memory<R>(f: impl FnOnce(&VM) -> R) -> R {
@@ -150,6 +157,23 @@ pub(crate) fn with_stable_neuron_indexes_mut<R>(
         let stable_neuron_indexes = &mut state.borrow_mut().stable_neuron_indexes;
         f(stable_neuron_indexes)
     })
+}
+
+/// Validates that some of the data in stable storage can be read, in order to prevent broken
+/// schema. Should only be called in post_upgrade.
+pub fn validate_stable_storage() {
+    STATE.with_borrow(|state| state.validate());
+}
+
+pub(crate) fn validate_stable_btree_map<Key, Value, M>(btree_map: &StableBTreeMap<Key, Value, M>)
+where
+    Key: Storable + BoundedStorable + Ord + Clone,
+    Value: Storable + BoundedStorable,
+    M: Memory,
+{
+    // This is just to verify that any key-value pair can be deserialized without panicking. It is
+    // not guaranteed to catch all deserializations, but should catch a lot of common issues.
+    let _ = btree_map.first_key_value();
 }
 
 // Clears and initializes stable memory and stable structures before testing. Typically only needed

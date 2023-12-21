@@ -83,9 +83,9 @@ The docker image is then transformed into a bootable "bare-metal" or "virtual-me
 Note that all pre-configuration of the system is performed using docker utilities, and the system is actually also operational as a docker container.
 This means that some development and testing could be done on the docker image itself, but an actual VM image is still required for proper testing.
 
-== Adding a new dependency to an ICOS image
+== Adding a new dependency to an IC-OS image
 
-To add a new package to an ICOS image you need to:
+To add a new package to an IC-OS image you need to:
 
    * Update the list of packages to install in `ic/ic-os/{setupos,hostos,guestos,boundary-guestos}/rootfs/packages.common`
    ** Commit the changes and wait for CI to publish the base image

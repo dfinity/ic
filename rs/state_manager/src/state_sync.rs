@@ -34,7 +34,7 @@ impl StateSync {
     pub fn create_chunkable_state(
         &self,
         id: &StateSyncArtifactId,
-    ) -> Box<dyn Chunkable<StateSyncMessage> + Send + Sync> {
+    ) -> Box<dyn Chunkable<StateSyncMessage> + Send> {
         info!(self.log, "Starting state sync @{}", id.height);
 
         Box::new(crate::state_sync::chunkable::IncompleteState::new(
@@ -227,6 +227,8 @@ impl StateSync {
 }
 
 impl StateSyncClient for StateSync {
+    type Message = StateSyncMessage;
+
     /// Non-blocking.
     fn available_states(&self) -> Vec<StateSyncArtifactId> {
         // Using height 0 here is sane because for state sync `get_all_validated_ids_by_height`
@@ -239,7 +241,7 @@ impl StateSyncClient for StateSync {
     fn start_state_sync(
         &self,
         id: &StateSyncArtifactId,
-    ) -> Option<Box<dyn Chunkable<StateSyncMessage> + Send + Sync>> {
+    ) -> Option<Box<dyn Chunkable<StateSyncMessage> + Send>> {
         if self.get_priority_function()(id, &()) != Priority::Fetch {
             return None;
         }

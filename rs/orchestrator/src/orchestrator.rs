@@ -1,4 +1,5 @@
 use crate::args::OrchestratorArgs;
+use crate::boundary_node::BoundaryNodeManager;
 use crate::catch_up_package_provider::CatchUpPackageProvider;
 use crate::dashboard::{Dashboard, OrchestratorDashboard};
 use crate::firewall::Firewall;
@@ -38,6 +39,7 @@ pub struct Orchestrator {
     _metrics_runtime: MetricsHttpEndpoint,
     upgrade: Option<Upgrade>,
     hostos_upgrade: Option<HostosUpgrader>,
+    boundary_node_manager: Option<BoundaryNodeManager>,
     firewall: Option<Firewall>,
     ssh_access_manager: Option<SshAccessManager>,
     orchestrator_dashboard: Option<OrchestratorDashboard>,
@@ -215,7 +217,7 @@ impl Orchestrator {
                 replica_version.clone(),
                 args.replica_config_file.clone(),
                 node_id,
-                ic_binary_directory,
+                ic_binary_directory.clone(),
                 registry_replicator,
                 args.replica_binary_dir.clone(),
                 logger.clone(),
@@ -247,6 +249,15 @@ impl Orchestrator {
                 .await,
             ),
         };
+
+        let boundary_node = BoundaryNodeManager::new(
+            Arc::clone(&registry),
+            Arc::clone(&metrics),
+            replica_version.clone(),
+            node_id,
+            ic_binary_directory,
+            logger.clone(),
+        );
 
         let firewall = Firewall::new(
             node_id,
@@ -283,6 +294,7 @@ impl Orchestrator {
             _metrics_runtime,
             upgrade,
             hostos_upgrade,
+            boundary_node_manager: Some(boundary_node),
             firewall: Some(firewall),
             ssh_access_manager: Some(ssh_access_manager),
             orchestrator_dashboard,
@@ -359,6 +371,22 @@ impl Orchestrator {
             info!(log, "Shut down the HostOS upgrade loop");
         }
 
+        async fn boundary_node_check(
+            mut boundary_node_manager: BoundaryNodeManager,
+            mut exit_signal: Receiver<bool>,
+            log: ReplicaLogger,
+        ) {
+            while !*exit_signal.borrow() {
+                boundary_node_manager.check().await;
+
+                tokio::select! {
+                    _ = tokio::time::sleep(CHECK_INTERVAL_SECS) => {}
+                    _ = exit_signal.changed() => {}
+                }
+            }
+            info!(log, "Shut down the boundary node management loop");
+        }
+
         async fn tecdsa_key_rotation_check(
             maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
             registration: NodeRegistration,
@@ -425,6 +453,15 @@ impl Orchestrator {
             info!(self.logger, "Spawning the HostOS upgrade loop");
             self.task_handles.push(tokio::spawn(hostos_upgrade_checks(
                 hostos_upgrade,
+                self.exit_signal.clone(),
+                self.logger.clone(),
+            )));
+        }
+
+        if let Some(boundary_node) = self.boundary_node_manager.take() {
+            info!(self.logger, "Spawning boundary node management loop");
+            self.task_handles.push(tokio::spawn(boundary_node_check(
+                boundary_node,
                 self.exit_signal.clone(),
                 self.logger.clone(),
             )));

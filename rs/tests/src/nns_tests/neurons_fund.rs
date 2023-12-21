@@ -4,11 +4,11 @@ use ic_base_types::PrincipalId;
 use ic_canister_client_sender::ed25519_public_key_to_der;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::pb::v1::{neuron::DissolveState, Neuron};
-use ic_rosetta_api::models::RosettaSupportedKeyPair;
 use ic_rosetta_test_utils::EdKeypair;
 use icp_ledger::Subaccount;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
+use rosetta_core::models::RosettaSupportedKeyPair;
 
 use crate::{
     canister_agent::HasCanisterAgentCapability,

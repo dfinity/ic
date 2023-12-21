@@ -28,7 +28,6 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
-    "//rs/p2p/memory_transport",
     "//rs/p2p/test_utils",
     "//rs/test_utilities/logger",
     "//rs/types/types_test_utils",

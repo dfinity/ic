@@ -4,9 +4,11 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/certification/test-utils",
     "//rs/config",
     "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
     "//rs/crypto/test_utils/keys",
+    "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/crypto/utils/tls",
     "//rs/interfaces/registry",
@@ -23,6 +25,7 @@ DEPENDENCIES = [
     "//rs/protobuf",
     "//rs/test_utilities",
     "//rs/test_utilities/registry",
+    "//rs/types/base_types",
     "//rs/types/types",
     "//rs/types/ic00_types",
     "@crate_index//:anyhow",
@@ -83,9 +86,6 @@ MACRO_DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
-    "//rs/crypto/tree_hash",
-    "//rs/types/base_types",
-    "//rs/certification/test-utils",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

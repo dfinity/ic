@@ -682,7 +682,7 @@ mod verify_complaint {
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&params, rng);
             let (complainer, complaint) =
-                generate_single_complaint(&mut transcript, &params, &env, rng);
+                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
 
             let result = env
                 .nodes
@@ -708,7 +708,13 @@ mod verify_complaint {
 
             let num_of_complaints = rng.gen_range(1..=transcript.verified_dealings.len());
             let (complainer, corrupted_dealing_indices, complaints) =
-                generate_complaints(&mut transcript, num_of_complaints, &params, &env, rng);
+                corrupt_dealings_and_generate_complaints(
+                    &mut transcript,
+                    num_of_complaints,
+                    &params,
+                    &env,
+                    rng,
+                );
 
             for complaint in &complaints {
                 assert_eq!(complaint.transcript_id, transcript.transcript_id);
@@ -752,7 +758,7 @@ mod verify_complaint {
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&params, rng);
             let (complainer, complaint) =
-                generate_single_complaint(&mut transcript, &params, &env, rng);
+                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
 
             let wrong_complainer_id =
                 random_receiver_id_excluding(params.receivers(), complainer.id(), rng);
@@ -779,7 +785,7 @@ mod verify_complaint {
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&params, rng);
             let (complainer, complaint) =
-                generate_single_complaint(&mut transcript, &params, &env, rng);
+                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
 
             let other_transcript_id = env
                 .params_for_random_sharing(&dealers, &receivers, alg, rng)
@@ -831,7 +837,7 @@ mod verify_complaint {
             assert!(params.collection_threshold().get() >= 2);
             let num_of_dealings_to_corrupt = 2;
 
-            let (complainer, _, complaints) = generate_complaints(
+            let (complainer, _, complaints) = corrupt_dealings_and_generate_complaints(
                 &mut transcript,
                 num_of_dealings_to_corrupt,
                 &params,
@@ -884,7 +890,7 @@ mod verify_complaint {
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&params, rng);
 
-            let (complainer, _, complaints) = generate_complaints(
+            let (complainer, _, complaints) = corrupt_dealings_and_generate_complaints(
                 &mut transcript,
                 num_of_dealings_to_corrupt,
                 &params,
@@ -2182,7 +2188,7 @@ mod load_transcript_with_openings {
             let number_of_openings = reconstruction_threshold;
 
             let (complainer, complaint) =
-                generate_single_complaint(&mut transcript, &params, &env, rng);
+                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
             let complaint_with_openings = generate_and_verify_openings_for_complaint(
                 number_of_openings,
                 &transcript,
@@ -2195,6 +2201,87 @@ mod load_transcript_with_openings {
                 complainer.load_transcript_with_openings(&transcript, &complaint_with_openings);
 
             assert_eq!(result, Ok(()));
+        }
+    }
+
+    // In a scenario with a cheating dealer but when other parties have enough
+    // valid dealings, all honest parties must be able to reconstruct their
+    // dealings from the openings and successfully `sign_share`.
+    #[test]
+    fn should_sign_share_when_loaded_with_openings() {
+        const MIN_NUM_NODES: usize = 2;
+        let rng = &mut reproducible_rng();
+        let subnet_size = rng.gen_range(MIN_NUM_NODES..6);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
+        let (dealers, receivers) =
+            env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
+        for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
+            let random_sharing_params =
+                env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let random_sharing_transcript = env
+                .nodes
+                .run_idkg_and_create_and_verify_transcript(&random_sharing_params, rng);
+            let unmasked_key_params = build_params_from_previous(
+                random_sharing_params,
+                IDkgTranscriptOperation::ReshareOfMasked(random_sharing_transcript),
+                rng,
+            );
+            let mut key_transcript = env
+                .nodes
+                .run_idkg_and_create_and_verify_transcript(&unmasked_key_params, rng);
+            let reconstruction_threshold =
+                usize::try_from(key_transcript.reconstruction_threshold().get())
+                    .expect("invalid number");
+            let number_of_openings = reconstruction_threshold;
+
+            let (complainer, complaint) = corrupt_single_dealing_and_generate_complaint(
+                &mut key_transcript,
+                &unmasked_key_params,
+                &env,
+                rng,
+            );
+            let complaint_with_openings = generate_and_verify_openings_for_complaint(
+                number_of_openings,
+                &key_transcript,
+                &env,
+                complainer,
+                complaint,
+            );
+            complainer
+                .load_transcript_with_openings(&key_transcript, &complaint_with_openings)
+                .expect("failed to load transcript with openings");
+            let quadruple =
+                generate_presig_quadruple(&env, &dealers, &receivers, alg, &key_transcript, rng);
+            let inputs = {
+                let derivation_path = ExtendedDerivationPath {
+                    caller: PrincipalId::new_user_test_id(1),
+                    derivation_path: vec![],
+                };
+
+                let hashed_message = rng.gen::<[u8; 32]>();
+                let seed = Randomness::from(rng.gen::<[u8; 32]>());
+
+                ThresholdEcdsaSigInputs::new(
+                    &derivation_path,
+                    &hashed_message,
+                    seed,
+                    quadruple,
+                    key_transcript.clone(),
+                )
+                .expect("failed to create signature inputs")
+            };
+            complainer.load_transcript_or_panic(inputs.presig_quadruple().kappa_unmasked());
+            complainer.load_transcript_or_panic(inputs.presig_quadruple().lambda_masked());
+            complainer.load_transcript_or_panic(inputs.presig_quadruple().kappa_times_lambda());
+            complainer.load_transcript_or_panic(inputs.presig_quadruple().key_times_lambda());
+
+            let sig_result = complainer.sign_share(&inputs).expect("signing failed");
+            let verifier = env
+                .nodes
+                .random_receiver_excluding(complainer, &receivers, rng);
+            verifier
+                .verify_sig_share(complainer.id(), &inputs, &sig_result)
+                .expect("verification failed");
         }
     }
 
@@ -2222,7 +2309,7 @@ mod load_transcript_with_openings {
             let number_of_openings = reconstruction_threshold - 1;
 
             let (complainer, complaint) =
-                generate_single_complaint(&mut transcript, &params, &env, rng);
+                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
             let complaint_with_openings = generate_and_verify_openings_for_complaint(
                 number_of_openings,
                 &transcript,
@@ -3445,7 +3532,7 @@ mod open_transcript {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, complaint) =
-                generate_single_complaint(&mut transcript, &params, &env, rng);
+                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
             let opener =
                 env.nodes
                     .random_receiver_excluding(complainer, &transcript.receivers, rng);
@@ -3461,7 +3548,7 @@ mod open_transcript {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, complaint) =
-                generate_single_complaint(&mut transcript, &params, &env, rng);
+                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
             let opener = complainer; // opener's share is invalid
             let result = opener.open_transcript(&transcript, opener.id(), &complaint);
             assert_matches!(result, Err(IDkgOpenTranscriptError::InternalError { internal_error })
@@ -3475,7 +3562,7 @@ mod open_transcript {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, complaint) =
-                generate_single_complaint(&mut transcript, &params, &env, rng);
+                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
             // Remove the corrupted dealing from the transcript.
             transcript.verified_dealings.remove(
                 &transcript
@@ -3498,7 +3585,7 @@ mod open_transcript {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, mut complaint) =
-                generate_single_complaint(&mut transcript, &params, &env, rng);
+                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
             // Set "wrong" dealer_id in the complaint
             complaint.dealer_id = random_dealer_id_excluding(&transcript, complaint.dealer_id, rng);
 
@@ -3518,7 +3605,7 @@ mod open_transcript {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, complaint) =
-                generate_single_complaint(&mut transcript, &params, &env, rng);
+                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
 
             // Create another environment of the same size, and generate a transcript for it.
             let env_2 = CanisterThresholdSigTestEnvironment::new(env.nodes.len(), rng);
@@ -3550,7 +3637,7 @@ mod verify_opening {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, complaint) =
-                generate_single_complaint(&mut transcript, &params, &env, rng);
+                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
             let opener =
                 env.nodes
                     .random_receiver_excluding(complainer, &transcript.receivers, rng);
@@ -3570,7 +3657,7 @@ mod verify_opening {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, complaint) =
-                generate_single_complaint(&mut transcript, &params, &env, rng);
+                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
             let opener =
                 env.nodes
                     .random_receiver_excluding(complainer, &transcript.receivers, rng);
@@ -3597,7 +3684,7 @@ mod verify_opening {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, mut complaint) =
-                generate_single_complaint(&mut transcript, &params, &env, rng);
+                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
             let opener =
                 env.nodes
                     .random_receiver_excluding(complainer, &transcript.receivers, rng);
@@ -3625,7 +3712,7 @@ mod verify_opening {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, complaint) =
-                generate_single_complaint(&mut transcript, &params, &env, rng);
+                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
             let opener =
                 env.nodes
                     .random_receiver_excluding(complainer, &transcript.receivers, rng);
@@ -3648,7 +3735,7 @@ mod verify_opening {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, complaint) =
-                generate_single_complaint(&mut transcript, &params, &env, rng);
+                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
             let opener =
                 env.nodes
                     .random_receiver_excluding(complainer, &transcript.receivers, rng);
@@ -3678,7 +3765,7 @@ mod verify_opening {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, complaint) =
-                generate_single_complaint(&mut transcript, &params, &env, rng);
+                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
             let opener =
                 env.nodes
                     .random_receiver_excluding(complainer, &transcript.receivers, rng);
@@ -3703,7 +3790,7 @@ mod verify_opening {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, complaint) =
-                generate_single_complaint(&mut transcript, &params, &env, rng);
+                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
             let opener =
                 env.nodes
                     .random_receiver_excluding(complainer, &transcript.receivers, rng);
@@ -4099,20 +4186,21 @@ fn environment_and_transcript_for_complaint<R: RngCore + CryptoRng>(
     (env, params, transcript)
 }
 
-fn generate_single_complaint<'a, R: RngCore + CryptoRng>(
+fn corrupt_single_dealing_and_generate_complaint<'a, R: RngCore + CryptoRng>(
     transcript: &mut IDkgTranscript,
     params: &'a IDkgTranscriptParams,
     env: &'a CanisterThresholdSigTestEnvironment,
     rng: &mut R,
 ) -> (&'a Node, IDkgComplaint) {
-    let (complainer, _, mut complaints) = generate_complaints(transcript, 1, params, env, rng);
+    let (complainer, _, mut complaints) =
+        corrupt_dealings_and_generate_complaints(transcript, 1, params, env, rng);
     (
         complainer,
         complaints.pop().expect("expected one complaint"),
     )
 }
 
-fn generate_complaints<'a, R: RngCore + CryptoRng>(
+fn corrupt_dealings_and_generate_complaints<'a, R: RngCore + CryptoRng>(
     transcript: &mut IDkgTranscript,
     number_of_complaints: usize,
     params: &'a IDkgTranscriptParams,

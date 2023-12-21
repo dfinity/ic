@@ -207,7 +207,7 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 Burn { amount, .. }
                 | Mint { amount, .. }
                 | Transfer { amount, .. }
-                | Approve { amount, .. } => *amount,
+                | Approve { amount, .. } => amount.clone(),
             },
             fee: match &t.operation {
                 Transfer { fee, .. } | Approve { fee, .. } => fee.to_owned(),
@@ -319,11 +319,15 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
                 amount,
                 fee,
             } => {
-                let fee = fee.unwrap_or(effective_fee);
+                let fee = fee.clone().unwrap_or(effective_fee);
                 if spender.is_none() || from == &spender.unwrap() {
-                    context
-                        .balances_mut()
-                        .transfer(from, to, *amount, fee, fee_collector)?;
+                    context.balances_mut().transfer(
+                        from,
+                        to,
+                        amount.clone(),
+                        fee,
+                        fee_collector,
+                    )?;
                     return Ok(());
                 }
 
@@ -332,7 +336,7 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
                     amount
                         .checked_add(&fee)
                         .ok_or(TxApplyError::InsufficientAllowance {
-                            allowance: allowance.amount,
+                            allowance: allowance.amount.clone(),
                         })?;
                 if allowance.amount < used_allowance {
                     return Err(TxApplyError::InsufficientAllowance {
@@ -341,7 +345,7 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
                 }
                 context
                     .balances_mut()
-                    .transfer(from, to, *amount, fee, fee_collector)?;
+                    .transfer(from, to, amount.clone(), fee, fee_collector)?;
                 context
                     .approvals_mut()
                     .use_allowance(from, &spender.unwrap(), used_allowance, now)
@@ -360,15 +364,15 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
                         });
                     }
                 }
-                context.balances_mut().burn(from, *amount)?;
+                context.balances_mut().burn(from, amount.clone())?;
                 if spender.is_some() && from != &spender.unwrap() {
                     context
                         .approvals_mut()
-                        .use_allowance(from, &spender.unwrap(), *amount, now)
+                        .use_allowance(from, &spender.unwrap(), amount.clone(), now)
                         .expect("bug: cannot use allowance");
                 }
             }
-            Operation::Mint { to, amount } => context.balances_mut().mint(to, *amount)?,
+            Operation::Mint { to, amount } => context.balances_mut().mint(to, amount.clone())?,
             Operation::Approve {
                 from,
                 spender,
@@ -379,22 +383,22 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
             } => {
                 context
                     .balances_mut()
-                    .burn(from, fee.unwrap_or(effective_fee))?;
+                    .burn(from, fee.clone().unwrap_or(effective_fee.clone()))?;
                 let result = context
                     .approvals_mut()
                     .approve(
                         from,
                         spender,
-                        *amount,
+                        amount.clone(),
                         expires_at.map(TimeStamp::from_nanos_since_unix_epoch),
                         now,
-                        *expected_allowance,
+                        expected_allowance.clone(),
                     )
                     .map_err(TxApplyError::from);
                 if let Err(e) = result {
                     context
                         .balances_mut()
-                        .mint(from, fee.unwrap_or(effective_fee))
+                        .mint(from, fee.clone().unwrap_or(effective_fee))
                         .expect("bug: failed to refund approval fee");
                     return Err(e);
                 }

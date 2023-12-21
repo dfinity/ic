@@ -6,7 +6,7 @@ use crate::orchestrator::utils::rw_message::{
 };
 use crate::orchestrator::utils::ssh_access::execute_bash_command;
 use crate::orchestrator::utils::upgrade::assert_assigned_replica_version;
-use crate::tecdsa::tecdsa_signature_test::{
+use crate::tecdsa::{
     add_ecdsa_keys_with_timeout_and_rotation_period, create_new_subnet_with_keys,
     empty_subnet_update, execute_update_subnet_proposal, get_public_key_with_retries,
     get_signature_with_logger, make_key, verify_signature, KEY_ID1,

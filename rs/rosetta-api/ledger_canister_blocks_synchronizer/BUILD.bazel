@@ -28,6 +28,7 @@ PROC_MACRO_DEPENDENCIES = [
 TEST_DEPENDENCIES = [
     "@crate_index//:actix-rt",
     "@crate_index//:actix-web",
+    "@crate_index//:proptest",
     "//rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils",
 ]
 

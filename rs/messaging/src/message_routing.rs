@@ -16,7 +16,7 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateManager, StateManagerError};
 use ic_logger::{debug, fatal, info, warn, ReplicaLogger};
 use ic_metrics::buckets::{add_bucket, decimal_buckets, decimal_buckets_with_zero};
-use ic_metrics::{MetricsRegistry, Timer};
+use ic_metrics::MetricsRegistry;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
@@ -98,14 +98,14 @@ pub const CRITICAL_ERROR_BATCH_TIME_REGRESSION: &str = "mr_batch_time_regression
 /// previous `MessageTime`) were first added to / learned about in a stream.
 struct MessageTime {
     index: StreamIndex,
-    time: Timer,
+    time: Instant,
 }
 
 impl MessageTime {
     fn new(index: StreamIndex) -> Self {
         MessageTime {
             index,
-            time: Timer::start(),
+            time: Instant::now(),
         }
     }
 }
@@ -155,7 +155,7 @@ impl StreamTimeline {
                     // Discard all timeline entries with indexes smaller than the
                     // observed index.
                     Some(entry) if entry.index <= index.into() => {
-                        self.entries.pop_front().unwrap();
+                        self.entries.pop_front();
                         continue;
                     }
                     Some(entry) => break entry,
@@ -163,7 +163,7 @@ impl StreamTimeline {
                 }
             };
 
-            self.histogram.observe(entry.time.elapsed());
+            self.histogram.observe(entry.time.elapsed().as_secs_f64());
         }
     }
 }
@@ -558,11 +558,11 @@ impl BatchProcessorImpl {
 
     /// Adds an observation to the `METRIC_PROCESS_BATCH_PHASE_DURATION`
     /// histogram for the given phase.
-    fn observe_phase_duration(&self, phase: &str, timer: &Timer) {
+    fn observe_phase_duration(&self, phase: &str, since: &Instant) {
         self.metrics
             .process_batch_phase_duration
             .with_label_values(&[phase])
-            .observe(timer.elapsed());
+            .observe(since.elapsed().as_secs_f64());
     }
 
     /// Observes metrics related to memory used by canisters. It includes:
@@ -924,7 +924,7 @@ impl BatchProcessorImpl {
 impl BatchProcessor for BatchProcessorImpl {
     fn process_batch(&self, batch: Batch) {
         let _process_batch_start = Instant::now();
-        let timer = Timer::start();
+        let since = Instant::now();
 
         // Fetch the mutable tip from StateManager
         let mut state = match self
@@ -961,7 +961,7 @@ impl BatchProcessor for BatchProcessorImpl {
                 .set(batch.batch_number.get() as i64);
             state.after_split();
         }
-        self.observe_phase_duration(PHASE_LOAD_STATE, &timer);
+        self.observe_phase_duration(PHASE_LOAD_STATE, &since);
 
         debug!(self.log, "Processing batch {}", batch.batch_number);
         let commit_height = Height::from(batch.batch_number.get());
@@ -1010,16 +1010,18 @@ impl BatchProcessor for BatchProcessorImpl {
             info!(self.log, "[MALICIOUS]: Delayed execution by {:?}", delay);
         }
 
-        let phase_timer = Timer::start();
+        let phase_since = Instant::now();
 
         self.state_manager.commit_and_certify(
             state_after_round,
             commit_height,
             certification_scope,
         );
-        self.observe_phase_duration(PHASE_COMMIT, &phase_timer);
+        self.observe_phase_duration(PHASE_COMMIT, &phase_since);
 
-        self.metrics.process_batch_duration.observe(timer.elapsed());
+        self.metrics
+            .process_batch_duration
+            .observe(since.elapsed().as_secs_f64());
         self.metrics
             .registry_version
             .set(registry_version.get() as i64);

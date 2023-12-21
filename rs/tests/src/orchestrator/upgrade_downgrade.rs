@@ -27,9 +27,7 @@ use crate::{
         subnet_recovery::{enable_ecdsa_signing_on_subnet, run_ecdsa_signature_test},
         upgrade::*,
     },
-    tecdsa::tecdsa_signature_test::{
-        add_ecdsa_keys_with_timeout_and_rotation_period, make_key, KEY_ID1,
-    },
+    tecdsa::{add_ecdsa_keys_with_timeout_and_rotation_period, make_key, KEY_ID1},
     util::{block_on, runtime_from_url, MessageCanister},
 };
 use canister_test::Canister;

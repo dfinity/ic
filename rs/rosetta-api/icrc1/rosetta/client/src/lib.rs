@@ -1,5 +1,6 @@
 use reqwest::{Client, Url};
 use rosetta_core::identifiers::*;
+use rosetta_core::objects::Operation;
 use rosetta_core::request_types::*;
 use rosetta_core::response_types::*;
 use serde::{Deserialize, Serialize};
@@ -127,5 +128,29 @@ impl RosettaClient {
     ) -> reqwest::Result<MempoolTransactionResponse> {
         self.call_endpoint("/mempool/transaction", &mempool_transaction_request)
             .await
+    }
+
+    pub async fn construction_derive(
+        &self,
+        construction_derive_request: ConstructionDeriveRequest,
+    ) -> reqwest::Result<ConstructionDeriveResponse> {
+        self.call_endpoint("/construction/derive", &construction_derive_request)
+            .await
+    }
+
+    pub async fn construction_preprocess(
+        &self,
+        operations: Vec<Operation>,
+        network_identifier: NetworkIdentifier,
+    ) -> reqwest::Result<ConstructionPreprocessResponse> {
+        self.call_endpoint(
+            "/construction/preprocess",
+            &ConstructionPreprocessRequest {
+                metadata: None,
+                operations,
+                network_identifier,
+            },
+        )
+        .await
     }
 }

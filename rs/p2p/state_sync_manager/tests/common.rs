@@ -183,6 +183,8 @@ impl FakeStateSync {
 }
 
 impl StateSyncClient for FakeStateSync {
+    type Message = StateSyncMessage;
+
     fn available_states(&self) -> Vec<StateSyncArtifactId> {
         if self.disconnected.load(Ordering::SeqCst) {
             return vec![];
@@ -197,7 +199,7 @@ impl StateSyncClient for FakeStateSync {
     fn start_state_sync(
         &self,
         id: &StateSyncArtifactId,
-    ) -> Option<Box<dyn Chunkable<StateSyncMessage> + Send + Sync>> {
+    ) -> Option<Box<dyn Chunkable<StateSyncMessage> + Send>> {
         if !self.uses_global() && id.height > self.current_height() && !self.disconnected() {
             return Some(Box::new(FakeChunkable::new(
                 self.local_state.clone(),
@@ -352,7 +354,7 @@ impl Chunkable<StateSyncMessage> for SharableMockChunkable {
 
 #[derive(Clone, Default)]
 pub struct SharableMockStateSync {
-    mock: Arc<Mutex<MockStateSync>>,
+    mock: Arc<Mutex<MockStateSync<StateSyncMessage>>>,
     available_states_calls: Arc<AtomicUsize>,
     start_state_sync_calls: Arc<AtomicUsize>,
     should_cancel_calls: Arc<AtomicUsize>,
@@ -367,7 +369,7 @@ impl SharableMockStateSync {
             ..Default::default()
         }
     }
-    pub fn get_mut(&self) -> MutexGuard<'_, MockStateSync> {
+    pub fn get_mut(&self) -> MutexGuard<'_, MockStateSync<StateSyncMessage>> {
         self.mock.lock().unwrap()
     }
     pub fn start_state_sync_calls(&self) -> usize {
@@ -383,6 +385,8 @@ impl SharableMockStateSync {
 }
 
 impl StateSyncClient for SharableMockStateSync {
+    type Message = StateSyncMessage;
+
     fn available_states(&self) -> Vec<StateSyncArtifactId> {
         self.available_states_calls.fetch_add(1, Ordering::SeqCst);
         self.mock.lock().unwrap().available_states()
@@ -390,7 +394,7 @@ impl StateSyncClient for SharableMockStateSync {
     fn start_state_sync(
         &self,
         id: &StateSyncArtifactId,
-    ) -> Option<Box<dyn Chunkable<StateSyncMessage> + Send + Sync>> {
+    ) -> Option<Box<dyn Chunkable<StateSyncMessage> + Send>> {
         self.start_state_sync_calls.fetch_add(1, Ordering::SeqCst);
         self.mock.lock().unwrap().start_state_sync(id)
     }

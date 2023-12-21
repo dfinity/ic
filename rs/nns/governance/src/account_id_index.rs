@@ -1,4 +1,7 @@
-use crate::pb::v1::{governance_error::ErrorType, GovernanceError};
+use crate::{
+    pb::v1::{governance_error::ErrorType, GovernanceError},
+    storage::validate_stable_btree_map,
+};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_stable_structures::{Memory, StableBTreeMap};
 use icp_ledger::AccountIdentifier;
@@ -83,19 +86,10 @@ impl<M: Memory> NeuronAccountIdIndex<M> {
             .map(|id| NeuronId { id })
     }
 
-    /// This method is used in testing to reset the AccountId index to properly test the upgrade path.
-    /// The `.clear()` method does not work given a mutable reference, so instead, iterate the map,
-    /// collect all keys, and remove all keys.
-    // TODO(NNS1-2784) - Remove test after 1-time upgrade
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn reset(&mut self) {
-        self.account_id_to_id
-            .range(..)
-            .collect::<Vec<_>>()
-            .iter()
-            .for_each(|(key, _)| {
-                self.account_id_to_id.remove(key);
-            });
+    /// Validates that some of the data in stable storage can be read, in order to prevent broken
+    /// schema. Should only be called in post_upgrade.
+    pub fn validate(&self) {
+        validate_stable_btree_map(&self.account_id_to_id);
     }
 }
 

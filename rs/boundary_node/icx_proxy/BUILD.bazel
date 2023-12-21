@@ -38,6 +38,7 @@ DEPENDENCIES = [
     "@crate_index//:sha2",
     "@crate_index//:tokio",
     "@crate_index//:ic-response-verification",
+    "@crate_index//:ic-http-certification",
     "@crate_index//:thiserror",
 ]
 

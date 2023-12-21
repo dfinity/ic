@@ -1447,6 +1447,8 @@ impl ExecutionTest {
     }
 
     /// Executes a query call on the given state.
+    ///
+    /// Consider to use the simplified `non_replicated_query()` instead.
     pub fn query(
         &self,
         query: UserQuery,
@@ -1457,8 +1459,8 @@ impl ExecutionTest {
         // in these tests and therefore there isn't any height.
         //
         // Currently, this height is only used for query stats collection and it doesn't matter which one we pass in here.
-        // Even if consensus was running, it could be that all queries are actually runnning at height 0. The state passed in to
-        // the query handler shouldn't have the height encoded, so there shouldn't be a missmatch between the two.
+        // Even if consensus was running, it could be that all queries are actually running at height 0. The state passed in to
+        // the query handler shouldn't have the height encoded, so there shouldn't be a mismatch between the two.
         self.query_handler.query(
             query,
             Labeled::new(Height::from(0), state),

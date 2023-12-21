@@ -112,6 +112,7 @@ class Args:
             or Path(self.file_share_ssh_key).exists(), \
             "File share ssh key path does not exist"
 
+
 @dataclass(frozen=True)
 class BMCInfo:
     ip_address: str
@@ -172,6 +173,14 @@ def parse_from_csv_file(csv_filename: str, network_image_url: str) -> List["BMCI
     with open(csv_filename, "r") as csv_file:
         rows = [line.strip().split(',') for line in csv_file]
         return [parse_from_row(row, network_image_url) for row in rows]
+
+
+def assert_ssh_connectivity(target_url: str, ssh_key_file: Optional[Path]):
+    ssh_key_arg = f"-i {ssh_key_file}" if ssh_key_file else ""
+    ssh_opts = "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    result = invoke.run(f"ssh {ssh_opts} {ssh_key_arg} {target_url} 'echo Testing connection'", warn=True)
+    assert result and result.ok, \
+        f"SSH connection test failed: {result.stderr.strip().splitlines()[0]}"
 
 
 def get_url_content(url: str) -> Optional[str]:
@@ -386,29 +395,30 @@ def boot_images(bmc_infos: List[BMCInfo],
         log.info(res)
 
 
+def create_file_share_endpoint(file_share_url: str,
+                               file_share_username: Optional[str]) -> str:
+    return file_share_url \
+        if file_share_username is None \
+        else f"{file_share_username}@{file_share_url}"
+
+
 def upload_to_file_share(
     upload_img: Path,
-    file_share_username: Optional[str],
-    file_share_url: str,
+    file_share_endpoint: str,
     file_share_dir: str,
     file_share_image_name: str,
     file_share_ssh_key: str,
 ):
-    endpoint = (
-        file_share_url
-        if file_share_username is None
-        else f"{file_share_username}@{file_share_url}"
-    )
-    log.info(f'''Uploading "{upload_img}" to "{endpoint}"''')
+    log.info(f'''Uploading "{upload_img}" to "{file_share_endpoint}"''')
 
-    conn = fabric.Connection(endpoint)
+    conn = fabric.Connection(file_share_endpoint)
     tmp_dir = None
     try:
         result = conn.run("mktemp --directory", hide="both", echo=True)
         tmp_dir = str.strip(result.stdout)
         # scp is faster than fabric's built-in transfer.
         ssh_key_arg = f"-i {file_share_ssh_key}" if file_share_ssh_key else ""
-        invoke.run(f"scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {ssh_key_arg} {upload_img}  {endpoint}:{tmp_dir}", echo=True)
+        invoke.run(f"scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {ssh_key_arg} {upload_img}  {file_share_endpoint}:{tmp_dir}", echo=True)
 
         upload_img_filename = upload_img.name
         # Decompress in place. disk.img should appear in the same directory
@@ -422,7 +432,7 @@ def upload_to_file_share(
         if tmp_dir:
             conn.run(f"rm --force --recursive {tmp_dir}", echo=True)
 
-    log.info(f"Image ready at {endpoint}:/{file_share_dir}/{file_share_image_name}")
+    log.info(f"Image ready at {file_share_endpoint}:/{file_share_dir}/{file_share_image_name}")
 
 
 def inject_config_into_image(setupos_inject_configuration_path: Path,
@@ -487,32 +497,34 @@ def main():
     csv_filename: str = args.csv_filename
     bmc_infos = parse_from_csv_file(csv_filename, network_image_url)
 
-    if args.inject_image_ipv6_prefix:
-        tmpdir = mkdtemp()
-        atexit.register(lambda: shutil.rmtree(tmpdir))
-        modified_image_path = inject_config_into_image(
-            Path(args.inject_configuration_tool),
-            Path(tmpdir),
-            Path(args.upload_img),
-            args.inject_image_ipv6_prefix,
-            args.inject_image_ipv6_gateway)
+    if args.upload_img or args.inject_image_ipv6_prefix:
+        file_share_endpoint = create_file_share_endpoint(args.file_share_url, args.file_share_username)
+        assert_ssh_connectivity(file_share_endpoint, args.file_share_ssh_key)
 
-        upload_to_file_share(
-            modified_image_path,
-            args.file_share_username,
-            args.file_share_url,
-            args.file_share_dir,
-            args.file_share_image_filename,
-            args.file_share_ssh_key)
+        if args.inject_image_ipv6_prefix:
+            tmpdir = mkdtemp()
+            atexit.register(lambda: shutil.rmtree(tmpdir))
+            modified_image_path = inject_config_into_image(
+                Path(args.inject_configuration_tool),
+                Path(tmpdir),
+                Path(args.upload_img),
+                args.inject_image_ipv6_prefix,
+                args.inject_image_ipv6_gateway)
 
-    elif args.upload_img:
-        upload_to_file_share(
-            args.upload_img,
-            args.file_share_username,
-            args.file_share_url,
-            args.file_share_dir,
-            args.file_share_image_filename,
-        )
+            upload_to_file_share(
+                modified_image_path,
+                file_share_endpoint,
+                args.file_share_dir,
+                args.file_share_image_filename,
+                args.file_share_ssh_key)
+
+        elif args.upload_img:
+            upload_to_file_share(
+                args.upload_img,
+                file_share_endpoint,
+                args.file_share_dir,
+                args.file_share_image_filename,
+                args.file_share_ssh_key)
 
     wait_time_mins = args.wait_time
     parallelism = args.parallel

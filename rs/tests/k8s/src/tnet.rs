@@ -41,10 +41,10 @@ pub static TNET_IPV6: Lazy<String> =
 static TNET_CDN_URL: Lazy<String> =
     Lazy::new(|| var("TNET_CDN_URL").unwrap_or("https://download.dfinity.systems".to_string()));
 static TNET_CONFIG_URL: Lazy<String> = Lazy::new(|| {
-    var("TNET_CONFIG_URL").unwrap_or("https://objects.sf1-idx1.dfinity.network".to_string())
+    var("TNET_CONFIG_URL").unwrap_or("https://objects.ch1-idx1.dfinity.network".to_string())
 });
 static TNET_BUCKET: Lazy<String> = Lazy::new(|| {
-    var("TNET_BUCKET").unwrap_or("tnet-config-5f1a0cb6-fdf2-4ca8-b816-9b9c2ffa1669".to_string())
+    var("TNET_BUCKET").unwrap_or("tnet-config-0b1628f1-bfcd-495d-8a91-5a85e8f426e3".to_string())
 });
 static TNET_NAMESPACE: Lazy<String> =
     Lazy::new(|| var("TNET_NAMESPACE").unwrap_or("tnets".to_string()));
@@ -104,15 +104,15 @@ pub struct TNet {
     version: String,
     init: bool,
     use_zero_version: bool,
-    pub(crate) image_url: String,
+    pub image_url: String,
     ipv6_net: Option<Ipv6Cidr>,
     config_url: Option<String>,
-    pub(crate) index: Option<u32>,
+    pub index: Option<u32>,
     pub nns_nodes: Vec<TNode>,
     pub app_nodes: Vec<TNode>,
     k8s: Option<K8sClient>,
     owner: ConfigMap,
-    terminate_time: DateTime<Utc>,
+    terminate_time: Option<DateTime<Utc>>,
 }
 
 impl TNet {
@@ -209,7 +209,7 @@ impl TNet {
             })
     }
 
-    async fn vms_action(index: u32, action: &str) -> Result<()> {
+    pub async fn vms_action(index: u32, action: &str) -> Result<()> {
         let tnet = Self::owner_config_map_name(index);
         let client = Client::try_default().await?;
 
@@ -232,20 +232,22 @@ impl TNet {
         Ok(())
     }
 
-    pub async fn start(index: u32) -> Result<()> {
-        Self::vms_action(index, "start").await
+    pub async fn start(&self) -> Result<()> {
+        Self::vms_action(self.index.expect("TNet missing index"), "start").await
     }
 
-    pub async fn stop(index: u32) -> Result<()> {
-        Self::vms_action(index, "stop").await
+    pub async fn stop(&self) -> Result<()> {
+        Self::vms_action(self.index.expect("TNet missing index"), "stop").await
     }
 
     pub fn version(mut self, version: &str) -> Self {
         self.version = version.to_string();
-        self.image_url = format!(
-            "{}/ic/{}/guest-os/disk-img-dev/disk-img.tar.gz",
-            *TNET_CDN_URL, self.version
-        );
+        if self.image_url.is_empty() {
+            self.image_url = format!(
+                "{}/ic/{}/guest-os/disk-img-dev/disk-img.tar.gz",
+                *TNET_CDN_URL, self.version
+            );
+        }
         self
     }
 
@@ -273,16 +275,15 @@ impl TNet {
     }
 
     pub fn ttl(mut self, ttl: Duration) -> Result<Self> {
-        self.terminate_time = k8s_openapi::chrono::Utc::now()
-            .checked_add_signed(ttl)
-            .ok_or(anyhow::anyhow!("failed to set terminate time"))?;
+        self.terminate_time = Some(
+            k8s_openapi::chrono::Utc::now()
+                .checked_add_signed(ttl)
+                .ok_or(anyhow::anyhow!("failed to set terminate time"))?,
+        );
         Ok(self)
     }
 
-    pub async fn upload<P: AsRef<Path> + std::fmt::Display + Clone>(
-        path: P,
-        uri: &str,
-    ) -> Result<()> {
+    pub async fn upload<P: AsRef<Path>>(path: P, uri: &str) -> Result<()> {
         Self::upload_url(
             path,
             &format!("{}/{}/{}", *TNET_CONFIG_URL, *TNET_BUCKET, uri),
@@ -290,14 +291,15 @@ impl TNet {
         .await
     }
 
-    async fn upload_url<P: AsRef<Path> + std::fmt::Display + Clone>(
-        path: P,
-        url: &str,
-    ) -> Result<()> {
+    pub async fn upload_url<P: AsRef<Path>>(path: P, url: &str) -> Result<()> {
         let client = reqwest::Client::new();
 
-        info!("Uploading {} to {}", path.clone(), url);
-        let file = tokio::fs::File::open(path.clone()).await?;
+        info!(
+            "Uploading {} to {}",
+            path.as_ref().display().to_string(),
+            url
+        );
+        let file = tokio::fs::File::open(path.as_ref()).await?;
         let res = client
             .put(url)
             .body({
@@ -308,7 +310,11 @@ impl TNet {
             .await?;
         debug!("Upload's put response: {:?}", res);
         if res.status().as_u16() != 200 {
-            return Err(anyhow!("Failed to upload {} to {}", path.clone(), url));
+            return Err(anyhow!(
+                "Failed to upload {} to {}",
+                path.as_ref().display(),
+                url
+            ));
         }
 
         Ok(())
@@ -406,10 +412,12 @@ impl TNet {
                             .into(),
                             annotations: [(
                                 TNET_TERMINATE_TIME_ANNOTATION.to_string(),
-                                self.terminate_time.to_rfc3339_opts(
-                                    k8s_openapi::chrono::SecondsFormat::Secs,
-                                    true,
-                                ),
+                                self.terminate_time
+                                    .expect("Terminate time missing")
+                                    .to_rfc3339_opts(
+                                        k8s_openapi::chrono::SecondsFormat::Secs,
+                                        true,
+                                    ),
                             )]
                             .into_iter()
                             .collect::<BTreeMap<String, String>>()
@@ -429,6 +437,21 @@ impl TNet {
         self.owner = config_map;
         self.autoconfigure();
 
+        Ok(())
+    }
+
+    pub async fn deploy_config_drives(&self) -> Result<()> {
+        let client = Client::try_default().await?;
+        let gvk = GroupVersionKind::gvk("cdi.kubevirt.io", "v1beta1", "DataVolume");
+        let (ar, _) = kube::discovery::pinned_kind(&client, &gvk).await?;
+        let api = Api::<DynamicObject>::namespaced_with(client, &TNET_NAMESPACE, &ar);
+        for node in self.nns_nodes.iter().chain(self.app_nodes.iter()) {
+            let dvname = format!("{}-config", node.name.clone().unwrap());
+            let source = DvSource::url(node.config_url.clone().unwrap());
+            let dvinfo = DvInfo::new(&dvname, source, "kubevirt", "12Mi");
+            info!("Creating DV {}", dvname);
+            create_datavolume(&api, &dvinfo, self.owner_reference()).await?;
+        }
         Ok(())
     }
 

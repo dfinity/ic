@@ -52,6 +52,8 @@ impl ArtifactKind for U64Artifact {
 #[derive(Debug, Default)]
 struct PeerPool {
     pool_events: Vec<PoolEvent>,
+    // Pool with events applied.
+    pool: HashSet<u64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,12 +66,15 @@ impl PeerPool {
     pub fn new() -> Self {
         Self {
             pool_events: Vec::new(),
+            pool: HashSet::new(),
         }
     }
     pub fn insert(&mut self, id: u64) {
+        self.pool.insert(id);
         self.pool_events.push(PoolEvent::Insert(id))
     }
     pub fn remove(&mut self, id: u64) {
+        self.pool.remove(&id);
         self.pool_events.push(PoolEvent::Remove(id))
     }
     pub fn num_inserts(&self, id: u64) -> usize {
@@ -86,14 +91,7 @@ impl PeerPool {
     }
 
     pub fn pool(&self) -> HashSet<u64> {
-        let mut pool = HashSet::new();
-        for event in &self.pool_events {
-            match event {
-                PoolEvent::Insert(id) => pool.insert(*id),
-                PoolEvent::Remove(id) => pool.remove(id),
-            };
-        }
-        pool
+        self.pool.clone()
     }
 }
 

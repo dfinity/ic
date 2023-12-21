@@ -1,15 +1,14 @@
 pub use ic_canister_client_sender::Ed25519KeyPair as EdKeypair;
 use ic_canister_client_sender::Secp256k1KeyPair;
 use ic_rosetta_api::convert::{
-    from_hex, from_model_account_identifier, operations_to_requests, principal_id_from_public_key,
-    to_hex, to_model_account_identifier,
+    from_hex, from_model_account_identifier, operations_to_requests, to_hex,
+    to_model_account_identifier,
 };
 use ic_rosetta_api::models::amount::{signed_amount, tokens_to_amount};
 use ic_rosetta_api::models::operation::OperationType;
 use ic_rosetta_api::models::{
     ConstructionCombineResponse, ConstructionParseResponse, ConstructionPayloadsRequestMetadata,
-    ConstructionPayloadsResponse, CurveType, PublicKey, RosettaSupportedKeyPair, Signature,
-    SignatureType,
+    ConstructionPayloadsResponse, CurveType, PublicKey, Signature, SignatureType,
 };
 use ic_rosetta_api::models::{ConstructionSubmitResponse, Error as RosettaError};
 use ic_rosetta_api::request::request_result::RequestResult;
@@ -27,6 +26,8 @@ use icp_ledger::{AccountIdentifier, BlockIndex, Operation, Tokens};
 use log::debug;
 use rand::{seq::SliceRandom, thread_rng};
 use rosetta_api_serv::RosettaApiHandle;
+use rosetta_core::convert::principal_id_from_public_key;
+use rosetta_core::models::RosettaSupportedKeyPair;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;

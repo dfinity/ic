@@ -51,8 +51,8 @@ const ADVERT_BROADCAST_INTERVAL: Duration = Duration::from_secs(5);
 const ADVERT_BROADCAST_TIMEOUT: Duration =
     ADVERT_BROADCAST_INTERVAL.saturating_sub(Duration::from_secs(2));
 
-pub fn build_axum_router(
-    state_sync: Arc<dyn StateSyncClient>,
+pub fn build_axum_router<T: 'static>(
+    state_sync: Arc<dyn StateSyncClient<Message = T>>,
     log: ReplicaLogger,
     metrics_registry: &MetricsRegistry,
 ) -> (
@@ -81,12 +81,12 @@ pub fn build_axum_router(
     (app, rx)
 }
 
-pub fn start_state_sync_manager(
+pub fn start_state_sync_manager<T: Send + 'static>(
     log: ReplicaLogger,
     metrics: &MetricsRegistry,
     rt: &Handle,
     transport: Arc<dyn Transport>,
-    state_sync: Arc<dyn StateSyncClient>,
+    state_sync: Arc<dyn StateSyncClient<Message = T>>,
     advert_receiver: tokio::sync::mpsc::Receiver<(StateSyncArtifactId, NodeId)>,
 ) -> JoinHandle<()> {
     let state_sync_manager_metrics = StateSyncManagerMetrics::new(metrics);
@@ -102,17 +102,17 @@ pub fn start_state_sync_manager(
     rt.spawn(manager.run())
 }
 
-struct StateSyncManager {
+struct StateSyncManager<T> {
     log: ReplicaLogger,
     rt: Handle,
     metrics: StateSyncManagerMetrics,
     transport: Arc<dyn Transport>,
-    state_sync: Arc<dyn StateSyncClient>,
+    state_sync: Arc<dyn StateSyncClient<Message = T>>,
     advert_receiver: tokio::sync::mpsc::Receiver<(StateSyncArtifactId, NodeId)>,
     ongoing_state_sync: Option<OngoingStateSyncHandle>,
 }
 
-impl StateSyncManager {
+impl<T: 'static + Send> StateSyncManager<T> {
     async fn run(mut self) {
         let mut interval = tokio::time::interval(ADVERT_BROADCAST_INTERVAL);
         let mut advertise_task = JoinSet::new();
@@ -186,7 +186,7 @@ impl StateSyncManager {
 
     async fn send_state_adverts(
         rt: Handle,
-        state_sync: Arc<dyn StateSyncClient>,
+        state_sync: Arc<dyn StateSyncClient<Message = T>>,
         transport: Arc<dyn Transport>,
         metrics: StateSyncManagerMetrics,
     ) {

@@ -2,7 +2,7 @@ use candid::{Decode, Encode, Nat, Principal};
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::E8;
+use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
 use ic_nervous_system_proto::pb::v1::Tokens as TokensPb;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
@@ -31,7 +31,7 @@ use ic_nns_test_utils::{
 use ic_sns_governance::pb::v1::{governance::Mode, GetMode, GetModeResponse};
 use ic_sns_swap::{
     pb::v1::{
-        GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse,
+        FinalizeSwapResponse, GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse,
         GetDerivedStateRequest, GetDerivedStateResponse, GetLifecycleRequest, GetLifecycleResponse,
         Lifecycle, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse,
     },
@@ -55,12 +55,12 @@ use std::{collections::HashMap, time::Duration};
 const STARTING_CYCLES_PER_CANISTER: u128 = 2_000_000_000_000_000;
 
 fn manage_neuron(
-    pic: &PocketIc,
+    pocket_ic: &PocketIc,
     sender: PrincipalId,
     neuron_id: NeuronId,
     command: manage_neuron::Command,
 ) -> ManageNeuronResponse {
-    let result = pic
+    let result = pocket_ic
         .update_call(
             GOVERNANCE_CANISTER_ID.into(),
             Principal::from(sender),
@@ -81,12 +81,12 @@ fn manage_neuron(
 }
 
 fn refresh_buyer_tokens(
-    pic: &PocketIc,
+    pocket_ic: &PocketIc,
     swap_canister_id: PrincipalId,
     buyer: PrincipalId,
     confirmation_text: Option<String>,
 ) -> RefreshBuyerTokensResponse {
-    let result = pic
+    let result = pocket_ic
         .update_call(
             swap_canister_id.into(),
             Principal::anonymous(),
@@ -105,8 +105,11 @@ fn refresh_buyer_tokens(
     Decode!(&result, RefreshBuyerTokensResponse).unwrap()
 }
 
-fn get_derived_state(pic: &PocketIc, swap_canister_id: PrincipalId) -> GetDerivedStateResponse {
-    let result = pic
+fn get_derived_state(
+    pocket_ic: &PocketIc,
+    swap_canister_id: PrincipalId,
+) -> GetDerivedStateResponse {
+    let result = pocket_ic
         .update_call(
             swap_canister_id.into(),
             Principal::anonymous(),
@@ -121,8 +124,8 @@ fn get_derived_state(pic: &PocketIc, swap_canister_id: PrincipalId) -> GetDerive
     Decode!(&result, GetDerivedStateResponse).unwrap()
 }
 
-fn get_lifecycle(pic: &PocketIc, swap_canister_id: PrincipalId) -> GetLifecycleResponse {
-    let result = pic
+fn get_lifecycle(pocket_ic: &PocketIc, swap_canister_id: PrincipalId) -> GetLifecycleResponse {
+    let result = pocket_ic
         .update_call(
             swap_canister_id.into(),
             Principal::anonymous(),
@@ -138,22 +141,20 @@ fn get_lifecycle(pic: &PocketIc, swap_canister_id: PrincipalId) -> GetLifecycleR
 }
 
 fn await_swap_lifecycle(
-    pic: &PocketIc,
+    pocket_ic: &PocketIc,
     swap_canister_id: PrincipalId,
     expected_lifecycle: Lifecycle,
 ) -> Result<(), String> {
-    let mut attempt_count = 0;
     let mut last_lifecycle = None;
-    while attempt_count < 50 {
-        attempt_count += 1;
-        pic.tick();
-        let lifecycle = get_lifecycle(pic, swap_canister_id);
+    for _attempt_count in 1..=50 {
+        pocket_ic.tick();
+        let lifecycle = get_lifecycle(pocket_ic, swap_canister_id);
         let lifecycle = lifecycle.lifecycle.unwrap();
         if lifecycle == expected_lifecycle as i32 {
             return Ok(());
         }
         last_lifecycle = Some(lifecycle);
-        pic.advance_time(Duration::from_millis(100));
+        pocket_ic.advance_time(Duration::from_millis(100));
     }
     Err(format!(
         "Looks like the SNS lifecycle {:?} is never going to be reached: {:#?}",
@@ -161,51 +162,140 @@ fn await_swap_lifecycle(
     ))
 }
 
-fn await_swap_finalization(
-    pic: &PocketIc,
+/// Returns:
+/// * `Ok(None)` if any of the top-level fields of this `auto_finalization_status` are unset, i.e.:
+///   `has_auto_finalize_been_attempted`, `is_auto_finalize_enabled`,
+///   or `auto_finalize_swap_response`.
+/// * `Err` if `auto_finalize_swap_response` contains any errors.
+/// * `Ok(Some(response))` -- otherwise.
+fn validate_auto_finalization_status(
+    auto_finalization_status: &GetAutoFinalizationStatusResponse,
+) -> Result<Option<&FinalizeSwapResponse>, String> {
+    if auto_finalization_status
+        .has_auto_finalize_been_attempted
+        .is_none()
+        || auto_finalization_status.is_auto_finalize_enabled.is_none()
+    {
+        return Ok(None);
+    }
+    let Some(ref auto_finalize_swap_response) =
+        auto_finalization_status.auto_finalize_swap_response
+    else {
+        return Ok(None);
+    };
+    if let Some(ref error_message) = auto_finalize_swap_response.error_message {
+        // If auto_finalization_status contains an error, we return that error.
+        return Err(error_message.clone());
+    }
+    Ok(Some(auto_finalize_swap_response))
+}
+
+/// Returns:
+/// * `Ok(true)` if auto-finalization completed, reaching `Lifecycle::Committed`.
+/// * `Ok(false)` if auto-finalization is still happening (or swap lifecycle reached a final state
+///   other than Committed), i.e., one of the following conditions holds:
+///     1. Any of the top-level fields of this `auto_finalization_status` are unset:
+///       `has_auto_finalize_been_attempted`, `is_auto_finalize_enabled`,
+///        or `auto_finalize_swap_response`.
+///     2. `auto_finalize_swap_response` does not match the expected pattern for a *committed* SNS
+///        Swap's `auto_finalize_swap_response`. In particular:
+///        - `set_dapp_controllers_call_result` must be `None`,
+///        - `sweep_sns_result` must be `Some`.
+/// * `Err` if `auto_finalize_swap_response` contains any errors.
+fn is_auto_finalization_status_committed_or_err(
+    auto_finalization_status: &GetAutoFinalizationStatusResponse,
+) -> Result<bool, String> {
+    let Some(auto_finalize_swap_response) =
+        validate_auto_finalization_status(auto_finalization_status)?
+    else {
+        return Ok(false);
+    };
+    // Otherwise, either `auto_finalization_status` matches the expected structure of it does not
+    // indicate that the swap has been committed yet.
+    Ok(matches!(
+        auto_finalize_swap_response,
+        FinalizeSwapResponse {
+            sweep_icp_result: Some(_),
+            create_sns_neuron_recipes_result: Some(_),
+            settle_neurons_fund_participation_result: Some(_),
+            sweep_sns_result: Some(_),
+            claim_neuron_result: Some(_),
+            set_mode_call_result: Some(_),
+            set_dapp_controllers_call_result: None,
+            settle_community_fund_participation_result: None,
+            error_message: None,
+        }
+    ))
+}
+
+/// Returns:
+/// * `Ok(true)` if auto-finalization completed, reaching `Lifecycle::Aborted`.
+/// * `Ok(false)` if auto-finalization is still happening (or swap lifecycle reached a final state
+///   other than Aborted), i.e., one of the following conditions holds:
+///     1. Any of the top-level fields of this `auto_finalization_status` are unset:
+///       `has_auto_finalize_been_attempted`, `is_auto_finalize_enabled`,
+///        or `auto_finalize_swap_response`.
+///     2. `auto_finalize_swap_response` does not match the expected pattern for an *aborted* SNS
+///        Swap's `auto_finalize_swap_response`. In particular:
+///        - `set_dapp_controllers_call_result` must be `Some`,
+///        - `sweep_sns_result` must be `None`.
+/// * `Err` if `auto_finalize_swap_response` contains any errors.
+fn is_auto_finalization_status_aborted_or_err(
+    auto_finalization_status: &GetAutoFinalizationStatusResponse,
+) -> Result<bool, String> {
+    let Some(auto_finalize_swap_response) =
+        validate_auto_finalization_status(auto_finalization_status)?
+    else {
+        return Ok(false);
+    };
+    // Otherwise, either `auto_finalization_status` matches the expected structure of it does not
+    // indicate that the swap has been aborted yet.
+    Ok(matches!(
+        auto_finalize_swap_response,
+        FinalizeSwapResponse {
+            sweep_icp_result: Some(_),
+            set_dapp_controllers_call_result: Some(_),
+            settle_neurons_fund_participation_result: Some(_),
+            create_sns_neuron_recipes_result: None,
+            sweep_sns_result: None,
+            claim_neuron_result: None,
+            set_mode_call_result: None,
+            settle_community_fund_participation_result: None,
+            error_message: None,
+        }
+    ))
+}
+
+/// Subset of `Lifecycle` indicating terminal statuses.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SwapFinalizationStatus {
+    Aborted,
+    Committed,
+}
+
+fn await_swap_finalization_status(
+    pocket_ic: &PocketIc,
     swap_canister_id: PrincipalId,
+    status: SwapFinalizationStatus,
 ) -> Result<GetAutoFinalizationStatusResponse, String> {
-    let mut attempt_count = 0;
     let mut last_auto_finalization_status = None;
-    while attempt_count < 500 {
-        attempt_count += 1;
-        pic.tick();
-        let auto_finalization_status = get_auto_finalization_status(pic, swap_canister_id);
-        if auto_finalization_status
-            .has_auto_finalize_been_attempted
-            .unwrap_or(false)
-            && auto_finalization_status
-                .is_auto_finalize_enabled
-                .unwrap_or(false)
-        {
-            if let Some(ref auto_finalize_swap_response) =
-                auto_finalization_status.auto_finalize_swap_response
-            {
-                if let Some(ref error_message) = auto_finalize_swap_response.error_message {
-                    return Err(error_message.clone());
-                } else if auto_finalize_swap_response.sweep_icp_result.is_some()
-                    && auto_finalize_swap_response.sweep_sns_result.is_some()
-                    && auto_finalize_swap_response.claim_neuron_result.is_some()
-                    && auto_finalize_swap_response.set_mode_call_result.is_some()
-                    && auto_finalize_swap_response
-                        .create_sns_neuron_recipes_result
-                        .is_some()
-                    && auto_finalize_swap_response
-                        .settle_neurons_fund_participation_result
-                        .is_some()
-                    // Legacy field, expected to be unset.
-                    && auto_finalize_swap_response
-                        .settle_community_fund_participation_result
-                        .is_none()
-                {
-                    // Wo do not check auto_finalize_swap_response.set_dapp_controllers_call_result
-                    // as that is supposed to be set only if the swap is aborted.
+    for _attempt_count in 1..=100 {
+        pocket_ic.tick();
+        let auto_finalization_status = get_auto_finalization_status(pocket_ic, swap_canister_id);
+        match status {
+            SwapFinalizationStatus::Aborted => {
+                if is_auto_finalization_status_aborted_or_err(&auto_finalization_status)? {
+                    return Ok(auto_finalization_status);
+                }
+            }
+            SwapFinalizationStatus::Committed => {
+                if is_auto_finalization_status_committed_or_err(&auto_finalization_status)? {
                     return Ok(auto_finalization_status);
                 }
             }
         }
         last_auto_finalization_status = Some(auto_finalization_status);
-        pic.advance_time(Duration::from_millis(100));
+        pocket_ic.advance_time(Duration::from_millis(100));
     }
     Err(format!(
         "Looks like the expected SNS auto-finalization status is never going to be reached: {:#?}",
@@ -214,10 +304,10 @@ fn await_swap_finalization(
 }
 
 fn get_auto_finalization_status(
-    pic: &PocketIc,
+    pocket_ic: &PocketIc,
     swap_canister_id: PrincipalId,
 ) -> GetAutoFinalizationStatusResponse {
-    let result = pic
+    let result = pocket_ic
         .update_call(
             swap_canister_id.into(),
             Principal::anonymous(),
@@ -232,8 +322,8 @@ fn get_auto_finalization_status(
     Decode!(&result, GetAutoFinalizationStatusResponse).unwrap()
 }
 
-fn get_mode(pic: &PocketIc, sns_governance_canister_id: PrincipalId) -> GetModeResponse {
-    let result = pic
+fn get_mode(pocket_ic: &PocketIc, sns_governance_canister_id: PrincipalId) -> GetModeResponse {
+    let result = pocket_ic
         .update_call(
             sns_governance_canister_id.into(),
             Principal::anonymous(),
@@ -249,10 +339,10 @@ fn get_mode(pic: &PocketIc, sns_governance_canister_id: PrincipalId) -> GetModeR
 }
 
 fn get_deployed_sns_by_proposal_id(
-    pic: &PocketIc,
+    pocket_ic: &PocketIc,
     proposal_id: ProposalId,
 ) -> GetDeployedSnsByProposalIdResponse {
-    let result = pic
+    let result = pocket_ic
         .update_call(
             SNS_WASM_CANISTER_ID.into(),
             Principal::anonymous(),
@@ -270,8 +360,8 @@ fn get_deployed_sns_by_proposal_id(
     Decode!(&result, GetDeployedSnsByProposalIdResponse).unwrap()
 }
 
-fn account_balance(pic: &PocketIc, account: &AccountIdentifier) -> Tokens {
-    let result = pic
+fn account_balance(pocket_ic: &PocketIc, account: &AccountIdentifier) -> Tokens {
+    let result = pocket_ic
         .update_call(
             LEDGER_CANISTER_ID.into(),
             Principal::from(*TEST_NEURON_1_OWNER_PRINCIPAL),
@@ -290,11 +380,11 @@ fn account_balance(pic: &PocketIc, account: &AccountIdentifier) -> Tokens {
 }
 
 fn icrc1_transfer(
-    pic: &PocketIc,
+    pocket_ic: &PocketIc,
     sender: PrincipalId,
     transfer_arg: TransferArg,
 ) -> Result<Nat, TransferError> {
-    let result = pic
+    let result = pocket_ic
         .update_call(
             LEDGER_CANISTER_ID.into(),
             Principal::from(sender),
@@ -310,11 +400,11 @@ fn icrc1_transfer(
 }
 
 fn nns_governance_get_proposal_info(
-    pic: &PocketIc,
+    pocket_ic: &PocketIc,
     proposal_id: u64,
     sender: PrincipalId,
 ) -> ProposalInfo {
-    let result = pic
+    let result = pocket_ic
         .update_call(
             GOVERNANCE_CANISTER_ID.into(),
             Principal::from(sender),
@@ -335,12 +425,17 @@ fn nns_governance_get_proposal_info(
     Decode!(&result, Option<ProposalInfo>).unwrap().unwrap()
 }
 
-fn propose_and_wait(pic: &PocketIc, proposal: Proposal) -> Result<ProposalInfo, String> {
+fn propose_and_wait(pocket_ic: &PocketIc, proposal: Proposal) -> Result<ProposalInfo, String> {
     let neuron_id = NeuronId {
         id: TEST_NEURON_1_ID,
     };
     let command: manage_neuron::Command = manage_neuron::Command::MakeProposal(Box::new(proposal));
-    let response = manage_neuron(pic, *TEST_NEURON_1_OWNER_PRINCIPAL, neuron_id, command);
+    let response = manage_neuron(
+        pocket_ic,
+        *TEST_NEURON_1_OWNER_PRINCIPAL,
+        neuron_id,
+        command,
+    );
     let response = match response.command {
         Some(manage_neuron_response::Command::MakeProposal(response)) => response,
         _ => panic!("Proposal failed: {:#?}", response),
@@ -354,21 +449,19 @@ fn propose_and_wait(pic: &PocketIc, proposal: Proposal) -> Result<ProposalInfo, 
             )
         })
         .id;
-    nns_wait_for_proposal_execution(pic, proposal_id)
+    nns_wait_for_proposal_execution(pocket_ic, proposal_id)
 }
 
 fn nns_wait_for_proposal_execution(
-    pic: &PocketIc,
+    pocket_ic: &PocketIc,
     proposal_id: u64,
 ) -> Result<ProposalInfo, String> {
     // We create some blocks until the proposal has finished executing (machine.tick())
-    let mut attempt_count = 0;
     let mut last_proposal_info = None;
-    while attempt_count < 50 {
-        attempt_count += 1;
-        pic.tick();
+    for _attempt_count in 1..=50 {
+        pocket_ic.tick();
         let proposal_info =
-            nns_governance_get_proposal_info(pic, proposal_id, PrincipalId::new_anonymous());
+            nns_governance_get_proposal_info(pocket_ic, proposal_id, PrincipalId::new_anonymous());
         if proposal_info.executed_timestamp_seconds > 0 {
             return Ok(proposal_info);
         }
@@ -378,7 +471,7 @@ fn nns_wait_for_proposal_execution(
             proposal_info
         );
         last_proposal_info = Some(proposal_info);
-        pic.advance_time(Duration::from_millis(100));
+        pocket_ic.advance_time(Duration::from_millis(100));
     }
     Err(format!(
         "Looks like proposal {:?} is never going to be executed: {:#?}",
@@ -386,7 +479,7 @@ fn nns_wait_for_proposal_execution(
     ))
 }
 
-fn add_wasm(pic: &PocketIc, wasm: SnsWasm) -> Result<ProposalInfo, String> {
+fn add_wasm(pocket_ic: &PocketIc, wasm: SnsWasm) -> Result<ProposalInfo, String> {
     let hash = wasm.sha256_hash();
     let canister_type = wasm.canister_type;
     let payload = AddWasmRequest {
@@ -402,29 +495,29 @@ fn add_wasm(pic: &PocketIc, wasm: SnsWasm) -> Result<ProposalInfo, String> {
             payload: Encode!(&payload).expect("Error encoding proposal payload"),
         })),
     };
-    propose_and_wait(pic, proposal)
+    propose_and_wait(pocket_ic, proposal)
 }
 
 fn add_real_wasms_to_sns_wasm(
-    pic: &PocketIc,
+    pocket_ic: &PocketIc,
 ) -> Result<HashMap<SnsCanisterType, (ProposalInfo, SnsWasm)>, String> {
     let root_wasm = build_root_sns_wasm();
-    let root_proposal_info = add_wasm(pic, root_wasm.clone())?;
+    let root_proposal_info = add_wasm(pocket_ic, root_wasm.clone())?;
 
     let gov_wasm = build_governance_sns_wasm();
-    let gov_proposal_info = add_wasm(pic, gov_wasm.clone())?;
+    let gov_proposal_info = add_wasm(pocket_ic, gov_wasm.clone())?;
 
     let ledger_wasm = build_ledger_sns_wasm();
-    let ledger_proposal_info = add_wasm(pic, ledger_wasm.clone())?;
+    let ledger_proposal_info = add_wasm(pocket_ic, ledger_wasm.clone())?;
 
     let swap_wasm = build_swap_sns_wasm();
-    let swap_proposal_info = add_wasm(pic, swap_wasm.clone())?;
+    let swap_proposal_info = add_wasm(pocket_ic, swap_wasm.clone())?;
 
     let archive_wasm = build_archive_sns_wasm();
-    let archive_proposal_info = add_wasm(pic, archive_wasm.clone())?;
+    let archive_proposal_info = add_wasm(pocket_ic, archive_wasm.clone())?;
 
     let index_wasm = build_index_sns_wasm();
-    let index_proposal_info = add_wasm(pic, index_wasm.clone())?;
+    let index_proposal_info = add_wasm(pocket_ic, index_wasm.clone())?;
 
     Ok(hashmap! {
         SnsCanisterType::Root => (root_proposal_info, root_wasm),
@@ -436,28 +529,26 @@ fn add_real_wasms_to_sns_wasm(
     })
 }
 
-fn install_canister(pic: &PocketIc, name: &str, id: CanisterId, arg: Vec<u8>, wasm: Wasm) {
-    let canister_id = pic.create_canister_with_id(None, None, id.into()).unwrap();
-    pic.install_canister(canister_id, wasm.bytes(), arg, None);
-    pic.add_cycles(canister_id, STARTING_CYCLES_PER_CANISTER);
-    let subnet_id = pic.get_subnet(canister_id).unwrap();
+fn install_canister(pocket_ic: &PocketIc, name: &str, id: CanisterId, arg: Vec<u8>, wasm: Wasm) {
+    let canister_id = pocket_ic
+        .create_canister_with_id(None, None, id.into())
+        .unwrap();
+    pocket_ic.install_canister(canister_id, wasm.bytes(), arg, None);
+    pocket_ic.add_cycles(canister_id, STARTING_CYCLES_PER_CANISTER);
+    let subnet_id = pocket_ic.get_subnet(canister_id).unwrap();
     println!(
         "Installed the {} canister ({}) onto {:?}",
         name, canister_id, subnet_id
     );
 }
 
-fn test_sns_lifecycle(neurons_fund_participation: bool) {
-    // 0. Prepare the world
-    let pic = PocketIcBuilder::new()
-        .with_nns_subnet()
-        .with_sns_subnet()
-        .build();
-    let direct_participant = PrincipalId::new_user_test_id(1);
-    let direct_participant_icp_account = AccountIdentifier::new(direct_participant, None);
+fn install_nns_canisters(
+    pocket_ic: &PocketIc,
+    test_user_icp_ledger_account: AccountIdentifier,
+    test_user_icp_ledger_initial_balance: Tokens,
+) {
+    let topology = pocket_ic.topology();
 
-    // 1. Install the NNS canisters
-    let topology = pic.topology();
     let sns_subnet_id = topology.get_sns().unwrap();
     let sns_subnet_id = PrincipalId::from(sns_subnet_id);
     let sns_subnet_id = SubnetId::from(sns_subnet_id);
@@ -468,40 +559,58 @@ fn test_sns_lifecycle(neurons_fund_participation: bool) {
         .with_sns_dedicated_subnets(vec![sns_subnet_id])
         .with_sns_wasm_access_controls(true)
         .with_ledger_account(
-            direct_participant_icp_account,
-            Tokens::from_e8s(1_000_000 * E8),
+            test_user_icp_ledger_account,
+            test_user_icp_ledger_initial_balance,
         )
         .build();
-
     install_canister(
-        &pic,
+        pocket_ic,
         "ICP Ledger",
         LEDGER_CANISTER_ID,
         Encode!(&nns_init_payload.ledger).unwrap(),
         build_ledger_wasm(),
     );
     install_canister(
-        &pic,
+        pocket_ic,
         "NNS Root",
         ROOT_CANISTER_ID,
         Encode!(&nns_init_payload.root).unwrap(),
         build_root_wasm(),
     );
     install_canister(
-        &pic,
+        pocket_ic,
         "NNS Governance",
         GOVERNANCE_CANISTER_ID,
         nns_init_payload.governance.encode_to_vec(),
         build_test_governance_wasm(),
     );
     install_canister(
-        &pic,
+        pocket_ic,
         "NNS SNS-W",
         SNS_WASM_CANISTER_ID,
         Encode!(&nns_init_payload.sns_wasms).unwrap(),
         build_sns_wasms_wasm(),
     );
-    add_real_wasms_to_sns_wasm(&pic).unwrap();
+    add_real_wasms_to_sns_wasm(pocket_ic).unwrap();
+}
+
+fn test_sns_lifecycle(
+    neurons_fund_participation: bool,
+    ensure_swap_time_run_out_without_sufficient_direct_participation: bool,
+) {
+    // 1. Prepare the world
+    let pocket_ic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_sns_subnet()
+        .build();
+
+    let direct_participant = PrincipalId::new_user_test_id(1);
+    let direct_participant_icp_account = AccountIdentifier::new(direct_participant, None);
+    install_nns_canisters(
+        &pocket_ic,
+        direct_participant_icp_account,
+        Tokens::from_e8s(1_000_000 * E8),
+    );
 
     // 2. Create an SNS instance
     let swap_parameters = CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
@@ -517,7 +626,7 @@ fn test_sns_lifecycle(neurons_fund_participation: bool) {
         maximum_participant_icp: Some(TokensPb::from_e8s(650_000 * E8)),
         minimum_direct_participation_icp: Some(TokensPb::from_e8s(150_000 * E8)),
         maximum_direct_participation_icp: Some(TokensPb::from_e8s(650_000 * E8)),
-        // Instantly transit from Lifecycle::Adopted to Lifecycle::Open.
+        // Instantly transit from Lifecycle::Committed to Lifecycle::Open.
         start_time: None,
         // Avoid the need to say that we're human.
         confirmation_text: None,
@@ -529,7 +638,7 @@ fn test_sns_lifecycle(neurons_fund_participation: bool) {
         ..CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone()
     };
     let proposal_info = propose_and_wait(
-        &pic,
+        &pocket_ic,
         Proposal {
             title: Some(format!("Create SNS #{}", 1)),
             summary: "".to_string(),
@@ -541,7 +650,8 @@ fn test_sns_lifecycle(neurons_fund_participation: bool) {
     let proposal_id = proposal_info.id.unwrap();
 
     let Some(GetDeployedSnsByProposalIdResult::DeployedSns(deployed_sns)) =
-        get_deployed_sns_by_proposal_id(&pic, proposal_id).get_deployed_sns_by_proposal_id_result
+        get_deployed_sns_by_proposal_id(&pocket_ic, proposal_id)
+            .get_deployed_sns_by_proposal_id_result
     else {
         panic!(
             "Proposal {:?} did not result in a successfully deployed SNS",
@@ -556,12 +666,14 @@ fn test_sns_lifecycle(neurons_fund_participation: bool) {
 
     // Assert that the mode of SNS Governance is not PreInitializationSwap
     assert_eq!(
-        get_mode(&pic, sns_governance_canister_id).mode.unwrap(),
+        get_mode(&pocket_ic, sns_governance_canister_id)
+            .mode
+            .unwrap(),
         Mode::PreInitializationSwap as i32
     );
 
-    await_swap_lifecycle(&pic, swap_canister_id, Lifecycle::Open).unwrap();
-    let derived_state = get_derived_state(&pic, swap_canister_id);
+    await_swap_lifecycle(&pocket_ic, swap_canister_id, Lifecycle::Open).unwrap();
+    let derived_state = get_derived_state(&pocket_ic, swap_canister_id);
     assert_eq!(derived_state.direct_participation_icp_e8s.unwrap(), 0);
     assert_eq!(derived_state.neurons_fund_participation_icp_e8s.unwrap(), 0);
 
@@ -573,12 +685,12 @@ fn test_sns_lifecycle(neurons_fund_participation: bool) {
     };
     // Participate with as much as we have minus the transfer fee
     assert_eq!(
-        account_balance(&pic, &direct_participant_icp_account),
+        account_balance(&pocket_ic, &direct_participant_icp_account),
         Tokens::from_e8s(1_000_000 * E8)
     );
     let effective_participation_amount_e8s = 1_000_000 * E8 - 10_000;
     icrc1_transfer(
-        &pic,
+        &pocket_ic,
         direct_participant,
         TransferArg {
             from_subaccount: None,
@@ -591,55 +703,111 @@ fn test_sns_lifecycle(neurons_fund_participation: bool) {
     )
     .unwrap();
     assert_eq!(
-        account_balance(&pic, &direct_participant_icp_account),
+        account_balance(&pocket_ic, &direct_participant_icp_account),
         Tokens::from_e8s(0)
     );
 
-    // 4. Participate in the swap
-    refresh_buyer_tokens(&pic, swap_canister_id, direct_participant, None);
+    // 4. Force the swap to reach either Aborted, or Committed.
+    if ensure_swap_time_run_out_without_sufficient_direct_participation {
+        // ... either by advancing the time
+        pocket_ic.advance_time(Duration::from_secs(30 * SECONDS_PER_DAY)); // 30 days
+        await_swap_lifecycle(&pocket_ic, swap_canister_id, Lifecycle::Aborted).unwrap();
+    } else {
+        // ... or by participating in the swap
+        refresh_buyer_tokens(&pocket_ic, swap_canister_id, direct_participant, None);
+        await_swap_lifecycle(&pocket_ic, swap_canister_id, Lifecycle::Committed).unwrap();
+    }
 
-    // Wait Swap's auto-finalization (since maximum direct participation should have been reached)
-    await_swap_lifecycle(&pic, swap_canister_id, Lifecycle::Committed).unwrap();
-
-    // Double check that auto-finalization worked as expected. It takes many more blocks to fully
-    // finalize.
-    if let Err(err) = await_swap_finalization(&pic, swap_canister_id) {
+    // Double check that auto-finalization worked as expected, i.e.,
+    // `Swap.get_auto_finalization_status` returns a structure with the top-level fields being set,
+    // no errors, and matching the expected pattern (different for `Aborted` and `Committed`).
+    // It may take some time for the process to complete, so we should await (implemented via a busy
+    // loop) rather than try just once.
+    let expected_swap_finalization_status =
+        if ensure_swap_time_run_out_without_sufficient_direct_participation {
+            SwapFinalizationStatus::Aborted
+        } else {
+            SwapFinalizationStatus::Committed
+        };
+    if let Err(err) = await_swap_finalization_status(
+        &pocket_ic,
+        swap_canister_id,
+        expected_swap_finalization_status,
+    ) {
         println!("{}", err);
-        panic!("Awaiting Swap finalization failed.");
+        panic!(
+            "Awaiting Swap finalization status {:?} failed.",
+            expected_swap_finalization_status
+        );
     }
 
     // Inspect the final derived state
-    let derived_state = get_derived_state(&pic, swap_canister_id);
-    assert_eq!(
-        derived_state.direct_participation_icp_e8s.unwrap(),
-        650_000 * E8
-    );
-
-    // Assert that the mode of SNS Governance is not Normal
-    assert_eq!(
-        get_mode(&pic, sns_governance_canister_id).mode.unwrap(),
-        Mode::Normal as i32
-    );
-
-    // Assert the input-dependent postcondition
-    if neurons_fund_participation {
-        // 10% of the total maturity_equalivaltn_icp_e8s of the Neurons' Fund.
+    let derived_state = get_derived_state(&pocket_ic, swap_canister_id);
+    if ensure_swap_time_run_out_without_sufficient_direct_participation {
+        assert_eq!(derived_state.direct_participation_icp_e8s.unwrap(), 0);
+    } else {
         assert_eq!(
-            derived_state.neurons_fund_participation_icp_e8s.unwrap(),
-            150_000 * E8
+            derived_state.direct_participation_icp_e8s.unwrap(),
+            650_000 * E8
+        );
+    }
+
+    // Assert that the mode of SNS Governance is correct
+    if ensure_swap_time_run_out_without_sufficient_direct_participation {
+        assert_eq!(
+            get_mode(&pocket_ic, sns_governance_canister_id)
+                .mode
+                .unwrap(),
+            Mode::PreInitializationSwap as i32,
         );
     } else {
-        // The Neurons' Fund did not participate anything.
-        assert_eq!(derived_state.neurons_fund_participation_icp_e8s.unwrap(), 0);
+        assert_eq!(
+            get_mode(&pocket_ic, sns_governance_canister_id)
+                .mode
+                .unwrap(),
+            Mode::Normal as i32
+        );
+    }
+
+    if neurons_fund_participation {
+        if ensure_swap_time_run_out_without_sufficient_direct_participation {
+            assert_eq!(
+                derived_state.neurons_fund_participation_icp_e8s.unwrap(),
+                0,
+                "Neurons' Fund participation should not be provided to an aborted SNS swap.",
+            );
+        } else {
+            assert_eq!(
+                derived_state.neurons_fund_participation_icp_e8s.unwrap(),
+                150_000 * E8,
+                "Neurons' Fund participation is expected to be at 10% of its total maturity.",
+            );
+        }
+    } else {
+        assert_eq!(
+            derived_state.neurons_fund_participation_icp_e8s.unwrap(),
+            0,
+            "Neurons' Fund participation has not been requested, yet there is some.",
+        );
     }
 }
 
 #[test]
-fn test_sns_lifecycle_with_neurons_fund_participation() {
-    test_sns_lifecycle(true);
+fn test_sns_lifecycle_happy_scenario_with_neurons_fund_participation() {
+    test_sns_lifecycle(true, false);
 }
 
 #[test]
-fn test_sns_lifecycle_without_neurons_fund_participation() {
-    test_sns_lifecycle(false);
+fn test_sns_lifecycle_happy_scenario_without_neurons_fund_participation() {
+    test_sns_lifecycle(false, false);
+}
+
+#[test]
+fn test_sns_lifecycle_swap_timeout_with_neurons_fund_participation() {
+    test_sns_lifecycle(true, true);
+}
+
+#[test]
+fn test_sns_lifecycle_swap_timeout_without_neurons_fund_participation() {
+    test_sns_lifecycle(false, true);
 }

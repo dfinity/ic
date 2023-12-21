@@ -52,9 +52,7 @@ use crate::{
         UpdateNodeProvider, Vote, WaitForQuietState,
     },
     proposals::create_service_nervous_system::ExecutedCreateServiceNervousSystemProposal,
-    storage::{
-        with_stable_neuron_indexes, with_stable_neuron_indexes_mut, with_stable_neuron_store,
-    },
+    storage::with_stable_neuron_store,
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -1169,11 +1167,11 @@ impl ProposalData {
 
     fn set_swap_lifecycle_by_settle_neurons_fund_participation_request_type(
         &mut self,
-        result: &settle_neurons_fund_participation_request::Result,
+        result: &SwapResult,
     ) {
         let lifecycle = match result {
-            settle_neurons_fund_participation_request::Result::Committed(_) => Lifecycle::Committed,
-            settle_neurons_fund_participation_request::Result::Aborted(_) => Lifecycle::Aborted,
+            SwapResult::Committed { .. } => Lifecycle::Committed,
+            SwapResult::Aborted => Lifecycle::Aborted,
         };
         self.set_sns_token_swap_lifecycle(lifecycle);
     }
@@ -1470,10 +1468,55 @@ pub fn neuron_subaccount(subaccount: Subaccount) -> AccountIdentifier {
 }
 
 #[derive(Debug)]
+pub enum SwapResult {
+    Aborted,
+    Committed {
+        sns_governance_canister_id: PrincipalId,
+        total_direct_participation_icp_e8s: u64,
+        total_neurons_fund_participation_icp_e8s: u64,
+    },
+}
+
+impl TryFrom<settle_neurons_fund_participation_request::Result> for SwapResult {
+    type Error = String;
+
+    fn try_from(
+        swap_result_pb: settle_neurons_fund_participation_request::Result,
+    ) -> Result<Self, Self::Error> {
+        use settle_neurons_fund_participation_request::Result;
+        match swap_result_pb {
+            Result::Committed(committed) => {
+                let sns_governance_canister_id =
+                    committed.sns_governance_canister_id.ok_or_else(|| {
+                        "Committed.sns_governance_canister_id must be specified".to_string()
+                    })?;
+                let total_direct_participation_icp_e8s = committed
+                    .total_direct_participation_icp_e8s
+                    .ok_or_else(|| {
+                        "Committed.total_direct_participation_icp_e8s must be specified".to_string()
+                    })?;
+                let total_neurons_fund_participation_icp_e8s = committed
+                    .total_neurons_fund_participation_icp_e8s
+                    .ok_or_else(|| {
+                        "Committed.total_neurons_fund_participation_icp_e8s must be specified"
+                            .to_string()
+                    })?;
+                Ok(SwapResult::Committed {
+                    sns_governance_canister_id,
+                    total_direct_participation_icp_e8s,
+                    total_neurons_fund_participation_icp_e8s,
+                })
+            }
+            Result::Aborted(_) => Ok(SwapResult::Aborted),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct ValidatedSettleNeuronsFundParticipationRequest {
     pub request_str: String,
     pub nns_proposal_id: ProposalId,
-    pub request_type: settle_neurons_fund_participation_request::Result,
+    pub swap_result: SwapResult,
 }
 
 impl TryFrom<SettleNeuronsFundParticipationRequest>
@@ -1494,44 +1537,19 @@ impl TryFrom<SettleNeuronsFundParticipationRequest>
         };
         let request_str = format!("{:#?}", &request);
         // Validate request.result
-        let validated_proposal_type = {
-            if let Some(result) = request.result {
-                match result {
-                    settle_neurons_fund_participation_request::Result::Aborted(_) => Ok(result),
-                    settle_neurons_fund_participation_request::Result::Committed(ref committed) => {
-                        let mut defects = vec![];
-                        if committed.sns_governance_canister_id.is_none() {
-                            defects.push(
-                                "Request.result.Committed.sns_governance_canister_id is unspecified."
-                                    .to_string(),
-                            );
-                        }
-                        if committed.total_direct_participation_icp_e8s.is_none() {
-                            defects.push("Request.result.Committed.total_direct_participation_icp_e8s is unspecified.".to_string());
-                        }
-                        if committed.total_neurons_fund_participation_icp_e8s.is_none() {
-                            defects.push("Request.result.Committed.total_neurons_fund_participation_icp_e8s is unspecified.".to_string());
-                        }
-                        if defects.is_empty() {
-                            Ok(result)
-                        } else {
-                            Err(defects)
-                        }
-                    }
-                }
-            } else {
-                Err(vec![
-                    "Request.result is unspecified (must be either Committed or Aborted)."
-                        .to_string(),
-                ])
-            }
+        let swap_result = if let Some(result) = request.result {
+            SwapResult::try_from(result).map_err(|err| vec![err])
+        } else {
+            Err(vec![
+                "Request.result is unspecified (must be either Committed or Aborted).".to_string(),
+            ])
         };
         // Compose the validated results
-        match (validated_proposal_id, validated_proposal_type) {
-            (Ok(nns_proposal_id), Ok(request_type)) => Ok(Self {
+        match (validated_proposal_id, swap_result) {
+            (Ok(nns_proposal_id), Ok(swap_result)) => Ok(Self {
                 request_str,
                 nns_proposal_id,
-                request_type,
+                swap_result,
             }),
             (Ok(_), Err(proposal_type_defects)) => Err(proposal_type_defects),
             (Err(proposal_id_defects), Ok(_)) => Err(proposal_id_defects),
@@ -1553,84 +1571,6 @@ impl TryFrom<SettleNeuronsFundParticipationRequest>
                 )
             })
     }
-}
-
-fn maybe_build_initial_account_id_neuron_index(heap_neurons: &BTreeMap<u64, Neuron>) {
-    let is_account_id_index_empty =
-        with_stable_neuron_indexes_mut(|indexes| indexes.account_id().num_entries() == 0);
-    // This indicates that this is the first upgrade since introducing the new index
-    if !is_account_id_index_empty {
-        return;
-    }
-
-    println!("{}Starting to build AccountId Neuron Index", LOG_PREFIX);
-
-    for (id, neuron) in heap_neurons.iter() {
-        let subaccount = match neuron.subaccount() {
-            Ok(subaccount) => Some(subaccount),
-            Err(governance_error) => {
-                panic!(
-                    "{}WARNING: issues encountered when adding neuron to NeuronAccountIdIndex. {}",
-                    LOG_PREFIX, governance_error
-                );
-            }
-        };
-        let account_id = AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), subaccount);
-        if let Err(governance_error) = with_stable_neuron_indexes_mut(|indexes| {
-            indexes
-                .account_id_mut()
-                .add_neuron_account_id(NeuronId { id: *id }, account_id)
-        }) {
-            panic!(
-                "{}WARNING: issues encountered when adding neuron to NeuronAccountIdIndex. {}",
-                LOG_PREFIX, governance_error
-            );
-        }
-    }
-
-    println!(
-        "{}Finished building AccountId Neuron Index for heap neurons",
-        LOG_PREFIX
-    );
-
-    let stable_neurons = with_stable_neuron_store(|neuron_store| {
-        neuron_store
-            .range_neurons_map(..)
-            .map(|(id, neuron)| {
-                let subaccount = match neuron.subaccount() {
-                    Ok(subaccount) => Some(subaccount),
-                    Err(governance_error) => {
-                        panic!("{}WARNING: issues encountered when adding neuron to NeuronAccountIdIndex. {}", 
-                               LOG_PREFIX, governance_error);
-                    }
-                };
-                (id, subaccount)
-            })
-            .collect::<Vec<_>>()
-    });
-
-    with_stable_neuron_indexes_mut(|indexes| {
-        for (id, subaccount) in stable_neurons {
-            let account_id = AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), subaccount);
-            if let Err(governance_error) = indexes
-                .account_id_mut()
-                .add_neuron_account_id(id, account_id)
-            {
-                panic!(
-                    "{}WARNING: issues encountered when adding neuron to NeuronAccountIdIndex. {}",
-                    LOG_PREFIX, governance_error
-                );
-            }
-        }
-    });
-
-    let account_id_index_size =
-        with_stable_neuron_indexes(|indexes| indexes.account_id().num_entries());
-
-    println!(
-        "{}Finished building AccountId Neuron Index. Number of entries={}",
-        LOG_PREFIX, account_id_index_size
-    );
 }
 
 impl Governance {
@@ -1702,8 +1642,6 @@ impl Governance {
     ) -> Self {
         let (heap_neurons, topic_followee_map, heap_governance_proto) =
             split_governance_proto(governance_proto);
-
-        maybe_build_initial_account_id_neuron_index(&heap_neurons);
 
         Self {
             heap_data: heap_governance_proto,
@@ -7194,7 +7132,7 @@ impl Governance {
         caller: PrincipalId,
         request: SettleNeuronsFundParticipationRequest,
     ) -> Result<NeuronsFundSnapshot, GovernanceError> {
-        let request: ValidatedSettleNeuronsFundParticipationRequest = request.try_into()?;
+        let request = ValidatedSettleNeuronsFundParticipationRequest::try_from(request)?;
         let proposal_data = self.get_proposal_data_or_err(
             &request.nns_proposal_id,
             &format!("before awaiting SNS-W for {:?}", request.request_str),
@@ -7402,38 +7340,35 @@ impl Governance {
             }
         };
 
-        // Set the lifecycle of the proposal to avoid interleaving callers
-        proposal_data.set_swap_lifecycle_by_settle_neurons_fund_participation_request_type(
-            &request.request_type,
-        );
-
         let Some(initial_neurons_fund_participation) = initial_neurons_fund_participation else {
             println!(
                 "{}INFO: The Neurons' Fund does not participate in the SNS created with \
                 ProposalId {:?}. Setting lifecycle to {:?} and returning empty list of \
                 Neurons' Fund participants.",
-                LOG_PREFIX, request.nns_proposal_id, request.request_type,
+                LOG_PREFIX, request.nns_proposal_id, request.swap_result,
             );
             return Ok(NeuronsFundSnapshot::empty());
         };
 
-        use settle_neurons_fund_participation_request::Result::Committed;
-        let direct_participation_icp_e8s = if let Committed(committed) = &request.request_type {
-            let direct_participation_icp_e8s =
-                committed.total_direct_participation_icp_e8s.unwrap();
+        let direct_participation_icp_e8s = if let SwapResult::Committed {
+            total_direct_participation_icp_e8s,
+            ..
+        } = request.swap_result
+        {
             println!(
                 "{}INFO: The Swap canister of the SNS created via proposal {:?} has requested \
                 Neurons' Fund Matched Funding for {} ICP e8s of direct participation.",
-                LOG_PREFIX, request.nns_proposal_id, direct_participation_icp_e8s
+                LOG_PREFIX, request.nns_proposal_id, total_direct_participation_icp_e8s
             );
-            // TODO: Do not use Protobuf types inside ValidatedSettleNeuronsFundParticipationRequest.
-            direct_participation_icp_e8s
+            total_direct_participation_icp_e8s
         } else {
             println!(
                 "{}INFO: The Swap canister of the SNS created via proposal {:?} has reported \
                 that the swap had been aborted. There should not be Neurons' Fund participation.",
                 LOG_PREFIX, request.nns_proposal_id
             );
+            // Our intention is that the following implications hold:
+            // Aborted swap ==> Zero direct participation ==> Zero Neurons' Fund participation.
             0
         };
 
@@ -7451,6 +7386,11 @@ impl Governance {
                 )
             })?;
 
+        // Set the lifecycle of the proposal to avoid interleaving callers
+        proposal_data.set_swap_lifecycle_by_settle_neurons_fund_participation_request_type(
+            &request.swap_result,
+        );
+
         let settlement_result = if final_neurons_fund_participation.is_empty() {
             // TODO: Provide the reason why there is no Matched Funding in this case.
             println!(
@@ -7463,7 +7403,12 @@ impl Governance {
                 final_neurons_fund_participation,
             )?;
             Ok(NeuronsFundSnapshot::empty())
-        } else if let Committed(committed) = &request.request_type {
+        } else if let SwapResult::Committed {
+            sns_governance_canister_id,
+            total_neurons_fund_participation_icp_e8s,
+            ..
+        } = request.swap_result
+        {
             println!(
                 "{}INFO: The Neurons' Fund has decided to provide Matched Funding to the \
                 SNS created via proposal {:?}, in the amount of {} ICP e8s taken from {} \
@@ -7476,7 +7421,8 @@ impl Governance {
             let participated_reserves = final_neurons_fund_participation.snapshot_cloned();
             self.mint_to_sns_governance(
                 &request.nns_proposal_id,
-                committed,
+                sns_governance_canister_id,
+                total_neurons_fund_participation_icp_e8s,
                 final_neurons_fund_participation,
             )
             .await
@@ -7674,19 +7620,13 @@ impl Governance {
     async fn mint_to_sns_governance(
         &mut self,
         proposal_id: &ProposalId,
-        committed: &settle_neurons_fund_participation_request::Committed,
+        sns_governance_canister_id: PrincipalId,
+        swap_estimated_total_neurons_fund_participation_icp_e8s: u64,
         final_neurons_fund_participation: PolynomialNeuronsFundParticipation,
     ) -> Result<(), GovernanceError> {
-        let owner = committed.sns_governance_canister_id.ok_or_else(|| {
-            GovernanceError::new_with_message(
-                ErrorType::InvalidCommand,
-                "Expected sns_governance_canister_id to be set in \
-                SettleNeuronsFundParticipationRequest::Committed",
-            )
-        })?;
-        let destination = AccountIdentifier::new(owner, /* subaccount = */ None);
+        let destination =
+            AccountIdentifier::new(sns_governance_canister_id, /* subaccount = */ None);
         let amount_icp_e8s = final_neurons_fund_participation.total_amount_icp_e8s();
-
         // Sanity check if the NNS Governance and the Swap canister agree on how much ICP
         // the Neurons' Fund should participate with.
         //
@@ -7696,8 +7636,6 @@ impl Governance {
         // (1) there is an incompatibility between NNS Governance and Swap, due to a bug or
         // a problematic upgrade or (2) some Neurons' Fund neurons became inactive during
         // the swap.
-        let swap_estimated_total_neurons_fund_participation_icp_e8s =
-            committed.total_neurons_fund_participation_icp_e8s.unwrap();
         if amount_icp_e8s != swap_estimated_total_neurons_fund_participation_icp_e8s {
             println!(
                 "{}WARNING: mismatch between amount_icp_e8s computed while settling Neurons' Fund \
@@ -7820,7 +7758,7 @@ impl Governance {
         }
 
         // Get the type of request, i.e. Committed or Aborted.
-        let request_type = match &request.result {
+        let swap_result = match &request.result {
             None => {
                 return Err(GovernanceError::new_with_message(
                     ErrorType::InvalidCommand,
@@ -7830,7 +7768,7 @@ impl Governance {
                     ),
                 ));
             }
-            Some(request_type) => request_type,
+            Some(swap_result) => swap_result,
         };
 
         // Record the proposal's current lifecycle. If an error occurs when settling the CF,
@@ -7838,11 +7776,11 @@ impl Governance {
         let original_sns_token_swap_lifecycle = proposal_data.sns_token_swap_lifecycle;
 
         // Set the lifecycle : Result<(), GovernanceError>of the proposal to avoid interleaving callers
-        proposal_data.set_sale_lifecycle_by_settle_cf_request_type(request_type);
+        proposal_data.set_sale_lifecycle_by_settle_cf_request_type(swap_result);
 
         // Finally, execute.
         let cf_participants = proposal_data.cf_participants.clone();
-        let settlement_result = match &request_type {
+        let settlement_result = match &swap_result {
             settle_community_fund_participation::Result::Committed(committed) => {
                 committed
                     .mint_to_sns_governance(proposal_data, &*self.ledger)

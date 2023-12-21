@@ -5,6 +5,7 @@ use num_traits::{Bounded, ToPrimitive};
 use serde::{de::Deserializer, Deserialize, Serialize};
 use std::borrow::Cow;
 use std::fmt;
+use std::str::FromStr;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Hash)]
 #[serde(transparent)]
@@ -22,6 +23,15 @@ impl U64 {
     #[inline]
     pub fn to_u64(self) -> u64 {
         self.0
+    }
+}
+
+impl FromStr for U64 {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(U64(s.parse().map_err(|_| {
+            format!("Could not parse string to u64: {}", s)
+        })?))
     }
 }
 

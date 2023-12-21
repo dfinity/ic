@@ -251,7 +251,7 @@ where
     }
 
     transaction
-        .apply(ledger, now, effective_fee)
+        .apply(ledger, now, effective_fee.clone())
         .map_err(|e| match e {
             TxApplyError::InsufficientFunds { balance } => {
                 TransferError::InsufficientFunds { balance }
@@ -490,7 +490,7 @@ where
 
     // Accumulate up to `trim_quantity` accounts
     for (account, balance) in iter.by_ref().take(num_accounts) {
-        to_trim.push((*balance, account.clone()));
+        to_trim.push((balance.clone(), account.clone()));
     }
 
     for (account, balance) in iter {
@@ -498,7 +498,7 @@ where
         // include that account, and remove the current maximum
         if let Some((greatest_balance, _)) = to_trim.peek() {
             if balance < greatest_balance {
-                to_trim.push((*balance, account.clone()));
+                to_trim.push((balance.clone(), account.clone()));
                 to_trim.pop();
             }
         }

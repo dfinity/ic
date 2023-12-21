@@ -28,14 +28,14 @@ use ic_interfaces_adapter_client::{Options, RpcAdapterClient};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManagerError, StateReader};
 use ic_logger::{log, warn, ReplicaLogger};
-use ic_metrics::{MetricsRegistry, Timer};
+use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::{SelfValidatingPayload, ValidationContext, MAX_BITCOIN_PAYLOAD_IN_BYTES},
     messages::CallbackId,
     CountBytes, Height, NumBytes, SubnetId,
 };
-use std::{collections::BTreeSet, sync::Arc};
+use std::{collections::BTreeSet, sync::Arc, time::Instant};
 use thiserror::Error;
 
 const ADAPTER_REQUEST_STATUS_FAILURE: &str = "failed";
@@ -149,7 +149,7 @@ impl BitcoinPayloadBuilder {
             };
 
             // Send request to the adapter.
-            let timer = Timer::start();
+            let since = Instant::now();
             let result = adapter_client.send_blocking(
                 request.clone(),
                 Options {
@@ -163,7 +163,7 @@ impl BitcoinPayloadBuilder {
                     self.metrics.observe_adapter_request_duration(
                         ADAPTER_REQUEST_STATUS_SUCCESS,
                         request.to_request_type_label(),
-                        timer,
+                        since,
                     );
 
                     if let BitcoinAdapterResponseWrapper::GetSuccessorsResponse(r) =
@@ -177,7 +177,7 @@ impl BitcoinPayloadBuilder {
                     self.metrics.observe_adapter_request_duration(
                         ADAPTER_REQUEST_STATUS_FAILURE,
                         request.to_request_type_label(),
-                        timer,
+                        since,
                     );
 
                     warn!(
@@ -242,7 +242,7 @@ impl BitcoinPayloadBuilder {
         payload: &SelfValidatingPayload,
         validation_context: &ValidationContext,
     ) -> Result<NumBytes, SelfValidatingPayloadValidationError> {
-        let timer = Timer::start();
+        let since = Instant::now();
 
         // An empty block is always valid.
         if *payload == SelfValidatingPayload::default() {
@@ -250,7 +250,7 @@ impl BitcoinPayloadBuilder {
         }
 
         self.metrics
-            .observe_validate_duration(VALIDATION_STATUS_VALID, timer);
+            .observe_validate_duration(VALIDATION_STATUS_VALID, since);
         let size = NumBytes::new(payload.count_bytes() as u64);
 
         Ok(size)
@@ -264,7 +264,7 @@ impl SelfValidatingPayloadBuilder for BitcoinPayloadBuilder {
         past_payloads: &[&SelfValidatingPayload],
         byte_limit: NumBytes,
     ) -> (SelfValidatingPayload, NumBytes) {
-        let timer = Timer::start();
+        let since = Instant::now();
 
         let past_callback_ids: BTreeSet<u64> = past_payloads
             .iter()
@@ -279,13 +279,13 @@ impl SelfValidatingPayloadBuilder for BitcoinPayloadBuilder {
         ) {
             Ok(payload) => {
                 self.metrics
-                    .observe_build_duration(BUILD_PAYLOAD_STATUS_SUCCESS, timer);
+                    .observe_build_duration(BUILD_PAYLOAD_STATUS_SUCCESS, since);
                 payload
             }
             Err(e) => {
                 log!(self.log, e.log_level(), "{}", e);
                 self.metrics
-                    .observe_build_duration(e.to_label_value(), timer);
+                    .observe_build_duration(e.to_label_value(), since);
 
                 SelfValidatingPayload::default()
             }
@@ -340,7 +340,7 @@ impl BatchPayloadBuilder for BitcoinPayloadBuilder {
         past_payloads: &[PastPayload],
         context: &ValidationContext,
     ) -> Vec<u8> {
-        let timer = Timer::start();
+        let since = Instant::now();
 
         let delivered_ids = parse::parse_past_payload_ids(past_payloads, &self.log);
         let payload = match self.get_self_validating_payload_impl(context, delivered_ids, max_size)
@@ -349,7 +349,7 @@ impl BatchPayloadBuilder for BitcoinPayloadBuilder {
             Err(e) => {
                 log!(self.log, e.log_level(), "{}", e);
                 self.metrics
-                    .observe_build_duration(e.to_label_value(), timer);
+                    .observe_build_duration(e.to_label_value(), since);
 
                 return vec![];
             }

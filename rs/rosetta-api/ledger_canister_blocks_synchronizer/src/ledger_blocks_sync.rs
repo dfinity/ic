@@ -235,7 +235,13 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         ))?;
         let block = Block::decode(encoded_block.clone())?;
         if let Some(info) = &self.verification_info {
-            let hash = HashedBlock::hash_block(encoded_block, block.parent_hash, tip_index).hash;
+            let hash = HashedBlock::hash_block(
+                encoded_block,
+                block.parent_hash,
+                tip_index,
+                block.timestamp,
+            )
+            .hash;
             verify_block_hash(&certification, hash, info)?;
         }
         Ok(BlockWithIndex {
@@ -393,7 +399,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                 if i == tip.index && block != tip.block {
                     return Err(Error::invalid_tip_of_chain(tip.index, tip.block, block));
                 }
-                let hb = HashedBlock::hash_block(raw_block, last_block_hash, i);
+                let hb = HashedBlock::hash_block(raw_block, last_block_hash, i, block.timestamp);
                 last_block_hash = Some(hb.hash);
                 block_batch.push(hb);
                 i += 1;

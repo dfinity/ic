@@ -27,6 +27,7 @@ use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_peer_manager::SubnetTopology;
 use ic_quic_transport::{QuicTransport, Transport};
+use ic_types::state_sync::StateSyncMessage;
 use ic_types::{artifact::UnvalidatedArtifactMutation, NodeId, RegistryVersion};
 use ic_types_test_utils::ids::SUBNET_1;
 use quinn::{
@@ -271,7 +272,7 @@ pub fn add_transport_to_sim<F>(
     conn_checker: Option<Router>,
     crypto: Option<Arc<dyn TlsConfig + Send + Sync>>,
     sev: Option<Arc<dyn ValidateAttestedStream<Box<dyn TlsStream>> + Send + Sync>>,
-    state_sync_client: Option<Arc<dyn StateSyncClient>>,
+    state_sync_client: Option<Arc<dyn StateSyncClient<Message = StateSyncMessage>>>,
     consensus_manager: Option<TestConsensus<U64Artifact>>,
     post_setup_future: F,
 ) where
@@ -304,7 +305,7 @@ pub fn add_transport_to_sim<F>(
         let consensus_manager_clone = consensus_manager.clone();
 
         async move {
-            let metrics_registry = &MetricsRegistry::default();
+            let metrics_registry = MetricsRegistry::default();
             let mut consensus_builder = ic_consensus_manager::ConsensusManagerBuilder::new(
                 log.clone(),
                 tokio::runtime::Handle::current(),

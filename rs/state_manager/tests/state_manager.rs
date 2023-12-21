@@ -83,40 +83,28 @@ fn label<T: Into<Label>>(t: T) -> Label {
 
 /// Combined size of wasm memory including overlays.
 fn vmemory_size(canister_layout: &ic_state_layout::CanisterLayout<ReadOnly>) -> u64 {
-    if lsmt_storage_default() == FlagStatus::Enabled {
-        canister_layout
-            .vmemory_0_overlays()
-            .unwrap()
-            .into_iter()
-            .map(|p| std::fs::metadata(p).unwrap().len())
-            .sum::<u64>()
-            + std::fs::metadata(canister_layout.vmemory_0())
-                .map(|metadata| metadata.len())
-                .unwrap_or(0)
-    } else {
-        std::fs::metadata(canister_layout.vmemory_0())
-            .unwrap()
-            .len()
-    }
+    canister_layout
+        .vmemory_0_overlays()
+        .unwrap()
+        .into_iter()
+        .map(|p| std::fs::metadata(p).unwrap().len())
+        .sum::<u64>()
+        + std::fs::metadata(canister_layout.vmemory_0())
+            .map(|metadata| metadata.len())
+            .unwrap_or(0)
 }
 
 /// Combined size of stable memory including overlays.
 fn stable_memory_size(canister_layout: &ic_state_layout::CanisterLayout<ReadOnly>) -> u64 {
-    if lsmt_storage_default() == FlagStatus::Enabled {
-        canister_layout
-            .stable_memory_overlays()
-            .unwrap()
-            .into_iter()
-            .map(|p| std::fs::metadata(p).unwrap().len())
-            .sum::<u64>()
-            + std::fs::metadata(canister_layout.stable_memory_blob())
-                .map(|metadata| metadata.len())
-                .unwrap_or(0)
-    } else {
-        std::fs::metadata(canister_layout.stable_memory_blob())
-            .unwrap()
-            .len()
-    }
+    canister_layout
+        .stable_memory_overlays()
+        .unwrap()
+        .into_iter()
+        .map(|p| std::fs::metadata(p).unwrap().len())
+        .sum::<u64>()
+        + std::fs::metadata(canister_layout.stable_memory_blob())
+            .map(|metadata| metadata.len())
+            .unwrap_or(0)
 }
 
 /// Combined size of wasm chunk store including overlays.
@@ -4321,6 +4309,33 @@ fn can_reset_memory_state_machine() {
     env.set_checkpoints_enabled(true);
     env.tick();
     read_and_assert_eq(&env, canister_id, 1);
+}
+
+#[test]
+fn can_upgrade_and_uninstall_canister_after_many_checkpoints() {
+    let env = StateMachineBuilder::new().build();
+    env.set_checkpoints_enabled(true);
+    let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
+
+    for i in 1..100 {
+        env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+        read_and_assert_eq(&env, canister_id, i);
+        if i == 50 {
+            env.execute_ingress(canister_id, "grow_page", vec![])
+                .unwrap();
+            env.execute_ingress(canister_id, "persist", vec![]).unwrap();
+        }
+    }
+
+    env.upgrade_canister_wat(canister_id, TEST_CANISTER, vec![]);
+    env.execute_ingress(canister_id, "load", vec![]).unwrap();
+
+    for i in 1..100 {
+        env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+        read_and_assert_eq(&env, canister_id, 50 + i);
+    }
+
+    env.uninstall_code(canister_id).unwrap();
 }
 
 #[test]

@@ -3,8 +3,14 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    "//rs/canister_client",
+    "//rs/canister_client/sender",
+    "//rs/crypto/ecdsa_secp256k1",
+    "//rs/types/types",
     "@crate_index//:serde",
+    "@crate_index//:rand",
     "@crate_index//:serde_cbor",
+    "@crate_index//:hex",
     "@crate_index//:serde_json",
     "@crate_index//:serde_with",
 ]

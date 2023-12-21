@@ -1,6 +1,7 @@
-#![allow(dead_code)] // TODO(NNS1-2409): remove when it is used by NNS Governance.
-
-use crate::pb::v1::{governance_error::ErrorType, GovernanceError};
+use crate::{
+    pb::v1::{governance_error::ErrorType, GovernanceError},
+    storage::validate_stable_btree_map,
+};
 
 use ic_nns_common::pb::v1::NeuronId;
 use ic_stable_structures::{Memory, StableBTreeMap};
@@ -90,6 +91,12 @@ impl<M: Memory> NeuronSubaccountIndex<M> {
     /// Finds the neuron id by subaccount if it exists.
     pub fn get_neuron_id_by_subaccount(&self, subaccount: &Subaccount) -> Option<NeuronId> {
         self.subaccount_to_id.get(&subaccount.0)
+    }
+
+    /// Validates that some of the data in stable storage can be read, in order to prevent broken
+    /// schema. Should only be called in post_upgrade.
+    pub fn validate(&self) {
+        validate_stable_btree_map(&self.subaccount_to_id);
     }
 }
 

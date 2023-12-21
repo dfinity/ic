@@ -521,7 +521,7 @@ impl<Tokens: TokensType> Ledger<Tokens> {
     }
 
     pub fn transfer_fee(&self) -> Tokens {
-        self.transfer_fee
+        self.transfer_fee.clone()
     }
 
     pub fn max_memo_length(&self) -> u16 {

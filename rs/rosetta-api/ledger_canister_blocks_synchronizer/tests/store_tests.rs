@@ -1,6 +1,7 @@
 use ic_ledger_canister_blocks_synchronizer::{
     balance_book::{BalanceBook, ClientBalancesStore},
     blocks::{BlockStoreError, Blocks},
+    timestamp_to_iso8601,
 };
 use ic_ledger_canister_blocks_synchronizer_test_utils::{create_tmp_dir, sample_data::Scribe};
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction};
@@ -96,10 +97,16 @@ async fn store_coherence_test() {
     for hb in &scribe.blockchain {
         let hash = hb.hash.into_bytes().to_vec();
         let parent_hash = hb.parent_hash.map(|ph| ph.into_bytes().to_vec());
-        let command = "INSERT INTO blocks (hash, block, parent_hash, idx, verified) VALUES (?1, ?2, ?3, ?4, FALSE)";
+        let command = "INSERT INTO blocks (hash, block, parent_hash, idx, verified, timestamp) VALUES (?1, ?2, ?3, ?4, FALSE, ?5)";
         con.execute(
             command,
-            params![hash, hb.block.clone().into_vec(), parent_hash, hb.index],
+            params![
+                hash,
+                hb.block.clone().into_vec(),
+                parent_hash,
+                hb.index,
+                timestamp_to_iso8601(hb.timestamp)
+            ],
         )
         .unwrap();
     }
@@ -131,7 +138,7 @@ async fn store_account_balances_test() {
         let tx = Block::decode(hb.block.clone()).unwrap().transaction;
         let operation = tx.operation;
         context.balance_book.store.transaction_context = Some(hb.index);
-        apply_operation(&mut context, &operation, now).ok();
+        apply_operation(&mut context, &operation, now).unwrap();
         context.balance_book.store.transaction_context = None;
         store.push(hb).unwrap();
         store.set_hashed_block_to_verified(&hb.index).unwrap();

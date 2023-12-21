@@ -114,9 +114,8 @@ impl Routes {
     }
 }
 
-#[async_trait]
 pub trait Persist: Send + Sync {
-    async fn persist(&self, subnets: Vec<Subnet>) -> PersistStatus;
+    fn persist(&self, subnets: Vec<Subnet>) -> PersistStatus;
 }
 
 pub struct Persister {
@@ -132,7 +131,7 @@ impl Persister {
 #[async_trait]
 impl Persist for Persister {
     // Construct a lookup table based on the provided subnet list
-    async fn persist(&self, subnets: Vec<Subnet>) -> PersistStatus {
+    fn persist(&self, subnets: Vec<Subnet>) -> PersistStatus {
         if subnets.is_empty() {
             return PersistStatus::SkippedEmpty;
         }
@@ -188,8 +187,8 @@ impl Persist for Persister {
 
 #[async_trait]
 impl<T: Persist> Persist for WithMetricsPersist<T> {
-    async fn persist(&self, subnets: Vec<Subnet>) -> PersistStatus {
-        let out = self.0.persist(subnets).await;
+    fn persist(&self, subnets: Vec<Subnet>) -> PersistStatus {
+        let out = self.0.persist(subnets);
         let MetricParamsPersist { nodes, ranges } = &self.1;
 
         match out {

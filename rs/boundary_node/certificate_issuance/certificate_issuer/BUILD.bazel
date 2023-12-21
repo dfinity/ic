@@ -15,6 +15,7 @@ DEPENDENCIES = [
     "@crate_index//:ic-agent",
     "@crate_index//:ic-utils",
     "@crate_index//:ic-response-verification",
+    "@crate_index//:ic-http-certification",
     "@crate_index//:idna",
     "@crate_index//:instant-acme",
     "@crate_index//:leb128",

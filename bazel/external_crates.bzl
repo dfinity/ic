@@ -141,6 +141,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "async-socks5": crate.spec(
                 version = "^0.5.1",
             ),
+            "async-std": crate.spec(
+                version = "^1.12.0",
+            ),
             "async-stream": crate.spec(
                 version = "^0.3.5",
             ),
@@ -164,6 +167,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "backoff": crate.spec(
                 version = "^0.4.0",
+            ),
+            "backon": crate.spec(
+                version = "^0.4.1",
             ),
             "base32": crate.spec(
                 version = "^0.4.0",
@@ -275,6 +281,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ciborium": crate.spec(
                 version = "^0.2.1",
+            ),
+            "cidr": crate.spec(
+                version = "^0.2.2",
             ),
             "clap": crate.spec(
                 version = "^3.2.25",
@@ -567,7 +576,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.0",
             ),
             "ic-response-verification": crate.spec(
-                version = "^1.2.0",
+                version = "^2.0",
+            ),
+            "ic-http-certification": crate.spec(
+                version = "^2.0",
             ),
             "ic-test-state-machine-client": crate.spec(
                 version = "^3.0.0",
@@ -641,6 +653,20 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
                 default_features = False,
             ),
+            "k8s-openapi": crate.spec(
+                version = "=0.20.0",
+                features = [
+                    "v1_22",
+                ],
+            ),
+            "kube": crate.spec(
+                version = "=0.87.1",
+                features = [
+                    "runtime",
+                    "derive",
+                    "ws",
+                ],
+            ),
             "lazy_static": crate.spec(
                 version = "^1.4.0",
             ),
@@ -678,7 +704,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "metrics-proxy": crate.spec(
                 git = "https://github.com/dfinity/metrics-proxy.git",
-                rev = "b9e1c264fc9198f5dde704463b5acf2f34debf2d",
+                rev = "14915111a42b9990747a020edffe9b875a81c814",
                 default_features = False,
                 features = [
                     "rustls-tls-webpki-roots",

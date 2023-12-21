@@ -27,7 +27,7 @@ impl SystemdReloader {
         }
     }
 
-    pub async fn reload(&self) -> Result<(), Error> {
+    pub fn reload(&self) -> Result<(), Error> {
         let mut child = Command::new(&self.bin_path)
             .args([&self.command, &self.service])
             .stdout(Stdio::piped())

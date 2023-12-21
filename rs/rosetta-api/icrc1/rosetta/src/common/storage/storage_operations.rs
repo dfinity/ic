@@ -1,8 +1,7 @@
-use crate::common::storage::types::{MetadataEntry, RosettaBlock};
+use crate::common::storage::types::{MetadataEntry, RosettaBlock, Tokens};
 use anyhow::{anyhow, bail};
 use candid::Principal;
 use ic_icrc1::{Operation, Transaction};
-use ic_icrc1_tokens_u64::U64;
 use ic_ledger_core::block::EncodedBlock;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
@@ -10,8 +9,6 @@ use rusqlite::{params, Params};
 use rusqlite::{Connection, Statement, ToSql};
 use serde_bytes::ByteBuf;
 use std::str::FromStr;
-
-type Tokens = U64;
 
 pub fn store_metadata(connection: &Connection, metadata: Vec<MetadataEntry>) -> anyhow::Result<()> {
     connection.execute_batch("BEGIN TRANSACTION;")?;
@@ -82,7 +79,7 @@ pub fn store_blocks(
             }
         };
 
-        let transaction = rosetta_block.get_transaction()?;
+        let transaction: Transaction<Tokens> = rosetta_block.get_transaction()?;
         let (
             operation_type,
             from_principal,
@@ -176,9 +173,9 @@ pub fn store_blocks(
                 spender_principal.map(|x| x.as_slice().to_vec()),
                 spender_subaccount,
                 transaction.memo.map(|x| x.0.as_slice().to_vec()),
-                amount.to_u64().to_string(),
-                expected_allowance.map(|ea| ea.to_u64().to_string()),
-                fee.map(|fee| fee.to_u64().to_string()),
+                amount.to_string(),
+                expected_allowance.map(|ea| ea.to_string()),
+                fee.map(|fee| fee.to_string()),
                 transaction.created_at_time,
                 approval_expires_at
             ],
@@ -405,14 +402,22 @@ where
             transaction_created_at_time,
             approval_expires_at,
         ) = row?;
-        let amount = u64::from_str(&amount_str)?;
+        let amount = Tokens::from_str(&amount_str).map_err(anyhow::Error::msg)?;
         let expected_allowance = if let Some(expected_allowance_str) = expected_allowance_str {
-            Some(u64::from_str(&expected_allowance_str)?)
+            Some(
+                Tokens::from_str(&expected_allowance_str)
+                    .map_err(anyhow::Error::msg)
+                    .map_err(anyhow::Error::msg)?,
+            )
         } else {
             None
         };
         let fee = if let Some(fee_str) = fee_str {
-            Some(u64::from_str(&fee_str)?)
+            Some(
+                Tokens::from_str(&fee_str)
+                    .map_err(anyhow::Error::msg)
+                    .map_err(anyhow::Error::msg)?,
+            )
         } else {
             None
         };
@@ -425,7 +430,7 @@ where
                         })?,
                         subaccount: to_subaccount,
                     },
-                    amount: Tokens::new(amount),
+                    amount,
                 },
                 "transfer" => Operation::Transfer {
                     from: Account {
@@ -441,8 +446,8 @@ where
                         subaccount: to_subaccount,
                     },
                     spender: None,
-                    amount: Tokens::new(amount),
-                    fee: fee.map(Tokens::new),
+                    amount,
+                    fee,
                 },
                 "burn" => Operation::Burn {
                     from: Account {
@@ -452,7 +457,7 @@ where
                         subaccount: from_subaccount,
                     },
                     spender: None,
-                    amount: Tokens::new(amount),
+                    amount,
                 },
                 "approve" => Operation::Approve {
                     from: Account {
@@ -467,10 +472,10 @@ where
                         })?,
                         subaccount: spender_subaccount,
                     },
-                    amount: Tokens::new(amount),
-                    expected_allowance: expected_allowance.map(Tokens::new),
+                    amount,
+                    expected_allowance,
                     expires_at: approval_expires_at,
-                    fee: fee.map(Tokens::new),
+                    fee,
                 },
                 k => bail!("Operation type {} is not supported", k),
             },

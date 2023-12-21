@@ -134,7 +134,7 @@
 use super::config::NODES_INFO;
 use super::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
 use super::farm::{DnsRecord, PlaynetCertificate};
-use super::test_setup::GroupSetup;
+use super::test_setup::{GroupSetup, InfraProvider};
 use crate::driver::boundary_node::BoundaryNodeVm;
 use crate::driver::constants::{self, kibana_link, SSH_USERNAME};
 use crate::driver::farm::{Farm, GroupSpec};
@@ -972,13 +972,24 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
 
     fn get_ic_os_img_url(&self) -> Result<Url> {
         let url =
-            self.read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL")?;
+            match InfraProvider::read_attribute(&self.test_env()) {
+                InfraProvider::Farm => self
+                    .read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL")?,
+                InfraProvider::K8s => self
+                    .read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_GZ_CAS_URL")?,
+            };
         Ok(Url::parse(&url)?)
     }
 
     fn get_ic_os_img_sha256(&self) -> Result<String> {
-        let sha256 =
-            self.read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_SHA256")?;
+        let sha256 = match InfraProvider::read_attribute(&self.test_env()) {
+            InfraProvider::Farm => {
+                self.read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_SHA256")?
+            }
+            InfraProvider::K8s => {
+                self.read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_GZ_SHA256")?
+            }
+        };
         bail_if_sha256_invalid(&sha256, "ic_os_img_sha256")?;
         Ok(sha256)
     }
@@ -1163,22 +1174,27 @@ impl HasGroupSetup for TestEnv {
             );
         } else {
             let group_setup = GroupSetup::new(group_base_name);
-            let farm_base_url = FarmBaseUrl::read_attribute(self);
-            let farm = Farm::new(farm_base_url.into(), self.logger());
-            let group_spec = GroupSpec {
-                vm_allocation: None,
-                required_host_features: vec![],
-                preferred_network: None,
-                metadata: None,
+            match InfraProvider::read_attribute(self) {
+                InfraProvider::Farm => {
+                    let farm_base_url = FarmBaseUrl::read_attribute(self);
+                    let farm = Farm::new(farm_base_url.into(), self.logger());
+                    let group_spec = GroupSpec {
+                        vm_allocation: None,
+                        required_host_features: vec![],
+                        preferred_network: None,
+                        metadata: None,
+                    };
+                    farm.create_group(
+                        &group_setup.group_base_name,
+                        &group_setup.infra_group_name,
+                        group_setup.group_timeout,
+                        group_spec,
+                        self,
+                    )
+                    .unwrap();
+                }
+                InfraProvider::K8s => {}
             };
-            farm.create_group(
-                &group_setup.group_base_name,
-                &group_setup.infra_group_name,
-                group_setup.group_timeout,
-                group_spec,
-                self,
-            )
-            .unwrap();
             group_setup.write_attribute(self);
             self.ssh_keygen().expect("ssh key generation failed");
             emit_group_event(&log, &group_setup.infra_group_name);
@@ -2217,7 +2233,7 @@ pub fn emit_group_event(log: &slog::Logger, group: &str) {
     let event = log_events::LogEvent::new(
         INFRA_GROUP_CREATED_EVENT_NAME.to_string(),
         GroupName {
-            message: "Created new Farm group".to_string(),
+            message: "Created new InfraProvider group".to_string(),
             group: group.to_string(),
         },
     );

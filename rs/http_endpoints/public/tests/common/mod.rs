@@ -104,7 +104,7 @@ fn setup_query_execution_mock() -> (QueryExecutionService, QueryExecutionHandle)
 }
 
 #[allow(clippy::type_complexity)]
-fn setup_ingress_filter_mock() -> (IngressFilterService, IngressFilterHandle) {
+pub fn setup_ingress_filter_mock() -> (IngressFilterService, IngressFilterHandle) {
     let (service, handle) = tower_test::mock::pair::<
         (ProvisionalWhitelist, SignedIngressContent),
         Result<(), UserError>,

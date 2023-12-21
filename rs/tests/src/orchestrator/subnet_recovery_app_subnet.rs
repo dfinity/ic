@@ -37,7 +37,7 @@ use crate::orchestrator::utils::rw_message::{
     can_read_msg, cert_state_makes_progress_with_retries, store_message,
 };
 use crate::orchestrator::utils::subnet_recovery::*;
-use crate::tecdsa::tecdsa_signature_test::{make_key, KEY_ID1};
+use crate::tecdsa::{make_key, KEY_ID1};
 use crate::util::*;
 use ic_base_types::NodeId;
 use ic_recovery::app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs};

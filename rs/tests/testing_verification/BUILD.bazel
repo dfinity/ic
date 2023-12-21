@@ -91,6 +91,7 @@ system_test(
     name = "basic_health_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "k8s",
         "system_test_hourly",
         "system_test_nightly",
     ],

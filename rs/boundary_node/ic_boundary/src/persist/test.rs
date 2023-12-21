@@ -193,8 +193,8 @@ fn generate_test_routes(offset: u64) -> Routes {
     }
 }
 
-#[tokio::test]
-async fn test_persist() -> Result<(), Error> {
+#[test]
+fn test_persist() -> Result<(), Error> {
     let routes = generate_test_routes(0);
     let subnets = generate_test_subnets(0);
 
@@ -202,21 +202,21 @@ async fn test_persist() -> Result<(), Error> {
     let persister = Persister::new(Arc::clone(&rt_init));
 
     // Persist the routing table
-    let result = persister.persist(subnets.clone()).await;
+    let result = persister.persist(subnets.clone());
     // Check the result
     assert!(matches!(result, PersistStatus::Completed(_)));
     // Compare the persisted table state with expected
     assert_eq!(&routes, rt_init.load_full().unwrap().as_ref());
 
     // Check empty table
-    let result = persister.persist(vec![]).await;
+    let result = persister.persist(vec![]);
     assert!(matches!(result, PersistStatus::SkippedEmpty));
     // Check if the table hasn't changed
     assert_eq!(&routes, rt_init.load_full().unwrap().as_ref());
 
     // Generate different table
     let subnets = generate_test_subnets(1);
-    let result = persister.persist(subnets).await;
+    let result = persister.persist(subnets);
     // Check if it was updated
     assert!(matches!(result, PersistStatus::Completed(_)));
     // Check if the routing table matches expected one
