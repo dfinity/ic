@@ -130,6 +130,14 @@ impl RosettaClient {
             .await
     }
 
+    pub async fn construction_derive(
+        &self,
+        construction_derive_request: ConstructionDeriveRequest,
+    ) -> reqwest::Result<ConstructionDeriveResponse> {
+        self.call_endpoint("/construction/derive", &construction_derive_request)
+            .await
+    }
+
     pub async fn construction_preprocess(
         &self,
         operations: Vec<Operation>,

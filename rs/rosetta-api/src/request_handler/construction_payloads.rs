@@ -29,6 +29,7 @@ use crate::request_types::{
     Stake, StakeMaturity, StartDissolve, StopDissolve,
 };
 use crate::{convert, models};
+use rosetta_core::convert::principal_id_from_public_key;
 
 impl RosettaRequestHandler {
     /// Generate an Unsigned Transaction and Signing Payloads.
@@ -93,7 +94,7 @@ impl RosettaRequestHandler {
         let pks_map = pks
             .iter()
             .map(|pk| {
-                let pid: PrincipalId = convert::principal_id_from_public_key(pk)?;
+                let pid: PrincipalId = principal_id_from_public_key(pk)?;
                 let account: icp_ledger::AccountIdentifier = pid.into();
                 Ok((account, pk))
             })
@@ -310,7 +311,7 @@ fn handle_transfer_operation(
         // We don't use a it here because we never want two transactions with
         // identical tx IDs to both land on chain.
         nonce: None,
-        sender: Blob(convert::principal_id_from_public_key(pk)?.into_vec()),
+        sender: Blob(principal_id_from_public_key(pk)?.into_vec()),
         ingress_expiry: 0,
     };
 
@@ -345,7 +346,7 @@ fn handle_neuron_info(
             account,
         ))
     })?;
-    let sender = convert::principal_id_from_public_key(pk)?;
+    let sender = principal_id_from_public_key(pk)?;
 
     // Argument for the method called on the governance canister.
     let args = NeuronIdOrSubaccount::Subaccount(neuron_subaccount.to_vec());
@@ -446,7 +447,7 @@ fn handle_stake(
                 .into_bytes()
                 .expect("Serialization of neuron_index failed"),
         )),
-        sender: Blob(convert::principal_id_from_public_key(pk)?.into_vec()),
+        sender: Blob(principal_id_from_public_key(pk)?.into_vec()),
         ingress_expiry: 0,
     };
 
@@ -594,7 +595,7 @@ fn handle_add_hotkey(
     let key = req.key;
     let pid = match key {
         PublicKeyOrPrincipal::Principal(p) => p,
-        PublicKeyOrPrincipal::PublicKey(pk) => convert::principal_id_from_public_key(&pk)?,
+        PublicKeyOrPrincipal::PublicKey(pk) => principal_id_from_public_key(&pk)?,
     };
     let command = Command::Configure(manage_neuron::Configure {
         operation: Some(configure::Operation::AddHotKey(manage_neuron::AddHotKey {
@@ -628,7 +629,7 @@ fn handle_remove_hotkey(
     let key = req.key;
     let pid = match key {
         PublicKeyOrPrincipal::Principal(p) => p,
-        PublicKeyOrPrincipal::PublicKey(pk) => convert::principal_id_from_public_key(&pk)?,
+        PublicKeyOrPrincipal::PublicKey(pk) => principal_id_from_public_key(&pk)?,
     };
     let command = Command::Configure(manage_neuron::Configure {
         operation: Some(configure::Operation::RemoveHotKey(
@@ -844,7 +845,7 @@ fn add_neuron_management_payload(
                 .into_bytes()
                 .expect("Serialization of neuron_index failed"),
         )),
-        sender: Blob(convert::principal_id_from_public_key(pk)?.into_vec()),
+        sender: Blob(principal_id_from_public_key(pk)?.into_vec()),
         ingress_expiry: 0,
     };
 

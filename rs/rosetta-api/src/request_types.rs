@@ -3,13 +3,14 @@ use crate::models::operation::OperationType;
 use crate::models::seconds::Seconds;
 use crate::models::OperationIdentifier;
 use crate::{
-    convert::{principal_id_from_public_key, to_model_account_identifier},
+    convert::to_model_account_identifier,
     errors::ApiError,
     models::{self, Operation},
     transaction_id::TransactionIdentifier,
 };
 use ic_types::PrincipalId;
 use icp_ledger::{AccountIdentifier, BlockIndex, Operation as LedgerOperation, Tokens};
+use rosetta_core::convert::principal_id_from_public_key;
 use rosetta_core::objects::ObjectMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -372,7 +373,7 @@ impl TryFrom<&PublicKeyOrPrincipal> for PrincipalId {
     type Error = ApiError;
     fn try_from(p: &PublicKeyOrPrincipal) -> Result<PrincipalId, ApiError> {
         match p {
-            PublicKeyOrPrincipal::PublicKey(pk) => principal_id_from_public_key(pk),
+            PublicKeyOrPrincipal::PublicKey(pk) => Ok(principal_id_from_public_key(pk)?),
             PublicKeyOrPrincipal::Principal(pid) => Ok(*pid),
         }
     }
