@@ -886,6 +886,8 @@ bazel-test-bare-metal:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "setupos-bare-metal-smoke-test"'
   tags:
+    - dfinity-ic
+    - bazel
     - zh
   needs: [] # don't wait on other jobs
   script:
