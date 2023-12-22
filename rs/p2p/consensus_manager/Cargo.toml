@@ -15,7 +15,6 @@ ic-async-utils = { path = "../../async_utils" }
 ic-artifact-pool = { path = "../../artifact_pool" }
 ic-interfaces = { path = "../../interfaces" }
 ic-logger = { path = "../../monitoring/logger" }
-ic-peer-manager = { path = "../../p2p/peer_manager" }
 ic-protobuf = { path = "../../protobuf" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-quic-transport = { path = "../quic_transport" }

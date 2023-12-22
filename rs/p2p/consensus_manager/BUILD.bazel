@@ -13,7 +13,6 @@ DEPENDENCIES = [
     "//rs/monitoring/metrics",
     "//rs/phantom_newtype",
     "//rs/protobuf",
-    "//rs/p2p/peer_manager",
     "//rs/p2p/quic_transport",
     "//rs/types/types",
     "@crate_index//:axum",
