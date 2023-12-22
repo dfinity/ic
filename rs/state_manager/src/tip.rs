@@ -1,7 +1,10 @@
 use crate::{
-    compute_bundled_manifest, release_lock_and_persist_metadata, CheckpointError, PageMapType,
-    SharedState, StateManagerMetrics, CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS,
-    NUMBER_OF_CHECKPOINT_THREADS,
+    compute_bundled_manifest, release_lock_and_persist_metadata,
+    state_sync::types::{
+        FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, MAX_SUPPORTED_STATE_SYNC_VERSION,
+    },
+    CheckpointError, PageMapType, SharedState, StateManagerMetrics,
+    CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::subnet_id_into_protobuf;
@@ -20,9 +23,6 @@ use ic_replicated_state::{
 use ic_state_layout::{
     error::LayoutError, CanisterStateBits, CheckpointLayout, ExecutionStateBits, ReadOnly,
     RwPolicy, StateLayout, TipHandler,
-};
-use ic_types::state_sync::{
-    FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, MAX_SUPPORTED_STATE_SYNC_VERSION,
 };
 use ic_types::{malicious_flags::MaliciousFlags, CanisterId, Height};
 use ic_utils::fs::defrag_file_partially;
@@ -744,7 +744,7 @@ fn handle_compute_manifest_request(
         log,
         state_sync_version,
         checkpoint_layout,
-        crate::manifest::DEFAULT_CHUNK_SIZE,
+        crate::state_sync::types::DEFAULT_CHUNK_SIZE,
         manifest_delta,
     )
     .unwrap_or_else(|err| {

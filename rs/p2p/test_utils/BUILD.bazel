@@ -24,6 +24,7 @@ DEPENDENCIES = [
     "//rs/registry/local_store",
     "//rs/registry/local_store/artifacts",
     "//rs/registry/proto_data_provider",
+    "//rs/state_manager",
     "//rs/test_utilities",
     "//rs/test_utilities/registry",
     "//rs/types/base_types",

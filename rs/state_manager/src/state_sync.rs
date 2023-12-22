@@ -1,16 +1,17 @@
 pub(crate) mod chunkable;
+pub mod types;
 
 use super::StateManagerImpl;
 use crate::{
-    manifest::build_file_group_chunks, StateSyncRefs, EXTRA_CHECKPOINTS_TO_KEEP,
-    NUMBER_OF_CHECKPOINT_THREADS,
+    manifest::build_file_group_chunks,
+    state_sync::types::{FileGroupChunks, StateSyncMessage},
+    StateSyncRefs, EXTRA_CHECKPOINTS_TO_KEEP, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use ic_interfaces::p2p::state_sync::StateSyncClient;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_types::{
     artifact::{Priority, StateSyncArtifactId},
     chunkable::{Chunk, ChunkId, Chunkable},
-    state_sync::{FileGroupChunks, StateSyncMessage},
     Height,
 };
 use std::sync::{Arc, Mutex};
