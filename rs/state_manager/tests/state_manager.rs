@@ -23,7 +23,13 @@ use ic_replicated_state::{
 use ic_state_layout::{CheckpointLayout, ReadOnly, StateLayout, SYSTEM_METADATA_FILE};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_state_manager::manifest::{build_meta_manifest, manifest_from_path, validate_manifest};
-use ic_state_manager::{DirtyPageMap, PageMapType, StateManagerImpl};
+use ic_state_manager::{
+    state_sync::types::{
+        DEFAULT_CHUNK_SIZE, FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET,
+        META_MANIFEST_CHUNK,
+    },
+    DirtyPageMap, PageMapType, StateManagerImpl,
+};
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::{
     consensus::fake::FakeVerifier,
@@ -47,7 +53,6 @@ use ic_types::{
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::CallbackId,
-    state_sync::{FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, META_MANIFEST_CHUNK},
     time::Time,
     xnet::{StreamIndex, StreamIndexedQueue},
     CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, NumBytes, PrincipalId,
@@ -2754,7 +2759,6 @@ fn can_state_sync_based_on_old_checkpoint() {
 #[test]
 fn can_recover_from_corruption_on_state_sync() {
     use ic_state_layout::{CheckpointLayout, RwPolicy};
-    use ic_state_manager::manifest::DEFAULT_CHUNK_SIZE;
 
     let pages_per_chunk = DEFAULT_CHUNK_SIZE as u64 / PAGE_SIZE as u64;
     assert_eq!(DEFAULT_CHUNK_SIZE as usize % PAGE_SIZE, 0);
@@ -3235,7 +3239,7 @@ fn can_get_dirty_pages() {
 
 #[test]
 fn can_reuse_chunk_hashes_when_computing_manifest() {
-    use ic_state_manager::manifest::{compute_manifest, validate_manifest, DEFAULT_CHUNK_SIZE};
+    use ic_state_manager::manifest::{compute_manifest, validate_manifest};
     use ic_state_manager::ManifestMetrics;
     use ic_types::state_sync::CURRENT_STATE_SYNC_VERSION;
 

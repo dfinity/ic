@@ -27,7 +27,7 @@ use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_peer_manager::SubnetTopology;
 use ic_quic_transport::{QuicTransport, Transport};
-use ic_types::state_sync::StateSyncMessage;
+use ic_state_manager::state_sync::types::StateSyncMessage;
 use ic_types::{artifact::UnvalidatedArtifactMutation, NodeId, RegistryVersion};
 use ic_types_test_utils::ids::SUBNET_1;
 use quinn::{

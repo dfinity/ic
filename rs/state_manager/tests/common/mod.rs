@@ -14,7 +14,11 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::execution_state::WasmBinary;
 use ic_replicated_state::{testing::ReplicatedStateTesting, ReplicatedState, Stream};
-use ic_state_manager::{state_sync::StateSync, stream_encoding, StateManagerImpl};
+use ic_state_manager::{
+    state_sync::types::{StateSyncMessage, MANIFEST_CHUNK_ID_OFFSET},
+    state_sync::StateSync,
+    stream_encoding, StateManagerImpl,
+};
 use ic_test_utilities::{
     consensus::fake::{Fake, FakeVerifier},
     state::{initial_execution_state, new_canister_state},
@@ -30,7 +34,6 @@ use ic_types::{
     consensus::certification::{Certification, CertificationContent},
     crypto::Signed,
     signature::ThresholdSignature,
-    state_sync::{StateSyncMessage, MANIFEST_CHUNK_ID_OFFSET},
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
     CanisterId, CryptoHashOfState, Cycles, Height, RegistryVersion, SubnetId,
 };

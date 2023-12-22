@@ -29,6 +29,7 @@ ic-registry-local-registry = { path = "../../registry/local_registry" }
 ic-registry-local-store = { path = "../../registry/local_store" }
 ic-registry-local-store-artifacts = { path = "../../registry/local_store/artifacts" }
 ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
+ic-state-manager = { path = "../../state_manager" }
 ic-state-sync-manager = { path = "../state_sync_manager" }
 ic-types = { path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }

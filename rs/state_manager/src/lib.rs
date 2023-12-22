@@ -12,7 +12,10 @@ pub mod tree_hash;
 
 use crate::{
     manifest::compute_bundled_manifest,
-    state_sync::chunkable::cache::StateSyncCache,
+    state_sync::{
+        chunkable::cache::StateSyncCache,
+        types::{FileGroupChunks, Manifest, MetaManifest},
+    },
     tip::{spawn_tip_thread, PageMapToFlush, TipRequest},
 };
 use crossbeam_channel::{unbounded, Sender};
@@ -49,7 +52,7 @@ use ic_types::{
     consensus::certification::Certification,
     crypto::CryptoHash,
     malicious_flags::MaliciousFlags,
-    state_sync::{FileGroupChunks, Manifest, MetaManifest, CURRENT_STATE_SYNC_VERSION},
+    state_sync::CURRENT_STATE_SYNC_VERSION,
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
     CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
 };
