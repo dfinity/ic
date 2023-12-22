@@ -290,7 +290,7 @@ def deploy_server(bmc_info: BMCInfo, wait_time_mins: int, idrac_script_dir: Path
         run_func(
             f"GetSetPowerStateREDFISH.py {cli_creds} -p {bmc_info.password} --set GracefulShutdown",
         )
-        for i in tqdm.tqdm(range(int(60))):
+        for i in tqdm.tqdm(range(int(60)), disable=None):
             time.sleep(1)
 
         log.info(
@@ -313,7 +313,7 @@ def deploy_server(bmc_info: BMCInfo, wait_time_mins: int, idrac_script_dir: Path
             f"GetSetPowerStateREDFISH.py {cli_creds} -p {bmc_info.password} --set On",
         )
         # Waiting to make sure the machine gets back to a steady state, so that next reboot is done consistently
-        for i in tqdm.tqdm(range(int(90))):
+        for i in tqdm.tqdm(range(int(90)),disable=None):
             time.sleep(1)
 
         log.info("Setting next boot device to virtual floppy, and restarting")
@@ -342,7 +342,7 @@ def deploy_server(bmc_info: BMCInfo, wait_time_mins: int, idrac_script_dir: Path
         log.info(
             f"Machine booting. Checking on SetupOS completion periodically. Timeout (mins): {wait_time_mins}"
         )
-        for i in tqdm.tqdm(range(int(60 * (wait_time_mins / timeout_secs)))):
+        for i in tqdm.tqdm(range(int(60 * (wait_time_mins / timeout_secs))),disable=None):
             if iterate_func():
                 break
 
