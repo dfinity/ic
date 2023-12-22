@@ -24,7 +24,8 @@ use crate::{
     },
     verification::{Verify, VerifyError},
     work::{
-        Dispense, DispenseError, Peek, PeekError, Process, ProcessError, Queue, QueueError, Task,
+        extract_domain, Dispense, DispenseError, Peek, PeekError, Process, ProcessError, Queue,
+        QueueError, Task,
     },
 };
 
@@ -40,8 +41,8 @@ impl MetricParams {
         Self {
             action: action.to_string(),
             counter: meter
-                .u64_counter(format!("{namespace}.{action}.total"))
-                .with_description(format!("Counts occurences of {action} calls"))
+                .u64_counter(format!("{namespace}.{action}"))
+                .with_description(format!("Counts occurrences of {action} calls"))
                 .init(),
             recorder: meter
                 .f64_histogram(format!("{namespace}.{action}.duration_sec"))
@@ -359,11 +360,19 @@ impl<T: Process> Process for WithMetrics<T> {
         let cx = Context::current();
         let bgg = cx.baggage();
         let is_renewal = bgg.get("is_renewal").unwrap().to_string();
+        let is_important = bgg.get("is_important").unwrap().to_string();
+
+        let apex_domain = match is_important.as_str() {
+            "1" => extract_domain(&task.name),
+            _ => "N/A",
+        };
 
         let labels = &[
             KeyValue::new("status", status),
             KeyValue::new("task", task.action.to_string()),
             KeyValue::new("is_renewal", is_renewal.clone()),
+            KeyValue::new("is_important", is_important.clone()),
+            KeyValue::new("apex_domain", apex_domain.to_string()),
         ];
 
         let MetricParams {
@@ -375,7 +384,7 @@ impl<T: Process> Process for WithMetrics<T> {
         counter.add(1, labels);
         recorder.record(duration, labels);
 
-        info!(action = action.as_str(), id, name = task.name, task = task.action.to_string(), is_renewal, status, duration, error = ?out.as_ref().err());
+        info!(action = action.as_str(), id, name = task.name, task = task.action.to_string(), is_renewal, is_important, status, duration, error = ?out.as_ref().err());
 
         out
     }

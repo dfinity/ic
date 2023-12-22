@@ -24,11 +24,11 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     fn multi_sign(
         &self,
         algorithm_id: AlgorithmId,
-        message: &[u8],
+        message: Vec<u8>,
         key_id: KeyId,
     ) -> Result<CspSignature, CspMultiSignatureError> {
         let start_time = self.metrics.now();
-        let result = self.multi_sign_internal(algorithm_id, message, key_id);
+        let result = self.multi_sign_internal(algorithm_id, &message[..], key_id);
         self.metrics.observe_duration_seconds(
             MetricsDomain::MultiSignature,
             MetricsScope::Local,
@@ -129,7 +129,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                 key_id,
             })?;
 
-        let result = match algorithm_id {
+        match algorithm_id {
             AlgorithmId::MultiBls12_381 => match &secret_key {
                 CspSecretKey::MultiBls12_381(key) => {
                     let sig = multi_bls12381::sign(message, key);
@@ -145,8 +145,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             _ => Err(CspMultiSignatureError::UnsupportedAlgorithm {
                 algorithm: algorithm_id,
             }),
-        };
-        result
+        }
     }
 
     fn gen_multi_bls12381_keypair_with_pop(

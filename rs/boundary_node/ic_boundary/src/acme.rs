@@ -7,7 +7,6 @@ use instant_acme::{
 };
 
 use crate::core::{WithRetry, WithThrottle};
-
 pub struct OrderHandle(instant_acme::Order);
 
 #[derive(Debug)]
@@ -227,10 +226,10 @@ impl<T: Obtain> Obtain for WithRetry<T> {
             }
 
             // Retry
-            if let Err(ObtainError::OrderNotValid(_)) = out {
-                continue;
-            }
-            if let Err(ObtainError::CertificateNotReady) = out {
+            if matches!(
+                out,
+                Err(ObtainError::OrderNotValid(_)) | Err(ObtainError::CertificateNotReady)
+            ) {
                 continue;
             }
 

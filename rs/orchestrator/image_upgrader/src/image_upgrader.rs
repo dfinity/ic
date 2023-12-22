@@ -21,7 +21,7 @@ pub mod error;
 const REBOOT_TIME_FILENAME: &str = "reboot_time.txt";
 
 /// Defines the image upgrader trait and default implementation. It receives a generic version identifier `V`
-/// and a return value `R` stemming from a peridoically called `check_for_upgrade` function.
+/// and a return value `R` stemming from a periodically called `check_for_upgrade` function.
 /// The lifecycle of an image can be described by:
 /// 1. Confirming the boot of the current image using the `manageboot.sh` script. Cf. `confirm_boot()`
 /// 2. Optionally collecting metrics of the reboot time from disk.
@@ -70,7 +70,7 @@ const REBOOT_TIME_FILENAME: &str = "reboot_time.txt";
 ///     ...
 ///
 ///     let upgrade = Upgrader {...};
-///     
+///
 ///     upgrade.confirm_boot().await;
 ///
 ///     upgrade.upgrade_loop(exit_signal, interval, timeout, |result| async {
@@ -114,7 +114,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
     ) -> UpgradeResult<(Vec<String>, Option<String>)>;
 
     /// Calls a corresponding script to "confirm" that the base OS could boot
-    /// successfully. With a confirmation the image will be reverted on the next
+    /// successfully. Without a confirmation the image will be reverted on the next
     /// restart.
     async fn confirm_boot(&self) {
         if let Err(err) = Command::new(self.binary_dir().join("manageboot.sh").into_os_string())
@@ -137,24 +137,29 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
     async fn download_release_package(&self, version: &V) -> UpgradeResult<()> {
         let (mut release_package_urls, hash) = self.get_release_package_urls_and_hash(version)?;
 
+        let url_count = release_package_urls.len();
+        if url_count == 0 {
+            return Err(UpgradeError::GenericError(format!(
+                "No download URLs are provided for version {:?}",
+                version
+            )));
+        }
+
         // Load-balance, by making each node rotate the `release_package_urls` by some number.
         // Note that the order is the same for everyone; only the starting point is different.
         // This is okay because we do expect the first attempt to be successful.
-        let url_count = release_package_urls.len();
         release_package_urls.rotate_right(self.get_load_balance_number() % url_count);
 
         // We return the last error if download attempts from all the URLs fail.
-        let mut error = UpgradeError::GenericError(format!(
-            "No download URLs are provided for version {:?}",
-            version
-        ));
-
+        // We will always either set `error`, or return `Ok` from this loop.
+        let mut error = UpgradeError::GenericError("unreachable".to_string());
         for release_package_url in release_package_urls.iter() {
             let req = format!(
                 "Request to download image {:?} from {}",
                 version, release_package_url
             );
-            let file_downloader = FileDownloader::new(Some(self.log().clone())).follow_redirects();
+            let file_downloader =
+                FileDownloader::new_with_timeout(Some(self.log().clone()), Duration::from_secs(60));
             let start_time = std::time::Instant::now();
             let download_result = file_downloader
                 .download_file(release_package_url, self.image_path(), hash.clone())
@@ -162,7 +167,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
             let duration = start_time.elapsed();
 
             if let Err(e) = download_result {
-                info!(self.log(), "{} failed in {:?}: {:?}", req, duration, e);
+                warn!(self.log(), "{} failed in {:?}: {}", req, duration, e);
                 error = UpgradeError::from(e);
             } else {
                 info!(self.log(), "{} processed in {:?}", req, duration);
@@ -186,7 +191,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
 
         self.download_release_package(version).await?;
 
-        // The call to `manageboot.sh upgrade-install` could corrupt any previous upgrade preperation.
+        // The call to `manageboot.sh upgrade-install` could corrupt any previous upgrade preparation.
         // In case this function fails and we do want to leave `prepared_upgrade_version` set. Therefore,
         // clear it here.
         self.set_prepared_version(None);
@@ -233,7 +238,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
             warn!(self.log(), "Cannot persist the time of reboot: {}", e);
         }
 
-        // We could successfuly unpack the file above, so we do not need the image anymore.
+        // We could successfully unpack the file above, so we do not need the image anymore.
         std::fs::remove_file(self.image_path())
             .map_err(|e| UpgradeError::IoError("Couldn't delete the image".to_string(), e))?;
 

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,7 +18,7 @@ import (
 )
 
 // This defines timeout on the Bazel level.
-var TESTNET_DEPLOYMENT_TIMEOUT_SEC = 1200
+var TESTNET_DEPLOYMENT_TIMEOUT_SEC = 3600
 
 var FARM_BASE_URL = "https://farm.dfinity.systems"
 var FARM_API = FARM_BASE_URL + "/swagger-ui"
@@ -25,7 +26,7 @@ var FARM_GROUP_KEEPALIVE_TTL_SEC = 90
 var KEEPALIVE_PERIOD = 30 * time.Second
 
 // This restriction is defined in an ad-hoc way to avoid accidental resources abuse.
-var MAX_TESTNET_LIFETIME_MINS = 180
+var MAX_TESTNET_LIFETIME_MINS = 1440 * 7
 
 // All output files are saved in this folder, if output-dir is not provided explicitly.
 var DEFAULT_RESULTS_DIR = "ict_testnets"
@@ -40,7 +41,7 @@ var DATE_TIME_FORMAT = "2006-01-02_15-04-05.000"
 const MAX_TOKEN_CAPACITY = 1024 * 1024
 
 // These events are collected from test-driver logs during the testnet deployment.
-const FARM_GROUP_NAME_CREATED_EVENT = "farm_group_name_created_event"
+const INFRA_GROUP_NAME_CREATED_EVENT = "infra_group_name_created_event"
 const KIBANA_URL_CREATED_EVENT = "kibana_url_created_event"
 const FARM_VM_CREATED_EVENT = "farm_vm_created_event"
 const BN_AAAA_RECORDS_CREATED_EVENT = "bn_aaaa_records_created_event"
@@ -107,7 +108,7 @@ func (summary *Summary) add_event(event *TestDriverEvent) {
 		summary.IcProgressClock = event.Body
 	} else if event.EventName == FARM_VM_CREATED_EVENT {
 		summary.FarmVMs = append(summary.FarmVMs, event.Body)
-	} else if event.EventName == FARM_GROUP_NAME_CREATED_EVENT {
+	} else if event.EventName == INFRA_GROUP_NAME_CREATED_EVENT {
 		summary.FarmGroup = event.Body
 	} else if event.EventName == KIBANA_URL_CREATED_EVENT {
 		summary.KibanaUrl = event.Body
@@ -267,12 +268,19 @@ func ProcessLogs(reader io.ReadCloser, cmd *cobra.Command, outputFiles *OutputFi
 			if err != nil {
 				return "", fmt.Errorf("testnet deployment failed: %v", err)
 			}
-			prettyJson, err := json.MarshalIndent(summary, "", "  ")
+			var buffer bytes.Buffer
+			encoder := json.NewEncoder(&buffer)
+			// Here we change the default encoding behavior, as urls can contain special symbols like &. We don't want to escape those.
+			encoder.SetEscapeHTML(false)
+			encoder.SetIndent("", "  ")
+			err = encoder.Encode(summary)
 			if err != nil {
 				return "", fmt.Errorf("marshalling summary failed with err: %v", err)
+			} else {
+				prettyJson := buffer.String()
+				// Only this line goes to stdout, so that the command output can be piped to jq.
+				cmd.Println(string(prettyJson))
 			}
-			// Only this line goes to stdout, so that the command output can be piped to jq.
-			cmd.Println(string(prettyJson))
 			group, err = ExtractFarmGroup(&summary)
 			if err != nil {
 				return "", err
@@ -378,7 +386,7 @@ func ExtractFarmGroup(summary *Summary) (string, error) {
 	if val, ok := jsonMap["group"]; ok {
 		return val.(string), nil
 	}
-	return "", fmt.Errorf("couldn't extract Farm group from %s", FARM_GROUP_NAME_CREATED_EVENT)
+	return "", fmt.Errorf("couldn't extract infra group from %s", INFRA_GROUP_NAME_CREATED_EVENT)
 }
 
 func GetTestnetExpiration(group string) (string, error) {

@@ -3,8 +3,9 @@ use ic_error_types::{RejectCode, TryFromError, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_ic00_types::{
-    CanisterIdRecord, CanisterInfoRequest, InstallCodeArgsV2, Method, Payload as _,
-    ProvisionalTopUpCanisterArgs, SetControllerArgs, UpdateSettingsArgs,
+    CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, InstallChunkedCodeArgs,
+    InstallCodeArgsV2, Method, Payload as _, ProvisionalTopUpCanisterArgs, StoredChunksArgs,
+    UpdateSettingsArgs, UploadChunkArgs,
 };
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -47,7 +48,7 @@ pub struct RequestMetadata {
     /// A point in the future vs. `call_tree_start_time` at which a request would ideally have concluded
     /// its lifecycle on the IC. Unlike `call_tree_depth` and `call_tree_start_time`, the deadline
     /// does not have to be a constant for the whole call tree. Rather it's valid only for the subtree of
-    /// downstream calls at any point in the tree. Since a call tree can be disolved from above if
+    /// downstream calls at any point in the tree. Since a call tree can be dissolved from above if
     /// a corresponding deadline expires, this effectively implies that `call_subtree_deadline` can only
     /// decrease as we go down the tree.
     ///
@@ -112,20 +113,37 @@ impl Request {
                 Ok(record) => Some(record.get_canister_id()),
                 Err(_) => None,
             },
-            Ok(Method::SetController) => match SetControllerArgs::decode(&self.method_payload) {
-                Ok(record) => Some(record.get_canister_id()),
-                Err(_) => None,
-            },
             Ok(Method::InstallCode) => match InstallCodeArgsV2::decode(&self.method_payload) {
                 Ok(record) => Some(record.get_canister_id()),
                 Err(_) => None,
             },
+            Ok(Method::InstallChunkedCode) => {
+                match InstallChunkedCodeArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.target_canister_id()),
+                    Err(_) => None,
+                }
+            }
             Ok(Method::ProvisionalTopUpCanister) => {
                 match ProvisionalTopUpCanisterArgs::decode(&self.method_payload) {
                     Ok(record) => Some(record.get_canister_id()),
                     Err(_) => None,
                 }
             }
+            Ok(Method::UploadChunk) => match UploadChunkArgs::decode(&self.method_payload) {
+                Ok(record) => Some(record.get_canister_id()),
+                Err(_) => None,
+            },
+            Ok(Method::ClearChunkStore) => {
+                match ClearChunkStoreArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
+            Ok(Method::StoredChunks) => match StoredChunksArgs::decode(&self.method_payload) {
+                Ok(record) => Some(record.get_canister_id()),
+                Err(_) => None,
+            },
+            Ok(Method::DeleteChunks) => None,
             Ok(Method::CreateCanister)
             | Ok(Method::SetupInitialDKG)
             | Ok(Method::HttpRequest)
@@ -138,7 +156,8 @@ impl Request {
             | Ok(Method::BitcoinSendTransaction)
             | Ok(Method::BitcoinSendTransactionInternal)
             | Ok(Method::BitcoinGetSuccessors)
-            | Ok(Method::BitcoinGetCurrentFeePercentiles) => {
+            | Ok(Method::BitcoinGetCurrentFeePercentiles)
+            | Ok(Method::NodeMetricsHistory) => {
                 // No effective canister id.
                 None
             }
@@ -168,10 +187,10 @@ impl std::fmt::Debug for Request {
         }
         write!(
             f,
-            "method_payload: [{}] }}",
+            "method_payload: [{}], ",
             truncate_and_format(&self.method_payload, 1024)
         )?;
-        write!(f, "metadata: {:?}, ", self.metadata)?;
+        write!(f, "metadata: {:?} }}", self.metadata)?;
         Ok(())
     }
 }
@@ -462,7 +481,7 @@ impl From<pb_queues::RequestMetadata> for RequestMetadata {
                 }),
             call_subtree_deadline: metadata
                 .call_subtree_deadline_nanos
-                .map(|deadline| Time::from_nanos_since_unix_epoch(deadline)),
+                .map(Time::from_nanos_since_unix_epoch),
         }
     }
 }

@@ -11,10 +11,7 @@ use ic_crypto::CryptoComponent;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
 use ic_https_outcalls_adapter_client::setup_canister_http_client;
-use ic_interfaces::{
-    artifact_manager::JoinGuard, artifact_pool::UnvalidatedArtifact,
-    execution_environment::QueryHandler, time_source::SysTimeSource,
-};
+use ic_interfaces::{execution_environment::QueryHandler, p2p::artifact_manager::JoinGuard};
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient};
 use ic_logger::{info, ReplicaLogger};
@@ -24,13 +21,19 @@ use ic_pprof::Pprof;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_local_store::LocalStoreImpl;
-use ic_replica_setup_ic_network::{setup_consensus_and_p2p, P2PStateSyncClient};
+use ic_replica_setup_ic_network::setup_consensus_and_p2p;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::{state_sync::StateSync, StateManagerImpl};
-use ic_types::{consensus::CatchUpPackage, messages::SignedIngress, NodeId, SubnetId};
+use ic_types::{
+    artifact::UnvalidatedArtifactMutation,
+    artifact_kind::IngressArtifact,
+    consensus::{CatchUpPackage, HasHeight},
+    NodeId, SubnetId,
+};
 use ic_xnet_endpoint::{XNetEndpoint, XNetEndpointConfig};
 use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
 use std::sync::{Arc, RwLock};
+
 /// Create the consensus pool directory (if none exists)
 fn create_consensus_pool_dir(config: &Config) {
     std::fs::create_dir_all(&config.artifact_pool.consensus_pool_path).unwrap_or_else(|err| {
@@ -46,15 +49,16 @@ fn create_consensus_pool_dir(config: &Config) {
 pub fn construct_ic_stack(
     log: &ReplicaLogger,
     metrics_registry: &MetricsRegistry,
-    rt_handle: tokio::runtime::Handle,
-    rt_handle_http: tokio::runtime::Handle,
-    rt_handle_xnet: tokio::runtime::Handle,
+    rt_handle_main: &tokio::runtime::Handle,
+    rt_handle_p2p: &tokio::runtime::Handle,
+    rt_handle_http: &tokio::runtime::Handle,
+    rt_handle_xnet: &tokio::runtime::Handle,
     config: Config,
     node_id: NodeId,
     subnet_id: SubnetId,
     registry: Arc<dyn RegistryClient + Send + Sync>,
     crypto: Arc<CryptoComponent>,
-    catch_up_package: Option<CatchUpPackage>,
+    catch_up_package: Option<pb::CatchUpPackage>,
 ) -> std::io::Result<(
     // TODO: remove this return value since it is used only in tests
     Arc<StateManagerImpl>,
@@ -62,42 +66,47 @@ pub fn construct_ic_stack(
     Arc<dyn QueryHandler<State = ReplicatedState>>,
     Vec<Box<dyn JoinGuard>>,
     // TODO: remove this return value since it is used only in tests
-    Sender<UnvalidatedArtifact<SignedIngress>>,
+    Sender<UnvalidatedArtifactMutation<IngressArtifact>>,
     XNetEndpoint,
 )> {
     // Determine the correct catch-up package.
-    let catch_up_package = {
-        use ic_types::consensus::HasHeight;
+    let (catch_up_package, catch_up_package_proto) = {
         match catch_up_package {
             // The replica was started on a CUP persisted by the orchestrator.
-            Some(cup_from_orc) => {
+            Some(cup_proto_from_orchestrator) => {
+                // We crash if we fail to deserialize the CUP, as there is no reasonable CUP we
+                // could fall back to.
+                let cup_from_orchestrator = CatchUpPackage::try_from(&cup_proto_from_orchestrator)
+                    .expect("deserializing CUP failed");
+
                 // The CUP passed by the orchestrator can be signed or unsigned. If it's signed, it
-                // was created and signed by the subnet. An unsigned CUP was created by the orchestrator
-                // from the registry CUP contents and can only happen during a subnet recovery or subnet genesis.
-                let signed = !cup_from_orc.signature.signature.clone().get().0.is_empty();
+                // was created and signed by the subnet. An unsigned CUP was created by the
+                // orchestrator from the registry CUP contents and can only happen during a subnet
+                // recovery or subnet genesis.
+                let signed = cup_from_orchestrator.is_signed();
                 info!(
                     log,
                     "Using the {} CUP with height {}",
                     if signed { "signed" } else { "unsigned" },
-                    cup_from_orc.height()
+                    cup_from_orchestrator.height()
                 );
-                cup_from_orc
+
+                (cup_from_orchestrator, cup_proto_from_orchestrator)
             }
             // This case is only possible if the replica is started without an orchestrator which
             // is currently only possible in the local development mode with `dfx`.
             None => {
-                let make_registry_cup = || {
-                    ic_consensus::dkg::make_registry_cup(&*registry, subnet_id, None)
-                        .expect("Couldn't create a registry CUP")
-                };
-                let registry_cup = CatchUpPackage::try_from(&make_registry_cup())
-                    .expect("deserializing CUP failed");
+                let registry_cup = ic_consensus::dkg::make_registry_cup(&*registry, subnet_id, log)
+                    .expect("Couldn't create a registry CUP");
+
                 info!(
                     log,
                     "Using the CUP with height {} generated from the registry",
                     registry_cup.height()
                 );
-                registry_cup
+
+                let registry_cup_proto = pb::CatchUpPackage::from(&registry_cup);
+                (registry_cup, registry_cup_proto)
             }
         }
     };
@@ -112,10 +121,10 @@ pub fn construct_ic_stack(
         registry.get_latest_version(),
         registry.as_ref(),
     );
-    let time_source = Arc::new(SysTimeSource::new());
     // ---------- THE PERSISTED CONSENSUS ARTIFACT POOL DEPS FOLLOW ----------
-    // This is the first object that is required for the creation of the IC stack. Initializing the persistent
-    // consensus pool is the only way for retrieving the height of the last CUP and/or certification.
+    // This is the first object that is required for the creation of the IC stack. Initializing the
+    // persistent consensus pool is the only way for retrieving the height of the last CUP and/or
+    // certification.
     let artifact_pool_config = ArtifactPoolConfig::from(config.artifact_pool.clone());
     create_consensus_pool_dir(&config);
     ensure_persistent_pool_replica_version_compatibility(
@@ -123,8 +132,17 @@ pub fn construct_ic_stack(
     );
 
     let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new(
+        node_id,
         subnet_id,
-        pb::CatchUpPackage::from(&catch_up_package),
+        // Note: it's important to pass the original proto which came from the command line (as
+        // opposed to, for example, a proto which was first deserialized and then serialized
+        // again). Since the proto file could have been produced and signed by nodes running a
+        // different replica version, there is a possibility that the format of
+        // `pb::CatchUpContent` has changed across the versions, in which case deserializing and
+        // serializing the proto could result in a different value of
+        // `pb::CatchUpPackage::content` which will make it impossible to validate the signature of
+        // the proto.
+        catch_up_package_proto,
         artifact_pool_config.clone(),
         metrics_registry.clone(),
         log.clone(),
@@ -213,7 +231,7 @@ pub fn construct_ic_stack(
         Arc::clone(&certified_stream_store) as Arc<_>,
         Arc::clone(&crypto) as Arc<_>,
         registry.clone(),
-        rt_handle_xnet,
+        rt_handle_xnet.clone(),
         node_id,
         subnet_id,
         metrics_registry,
@@ -226,7 +244,7 @@ pub fn construct_ic_stack(
     } = setup_bitcoin_adapter_clients(
         log.clone(),
         metrics_registry,
-        rt_handle.clone(),
+        rt_handle_main.clone(),
         config.adapters_config.clone(),
     );
     let self_validating_payload_builder = Arc::new(BitcoinPayloadBuilder::new(
@@ -236,17 +254,22 @@ pub fn construct_ic_stack(
         btc_testnet_client,
         subnet_id,
         registry.clone(),
+        config.bitcoin_payload_builder_config,
         log.clone(),
     ));
     // ---------- HTTPS OUTCALLS DEPS FOLLOW ----------
     let canister_http_adapter_client = setup_canister_http_client(
-        rt_handle.clone(),
+        rt_handle_main.clone(),
         metrics_registry,
         config.adapters_config,
         execution_services.anonymous_query_handler,
         log.clone(),
         subnet_type,
     );
+    // ---------- QUERY STATS DEPS FOLLOW -----------
+    let query_stats_payload_builder = execution_services
+        .query_stats_payload_builder
+        .into_payload_builder(state_manager.clone(), node_id, log.clone());
     // ---------- CONSENSUS AND P2P DEPS FOLLOW ----------
     let state_sync = StateSync::new(state_manager.clone(), log.clone());
     let local_store_cert_time_reader: Arc<dyn LocalStoreCertifiedTimeReader> = Arc::new(
@@ -255,7 +278,7 @@ pub fn construct_ic_stack(
     let (ingress_throttler, ingress_tx, p2p_runner) = setup_consensus_and_p2p(
         log,
         metrics_registry,
-        &rt_handle,
+        rt_handle_p2p,
         artifact_pool_config,
         config.transport,
         config.malicious_behaviour.malicious_flags.clone(),
@@ -268,10 +291,10 @@ pub fn construct_ic_stack(
         Arc::clone(&state_manager) as Arc<_>,
         consensus_pool,
         catch_up_package,
-        P2PStateSyncClient::Client(state_sync),
+        Arc::new(state_sync),
         xnet_payload_builder,
         self_validating_payload_builder,
-        execution_services.query_stats_payload_builder,
+        query_stats_payload_builder,
         message_router,
         // TODO(SCL-213)
         Arc::clone(&crypto) as Arc<_>,
@@ -283,19 +306,18 @@ pub fn construct_ic_stack(
         local_store_cert_time_reader,
         canister_http_adapter_client,
         config.nns_registry_replicator.poll_delay_duration_ms,
-        time_source.clone(),
     );
     // ---------- PUBLIC ENDPOINT DEPS FOLLOW ----------
     ic_http_endpoints_public::start_server(
-        rt_handle_http,
+        rt_handle_http.clone(),
         metrics_registry,
         config.http_handler.clone(),
         execution_services.ingress_filter,
         execution_services.async_query_handler,
         ingress_throttler,
         ingress_tx.clone(),
-        time_source,
         Arc::clone(&state_manager) as Arc<_>,
+        Arc::clone(&crypto) as Arc<_>,
         registry,
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&crypto) as Arc<_>,
@@ -306,6 +328,7 @@ pub fn construct_ic_stack(
         consensus_pool_cache,
         subnet_type,
         config.malicious_behaviour.malicious_flags,
+        None,
         Arc::new(Pprof),
     );
 

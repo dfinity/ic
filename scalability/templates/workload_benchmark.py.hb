@@ -28,7 +28,7 @@ class {{experiment_name}}(workload_experiment.WorkloadExperiment):
         # TODO: Load between iterations.
         
         {{#if use_workload_generators}}
-        # TODO: Set correct argumetns in workload generator
+        # TODO: Set correct arguments in workload generator
         return self.run_workload_generator(
             self.machines, # List of machines that the workload generator should run on
             self.target_nodes, # List of IC nodes running the canister that should be targeted

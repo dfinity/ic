@@ -17,6 +17,4 @@ MERGE_BASE="$(git merge-base HEAD master)"
 buf build -o current.bin
 buf build ".git#ref=$MERGE_BASE" -o against.bin
 
-for directory in $(yq '.directories[]' buf.yaml); do
-    buf breaking current.bin --against against.bin --config="${directory}/buf.yaml"
-done
+buf breaking current.bin --against against.bin --config=buf.yaml

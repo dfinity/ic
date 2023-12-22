@@ -1,13 +1,14 @@
 use std::{
     collections::HashMap,
     io::{BufWriter, Write},
-    path::PathBuf,
+    path::{Component, Path, PathBuf},
     sync::{Arc, RwLock},
     time::Instant,
 };
 
-use anyhow::{Context as AnyhowContext, Error};
+use anyhow::{anyhow, Context as AnyhowContext, Error};
 use async_trait::async_trait;
+use mockall::automock;
 use opentelemetry::KeyValue;
 use tracing::info;
 
@@ -31,6 +32,7 @@ pub enum PersistError {
     UnexpectedError(#[from] anyhow::Error),
 }
 
+#[automock]
 #[async_trait]
 pub trait Persist: Send + Sync {
     async fn persist(&self, pkgs: &[Package]) -> Result<PersistStatus, PersistError>;
@@ -62,6 +64,33 @@ impl Persister {
     }
 }
 
+fn normalize_path(path: PathBuf) -> PathBuf {
+    let mut components = path.components().peekable();
+    let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().cloned() {
+        components.next();
+        PathBuf::from(c.as_os_str())
+    } else {
+        PathBuf::new()
+    };
+
+    for component in components {
+        match component {
+            Component::Prefix(..) => unreachable!(),
+            Component::RootDir => {
+                ret.push(component.as_os_str());
+            }
+            Component::CurDir => {}
+            Component::ParentDir => {
+                ret.pop();
+            }
+            Component::Normal(c) => {
+                ret.push(c);
+            }
+        }
+    }
+    ret
+}
+
 #[async_trait]
 impl Persist for Persister {
     async fn persist(&self, pkgs: &[Package]) -> Result<PersistStatus, PersistError> {
@@ -70,25 +99,36 @@ impl Persist for Persister {
             .context("failed to create certificates directory")?;
 
         pkgs.iter().try_for_each(|pkg| {
+            // Certificate
+
+            let ssl_certificate_path = normalize_path(
+                Path::new(&self.certificates_path.to_string_lossy().to_string())
+                    .join(format!("{}.pem", &pkg.name)),
+            );
+
+            if ssl_certificate_path.as_path().parent()
+                != Some(Path::new(
+                    &self.certificates_path.to_string_lossy().to_string(),
+                ))
+            {
+                return Err(anyhow!(format!(
+                    "error making a key path:{}/{}.pem",
+                    &self.certificates_path.to_string_lossy().to_string(),
+                    pkg.name
+                )));
+            }
+
+            std::fs::write(ssl_certificate_path, &pkg.pair.1)
+                .context("failed to write certificate")?;
+
             // Private Key
-            let ssl_certificate_key_path = format!(
-                "{}/{}-key.pem",
-                self.certificates_path.to_string_lossy(),
-                pkg.name.to_owned()
+            let ssl_certificate_key_path = normalize_path(
+                Path::new(&self.certificates_path.to_string_lossy().to_string())
+                    .join(format!("{}-key.pem", &pkg.name)),
             );
 
             std::fs::write(ssl_certificate_key_path, &pkg.pair.0)
                 .context("failed to write private key")?;
-
-            // Certificate
-            let ssl_certificate_path = format!(
-                "{}/{}.pem",
-                self.certificates_path.to_string_lossy(),
-                pkg.name.to_owned()
-            );
-
-            std::fs::write(ssl_certificate_path, &pkg.pair.1)
-                .context("failed to write certificate")?;
 
             Ok::<_, Error>(())
         })?;
@@ -97,17 +137,19 @@ impl Persist for Persister {
         let cfgs = pkgs
             .iter()
             .map(|pkg| {
-                let ssl_certificate_key_path = format!(
-                    "{}/{}-key.pem",
-                    self.certificates_path.to_string_lossy(),
-                    pkg.name.to_owned()
-                );
+                let ssl_certificate_path = normalize_path(
+                    Path::new(&self.certificates_path.to_string_lossy().to_string())
+                        .join(format!("{}.pem", &pkg.name)),
+                )
+                .to_string_lossy()
+                .to_string();
 
-                let ssl_certificate_path = format!(
-                    "{}/{}.pem",
-                    self.certificates_path.to_string_lossy(),
-                    pkg.name.to_owned()
-                );
+                let ssl_certificate_key_path = normalize_path(
+                    Path::new(&self.certificates_path.to_string_lossy().to_string())
+                        .join(format!("{}-key.pem", &pkg.name)),
+                )
+                .to_string_lossy()
+                .to_string();
 
                 self.renderer
                     .render(&Context {
@@ -196,6 +238,10 @@ pub struct WithDedup<T, U>(pub T, pub Arc<RwLock<Option<U>>>);
 #[async_trait]
 impl<T: Persist> Persist for WithDedup<T, Vec<Package>> {
     async fn persist(&self, pkgs: &[Package]) -> Result<PersistStatus, PersistError> {
+        if self.1.read().unwrap().is_none() && pkgs.is_empty() {
+            return Ok(PersistStatus::SkippedEmpty);
+        }
+
         if self
             .1
             .read()
@@ -220,18 +266,6 @@ impl<T: Persist> Persist for WithDedup<T, Vec<Package>> {
     }
 }
 
-pub struct WithEmpty<T>(pub T);
-
-#[async_trait]
-impl<T: Persist> Persist for WithEmpty<T> {
-    async fn persist(&self, pkgs: &[Package]) -> Result<PersistStatus, PersistError> {
-        if pkgs.is_empty() {
-            return Ok(PersistStatus::SkippedEmpty);
-        }
-        self.0.persist(pkgs).await
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -248,7 +282,11 @@ mod tests {
 
         let tmp_dir = tempdir()?;
 
-        let renderer = Renderer::new("{name}|{ssl_certificate_key_path}|{ssl_certificate_path}");
+        let renderer = Renderer::new(
+            "{name}|{ssl_certificate_key_path}|{ssl_certificate_path}",
+            "{name}|{ssl_certificate_key_path}|{ssl_certificate_path}",
+            vec!["X".to_string(), "Y".to_string(), "Z".to_string()],
+        );
 
         let persister = Persister::new(
             Arc::new(renderer),              // renderer
@@ -297,6 +335,78 @@ mod tests {
             std::fs::read_to_string(tmp_dir.path().join("mappings"))?,
             "let domain_mappings = {\"test\":\"aaaaa-aa\"}; export default domain_mappings;",
         );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_dedup_empty() -> Result<(), Error> {
+        let mut mock = MockPersist::new();
+        mock.expect_persist()
+            .returning(|_| Ok(PersistStatus::Completed));
+
+        let initial_value: Option<Vec<Package>> = None;
+        let persister = WithDedup(mock, Arc::new(RwLock::new(initial_value)));
+
+        let empty_package: &[Package] = &[];
+        let out = persister.persist(empty_package).await?;
+
+        assert_eq!(out, PersistStatus::SkippedEmpty,);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_dedup_unchanged() -> Result<(), Error> {
+        let mut mock = MockPersist::new();
+        mock.expect_persist()
+            .returning(|_| Ok(PersistStatus::Completed));
+
+        let initial_value: Option<Vec<Package>> = None;
+        let persister = WithDedup(mock, Arc::new(RwLock::new(initial_value)));
+
+        let single_package: &[Package] = &[Package {
+            name: "test1".into(),
+            canister: Principal::from_text("aaaaa-aa")?,
+            pair: Pair(
+                "key1".to_string().into_bytes(),
+                "cert1".to_string().into_bytes(),
+            ),
+        }];
+
+        let double_package: &[Package] = &[
+            Package {
+                name: "test1".into(),
+                canister: Principal::from_text("aaaaa-aa")?,
+                pair: Pair(
+                    "key1".to_string().into_bytes(),
+                    "cert1".to_string().into_bytes(),
+                ),
+            },
+            Package {
+                name: "test2".into(),
+                canister: Principal::from_text("aaaaa-aa")?,
+                pair: Pair(
+                    "key2".to_string().into_bytes(),
+                    "cert2".to_string().into_bytes(),
+                ),
+            },
+        ];
+
+        let out = persister.persist(single_package).await?;
+        assert_eq!(out, PersistStatus::Completed,);
+
+        let out = persister.persist(single_package).await?;
+        assert_eq!(out, PersistStatus::SkippedUnchanged,);
+
+        let out = persister.persist(double_package).await?;
+        assert_eq!(out, PersistStatus::Completed,);
+
+        let out = persister.persist(double_package).await?;
+        assert_eq!(out, PersistStatus::SkippedUnchanged,);
+
+        let out = persister.persist(single_package).await?;
+        assert_eq!(out, PersistStatus::Completed,);
 
         Ok(())
     }

@@ -1,10 +1,10 @@
 use anyhow::Context;
 use async_trait::async_trait;
 use axum::extract::FromRequestParts;
+use candid::Principal;
 use hyper::{header::HOST, http::request::Parts};
 #[cfg(feature = "dev_proxy")]
 use hyper::{header::REFERER, Uri};
-use ic_agent::export::Principal;
 use itertools::iproduct;
 use tracing::error;
 

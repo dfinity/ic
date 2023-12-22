@@ -59,7 +59,7 @@ class Flamegraph(metrics.Metric):
                 colored(
                     (
                         "❌ Perf isn't working correctly, disabling flamegraphs for this run. "
-                        "This is most likely due to a missmatch of kernel version for the perf install. "
+                        "This is most likely due to a mismatch of kernel version for the perf install. "
                         "The node-team might be able to help with this."
                     ),
                     "red",

@@ -71,7 +71,7 @@ op :: (Op a) => Word8 -> a
 op x = mkOp x mempty
 
 -- Now, all the op codes defined by the universal canister.
--- Most can be simply be defined by specifiying their type and using the 'op'
+-- Most can be simply be defined by specifying their type and using the 'op'
 -- combinator
 
 noop :: Prog
@@ -278,6 +278,9 @@ oneWayCallNew = op 76
 
 isController :: Exp 'B -> Exp 'I
 isController = op 77
+
+inReplicatedExecution :: Exp 'I
+inReplicatedExecution = op 81
 
 -- Some convenience combinators
 

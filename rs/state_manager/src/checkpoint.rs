@@ -1,16 +1,20 @@
-use crate::{CheckpointError, CheckpointMetrics, TipRequest, NUMBER_OF_CHECKPOINT_THREADS};
+use crate::{
+    CheckpointError, CheckpointMetrics, TipRequest,
+    CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN, NUMBER_OF_CHECKPOINT_THREADS,
+};
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::{subnet_id_try_from_protobuf, CanisterId};
-// TODO(MR-412): uncomment
-//use ic_protobuf::proxy::try_from_option_field;
+use ic_config::flag_status::FlagStatus;
+use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
-use ic_replicated_state::Memory;
 use ic_replicated_state::{
     canister_state::execution_state::WasmBinary, page_map::PageMap, CanisterMetrics, CanisterState,
     ExecutionState, ReplicatedState, SchedulerState, SystemState,
 };
+use ic_replicated_state::{CheckpointLoadingMetrics, Memory};
 use ic_state_layout::{CanisterLayout, CanisterStateBits, CheckpointLayout, ReadOnly, ReadPolicy};
+use ic_types::batch::RawQueryStats;
 use ic_types::{CanisterTimer, Height, LongExecutionMode, Time};
 use ic_utils::thread::parallel_map;
 use std::collections::BTreeMap;
@@ -20,6 +24,19 @@ use std::time::{Duration, Instant};
 
 #[cfg(test)]
 mod tests;
+
+impl CheckpointLoadingMetrics for CheckpointMetrics {
+    fn observe_broken_soft_invariant(&self, msg: String) {
+        debug_assert!(false);
+        self.load_checkpoint_soft_invariant_broken.inc();
+        error!(
+            self.log,
+            "{}: Checkpoint invariant broken: {}",
+            CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN,
+            msg
+        );
+    }
+}
 
 /// Creates a checkpoint of the node state using specified directory
 /// layout. Returns a new state that is equivalent to the given one
@@ -38,6 +55,7 @@ pub(crate) fn make_checkpoint(
     metrics: &CheckpointMetrics,
     thread_pool: &mut scoped_threadpool::Pool,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+    lsmt_storage: FlagStatus,
 ) -> Result<(CheckpointLayout<ReadOnly>, ReplicatedState), CheckpointError> {
     {
         let _timer = metrics
@@ -71,10 +89,19 @@ pub(crate) fn make_checkpoint(
                 sender: send,
             })
             .unwrap();
-        recv.recv().unwrap()?
+        let cp = recv.recv().unwrap()?;
+        // With lsmt storage, this happens later (after manifest)
+        if lsmt_storage == FlagStatus::Disabled {
+            tip_channel
+                .send(TipRequest::ResetTipTo {
+                    checkpoint_layout: cp.clone(),
+                })
+                .unwrap();
+        }
+        cp
     };
 
-    {
+    if lsmt_storage == FlagStatus::Disabled {
         // Wait for reset_tip_to so that we don't reflink in parallel with other operations.
         let _timer = metrics
             .make_checkpoint_step_duration
@@ -121,7 +148,7 @@ pub fn load_checkpoint_parallel<P: ReadPolicy + Send + Sync>(
     )
 }
 
-/// loads the node state heighted with `height` using the specified
+/// Loads the node state heighted with `height` using the specified
 /// directory layout.
 pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
     checkpoint_layout: &CheckpointLayout<P>,
@@ -148,8 +175,11 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
             ic_replicated_state::IngressHistoryState::try_from(ingress_history_proto)
                 .map_err(|err| into_checkpoint_error("IngressHistoryState".into(), err))?;
         let metadata_proto = checkpoint_layout.system_metadata().deserialize()?;
-        let mut metadata = ic_replicated_state::SystemMetadata::try_from(metadata_proto)
-            .map_err(|err| into_checkpoint_error("SystemMetadata".into(), err))?;
+        let mut metadata = ic_replicated_state::SystemMetadata::try_from((
+            metadata_proto,
+            metrics as &dyn CheckpointLoadingMetrics,
+        ))
+        .map_err(|err| into_checkpoint_error("SystemMetadata".into(), err))?;
         metadata.ingress_history = ingress_history;
         metadata.own_subnet_type = own_subnet_type;
 
@@ -173,6 +203,14 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
             checkpoint_layout.subnet_queues().deserialize()?,
         )
         .map_err(|err| into_checkpoint_error("CanisterQueues".into(), err))?
+    };
+
+    let stats = checkpoint_layout.stats().deserialize()?;
+    let query_stats = if let Some(query_stats) = stats.query_stats {
+        RawQueryStats::try_from(query_stats)
+            .map_err(|err| into_checkpoint_error("QueryStats".into(), err))?
+    } else {
+        RawQueryStats::default()
     };
 
     let canister_states = {
@@ -219,7 +257,8 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
         canister_states
     };
 
-    let state = ReplicatedState::new_from_checkpoint(canister_states, metadata, subnet_queues);
+    let state =
+        ReplicatedState::new_from_checkpoint(canister_states, metadata, subnet_queues, query_stats);
 
     Ok(state)
 }
@@ -273,6 +312,7 @@ pub fn load_canister_state<P: ReadPolicy>(
             let wasm_memory = Memory::new(
                 PageMap::open(
                     &canister_layout.vmemory_0(),
+                    &canister_layout.vmemory_0_overlays()?,
                     height,
                     Arc::clone(&fd_factory),
                 )?,
@@ -284,6 +324,7 @@ pub fn load_canister_state<P: ReadPolicy>(
             let stable_memory = Memory::new(
                 PageMap::open(
                     &canister_layout.stable_memory_blob(),
+                    &canister_layout.stable_memory_overlays()?,
                     height,
                     Arc::clone(&fd_factory),
                 )?,
@@ -334,10 +375,20 @@ pub fn load_canister_state<P: ReadPolicy>(
         canister_state_bits.scheduled_as_first,
         canister_state_bits.skipped_round_due_to_no_messages,
         canister_state_bits.executed,
-        canister_state_bits.interruped_during_execution,
+        canister_state_bits.interrupted_during_execution,
         canister_state_bits.consumed_cycles_since_replica_started,
         canister_state_bits.consumed_cycles_since_replica_started_by_use_cases,
     );
+
+    let starting_time = Instant::now();
+    let wasm_chunk_store_data = PageMap::open(
+        &canister_layout.wasm_chunk_store(),
+        &canister_layout.wasm_chunk_store_overlays()?,
+        height,
+        Arc::clone(&fd_factory),
+    )?;
+    durations.insert("wasm_chunk_store", starting_time.elapsed());
+
     let system_state = SystemState::new_from_checkpoint(
         canister_state_bits.controllers,
         *canister_id,
@@ -350,10 +401,13 @@ pub fn load_canister_state<P: ReadPolicy>(
         canister_state_bits.cycles_balance,
         canister_state_bits.cycles_debit,
         canister_state_bits.reserved_balance,
+        canister_state_bits.reserved_balance_limit,
         canister_state_bits.task_queue.into_iter().collect(),
         CanisterTimer::from_nanos_since_unix_epoch(canister_state_bits.global_timer_nanos),
         canister_state_bits.canister_version,
         canister_state_bits.canister_history,
+        wasm_chunk_store_data,
+        canister_state_bits.wasm_chunk_store_metadata,
     );
 
     let canister_state = CanisterState {
@@ -372,6 +426,7 @@ pub fn load_canister_state<P: ReadPolicy>(
             time_of_last_allocation_charge: Time::from_nanos_since_unix_epoch(
                 canister_state_bits.time_of_last_allocation_charge_nanos,
             ),
+            total_query_stats: canister_state_bits.total_query_stats,
         },
     };
 

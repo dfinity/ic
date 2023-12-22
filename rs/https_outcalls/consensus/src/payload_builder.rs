@@ -12,7 +12,7 @@ use ic_consensus_utils::{
 };
 use ic_error_types::RejectCode;
 use ic_interfaces::{
-    batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload},
+    batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
     canister_http::{
         CanisterHttpPayloadValidationError, CanisterHttpPermanentValidationError, CanisterHttpPool,
         CanisterHttpTransientValidationError,
@@ -374,7 +374,7 @@ impl CanisterHttpPayloadBuilderImpl {
         payload: &CanisterHttpPayload,
         validation_context: &ValidationContext,
         delivered_ids: HashSet<CallbackId>,
-    ) -> Result<(), CanisterHttpPayloadValidationError> {
+    ) -> Result<(), PayloadValidationError> {
         // Empty payloads are always valid
         if payload.is_empty() {
             return Ok(());
@@ -383,23 +383,17 @@ impl CanisterHttpPayloadBuilderImpl {
         // Check whether feature is enabled and reject if it isn't.
         // NOTE: All payloads that are processed at this point are non-empty
         if !self.is_enabled(validation_context).map_err(|err| {
-            CanisterHttpPayloadValidationError::Transient(
-                CanisterHttpTransientValidationError::RegistryUnavailable(err),
-            )
+            ValidationError::Transient(PayloadTransientError::RegistryUnavailable(err))
         })? {
-            return Err(CanisterHttpPayloadValidationError::Transient(
-                CanisterHttpTransientValidationError::Disabled,
-            ));
+            return transient_error(CanisterHttpTransientValidationError::Disabled);
         }
 
         // Check number of responses
         if payload.num_non_timeout_responses() > CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
-            return Err(CanisterHttpPayloadValidationError::Permanent(
-                CanisterHttpPermanentValidationError::TooManyResponses {
-                    expected: CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK,
-                    received: payload.num_non_timeout_responses(),
-                },
-            ));
+            return permanent_error(CanisterHttpPermanentValidationError::TooManyResponses {
+                expected: CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK,
+                received: payload.num_non_timeout_responses(),
+            });
         }
 
         // Validate the timed out calls
@@ -429,8 +423,8 @@ impl CanisterHttpPayloadBuilderImpl {
             if request.time + CANISTER_HTTP_TIMEOUT_INTERVAL >= validation_context.time
                 || delivered_ids.contains(timeout_id)
             {
-                return Err(CanisterHttpPayloadValidationError::Permanent(
-                    CanisterHttpPermanentValidationError::NotTimedOut(*timeout_id),
+                return permanent_error(CanisterHttpPermanentValidationError::NotTimedOut(
+                    *timeout_id,
                 ));
             }
         }
@@ -441,7 +435,7 @@ impl CanisterHttpPayloadBuilderImpl {
                 CanisterHttpTransientValidationError::ConsensusRegistryVersionUnavailable,
             ))?;
 
-        // Check conditions on individual reponses
+        // Check conditions on individual responses
         for response in &payload.responses {
             // Check that response is consistent
             utils::check_response_consistency(response)
@@ -457,8 +451,8 @@ impl CanisterHttpPayloadBuilderImpl {
 
             // Check that the response is not submitted twice
             if delivered_ids.contains(&response.content.id) {
-                return Err(CanisterHttpPayloadValidationError::Permanent(
-                    CanisterHttpPermanentValidationError::DuplicateResponse(response.content.id),
+                return permanent_error(CanisterHttpPermanentValidationError::DuplicateResponse(
+                    response.content.id,
                 ));
             }
         }
@@ -483,9 +477,7 @@ impl CanisterHttpPayloadBuilderImpl {
                 Ok(threshold) => threshold,
                 Err(err) => {
                     warn!(self.log, "Failed to get membership: {:?}", err);
-                    return Err(CanisterHttpPayloadValidationError::Transient(
-                        CanisterHttpTransientValidationError::Membership,
-                    ));
+                    return transient_error(CanisterHttpTransientValidationError::Membership);
                 }
             };
             let (valid_signers, invalid_signers): (Vec<NodeId>, Vec<NodeId>) = response
@@ -496,22 +488,18 @@ impl CanisterHttpPayloadBuilderImpl {
                 .cloned()
                 .partition(|signer| committee.iter().any(|id| id == signer));
             if !invalid_signers.is_empty() {
-                return Err(CanisterHttpPayloadValidationError::Permanent(
-                    CanisterHttpPermanentValidationError::SignersNotMembers {
-                        invalid_signers,
-                        committee,
-                        valid_signers,
-                    },
-                ));
+                return permanent_error(CanisterHttpPermanentValidationError::SignersNotMembers {
+                    invalid_signers,
+                    committee,
+                    valid_signers,
+                });
             }
             if valid_signers.len() < threshold {
-                return Err(CanisterHttpPayloadValidationError::Permanent(
-                    CanisterHttpPermanentValidationError::NotEnoughSigners {
-                        committee,
-                        signers: valid_signers,
-                        expected_threshold: threshold,
-                    },
-                ));
+                return permanent_error(CanisterHttpPermanentValidationError::NotEnoughSigners {
+                    committee,
+                    signers: valid_signers,
+                    expected_threshold: threshold,
+                });
             }
             self.crypto
                 .verify_aggregate(&response.proof, consensus_registry_version)
@@ -526,9 +514,7 @@ impl CanisterHttpPayloadBuilderImpl {
             Ok(members) => ic_types::consensus::get_faults_tolerated(members.len()),
             _ => {
                 warn!(self.log, "Failed to get canister http committee");
-                return Err(CanisterHttpPayloadValidationError::Transient(
-                    CanisterHttpTransientValidationError::Membership,
-                ));
+                return transient_error(CanisterHttpTransientValidationError::Membership);
             }
         };
 
@@ -540,13 +526,11 @@ impl CanisterHttpPayloadBuilderImpl {
                 .partition(|signer| committee.iter().any(|id| id == signer));
 
             if !invalid_signers.is_empty() {
-                return Err(CanisterHttpPayloadValidationError::Permanent(
-                    CanisterHttpPermanentValidationError::SignersNotMembers {
-                        invalid_signers,
-                        committee,
-                        valid_signers,
-                    },
-                ));
+                return permanent_error(CanisterHttpPermanentValidationError::SignersNotMembers {
+                    invalid_signers,
+                    committee,
+                    valid_signers,
+                });
             }
 
             for share in response.shares.iter() {
@@ -561,15 +545,15 @@ impl CanisterHttpPayloadBuilderImpl {
 
             let grouped_shares = group_shares_by_callback_id(response.shares.iter());
             if grouped_shares.len() != 1 {
-                return Err(CanisterHttpPayloadValidationError::Permanent(
+                return permanent_error(
                     CanisterHttpPermanentValidationError::DivergenceProofContainsMultipleCallbackIds
-                ));
+                );
             }
             for (_, grouped_shares) in grouped_shares {
                 if !grouped_shares_meet_divergence_criteria(&grouped_shares, faults_tolerated) {
-                    return Err(CanisterHttpPayloadValidationError::Permanent(
+                    return permanent_error(
                         CanisterHttpPermanentValidationError::DivergenceProofDoesNotMeetDivergenceCriteria
-                    ));
+                    );
                 }
             }
         }
@@ -615,9 +599,9 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
     fn validate_payload(
         &self,
         height: Height,
+        proposal_context: &ProposalContext,
         payload: &[u8],
         past_payloads: &[PastPayload],
-        context: &ValidationContext,
     ) -> Result<(), PayloadValidationError> {
         let _time = self
             .metrics
@@ -647,16 +631,12 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
                 CanisterHttpPermanentValidationError::DecodeError(e),
             ))
         })?;
-        self.validate_canister_http_payload_impl(height, &payload, context, delivered_ids)
-            .map(|_| ())
-            .map_err(|err| match err {
-                ValidationError::Permanent(err) => ValidationError::Permanent(
-                    PayloadPermanentError::CanisterHttpPayloadValidationError(err),
-                ),
-                ValidationError::Transient(err) => ValidationError::Transient(
-                    PayloadTransientError::CanisterHttpPayloadValidationError(err),
-                ),
-            })
+        self.validate_canister_http_payload_impl(
+            height,
+            &payload,
+            proposal_context.validation_context,
+            delivered_ids,
+        )
     }
 }
 
@@ -728,4 +708,20 @@ impl IntoMessages<(Vec<Response>, CanisterHttpBatchStats)> for CanisterHttpPaylo
 
         (responses, stats)
     }
+}
+
+fn transient_error(
+    err: CanisterHttpTransientValidationError,
+) -> Result<(), PayloadValidationError> {
+    Err(ValidationError::Transient(
+        PayloadTransientError::CanisterHttpPayloadValidationError(err),
+    ))
+}
+
+fn permanent_error(
+    err: CanisterHttpPermanentValidationError,
+) -> Result<(), PayloadValidationError> {
+    Err(ValidationError::Permanent(
+        PayloadPermanentError::CanisterHttpPayloadValidationError(err),
+    ))
 }

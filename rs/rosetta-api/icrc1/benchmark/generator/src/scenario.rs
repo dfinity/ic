@@ -9,8 +9,8 @@ use ic_cdk::api::management_canister::main::{
     CanisterIdRecord, CanisterInstallMode, CreateCanisterArgument, InstallCodeArgument, WasmModule,
 };
 use ic_icrc1_benchmark_worker::InitArgs;
-use ic_icrc1_client_cdk::{CdkRuntime, ICRC1Client};
 use ic_ledger_core::Tokens;
+use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
 
@@ -28,14 +28,14 @@ fn get_ledger_client() -> ICRC1Client<CdkRuntime> {
 async fn create_workers(nb_workers: u32) -> Vec<Principal> {
     let mut workers = vec![];
     for i in 0..nb_workers {
-        let worker_id =
-            ic_cdk::api::management_canister::main::create_canister(CreateCanisterArgument {
-                settings: None,
-            })
-            .await
-            .expect("Error while creating worker canister.")
-            .0
-            .canister_id;
+        let worker_id = ic_cdk::api::management_canister::main::create_canister(
+            CreateCanisterArgument { settings: None },
+            100_000_000_000u128,
+        )
+        .await
+        .expect("Error while creating worker canister.")
+        .0
+        .canister_id;
         ic_cdk::println!(
             "Created worker canister [{}/{}] {}",
             i + 1,
@@ -69,7 +69,7 @@ async fn install_code_on_canisters(wasm: WasmModule, canisters: Vec<Principal>) 
             canister_id
         );
         let arg = InitArgs {
-            ledger_id: CanisterId::new(get_ledger_principal()).unwrap(),
+            ledger_id: CanisterId::unchecked_from_principal(get_ledger_principal()),
             rand_seed: Nat::from(next_u64()),
         };
         let arg = &Encode!(&arg).expect("Error while encoding arg");

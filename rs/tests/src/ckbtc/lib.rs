@@ -13,13 +13,12 @@ use crate::{
     },
     util::{assert_create_agent, runtime_from_url, MessageCanister},
 };
-use candid::Encode;
+use candid::{Encode, Principal};
 use canister_test::{ic00::EcdsaKeyId, Canister, Runtime};
 use dfn_candid::candid;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_btc_interface::{Config, Fees, Flag, Network};
 use ic_canister_client::Sender;
-use ic_cdk::export::Principal;
 use ic_ckbtc_kyt::{
     InitArg as KytInitArg, KytMode, LifecycleArg, SetApiKeyArg, UpgradeArg as KytUpgradeArg,
 };
@@ -63,7 +62,7 @@ pub const TIMEOUT_SHORT: Duration = Duration::from_secs(300);
 
 // const KYT_CANISTER_ID: &str = "g4xu7-jiaaa-aaaan-aaaaq-cai";
 
-/// Maximum time (in nanoseconds) spend in queue at 0 to make the minter treat requests rigth away
+/// Maximum time (in nanoseconds) spend in queue at 0 to make the minter treat requests right away
 pub const MAX_NANOS_IN_QUEUE: u64 = 0;
 
 pub const BTC_MIN_CONFIRMATIONS: u64 = 6;
@@ -291,8 +290,8 @@ pub(crate) async fn install_minter(
     info!(&logger, "Installing minter ...");
     let args = CkbtcMinterInitArgs {
         btc_network: Network::Regtest.into(),
-        /// The name of the [EcdsaKeyId]. Use "dfx_test_key" for local replica and "test_key_1" for
-        /// a testing key for testnet and mainnet
+        // The name of the [EcdsaKeyId]. Use "dfx_test_key" for local replica and "test_key_1" for
+        // a testing key for testnet and mainnet
         ecdsa_key_name: TEST_KEY_LOCAL.parse().unwrap(),
         // ecdsa_key_name: "test_key_1".parse().unwrap(),
         retrieve_btc_min_amount: RETRIEVE_BTC_MIN_AMOUNT,

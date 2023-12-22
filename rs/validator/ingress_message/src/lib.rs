@@ -61,6 +61,7 @@ pub enum RequestValidationError {
     CanisterNotInDelegationTargets(CanisterId),
     TooManyPathsError { length: usize, maximum: usize },
     PathTooLongError { length: usize, maximum: usize },
+    NonceTooBigError { num_bytes: usize, maximum: usize },
 }
 
 impl Display for RequestValidationError {
@@ -100,7 +101,12 @@ impl Display for RequestValidationError {
                 f,
                 "At least one path in read state request is too deep: got {} labels, but at most {} are allowed",
                 length, maximum
-            )
+            ),
+            RequestValidationError::NonceTooBigError { num_bytes: length, maximum } => write!(
+                f,
+                "Nonce in request is too big: got {} bytes, but at most {} are allowed",
+                length, maximum
+            ),
         }
     }
 }

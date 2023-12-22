@@ -10,6 +10,7 @@ DEPENDENCIES = [
 
 rust_proc_macro(
     name = "exhaustive_derive",
+    testonly = True,
     srcs = glob(["src/**"]),
     crate_name = "ic_exhaustive_derive",
     version = "0.1.0",

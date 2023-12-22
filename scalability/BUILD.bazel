@@ -1,10 +1,10 @@
-load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
-load("@python_deps//:requirements.bzl", "requirement")
 load("@aspect_bazel_lib//lib:copy_to_directory.bzl", "copy_to_directory")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("@python_deps//:requirements.bzl", "requirement")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
 load("//rs/tests:common.bzl", "symlink_dir")
 
-IC_OS_ENV = "//ic-os/guestos/envs/dev-fixed-version"
+IC_OS_ENV = "//ic-os/guestos/envs/dev"
 
 # there were some issues with loading uuid, therefore we need load requirements individually instead of usings all_requirements
 py_library(
@@ -264,9 +264,11 @@ sh_test(
     env_inherit = [
         "HOME",
     ],
+    flaky = True,
     tags = [
         "no-sandbox",
         "requires-network",
+        "system_test_hourly",
     ],
 )
 

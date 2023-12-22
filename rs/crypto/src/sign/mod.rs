@@ -6,13 +6,13 @@ use crate::sign::multi_sig::MultiSigVerifierInternal;
 use crate::sign::multi_sig::MultiSignerInternal;
 use crate::sign::threshold_sig::{ThresholdSigVerifierInternal, ThresholdSignerInternal};
 pub use canister_threshold_sig::ecdsa::get_tecdsa_master_public_key;
+use ic_crypto_interfaces_sig_verification::{BasicSigVerifierByPublicKey, CanisterSigVerifier};
 use ic_crypto_internal_csp::types::{CspPublicKey, CspSignature};
 use ic_crypto_internal_csp::CryptoServiceProvider;
 use ic_crypto_internal_threshold_sig_bls12381::api::bls_signature_cache_statistics;
 use ic_interfaces::crypto::{
-    BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, CanisterSigVerifier,
-    MultiSigVerifier, MultiSigner, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
-    ThresholdSigVerifier, ThresholdSigVerifierByPublicKey, ThresholdSigner,
+    BasicSigVerifier, BasicSigner, MultiSigVerifier, MultiSigner, ThresholdEcdsaSigVerifier,
+    ThresholdEcdsaSigner, ThresholdSigVerifier, ThresholdSigVerifierByPublicKey, ThresholdSigner,
 };
 use ic_logger::{debug, new_logger};
 use ic_types::crypto::canister_threshold_sig::error::{
@@ -47,8 +47,6 @@ pub use canister_threshold_sig::{
 
 #[cfg(test)]
 mod tests;
-// TODO: Remove this indirection:
-pub(crate) use ic_crypto_internal_csp::imported_utilities::sign_utils as utils;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_types::crypto::threshold_sig::IcRootOfTrust;
 use ic_types::signature::BasicSignatureBatch;
@@ -680,7 +678,7 @@ impl<C: CryptoServiceProvider, S: Signable> CanisterSigVerifier<S> for CryptoCom
             root_of_trust,
         );
 
-        // Processing of the cache statistics for metrics is deliberatly
+        // Processing of the cache statistics for metrics is deliberately
         // part of the canister signature run time metric. It is expected to take
         // very little time, but if something goes wrong, e.g., due to a mutex
         // locking congestion or similar, we should be able to notice that.
@@ -715,12 +713,7 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigner for CryptoComponentImpl<C> {
             crypto.signature_inputs => format!("{:?}", inputs),
         );
         let start_time = self.metrics.now();
-        let result = canister_threshold_sig::ecdsa::sign_share(
-            &self.csp,
-            &self.node_id,
-            inputs,
-            &self.logger,
-        );
+        let result = canister_threshold_sig::ecdsa::sign_share(&self.csp, &self.node_id, inputs);
         self.metrics.observe_duration_seconds(
             MetricsDomain::ThresholdEcdsa,
             MetricsScope::Full,

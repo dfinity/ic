@@ -179,6 +179,7 @@ fn forward_whitelisted_unclaimed_accounts() {
 }
 
 #[candid_method(update, rename = "forward_whitelisted_unclaimed_accounts")]
+#[allow(clippy::let_unit_value)] // clippy false positive
 async fn forward_whitelisted_unclaimed_accounts_(_: ()) -> Result<(), String> {
     gtc_mut().forward_whitelisted_unclaimed_accounts().await
 }

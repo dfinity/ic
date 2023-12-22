@@ -1,30 +1,34 @@
-use crate::endpoints::EthereumNetwork;
-use crate::eth_rpc;
 use crate::eth_rpc::{
-    Block, FeeHistory, FeeHistoryParams, GetLogsParam, Hash, HttpOutcallError, HttpOutcallResult,
-    HttpResponsePayload, JsonRpcResult, LogEntry, ResponseSizeEstimate, Transaction,
+    self, are_errors_consistent, Block, BlockSpec, FeeHistory, FeeHistoryParams, GetLogsParam,
+    Hash, HttpOutcallError, HttpOutcallResult, HttpResponsePayload, JsonRpcResult, LogEntry,
+    ResponseSizeEstimate, SendRawTransactionResult,
 };
 use crate::eth_rpc_client::providers::{RpcNodeProvider, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS};
+use crate::eth_rpc_client::requests::GetTransactionCountParams;
+use crate::eth_rpc_client::responses::TransactionReceipt;
+use crate::lifecycle::EthereumNetwork;
 use crate::logs::{DEBUG, INFO};
+use crate::numeric::TransactionCount;
 use crate::state::State;
 use ic_canister_log::log;
-use serde::de::DeserializeOwned;
-use serde::Serialize;
+use serde::{de::DeserializeOwned, Serialize};
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 
 mod providers;
+pub mod requests;
+pub mod responses;
 
 #[cfg(test)]
 mod tests;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EthRpcClient {
     chain: EthereumNetwork,
 }
 
 impl EthRpcClient {
-    pub const fn new(chain: EthereumNetwork) -> Self {
+    const fn new(chain: EthereumNetwork) -> Self {
         Self { chain }
     }
 
@@ -129,31 +133,39 @@ impl EthRpcClient {
         results.reduce_with_equality()
     }
 
-    pub async fn eth_get_last_finalized_block(&self) -> Result<Block, MultiCallError<Block>> {
-        use crate::eth_rpc::{BlockSpec, BlockTag, GetBlockByNumberParams};
+    pub async fn eth_get_block_by_number(
+        &self,
+        block: BlockSpec,
+    ) -> Result<Block, MultiCallError<Block>> {
+        use crate::eth_rpc::GetBlockByNumberParams;
+
+        let expected_block_size = match self.chain {
+            EthereumNetwork::Sepolia => 12 * 1024,
+            EthereumNetwork::Mainnet => 24 * 1024,
+        };
 
         let results: MultiCallResults<Block> = self
             .parallel_call(
                 "eth_getBlockByNumber",
                 GetBlockByNumberParams {
-                    block: BlockSpec::Tag(BlockTag::Finalized),
+                    block,
                     include_full_transactions: false,
                 },
-                ResponseSizeEstimate::new(6 * 1024),
+                ResponseSizeEstimate::new(expected_block_size),
             )
             .await;
         results.reduce_with_equality()
     }
 
-    pub async fn eth_get_transaction_by_hash(
+    pub async fn eth_get_transaction_receipt(
         &self,
         tx_hash: Hash,
-    ) -> Result<Option<Transaction>, MultiCallError<Option<Transaction>>> {
-        let results: MultiCallResults<Option<Transaction>> = self
+    ) -> Result<Option<TransactionReceipt>, MultiCallError<Option<TransactionReceipt>>> {
+        let results: MultiCallResults<Option<TransactionReceipt>> = self
             .parallel_call(
-                "eth_getTransactionByHash",
+                "eth_getTransactionReceipt",
                 vec![tx_hash],
-                ResponseSizeEstimate::new(1200),
+                ResponseSizeEstimate::new(700),
             )
             .await;
         results.reduce_with_equality()
@@ -162,22 +174,36 @@ impl EthRpcClient {
     pub async fn eth_fee_history(
         &self,
         params: FeeHistoryParams,
-    ) -> HttpOutcallResult<JsonRpcResult<FeeHistory>> {
+    ) -> Result<FeeHistory, MultiCallError<FeeHistory>> {
         // A typical response is slightly above 300 bytes.
-        self.sequential_call_until_ok("eth_feeHistory", params, ResponseSizeEstimate::new(512))
-            .await
+        let results: MultiCallResults<FeeHistory> = self
+            .parallel_call("eth_feeHistory", params, ResponseSizeEstimate::new(512))
+            .await;
+        results.reduce_with_strict_majority_by_key(|fee_history| fee_history.oldest_block)
     }
 
     pub async fn eth_send_raw_transaction(
         &self,
         raw_signed_transaction_hex: String,
-    ) -> HttpOutcallResult<JsonRpcResult<Hash>> {
+    ) -> HttpOutcallResult<JsonRpcResult<SendRawTransactionResult>> {
         // A successful reply is under 256 bytes, but we expect most calls to end with an error
         // since we submit the same transaction from multiple nodes.
         self.sequential_call_until_ok(
             "eth_sendRawTransaction",
             vec![raw_signed_transaction_hex],
             ResponseSizeEstimate::new(256),
+        )
+        .await
+    }
+
+    pub async fn eth_get_transaction_count(
+        &self,
+        params: GetTransactionCountParams,
+    ) -> MultiCallResults<TransactionCount> {
+        self.parallel_call(
+            "eth_getTransactionCount",
+            params,
+            ResponseSizeEstimate::new(50),
         )
         .await
     }
@@ -204,6 +230,55 @@ impl<T> MultiCallResults<T> {
     }
 }
 
+impl<T: PartialEq> MultiCallResults<T> {
+    /// Expects all results to be ok or return the following error:
+    /// * MultiCallError::ConsistentJsonRpcError: all errors are the same JSON-RPC error.
+    /// * MultiCallError::ConsistentHttpOutcallError: all errors are the same HTTP outcall error.
+    /// * MultiCallError::InconsistentResults if there are different errors.
+    fn all_ok(self) -> Result<BTreeMap<RpcNodeProvider, T>, MultiCallError<T>> {
+        let mut results = BTreeMap::new();
+        let mut first_error: Option<(RpcNodeProvider, HttpOutcallResult<JsonRpcResult<T>>)> = None;
+        for (provider, result) in self.results.into_iter() {
+            match result {
+                Ok(JsonRpcResult::Result(value)) => {
+                    results.insert(provider, value);
+                }
+                _ => match first_error {
+                    None => {
+                        first_error = Some((provider, result));
+                    }
+                    Some((first_error_provider, error)) => {
+                        if !are_errors_consistent(&error, &result) {
+                            return Err(MultiCallError::InconsistentResults(
+                                MultiCallResults::from_non_empty_iter(vec![
+                                    (first_error_provider, error),
+                                    (provider, result),
+                                ]),
+                            ));
+                        }
+                        first_error = Some((first_error_provider, error));
+                    }
+                },
+            }
+        }
+        match first_error {
+            None => Ok(results),
+            Some((_provider, Ok(JsonRpcResult::Error { code, message }))) => {
+                Err(MultiCallError::ConsistentJsonRpcError { code, message })
+            }
+            Some((_provider, Err(error))) => Err(MultiCallError::ConsistentHttpOutcallError(error)),
+            Some((_, Ok(JsonRpcResult::Result(_)))) => {
+                panic!("BUG: first_error should be an error type")
+            }
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum SingleCallError {
+    HttpOutcallError(HttpOutcallError),
+    JsonRpcError { code: i64, message: String },
+}
 #[derive(Debug, PartialEq, Eq)]
 pub enum MultiCallError<T> {
     ConsistentHttpOutcallError(HttpOutcallError),
@@ -211,36 +286,138 @@ pub enum MultiCallError<T> {
     InconsistentResults(MultiCallResults<T>),
 }
 
+impl<T> MultiCallError<T> {
+    pub fn has_http_outcall_error_matching<P: Fn(&HttpOutcallError) -> bool>(
+        &self,
+        predicate: P,
+    ) -> bool {
+        match self {
+            MultiCallError::ConsistentHttpOutcallError(error) => predicate(error),
+            MultiCallError::ConsistentJsonRpcError { .. } => false,
+            MultiCallError::InconsistentResults(results) => {
+                results.results.values().any(|result| match result {
+                    Ok(JsonRpcResult::Result(_)) => false,
+                    Ok(JsonRpcResult::Error { .. }) => false,
+                    Err(error) => predicate(error),
+                })
+            }
+        }
+    }
+}
+
 impl<T: Debug + PartialEq> MultiCallResults<T> {
     pub fn reduce_with_equality(self) -> Result<T, MultiCallError<T>> {
-        let mut results = self.results.into_iter();
+        let mut results = self.all_ok()?.into_iter();
         let (base_node_provider, base_result) = results
             .next()
             .expect("BUG: MultiCallResults is guaranteed to be non-empty");
-        for (provider, result) in results {
-            if result != base_result {
-                log!(INFO, "[reduce_with_equality]: Provider {:?} returned a different result than {:?}. Result {:?} is not equal to {:?}",
-                provider,
-                base_node_provider,
-                result,
-                base_result
+        let mut inconsistent_results: Vec<_> = results
+            .filter(|(_provider, result)| result != &base_result)
+            .collect();
+        if !inconsistent_results.is_empty() {
+            inconsistent_results.push((base_node_provider, base_result));
+            let error = MultiCallError::InconsistentResults(MultiCallResults::from_non_empty_iter(
+                inconsistent_results
+                    .into_iter()
+                    .map(|(provider, result)| (provider, Ok(JsonRpcResult::Result(result)))),
+            ));
+            log!(
+                INFO,
+                "[reduce_with_equality]: inconsistent results {error:?}"
             );
-                return Err(MultiCallError::InconsistentResults(
-                    MultiCallResults::from_non_empty_iter(vec![
-                        (base_node_provider, base_result),
-                        (provider, result),
-                    ]),
-                ));
+            return Err(error);
+        }
+        Ok(base_result)
+    }
+
+    pub fn reduce_with_min_by_key<F: FnMut(&T) -> K, K: Ord>(
+        self,
+        extractor: F,
+    ) -> Result<T, MultiCallError<T>> {
+        let min = self
+            .all_ok()?
+            .into_values()
+            .min_by_key(extractor)
+            .expect("BUG: MultiCallResults is guaranteed to be non-empty");
+        Ok(min)
+    }
+
+    pub fn reduce_with_strict_majority_by_key<F: Fn(&T) -> K, K: Ord>(
+        self,
+        extractor: F,
+    ) -> Result<T, MultiCallError<T>> {
+        let mut votes_by_key: BTreeMap<K, BTreeMap<RpcNodeProvider, T>> = BTreeMap::new();
+        for (provider, result) in self.all_ok()?.into_iter() {
+            let key = extractor(&result);
+            match votes_by_key.remove(&key) {
+                Some(mut votes_for_same_key) => {
+                    let (_other_provider, other_result) = votes_for_same_key
+                        .last_key_value()
+                        .expect("BUG: results_with_same_key is non-empty");
+                    if &result != other_result {
+                        let error = MultiCallError::InconsistentResults(
+                            MultiCallResults::from_non_empty_iter(
+                                votes_for_same_key
+                                    .into_iter()
+                                    .chain(std::iter::once((provider, result)))
+                                    .map(|(provider, result)| {
+                                        (provider, Ok(JsonRpcResult::Result(result)))
+                                    }),
+                            ),
+                        );
+                        log!(
+                            INFO,
+                            "[reduce_with_strict_majority_by_key]: inconsistent results {error:?}"
+                        );
+                        return Err(error);
+                    }
+                    votes_for_same_key.insert(provider, result);
+                    votes_by_key.insert(key, votes_for_same_key);
+                }
+                None => {
+                    let _ = votes_by_key.insert(key, BTreeMap::from([(provider, result)]));
+                }
             }
         }
-        match base_result {
-            Ok(json_rpc_result) => match json_rpc_result {
-                JsonRpcResult::Result(v) => Ok(v),
-                JsonRpcResult::Error { code, message } => {
-                    Err(MultiCallError::ConsistentJsonRpcError { code, message })
+
+        let mut tally: Vec<(K, BTreeMap<RpcNodeProvider, T>)> = Vec::from_iter(votes_by_key);
+        tally.sort_unstable_by(|(_left_key, left_ballot), (_right_key, right_ballot)| {
+            left_ballot.len().cmp(&right_ballot.len())
+        });
+        match tally.len() {
+            0 => panic!("BUG: tally should be non-empty"),
+            1 => Ok(tally
+                .pop()
+                .and_then(|(_key, mut ballot)| ballot.pop_last())
+                .expect("BUG: tally is non-empty")
+                .1),
+            _ => {
+                let mut first = tally.pop().expect("BUG: tally has at least 2 elements");
+                let second = tally.pop().expect("BUG: tally has at least 2 elements");
+                if first.1.len() > second.1.len() {
+                    Ok(first
+                        .1
+                        .pop_last()
+                        .expect("BUG: tally should be non-empty")
+                        .1)
+                } else {
+                    let error =
+                        MultiCallError::InconsistentResults(MultiCallResults::from_non_empty_iter(
+                            first
+                                .1
+                                .into_iter()
+                                .chain(second.1)
+                                .map(|(provider, result)| {
+                                    (provider, Ok(JsonRpcResult::Result(result)))
+                                }),
+                        ));
+                    log!(
+                        INFO,
+                        "[reduce_with_strict_majority_by_key]: no strict majority {error:?}"
+                    );
+                    Err(error)
                 }
-            },
-            Err(error) => Err(MultiCallError::ConsistentHttpOutcallError(error)),
+            }
         }
     }
 }

@@ -180,7 +180,7 @@ pub async fn wait_for_signed_tx(
     ckbtc_minter_agent: &CkBtcMinterAgent,
     logger: &Logger,
     block_index: u64,
-) -> [u8; 32] {
+) -> ic_btc_interface::Txid {
     let start = Instant::now();
     loop {
         if start.elapsed() >= LONG_TIMEOUT {
@@ -239,7 +239,7 @@ pub async fn wait_for_finalization(
     logger: &Logger,
     block_index: u64,
     default_btc_address: &Address,
-) -> [u8; 32] {
+) -> ic_btc_interface::Txid {
     let start = Instant::now();
     loop {
         if start.elapsed() >= LONG_TIMEOUT {
@@ -284,7 +284,7 @@ pub async fn wait_for_finalization(
 pub async fn wait_for_finalization_no_new_blocks(
     ckbtc_minter_agent: &CkBtcMinterAgent,
     block_index: u64,
-) -> [u8; 32] {
+) -> ic_btc_interface::Txid {
     let start = Instant::now();
     loop {
         if start.elapsed() >= LONG_TIMEOUT {

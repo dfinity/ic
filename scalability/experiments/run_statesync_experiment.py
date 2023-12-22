@@ -107,7 +107,7 @@ class StatesyncExperiment(base_experiment.BaseExperiment):
         members = self.get_subnet_members(FLAGS.subnet_index)
         error_msg = "Need at least 2 nodes in the subnet for this experiment.\n"
         error_msg += (
-            "The experiment is targetting the subnet with index "
+            "The experiment is targeting the subnet with index "
             + str(FLAGS.subnet_index)
             + ", which contains "
             + str(len(members))
@@ -160,7 +160,7 @@ class StatesyncExperiment(base_experiment.BaseExperiment):
         same_prefix_nodes = [node for node in nodes[:-1] if node[:9] == restarted_ip_prefix]
         error_msg = "When stopping too many nodes, the network will not be able to make progress.\n"
         error_msg += (
-            "The experiment is targetting the subnet with index "
+            "The experiment is targeting the subnet with index "
             + str(FLAGS.subnet_index)
             + ", which contains "
             + str(len(members))

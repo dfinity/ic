@@ -103,8 +103,7 @@ pub struct UnixStreamMessageWriter<Message: 'static + Serialize + Send> {
     // long as this object is alive. Actual access is through the "raw"
     // fd (we otherwise have problem with concurrent access through
     // same fd).
-    _socket: Arc<UnixStream>,
-    socket_fd: libc::c_int,
+    socket: Arc<UnixStream>,
     trigger_background_sending: Condvar,
 }
 struct UnixStreamMessageWriterInt<Message: 'static + Send> {
@@ -125,7 +124,6 @@ impl<Message: 'static + Serialize + Send + EnumerateInnerFileDescriptors>
     UnixStreamMessageWriter<Message>
 {
     fn new(socket: Arc<UnixStream>, idle_timeout_to_trim_buffer: Duration) -> Arc<Self> {
-        let socket_fd = socket.as_raw_fd();
         let instance = Arc::new(UnixStreamMessageWriter {
             state: Mutex::new(UnixStreamMessageWriterInt::<Message> {
                 buf: BytesMut::new(),
@@ -135,8 +133,7 @@ impl<Message: 'static + Serialize + Send + EnumerateInnerFileDescriptors>
                 number_of_timeouts: 0,
                 phantom: PhantomData,
             }),
-            _socket: socket,
-            socket_fd,
+            socket,
             trigger_background_sending: Condvar::new(),
         });
         let copy_instance = Arc::clone(&instance);
@@ -180,7 +177,7 @@ impl<Message: 'static + Serialize + Send + EnumerateInnerFileDescriptors>
                 (guard.buf.split(), std::mem::take(&mut guard.fds))
             };
             while !buf.is_empty() {
-                send_message(self.socket_fd, &mut buf, &mut fds, 0);
+                send_message(&self.socket, &mut buf, &mut fds, 0);
             }
         }
     }
@@ -208,7 +205,7 @@ impl<Message: 'static + Serialize + Send + EnumerateInnerFileDescriptors>
         state.fds.extend_from_slice(fds);
         if !state.sending_in_background {
             send_message(
-                self.socket_fd,
+                &self.socket,
                 &mut state.buf,
                 &mut state.fds,
                 libc::MSG_DONTWAIT,
@@ -326,14 +323,14 @@ impl SocketReaderConfig {
 // It uses the `libc::setsockopt()` syscall to set the timeout and keeps track
 // of the currently set timeout in order to reduce the number of syscalls.
 struct SocketReaderWithTimeout {
-    socket_fd: i32,
+    socket: Arc<UnixStream>,
     socket_timeout: Option<Duration>,
 }
 
 impl SocketReaderWithTimeout {
-    fn new(socket_fd: i32) -> Self {
+    fn new(socket: Arc<UnixStream>) -> Self {
         Self {
-            socket_fd,
+            socket,
             socket_timeout: None,
         }
     }
@@ -356,7 +353,7 @@ impl SocketReaderWithTimeout {
             // without crashing and let `recvmsg` handle `EWOULDBLOCK`.
             eprintln!("Failed to update sandbox IPC socket timeout: {}", err);
         }
-        let num_bytes_received = receive_message(self.socket_fd, buf, fds, flags);
+        let num_bytes_received = receive_message(&self.socket, buf, fds, flags);
         if num_bytes_received == -1
             && std::io::Error::last_os_error().raw_os_error() == Some(libc::EWOULDBLOCK)
         {
@@ -392,7 +389,7 @@ impl SocketReaderWithTimeout {
         // SAFETY: All parameters are valid.
         let result = unsafe {
             libc::setsockopt(
-                self.socket_fd,
+                self.socket.as_raw_fd(),
                 libc::SOL_SOCKET,
                 libc::SO_RCVTIMEO,
                 &tv as *const libc::timeval as *const libc::c_void,
@@ -427,11 +424,10 @@ pub fn socket_read_messages<
     socket: Arc<UnixStream>,
     config: SocketReaderConfig,
 ) {
-    let socket_fd = socket.as_raw_fd();
     let mut decoder = FrameDecoder::<Message>::new();
     let mut buf = BytesMut::with_capacity(INITIAL_BUFFER_CAPACITY);
     let mut fds = Vec::<RawFd>::new();
-    let mut reader = SocketReaderWithTimeout::new(socket_fd);
+    let mut reader = SocketReaderWithTimeout::new(socket);
     loop {
         while let Some(mut frame) = decoder.decode(&mut buf) {
             install_file_descriptors(&mut frame, &mut fds);
@@ -507,7 +503,7 @@ fn install_file_descriptors<Message: EnumerateInnerFileDescriptors>(
 ///   the buffer. That's because `libc::sendmsg()` can only send file descriptors
 ///   along with at least 1 byte of payload data.
 fn send_message(
-    socket_fd: i32,
+    socket: &UnixStream,
     buf: &mut BytesMut,
     fds: &mut Vec<RawFd>,
     flags: libc::c_int,
@@ -570,7 +566,7 @@ fn send_message(
                     as MsgControlLenType;
             assert!(
                 hdr.msg_controllen <= cmsgbuf.len() as MsgControlLenType,
-                "Controll message buffer overflow: {} > {}",
+                "Control message buffer overflow: {} > {}",
                 hdr.msg_controllen,
                 cmsgbuf.len(),
             );
@@ -589,7 +585,7 @@ fn send_message(
             }
         }
 
-        libc::sendmsg(socket_fd, &hdr, flags)
+        libc::sendmsg(socket.as_raw_fd(), &hdr, flags)
     };
     if num_bytes_sent > 0 {
         // If at least one byte was sent, then it is guaranteed that
@@ -607,10 +603,10 @@ fn send_message(
 /// It is a wrapper around `libc::recvmsg()` and returns the result of that
 /// syscall (which is the number of bytes read or -1 on error).
 ///
-/// If reading is successfull, then the function pushes the read bytes and file
+/// If reading is successful, then the function pushes the read bytes and file
 /// descriptors onto the given `buf` and `fds`.
 fn receive_message(
-    socket_fd: i32,
+    socket: &UnixStream,
     buf: &mut BytesMut,
     fds: &mut Vec<RawFd>,
     flags: libc::c_int,
@@ -642,7 +638,7 @@ fn receive_message(
             msg_flags: flags,
         };
 
-        let num_bytes_received = libc::recvmsg(socket_fd, &mut hdr, flags);
+        let num_bytes_received = libc::recvmsg(socket.as_raw_fd(), &mut hdr, flags);
 
         if num_bytes_received > 0 {
             // Update the buffer length to account for the received bytes.
@@ -797,10 +793,10 @@ mod tests {
         let mut recv_buf = BytesMut::new();
         let mut recv_fds = Vec::new();
 
-        let res = send_message(send.as_raw_fd(), &mut send_buf, &mut send_fds, 0);
+        let res = send_message(&send, &mut send_buf, &mut send_fds, 0);
         assert_eq!(res, 1);
 
-        let res = receive_message(recv.as_raw_fd(), &mut recv_buf, &mut recv_fds, 0);
+        let res = receive_message(&recv, &mut recv_buf, &mut recv_fds, 0);
         assert_eq!(res, 1);
         assert_eq!(recv_buf.iter().copied().collect::<Vec<_>>(), vec![42; 1]);
         assert_eq!(recv_fds.len(), 1);
@@ -836,7 +832,7 @@ mod tests {
 
         let mut messages = 0;
         loop {
-            let res = send_message(send.as_raw_fd(), &mut send_buf, &mut send_fds, 0);
+            let res = send_message(&send, &mut send_buf, &mut send_fds, 0);
             if res == 0 {
                 break;
             }
@@ -844,7 +840,7 @@ mod tests {
         }
 
         for _ in 0..messages {
-            let res = receive_message(recv.as_raw_fd(), &mut recv_buf, &mut recv_fds, 0);
+            let res = receive_message(&recv, &mut recv_buf, &mut recv_fds, 0);
             assert!(res > 0);
         }
         assert_eq!(recv_buf.iter().copied().collect::<Vec<_>>(), vec![42; 1000]);
@@ -937,7 +933,7 @@ mod tests {
         // Create a socketpair through which we will communicate.
         let (comm_send, comm_recv) = std::os::unix::net::UnixStream::pair().unwrap();
 
-        let mut reader = SocketReaderWithTimeout::new(comm_recv.as_raw_fd());
+        let mut reader = SocketReaderWithTimeout::new(Arc::new(comm_recv));
 
         let mut recv_buf = BytesMut::new();
         let mut recv_fds = vec![];
@@ -952,7 +948,7 @@ mod tests {
         let mut send_buf = BytesMut::new();
         send_buf.extend_from_slice(&[42; 1000]);
         let mut send_fds = vec![];
-        let bytes = send_message(comm_send.as_raw_fd(), &mut send_buf, &mut send_fds, 0);
+        let bytes = send_message(&comm_send, &mut send_buf, &mut send_fds, 0);
         assert_eq!(bytes, 1000);
 
         let bytes = reader.receive_message(

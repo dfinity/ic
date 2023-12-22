@@ -9,18 +9,17 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{Cycles, ExecutionRound, NumInstructions};
 use serde::{Deserialize, Serialize};
 
-const B: u64 = 1_000_000_000;
 const M: u64 = 1_000_000;
+const B: u64 = 1_000_000_000;
+const T: u128 = 1_000_000_000_000;
 
 // The limit on the number of instructions a message is allowed to executed.
-// Going above the limit results in an `InstructionLimitExceeded` or
-// `ExecutionComplexityLimitExceeded` error.
+// Going above the limit results in an `InstructionLimitExceeded` error.
 pub(crate) const MAX_INSTRUCTIONS_PER_MESSAGE: NumInstructions = NumInstructions::new(20 * B);
 
 // The limit on the number of instructions a message is allowed to execute
 // without deterministic time slicing.
-// Going above the limit results in an `InstructionLimitExceeded` or
-// `ExecutionComplexityLimitExceeded` error.
+// Going above the limit results in an `InstructionLimitExceeded` error.
 pub(crate) const MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS: NumInstructions =
     NumInstructions::new(5 * B);
 
@@ -142,8 +141,16 @@ const SYSTEM_SUBNET_DIRTY_PAGE_OVERHEAD: NumInstructions = NumInstructions::new(
 /// all subnet types.
 const ACCUMULATED_PRIORITY_RESET_INTERVAL: ExecutionRound = ExecutionRound::new(24 * 3600);
 
+/// The default value of the reserved balance limit for the case when the
+/// canister doesn't have it set in the settings.
+const DEFAULT_RESERVED_BALANCE_LIMIT: Cycles = Cycles::new(5 * T);
+
+/// Instructions used to upload a chunk (1MiB) to the wasm chunk store. This is
+/// 1/10th of a round.
+pub const DEFAULT_UPLOAD_CHUNK_INSTRUCTIONS: NumInstructions = NumInstructions::new(200_000_000);
+
 /// The per subnet type configuration for the scheduler component
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct SchedulerConfig {
     /// Number of canisters that the scheduler is allowed to schedule in
     /// parallel.
@@ -232,6 +239,9 @@ pub struct SchedulerConfig {
 
     /// Accumulated priority reset interval, rounds.
     pub accumulated_priority_reset_interval: ExecutionRound,
+
+    /// Number of instructions to count when uploading a chunk to the wasm store.
+    pub upload_wasm_chunk_instructions: NumInstructions,
 }
 
 impl SchedulerConfig {
@@ -257,6 +267,7 @@ impl SchedulerConfig {
             install_code_rate_limit: MAX_INSTRUCTIONS_PER_SLICE,
             dirty_page_overhead: DEFAULT_DIRTY_PAGE_OVERHEAD,
             accumulated_priority_reset_interval: ACCUMULATED_PRIORITY_RESET_INTERVAL,
+            upload_wasm_chunk_instructions: DEFAULT_UPLOAD_CHUNK_INSTRUCTIONS,
         }
     }
 
@@ -292,6 +303,7 @@ impl SchedulerConfig {
             install_code_rate_limit: NumInstructions::from(1_000_000_000_000_000),
             dirty_page_overhead: SYSTEM_SUBNET_DIRTY_PAGE_OVERHEAD,
             accumulated_priority_reset_interval: ACCUMULATED_PRIORITY_RESET_INTERVAL,
+            upload_wasm_chunk_instructions: NumInstructions::from(0),
         }
     }
 
@@ -320,6 +332,7 @@ impl SchedulerConfig {
             install_code_rate_limit: MAX_INSTRUCTIONS_PER_SLICE,
             dirty_page_overhead: DEFAULT_DIRTY_PAGE_OVERHEAD,
             accumulated_priority_reset_interval: ACCUMULATED_PRIORITY_RESET_INTERVAL,
+            upload_wasm_chunk_instructions: DEFAULT_UPLOAD_CHUNK_INSTRUCTIONS,
         }
     }
 
@@ -390,11 +403,21 @@ pub struct CyclesAccountManagerConfig {
 
     /// Fee per byte for networking and consensus work done for an HTTP response per node.
     pub http_response_per_byte_fee: Cycles,
+
+    /// The upper bound on the storage reservation period.
+    pub max_storage_reservation_period: Duration,
+
+    /// The default value of the reserved balance limit for the case when the
+    /// canister doesn't have it set in the settings.
+    pub default_reserved_balance_limit: Cycles,
 }
 
 impl CyclesAccountManagerConfig {
     pub fn application_subnet() -> Self {
-        Self::verified_application_subnet()
+        Self {
+            max_storage_reservation_period: Duration::from_secs(300_000_000),
+            ..Self::verified_application_subnet()
+        }
     }
 
     pub fn verified_application_subnet() -> Self {
@@ -420,6 +443,10 @@ impl CyclesAccountManagerConfig {
             http_request_quadratic_baseline_fee: Cycles::new(60_000),
             http_request_per_byte_fee: Cycles::new(400),
             http_response_per_byte_fee: Cycles::new(800),
+            // This effectively disables the storage reservation mechanism on
+            // verified application subnets.
+            max_storage_reservation_period: Duration::from_secs(0),
+            default_reserved_balance_limit: DEFAULT_RESERVED_BALANCE_LIMIT,
         }
     }
 
@@ -437,19 +464,22 @@ impl CyclesAccountManagerConfig {
             ingress_byte_reception_fee: Cycles::new(0),
             gib_storage_per_second_fee: Cycles::new(0),
             duration_between_allocation_charges: Duration::from_secs(10),
-            /// The ECDSA signature fee is the fee charged when creating a
-            /// signature on this subnet. The request likely came from a
-            /// different subnet which is not a system subnet. There is an
-            /// explicit exception for requests originating from the NNS when the
-            /// charging occurs.
-            /// Costs:
-            /// - zero cost if called from NNS subnet
-            /// - non-zero cost if called from any other subnet which is not NNS subnet
+            // The ECDSA signature fee is the fee charged when creating a
+            // signature on this subnet. The request likely came from a
+            // different subnet which is not a system subnet. There is an
+            // explicit exception for requests originating from the NNS when the
+            // charging occurs.
+            // Costs:
+            // - zero cost if called from NNS subnet
+            // - non-zero cost if called from any other subnet which is not NNS subnet
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
             http_request_linear_baseline_fee: Cycles::new(0),
             http_request_quadratic_baseline_fee: Cycles::new(0),
             http_request_per_byte_fee: Cycles::new(0),
             http_response_per_byte_fee: Cycles::new(0),
+            // This effectively disables the storage reservation mechanism on system subnets.
+            max_storage_reservation_period: Duration::from_secs(0),
+            default_reserved_balance_limit: DEFAULT_RESERVED_BALANCE_LIMIT,
         }
     }
 }

@@ -1,6 +1,24 @@
 // Represents an account on the ckBTC ledger.
 type Account = record { owner : principal; subaccount : opt blob };
 
+type CanisterStatusResponse = record {
+  status : CanisterStatusType;
+  memory_size : nat;
+  cycles : nat;
+  settings : DefiniteCanisterSettings;
+  idle_cycles_burned_per_day : nat;
+  module_hash : opt vec nat8;
+};
+
+type CanisterStatusType = variant { stopped; stopping; running };
+
+type DefiniteCanisterSettings = record {
+  freezing_threshold : nat;
+  controllers : vec principal;
+  memory_allocation : nat;
+  compute_allocation : nat;
+};
+
 type RetrieveBtcArgs = record {
     // The address to which the ckBTC minter should deposit BTC.
     address : text;
@@ -67,7 +85,7 @@ type UtxoStatus = variant {
     // the KYT fees. This state is final, retrying [update_balance] call will
     // have no effect on this UTXO.
     ValueTooSmall : Utxo;
-    // The KYT provider considered this UTXO to be tained. This UTXO state is
+    // The KYT provider considered this UTXO to be tainted. This UTXO state is
     // final, retrying [update_balance] call will have no effect on this UTXO.
     Tainted : Utxo;
     // The UTXO passed the KYT check, but the minter failed to mint ckBTC
@@ -82,11 +100,19 @@ type UtxoStatus = variant {
     };
 };
 
+// Utxos that don't have enough confirmations to be processed.
+type PendingUtxo = record {
+    outpoint : record { txid : vec nat8; vout : nat32 };
+    value : nat64;
+    confirmations: nat32;
+};
+
 type UpdateBalanceError = variant {
     // There are no new UTXOs to process.
     NoNewUtxos : record {
         current_confirmations: opt nat32;
-        required_confirmations: nat32
+        required_confirmations: nat32;
+        pending_utxos: opt vec PendingUtxo;
     };
     // The minter is already processing another update balance request for the caller.
     AlreadyProcessing;
@@ -206,6 +232,48 @@ type RetrieveBtcStatus = variant {
     Confirmed : record { txid : blob };
 };
 
+type ReimbursementRequest = record {
+  account : Account;
+  amount : nat64;
+  reason : ReimbursementReason;
+};
+
+type ReimbursedDeposit = record {
+  account : Account;
+  mint_block_index : nat64;
+  amount : nat64;
+  reason : ReimbursementReason;
+};
+
+type RetrieveBtcStatusV2 = variant {
+    // The minter does not have any information on the specified
+    // retrieval request.  It can be that nobody submitted the
+    // request or the minter pruned the relevant information from the
+    // history to save space.
+    Unknown;
+    // The minter did not send a Bitcoin transaction for this request yet.
+    Pending;
+    // The minter is obtaining all required ECDSA signatures on the
+    // Bitcoin transaction for this request.
+    Signing;
+    // The minter signed the transaction and is waiting for a reply
+    // from the Bitcoin canister.
+    Sending : record { txid : blob };
+    // The minter sent a transaction for the retrieve request.
+    // The payload contains the identifier of the transaction on the Bitcoin network.
+    Submitted : record { txid : blob };
+    // The amount was too low to cover the transaction fees.
+    AmountTooLow;
+    // The minter received enough confirmations for the Bitcoin
+    // transaction for this request.  The payload contains the
+    // identifier of the transaction on the Bitcoin network.
+    Confirmed : record { txid : blob };
+    /// The retrieve bitcoin request has been reimbursed.
+    Reimbursed : ReimbursedDeposit;
+    /// The minter will try to reimburse this transaction.
+    WillReimburse : ReimbursementRequest;
+};
+
 type Utxo = record {
     outpoint : record { txid : vec nat8; vout : nat32 };
     value : nat64;
@@ -226,18 +294,25 @@ type MinterInfo = record {
     kyt_fee : nat64;
 };
 
-type ReimbursementReason = variant { CallFailed; TaintedDestination };
+type ReimbursementReason = variant {
+    CallFailed;
+    TaintedDestination : record {
+        kyt_fee : nat64;
+        kyt_provider: principal;
+    };
+};
 
 type Event = variant {
     init : InitArgs;
     upgrade : UpgradeArgs;
-    received_utxos : record { to_account : Account; utxos : vec Utxo };
+    received_utxos : record { to_account : Account; mint_txid : opt nat64; utxos : vec Utxo };
     accepted_retrieve_btc_request : record {
         amount : nat64;
         address : BitcoinAddress;
         block_index : nat64;
         received_at : nat64;
         kyt_provider : opt principal;
+        reimbursement_account : opt Account;
     };
     distributed_kyt_fee : record {
         kyt_provider : principal;
@@ -271,18 +346,18 @@ type Event = variant {
     retrieve_btc_kyt_failed : record {
         address : text;
         amount : nat64;
+        owner : principal;
         kyt_provider : principal;
         uuid : text;
         block_index : nat64;
     };
     schedule_deposit_reimbursement : record {
-        kyt_fee : nat64;
         account : Account;
         burn_block_index : nat64;
         amount : nat64;
         reason : ReimbursementReason;
     };
-    reimbursed_failed_deposit : record { burn_block_index : nat64 };
+    reimbursed_failed_deposit : record { burn_block_index : nat64; mint_block_index : nat64 };
 };
 
 type MinterArg = variant {
@@ -354,16 +429,30 @@ service : (minter_arg : MinterArg) -> {
     //
     // * The caller allowed the minter's principal to spend its funds
     //   using [icrc2_approve] on the ckBTC ledger.
-    retrieve_btc_with_approval : (RetrieveBtcArgs) -> (variant { Ok : RetrieveBtcOk; Err : RetrieveBtcWithApprovalError });
+    retrieve_btc_with_approval : (RetrieveBtcWithApprovalArgs) -> (variant { Ok : RetrieveBtcOk; Err : RetrieveBtcWithApprovalError });
 
-    /// Returns the status of a [retrieve_btc] request.
+    /// [deprecated] Returns the status of a withdrawal request.
+    /// You should use retrieve_btc_status_v2 to retrieve the status of your withdrawal request.
     retrieve_btc_status : (record { block_index : nat64 }) -> (RetrieveBtcStatus) query;
+
+    /// Returns the status of a withdrawal request request using the RetrieveBtcStatusV2 type.
+    retrieve_btc_status_v2 : (record { block_index : nat64 }) -> (RetrieveBtcStatusV2) query;
+    
+    // Returns the withdrawal statues by account.
+    //
+    // # Note
+    // The _v2_ part indicates that you get a response in line with the retrieve_btc_status_v2 endpoint,
+    // i.e., you get a vector of RetrieveBtcStatusV2 and not RetrieveBtcStatus.
+    //
+    retrieve_btc_status_v2_by_account : (opt Account) -> (vec record { block_index: nat64; status_v2: opt RetrieveBtcStatusV2; }) query;
 
     // }}} Section "Convert ckBTC to BTC"
 
     // Section "Minter Information" {{{
     // Returns internal minter parameters.
     get_minter_info : () -> (MinterInfo) query;
+
+    get_canister_status : () -> (CanisterStatusResponse);
     // }}}
 
     // Section "Event log" {{{

@@ -1,4 +1,4 @@
-use crate::unit_helpers;
+use crate::{generate_sns_init_payload, unit_helpers};
 use clap::Parser;
 use ic_nervous_system_proto::pb::v1::Countries;
 use ic_sns_governance::{
@@ -95,7 +95,7 @@ pub struct SnsGovernanceConfig {
     /// initial_reward_rate_basis_points and final_reward_rate_basis_points.
     /// In the config file we use percentages instead of basis points to try to
     /// be a bit more user friendly.
-    /// For example, on the ic dashbord
+    /// For example, on the ic dashboard
     /// <https://dashboard.internetcomputer.org/circulation> we show the reward
     /// rate in terms of percentages instead of basis points.
     pub initial_reward_rate_percentage: Option<f64>,
@@ -178,6 +178,9 @@ pub struct SnsSwapConfig {
     /// An optional set of countries that should not participate in the swap. If the
     /// field is set, it must contain (upper case) ISO 3166-1 alpha-2 country codes.
     pub restricted_countries: Option<Vec<String>>,
+
+    /// An optional flag indicating whether the Neurons' Fund matched participation is requested.
+    pub neurons_fund_participation: Option<bool>,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Eq, Clone, PartialEq, Debug)]
@@ -263,6 +266,7 @@ impl Default for SnsCliInitConfig {
             sns_swap: SnsSwapConfig {
                 confirmation_text: None,
                 restricted_countries: None,
+                neurons_fund_participation: Some(false),
             },
         }
     }
@@ -369,6 +373,7 @@ impl SnsCliInitConfig {
 
     /// A SnsCliInitConfig is valid if it can convert to an SnsInitPayload and have the generated
     /// struct pass its validation.
+    #[cfg(test)]
     fn validate(&self) -> Result<(), String> {
         let sns_init_payload = SnsInitPayload::try_from(self.clone())?;
         sns_init_payload.validate_legacy_init()?;
@@ -500,6 +505,8 @@ impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
             min_participants: None,
             min_icp_e8s: None,
             max_icp_e8s: None,
+            min_direct_participation_icp_e8s: None,
+            max_direct_participation_icp_e8s: None,
             min_participant_icp_e8s: None,
             max_participant_icp_e8s: None,
             swap_start_timestamp_seconds: None,
@@ -514,6 +521,8 @@ impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
             ),
             neurons_fund_participants: None,
             token_logo: None,
+            neurons_fund_participation_constraints: None,
+            neurons_fund_participation: sns_cli_init_config.sns_swap.neurons_fund_participation,
         })
     }
 }
@@ -588,7 +597,7 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
         ),
         (
             Regex::new(r"confirmation_text.*").unwrap(),
-            r##"#
+            r#"#
 #
 # SNS SWAP
 #
@@ -597,23 +606,23 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 # with at least 1 and at most 1,000 characters.
 #
 # Example: "Please confirm that 2+2=4"
-#"##
+#"#
             .to_string(),
         ),
         (
             Regex::new(r"restricted_countries.*").unwrap(),
-            r##"#
+            r#"#
 #
 # An optional set of countries that should not participate in the swap. If the
 # field is set, it must contain (upper case) ISO 3166-1 alpha-2 country codes.
 #
 # Example: ["CH", "FR"]
-#"##
+#"#
             .to_string(),
         ),
         (
             Regex::new(r"initial_token_distribution.*").unwrap(),
-            r##"#
+            r#"#
 #
 # SNS INITIAL TOKEN DISTRIBUTION
 #
@@ -684,7 +693,7 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 #           stake_e8s: 500000000
 #           memo: 0
 #           dissolve_delay_seconds: 15780000 # 6 months
-#"##
+#"#
             .to_string(),
         ),
         (
@@ -1002,27 +1011,9 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 }
 
 fn validate(init_config_file: PathBuf) {
-    let file = File::open(&init_config_file).unwrap_or_else(|_| {
-        eprintln!(
-            "Couldn't open {} for validation",
-            init_config_file.to_str().unwrap()
-        );
+    if let Err(err) = generate_sns_init_payload(&init_config_file) {
+        eprintln!("{}", err);
         std::process::exit(1);
-    });
-    let sns_cli_init_config: SnsCliInitConfig = serde_yaml::from_reader(file).unwrap_or_else(|e| {
-        eprintln!(
-            "Couldn't parse {} for validation: {}",
-            init_config_file.to_str().unwrap(),
-            e
-        );
-        std::process::exit(1);
-    });
-    match sns_cli_init_config.validate() {
-        Ok(_) => println!("No errors found {}", init_config_file.to_str().unwrap()),
-        Err(e) => {
-            eprintln!("{}", e);
-            std::process::exit(1);
-        }
     }
 }
 
@@ -1105,6 +1096,7 @@ mod test {
             Self {
                 confirmation_text: Some("Please confirm that 2+2=4".to_string()),
                 restricted_countries: Some(vec!["CH".to_string()]),
+                neurons_fund_participation: Some(true),
             }
         }
     }
@@ -1231,6 +1223,8 @@ wait_for_quiet_deadline_increase_seconds: 1000
             min_participants: _,
             min_icp_e8s: _,
             max_icp_e8s: _,
+            min_direct_participation_icp_e8s: _,
+            max_direct_participation_icp_e8s: _,
             min_participant_icp_e8s: _,
             max_participant_icp_e8s: _,
             swap_start_timestamp_seconds: _,
@@ -1239,6 +1233,8 @@ wait_for_quiet_deadline_increase_seconds: 1000
             nns_proposal_id: _,
             neurons_fund_participants: _,
             token_logo: _,
+            neurons_fund_participation_constraints: _,
+            neurons_fund_participation,
         } = sns_init_payload;
 
         assert_eq!(
@@ -1341,6 +1337,11 @@ wait_for_quiet_deadline_increase_seconds: 1000
         assert_eq!(
             sns_cli_init_config.sns_swap.restricted_countries,
             restricted_countries.map(|items| items.iso_codes)
+        );
+
+        assert_eq!(
+            sns_cli_init_config.sns_swap.neurons_fund_participation,
+            neurons_fund_participation,
         );
 
         // Read the test.png file into memory

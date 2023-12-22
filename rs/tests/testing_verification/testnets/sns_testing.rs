@@ -87,7 +87,7 @@ pub fn setup(env: TestEnv) {
         .use_real_certs_and_dns()
         .start(&env)
         .expect("failed to setup BoundaryNode VM");
-    env.sync_prometheus_config_with_topology();
+    env.sync_with_prometheus();
 
     let topology = env.topology_snapshot();
     let mut app_subnets = topology

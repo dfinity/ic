@@ -1,6 +1,7 @@
 module IC.Test.Options where
 
 import Codec.Candid (Principal (..), parsePrincipal)
+import Control.Monad
 import qualified Data.ByteString.Lazy.UTF8 as BLU
 import Data.List
 import Data.Proxy
@@ -73,22 +74,27 @@ allowSelfSignedCertsOption = Option (Proxy :: Proxy AllowSelfSignedCerts)
 
 -- TestSubnetConfig: helper functions
 
-getSubnetIdFromNonce :: String -> EntityId
-getSubnetIdFromNonce nonce = EntityId $ mkSelfAuthenticatingId $ toPublicKey $ createSecretKeyBLS $ BLU.fromString nonce
+getEntityIdFromNonce :: String -> EntityId
+getEntityIdFromNonce nonce = EntityId $ mkSelfAuthenticatingId $ toPublicKey $ createSecretKeyBLS $ BLU.fromString nonce
 
 defaultSysTestSubnetConfig :: TestSubnetConfig
-defaultSysTestSubnetConfig = (getSubnetIdFromNonce "sk1", System, 1, [nth_canister_range 0], [])
+defaultSysTestSubnetConfig = (getEntityIdFromNonce "sk1", System, [getEntityIdFromNonce "nk1"], [nth_canister_range 0], [])
 
 defaultAppTestSubnetConfig :: TestSubnetConfig
-defaultAppTestSubnetConfig = (getSubnetIdFromNonce "sk2", Application, 1, [nth_canister_range 1], [])
+defaultAppTestSubnetConfig = (getEntityIdFromNonce "sk2", Application, [getEntityIdFromNonce "nk2"], [nth_canister_range 1], [])
 
 readTestSubnetConfig :: Int -> ReadS TestSubnetConfig
 readTestSubnetConfig p x = do
-  ((id, typ, size, ranges, ns), z) <- (readsPrec p x :: [((String, SubnetType, W.Word64, [(W.Word64, W.Word64)], [String]), String)])
+  ((id, typ, nids, ranges, ns), z) <- (readsPrec p x :: [((String, SubnetType, [String], [(W.Word64, W.Word64)], [String]), String)])
   Principal b <- case parsePrincipal (T.pack id) of
     Left err -> error err
     Right p -> return p
-  return ((EntityId b, typ, size, ranges, ns), z)
+  nids <- forM nids $ \nid -> do
+    Principal b <- case parsePrincipal (T.pack nid) of
+      Left err -> error err
+      Right p -> return p
+    return $ EntityId b
+  return ((EntityId b, typ, nids, ranges, ns), z)
 
 -- Configuration: Test subnet
 

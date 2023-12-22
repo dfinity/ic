@@ -1,6 +1,6 @@
 //! The consensus pool public interface.
 
-use crate::artifact_pool::{UnvalidatedArtifact, ValidatedArtifact};
+use crate::p2p::consensus::UnvalidatedArtifact;
 use ic_base_types::RegistryVersion;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -22,15 +22,27 @@ use std::sync::Arc;
 /// The height, at which we consider a replica to be behind
 pub const HEIGHT_CONSIDERED_BEHIND: Height = Height::new(20);
 
+/// Validated artifact
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub struct ValidatedArtifact<T> {
+    pub msg: T,
+    pub timestamp: Time,
+}
+
+impl<T> AsRef<T> for ValidatedArtifact<T> {
+    fn as_ref(&self) -> &T {
+        &self.msg
+    }
+}
+
 pub type ChangeSet = Vec<ChangeAction>;
 
 /// Change actions applicable to the consensus pool.
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ChangeAction {
-    AddToValidated(ConsensusMessage),
+    AddToValidated(ValidatedConsensusArtifact),
     MoveToValidated(ConsensusMessage),
-    RemoveFromValidated(ConsensusMessage),
     RemoveFromUnvalidated(ConsensusMessage),
     HandleInvalid(ConsensusMessage, String),
     PurgeValidatedBelow(Height),
@@ -76,11 +88,10 @@ impl ChangeSetOperation for ChangeSet {
 impl ContentEq for ChangeAction {
     fn content_eq(&self, other: &ChangeAction) -> bool {
         match (self, other) {
-            (ChangeAction::AddToValidated(x), ChangeAction::AddToValidated(y)) => x.content_eq(y),
-            (ChangeAction::MoveToValidated(x), ChangeAction::MoveToValidated(y)) => x.content_eq(y),
-            (ChangeAction::RemoveFromValidated(x), ChangeAction::RemoveFromValidated(y)) => {
-                x.content_eq(y)
+            (ChangeAction::AddToValidated(x), ChangeAction::AddToValidated(y)) => {
+                x.msg.content_eq(&y.msg)
             }
+            (ChangeAction::MoveToValidated(x), ChangeAction::MoveToValidated(y)) => x.content_eq(y),
             (ChangeAction::RemoveFromUnvalidated(x), ChangeAction::RemoveFromUnvalidated(y)) => {
                 x.content_eq(y)
             }
@@ -88,8 +99,12 @@ impl ContentEq for ChangeAction {
                 x.content_eq(y)
             }
             // Also compare between MoveToValidated and AddToValidated to help remove duplicates
-            (ChangeAction::AddToValidated(x), ChangeAction::MoveToValidated(y)) => x.content_eq(y),
-            (ChangeAction::MoveToValidated(x), ChangeAction::AddToValidated(y)) => x.content_eq(y),
+            (ChangeAction::AddToValidated(x), ChangeAction::MoveToValidated(y)) => {
+                x.msg.content_eq(y)
+            }
+            (ChangeAction::MoveToValidated(x), ChangeAction::AddToValidated(y)) => {
+                x.content_eq(&y.msg)
+            }
             (ChangeAction::PurgeValidatedBelow(x), ChangeAction::PurgeValidatedBelow(y)) => x == y,
             (
                 ChangeAction::PurgeValidatedSharesBelow(x),
@@ -279,14 +294,17 @@ pub trait HeightIndexedPool<T> {
 }
 // end::interface[]
 
+/// Reader of time in the latest/highest finalized block.
+pub trait ConsensusTime: Send + Sync {
+    /// Return the time as recorded in the latest/highest finalized block.
+    /// Return None if there has not been any finalized block since genesis.
+    fn consensus_time(&self) -> Option<Time>;
+}
+
 /// Reader of consensus related states.
 pub trait ConsensusPoolCache: Send + Sync {
     /// Return the latest/highest finalized block.
     fn finalized_block(&self) -> Block;
-
-    /// Return the time as recorded in the latest/highest finalized block.
-    /// Return None if there has not been any finalized block since genesis.
-    fn consensus_time(&self) -> Option<Time>;
 
     /// Return the latest/highest CatchUpPackage.
     fn catch_up_package(&self) -> CatchUpPackage;

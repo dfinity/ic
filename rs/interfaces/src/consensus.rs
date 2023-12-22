@@ -1,5 +1,6 @@
 //! The consensus public interface.
 use crate::{
+    batch_payload::ProposalContext,
     canister_http::{
         CanisterHttpPayloadValidationError, CanisterHttpPermanentValidationError,
         CanisterHttpTransientValidationError,
@@ -8,6 +9,7 @@ use crate::{
         IngressPayloadValidationError, IngressPermanentError, IngressTransientError,
     },
     messaging::{InvalidXNetPayload, XNetPayloadValidationError, XNetTransientValidationError},
+    query_stats::{QueryStatsPermanentValidationError, QueryStatsTransientValidationError},
     self_validating_payload::{
         InvalidSelfValidatingPayload, SelfValidatingPayloadValidationError,
         SelfValidatingTransientValidationError,
@@ -47,9 +49,9 @@ pub trait PayloadBuilder: Send + Sync {
     fn validate_payload(
         &self,
         height: Height,
+        proposal_context: &ProposalContext,
         payload: &Payload,
         past_payloads: &[(Height, Time, Payload)],
-        context: &ValidationContext,
     ) -> ValidationResult<PayloadValidationError>;
 }
 
@@ -57,12 +59,14 @@ pub trait PayloadBuilder: Send + Sync {
 pub enum PayloadPermanentError {
     XNetPayloadValidationError(InvalidXNetPayload),
     IngressPayloadValidationError(IngressPermanentError),
+    /// The overall block size is too large, even though the individual payloads are valid
     PayloadTooBig {
         expected: NumBytes,
         received: NumBytes,
     },
     SelfValidatingPayloadValidationError(InvalidSelfValidatingPayload),
     CanisterHttpPayloadValidationError(CanisterHttpPermanentValidationError),
+    QueryStatsPayloadValidationError(QueryStatsPermanentValidationError),
 }
 
 #[derive(Debug)]
@@ -73,6 +77,7 @@ pub enum PayloadTransientError {
     SubnetNotFound(SubnetId),
     SelfValidatingPayloadValidationError(SelfValidatingTransientValidationError),
     CanisterHttpPayloadValidationError(CanisterHttpTransientValidationError),
+    QueryStatsPayloadValidationError(QueryStatsTransientValidationError),
 }
 
 /// Payload validation error

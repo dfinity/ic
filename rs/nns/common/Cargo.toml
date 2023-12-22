@@ -1,7 +1,10 @@
 [package]
 name = "ic-nns-common"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [lib]
 name = "ic_nns_common"
@@ -22,13 +25,12 @@ ic-types = { path = "../../types/types" }
 lazy_static = "1.4.0"
 num-traits = "0.2.12"
 on_wire = { path = "../../rust_canisters/on_wire" }
-prost = "0.11.0"
-serde = { version = "1.0", features = ["derive"] }
+prost = { workspace = true }
+serde = { workspace = true }
 sha2 = "0.9.1"
 comparable = { version = "0.5", features = ["derive"] }
 
 [dev-dependencies]
-serial_test = "0.8.0"
 ic-nns-common-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 tempfile = "3.1.0"

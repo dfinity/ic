@@ -3,7 +3,7 @@
 use crate::{
     encoding::{
         encode_controllers, encode_message, encode_metadata, encode_stream_header,
-        encode_subnet_canister_ranges,
+        encode_subnet_canister_ranges, encode_subnet_metrics,
     },
     CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION,
 };
@@ -14,7 +14,9 @@ use ic_error_types::RejectCode;
 use ic_registry_routing_table::RoutingTable;
 use ic_replicated_state::{
     canister_state::CanisterState,
-    metadata_state::{IngressHistoryState, StreamMap, SubnetTopology, SystemMetadata},
+    metadata_state::{
+        IngressHistoryState, StreamMap, SubnetMetrics, SubnetTopology, SystemMetadata,
+    },
     replicated_state::ReplicatedStateMessageRouting,
     ExecutionState, ReplicatedState,
 };
@@ -162,7 +164,7 @@ impl LabelLike for CanisterId {
     }
 
     fn from_label(label: &[u8]) -> Option<Self> {
-        PrincipalId::from_label(label).map(|principal| Self::new(principal).unwrap())
+        PrincipalId::from_label(label).map(|principal| Self::unchecked_from_principal(principal))
     }
 }
 
@@ -297,6 +299,7 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState) -> LazyTree<'_> {
                     own_subnet_id,
                     &state.metadata.node_public_keys,
                     inverted_routing_table,
+                    &state.metadata.subnet_metrics,
                     certification_version,
                 )
             })
@@ -674,6 +677,7 @@ fn subnets_as_tree<'a>(
     own_subnet_id: SubnetId,
     own_subnet_node_public_keys: &'a BTreeMap<NodeId, Vec<u8>>,
     inverted_routing_table: Arc<BTreeMap<SubnetId, Vec<(PrincipalId, PrincipalId)>>>,
+    metrics: &'a SubnetMetrics,
     certification_version: CertificationVersion,
 ) -> LazyTree<'a> {
     fork(MapTransformFork {
@@ -700,6 +704,12 @@ fn subnets_as_tree<'a>(
                             && subnet_id == own_subnet_id,
                         "node",
                         move || nodes_as_tree(own_subnet_node_public_keys, certification_version),
+                    )
+                    .with_tree_if(
+                        certification_version >= CertificationVersion::V15
+                            && subnet_id == own_subnet_id,
+                        "metrics",
+                        blob(move || encode_subnet_metrics(metrics, certification_version)),
                     ),
             )
         },

@@ -33,13 +33,13 @@ mod root_of_trust {
 
     #[test]
     fn should_not_query_root_of_trust_provider_for_non_canister_signature() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let current_time = GENESIS;
         let mut root_of_trust_provider = MockRootOfTrustProvider::new();
         root_of_trust_provider.expect_root_of_trust().never();
         let verifier =
             verifier_at_time_with_root_of_trust_provider(current_time, root_of_trust_provider);
-        let authentication_schemes = all_authentication_schemes(&mut rng);
+        let authentication_schemes = all_authentication_schemes(rng);
         for authentication_scheme in authentication_schemes {
             let request = HttpRequestBuilder::new_update_call()
                 .with_ingress_expiry_at(current_time)
@@ -109,7 +109,7 @@ mod root_of_trust {
     ) -> IngressMessageVerifier<MockRootOfTrustProvider> {
         IngressMessageVerifier {
             root_of_trust_provider,
-            time_source: Arc::new(TimeProvider::Constant(current_time)),
+            time_source: TimeProvider::Constant(current_time),
             validator: ic_validator::HttpRequestVerifierImpl::new(Arc::new(
                 StandaloneIngressSigVerifier,
             )),
@@ -120,9 +120,9 @@ mod root_of_trust {
 mod standalone_ingress_sig_verifier {
     use crate::internal::StandaloneIngressSigVerifier;
     use assert_matches::assert_matches;
+    use ic_crypto_interfaces_sig_verification::CanisterSigVerifier;
     use ic_crypto_test_utils_canister_sigs::new_valid_sig_and_crypto_component;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-    use ic_interfaces::crypto::CanisterSigVerifier;
     use ic_types::crypto::{AlgorithmId, CryptoError};
 
     #[test]
@@ -130,8 +130,8 @@ mod standalone_ingress_sig_verifier {
         use strum::IntoEnumIterator;
 
         let verifier = StandaloneIngressSigVerifier;
-        let mut rng = reproducible_rng();
-        let mut data = new_valid_sig_and_crypto_component(&mut rng, false);
+        let rng = &mut reproducible_rng();
+        let mut data = new_valid_sig_and_crypto_component(rng, false);
 
         AlgorithmId::iter()
             .filter(|algorithm_id| *algorithm_id != AlgorithmId::IcCanisterSignature)

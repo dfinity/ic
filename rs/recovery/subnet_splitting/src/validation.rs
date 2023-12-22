@@ -67,7 +67,6 @@ fn validate_original_source_cup_and_extract_state_hash(
     subnet_public_key: &ThresholdSigPublicKey,
     logger: &Logger,
 ) -> RecoveryResult<String> {
-    let logger = logger;
     let cup = get_cup(cup_path)?;
 
     if let Some((_, transcript)) = cup
@@ -88,6 +87,15 @@ fn validate_original_source_cup_and_extract_state_hash(
         );
     }
     info!(logger, "CUP height: {}", &cup.content.height());
+
+    let block_time = cup.content.block.as_ref().context.time;
+
+    info!(
+        logger,
+        "Block time from the CUP: {} (nanos since unix epoch: {})",
+        block_time,
+        block_time.as_nanos_since_unix_epoch()
+    );
 
     let state_hash = hex::encode(&cup.content.state_hash.get_ref().0);
     info!(logger, "State hash from the CUP: {}", state_hash);

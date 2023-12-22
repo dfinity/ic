@@ -1,5 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:prost.bzl", "generated_files_check")
 
@@ -7,7 +7,7 @@ package(default_visibility = ["//visibility:public"])
 
 filegroup(
     name = "protos",
-    srcs = glob(["proto/**"]),
+    srcs = glob(["proto/**/*.proto"]),
 )
 
 # See rs/nervous_system/feature_test.md
@@ -27,7 +27,7 @@ BASE_DEPENDENCIES = [
     "@crate_index//:lazy_static",
     "@crate_index//:libsecp256k1",
     "@crate_index//:prost",
-    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand",
     "@crate_index//:serde",
     "@crate_index//:sha3",
     "@crate_index//:simple_asn1",
@@ -78,32 +78,32 @@ cargo_build_script(
     srcs = ["build.rs"],
     aliases = ALIASES,
     data = [],  # build script data (e.g. template files) goes here
-    version = "0.8.0",
+    version = "0.9.0",
     deps = BUILD_DEPENDENCIES,
 )
 
 rust_library(
     name = "gtc",
     srcs = glob([
-        "src/**",
+        "src/**/*.rs",
     ]),
     aliases = ALIASES,
     crate_name = "ic_nns_gtc",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES + [":build_script"],
 )
 
 rust_library(
     name = "gtc--test_feature",
     srcs = glob([
-        "src/**",
+        "src/**/*.rs",
     ]),
     aliases = ALIASES,
     crate_features = ["test"],
     crate_name = "ic_nns_gtc",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES_WITH_TEST_FEATURES + [":build_script"],
 )
 
@@ -171,7 +171,7 @@ rust_test_suite(
 generated_files_check(
     name = "check_generated_files",
     srcs = ["tests/check_generated_files.rs"],
-    data = glob(["src/gen/**"]) + [
+    data = glob(["src/gen/**/*.rs"]) + [
         ":protos",
         "//rs/nns/common:protos",
         "//rs/types/base_types:protos",

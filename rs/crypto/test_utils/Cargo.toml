@@ -1,7 +1,10 @@
 [package]
 name = "ic-crypto-test-utils"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-crypto-internal-csp-test-utils = { path = "../internal/csp_test_utils" }
@@ -17,9 +20,8 @@ ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" 
 ic-types = { path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 ed25519-consensus = "2.0.1"
-openssl = "0.10.55"
 rand = "0.8"
-serde = { version = "1.0.99", features = [ "derive" ] }
-strum_macros = "0.23.0"
-tokio = { version = "1.15.0", features = ["net"] }
-tokio-openssl = "0.6.0"
+rand_chacha = "0.3"
+serde = { workspace = true }
+strum_macros = { workspace = true }
+tokio = { workspace = true }

@@ -1,8 +1,8 @@
+use anyhow::Error;
 use async_trait::async_trait;
 use std::time::Instant;
 use tracing::info;
 
-#[cfg(feature = "tls")]
 use {
     anyhow::Context,
     arc_swap::ArcSwapOption,
@@ -11,23 +11,19 @@ use {
 };
 
 use crate::{
-    firewall::Rule,
+    core::Run,
     metrics::{MetricParams, WithMetrics},
+    tls::{self, Provision, ProvisionResult, TLSCert},
 };
 
-#[cfg(feature = "tls")]
-use crate::tls::{self, Provision};
-
-#[allow(dead_code)] // TODO: remove when Firewall() is used.
+#[non_exhaustive]
 #[derive(Clone, PartialEq)]
 pub enum ServiceConfiguration {
     Tls(String),
-    Firewall(Vec<Rule>),
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigureError {
-    #[cfg(feature = "tls")]
     #[error(transparent)]
     ProvisionError(#[from] tls::ProvisionError),
 
@@ -50,7 +46,14 @@ impl<T: Configure> Configure for WithMetrics<T> {
         let status = if out.is_ok() { "ok" } else { "fail" };
         let duration = start_time.elapsed().as_secs_f64();
 
-        let MetricParams { action, .. } = &self.1;
+        let MetricParams {
+            action,
+            counter,
+            recorder,
+        } = &self.1;
+
+        counter.with_label_values(&[status]).inc();
+        recorder.with_label_values(&[status]).observe(duration);
 
         info!(action, status, duration, error = ?out.as_ref().err());
 
@@ -58,30 +61,8 @@ impl<T: Configure> Configure for WithMetrics<T> {
     }
 }
 
-pub struct WithDeduplication<T>(T, Option<ServiceConfiguration>);
-
-impl<T> WithDeduplication<T> {
-    pub fn wrap(v: T) -> Self {
-        Self(v, None)
-    }
-}
-
-#[async_trait]
-impl<T: Configure> Configure for WithDeduplication<T> {
-    async fn configure(&mut self, cfg: &ServiceConfiguration) -> Result<(), ConfigureError> {
-        if self.1.as_ref() == Some(cfg) {
-            return Ok(());
-        }
-
-        let out = self.0.configure(cfg).await?;
-        self.1 = Some(cfg.to_owned());
-        Ok(out)
-    }
-}
-
 pub struct Configurator {
     pub tls: Box<dyn Configure>,
-    pub firewall: Box<dyn Configure>,
 }
 
 #[async_trait]
@@ -89,18 +70,15 @@ impl Configure for Configurator {
     async fn configure(&mut self, cfg: &ServiceConfiguration) -> Result<(), ConfigureError> {
         match cfg {
             ServiceConfiguration::Tls(..) => self.tls.configure(cfg).await,
-            ServiceConfiguration::Firewall(..) => self.firewall.configure(cfg).await,
         }
     }
 }
 
-#[cfg(feature = "tls")]
 pub struct TlsConfigurator {
     acceptor: Arc<ArcSwapOption<RustlsAcceptor>>,
     provisioner: Box<dyn Provision>,
 }
 
-#[cfg(feature = "tls")]
 impl TlsConfigurator {
     pub fn new(
         acceptor: Arc<ArcSwapOption<RustlsAcceptor>>,
@@ -111,52 +89,68 @@ impl TlsConfigurator {
             provisioner,
         }
     }
-}
 
-#[cfg(feature = "tls")]
-#[async_trait]
-impl Configure for TlsConfigurator {
-    async fn configure(&mut self, cfg: &ServiceConfiguration) -> Result<(), ConfigureError> {
-        if let ServiceConfiguration::Tls(name) = cfg {
-            // Provision new certificate
-            let (cert, pkey) = self.provisioner.provision(name).await?;
+    async fn apply(&self, tls_cert: TLSCert) -> Result<(), ConfigureError> {
+        let cfg = RustlsConfig::from_pem(tls_cert.0.into_bytes(), tls_cert.1.into_bytes())
+            .await
+            .context("failed to parse certificate")?;
 
-            // Replace with new acceptor
-            let cfg = RustlsConfig::from_pem(cert.into_bytes(), pkey.into_bytes())
-                .await
-                .context("failed to create rustls config")?;
+        // Construct new acceptor
+        let acceptor = RustlsAcceptor::new(cfg);
+        let acceptor = Arc::new(acceptor);
+        let acceptor = Some(acceptor);
 
-            let acceptor = RustlsAcceptor::new(cfg);
-            let acceptor = Arc::new(acceptor);
-            let acceptor = Some(acceptor);
-
-            self.acceptor.store(acceptor);
-        }
+        // Replace current acceptor
+        self.acceptor.store(acceptor);
 
         Ok(())
     }
 }
 
-// No-op configurator when the feature is off
-#[cfg(not(feature = "tls"))]
-pub struct TlsConfigurator {}
-
-#[cfg(not(feature = "tls"))]
 #[async_trait]
 impl Configure for TlsConfigurator {
-    async fn configure(&mut self, _cfg: &ServiceConfiguration) -> Result<(), ConfigureError> {
-        Ok(())
+    async fn configure(&mut self, cfg: &ServiceConfiguration) -> Result<(), ConfigureError> {
+        let ServiceConfiguration::Tls(name) = cfg;
+
+        // Try to provision a certificate
+        match self.provisioner.provision(name).await? {
+            // If there was a new certificate issued - apply it
+            ProvisionResult::Issued(tls_cert) => self.apply(tls_cert).await,
+
+            // If it's still valid - apply it only if we don't have one yet loaded
+            ProvisionResult::StillValid(tls_cert) => {
+                if self.acceptor.load().is_none() {
+                    self.apply(tls_cert).await
+                } else {
+                    Ok(())
+                }
+            }
+        }
     }
 }
 
-pub struct FirewallConfigurator {}
+pub struct ConfigurationRunner<C> {
+    hostname: String,
+    configurator: C,
+}
+
+impl<C> ConfigurationRunner<C> {
+    pub fn new(hostname: String, configurator: C) -> Self {
+        Self {
+            hostname,
+            configurator,
+        }
+    }
+}
 
 #[async_trait]
-impl Configure for FirewallConfigurator {
-    async fn configure(&mut self, cfg: &ServiceConfiguration) -> Result<(), ConfigureError> {
-        if let ServiceConfiguration::Firewall(rules) = cfg {
-            println!("configuring firewall: {rules:?}");
-        }
+impl<C: Configure> Run for ConfigurationRunner<C> {
+    async fn run(&mut self) -> Result<(), Error> {
+        // TLS
+        self.configurator
+            .configure(&ServiceConfiguration::Tls(self.hostname.clone()))
+            .await
+            .context("failed to apply tls configuration")?;
 
         Ok(())
     }

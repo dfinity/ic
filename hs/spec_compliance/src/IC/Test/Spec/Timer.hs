@@ -63,8 +63,8 @@ canister_timer_tests ecid =
                                                       far_future_time <- get_far_future_time
                                                       cid <- install ecid $ (on_timer_prog (2 :: Int) >>> onPreUpgrade (callback $ set_timer_prog far_past_time))
                                                       _ <- reset_stable cid
-                                                      universal_wasm <- getTestWasm "universal_canister"
-                                                      _ <- ic_install ic00 (enum #upgrade) cid universal_wasm (run noop)
+                                                      universal_wasm <- getTestWasm "universal_canister.wasm.gz"
+                                                      _ <- ic_install ic00 (enumNothing #upgrade) cid universal_wasm (run noop)
                                                       timer1 <- get_stable cid
                                                       timer2 <- set_timer cid far_future_time
                                                       timer1 @?= blob 0
@@ -75,8 +75,8 @@ canister_timer_tests ecid =
                                                       far_future_time <- get_far_future_time
                                                       timer1 <- set_timer cid far_future_time
                                                       far_far_future_time <- get_far_far_future_time
-                                                      universal_wasm <- getTestWasm "universal_canister"
-                                                      _ <- ic_install ic00 (enum #upgrade) cid universal_wasm (run $ set_timer_prog far_far_future_time)
+                                                      universal_wasm <- getTestWasm "universal_canister.wasm.gz"
+                                                      _ <- ic_install ic00 (enumNothing #upgrade) cid universal_wasm (run $ set_timer_prog far_far_future_time)
                                                       timer2 <- get_stable cid
                                                       timer3 <- set_timer cid far_future_time
                                                       timer1 @?= blob 0
@@ -88,14 +88,14 @@ canister_timer_tests ecid =
                                                       far_future_time <- get_far_future_time
                                                       timer1 <- set_timer cid far_future_time
                                                       past_time <- get_far_past_time
-                                                      universal_wasm <- getTestWasm "universal_canister"
+                                                      universal_wasm <- getTestWasm "universal_canister.wasm.gz"
                                                       _ <- ic_stop_canister ic00 cid
                                                       waitFor $ do
                                                         cs <- ic_canister_status ic00 cid
                                                         if cs .! #status == enum #stopped
                                                           then return $ Just ()
                                                           else return Nothing
-                                                      _ <- ic_install ic00 (enum #upgrade) cid universal_wasm (run $ on_timer_prog (2 :: Int) >>> set_timer_prog past_time)
+                                                      _ <- ic_install ic00 (enumNothing #upgrade) cid universal_wasm (run $ on_timer_prog (2 :: Int) >>> set_timer_prog past_time)
                                                       _ <- ic_start_canister ic00 cid
                                                       wait_for_timer cid 2
                                                       timer2 <- set_timer cid far_future_time
@@ -108,7 +108,7 @@ canister_timer_tests ecid =
                                                       timer1 <- set_timer cid far_future_time
                                                       cid2 <- install ecid noop
                                                       ic_set_controllers ic00 cid [defaultUser, cid2]
-                                                      universal_wasm <- getTestWasm "universal_canister"
+                                                      universal_wasm <- getTestWasm "universal_canister.wasm.gz"
                                                       past_time <- get_far_past_time
                                                       let upgrade =
                                                             update_call "" "install_code" $
@@ -117,7 +117,7 @@ canister_timer_tests ecid =
                                                                     Candid.encode $
                                                                       empty
                                                                         .+ #mode
-                                                                        .== ((enum #upgrade) :: InstallMode)
+                                                                        .== ((enumNothing #upgrade) :: InstallMode)
                                                                         .+ #canister_id
                                                                         .== Principal cid
                                                                         .+ #wasm_module
@@ -205,7 +205,7 @@ canister_timer_tests ecid =
                                                       far_future_time <- get_far_future_time
                                                       timer1 <- set_timer cid far_future_time
                                                       timer2 <- set_timer cid far_future_time
-                                                      universal_wasm <- getTestWasm "universal_canister"
+                                                      universal_wasm <- getTestWasm "universal_canister.wasm.gz"
                                                       _ <- ic_uninstall ic00 cid
                                                       _ <- ic_install ic00 (enum #install) cid universal_wasm (run $ on_timer_prog (2 :: Int))
                                                       timer3 <- set_timer cid far_future_time
@@ -218,8 +218,8 @@ canister_timer_tests ecid =
                                                       far_future_time <- get_far_future_time
                                                       timer1 <- set_timer cid far_future_time
                                                       timer2 <- set_timer cid far_future_time
-                                                      universal_wasm <- getTestWasm "universal_canister"
-                                                      _ <- ic_install ic00 (enum #upgrade) cid universal_wasm (run $ on_timer_prog (2 :: Int))
+                                                      universal_wasm <- getTestWasm "universal_canister.wasm.gz"
+                                                      _ <- ic_install ic00 (enumNothing #upgrade) cid universal_wasm (run $ on_timer_prog (2 :: Int))
                                                       timer3 <- set_timer cid far_future_time
                                                       timer1 @?= blob 0
                                                       timer2 @?= blob far_future_time
@@ -230,7 +230,7 @@ canister_timer_tests ecid =
                                                       far_future_time <- get_far_future_time
                                                       timer1 <- set_timer cid far_future_time
                                                       timer2 <- set_timer cid far_future_time
-                                                      universal_wasm <- getTestWasm "universal_canister"
+                                                      universal_wasm <- getTestWasm "universal_canister.wasm.gz"
                                                       _ <- ic_install ic00 (enum #reinstall) cid universal_wasm (run $ on_timer_prog (2 :: Int))
                                                       timer3 <- set_timer cid far_future_time
                                                       timer1 @?= blob 0

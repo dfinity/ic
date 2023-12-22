@@ -1,6 +1,6 @@
 use std::{ffi::OsString, fmt::Write, fs, path::PathBuf};
 
-use ic_embedders::wasm_utils::wasm_transform;
+use ic_embedders::wasm_utils::validation::wasmtime_validation_config;
 use wasmtime::{
     Config, Engine, Global, GlobalType, Instance, Linker, Memory, MemoryType, Mutability, Store,
     Table, TableType, Val, ValType,
@@ -48,9 +48,9 @@ mod convert {
             WastArg::Core(WastArgCore::I64(i)) => Some(wasmtime::Val::I64(i)),
             WastArg::Core(WastArgCore::F32(f)) => Some(wasmtime::Val::F32(f.bits)),
             WastArg::Core(WastArgCore::F64(f)) => Some(wasmtime::Val::F64(f.bits)),
-            WastArg::Core(WastArgCore::V128(v)) => {
-                Some(wasmtime::Val::V128(u128::from_le_bytes(v.to_le_bytes())))
-            }
+            WastArg::Core(WastArgCore::V128(v)) => Some(wasmtime::Val::V128(
+                u128::from_le_bytes(v.to_le_bytes()).into(),
+            )),
             WastArg::Core(WastArgCore::RefNull(ty)) => Some(heap_type(ty)),
             WastArg::Core(WastArgCore::RefExtern(n)) => Some(wasmtime::ExternRef::new(n).into()),
             WastArg::Component(_) => {
@@ -197,7 +197,7 @@ mod convert {
             (V::I64(l), C(R::I64(r))) => l == r,
             (V::F32(l), C(R::F32(r))) => f32_equal(*l, r),
             (V::F64(l), C(R::F64(r))) => f64_equal(*l, r),
-            (V::V128(l), C(R::V128(r))) => v128_equal(*l, r),
+            (V::V128(l), C(R::V128(r))) => v128_equal(l.as_u128(), r),
             (V::ExternRef(None), C(R::RefExtern(_))) => false,
             // `WastArgCore::RefExtern` always stores a `u32`.
             (V::ExternRef(Some(l)), C(R::RefExtern(r))) => {
@@ -394,7 +394,7 @@ impl<'a> TestState<'a> {
         params: Vec<WastArg>,
         id: Option<Id<'a>>,
     ) -> Result<Vec<wasmtime::Val>, String> {
-        let params: Vec<_> = params.into_iter().map(|a| convert::arg(a)).collect();
+        let params: Vec<_> = params.into_iter().map(convert::arg).collect();
         if params.iter().any(|p| p.is_none()) {
             return Ok(vec![]);
         }
@@ -460,7 +460,7 @@ fn parse_and_encode(
             location(wat, text, path)
         )
     })?;
-    let module = wasm_transform::Module::parse(&wasm, enable_multi_memory)
+    let module = ic_wasm_transform::Module::parse(&wasm, enable_multi_memory)
         .map_err(|e| format!("Parsing error: {:?} in {}", e, location(wat, text, path)))?;
     module
         .encode()
@@ -512,7 +512,7 @@ fn run_directive<'a>(
         }
         // These directives include many wasm modules that wasm-transform won't
         // be able to recognize as invalid (e.g. function bodies that don't type
-        // check). So we want to assert that after parsing and endcoding,
+        // check). So we want to assert that after parsing and encoding,
         // wasmtime still throws an error on validation. That is, wasm-transform
         // didn't somehow make an invalid module valid.
         WastDirective::AssertInvalid {
@@ -592,7 +592,7 @@ fn run_directive<'a>(
                     span_location(span, text, path)
                 )),
                 Err(e) => {
-                    // There seemes to be one case in `bulk.wast` where the
+                    // There seems to be one case in `bulk.wast` where the
                     // error message contains extra information.
                     let message = if message.starts_with("uninitialized element") {
                         "uninitialized element"
@@ -740,13 +740,14 @@ fn run_testsuite(subdirectory: &str, config: &Config, parsing_multi_memory_enabl
     }
 }
 
-/// Note that the tests should pass with or without
-/// `cranelift_nan_canonicalization`. But we only use `wasmtime` with
-/// this feature enabled, so it's better to test the case we actually
-/// use.
+/// Returns the config that is as close as possible to the actual config used in
+/// production for validation.
 fn default_config() -> Config {
-    let mut config = Config::default();
-    config.cranelift_nan_canonicalization(true);
+    let mut config = wasmtime_validation_config(&ic_config::embedders::Config::default());
+    // Some tests require SIMD instructions to run.
+    config.wasm_simd(true);
+    // This is needed to avoid stack overflows in some tests.
+    config.max_wasm_stack(512 * 1024);
     config
 }
 
@@ -758,7 +759,7 @@ fn error_to_string(e: anyhow::Error) -> String {
 }
 
 /// These tests run on data from the WebAssembly spec testsuite. The suite is not
-/// incuded in our repo, but is imported by Bazel using the `new_git_repository`
+/// included in our repo, but is imported by Bazel using the `new_git_repository`
 /// rule in `WORKSPACE.bazel`.
 ///
 /// If you need to look at the test `wast` files directly they can be found in

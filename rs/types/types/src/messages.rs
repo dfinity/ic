@@ -12,8 +12,9 @@ pub use self::http::{
     Authentication, Certificate, CertificateDelegation, Delegation, HasCanisterId, HttpCallContent,
     HttpCanisterUpdate, HttpQueryContent, HttpQueryResponse, HttpQueryResponseReply, HttpReadState,
     HttpReadStateContent, HttpReadStateResponse, HttpReply, HttpRequest, HttpRequestContent,
-    HttpRequestEnvelope, HttpRequestError, HttpStatusResponse, HttpUserQuery, RawHttpRequestVal,
-    ReplicaHealthStatus, SignedDelegation,
+    HttpRequestEnvelope, HttpRequestError, HttpSignedQueryResponse, HttpStatusResponse,
+    HttpUserQuery, NodeSignature, QueryResponseHash, RawHttpRequestVal, ReplicaHealthStatus,
+    SignedDelegation,
 };
 pub use crate::methods::SystemMethod;
 use crate::{user_id_into_protobuf, user_id_try_from_protobuf, Cycles, Funds, NumBytes, UserId};
@@ -69,6 +70,10 @@ pub const MAX_INTER_CANISTER_PAYLOAD_IN_BYTES: NumBytes =
 pub const MAX_XNET_PAYLOAD_IN_BYTES: NumBytes =
     NumBytes::new(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 * 21 / 20); // 2.1 MiB
 
+/// Error margin (in percentage points) of the deterministic payload size
+/// estimate, relative to the actual byte size of the encoded slice.
+pub const MAX_XNET_PAYLOAD_SIZE_ERROR_MARGIN_PERCENT: u64 = 5;
+
 /// Maximum byte size of a valid inter-canister `Response`.
 pub const MAX_RESPONSE_COUNT_BYTES: usize =
     size_of::<RequestOrResponse>() + MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize;
@@ -122,6 +127,13 @@ impl StopCanisterContext {
         match self {
             StopCanisterContext::Ingress { .. } => Cycles::zero(),
             StopCanisterContext::Canister { cycles, .. } => cycles.take(),
+        }
+    }
+
+    pub fn call_id(&self) -> &Option<StopCanisterCallId> {
+        match &self {
+            StopCanisterContext::Ingress { call_id, .. } => call_id,
+            StopCanisterContext::Canister { call_id, .. } => call_id,
         }
     }
 }
@@ -199,7 +211,7 @@ impl TryFrom<pb::StopCanisterContext> for StopCanisterContext {
                         "StopCanisterContext::Ingress::sender",
                     )?)?,
                     message_id: MessageId::try_from(message_id.as_slice())?,
-                    call_id: call_id.map(|id| StopCanisterCallId::from(id)),
+                    call_id: call_id.map(StopCanisterCallId::from),
                 },
                 pb::stop_canister_context::Context::Canister(
                     pb::stop_canister_context::Canister {
@@ -232,7 +244,7 @@ impl TryFrom<pb::StopCanisterContext> for StopCanisterContext {
                             "StopCanisterContext::Canister::sender",
                         )?,
                         reply_callback: CallbackId::from(reply_callback),
-                        call_id: call_id.map(|id| StopCanisterCallId::from(id)),
+                        call_id: call_id.map(StopCanisterCallId::from),
                         cycles,
                     }
                 }

@@ -10,6 +10,7 @@ use crate::{InputQueueType, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions, Global};
 use ic_ic00_types::CanisterStatusType;
 use ic_registry_subnet_type::SubnetType;
+use ic_types::batch::TotalQueryStats;
 use ic_types::methods::SystemMethod;
 use ic_types::time::UNIX_EPOCH;
 use ic_types::{
@@ -71,6 +72,16 @@ pub struct SchedulerState {
     /// needed to calculate how much time should be considered when charging
     /// occurs.
     pub time_of_last_allocation_charge: Time,
+
+    /// Query statistics.
+    ///
+    /// As queries are executed in non-deterministic fashion state modifications are
+    /// disallowed during the query call.
+    /// Instead, each node collects statistics about query execution locally and periodically,
+    /// once per "epoch", sends those to other machines as part of consensus blocks.
+    /// At the end of an "epoch", each node deterministically aggregates all those partial
+    /// query statistics received from consensus blocks and mutates these values.
+    pub total_query_stats: TotalQueryStats,
 }
 
 impl Default for SchedulerState {
@@ -84,6 +95,7 @@ impl Default for SchedulerState {
             heap_delta_debit: 0.into(),
             install_code_debit: 0.into(),
             time_of_last_allocation_charge: UNIX_EPOCH,
+            total_query_stats: TotalQueryStats::default(),
         }
     }
 }
@@ -382,16 +394,17 @@ impl CanisterState {
 
     /// The amount of memory currently being used by the canister.
     ///
-    /// This only includes execution memory (heap, stable, globals, Wasm)
-    /// and canister history memory.
+    /// This only includes execution memory (heap, stable, globals, Wasm),
+    /// canister history memory and wasm chunk storage.
     pub fn memory_usage(&self) -> NumBytes {
-        self.raw_memory_usage() + self.canister_history_memory_usage()
+        self.execution_memory_usage()
+            + self.canister_history_memory_usage()
+            + self.wasm_chunk_store_memory_usage()
     }
 
-    /// Returns the amount of raw memory currently used by the canister in bytes.
-    ///
-    /// This only includes execution memory (heap, stable, globals, Wasm).
-    pub(crate) fn raw_memory_usage(&self) -> NumBytes {
+    /// Returns the amount of execution memory (heap, stable, globals, Wasm)
+    /// currently used by the canister in bytes.
+    pub fn execution_memory_usage(&self) -> NumBytes {
         self.execution_state
             .as_ref()
             .map_or(NumBytes::from(0), |es| es.memory_usage())
@@ -413,6 +426,11 @@ impl CanisterState {
     /// Returns the amount of memory used by canister history in bytes.
     pub fn canister_history_memory_usage(&self) -> NumBytes {
         self.system_state.canister_history_memory_usage()
+    }
+
+    /// Returns the memory usage of the wasm chunk store in bytes.
+    fn wasm_chunk_store_memory_usage(&self) -> NumBytes {
+        self.system_state.wasm_chunk_store.memory_usage()
     }
 
     /// Sets the (transient) size in bytes of responses from this canister
@@ -492,14 +510,26 @@ impl CanisterState {
         }
     }
 
-    #[allow(dead_code)]
-    pub fn after_split(self) -> Self {
-        // Take apart `self` and put it back together, in order for the compiler to
-        // enforce an explicit decision whenever new fields are added.
+    /// Silently discards in-progress subnet messages being executed by the
+    /// canister, in the second phase of a subnet split. This should only be called
+    /// on canisters that have migrated to a new subnet (*subnet B*), which does not
+    /// have a matching call context.
+    ///
+    /// The other subnet (which must be *subnet A'*), produces reject responses (for
+    /// calls originating from canisters); and fails ingress messages (for calls
+    /// originating from ingress messages); for the matching subnet calls. This is
+    /// the only way to ensure consistency for messages that would otherwise be
+    /// executing on one subnet, but for which a response may only be produced by
+    /// another subnet.
+    pub fn drop_in_progress_management_calls_after_split(&mut self) {
+        // Destructure `self` in order for the compiler to enforce an explicit decision
+        // whenever new fields are added.
+        //
+        // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS a `match`!
         let CanisterState {
-            mut system_state,
-            execution_state,
-            scheduler_state,
+            ref mut system_state,
+            execution_state: _,
+            scheduler_state: _,
         } = self;
 
         // Remove aborted install code task.
@@ -512,27 +542,19 @@ impl CanisterState {
             | ExecutionTask::AbortedExecution { .. } => true,
         });
 
-        // Roll back canister state `Stopping` to `Running` and drop all stop contexts.
-        // The calls corresponding to the dropped stop contexts will be rejected by
-        // subnet A'.
-        let canister_status = match system_state.status {
-            CanisterStatus::Running {
-                call_context_manager,
-            }
-            | CanisterStatus::Stopping {
+        // Roll back `Stopping` canister states to `Running` and drop all their stop
+        // contexts (the calls corresponding to the dropped stop contexts will be
+        // rejected by subnet A').
+        match &system_state.status {
+            CanisterStatus::Running { .. } | CanisterStatus::Stopped => {}
+            CanisterStatus::Stopping {
                 call_context_manager,
                 ..
-            } => CanisterStatus::Running {
-                call_context_manager,
-            },
-            CanisterStatus::Stopped => CanisterStatus::Stopped,
-        };
-        system_state.status = canister_status;
-
-        CanisterState {
-            system_state,
-            execution_state,
-            scheduler_state,
+            } => {
+                system_state.status = CanisterStatus::Running {
+                    call_context_manager: call_context_manager.clone(),
+                }
+            }
         }
     }
 }

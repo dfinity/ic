@@ -1,22 +1,20 @@
 //! Module that deals with requests to /api/v2/canister/.../call
 
 use crate::{
-    body::BodyReceiverLayer,
     common::{
-        get_cors_headers, make_plaintext_response, make_response, remove_effective_canister_id,
+        get_cors_headers, make_plaintext_response, make_response, remove_effective_principal_id,
     },
     metrics::LABEL_UNKNOWN,
     types::ApiReqType,
     validator_executor::ValidatorExecutor,
     EndpointService, HttpError, HttpHandlerMetrics, IngressFilterService,
 };
+use bytes::Bytes;
 use crossbeam::channel::Sender;
 use http::Request;
 use hyper::{Body, Response, StatusCode};
 use ic_config::http_handler::Config;
-use ic_interfaces::{
-    artifact_pool::UnvalidatedArtifact, ingress_pool::IngressPoolThrottler, time_source::TimeSource,
-};
+use ic_interfaces::ingress_pool::IngressPoolThrottler;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info_sample, warn, ReplicaLogger};
 use ic_registry_client_helpers::{
@@ -24,9 +22,10 @@ use ic_registry_client_helpers::{
     subnet::{IngressMessageSettings, SubnetRegistry},
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_types::messages::SignedIngressContent;
 use ic_types::{
-    messages::{SignedIngress, SignedRequestBytes},
+    artifact::UnvalidatedArtifactMutation,
+    artifact_kind::IngressArtifact,
+    messages::{SignedIngress, SignedIngressContent, SignedRequestBytes},
     CanisterId, CountBytes, NodeId, RegistryVersion, SubnetId,
 };
 use std::convert::{Infallible, TryInto};
@@ -44,12 +43,11 @@ pub(crate) struct CallService {
     metrics: HttpHandlerMetrics,
     node_id: NodeId,
     subnet_id: SubnetId,
-    time_source: Arc<dyn TimeSource>,
     registry_client: Arc<dyn RegistryClient>,
     validator_executor: ValidatorExecutor<SignedIngressContent>,
     ingress_filter: IngressFilterService,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    ingress_tx: Sender<UnvalidatedArtifact<SignedIngress>>,
+    ingress_tx: Sender<UnvalidatedArtifactMutation<IngressArtifact>>,
 }
 
 impl CallService {
@@ -60,14 +58,13 @@ impl CallService {
         metrics: HttpHandlerMetrics,
         node_id: NodeId,
         subnet_id: SubnetId,
-        time_source: Arc<dyn TimeSource>,
         registry_client: Arc<dyn RegistryClient>,
         validator_executor: ValidatorExecutor<SignedIngressContent>,
         ingress_filter: IngressFilterService,
         ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-        ingress_tx: Sender<UnvalidatedArtifact<SignedIngress>>,
+        ingress_tx: Sender<UnvalidatedArtifactMutation<IngressArtifact>>,
     ) -> EndpointService {
-        let base_service = BoxCloneService::new(
+        BoxCloneService::new(
             ServiceBuilder::new()
                 .layer(GlobalConcurrencyLimitLayer::new(
                     config.max_call_concurrent_requests,
@@ -80,16 +77,9 @@ impl CallService {
                     validator_executor,
                     ingress_throttler,
                     ingress_tx,
-                    time_source,
                     ingress_filter,
                     node_id,
                 }),
-        );
-
-        BoxCloneService::new(
-            ServiceBuilder::new()
-                .layer(BodyReceiverLayer::new(&config))
-                .service(base_service),
         )
     }
 }
@@ -143,7 +133,7 @@ fn get_registry_data(
 }
 
 /// Handles a call to /api/v2/canister/../call
-impl Service<Request<Vec<u8>>> for CallService {
+impl Service<Request<Bytes>> for CallService {
     type Response = Response<Body>;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
@@ -153,7 +143,7 @@ impl Service<Request<Vec<u8>>> for CallService {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, request: Request<Vec<u8>>) -> Self::Future {
+    fn call(&mut self, request: Request<Bytes>) -> Self::Future {
         // Actual parsing.
         self.metrics
             .request_body_size_bytes
@@ -161,7 +151,7 @@ impl Service<Request<Vec<u8>>> for CallService {
             .observe(request.body().len() as f64);
 
         let (mut parts, body) = request.into_parts();
-        let msg: SignedIngress = match SignedRequestBytes::from(body).try_into() {
+        let msg: SignedIngress = match SignedRequestBytes::from(body.to_vec()).try_into() {
             Ok(msg) => msg,
             Err(e) => {
                 let res = make_plaintext_response(
@@ -172,8 +162,8 @@ impl Service<Request<Vec<u8>>> for CallService {
             }
         };
 
-        let effective_canister_id = match remove_effective_canister_id(&mut parts) {
-            Ok(canister_id) => canister_id,
+        let effective_principal_id = match remove_effective_principal_id(&mut parts) {
+            Ok(principal_id) => principal_id,
             Err(res) => {
                 error!(
                     self.log,
@@ -182,6 +172,8 @@ impl Service<Request<Vec<u8>>> for CallService {
                 return Box::pin(async move { Ok(res) });
             }
         };
+
+        let effective_canister_id = CanisterId::unchecked_from_principal(effective_principal_id);
 
         // Reject requests where `canister_id` != `effective_canister_id` for non mgmt canister calls.
         // This needs to be enforced because boundary nodes block access based on the `effective_canister_id`
@@ -227,10 +219,9 @@ impl Service<Request<Vec<u8>>> for CallService {
         }
 
         let ingress_tx = self.ingress_tx.clone();
-        let mut ingress_filter = self.ingress_filter.clone();
+        let ingress_filter = self.ingress_filter.clone();
         let log = self.log.clone();
         let validator_executor = self.validator_executor.clone();
-        let time_source = self.time_source.clone();
         let node_id = self.node_id;
         let ingress_throttler = self.ingress_throttler.clone();
         Box::pin(async move {
@@ -242,10 +233,7 @@ impl Service<Request<Vec<u8>>> for CallService {
             }
 
             match ingress_filter
-                .ready()
-                .await
-                .expect("The service must always be able to process requests")
-                .call((provisional_whitelist, msg.content().clone()))
+                .oneshot((provisional_whitelist, msg.content().clone()))
                 .await
             {
                 Err(_) => panic!("Can't panic on Infallible"),
@@ -259,11 +247,7 @@ impl Service<Request<Vec<u8>>> for CallService {
 
             let is_overloaded = ingress_throttler.read().unwrap().exceeds_threshold()
                 || ingress_tx
-                    .try_send(UnvalidatedArtifact {
-                        message: msg,
-                        peer_id: node_id,
-                        timestamp: time_source.get_relative_time(),
-                    })
+                    .try_send(UnvalidatedArtifactMutation::Insert((msg, node_id)))
                     .is_err();
 
             let response = if is_overloaded {

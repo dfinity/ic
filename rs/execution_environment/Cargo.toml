@@ -1,7 +1,10 @@
 [package]
-edition = "2021"
 name = "ic-execution-environment"
-version = "0.8.0"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
@@ -13,6 +16,7 @@ ic-canister-sandbox-replica-controller = { path = "../canister_sandbox/replica_c
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
 ic-crypto-prng = { path = "../crypto/prng" }
+ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-tecdsa = { path = "../crypto/tecdsa" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
@@ -35,28 +39,26 @@ ic-system-api = { path = "../system_api" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-utils-lru-cache = { path = "../utils/lru_cache" }
+ic-wasm-transform = { path = "../wasm_transform" }
 ic-wasm-types = { path = "../types/wasm_types" }
 lazy_static = "1.4.0"
 memory_tracker = { path = "../memory_tracker" }
-nix = "0.23.0"
+nix = { workspace = true }
 num-rational = "0.2.2"
 num-traits = "0.2.12"
 phantom_newtype = { path = "../phantom_newtype" }
-prometheus = { version = "0.12.0", features = ["process"] }
+prometheus = { workspace = true }
 rand = "0.8"
 scoped_threadpool = "0.1.*"
-serde = { version = "1.0.99", features = ["derive"] }
-serde_cbor = "0.11.1"
-serde_bytes = "0.11"
-slog = { version = "2.5.2", features = [
-	"nested-values",
-	"release_max_level_debug",
-] }
-strum = "0.23.0"
+serde = { workspace = true }
+serde_cbor = { workspace = true }
+serde_bytes = { workspace = true }
+slog = { workspace = true }
+strum = { workspace = true }
 threadpool = "1.8.1"
-tokio = { version = "1.17.0", features = ["rt", "sync"] }
-tower = { version = "0.4.11", features = ["buffer", "limit", "timeout"] }
-wasmparser = "0.109.0"
+tokio = { workspace = true }
+tower = { workspace = true }
+wasmparser = "0.115.0"
 
 [dev-dependencies]
 assert_matches = "1.3.0"
@@ -64,7 +66,6 @@ canister-test = { path = "../rust_canisters/canister_test" }
 criterion = { version = "0.5", features = ["html_reports"] }
 execution-environment-bench = { path = "benches/lib" }
 ic-btc-test-utils = { git = "https://github.com/dfinity/bitcoin-canister", rev = "b1693619e3d4dbc00d8c79e9b6886e1db48b21f7" }
-ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-test-utilities = { path = "../test_utilities" }
@@ -76,13 +77,10 @@ ic-universal-canister = { path = "../universal_canister/lib" }
 ic-wasm-types = { path = "../types/wasm_types" }
 libflate = "1.1.2"
 maplit = "1.0.2"
-mockall = "0.7.2"
 proptest = "1.0"
 tempfile = "3.1.0"
 test-strategy = "0.2"
-tokio = "1.15.0"
 wat = "1.0.52"
-wasmparser = "0.109.0"
 
 [build-dependencies]
 escargot = "0.5"
@@ -96,20 +94,33 @@ sigsegv_handler_checksum = [
 
 [[bench]]
 harness = false
-name = "100k_canisters"
-
-[[bench]]
-harness = false
 name = "execute_inspect_message"
+path = "benches/system_api/execute_inspect_message.rs"
 
 [[bench]]
 harness = false
 name = "execute_query"
+path = "benches/system_api/execute_query.rs"
 
 [[bench]]
 harness = false
 name = "execute_update"
+path = "benches/system_api/execute_update.rs"
+
+[[bench]]
+harness = false
+name = "wasm_instructions"
+path = "benches/wasm_instructions/main.rs"
 
 [[bench]]
 harness = false
 name = "scheduler"
+
+[[bench]]
+harness = false
+name = "100k_canisters"
+
+[[bench]]
+harness = false
+name = "management_canister_bench"
+path = "benches/management_canister/main.rs"

@@ -76,15 +76,14 @@ use crate::{
 };
 use ic_interfaces_transport::TransportPayload;
 use ic_logger::{info, trace, warn};
-use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
-use ic_state_manager::state_sync::StateSyncArtifact;
+use ic_protobuf::{proxy::ProtoProxy, types::v1 as pb};
 use ic_types::{
     artifact::{Advert, Artifact, ArtifactFilter, ArtifactId, ArtifactKind, ArtifactTag},
     artifact_kind::{
         CanisterHttpArtifact, CertificationArtifact, ConsensusArtifact, DkgArtifact, EcdsaArtifact,
         IngressArtifact,
     },
-    chunkable::{ArtifactErrorCode, ChunkId},
+    chunkable::ChunkId,
     crypto::CryptoHash,
     p2p::GossipAdvert,
     NodeId, RegistryVersion,
@@ -96,6 +95,8 @@ use std::{
     ops::DerefMut,
     time::{Instant, SystemTime},
 };
+
+const CHUNKID_UNIT_CHUNK: u32 = 0;
 
 /// `DownloadManagerImpl` implements the `DownloadManager` trait.
 impl GossipImpl {
@@ -210,7 +211,7 @@ impl GossipImpl {
         // Allowing the rest of the artifact to be downloaded and
         // skipping only the affected chunk increase overall
         // resilience.
-        if let Err(error) = gossip_chunk.artifact_chunk {
+        if let Err(error) = gossip_chunk.artifact {
             self.metrics.chunks_not_served_from_peer.inc();
             trace!(
                 self.log,
@@ -261,30 +262,7 @@ impl GossipImpl {
         let artifact_tracker = artifact_tracker.unwrap();
 
         // Feed the chunk to the tracker.
-        let completed_artifact = match artifact_tracker
-            .chunkable
-            .add_chunk(gossip_chunk.artifact_chunk.unwrap())
-        {
-            // Artifact assembly is complete.
-            Ok(artifact) => Some(artifact),
-            Err(ArtifactErrorCode::ChunksMoreNeeded) => None,
-            Err(ArtifactErrorCode::ChunkVerificationFailed) => {
-                trace!(
-                    self.log,
-                    "Chunk verification failed for artifact{:?} chunk {:?} from peer {:?}",
-                    gossip_chunk.request.artifact_id,
-                    gossip_chunk.request.chunk_id,
-                    &peer_id
-                );
-                self.metrics.chunks_verification_failed.inc();
-                None
-            }
-        };
-
-        // Return if the artifact is complete.
-        if completed_artifact.is_none() {
-            return;
-        }
+        let completed_artifact = gossip_chunk.artifact.unwrap();
 
         // Record metrics.
         self.metrics.artifacts_received.inc();
@@ -292,8 +270,6 @@ impl GossipImpl {
         self.metrics
             .artifact_download_time
             .observe(artifact_tracker.get_duration_sec());
-
-        let completed_artifact = completed_artifact.unwrap();
 
         // Check whether the artifact matches the advertised integrity hash.
         let advert = match self.prioritizer.get_advert_from_peer(
@@ -401,7 +377,7 @@ impl GossipImpl {
             }
             // This artifact is used only in tests.
             Artifact::FileTreeSync(_) => true,
-            Artifact::StateSync(msg) => advert_matches_artifact::<StateSyncArtifact>(msg, &advert),
+            Artifact::StateSync(_) => unimplemented!(),
         };
         if advert_matches_completed_artifact {
             match self
@@ -715,7 +691,7 @@ impl GossipImpl {
             .start_timer();
         let channel_id = self.transport_channel_mapper.map(&message);
         let message_label: &'static str = (&message).into();
-        let message = TransportPayload(pb::GossipMessage::proxy_encode(message).unwrap());
+        let message = TransportPayload(pb::GossipMessage::proxy_encode(message));
         match self.transport.send(&peer_id, channel_id, message) {
             Ok(()) => self
                 .metrics
@@ -828,20 +804,20 @@ impl GossipImpl {
             let advert_tracker = advert_tracker.deref_mut();
 
             // Try to begin a download for the artifact and collect its chunk requests.
-            if let Some(artifact_tracker) = artifacts_under_construction.schedule_download(
+            if artifacts_under_construction.schedule_download(
                 peer_id,
                 advert_tracker.advert(),
                 &self.gossip_config,
                 current_peers.len() as u32,
-                self.artifact_manager.as_ref(),
             ) {
                 // Collect gossip requests that can be initiated for this artifact.
                 // The function get_chunk_request() returns requests for chunks that satisfy
                 // chunk download constraints. These requests are collected and download
                 // attempts are recorded.
-                let new_chunk_requests = artifact_tracker
-                    .chunkable
-                    .chunks_to_download()
+                let v: Vec<ChunkId> = vec![ChunkId::from(CHUNKID_UNIT_CHUNK)];
+                let chunks_to_download = Box::new(v.into_iter());
+
+                let new_chunk_requests = chunks_to_download
                     .filter_map(|id: ChunkId| {
                         self.get_chunk_request(&current_peers, peer_id, advert_tracker, id)
                             .map(|req| {
@@ -1008,8 +984,9 @@ where
 pub mod tests {
     use super::*;
     use crate::download_prioritization::DownloadPrioritizerError;
-    use ic_interfaces::artifact_manager::{ArtifactManager, OnArtifactError};
     use ic_interfaces::consensus_pool::ConsensusPoolCache;
+    use ic_interfaces::p2p::artifact_manager::{ArtifactManager, OnArtifactError};
+    use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
     use ic_interfaces_registry::RegistryClient;
     use ic_interfaces_transport::TransportChannelId;
     use ic_logger::{LoggerImpl, ReplicaLogger};
@@ -1019,25 +996,23 @@ pub mod tests {
     use ic_test_utilities::consensus::fake::FakeSigner;
     use ic_test_utilities::port_allocation::allocate_ports;
     use ic_test_utilities::{
-        consensus::MockConsensusCache,
         consensus::{fake::*, make_genesis},
         p2p::*,
         thread_transport::*,
-        types::ids::{node_id_to_u64, node_test_id, subnet_test_id},
+        types::ids::{node_test_id, subnet_test_id},
     };
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
-    use ic_types::artifact::{DkgMessage, DkgMessageAttribute};
-    use ic_types::consensus::dkg::DealingContent;
+    use ic_types::consensus::dkg::{DealingContent, DkgMessageId, Message as DkgMessage};
     use ic_types::crypto::{
         threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
-        {CryptoHash, CryptoHashOf},
+        CryptoHash,
     };
     use ic_types::signature::BasicSignature;
     use ic_types::SubnetId;
     use ic_types::{
         artifact,
         artifact::{Artifact, ArtifactAttribute, ArtifactPriorityFn, Priority},
-        chunkable::{ArtifactChunk, ArtifactChunkData, Chunkable, ChunkableArtifact},
+        chunkable::ChunkableArtifact,
         Height, NodeId, PrincipalId,
     };
     use ic_types::{artifact::ArtifactKind, artifact_kind::ConsensusArtifact, consensus::*};
@@ -1054,47 +1029,7 @@ pub mod tests {
 
     /// The test artifact manager.
     #[derive(Default)]
-    pub(crate) struct TestArtifactManager {
-        /// The number of chunks.
-        pub num_chunks: u32,
-    }
-
-    /// The test artifact.
-    struct TestArtifact {
-        /// The number of chunks.
-        num_chunks: u32,
-        /// The list of artifact chunks.
-        chunks: Vec<ArtifactChunk>,
-    }
-
-    /// `TestArtifact` implements the `Chunkable` trait.
-    impl Chunkable for TestArtifact {
-        /// The method returns an Iterator over the chunks to download.
-        fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>> {
-            Box::new(
-                (0..self.num_chunks)
-                    .map(ChunkId::from)
-                    .collect::<Vec<_>>()
-                    .into_iter(),
-            )
-        }
-
-        /// The method adds the given chunk.
-        fn add_chunk(
-            &mut self,
-            artifact_chunk: ArtifactChunk,
-        ) -> Result<Artifact, ArtifactErrorCode> {
-            self.chunks.push(artifact_chunk.clone());
-            if self.chunks.len() == self.num_chunks as usize {
-                match artifact_chunk.artifact_chunk_data {
-                    ArtifactChunkData::UnitChunkData(artifact) => Ok(artifact),
-                    _ => Err(ArtifactErrorCode::ChunkVerificationFailed),
-                }
-            } else {
-                Err(ArtifactErrorCode::ChunksMoreNeeded)
-            }
-        }
-    }
+    pub(crate) struct TestArtifactManager {}
 
     /// The `TestArtifactManager` implements the `TestArtifact` trait.
     impl ArtifactManager for TestArtifactManager {
@@ -1141,18 +1076,6 @@ pub mod tests {
         fn get_priority_function(&self, _: artifact::ArtifactTag) -> ArtifactPriorityFn {
             Box::new(priority_fn_fetch_now_all)
         }
-
-        /// The method returns a new TestArtifact instance.
-        fn get_chunk_tracker(
-            &self,
-            _id: &artifact::ArtifactId,
-        ) -> Option<Box<dyn Chunkable + Send + Sync>> {
-            let chunks = vec![];
-            Some(Box::new(TestArtifact {
-                num_chunks: self.num_chunks,
-                chunks,
-            }))
-        }
     }
 
     /// The function returns a new
@@ -1175,7 +1098,7 @@ pub mod tests {
         rt_handle: tokio::runtime::Handle,
     ) -> GossipImpl {
         let log: ReplicaLogger = logger.root.clone().into();
-        let artifact_manager = TestArtifactManager { num_chunks: 1 };
+        let artifact_manager = TestArtifactManager {};
 
         // Set up transport.
         let hub_access: HubAccess = Arc::new(Mutex::new(Default::default()));
@@ -1225,7 +1148,7 @@ pub mod tests {
         let registry_client = Arc::new(FakeRegistryClient::new(data_provider));
         registry_client.update_to_latest_version();
 
-        let mut mock_consensus_cache = MockConsensusCache::new();
+        let mut mock_consensus_cache = MockConsensusPoolCache::new();
         mock_consensus_cache
             .expect_get_oldest_registry_version_in_use()
             .returning(move || RegistryVersion::from(1));
@@ -1245,7 +1168,7 @@ pub mod tests {
         for advert_id in range {
             let gossip_advert = GossipAdvert {
                 artifact_id: ArtifactId::FileTreeSync(advert_id.to_string()),
-                attribute: ArtifactAttribute::FileTreeSync(advert_id.to_string()),
+                attribute: ic_types::artifact::ArtifactAttribute::Empty(()),
                 size: 0,
                 integrity_hash: CryptoHash(Vec::from(advert_id.to_be_bytes())),
             };
@@ -1291,7 +1214,7 @@ pub mod tests {
 
         // Create consensus cache which returns CUP with version 1, the registry version
         // which contains the subnet record with all replicas.
-        let mut mock_consensus_cache = MockConsensusCache::new();
+        let mut mock_consensus_cache = MockConsensusPoolCache::new();
         let consensus_registry_client = registry_client.clone();
         mock_consensus_cache
             .expect_get_oldest_registry_version_in_use()
@@ -1320,7 +1243,7 @@ pub mod tests {
         registry_client.update_to_latest_version();
         let registry_version = registry_client.get_latest_version();
         let node_records = registry_client
-            .get_subnet_transport_infos(subnet_test_id(P2P_SUBNET_ID_DEFAULT), registry_version)
+            .get_subnet_node_records(subnet_test_id(P2P_SUBNET_ID_DEFAULT), registry_version)
             .unwrap_or(None)
             .unwrap_or_default();
         assert_eq!((num_replicas - 1) as usize, node_records.len());
@@ -1560,52 +1483,6 @@ pub mod tests {
         }
     }
 
-    /// The function tests the downloading of an artifact in multiple chunks in
-    /// parallel from multiple peers.
-    #[tokio::test]
-    async fn download_manager_multi_chunked_artifacts_are_linearly_striped() {
-        // There are 3 peers in total. 2 peers advertise an artifact with 40 chunks.
-        // Each peer has 20 download slots available for transport.
-        let num_peers = 3;
-        let logger = p2p_test_setup_logger();
-        let mut gossip = new_test_gossip(num_peers, &logger, tokio::runtime::Handle::current());
-        let request_queue_size = gossip.gossip_config.max_artifact_streams_per_peer;
-        gossip.artifact_manager = Arc::new(TestArtifactManager {
-            num_chunks: request_queue_size * num_peers,
-        });
-
-        // Each peer should download the node_id'th range of chunks, i.e.,
-        //  Node 1 downloads the chunks 0-19.
-        //  Node 2 downloads the chunks 20-39.
-        let test_assert_compute_work_is_striped =
-            |gossip: &GossipImpl, node_id: NodeId, compute_work_count: u64| {
-                let chunks_to_be_downloaded = gossip.download_next_compute_work(node_id).unwrap();
-                assert_eq!(chunks_to_be_downloaded.len() as u64, compute_work_count);
-                for (i, chunk_req) in chunks_to_be_downloaded.iter().enumerate() {
-                    assert_eq!(
-                        chunk_req.artifact_id,
-                        ArtifactId::FileTreeSync(0.to_string())
-                    );
-                    let chunk_num =
-                        ((node_id_to_u64(node_id) - 1) * request_queue_size as u64) + i as u64;
-                    assert_eq!(chunk_req.chunk_id, ChunkId::from(chunk_num as u32));
-                }
-            };
-
-        // Advertise the artifact from all peers.
-        for i in 1..num_peers {
-            test_add_adverts(&gossip, 0..1, node_test_id(i as u64))
-        }
-
-        for i in 1..num_peers {
-            test_assert_compute_work_is_striped(
-                &gossip,
-                node_test_id(i as u64),
-                request_queue_size as u64,
-            );
-        }
-    }
-
     /// The function returns a simple DKG message which changes according to the
     /// number passed in.
     fn receive_check_test_create_message(number: u32) -> DkgMessage {
@@ -1635,11 +1512,6 @@ pub mod tests {
         integrity_hash: CryptoHash,
     ) -> GossipChunk {
         let payload = Artifact::DkgMessage(receive_check_test_create_message(number));
-        let artifact_chunk = ArtifactChunk {
-            chunk_id,
-            witness: Vec::with_capacity(0),
-            artifact_chunk_data: ArtifactChunkData::UnitChunkData(payload),
-        };
 
         let request = GossipChunkRequest {
             artifact_id,
@@ -1648,7 +1520,7 @@ pub mod tests {
         };
         GossipChunk {
             request,
-            artifact_chunk: Ok(artifact_chunk),
+            artifact: Ok(payload),
         }
     }
 
@@ -1657,13 +1529,10 @@ pub mod tests {
         let mut result = vec![];
         for advert_number in range {
             let msg = receive_check_test_create_message(advert_number);
-            let artifact_id = CryptoHashOf::from(ic_types::crypto::crypto_hash(&msg).get());
-            let attribute = DkgMessageAttribute {
-                interval_start_height: Default::default(),
-            };
+            let artifact_id = ArtifactId::DkgMessage(DkgMessageId::from(&msg));
             let gossip_advert = GossipAdvert {
-                artifact_id: ArtifactId::DkgMessage(artifact_id),
-                attribute: ArtifactAttribute::DkgMessage(attribute),
+                artifact_id,
+                attribute: ic_types::artifact::ArtifactAttribute::Empty(()),
                 size: 0,
                 integrity_hash: ic_types::crypto::crypto_hash(&msg).get(),
             };
@@ -1690,9 +1559,7 @@ pub mod tests {
         let max_adverts = gossip.gossip_config.max_artifact_streams_per_peer;
         let mut adverts = receive_check_test_create_adverts(0..max_adverts);
         let msg = receive_check_test_create_message(0);
-        let artifact_id = ArtifactId::DkgMessage(CryptoHashOf::from(
-            ic_types::crypto::crypto_hash(&msg).get(),
-        ));
+        let artifact_id = ArtifactId::DkgMessage(DkgMessageId::from(&msg));
         for advert in &mut adverts {
             advert.artifact_id = artifact_id.clone();
         }

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 if ! which jq >/dev/null; then
     echo >&2 "Tool \`jq\` not found.  Please install. \`brew install jq\` or check https://stedolan.github.io/jq/"
@@ -60,7 +60,13 @@ canister_bazel_label() {
         "xrc-mock-canister")
             echo "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister"
             ;;
-        # TODO cycles-minting, genesis-token, identity, ledger, lifeline, nns-ui, registry
+        "genesis-token")
+            echo "//rs/nns/gtc:genesis-token-canister"
+            ;;
+        "cycles-minting")
+            echo "//rs/nns/cmc:cycles-minting-canister"
+            ;;
+        # TODO identity, ledger, lifeline, nns-ui, registry
         *)
             echo "Sorry. I do not know how to build ${CANISTER_NAME}."
             exit 1
@@ -165,21 +171,6 @@ get_sns_canister_code_location() {
 
 ### Functions related to SNS deployments
 
-add_sns_wasms_allowed_principal() {
-    ensure_variable_set IC_ADMIN
-
-    local NNS_URL=$1 # with protocol and port (http://...:8080)
-    local NEURON_ID=$2
-    local PEM=$3
-    local PRINCIPAL_TO_ADD=$4
-
-    $IC_ADMIN --nns-url "$NNS_URL" -s "$PEM" \
-        propose-to-update-sns-deploy-whitelist \
-        --proposer "$NEURON_ID" \
-        --added-principals "$PRINCIPAL_TO_ADD" \
-        --summary "Updating deploy whitelist"
-}
-
 set_sns_wasms_allowed_subnets() {
     ensure_variable_set IC_ADMIN
 
@@ -191,7 +182,7 @@ set_sns_wasms_allowed_subnets() {
     #  Remove all from current list
     #  and add new one
 
-    CURRENT_SUBNETS=$(dfx canister --network "$NNS_URL" call qaa6y-5yaaa-aaaaa-aaafa-cai get_sns_subnet_ids '(record {})' \
+    CURRENT_SUBNETS=$(__dfx canister --network "$NNS_URL" call qaa6y-5yaaa-aaaaa-aaafa-cai get_sns_subnet_ids '(record {})' \
         | grep principal \
         | sed 's/.*"\(.*\)";/\1/')
 
@@ -224,43 +215,6 @@ set_default_subnets() {
         --subnets "$SUBNET_ID"
 }
 
-##: test_propose_to_open_sns_token_swap_pem
-## Decentralize an SNS with test parameters
-## Usage: $1 <NNS_URL> <NEURON_ID> <PEM> <SWAP_CANISTER_ID>
-##      NNS_URL: The url to the subnet running the NNS in your testnet.
-##      NEURON_ID: The neuron used to submit proposals (should have following to immediately pass)
-##      PEM: path to the pem file of a neuron controller (hotkey or owner)
-##      SWAP_CANISTER_ID: the id of the swap canister to decentralize
-test_propose_to_open_sns_token_swap_pem() {
-    ensure_variable_set IC_ADMIN
-
-    local NNS_URL=$1 # with protocol and port (http://...:8080)
-    local NEURON_ID=$2
-    local PEM=$3
-    local SWAP_ID=$4
-
-    NOW_PLUS_TWO_DAYS=$(($(date +%s) + 86400 + 86400))
-
-    # Min ICP = 50, Max = 500
-    # min per user 1 ICP, max 200
-    # 3 users minimum
-    $IC_ADMIN -s "$PEM" --nns-url "$NNS_URL" \
-        propose-to-open-sns-token-swap \
-        --min-participants 1 \
-        --min-icp-e8s 1000000000 \
-        --max-icp-e8s 3000000000000 \
-        --min-participant-icp-e8s 1000000000 \
-        --max-participant-icp-e8s 3000000000000 \
-        --swap-due-timestamp-seconds $NOW_PLUS_TWO_DAYS \
-        --sns-token-e8s 3000000000000 \
-        --target-swap-canister-id "$SWAP_ID" \
-        --neuron-basket-count 3000 \
-        --neuron-basket-dissolve-delay-interval-seconds 100 \
-        --proposal-title "Decentralize this SNS" \
-        --summary "Decentralize this SNS" \
-        --proposer "$NEURON_ID"
-}
-
 ##: nns_proposal_info
 ## Get the information for a proposal for a given ID
 ## Usage: $1 <NNS_URL> <PROPOSAL_ID>
@@ -273,7 +227,7 @@ nns_proposal_info() {
     local IC=$(repo_root)
     local GOV_DID="$IC/rs/nns/governance/canister/governance.did"
 
-    dfx -q canister --network $NNS_URL \
+    __dfx -q canister --network $NNS_URL \
         call --candid "$GOV_DID" \
         $(nns_canister_id governance) get_proposal_info "( $PROPOSAL_ID : nat64 )"
 }
@@ -299,7 +253,7 @@ nns_neuron_info() {
     local IC=$(repo_root)
     local GOV_DID="$IC/rs/nns/governance/canister/governance.did"
 
-    dfx -q canister --network $NNS_URL \
+    __dfx -q canister --network $NNS_URL \
         call --candid "$GOV_DID" \
         $(nns_canister_id governance) get_neuron_info "( $NEURON_ID : nat64 )"
 }
@@ -311,7 +265,7 @@ top_up_wallet() {
     local WALLET_CANISTER=$2
     local AMOUNT=$3
 
-    dfx -q ledger top-up --network "$SUBNET_URL" \
+    __dfx -q ledger top-up --network "$SUBNET_URL" \
         --amount "$AMOUNT" "$WALLET_CANISTER"
 }
 
@@ -324,7 +278,7 @@ call_swap() {
     local IC=$(repo_root)
     local SWAP_DID="$IC/rs/sns/swap/canister/swap.did"
 
-    dfx -q canister --network $NNS_URL \
+    __dfx -q canister --network $NNS_URL \
         call --candid $SWAP_DID \
         $SWAP_CANISTER_ID $METHOD '(record {})'
 }
@@ -334,25 +288,19 @@ sns_quill_participate_in_sale() {
 
     # Please forgive me we need separate urls for these subnets until we get the boundary node in the script :(
     local NNS_URL=$1
-    local SNS_URL=$2
-    local PEM=$3
-    local ROOT_CANISTER_ID=$4 # Needed to generate canister ids file
-    local ICP=$5              # Not e8s
+    local PEM=$2
+    local ROOT_CANISTER_ID=$3 # Needed to generate canister ids file
+    local ICP=$4              # Not e8s
 
     TMP_ONE=$(mktemp)
     TMP_TWO=$(mktemp)
     CANISTER_IDS_FILE=$(mktemp)
 
-    generate_canister_ids_file_for_sns_quill "$SNS_URL" "$ROOT_CANISTER_ID" >$CANISTER_IDS_FILE
+    generate_canister_ids_file_for_sns_quill "$NNS_URL" "$ROOT_CANISTER_ID" >$CANISTER_IDS_FILE
 
     # We expect an error b/c the second command won't run
-    set +e
     $SNS_QUILL --canister-ids-file $CANISTER_IDS_FILE --pem-file "$PEM" swap --amount "$ICP" --memo 4 >"$TMP_ONE"
     IC_URL=$NNS_URL $SNS_QUILL send --yes "$TMP_ONE"
-    set -e
-
-    $SNS_QUILL --canister-ids-file $CANISTER_IDS_FILE --pem-file "$PEM" swap --amount "$ICP" --memo 4 --notify-only >"$TMP_TWO"
-    IC_URL=$SNS_URL $SNS_QUILL send --yes "$TMP_TWO"
 }
 
 generate_canister_ids_file_for_sns_quill() {
@@ -375,7 +323,7 @@ sns_list_sns_canisters() {
     local IC=$(repo_root)
     local ROOT_DID="$IC/rs/sns/root/canister/root.did"
 
-    dfx -q canister --network "$SNS_URL" \
+    __dfx -q canister --network "$SNS_URL" \
         call --candid "$ROOT_DID" \
         "$SNS_ROOT_CANISTER_ID" list_sns_canisters '(record {})'
 }
@@ -387,7 +335,7 @@ sns_get_sns_canisters_summary() {
     local IC=$(repo_root)
     local ROOT_DID="$IC/rs/sns/root/canister/root.did"
 
-    dfx -q canister --network "$SNS_URL" \
+    __dfx -q canister --network "$SNS_URL" \
         call --candid "$ROOT_DID" \
         "$SNS_ROOT_CANISTER_ID" get_sns_canisters_summary '(record {})'
 }
@@ -399,7 +347,7 @@ sns_finalize_sale() {
     local IC=$(repo_root)
     local SWAP_DID="$IC/rs/sns/swap/canister/swap.did"
 
-    dfx -q canister --network "$SNS_URL" \
+    __dfx -q canister --network "$SNS_URL" \
         call --candid "$SWAP_DID" \
         "$SWAP_CANISTER_ID" finalize_swap '(record {})'
 }
@@ -418,7 +366,7 @@ sns_w_list_upgrade_steps() {
         && echo "null" \
         || echo "opt principal \"$SNS_GOVERNANCE_CANISTER_ID\"")
 
-    dfx -q canister --network "$NNS_URL" \
+    __dfx -q canister --network "$NNS_URL" \
         call --candid "$SNS_W_DID" \
         qaa6y-5yaaa-aaaaa-aaafa-cai list_upgrade_steps "(record {limit = 0: nat32; sns_governance_canister_id = $SNS_GOVERNANCE_CANISTER_ID})"
 }
@@ -432,7 +380,7 @@ list_deployed_snses() {
     local IC=$(repo_root)
     local SNS_W_DID="$IC/rs/nns/sns-wasm/canister/sns-wasm.did"
 
-    dfx -q canister --network $NNS_URL \
+    __dfx -q canister --network $NNS_URL \
         call --candid "$SNS_W_DID" \
         qaa6y-5yaaa-aaaaa-aaafa-cai list_deployed_snses '(record {})'
 }
@@ -443,7 +391,7 @@ sns_w_latest_version() {
     local IC=$(repo_root)
     local SNS_W_DID="$IC/rs/nns/sns-wasm/canister/sns-wasm.did"
 
-    dfx -q canister --network $NNS_URL \
+    __dfx -q canister --network $NNS_URL \
         call --candid "$SNS_W_DID" \
         qaa6y-5yaaa-aaaaa-aaafa-cai get_latest_sns_version_pretty '(null)'
 }
@@ -459,10 +407,10 @@ sns_list_my_neurons() {
     local IC=$(repo_root)
     local GOV_DID="$IC/rs/sns/governance/canister/governance.did"
 
-    dfx -q canister --network $SNS_URL call \
+    __dfx -q canister --network $SNS_URL call \
         --candid $GOV_DID \
         $SNS_GOVERNANCE_CANISTER_ID list_neurons \
-        "( record { of_principal = opt principal \"$(dfx -q identity get-principal)\"; limit = 100: nat32})"
+        "( record { of_principal = opt principal \"$(__dfx -q identity get-principal)\"; limit = 100: nat32})"
 
 }
 
@@ -477,7 +425,7 @@ sns_list_all_neurons() {
     local IC=$(repo_root)
     local GOV_DID="$IC/rs/sns/governance/canister/governance.did"
 
-    dfx -q canister --network "${SNS_URL}" call \
+    __dfx -q canister --network "${SNS_URL}" call \
         --candid "${GOV_DID}" \
         "${SNS_GOVERNANCE_CANISTER_ID}" list_neurons \
         "( record { of_principal = null; limit = 100: nat32})"
@@ -496,7 +444,7 @@ sns_w_get_next_sns_version() {
     local IC=$(repo_root)
     local SNS_W_DID="$IC/rs/nns/sns-wasm/canister/sns-wasm.did"
 
-    dfx -q canister --network $NNS_URL call \
+    __dfx -q canister --network $NNS_URL call \
         --candid $SNS_W_DID \
         qaa6y-5yaaa-aaaaa-aaafa-cai get_next_sns_version \
         "(record {
@@ -513,7 +461,7 @@ sns_get_running_version() {
     local IC=$(repo_root)
     local SNS_GOV_DID="$IC/rs/sns/governance/canister/governance.did"
 
-    dfx -q canister --network "$SNS_URL" \
+    __dfx -q canister --network "$SNS_URL" \
         call --candid $SNS_GOV_DID \
         "$SNS_GOVERNANCE_CANISTER_ID" get_running_sns_version "(record{})"
 }
@@ -526,7 +474,7 @@ sns_upgrade_to_next_version() {
     local SNS_GOVERNANCE_CANISTER_ID=$3
     local MEMO=$4
 
-    SNS_DEV_NEURON_ID=$($SNS_QUILL public-ids --principal-id $(dfx -q identity get-principal) --memo $MEMO \
+    SNS_DEV_NEURON_ID=$($SNS_QUILL public-ids --principal-id $(__dfx -q identity get-principal) --memo $MEMO \
         | grep "SNS neuron id" \
         | cut -f2 -d: | awk '{$1=$1};1')
 
@@ -551,7 +499,7 @@ sns_upgrade_to_next_version() {
 )
 EOF
     )
-    dfx -q canister --network "$SNS_URL" call "$SNS_GOVERNANCE_CANISTER_ID" manage_neuron "$PAYLOAD"
+    __dfx -q canister --network "$SNS_URL" call "$SNS_GOVERNANCE_CANISTER_ID" manage_neuron "$PAYLOAD"
 
 }
 
@@ -568,7 +516,7 @@ sns_list_proposals() {
     local IC=$(repo_root)
     local GOV_DID="$IC/rs/sns/governance/canister/governance.did"
 
-    dfx -q canister --network $SNS_URL \
+    __dfx -q canister --network $SNS_URL \
         call --candid "$GOV_DID" \
         $SNS_GOVERNANCE_CANISTER_ID list_proposals "( record { include_reward_status = vec {}; limit = 0; exclude_type = vec {}; include_status = vec {}; })"
 }
@@ -583,7 +531,7 @@ sns_get_proposal() {
     local IC=$(repo_root)
     local GOV_DID="$IC/rs/sns/governance/canister/governance.did"
 
-    dfx -q canister --network $SNS_URL \
+    __dfx -q canister --network $SNS_URL \
         call --candid "$GOV_DID" \
         "$SNS_GOVERNANCE_CANISTER_ID" get_proposal "( record { proposal_id = opt record { id = $PROPOSAL_ID : nat64 }})"
 }
@@ -595,7 +543,7 @@ sns_get_archive() {
     set -e
     # Unfortunately the ledger .did file does not support this method even though the canister does.
     # This forces us to use grep & awk instead of jq
-    ARCHIVE_ID=$(dfx canister --network "$SUBNET_URL" call "${SNS_LEDGER_CANISTER_ID}" archives '()' \
+    ARCHIVE_ID=$(__dfx canister --network "$SUBNET_URL" call "${SNS_LEDGER_CANISTER_ID}" archives '()' \
         | grep -o 'principal "[^"]*"' | awk -F '"' '{print $2}')
     set +e
 
@@ -606,7 +554,8 @@ add_archive_to_sns_canister_ids() {
     local FILE=$1
     local ARCHIVE_CANISTER_ID=$2
 
-    jq '. + {"archive_canister_id": "'"$ARCHIVE_CANISTER_ID"'"}' $FILE | sponge $FILE
+    SNS_CANISTER_IDS="$(jq '. + {"archive_canister_id": "'"$ARCHIVE_CANISTER_ID"'"}' "$FILE")"
+    echo "$SNS_CANISTER_IDS" >"$FILE"
 }
 
 ##: wait_for_proposal_to_execute
@@ -620,12 +569,18 @@ wait_for_proposal_to_execute() {
     local NNS_URL=$1
     local PROPOSAL_ID=$2
 
-    for i in {1..20}; do
-        echo "Testing to see if NNS proposal ${PROPOSAL_ID} executed successfully (${i}/20)"
+    for i in {1..30}; do
+        echo "Testing to see if NNS proposal ${PROPOSAL_ID} executed successfully (${i}/30)"
         EXECUTED=$(nns_proposal_info "$NNS_URL" "$PROPOSAL_ID" | $IDL2JSON | jq -r '.[0].executed_timestamp_seconds')
         if [[ "${EXECUTED}" != 0 ]]; then
             print_green "NNS proposal ${PROPOSAL_ID} executed successfully"
             return 0
+        fi
+        # Early exit if we know it failed, what are we waiting around for again?
+        FAILED=$(nns_proposal_info "$NNS_URL" "$PROPOSAL_ID" | $IDL2JSON | jq -r '.[0].failed_timestamp_seconds')
+        if [[ "${FAILED}" != 0 ]]; then
+            print_red "NNS proposal ${PROPOSAL_ID} failed to execute"
+            return 1
         fi
         sleep 10
     done
@@ -643,9 +598,9 @@ wait_for_sns_governance_to_be_in_normal_mode() {
     local IC=$(repo_root)
     local GOV_DID="$IC/rs/sns/governance/canister/governance.did"
 
-    for i in {1..20}; do
-        echo "Testing to see if SNS governance ${SNS_GOVERNANCE_CANISTER_ID} is in normal mode (${i}/20)"
-        EXECUTED=$(dfx canister --network "$SUBNET_URL" call --candid $GOV_DID "${SNS_GOVERNANCE_CANISTER_ID}" get_mode '(record {})' | $IDL2JSON | jq -r '.mode[0]')
+    for i in {1..40}; do
+        echo "Testing to see if SNS governance ${SNS_GOVERNANCE_CANISTER_ID} is in normal mode (${i}/40)"
+        EXECUTED=$(__dfx canister --network "$SUBNET_URL" call --candid $GOV_DID "${SNS_GOVERNANCE_CANISTER_ID}" get_mode '(record {})' | $IDL2JSON | jq -r '.mode[0]')
         if [[ "${EXECUTED}" -eq 1 ]]; then
             print_green "SNS Governance ${SNS_GOVERNANCE_CANISTER_ID} is in normal mode"
             return 0

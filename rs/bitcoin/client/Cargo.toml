@@ -1,7 +1,10 @@
 [package]
 name = "ic-btc-adapter-client"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-adapter-metrics = { path = "../../monitoring/adapter_metrics" }
@@ -12,11 +15,10 @@ ic-config = { path = "../../config" }
 ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
-prometheus = { version = "0.12.0", features = [ "process" ] }
-serde = { version = "1.0.99", features = [ "derive" ] }
-serde_bytes = "0.11.5"
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
-tokio = { version = "1.15.0", features = ["full"] }
-tonic = "0.8.2"
-tower = { version = "0.4.11", features = ["util"] }
-
+prometheus = { workspace = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+slog = { workspace = true }
+tokio = { workspace = true }
+tonic = { workspace = true }
+tower = { workspace = true }

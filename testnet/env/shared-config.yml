@@ -81,7 +81,7 @@ nodes:
     orchestrator_metrics_listen_port: 9091
     orchestrator_metrics_listen_addr: "[{{ orchestrator_metrics_listen_ip }}]:{{ orchestrator_metrics_listen_port }}"
 
-    journalbeat_hosts:
+    elasticsearch_hosts:
       - "elasticsearch.testnet.dfinity.network:443"
 
 api:
@@ -187,4 +187,4 @@ all:
   vars:
     ansible_python_interpreter: python3
     become_method: sudo
-    service_discovery_server: ic-service-discovery.ch1-obsstage1.dfinity.network
+    multiservice_discovery_server: https://service-discovery.sf1-esmesh1.dfinity.network

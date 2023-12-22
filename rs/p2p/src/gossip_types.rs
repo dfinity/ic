@@ -1,13 +1,12 @@
 use crate::{P2PError, P2PErrorCode, P2PResult};
-use bincode::{deserialize, serialize};
 use ic_interfaces_transport::TransportChannelId;
-use ic_protobuf::p2p::v1 as pb;
-use ic_protobuf::p2p::v1::gossip_chunk::Response;
-use ic_protobuf::p2p::v1::gossip_message::Body;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError, ProxyDecodeError::*};
+use ic_protobuf::types::v1 as pb;
+use ic_protobuf::types::v1::gossip_chunk::Response;
+use ic_protobuf::types::v1::gossip_message::Body;
 use ic_types::{
-    artifact::{ArtifactFilter, ArtifactId},
-    chunkable::{ArtifactChunk, ChunkId},
+    artifact::{Artifact, ArtifactFilter, ArtifactId},
+    chunkable::ChunkId,
     crypto::CryptoHash,
     p2p::GossipAdvert,
 };
@@ -32,13 +31,13 @@ pub(crate) struct GossipChunk {
     /// The request which resulted in the 'artifact_chunk'.
     pub(crate) request: GossipChunkRequest,
     /// The artifact chunk, encapsulated in a `P2PResult`.
-    pub(crate) artifact_chunk: P2PResult<ArtifactChunk>,
+    pub(crate) artifact: P2PResult<Artifact>,
 }
 
 /// This is the message exchanged on the wire with other peers.  This
 /// enum is private to the gossip layer because lower layers like
 /// *Transport* do not need to interpret the content.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, IntoStaticStr)]
+#[derive(Clone, Debug, IntoStaticStr)]
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum GossipMessage {
     /// The advert variant.
@@ -108,11 +107,9 @@ impl From<GossipChunkRequest> for pb::GossipChunkRequest {
     /// equivalent.
     fn from(gossip_chunk_request: GossipChunkRequest) -> Self {
         Self {
-            artifact_id: serialize(&gossip_chunk_request.artifact_id)
-                .expect("Local value serialization should succeed"),
+            artifact_id: Some(gossip_chunk_request.artifact_id.into()),
             chunk_id: gossip_chunk_request.chunk_id.get(),
-            integrity_hash: serialize(&gossip_chunk_request.integrity_hash)
-                .expect("Local value serialization should succeed"),
+            integrity_hash: gossip_chunk_request.integrity_hash.0,
         }
     }
 }
@@ -124,9 +121,12 @@ impl TryFrom<pb::GossipChunkRequest> for GossipChunkRequest {
     /// GossipChunkRequest.
     fn try_from(gossip_chunk_request: pb::GossipChunkRequest) -> Result<Self, Self::Error> {
         Ok(Self {
-            artifact_id: deserialize(&gossip_chunk_request.artifact_id)?,
+            artifact_id: try_from_option_field(
+                gossip_chunk_request.artifact_id,
+                "GossipChunkRequest",
+            )?,
             chunk_id: ChunkId::from(gossip_chunk_request.chunk_id),
-            integrity_hash: deserialize(&gossip_chunk_request.integrity_hash)?,
+            integrity_hash: CryptoHash(gossip_chunk_request.integrity_hash),
         })
     }
 }
@@ -135,12 +135,9 @@ impl TryFrom<pb::GossipChunkRequest> for GossipChunkRequest {
 impl From<GossipChunk> for pb::GossipChunk {
     /// The function converts the given chunk into the Protobuf equivalent.
     fn from(gossip_chunk: GossipChunk) -> Self {
-        let GossipChunk {
-            request,
-            artifact_chunk,
-        } = gossip_chunk;
-        let response = match artifact_chunk {
-            Ok(artifact_chunk) => Some(Response::Chunk(artifact_chunk.into())),
+        let GossipChunk { request, artifact } = gossip_chunk;
+        let response = match artifact {
+            Ok(artifact_chunk) => Some(Response::Artifact(artifact_chunk.into())),
             // Add additional cases as required.
             Err(_) => Some(Response::Error(pb::P2pError::NotFound as i32)),
         };
@@ -160,19 +157,11 @@ impl TryFrom<pb::GossipChunk> for GossipChunk {
         let request = gossip_chunk.request.ok_or(ProxyDecodeError::MissingField(
             "The 'request' field is missing",
         ))?;
-        let chunk_id = ChunkId::from(request.chunk_id);
         let request = GossipChunkRequest::try_from(request)?;
         Ok(Self {
             request,
-            artifact_chunk: match response {
-                Response::Chunk(c) => {
-                    let artifact_chunk: ArtifactChunk = c.try_into()?;
-                    Ok(ArtifactChunk {
-                        chunk_id,
-                        witness: artifact_chunk.witness,
-                        artifact_chunk_data: artifact_chunk.artifact_chunk_data,
-                    })
-                }
+            artifact: match response {
+                Response::Artifact(c) => Ok(c.try_into()?),
                 Response::Error(_e) => Err(P2PError {
                     p2p_error_code: P2PErrorCode::NotFound,
                 }),

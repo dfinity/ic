@@ -167,7 +167,7 @@ describe('Storage persist to indexed db', () => {
     expect(foundValue).toEqual(value);
   });
 
-  it('should remove value if it reachs ttl', async () => {
+  it('should remove value if it reaches ttl', async () => {
     const key: IDBKey = 'identity.ic0.app';
     const value = {
       gateway: 'ic0.app',

@@ -1,17 +1,52 @@
-use crate::common::storage::types::RosettaBlock;
+use crate::common::storage::types::{MetadataEntry, RosettaBlock};
 use anyhow::{anyhow, bail};
 use candid::Principal;
 use ic_icrc1::{Operation, Transaction};
 use ic_icrc1_tokens_u64::U64;
 use ic_ledger_core::block::EncodedBlock;
-use ic_ledger_core::timestamp::TimeStamp;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use rusqlite::{params, Params};
 use rusqlite::{Connection, Statement, ToSql};
 use serde_bytes::ByteBuf;
+use std::str::FromStr;
 
 type Tokens = U64;
+
+pub fn store_metadata(connection: &Connection, metadata: Vec<MetadataEntry>) -> anyhow::Result<()> {
+    connection.execute_batch("BEGIN TRANSACTION;")?;
+
+    let mut stmt_metadata = connection.prepare("INSERT INTO metadata (key, value) VALUES (?1, ?2) ON CONFLICT (key) DO UPDATE SET value = excluded.value;")?;
+
+    for entry in metadata.into_iter() {
+        match execute(&mut stmt_metadata, params![entry.key.clone(), entry.value]) {
+            Ok(_) => (),
+            Err(e) => {
+                connection.execute_batch("ROLLBACK TRANSACTION;")?;
+                return Err(e);
+            }
+        };
+    }
+
+    connection.execute_batch("COMMIT TRANSACTION;")?;
+    Ok(())
+}
+
+pub fn get_metadata(connection: &Connection) -> anyhow::Result<Vec<MetadataEntry>> {
+    let mut stmt_metadata = connection.prepare("SELECT key, value FROM metadata")?;
+    let rows = stmt_metadata.query_map(params![], |row| {
+        Ok(MetadataEntry {
+            key: row.get(0)?,
+            value: row.get(1)?,
+        })
+    })?;
+    let mut result = vec![];
+    for row in rows {
+        let entry = row?;
+        result.push(entry);
+    }
+    Ok(result)
+}
 
 // Stores a batch of RosettaBlocks
 pub fn store_blocks(
@@ -20,7 +55,7 @@ pub fn store_blocks(
 ) -> anyhow::Result<()> {
     connection.execute_batch("BEGIN TRANSACTION;")?;
     let mut stmt_blocks = connection.prepare(
-        "INSERT OR IGNORE INTO blocks (idx, hash, serialized_block, parent_hash) VALUES (?1, ?2, ?3, ?4)",
+        "INSERT OR IGNORE INTO blocks (idx, hash, serialized_block, parent_hash, timestamp) VALUES (?1, ?2, ?3, ?4, ?5)",
     )?;
 
     let mut stmt_transactions = connection.prepare(
@@ -36,7 +71,8 @@ pub fn store_blocks(
                 rosetta_block
                     .parent_hash
                     .clone()
-                    .map(|hash| hash.as_slice().to_vec())
+                    .map(|hash| hash.as_slice().to_vec()),
+                rosetta_block.timestamp
             ],
         ) {
             Ok(_) => (),
@@ -123,7 +159,7 @@ pub fn store_blocks(
                 amount,
                 expected_allowance,
                 fee,
-                expires_at.map(|ts| ts.as_nanos_since_unix_epoch()),
+                expires_at,
             ),
         };
 
@@ -140,9 +176,9 @@ pub fn store_blocks(
                 spender_principal.map(|x| x.as_slice().to_vec()),
                 spender_subaccount,
                 transaction.memo.map(|x| x.0.as_slice().to_vec()),
-                amount.to_u64(),
-                expected_allowance.map(Tokens::to_u64),
-                fee.map(Tokens::to_u64),
+                amount.to_u64().to_string(),
+                expected_allowance.map(|ea| ea.to_u64().to_string()),
+                fee.map(|fee| fee.to_u64().to_string()),
                 transaction.created_at_time,
                 approval_expires_at
             ],
@@ -166,6 +202,21 @@ pub fn get_block_at_idx(
 ) -> anyhow::Result<Option<RosettaBlock>> {
     let command = format!(
         "SELECT idx,serialized_block FROM blocks WHERE idx = {}",
+        block_idx
+    );
+    let mut stmt = connection.prepare(&command)?;
+    read_single_block(&mut stmt, params![])
+}
+
+// Returns a RosettaBlock with the smallest index larger than block_idx.
+// Returns None if there are no blocks with larger index.
+// Returns an Error if the query fails.
+fn get_block_at_next_idx(
+    connection: &Connection,
+    block_idx: u64,
+) -> anyhow::Result<Option<RosettaBlock>> {
+    let command = format!(
+        "SELECT idx,serialized_block FROM blocks WHERE idx > {} ORDER BY idx ASC LIMIT 1",
         block_idx
     );
     let mut stmt = connection.prepare(&command)?;
@@ -211,22 +262,20 @@ pub fn get_blocks_by_index_range(
 pub fn get_blockchain_gaps(
     connection: &Connection,
 ) -> anyhow::Result<Vec<(RosettaBlock, RosettaBlock)>> {
-    // If there exists a gap in the stored blockchain from (a,b) then this query will return all blocks which represent b in all the gaps that exist in the database
-    let command =  "SELECT b1.idx,b1.serialized_block FROM blocks b1 LEFT JOIN blocks b2 ON b1.idx = b2.idx +1 WHERE b2.idx IS NULL AND b1.idx > (SELECT idx from blocks ORDER BY idx ASC LIMIT 1) ORDER BY b1.idx ASC";
+    // Search for blocks, such that there is no block with index+1.
+    let command = "SELECT b1.idx,b1.serialized_block FROM blocks b1 WHERE not exists(select 1 from blocks b2 where b2.idx = b1.idx + 1)";
     let mut stmt = connection.prepare(command)?;
-    let upper_gap_limits = read_blocks(&mut stmt, params![])?;
+    let gap_starts = read_blocks(&mut stmt, params![])?;
+    let mut gap_limits = vec![];
 
-    // If there exists a gap in the stored blockchain from (a,b) then this query will return all blocks which represent a in all the gaps that exist in the database
-    let command =  "SELECT b1.idx,b1.serialized_block FROM  blocks b1 LEFT JOIN blocks b2 ON b1.idx + 1 = b2.idx WHERE b2.idx IS NULL AND b1.idx < (SELECT idx from blocks ORDER BY idx DESC LIMIT 1) ORDER BY b1.idx ASC";
-    let mut stmt = connection.prepare(command)?;
-    let lower_gap_limits = read_blocks(&mut stmt, params![])?;
+    for gap_start in gap_starts {
+        let gap_end = get_block_at_next_idx(connection, gap_start.index)?;
+        if let Some(gap_end) = gap_end {
+            gap_limits.push((gap_start, gap_end));
+        }
+    }
 
-    // Both block vectors are ordered and since a gap always has a upper and lower end, both vectors will have the same length.
-    // If U is the vector of upper limits and L of lower limits then the first gap in the blockchain is (L[0],U[0]) the second gap is (L[1],U[1]) ...
-    Ok(lower_gap_limits
-        .into_iter()
-        .zip(upper_gap_limits.into_iter())
-        .collect())
+    Ok(gap_limits)
 }
 
 // Returns a icrc1 Transaction if the block index exists in the database, else returns None.
@@ -332,9 +381,9 @@ where
             row.get(7).map(opt_bytes_to_principal)?,
             row.get(8)?,
             row.get(9).map(opt_bytes_to_memo)?,
-            row.get(10)?,
-            row.get::<usize, Option<u64>>(11)?,
-            row.get::<usize, Option<u64>>(12)?,
+            row.get::<usize, String>(10)?,
+            row.get::<usize, Option<String>>(11)?,
+            row.get::<usize, Option<String>>(12)?,
             row.get::<usize, Option<u64>>(13)?,
             row.get::<usize, Option<u64>>(14)?,
         ))
@@ -350,12 +399,23 @@ where
             maybe_spender_principal,
             spender_subaccount,
             memo,
-            amount,
-            expected_allowance,
-            fee,
+            amount_str,
+            expected_allowance_str,
+            fee_str,
             transaction_created_at_time,
             approval_expires_at,
         ) = row?;
+        let amount = u64::from_str(&amount_str)?;
+        let expected_allowance = if let Some(expected_allowance_str) = expected_allowance_str {
+            Some(u64::from_str(&expected_allowance_str)?)
+        } else {
+            None
+        };
+        let fee = if let Some(fee_str) = fee_str {
+            Some(u64::from_str(&fee_str)?)
+        } else {
+            None
+        };
         result.push(Transaction {
             operation: match operation_type.as_str() {
                 "mint" => Operation::Mint {
@@ -408,8 +468,8 @@ where
                         subaccount: spender_subaccount,
                     },
                     amount: Tokens::new(amount),
-                    expected_allowance: expected_allowance.map(|ea| Tokens::new(ea)),
-                    expires_at: approval_expires_at.map(TimeStamp::from_nanos_since_unix_epoch),
+                    expected_allowance: expected_allowance.map(Tokens::new),
+                    expires_at: approval_expires_at,
                     fee: fee.map(Tokens::new),
                 },
                 k => bail!("Operation type {} is not supported", k),
@@ -421,7 +481,7 @@ where
     Ok(result)
 }
 
-// Exectures a constructed statement
+// Executes a constructed statement
 fn execute(stmt: &mut Statement, params: &[&dyn ToSql]) -> anyhow::Result<()> {
     stmt.execute(params)
         .map_err(|e| anyhow::Error::msg(e.to_string()))?;

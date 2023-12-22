@@ -309,7 +309,7 @@ impl KeyDerParser {
             Ok(((**unwrapped).clone(), (*tag).clone()))
         } else {
             Err(Self::parsing_error(&format!(
-                "Expected Explict-block, got {:?}",
+                "Expected Explicit-block, got {:?}",
                 wrapped
             )))
         }

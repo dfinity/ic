@@ -29,9 +29,7 @@ use ic_types::p2p::build_default_gossip_config;
 use ic_types::{NodeId, ReplicaVersion};
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use registry_canister::mutations::node_management::common::make_add_node_registry_mutations;
-use registry_canister::mutations::node_management::do_add_node::{
-    connection_endpoint_from_string, flow_endpoint_from_string,
-};
+use registry_canister::mutations::node_management::do_add_node::connection_endpoint_from_string;
 use registry_canister::mutations::node_management::do_remove_node_directly::RemoveNodeDirectlyPayload;
 
 const TEST_NODE_ALLOWANCE: u64 = 5;
@@ -43,10 +41,6 @@ fn node_is_removed_on_receiving_the_request() {
             node_operator_id: (*TEST_NEURON_1_OWNER_PRINCIPAL).to_vec(),
             xnet: Some(connection_endpoint_from_string("128.0.0.1:1234")),
             http: Some(connection_endpoint_from_string("128.0.0.1:4321")),
-            p2p_flow_endpoints: vec!["123,128.0.0.1:10000"]
-                .iter()
-                .map(|x| flow_endpoint_from_string(x))
-                .collect(),
             ..Default::default()
         };
         let (node_id, mutation) = init_mutation(&test_node_record);
@@ -123,10 +117,6 @@ fn node_cannot_be_removed_by_non_node_operator() {
             node_operator_id: (*TEST_NEURON_1_OWNER_PRINCIPAL).to_vec(),
             xnet: Some(connection_endpoint_from_string("128.0.0.1:1234")),
             http: Some(connection_endpoint_from_string("128.0.0.1:4321")),
-            p2p_flow_endpoints: vec!["123,128.0.0.1:10000"]
-                .iter()
-                .map(|x| flow_endpoint_from_string(x))
-                .collect(),
             ..Default::default()
         };
         let (node_id, mutation) = init_mutation(&test_node_record);
@@ -157,10 +147,6 @@ fn node_cannot_be_removed_if_in_subnet() {
             node_operator_id: (*TEST_NEURON_1_OWNER_PRINCIPAL).to_vec(),
             xnet: Some(connection_endpoint_from_string("128.0.0.1:1234")),
             http: Some(connection_endpoint_from_string("128.0.0.1:4321")),
-            p2p_flow_endpoints: vec!["123,128.0.0.1:10000"]
-                .iter()
-                .map(|x| flow_endpoint_from_string(x))
-                .collect(),
             ..Default::default()
         };
         let (node_id, mutation) = init_mutation(&test_node_record);

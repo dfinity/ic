@@ -1,17 +1,14 @@
-//! The module is reponsible for keeping track of the blockchain state.
+//! The module is responsible for keeping track of the blockchain state.
 //!
 use crate::{common::BlockHeight, config::Config, metrics::BlockchainStateMetrics};
 use bitcoin::{blockdata::constants::genesis_block, Block, BlockHash, BlockHeader, Network};
 use ic_btc_validation::{validate_header, HeaderStore, ValidateHeaderError};
 use ic_metrics::MetricsRegistry;
-use parking_lot::Mutex;
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 use thiserror::Error;
 
 /// This field contains the datatype used to store "work" of a Bitcoin blockchain
 pub type Work = bitcoin::util::uint::Uint256;
-
-pub type CachedHeader = Arc<HeaderNode>;
 
 /// Contains the necessary information about a tip.
 #[derive(Debug, Clone)]
@@ -25,70 +22,18 @@ pub struct Tip {
     pub work: Work,
 }
 
-/// A possible error that the header cache may raise.
-#[derive(Debug, Error)]
-enum HeaderCacheError {
-    /// This variant is used when the predecessor of the input header is not part of header cache.
-    #[error("Received a block header where we do not have the previous header in the cache: {0}")]
-    NotFound(BlockHash),
-    /// This variant is used when the header is already part of header cache.
-    #[error("Received a block header that already exists in the cache")]
-    AlreadyExists,
-}
-
-/// Used to maintain the discovered headers from peers.
-#[derive(Debug)]
-struct HeaderCache(HashMap<BlockHash, CachedHeader>);
-
-impl HeaderCache {
-    /// Creates a new `HeaderCache` with a set genesis header determined by the
-    /// provided network.
-    fn new(genesis_block_header: BlockHeader) -> Self {
-        let cached_header = Arc::new(HeaderNode {
-            header: genesis_block_header,
-            height: 0,
-            work: genesis_block_header.work(),
-            children: Mutex::new(vec![]),
-        });
-        let mut headers = HashMap::new();
-        headers.insert(genesis_block_header.block_hash(), cached_header);
-        Self(headers)
-    }
-
-    /// Retrieves a cached header entry from internal HashMap. If not found,
-    /// returns None.
-    fn get(&self, hash: &BlockHash) -> Option<&CachedHeader> {
-        self.0.get(hash)
-    }
-
-    /// Adds a header to the internal HashMap if it does not already exist in the
-    /// map and the previous header's hash is a key in the HashMap.
-    fn insert(&mut self, header: BlockHeader) -> Result<(), HeaderCacheError> {
-        let block_hash = header.block_hash();
-        if self.0.contains_key(&block_hash) {
-            return Err(HeaderCacheError::AlreadyExists);
-        }
-
-        let cached_header = {
-            let parent = self
-                .get(&header.prev_blockhash)
-                .ok_or(HeaderCacheError::NotFound(header.prev_blockhash))?;
-            let next_height = parent.height + 1;
-            let next_work = parent.work + header.work();
-            let cached_header = Arc::new(HeaderNode {
-                header,
-                height: next_height,
-                work: next_work,
-                children: Mutex::new(vec![]),
-            });
-            parent.children.lock().push(cached_header.clone());
-            cached_header
-        };
-
-        self.0.insert(block_hash, cached_header);
-
-        Ok(())
-    }
+/// Creates a new cache with a set genesis header determined by the
+/// provided network.
+fn init_cache_with_genesis(genesis_block_header: BlockHeader) -> HashMap<BlockHash, HeaderNode> {
+    let cached_header = HeaderNode {
+        header: genesis_block_header,
+        height: 0,
+        work: genesis_block_header.work(),
+        children: vec![],
+    };
+    let mut headers = HashMap::new();
+    headers.insert(genesis_block_header.block_hash(), cached_header);
+    headers
 }
 
 /// This struct stores a BlockHeader along with its height in the Bitcoin Blockchain.
@@ -102,7 +47,7 @@ pub struct HeaderNode {
     /// That is, this field is the sum of work of the above header and all its ancestors.
     pub work: Work,
     /// This field contains this node's successor headers.
-    pub children: Mutex<Vec<CachedHeader>>,
+    pub children: Vec<BlockHash>,
 }
 
 /// The result when `BlockchainState::add_header(...)` is called.
@@ -144,7 +89,7 @@ pub struct BlockchainState {
     genesis_block_header: BlockHeader,
 
     /// This field stores all the Bitcoin headers using a HashMap containining BlockHash and the corresponding header.
-    header_cache: HeaderCache,
+    header_cache: HashMap<BlockHash, HeaderNode>,
 
     /// This field stores a hashmap containing BlockHash and the corresponding Block.
     block_cache: HashMap<BlockHash, Block>,
@@ -162,7 +107,7 @@ impl BlockchainState {
     pub fn new(config: &Config, metrics_registry: &MetricsRegistry) -> Self {
         // Create a header cache and inserting dummy header corresponding the `adapter_genesis_hash`.
         let genesis_block_header = genesis_block(config.network).header;
-        let header_cache = HeaderCache::new(genesis_block_header);
+        let header_cache = init_cache_with_genesis(genesis_block_header);
         let block_cache = HashMap::new();
         let tips = vec![Tip {
             header: genesis_block_header,
@@ -186,7 +131,7 @@ impl BlockchainState {
     }
 
     /// Returns the header for the given block hash.
-    pub fn get_cached_header(&self, hash: &BlockHash) -> Option<&CachedHeader> {
+    pub fn get_cached_header(&self, hash: &BlockHash) -> Option<&HeaderNode> {
         self.header_cache.get(hash)
     }
 
@@ -238,24 +183,22 @@ impl BlockchainState {
             return Err(AddHeaderError::InvalidHeader(block_hash, err));
         }
 
-        let prev_hash = header.prev_blockhash;
-        let cached_header = match self.header_cache.insert(header) {
-            Ok(_) => self
-                .header_cache
-                .get(&block_hash)
-                .expect("Header should exist in the cache at this point."),
-            Err(err) => match err {
-                HeaderCacheError::NotFound(prev_hash) => {
-                    return Err(AddHeaderError::PrevHeaderNotCached(prev_hash));
-                }
-                HeaderCacheError::AlreadyExists => {
-                    return Ok(AddHeaderResult::HeaderAlreadyExists(block_hash));
-                }
-            },
+        let parent = self
+            .header_cache
+            .get_mut(&header.prev_blockhash)
+            .ok_or(AddHeaderError::PrevHeaderNotCached(header.prev_blockhash))?;
+
+        let cached_header = HeaderNode {
+            header,
+            height: parent.height + 1,
+            work: parent.work + header.work(),
+            children: vec![],
         };
+        parent.children.push(header.block_hash());
 
         // Update the tip headers.
         // If the previous header already exists in `tips`, then update it with the new tip.
+        let prev_hash = header.prev_blockhash;
         let maybe_cached_header_idx = self
             .tips
             .iter()
@@ -276,10 +219,10 @@ impl BlockchainState {
             }
         };
 
+        self.header_cache.insert(block_hash, cached_header);
+
         self.metrics.header_cache_size.inc();
-        Ok(AddHeaderResult::HeaderAdded(
-            cached_header.header.block_hash(),
-        ))
+        Ok(AddHeaderResult::HeaderAdded(header.block_hash()))
     }
 
     /// This method adds a new block to the `block_cache`

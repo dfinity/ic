@@ -1,14 +1,15 @@
 use candid::{candid_method, Principal};
 use ic_canister_log::{export as export_logs, log};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk_macros::{init, query};
+use ic_cdk_macros::{init, post_upgrade, query};
 use ic_cdk_timers::TimerId;
 use ic_icp_index::logs::{P0, P1};
 use ic_icp_index::{
     GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse,
-    GetAccountIdentifierTransactionsResult, InitArg, Log, LogEntry, Priority, Status,
-    TransactionWithId,
+    GetAccountIdentifierTransactionsResult, GetAccountTransactionsResult, InitArg, Log, LogEntry,
+    Priority, Status, TransactionWithId,
 };
+use ic_icrc1_index_ng::GetAccountTransactionsArgs;
 use ic_ledger_core::block::{BlockType, EncodedBlock};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::{
@@ -20,6 +21,8 @@ use icp_ledger::{
     AccountIdentifier, ArchivedEncodedBlocksRange, Block, BlockIndex, GetBlocksArgs,
     GetEncodedBlocksResult, Operation, QueryEncodedBlocksResponse, MAX_BLOCKS_PER_REQUEST,
 };
+use icrc_ledger_types::icrc1::account::Account;
+use num_traits::cast::ToPrimitive;
 use scopeguard::{guard, ScopeGuard};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -37,8 +40,8 @@ const BLOCK_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(2);
 const ACCOUNTIDENTIFIER_BLOCK_IDS_MEMORY_ID: MemoryId = MemoryId::new(3);
 const ACCOUNTIDENTIFIER_DATA_MEMORY_ID: MemoryId = MemoryId::new(4);
 
-const DEFAULT_MAX_WAIT_TIME: Duration = Duration::from_secs(60);
-const DEFAULT_RETRY_WAIT_TIME: Duration = Duration::from_secs(10);
+const DEFAULT_MAX_WAIT_TIME: Duration = Duration::from_secs(2);
+const DEFAULT_RETRY_WAIT_TIME: Duration = Duration::from_secs(1);
 
 type VM = VirtualMemory<DefaultMemoryImpl>;
 type StateCell = StableCell<State, VM>;
@@ -236,6 +239,11 @@ fn init(init_arg: InitArg) {
     set_build_index_timer(Duration::from_secs(1));
 }
 
+#[post_upgrade]
+fn post_upgrade() {
+    set_build_index_timer(Duration::from_secs(1));
+}
+
 async fn get_blocks_from_ledger(start: u64) -> Result<QueryEncodedBlocksResponse, String> {
     let ledger_id = with_state(|state| state.ledger_id);
     let req = GetBlocksArgs {
@@ -336,8 +344,12 @@ pub async fn build_index() -> Result<(), String> {
     log!(P0, "[build_index]: received {} blocks", tx_indexed_count);
     append_blocks(res.blocks)?;
     let wait_time = compute_wait_time(tx_indexed_count);
-    log!(P0, "[build_index]: new wait time is {:?}", wait_time);
-    ic_cdk::eprintln!("Indexed: {} waiting : {:?}", tx_indexed_count, wait_time);
+    log!(
+        P1,
+        "[build_index]: Indexed: {} waiting : {:?}",
+        tx_indexed_count,
+        wait_time
+    );
     mutate_state(|state| state.last_wait_time = wait_time);
     ScopeGuard::into_inner(failure_guard);
     set_build_index_timer(wait_time);
@@ -506,7 +518,8 @@ fn get_oldest_tx_id(account_identifier: AccountIdentifier) -> Option<BlockIndex>
             .or_else(|| {
                 account_identifier_block_ids
                     .iter_upper_bound(&last_key)
-                    .find(|((account_identifier, _), _)| account_identifier == &last_key.0)
+                    .take_while(|(k, _)| k.0 == account_identifier.hash)
+                    .next()
                     .map(|(key, _)| key.1 .0)
             })
     })
@@ -617,6 +630,23 @@ fn get_account_identifier_transactions(
     })
 }
 
+#[query]
+#[candid_method(query)]
+fn get_account_transactions(arg: GetAccountTransactionsArgs) -> GetAccountTransactionsResult {
+    get_account_identifier_transactions(GetAccountIdentifierTransactionsArgs {
+        account_identifier: arg.account.into(),
+        max_results: arg
+            .max_results
+            .0
+            .to_u64()
+            .unwrap_or_else(|| ic_cdk::trap("Conversion from candid Nat to u64 failed")),
+        start: arg.start.map(|s| {
+            s.0.to_u64()
+                .unwrap_or_else(|| ic_cdk::trap("Conversion from candid Nat to u64 failed"))
+        }),
+    })
+}
+
 #[candid_method(query)]
 #[query]
 fn http_request(req: HttpRequest) -> HttpResponse {
@@ -668,6 +698,12 @@ fn http_request(req: HttpRequest) -> HttpResponse {
 #[candid_method(query)]
 fn get_account_identifier_balance(account_identifier: AccountIdentifier) -> u64 {
     get_balance(account_identifier)
+}
+
+#[query]
+#[candid_method(query)]
+fn icrc1_balance_of(account: Account) -> u64 {
+    get_balance(account.into())
 }
 
 #[query]

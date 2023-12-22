@@ -20,7 +20,6 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:bincode",
     "@crate_index//:crossbeam-channel",
-    "@crate_index//:futures",
     "@crate_index//:linked-hash-map",
     "@crate_index//:lru",
     "@crate_index//:parking_lot",
@@ -44,8 +43,8 @@ DEV_DEPENDENCIES = [
     "//rs/cycles_account_manager",
     "//rs/execution_environment",
     "//rs/https_outcalls/client",
+    "//rs/interfaces/mocks",
     "//rs/ic_os/sev",
-    "//rs/interfaces/transport/mocks",
     "//rs/registry/client",
     "//rs/registry/fake",
     "//rs/registry/nns_data_provider",
@@ -53,7 +52,6 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities",
     "//rs/test_utilities/metrics",
     "//rs/test_utilities/registry",
-    "@crate_index//:mockall_0_7_2",
     "@crate_index//:tempfile",
 ]
 
@@ -67,7 +65,7 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_p2p",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 

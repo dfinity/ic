@@ -1,0 +1,24 @@
+[Unit]
+Description=Canary Proxy Service
+After=network-online.target
+Wants=network-online.target
+After=setup-canary-proxy.service
+BindsTo=setup-canary-proxy.service
+
+[Service]
+User=root
+Group=root
+LimitNOFILE=524288
+EnvironmentFile=/run/ic-node/etc/default/canary-proxy
+ExecStart=/opt/ic/bin/canary-proxy \
+    --listen-port "${CANARY_PROXY_PORT}"  \
+    --target-host 127.0.0.1
+
+Restart=always
+RestartSec=10
+KillSignal=SIGINT
+StartLimitBurst=5
+StartLimitInterval=0
+
+[Install]
+WantedBy=multi-user.target

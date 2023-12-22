@@ -3,13 +3,13 @@ use ic_artifact_pool::dkg_pool::DkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::{
-    artifact_pool::{ChangeResult, MutablePool},
     consensus_pool::{
         ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusPool, ConsensusPoolCache,
         PoolSection, UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
     },
     crypto::{MultiSigner, ThresholdSigner},
     dkg::DkgPool,
+    p2p::consensus::{ChangeResult, MutablePool},
     time_source::TimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
@@ -18,8 +18,8 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::ReplicatedState;
 use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
 use ic_test_utilities::{consensus::fake::*, crypto::CryptoReturningOk, mock_time};
-use ic_types::batch::ValidationContext;
 use ic_types::signature::*;
+use ic_types::{artifact::ConsensusMessageId, batch::ValidationContext};
 use ic_types::{
     artifact_kind::ConsensusArtifact,
     crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
@@ -150,7 +150,6 @@ fn dkg_payload_builder_fn(
             validation_context,
             no_op_logger(),
             10, // at most dealings per block
-            0,  // dealings age in secs
         )
         .unwrap_or_else(|err| panic!("Couldn't create the payload: {:?}", err))
     })
@@ -160,6 +159,7 @@ impl TestConsensusPool {
     /// Creates a new test pool. `registry_version_for_genesis` is used to
     /// create the genesis block with data from the provided registry.
     pub fn new(
+        node_id: NodeId,
         subnet_id: SubnetId,
         pool_config: ArtifactPoolConfig,
         time_source: Arc<dyn TimeSource>,
@@ -183,9 +183,10 @@ impl TestConsensusPool {
             }),
         ));
         let summary = ic_consensus::dkg::make_genesis_summary(&*registry_client, subnet_id, None);
-        let pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+        let pool = ConsensusPoolImpl::new(
+            node_id,
             subnet_id,
-            ic_test_utilities::consensus::make_genesis(summary),
+            (&ic_test_utilities::consensus::make_genesis(summary)).into(),
             pool_config,
             ic_metrics::MetricsRegistry::new(),
             no_op_logger(),
@@ -408,7 +409,7 @@ impl TestConsensusPool {
         rb_shares: u32,
         f_shares: u32,
         // this is a vector of 32-element arrays with random usize numbers
-        certfied_height: Option<Height>,
+        certified_height: Option<Height>,
     ) -> Height {
         let notarized_height = self
             .pool
@@ -471,7 +472,7 @@ impl TestConsensusPool {
                 add_catch_up_package_if_needed = false;
             }
             block.rank = Rank(i as u64);
-            if let Some(height) = certfied_height {
+            if let Some(height) = certified_height {
                 block.context.certified_height = height;
             }
             let block_proposal = BlockProposal::fake(
@@ -643,37 +644,33 @@ impl TestConsensusPool {
     pub fn insert_random_tape(&mut self, height: Height) {
         let msg = RandomTape::fake(RandomTapeContent::new(height)).into_message();
         let time_source = self.time_source.clone();
-        self.apply_changes(
-            time_source.as_ref(),
-            vec![ChangeAction::AddToValidated(msg)],
-        );
+        self.apply_changes(vec![ChangeAction::AddToValidated(
+            ValidatedConsensusArtifact {
+                msg,
+                timestamp: time_source.get_relative_time(),
+            },
+        )]);
     }
 
-    pub fn remove_validated<T: ConsensusMessageHashable>(&mut self, value: T) {
+    pub fn purge_validated_below<T: ConsensusMessageHashable + HasHeight>(&mut self, value: T) {
         let msg = value.into_message();
-        let time_source = self.time_source.clone();
-        self.apply_changes(
-            time_source.as_ref(),
-            vec![ChangeAction::RemoveFromValidated(msg)],
-        );
+        self.apply_changes(vec![ChangeAction::PurgeValidatedBelow(msg.height())]);
     }
 
     pub fn insert_validated<T: ConsensusMessageHashable>(&mut self, value: T) {
         let msg = value.into_message();
         let time_source = self.time_source.clone();
-        self.apply_changes(
-            time_source.as_ref(),
-            vec![ChangeAction::AddToValidated(msg)],
-        );
+        self.apply_changes(vec![ChangeAction::AddToValidated(
+            ValidatedConsensusArtifact {
+                msg,
+                timestamp: time_source.get_relative_time(),
+            },
+        )]);
     }
 
     pub fn remove_unvalidated<T: ConsensusMessageHashable>(&mut self, value: T) {
         let msg = value.into_message();
-        let time_source = self.time_source.clone();
-        self.apply_changes(
-            time_source.as_ref(),
-            vec![ChangeAction::RemoveFromUnvalidated(msg)],
-        );
+        self.apply_changes(vec![ChangeAction::RemoveFromUnvalidated(msg)]);
     }
 
     pub fn insert_unvalidated<T: ConsensusMessageHashable>(&mut self, value: T) {
@@ -711,16 +708,18 @@ impl ConsensusPool for TestConsensusPool {
     }
 }
 
-impl MutablePool<ConsensusArtifact, ChangeSet> for TestConsensusPool {
+impl MutablePool<ConsensusArtifact> for TestConsensusPool {
+    type ChangeSet = ChangeSet;
+
     fn insert(&mut self, unvalidated_artifact: UnvalidatedConsensusArtifact) {
         self.pool.insert(unvalidated_artifact)
     }
 
-    fn apply_changes(
-        &mut self,
-        time_source: &dyn TimeSource,
-        change_set: ChangeSet,
-    ) -> ChangeResult<ConsensusArtifact> {
-        self.pool.apply_changes(time_source, change_set)
+    fn remove(&mut self, id: &ConsensusMessageId) {
+        self.pool.remove(id)
+    }
+
+    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<ConsensusArtifact> {
+        self.pool.apply_changes(change_set)
     }
 }

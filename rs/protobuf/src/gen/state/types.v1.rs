@@ -50,7 +50,6 @@ pub struct NominalCycles {
     pub low: u64,
 }
 /// A non-interactive distributed key generation (NI-DKG) tag.
-#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum NiDkgTag {
@@ -68,6 +67,15 @@ impl NiDkgTag {
             NiDkgTag::Unspecified => "NI_DKG_TAG_UNSPECIFIED",
             NiDkgTag::LowThreshold => "NI_DKG_TAG_LOW_THRESHOLD",
             NiDkgTag::HighThreshold => "NI_DKG_TAG_HIGH_THRESHOLD",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "NI_DKG_TAG_UNSPECIFIED" => Some(Self::Unspecified),
+            "NI_DKG_TAG_LOW_THRESHOLD" => Some(Self::LowThreshold),
+            "NI_DKG_TAG_HIGH_THRESHOLD" => Some(Self::HighThreshold),
+            _ => None,
         }
     }
 }
@@ -119,6 +127,16 @@ impl CanisterInstallMode {
             CanisterInstallMode::Install => "CANISTER_INSTALL_MODE_INSTALL",
             CanisterInstallMode::Reinstall => "CANISTER_INSTALL_MODE_REINSTALL",
             CanisterInstallMode::Upgrade => "CANISTER_INSTALL_MODE_UPGRADE",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "CANISTER_INSTALL_MODE_UNSPECIFIED" => Some(Self::Unspecified),
+            "CANISTER_INSTALL_MODE_INSTALL" => Some(Self::Install),
+            "CANISTER_INSTALL_MODE_REINSTALL" => Some(Self::Reinstall),
+            "CANISTER_INSTALL_MODE_UPGRADE" => Some(Self::Upgrade),
+            _ => None,
         }
     }
 }

@@ -7,12 +7,12 @@ fn should_fail_if_commitment_check_opening_fails() {
     let curve = EccCurveType::K256;
     let associated_data = b"assoc_data_test";
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
-    let sk0 = MEGaPrivateKey::generate(curve, &mut rng);
+    let sk0 = MEGaPrivateKey::generate(curve, rng);
     let pk0 = sk0.public_key();
 
-    let sk1 = MEGaPrivateKey::generate(curve, &mut rng);
+    let sk1 = MEGaPrivateKey::generate(curve, rng);
     let pk1 = sk1.public_key();
 
     let dealer_index = 0;
@@ -22,7 +22,7 @@ fn should_fail_if_commitment_check_opening_fails() {
     let dealing = IDkgDealingInternal::new(
         &SecretShares::Random,
         curve,
-        Seed::from_rng(&mut rng),
+        Seed::from_rng(rng),
         threshold,
         &[pk0.clone(), pk1.clone()],
         dealer_index,

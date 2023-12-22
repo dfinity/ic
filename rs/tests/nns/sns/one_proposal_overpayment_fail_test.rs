@@ -23,20 +23,21 @@ fn create_service_nervous_system_proposal() -> CreateServiceNervousSystem {
 }
 
 fn nns_nf_neurons() -> Vec<NnsNfNeuron> {
-    let cf_contribution = create_service_nervous_system_proposal()
+    let max_nf_contribution = create_service_nervous_system_proposal()
         .swap_parameters
         .unwrap()
-        .neurons_fund_investment_icp
+        .maximum_direct_participation_icp
         .unwrap()
         .e8s
-        .unwrap();
+        .unwrap()
+        * 2;
 
-    neurons_fund::initial_nns_neurons(cf_contribution * 100, 1)
+    neurons_fund::initial_nns_neurons(max_nf_contribution * 10, 1)
 }
 
 fn sns_setup_with_one_proposal(env: TestEnv) {
     sns_deployment::setup(
-        env,
+        &env,
         vec![],
         nns_nf_neurons(),
         create_service_nervous_system_proposal(),
@@ -46,7 +47,7 @@ fn sns_setup_with_one_proposal(env: TestEnv) {
 }
 
 fn wait_for_swap_to_start(env: TestEnv) {
-    block_on(swap_finalization::wait_for_swap_to_start(env));
+    block_on(swap_finalization::wait_for_swap_to_start(&env));
 }
 
 /// Creates ticket participants which will contribute in such a way that they'll hit max_icp_e8s with min_participants.
@@ -83,7 +84,7 @@ fn generate_ticket_participants_workload_necessary_to_abort_the_swap(env: TestEn
     // So if we set rps to `1`, and the duration to `num_participants`, we'll
     // have `num_participants` participants.
     generate_ticket_participants_workload(
-        env,
+        &env,
         1,
         Duration::from_secs(num_participants),
         contribution_per_user,
@@ -111,6 +112,13 @@ fn finalize_swap(env: TestEnv) {
         cf_neuron_count: Some(nns_nf_neurons().len() as u64),
         buyer_total_icp_e8s: swap_params.maximum_icp.unwrap().e8s,
         sns_tokens_per_icp: Some(sns_tokens_per_icp),
+        direct_participation_icp_e8s: Some(
+            swap_params.maximum_icp.unwrap().e8s()
+                - swap_params.neurons_fund_investment_icp.unwrap().e8s(),
+        ),
+        neurons_fund_participation_icp_e8s: Some(
+            swap_params.neurons_fund_investment_icp.unwrap().e8s(),
+        ),
     };
 
     block_on(finalize_aborted_swap_and_check_success(

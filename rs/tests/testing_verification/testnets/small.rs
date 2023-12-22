@@ -81,6 +81,6 @@ pub fn setup(env: TestEnv) {
         .use_real_certs_and_dns()
         .start(&env)
         .expect("failed to setup BoundaryNode VM");
-    env.sync_prometheus_config_with_topology();
+    env.sync_with_prometheus();
     await_boundary_node_healthy(&env, BOUNDARY_NODE_NAME);
 }

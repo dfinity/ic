@@ -1,9 +1,10 @@
 [package]
 name = "ic-icrc1-index-ng"
-version = "0.8.0"
-authors = ["The Internet Computer Project Developers"]
 description = "Index canister for the ICRC1 Ledger"
 edition = "2018"
+version.workspace = true
+authors.workspace = true
+documentation.workspace = true
 
 [[bin]]
 name = "ic-icrc1-index-ng"
@@ -12,6 +13,7 @@ path = "src/main.rs"
 [dependencies]
 candid = { workspace = true }
 ciborium = { workspace = true }
+ic-base-types = { path = "../../../types/base_types" }
 ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
 ic-canister-profiler = { path = "../../../rust_canisters/canister_profiler" }
@@ -28,8 +30,8 @@ ic-stable-structures = { workspace = true }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 num-traits = "0.2.14"
 scopeguard = "1.1.0"
-serde = "1.0"
-serde_json = "1.0.40"
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
 ic-base-types = { path = "../../../types/base_types" }
@@ -40,8 +42,9 @@ ic-ledger-canister-core = { path = "../../ledger_canister_core" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 proptest = "1.0"
-serde_bytes = "0.11"
-serde_json = "1.0.40"
+serde_bytes = { workspace = true }
+serde_json = { workspace = true }
+ic-agent = { workspace = true }
 
 [features]
 default = []

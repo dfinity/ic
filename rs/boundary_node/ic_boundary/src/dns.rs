@@ -1,21 +1,24 @@
-use std::{net::SocketAddr, sync::Arc, time::Instant};
+use std::{net::SocketAddr, sync::Arc};
 
 use arc_swap::ArcSwapOption;
-use futures_util::{future::ready, FutureExt};
+use futures_util::future::ready;
 use hyper::client::connect::dns::Name;
 use reqwest::dns::{Addrs, Resolve, Resolving};
-use tracing::info;
 
-use crate::{metrics::WithMetrics, snapshot::RoutingTable};
+use crate::snapshot::RegistrySnapshot;
 
 const UNUSED_PORT: u16 = 0;
 
+#[derive(Debug, thiserror::Error)]
+#[error("{0}")]
+pub struct DnsError(String);
+
 pub struct DnsResolver {
-    rt: Arc<ArcSwapOption<RoutingTable>>,
+    rt: Arc<ArcSwapOption<RegistrySnapshot>>,
 }
 
 impl DnsResolver {
-    pub fn new(rt: Arc<ArcSwapOption<RoutingTable>>) -> Self {
+    pub fn new(rt: Arc<ArcSwapOption<RegistrySnapshot>>) -> Self {
         Self { rt }
     }
 }
@@ -28,17 +31,17 @@ impl Resolve for DnsResolver {
         let rt = match self.rt.load_full() {
             Some(rt) => rt,
             None => {
-                return Box::pin(ready(Err(Box::from(
-                    "no routing table available".to_string(),
-                ))));
+                return Box::pin(ready(Err(Box::from(DnsError(
+                    "No routing table available".into(),
+                )))));
             }
         };
 
         match rt.nodes.get(name.as_str()) {
             // If there's no node with given id - return future with error
-            None => Box::pin(ready(Err(Box::from(format!(
-                "Node '{name}' not found in routing table",
-            ))))),
+            None => Box::pin(ready(Err(Box::from(DnsError(format!(
+                "Node '{name}' not found in the routing table",
+            )))))),
 
             // Return future that resolves to an iterator with a node IP address
             Some(n) => {
@@ -49,39 +52,5 @@ impl Resolve for DnsResolver {
     }
 }
 
-impl<T: Resolve> Resolve for WithMetrics<T> {
-    fn resolve(&self, name: Name) -> Resolving {
-        let start_time = Instant::now();
-
-        self.0
-            .resolve(name.clone())
-            .map(move |out| {
-                let status = match out {
-                    Ok(_) => "ok",
-                    Err(_) => "fail",
-                };
-
-                let duration = start_time.elapsed().as_secs_f64();
-
-                // Examine IPs
-                let out = out.map(|addrs| Vec::from_iter(addrs.map(|addr| addr.ip())));
-
-                info!(
-                    action = "resolve",
-                    name = name.as_str(),
-                    status,
-                    duration,
-                    ips = ?out.as_ref().ok(),
-                    error = ?out.as_ref().err(),
-                );
-
-                // Revert back to correct form (SocketAddr)
-                out.map(|ips| {
-                    Addrs::from(Box::new(
-                        ips.into_iter().map(|ip| SocketAddr::new(ip, UNUSED_PORT)),
-                    ))
-                })
-            })
-            .boxed()
-    }
-}
+#[cfg(test)]
+pub mod test;

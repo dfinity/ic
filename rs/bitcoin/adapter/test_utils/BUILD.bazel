@@ -5,7 +5,9 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "@crate_index//:bitcoin",
     "@crate_index//:hex",
-    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand",
+    "@crate_index//:serde_json",
+    "@crate_index//:tokio",
 ]
 
 DEV_DEPENDENCIES = [

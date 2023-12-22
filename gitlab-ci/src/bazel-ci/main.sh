@@ -11,30 +11,55 @@ echo "Bazel version: $(bazel version)"
 
 AWS_CREDS="${HOME}/.aws/credentials"
 mkdir -p "$(dirname "${AWS_CREDS}")"
-ln -fs "${AWS_SHARED_CREDENTIALS_FILE}" "${AWS_CREDS}"
+# handle github and gitlab differnetly
+if [ -n "${AWS_SHARED_CREDENTIALS_FILE+x}" ]; then
+    ln -fs "${AWS_SHARED_CREDENTIALS_FILE}" "${AWS_CREDS}"
+elif [ -n "${AWS_SHARED_CREDENTIALS_CONTENT+x}" ]; then
+    echo "$AWS_SHARED_CREDENTIALS_CONTENT" >"$AWS_CREDS"
+else
+    echo '$AWS_SHARED_CREDENTIALS_CONTENT or $AWS_SHARED_CREDENTIALS_FILE has to be set' >&2
+    exit 1
+fi
+
+GITLAB_TOKEN="${HOME}/.gitlab/api_token"
+mkdir -p "$(dirname "${GITLAB_TOKEN}")"
+echo "${GITLAB_API_TOKEN:-}" >"${GITLAB_TOKEN}"
 
 ic_version_rc_only="0000000000000000000000000000000000000000"
 if [ "$CI_COMMIT_REF_PROTECTED" = "true" ]; then
     ic_version_rc_only="${CI_COMMIT_SHA}"
 fi
 
-# Many actions seem to be using much more resources than bazel expects.
-# Running too many of them in parallel causes some tests that expect to get some resources within limited time to fail.
-# TODO(IDX-2225): reconsider limit when we will use Remute Execution.
-if [ "$(nproc)" -gt 32 ]; then
-    BAZEL_EXTRA_ARGS="--jobs=32 ${BAZEL_EXTRA_ARGS}"
+if [[ "${CI_COMMIT_TAG:-}" =~ ^hotfix-.+-rc--.+ ]]; then
+    ic_version_rc_only="${CI_COMMIT_SHA}"
 fi
 
+if [[ "${CI_COMMIT_TAG:-}" =~ ^release-.+ ]]; then
+    # upload artifacts also to cloudflare r2
+    RC="True"
+fi
+
+EXIT_CODE=0
 # shellcheck disable=SC2086
 # ${BAZEL_...} variables are expected to contain several arguments. We have `set -f` set above to disable globbing (and therefore only allow splitting)"
 buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" "${CI_JOB_NAME}-bazel-cmd" -- bazel \
     ${BAZEL_STARTUP_ARGS} \
     ${BAZEL_COMMAND} \
     ${BAZEL_CI_CONFIG} \
-    --build_metadata=BUILDBUDDY_LINKS="[GitLab CI Job](${CI_JOB_URL})" \
+    --build_metadata=BUILDBUDDY_LINKS="[CI Job](${CI_JOB_URL})" \
     --ic_version="${CI_COMMIT_SHA}" \
     --ic_version_rc_only="${ic_version_rc_only}" \
-    ${BAZEL_EXTRA_ARGS} \
+    --rc="${RC:-"False"}" \
+    ${BAZEL_EXTRA_ARGS:-} \
     ${BAZEL_TARGETS} \
     2>&1 \
-    | perl -pe 'BEGIN { select(STDOUT); $| = 1 } s/(.*Streaming build results to:.*)/\o{33}[92m$1\o{33}[0m/'
+    | perl -pe 'BEGIN { select(STDOUT); $| = 1 } s/(.*Streaming build results to:.*)/\o{33}[92m$1\o{33}[0m/' || EXIT_CODE="${PIPESTATUS[0]}"
+
+if [ "$EXIT_CODE" == "38" ]; then
+    echo "Tolerating BEP upload failure."
+    # ERROR: The Build Event Protocol upload failed: Not retrying publishBuildEvents, no more attempts left: status='Status{code=CANCELLED, description=context canceled, cause=null}' CANCELLED: CANCELLED: context canceled CANCELLED: CANCELLED: context canceled
+    #Error: exit status 38
+else
+    echo "bazel process exited with $EXIT_CODE" >&2
+    exit "$EXIT_CODE"
+fi

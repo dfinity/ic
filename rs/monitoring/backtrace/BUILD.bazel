@@ -1,5 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -26,6 +26,6 @@ rust_library(
     target_compatible_with = [
         "@platforms//os:linux",
     ],
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES + [":build_script"],
 )

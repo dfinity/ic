@@ -4,16 +4,23 @@ use super::{
     eventlog::Event, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, RetrieveBtcRequest,
     SubmittedBtcTransaction, UtxoCheckStatus,
 };
-use crate::state::ReimburseDepositTask;
+use crate::state::{ReimburseDepositTask, ReimbursedDeposit};
 use crate::storage::record_event;
 use crate::ReimbursementReason;
 use candid::Principal;
-use ic_btc_interface::Utxo;
+use ic_btc_interface::{Txid, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
 
 pub fn accept_retrieve_btc_request(state: &mut CkBtcMinterState, request: RetrieveBtcRequest) {
     record_event(&Event::AcceptedRetrieveBtcRequest(request.clone()));
     state.pending_retrieve_btc_requests.push(request.clone());
+    if let Some(account) = request.reimbursement_account {
+        state
+            .retrieve_btc_account_to_block_indices
+            .entry(account)
+            .and_modify(|entry| entry.push(request.block_index))
+            .or_insert(vec![request.block_index]);
+    }
     if let Some(kyt_provider) = request.kyt_provider {
         *state.owed_kyt_amount.entry(kyt_provider).or_insert(0) += state.kyt_fee;
     }
@@ -58,7 +65,7 @@ pub fn sent_transaction(state: &mut CkBtcMinterState, tx: SubmittedBtcTransactio
     state.push_submitted_transaction(tx);
 }
 
-pub fn confirm_transaction(state: &mut CkBtcMinterState, txid: &[u8; 32]) {
+pub fn confirm_transaction(state: &mut CkBtcMinterState, txid: &Txid) {
     record_event(&Event::ConfirmedBtcTransaction { txid: *txid });
     state.finalize_transaction(txid);
 }
@@ -86,7 +93,7 @@ pub fn ignore_utxo(state: &mut CkBtcMinterState, utxo: Utxo) {
 
 pub fn replace_transaction(
     state: &mut CkBtcMinterState,
-    old_txid: [u8; 32],
+    old_txid: Txid,
     new_tx: SubmittedBtcTransaction,
 ) {
     record_event(&Event::ReplacedBtcTransaction {
@@ -144,22 +151,19 @@ pub fn schedule_deposit_reimbursement(
     amount: u64,
     reason: ReimbursementReason,
     burn_block_index: u64,
-    kyt_fee: u64,
 ) {
     record_event(&Event::ScheduleDepositReimbursement {
         account,
         amount,
         reason,
         burn_block_index,
-        kyt_fee,
     });
-    state.reimbursement_map.insert(
+    state.schedule_deposit_reimbursement(
         burn_block_index,
         ReimburseDepositTask {
             account,
             amount,
             reason,
-            kyt_fee,
         },
     );
 }
@@ -173,5 +177,17 @@ pub fn reimbursed_failed_deposit(
         burn_block_index,
         mint_block_index,
     });
-    assert_ne!(state.reimbursement_map.remove(&burn_block_index), None);
+    let reimbursed_tx = state
+        .pending_reimbursements
+        .remove(&burn_block_index)
+        .expect("bug: reimbursement task should be present");
+    state.reimbursed_transactions.insert(
+        burn_block_index,
+        ReimbursedDeposit {
+            account: reimbursed_tx.account,
+            amount: reimbursed_tx.amount,
+            reason: reimbursed_tx.reason,
+            mint_block_index,
+        },
+    );
 }

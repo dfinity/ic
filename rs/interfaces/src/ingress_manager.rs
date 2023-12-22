@@ -64,6 +64,8 @@ pub enum IngressPermanentError {
     DuplicatedIngressMessage(MessageId),
     InsufficientCycles(CanisterOutOfCyclesError),
     CanisterNotFound(CanisterId),
+    CanisterStopping(CanisterId),
+    CanisterStopped(CanisterId),
     InvalidManagementMessage,
     StateRemoved(Height),
 }
@@ -141,7 +143,7 @@ pub trait IngressSelector: Send + Sync {
     /// #Returns
     /// `ValidationResult::Valid`: if the payload is valid
     /// `ValidationResult::Invalid`: if the payload is invalid
-    /// `ValidationResult::Error`: a transient error occured during the
+    /// `ValidationResult::Error`: a transient error occurred during the
     /// validation.
     fn validate_ingress_payload(
         &self,

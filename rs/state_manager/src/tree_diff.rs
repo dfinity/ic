@@ -324,7 +324,7 @@ mod tests {
     }
 
     /// Modify the leaf at the given index. The leaves are counted according to
-    /// their in-order traveral.
+    /// their in-order traversal.
     fn modify_leaf_at_index(t: &mut RoseHashTree, idx: usize, h: Digest) -> Option<(Path, Digest)> {
         fn go_rec(
             t: &mut RoseHashTree,

@@ -151,7 +151,7 @@ async fn test_make_transaction<T: RosettaSupportedKeyPair>(
         .unwrap()
         .unwrap()
         .current_block_identifier
-        .index as u64;
+        .index;
     let expected_idx = tip_idx + 1;
 
     let from = acc;
@@ -183,7 +183,7 @@ async fn test_make_transaction<T: RosettaSupportedKeyPair>(
     assert_eq!(block.transactions.len(), 1);
 
     let t = block.transactions.first().unwrap();
-    assert_eq!(t.transaction_identifier, tid);
+    assert_eq!(t.transaction_identifier, tid.into());
 
     check_balance(
         client,
@@ -298,7 +298,7 @@ async fn test_multiple_transfers(
         .unwrap()
         .unwrap()
         .current_block_identifier
-        .index as u64;
+        .index;
     let expected_idx = tip_idx + 3;
 
     let (tid, results, _fee) = do_multiple_txn(
@@ -349,7 +349,7 @@ async fn test_multiple_transfers(
     assert_eq!(block.transactions.len(), 1);
 
     let t = block.transactions.first().unwrap();
-    assert_eq!(t.transaction_identifier, tid);
+    assert_eq!(t.transaction_identifier, tid.into());
 
     check_balance(
         ros,
@@ -397,7 +397,7 @@ async fn test_multiple_transfers_fail(
         .unwrap()
         .unwrap()
         .current_block_identifier
-        .index as u64;
+        .index;
     let expected_idx = tip_idx + 1;
 
     let err = do_multiple_txn(

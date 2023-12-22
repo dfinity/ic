@@ -43,7 +43,7 @@ fn main() -> Result<()> {
     ));
 
     info!(log, "Starting IcServiceDiscovery ...");
-    info!(log, "Started jobs: {:?}", cli_args.jobs_and_ports);
+    info!(log, "Started jobs: {:?}", &cli_args.jobs_and_ports);
     let ic_discovery = Arc::new(IcServiceDiscoveryImpl::new(
         log.clone(),
         cli_args.targets_dir,
@@ -163,7 +163,7 @@ The interval at which ICs are polled for updates.
     default_value = "5s",
     value_parser = parse_duration,
     help = r#"
-The HTTP-request timeout used when quering for registry updates.
+The HTTP-request timeout used when querying for registry updates.
 
 "#
     )]

@@ -14,7 +14,7 @@ use crate::{
 };
 use ic_async_utils::start_tcp_listener;
 use ic_base_types::{NodeId, RegistryVersion};
-use ic_crypto_tls_interfaces::{AllowedClients, AuthenticatedPeer, TlsStream};
+use ic_crypto_tls_interfaces::{AuthenticatedPeer, SomeOrAllNodes, TlsStream};
 use ic_interfaces_transport::{TransportChannelId, TransportEvent, TransportEventHandler};
 use ic_logger::{error, warn};
 use std::{net::SocketAddr, time::Duration};
@@ -32,7 +32,6 @@ use tower::Service;
 enum TransportTlsHandshakeError {
     DeadlineExceeded,
     Internal(String),
-    InvalidArgument,
 }
 
 const DEFAULT_CHANNEL_ID: usize = 0;
@@ -226,8 +225,8 @@ impl TransportImpl {
                                         .expect("Can't panic on infallible");
                                     peer_state.update(ConnectionState::Connected(connected_state));
                             }
-                            // If there is an error completing the H2 handshake, we 
-                            // will retry on a future iteration of the tcp.accept loop 
+                            // If there is an error completing the H2 handshake, we
+                            // will retry on a future iteration of the tcp.accept loop
                         });
                     }
                     Err(err) => {
@@ -272,29 +271,33 @@ impl TransportImpl {
                             .tcp_connects
                             .with_label_values(&[STATUS_SUCCESS])
                             .inc();
-
-                        let peer_map = arc_self.peer_map.read().await;
-                        let peer_state_mu = match peer_map.get(&peer_id) {
-                            Some(peer_state) => peer_state,
-                            None => continue,
-                        };
-                        let mut peer_state = peer_state_mu.write().await;
-                        if peer_state.get_connected().is_some() {
-                            // TODO: P2P-516
-                            continue;
-                        }
                         match arc_self.tls_client_handshake(peer_id, stream).await {
                             Ok(tls_stream) => {
                                 arc_self.control_plane_metrics
                                 .tls_handshakes
                                     .with_label_values(&[ConnectionRole::Client.as_ref(), STATUS_SUCCESS])
                                     .inc();
+                                // It is important to not hold these lock across the tls handshake since in the worst case
+                                // this can take 10+s. By doing the peer map operation after the handshake it is ensured
+                                // that the looks are held as short as possible.
+                                let peer_map = arc_self.peer_map.read().await;
+                                let peer_state_mu = match peer_map.get(&peer_id) {
+                                    Some(peer_state) => peer_state,
+                                    None => continue,
+                                };
+
+                                let mut peer_state = peer_state_mu.write().await;
+                                if peer_state.get_connected().is_some() {
+                                    continue;
+                                }
+
                                 let mut event_handler = match arc_self.event_handler.lock().await.as_ref() {
                                     Some(event_handler) => event_handler.clone(),
                                     None => continue,
                                 };
                                 let weak_self_clone = arc_self.weak_self.read().unwrap().clone();
                                 let event_handler_clone = event_handler.clone();
+
                                 if let Ok(connected_state) = create_connected_state(
                                     peer_id,
                                     channel_id,
@@ -430,10 +433,8 @@ impl TransportImpl {
         stream: TcpStream,
     ) -> Result<(NodeId, Box<dyn TlsStream>), TransportTlsHandshakeError> {
         let latest_registry_version = *self.latest_registry_version.read().await;
-        let earliest_registry_version = *self.earliest_registry_version.read().await;
         let current_allowed_clients = self.allowed_clients.read().await.clone();
-        let allowed_clients = AllowedClients::new_with_nodes(current_allowed_clients)
-            .map_err(|_| TransportTlsHandshakeError::InvalidArgument)?;
+        let allowed_clients = SomeOrAllNodes::Some(current_allowed_clients);
         let (tls_stream, authenticated_peer) = match tokio::time::timeout(
             Duration::from_secs(TLS_HANDSHAKE_TIMEOUT_SECONDS),
             self.crypto.perform_tls_server_handshake(
@@ -455,7 +456,6 @@ impl TransportImpl {
                 tls_stream,
                 peer_id,
                 latest_registry_version,
-                earliest_registry_version,
             ),
         )
         .await
@@ -474,7 +474,6 @@ impl TransportImpl {
         stream: TcpStream,
     ) -> Result<Box<dyn TlsStream>, TransportTlsHandshakeError> {
         let latest_registry_version = *self.latest_registry_version.read().await;
-        let earliest_registry_version = *self.earliest_registry_version.read().await;
         let tls_stream = match tokio::time::timeout(
             Duration::from_secs(TLS_HANDSHAKE_TIMEOUT_SECONDS),
             self.crypto
@@ -492,7 +491,6 @@ impl TransportImpl {
                 tls_stream,
                 peer_id,
                 latest_registry_version,
-                earliest_registry_version,
             ),
         )
         .await
@@ -504,9 +502,9 @@ impl TransportImpl {
         Ok(tls_stream)
     }
 
-    /// Initilizes a client
+    /// Initializes a client
     pub(crate) fn init_client(&self, event_handler: TransportEventHandler) {
-        // Creating the listeners requres that we are within a tokio runtime context.
+        // Creating the listeners requires that we are within a tokio runtime context.
         let _rt_enter_guard = self.rt_handle.enter();
         let server_addr = SocketAddr::new(self.node_ip, self.config.listening_port);
         let tcp_listener = start_tcp_listener(server_addr);

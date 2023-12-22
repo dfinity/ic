@@ -1,5 +1,5 @@
 use candid::{CandidType, Decode, Deserialize, Encode, Nat, Principal};
-use ic_agent::agent::http_transport::ReqwestHttpReplicaV2Transport;
+use ic_agent::agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::{Agent, Identity};
 use ic_ic00_types::{CanisterInstallMode, CreateCanisterArgs, InstallCodeArgs};
@@ -13,8 +13,8 @@ use std::thread::sleep;
 use std::time::Duration;
 use url::Url;
 pub const LEDGER_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 2;
-const ATTEMPTS: u8 = 100;
-const DURATION_BETWEEN_ATTEMPTS: Duration = Duration::from_millis(100);
+const MAX_ATTEMPTS: u8 = 100;
+const DURATION_BETWEEN_ATTEMPTS: Duration = Duration::from_millis(1000);
 
 // small wrapper that gets the binaries from env
 async fn start_replica() -> ReplicaContext {
@@ -102,7 +102,7 @@ async fn create_canister(
             &Principal::management_canister(),
             "provisional_create_canister_with_cycles",
         )
-        .with_arg(&Encode!(&CreateCanisterArgs::default())?)
+        .with_arg(Encode!(&CreateCanisterArgs::default())?)
         .call_and_wait()
         .await?;
     let result = Decode!(&response, CreateCanisterResult)?;
@@ -118,7 +118,7 @@ async fn install_canister(
     let _ = agent
         .update(&Principal::management_canister(), "install_code")
         .with_effective_canister_id(canister_id)
-        .with_arg(&Encode!(&InstallCodeArgs {
+        .with_arg(Encode!(&InstallCodeArgs {
             canister_id: canister_id.into(),
             wasm_module,
             arg,
@@ -213,14 +213,21 @@ async fn test() {
     //
     // We don't know when Rosetta finishes the synchronization.
     // So we try multiple times.
-    for i in 0..ATTEMPTS {
+    let mut block = None;
+    let mut attempts = 0;
+    while block.is_none() && attempts < MAX_ATTEMPTS {
         match client.block(network.clone(), 0).await {
-            Ok(block) => {
-                assert!(block.is_some());
-                break;
+            Ok(b) => {
+                block = b;
             }
-            Err(_) if i < ATTEMPTS - 1 => sleep(DURATION_BETWEEN_ATTEMPTS),
-            Err(err) => panic!("Unable to fetch block 0: {}", err),
+            Err(err) => {
+                if attempts == MAX_ATTEMPTS - 1 {
+                    panic!("Unable to fetch block 0: {}", err)
+                }
+            }
         };
+        sleep(DURATION_BETWEEN_ATTEMPTS);
+        attempts += 1;
     }
+    assert!(block.is_some())
 }

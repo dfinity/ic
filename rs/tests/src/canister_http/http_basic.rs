@@ -25,7 +25,9 @@ use anyhow::bail;
 use canister_test::Canister;
 use dfn_candid::candid_one;
 use ic_cdk::api::call::RejectionCode;
-use ic_ic00_types::{CanisterHttpRequestArgs, HttpMethod, TransformContext, TransformFunc};
+use ic_ic00_types::{
+    BoundedHttpHeaders, CanisterHttpRequestArgs, HttpMethod, TransformContext, TransformFunc,
+};
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use slog::{info, Logger};
 
@@ -61,7 +63,7 @@ async fn test_proxy_canister(proxy_canister: &Canister<'_>, url: String, logger:
                     RemoteHttpRequest {
                         request: CanisterHttpRequestArgs {
                             url: url.to_string(),
-                            headers: vec![],
+                            headers: BoundedHttpHeaders::new(vec![]),
                             body: None,
                             transform: Some(TransformContext {
                                 function: TransformFunc(candid::Func {

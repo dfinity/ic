@@ -48,7 +48,7 @@ gflags.DEFINE_string(
 gflags.DEFINE_string("artifacts_path", "", "Path to the artifacts directory")
 gflags.DEFINE_string("workload_generator_path", "", "Path to the workload generator to be used")
 gflags.DEFINE_boolean("no_instrument", False, "Do not instrument target machine")
-gflags.DEFINE_string("targets", "", "Set load target IP adresses from this comma-separated list directly.")
+gflags.DEFINE_string("targets", "", "Set load target IP addresses from this comma-separated list directly.")
 gflags.DEFINE_string("top_level_out_dir", "", "Set the top-level output directory. Default is the git commit id.")
 gflags.DEFINE_string(
     "second_level_out_dir",
@@ -205,17 +205,17 @@ class BaseExperiment:
             return FLAGS.targets.split(",")
 
         topology = self.__get_topology()
-        for subnet, info in topology["topology"]["subnets"].items():
-            subnet_type = info["records"][0]["value"]["subnet_type"]
-            members = info["records"][0]["value"]["membership"]
+        for subnet, subnet_info in topology["subnets"].items():
+            subnet_type = subnet_info["subnet_type"]
+            subnet_nodes = subnet_info["nodes"]
             if subnet_type == "application":
-                return [self.get_node_ip_address(m) for m in members]
+                return [node_details["ipv6"] for node_details in subnet_nodes.values()]
 
     def get_subnet_to_instrument(self) -> str:
         """Return the subnet to instrument."""
         topology = self.__get_topology()
-        for subnet, info in topology["topology"]["subnets"].items():
-            subnet_type = info["records"][0]["value"]["subnet_type"]
+        for subnet, info in topology["subnets"].items():
+            subnet_type = info["subnet_type"]
             if subnet_type == "application":
                 return subnet
 
@@ -308,7 +308,7 @@ class BaseExperiment:
         """
         Get the current topology from the registry.
 
-        A different NNS can be choosen by setting nns_url. This is useful, for example
+        A different NNS can be chosen by setting nns_url. This is useful, for example
         when multiple testnets are used, one for workload generators, and one for
         target machines.
         """
@@ -339,7 +339,7 @@ class BaseExperiment:
         """
         Get info for the given node from the registry.
 
-        A different NNS can be choosen by setting nns_url. This is useful, for example
+        A different NNS can be chosen by setting nns_url. This is useful, for example
         when multiple testnets are used, one for workload generators, and one for
         target machines.
         """
@@ -400,27 +400,27 @@ class BaseExperiment:
     def get_unassigned_nodes(self):
         """Return a list of unassigned node IDs in the given subnetwork."""
         topo = self.__get_topology()
-        return [j["node_id"] for j in topo["topology"]["unassigned_nodes"]]
+        return list(topo["unassigned_nodes"].keys())
 
     def get_subnets(self):
         """Get the currently running subnetworks."""
         topo = self.__get_topology()
-        return [k for (k, _) in topo["topology"]["subnets"].items()]
+        return list(topo["subnets"].keys())
 
     def get_subnet_members(self, subnet_index):
         """Get members of subnet with the given subnet index (not subnet ID)."""
         topo = self.__get_topology()
-        subnet_info = [info for (_, info) in topo["topology"]["subnets"].items()]
-        return subnet_info[subnet_index]["records"][0]["value"]["membership"]
+        subnet_info = list(topo["subnets"].values())
+        return subnet_info[subnet_index]["membership"]
 
     @retry(tries=5)
     def get_mainnet_nns_ip(self):
         """Get NNS IP address on mainnet."""
         topology = self.__get_topology(nns_url=MAINNET_NNS_URL)
-        for subnet, info in topology["topology"]["subnets"].items():
+        for subnet, subnet_info in topology["subnets"].items():
             if subnet == MAINNET_NNS_SUBNET_ID:
-                node_id = random.choice(info["records"][0]["value"]["membership"])
-                nns_ip = self.get_node_ip_address(node_id, nns_url=MAINNET_NNS_URL)
+                subnet_nodes_ipv6 = [node["ipv6"] for node in subnet_info["nodes"].values()]
+                nns_ip = random.choice(subnet_nodes_ipv6)
                 print(f"Using NNS ip address: {nns_ip}")
                 return nns_ip
         raise Exception(f"Failed to get the mainnet NNS url from {MAINNET_NNS_URL}")
@@ -583,12 +583,12 @@ class BaseExperiment:
     def get_hostnames(self, for_subnet_idx=0, nns_url=None):
         """Return hostnames of all machines in the given testnet and subnet from the registry."""
         topology = self.__get_topology(nns_url)
-        for curr_subnet_idx, (subnet, info) in enumerate(topology["topology"]["subnets"].items()):
-            subnet_type = info["records"][0]["value"]["subnet_type"]
-            members = info["records"][0]["value"]["membership"]
+        for curr_subnet_idx, subnet_info in enumerate(topology["subnets"].values()):
+            subnet_type = subnet_info["subnet_type"]
+            subnet_nodes = subnet_info["nodes"]
             assert curr_subnet_idx != 0 or subnet_type == "system"
             if for_subnet_idx == curr_subnet_idx:
-                return sorted([self.get_node_ip_address(member, nns_url) for member in members])
+                return sorted([node_details["ipv6"] for node_details in subnet_nodes.values()])
 
     def get_app_subnet_hostnames(self, nns_url=None, idx=-1):
         """
@@ -603,18 +603,18 @@ class BaseExperiment:
         """
         ips = []
         topology = self.__get_topology(nns_url)
-        for curr_subnet_idx, (subnet, info) in enumerate(topology["topology"]["subnets"].items()):
-            subnet_type = info["records"][0]["value"]["subnet_type"]
-            members = info["records"][0]["value"]["membership"]
+        for curr_subnet_idx, subnet_info in enumerate(topology["subnets"].values()):
+            subnet_type = subnet_info["subnet_type"]
+            subnet_nodes = subnet_info["nodes"]
             if (subnet_type != "system" and idx < 0) or (idx >= 0 and curr_subnet_idx == idx):
-                ips += [self.get_node_ip_address(member, nns_url) for member in members]
+                ips += [node_details["ipv6"] for node_details in subnet_nodes.values()]
         return sorted(ips)
 
     def _build_summary_file(self):
         """
         Build dictionary to be used to build the summary file.
 
-        This is overriden by workload experiment, so visibility needs to be _ not __.
+        This is overridden by workload experiment, so visibility needs to be _ not __.
         """
         return {}
 

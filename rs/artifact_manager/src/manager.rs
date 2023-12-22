@@ -6,14 +6,14 @@
 //! It provides an interface to *Gossip* enabling it to interact with all the
 //! pools without knowing artifact-related details.
 use crate::ArtifactClientHandle;
-use ic_interfaces::{
-    artifact_manager::{ArtifactManager, OnArtifactError},
-    artifact_pool::UnvalidatedArtifact,
-};
+use ic_interfaces::p2p::artifact_manager::{ArtifactManager, OnArtifactError};
 use ic_types::{
     artifact,
-    artifact::{Advert, ArtifactKind, ArtifactPriorityFn, ArtifactTag, Priority},
-    chunkable::{Chunkable, ChunkableArtifact},
+    artifact::{
+        Advert, ArtifactKind, ArtifactPriorityFn, ArtifactTag, Priority,
+        UnvalidatedArtifactMutation,
+    },
+    chunkable::ChunkableArtifact,
     p2p, NodeId,
 };
 use std::collections::HashMap;
@@ -163,20 +163,6 @@ impl ArtifactManager for ArtifactManagerImpl {
             Some(client) => client.get_priority_function(tag),
         }
     }
-
-    /// The method returns the chunk tracker for an advert with the given ID.
-    ///
-    /// See `ArtifactClient::get_chunk_tracker` for more details
-    fn get_chunk_tracker(
-        &self,
-        artifact_id: &artifact::ArtifactId,
-    ) -> Option<Box<dyn Chunkable + Send + Sync>> {
-        let tag: ArtifactTag = artifact_id.into();
-
-        self.clients
-            .get(&tag)
-            .and_then(|client| client.get_chunk_tracker(artifact_id))
-    }
 }
 
 /// In order to let the artifact manager manage artifact clients, which can be
@@ -216,12 +202,6 @@ pub trait ArtifactManagerBackend: Send + Sync {
 
     /// The method returns a priority function for a given artifact tag.
     fn get_priority_function(&self, tag: artifact::ArtifactTag) -> ArtifactPriorityFn;
-
-    /// The method returns a chunk tracker for a given artifact ID.
-    fn get_chunk_tracker(
-        &self,
-        id: &artifact::ArtifactId,
-    ) -> Option<Box<dyn Chunkable + Send + Sync>>;
 }
 
 /// Trait implementation for `ArtifactManagerBackend`.
@@ -237,7 +217,7 @@ where
     for<'a> &'a Artifact::Attribute:
         TryFrom<&'a artifact::ArtifactAttribute, Error = &'a artifact::ArtifactAttribute>,
     Artifact::Attribute: 'static,
-    Artifact::Id: 'static,
+    Artifact::Id: 'static + Send,
 {
     /// The method is called when the given artifact is received.
     fn on_artifact(
@@ -249,13 +229,8 @@ where
             Ok(message) => {
                 // this sends to an unbounded channel, which is what we want here
                 self.sender
-                    .send(UnvalidatedArtifact {
-                        message,
-                        peer_id,
-                        timestamp: self.time_source.get_relative_time(),
-                    })
+                    .send(UnvalidatedArtifactMutation::Insert((message, peer_id)))
                     .unwrap_or_else(|err| panic!("Failed to send request: {:?}", err));
-
                 Ok(())
             }
             Err(_) => Err(OnArtifactError::NotProcessed),
@@ -311,7 +286,7 @@ where
                 move |id: &'_ artifact::ArtifactId, attribute: &'_ artifact::ArtifactAttribute| {
                     match (id.try_into(), attribute.try_into()) {
                         (Ok(idd), Ok(attr)) => func(idd, attr),
-                        _ => panic!("Priority function called on wrong id or attribute!"),
+                        _ => crate::Priority::Drop,
                     }
                 },
             )
@@ -322,17 +297,6 @@ where
                     Priority::Fetch
                 },
             )
-        }
-    }
-
-    /// The method returns the artifact chunk tracker.
-    fn get_chunk_tracker(
-        &self,
-        artifact_id: &artifact::ArtifactId,
-    ) -> Option<Box<dyn Chunkable + Send + Sync>> {
-        match artifact_id.try_into() {
-            Ok(artifact_id) => Some(self.pool_reader.as_ref().get_chunk_tracker(artifact_id)),
-            Err(_) => None,
         }
     }
 }

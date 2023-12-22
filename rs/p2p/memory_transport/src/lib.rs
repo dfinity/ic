@@ -40,7 +40,7 @@ use axum::{
 };
 use bytes::{Buf, BufMut, Bytes};
 use http::{Request, Response};
-use ic_quic_transport::{Transport, TransportError};
+use ic_quic_transport::{ConnId, SendError, Transport};
 use ic_types::NodeId;
 use std::{
     collections::HashMap,
@@ -144,25 +144,22 @@ impl TransportRouter {
 
         // Spawn request handler for this added node
         tokio::spawn(async move {
-            loop {
-                select! {
-                    Some((msg, oneshot_tx)) = rpc_rx.recv() => {
-                        // Get origin NodeId and change request body type
-                        let (parts, body) = msg.into_parts();
-                        let origin_id = *parts.extensions.get::<NodeId>().unwrap();
-                        let req = Request::from_parts(parts, Body::from(body));
+            while let Some((msg, oneshot_tx)) = rpc_rx.recv().await {
+                // Get origin NodeId and change request body type
+                let (mut parts, body) = msg.into_parts();
+                let origin_id = *parts.extensions.get::<NodeId>().unwrap();
+                parts.extensions.insert(ConnId::from(u64::MAX));
+                let req = Request::from_parts(parts, Body::from(body));
 
-                        // Call request handler
-                        let resp = router.ready().await.unwrap().call(req).await.unwrap();
+                // Call request handler
+                let resp = router.ready().await.unwrap().call(req).await.unwrap();
 
-                        // Transform request back to `Request<Bytes>` and attach this node in the extension map.
-                        let (mut parts, body) = resp.into_parts();
-                        let body = to_bytes(body).await.unwrap();
-                        parts.extensions.insert(this_node_id );
-                        let resp = Response::from_parts(parts, body);
-                        let _ = router_resp_tx.send((resp,origin_id,oneshot_tx));
-                    }
-                }
+                // Transform request back to `Request<Bytes>` and attach this node in the extension map.
+                let (mut parts, body) = resp.into_parts();
+                let body = to_bytes(body).await.unwrap();
+                parts.extensions.insert(this_node_id);
+                let resp = Response::from_parts(parts, body);
+                let _ = router_resp_tx.send((resp, origin_id, oneshot_tx));
             }
         });
 
@@ -279,28 +276,44 @@ impl Transport for PeerTransport {
         &self,
         peer_id: &NodeId,
         mut request: Request<Bytes>,
-    ) -> Result<Response<Bytes>, TransportError> {
+    ) -> Result<Response<Bytes>, SendError> {
         if peer_id == &self.node_id {
-            return Err(TransportError::Disconnected {
-                connection_error: "Can't connect to self".to_string(),
-            });
+            panic!("Should not happen");
         }
 
         let (oneshot_tx, oneshot_rx) = oneshot::channel();
         request.extensions_mut().insert(self.node_id);
-        self.router_request_tx
+        if self
+            .router_request_tx
             .send((request, *peer_id, oneshot_tx))
-            .unwrap();
-        Ok(oneshot_rx.await.unwrap())
+            .is_err()
+        {
+            return Err(SendError::SendRequestFailed {
+                reason: String::from("router channel closed"),
+            });
+        }
+        match oneshot_rx.await {
+            Ok(r) => Ok(r),
+            Err(_) => Err(SendError::RecvResponseFailed {
+                reason: "channel closed".to_owned(),
+            }),
+        }
     }
 
-    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), TransportError> {
+    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), SendError> {
         let _ = self.rpc(peer_id, request).await?;
         Ok(())
     }
 
-    fn peers(&self) -> Vec<NodeId> {
-        self.global.peers.read().unwrap().keys().cloned().collect()
+    fn peers(&self) -> Vec<(NodeId, ConnId)> {
+        self.global
+            .peers
+            .read()
+            .unwrap()
+            .iter()
+            .filter(|(&n, _)| n != self.node_id)
+            .map(|(k, _)| (*k, ConnId::from(u64::MAX)))
+            .collect()
     }
 }
 

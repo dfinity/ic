@@ -83,11 +83,9 @@ fn consensus_produces_expected_batches() {
         *router.next_batch_height.write().unwrap() = Height::from(1); // skip genesis block
 
         let router = Arc::new(router);
+        let node_id = node_test_id(0);
         let subnet_id = subnet_test_id(0);
-        let replica_config = ReplicaConfig {
-            node_id: node_test_id(0),
-            subnet_id,
-        };
+        let replica_config = ReplicaConfig { node_id, subnet_id };
         let fake_crypto = CryptoReturningOk::default();
         let fake_crypto = Arc::new(fake_crypto);
         let metrics_registry = MetricsRegistry::new();
@@ -107,15 +105,14 @@ fn consensus_produces_expected_batches() {
             vec![(1, SubnetRecordBuilder::from(&[node_test_id(0)]).build())],
         );
         let summary = dkg::make_genesis_summary(&*registry_client, replica_config.subnet_id, None);
-        let consensus_pool = Arc::new(RwLock::new(
-            consensus_pool::ConsensusPoolImpl::new_from_cup_without_bytes(
-                subnet_id,
-                make_genesis(summary),
-                pool_config.clone(),
-                MetricsRegistry::new(),
-                no_op_logger(),
-            ),
-        ));
+        let consensus_pool = Arc::new(RwLock::new(consensus_pool::ConsensusPoolImpl::new(
+            node_id,
+            subnet_id,
+            (&make_genesis(summary)).into(),
+            pool_config.clone(),
+            MetricsRegistry::new(),
+            no_op_logger(),
+        )));
         let consensus_cache = consensus_pool.read().unwrap().get_cache();
         let membership = Membership::new(
             consensus_cache.clone(),
@@ -184,11 +181,11 @@ fn consensus_produces_expected_batches() {
             no_op_logger(),
             metrics_registry,
         );
-        driver.step(time.as_ref()); // this stops before notary timeout expires after making 1st block
+        driver.step(); // this stops before notary timeout expires after making 1st block
         time.advance_time(Duration::from_millis(2000));
-        driver.step(time.as_ref()); // this stops before notary timeout expires after making 2nd block
+        driver.step(); // this stops before notary timeout expires after making 2nd block
         time.advance_time(Duration::from_millis(2000));
-        driver.step(time.as_ref()); // this stops before notary timeout expires after making 3rd block
+        driver.step(); // this stops before notary timeout expires after making 3rd block
         let batches = router.batches.read().unwrap().clone();
         *router.batches.write().unwrap() = Vec::new();
         assert_eq!(batches.len(), 2);

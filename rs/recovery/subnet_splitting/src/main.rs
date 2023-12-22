@@ -3,13 +3,17 @@ use ic_base_types::SubnetId;
 use ic_recovery::{cli, error::RecoveryResult, util, NeuronArgs, RecoveryArgs};
 use ic_subnet_splitting::{
     subnet_splitting::{SubnetSplitting, SubnetSplittingArgs},
+    utils::canister_id_ranges_to_strings,
     validation::validate_artifacts,
 };
 use ic_types::ReplicaVersion;
-use slog::Logger;
+use slog::{info, warn, Logger};
 use url::Url;
 
 use std::path::PathBuf;
+
+const FORUM_ANNOUNCEMENT_TEMPLATE_URL: &str =
+    "https://wiki.internetcomputer.org/wiki/Subnet_splitting_forum_announcement_template";
 
 #[derive(Parser)]
 struct SplitArgs {
@@ -38,6 +42,10 @@ struct SplitArgs {
     /// Flag to enter test mode
     #[clap(long)]
     test: bool,
+
+    /// Flag to make the tool non interactive. No input from the user is requested.
+    #[clap(long)]
+    pub skip_prompts: bool,
 
     #[clap(flatten)]
     subnet_splitting_args: SubnetSplittingArgs,
@@ -91,7 +99,29 @@ fn subnet_splitting(
     mut neuron_args: Option<NeuronArgs>,
 ) {
     cli::print_step(&logger, "Subnet Splitting");
+
+    info!(
+        logger,
+        "Splitting canisters within ranges {:?} out of subnet with id {} \
+        into subnet with id {}",
+        canister_id_ranges_to_strings(&subnet_splitting_args.canister_id_ranges_to_move),
+        subnet_splitting_args.source_subnet_id,
+        subnet_splitting_args.destination_subnet_id
+    );
+    warn!(
+        logger,
+        "Don't forget to announce at the forum the upcoming series of proposals to split the subnet"
+    );
+    warn!(
+        logger,
+        "See the template at: {}", FORUM_ANNOUNCEMENT_TEMPLATE_URL
+    );
+
     cli::wait_for_confirmation(&logger);
+
+    if !recovery_args.skip_prompts {
+        cli::wait_for_confirmation(&logger);
+    }
 
     if neuron_args.is_none() && !recovery_args.test_mode {
         neuron_args = Some(cli::read_neuron_args(&logger));
@@ -99,13 +129,12 @@ fn subnet_splitting(
 
     let subnet_splitting = SubnetSplitting::new(
         logger.clone(),
-        recovery_args,
+        recovery_args.clone(),
         neuron_args,
         subnet_splitting_args,
-        /*interactive=*/ true,
     );
 
-    cli::execute_steps(&logger, subnet_splitting);
+    cli::execute_steps(&logger, recovery_args.skip_prompts, subnet_splitting);
 }
 
 fn do_split(args: SplitArgs, logger: Logger) -> RecoveryResult<()> {
@@ -115,6 +144,7 @@ fn do_split(args: SplitArgs, logger: Logger) -> RecoveryResult<()> {
         replica_version: args.replica_version,
         key_file: args.key_file,
         test_mode: args.test,
+        skip_prompts: args.skip_prompts,
     };
 
     let subnet_splitting_state =

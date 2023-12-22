@@ -1,6 +1,8 @@
 use crate::{
     common::LOG_PREFIX,
     invariants::{
+        api_boundary_node::check_api_boundary_node_invariants,
+        assignment::check_node_assignment_invariants,
         common::RegistrySnapshot,
         crypto::check_node_crypto_keys_invariants,
         endpoint::check_endpoint_invariants,
@@ -73,6 +75,9 @@ impl Registry {
         // Crypto invariants
         result = result.and(check_node_crypto_keys_invariants(&snapshot));
 
+        // Node assignment invariants
+        result = result.and(check_node_assignment_invariants(&snapshot));
+
         // Routing Table invariants
         result = result.and(check_routing_table_invariants(&snapshot));
 
@@ -84,6 +89,9 @@ impl Registry {
 
         // Replica version invariants
         result = result.and(check_replica_version_invariants(&snapshot));
+
+        // API Boundary Node invariant
+        result = result.and(check_api_boundary_node_invariants(&snapshot));
 
         // HostOS version invariants
         result = result.and(check_hostos_version_invariants(&snapshot));
@@ -112,7 +120,7 @@ impl Registry {
         let mut snapshot = self.take_latest_snapshot();
         for mutation in mutations.iter() {
             let key = &mutation.key;
-            match Type::from_i32(mutation.mutation_type).unwrap() {
+            match Type::try_from(mutation.mutation_type).unwrap() {
                 Type::Insert | Type::Update | Type::Upsert => {
                     snapshot.insert(key.to_vec(), mutation.value.clone());
                 }

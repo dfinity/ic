@@ -11,10 +11,13 @@ function install_hostos() {
 
     target_drive=$(find_first_drive)
 
-    size=$(tar --list -v -f /data/host-os.img.tar.gz disk.img | cut -d ' ' -f 3)
+    TMPDIR=$(mktemp -d)
+    tar xafS /data/host-os.img.tar.zst -C "${TMPDIR}" disk.img
+
+    size=$(wc -c <"${TMPDIR}/disk.img")
     size="${size:=0}"
 
-    tar xzOf /data/host-os.img.tar.gz disk.img | pv -f -s "$size" | dd of="/dev/${target_drive}" bs=10M
+    pv -f -s "$size" "${TMPDIR}/disk.img" | dd of="/dev/${target_drive}" bs=10M conv=sparse
     log_and_reboot_on_error "${?}" "Unable to install HostOS disk-image on drive: /dev/${target_drive}"
 
     sync
@@ -76,14 +79,14 @@ function resize_partition() {
     log_and_reboot_on_error "${?}" "Unable scan logical volumes."
 
     # Add additional PVs to VG
-    count=0
+    count=1
     large_drives=($(lsblk -nld -o NAME,SIZE | grep 'T$' | grep -o '^\S*'))
     for drive in $(echo ${large_drives[@]}); do
-        count=$((count + 1))
         # Avoid adding PV of main disk
         if [ "/dev/${drive}" == "/dev/${target_drive}" ]; then
             continue
         fi
+        count=$((count + 1))
 
         vgextend hostlvm "/dev/${drive}"
         log_and_reboot_on_error "${?}" "Unable to include PV '/dev/${drive}' in VG."

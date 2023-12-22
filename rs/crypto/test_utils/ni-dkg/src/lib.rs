@@ -1,6 +1,9 @@
 //! Utilities for non-interactive Distributed Key Generation (NI-DKG), and
 //! for testing distributed key generation and threshold signing.
 
+use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
+    ni_dkg_groth20_bls12_381, CspNiDkgDealing, CspNiDkgTranscript,
+};
 use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_temp_crypto::CryptoComponentRng;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent, TempCryptoComponentGeneric};
@@ -9,9 +12,12 @@ use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::consensus::get_faults_tolerated;
-use ic_types::crypto::threshold_sig::ni_dkg::config::{NiDkgConfig, NiDkgConfigData};
+use ic_types::crypto::threshold_sig::ni_dkg::config::{
+    NiDkgConfig, NiDkgConfigData, NiDkgThreshold,
+};
 use ic_types::crypto::threshold_sig::ni_dkg::{
-    NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet, NiDkgTranscript,
+    NiDkgDealing, NiDkgId, NiDkgReceivers, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
+    NiDkgTranscript,
 };
 use ic_types::crypto::{KeyPurpose, Signable, ThresholdSigShareOf};
 use ic_types::{Height, NodeId, NumberOfNodes, PrincipalId, RegistryVersion, SubnetId};
@@ -26,7 +32,9 @@ use std::sync::Arc;
 
 mod initial_config;
 
-pub use initial_config::{initial_dkg_transcript, InitialNiDkgConfig};
+pub use initial_config::{
+    initial_dkg_transcript, initial_dkg_transcript_and_master_key, sign_message, InitialNiDkgConfig,
+};
 
 pub fn create_transcript<R: CryptoComponentRng>(
     ni_dkg_config: &NiDkgConfig,
@@ -176,6 +184,134 @@ pub fn sign_threshold_for_each<H: Signable, R: CryptoComponentRng>(
             (*signer, sig_share)
         })
         .collect()
+}
+
+pub fn dummy_transcript_for_tests_with_params(
+    committee: Vec<NodeId>,
+    dkg_tag: NiDkgTag,
+    threshold: u32,
+    registry_version: u64,
+) -> NiDkgTranscript {
+    // The functionality in this function, and the one in `dummy_transcript_for_tests` below, are
+    // copied from the `impl NiDkgTranscript` block in `ic_types::crypto::threshold_sig::ni_dkg`.
+    // The reasons for not being able to reuse the code are:
+    // - The functions/methods should not be available to production code, i.e., they should either
+    //   have a `#[cfg(test)]` annotation, or be in a `test-utils` crate.
+    // - We can annotate the method in the `ic-types` crate with `#[cfg(test)]`, since it is only
+    //   used for tests within that crate.
+    // - We cannot use the functions in this `ic-crypto-test-utils-ni-dkg` crate from the `ic-types`
+    //   crate even just for tests, due to the quasi-circular dependency that it would introduce.
+    // Since the code is not very complex and a dozen lines, duplicating it is not a big issue.
+    use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
+    NiDkgTranscript {
+        dkg_id: NiDkgId {
+            start_block_height: Height::from(0),
+            dealer_subnet: SubnetId::from(PrincipalId::new_subnet_test_id(0)),
+            dkg_tag,
+            target_subnet: NiDkgTargetSubnet::Local,
+        },
+        threshold: NiDkgThreshold::new(crate::NumberOfNodes::new(threshold))
+            .expect("Couldn't create a non-interactive DKG threshold."),
+        committee: NiDkgReceivers::new(committee.into_iter().collect())
+            .expect("Couldn't create non-interactive DKG committee"),
+        registry_version: RegistryVersion::from(registry_version),
+        internal_csp_transcript: CspNiDkgTranscript::Groth20_Bls12_381(
+            ni_dkg_groth20_bls12_381::Transcript {
+                public_coefficients: ni_dkg_groth20_bls12_381::PublicCoefficientsBytes {
+                    // the following public key matches the one used in StateMachine tests
+                    coefficients: vec![PublicKeyBytes(hex::decode("adf65638a53056b2222c91bb2457b0274bca95198a5acbdadfe7fd72178f069bdea8d99e9479d8087a2686fc81bf3c4b11fe275570d481f1698f79d468afe0e57acc1e298f8b69798da7a891bbec197093ec5f475909923d48bfed6843dbed1f").unwrap().try_into().unwrap())],
+                },
+                receiver_data: BTreeMap::new(),
+            },
+        ),
+    }
+}
+pub fn dummy_transcript_for_tests() -> NiDkgTranscript {
+    dummy_transcript_for_tests_with_params(
+        vec![NodeId::from(PrincipalId::new_node_test_id(0))],
+        NiDkgTag::LowThreshold,
+        1,
+        0,
+    )
+}
+
+pub fn ni_dkg_csp_dealing(seed: u8) -> CspNiDkgDealing {
+    use ni_dkg_groth20_bls12_381 as scheme;
+    fn fr(seed: u8) -> scheme::FrBytes {
+        scheme::FrBytes([seed; scheme::FrBytes::SIZE])
+    }
+    fn g1(seed: u8) -> scheme::G1Bytes {
+        scheme::G1Bytes([seed; scheme::G1Bytes::SIZE])
+    }
+    fn g2(seed: u8) -> scheme::G2Bytes {
+        scheme::G2Bytes([seed; scheme::G2Bytes::SIZE])
+    }
+    const NUM_RECEIVERS: usize = 1;
+    CspNiDkgDealing::Groth20_Bls12_381(scheme::Dealing {
+        public_coefficients: scheme::PublicCoefficientsBytes {
+            coefficients: Vec::new(),
+        },
+        ciphertexts: scheme::EncryptedShares {
+            rand_r: [g1(seed); scheme::NUM_CHUNKS],
+            rand_s: [g1(seed); scheme::NUM_CHUNKS],
+            rand_z: [g2(seed); scheme::NUM_CHUNKS],
+            ciphertext_chunks: (0..NUM_RECEIVERS)
+                .map(|i| [g1(seed ^ (i as u8)); scheme::NUM_CHUNKS])
+                .collect(),
+        },
+        zk_proof_decryptability: ni_dkg_groth20_bls12_381::ZKProofDec {
+            // TODO(CRP-530): Populate this when it has been defined in the spec.
+            first_move_y0: g1(seed),
+            first_move_b: [g1(seed); scheme::NUM_ZK_REPETITIONS],
+            first_move_c: [g1(seed); scheme::NUM_ZK_REPETITIONS],
+            second_move_d: (0..NUM_RECEIVERS + 1)
+                .map(|i| g1(seed ^ (i as u8)))
+                .collect(),
+            second_move_y: g1(seed),
+            response_z_r: (0..NUM_RECEIVERS).map(|i| fr(seed | (i as u8))).collect(),
+            response_z_s: [fr(seed); scheme::NUM_ZK_REPETITIONS],
+            response_z_b: fr(seed),
+        },
+        zk_proof_correct_sharing: ni_dkg_groth20_bls12_381::ZKProofShare {
+            first_move_f: g1(seed),
+            first_move_a: g2(seed),
+            first_move_y: g1(seed),
+            response_z_r: fr(seed),
+            response_z_a: fr(seed),
+        },
+    })
+}
+
+pub fn empty_ni_dkg_transcripts_with_committee(
+    committee: Vec<NodeId>,
+    registry_version: u64,
+) -> BTreeMap<NiDkgTag, NiDkgTranscript> {
+    vec![
+        (
+            NiDkgTag::LowThreshold,
+            dummy_transcript_for_tests_with_params(
+                committee.clone(),
+                NiDkgTag::LowThreshold,
+                NiDkgTag::LowThreshold.threshold_for_subnet_of_size(committee.len()) as u32,
+                registry_version,
+            ),
+        ),
+        (
+            NiDkgTag::HighThreshold,
+            dummy_transcript_for_tests_with_params(
+                committee.clone(),
+                NiDkgTag::HighThreshold,
+                NiDkgTag::HighThreshold.threshold_for_subnet_of_size(committee.len()) as u32,
+                registry_version,
+            ),
+        ),
+    ]
+    .into_iter()
+    .collect()
+}
+
+pub fn empty_ni_dkg_transcripts() -> BTreeMap<NiDkgTag, NiDkgTranscript> {
+    empty_ni_dkg_transcripts_with_committee(vec![NodeId::from(PrincipalId::new_node_test_id(0))], 0)
 }
 
 pub struct RandomNiDkgConfigBuilder {
@@ -557,23 +693,52 @@ pub struct NiDkgTestEnvironment {
     pub crypto_components: BTreeMap<NodeId, TempCryptoComponentGeneric<ChaCha20Rng>>,
     pub registry_data: Arc<ProtoRegistryDataProvider>,
     pub registry: Arc<FakeRegistryClient>,
+    use_remote_vault: bool,
 }
 
 impl NiDkgTestEnvironment {
     /// Creates a new empty test environment.
+    /// The crypto components are initialized with local vaults.
     pub fn new() -> Self {
+        Self::new_impl(false)
+    }
+
+    pub fn new_with_remote_vault() -> Self {
+        Self::new_impl(true)
+    }
+
+    fn new_impl(use_remote_vault: bool) -> Self {
         let registry_data = Arc::new(ProtoRegistryDataProvider::new());
         let registry = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
         Self {
             crypto_components: BTreeMap::new(),
             registry_data,
             registry,
+            use_remote_vault,
         }
     }
 
     /// Creates a new test environment appropriate for the given config.
+    /// The crypto components are initialized with local vaults.
     pub fn new_for_config<R: Rng + CryptoRng>(config: &NiDkgConfig, rng: &mut R) -> Self {
-        let mut env = Self::new();
+        Self::new_for_config_impl(config, false, rng)
+    }
+
+    /// Creates a new test environment appropriate for the given config.
+    /// The crypto components are initialized with remote vaults.
+    pub fn new_for_config_with_remote_vault<R: Rng + CryptoRng>(
+        config: &NiDkgConfig,
+        rng: &mut R,
+    ) -> Self {
+        Self::new_for_config_impl(config, true, rng)
+    }
+
+    fn new_for_config_impl<R: Rng + CryptoRng>(
+        config: &NiDkgConfig,
+        use_remote_vault: bool,
+        rng: &mut R,
+    ) -> Self {
+        let mut env = Self::new_impl(use_remote_vault);
         env.update_for_config(config, rng);
         env
     }
@@ -592,7 +757,12 @@ impl NiDkgTestEnvironment {
     ) {
         let new_node_ids = self.added_nodes(ni_dkg_config);
         for node_id in new_node_ids {
-            self.add_crypto_component_and_registry_entry(ni_dkg_config, node_id, rng);
+            self.add_crypto_component_and_registry_entry(
+                ni_dkg_config,
+                node_id,
+                self.use_remote_vault,
+                rng,
+            );
         }
         self.registry.update_to_latest_version();
         self.cleanup_unused_nodes(ni_dkg_config);
@@ -612,10 +782,31 @@ impl NiDkgTestEnvironment {
     }
 
     /// Deserializes a new `NiDkgTestEnvironment` from disk.
+    /// The crypto components are initialized with local vaults.
     ///
     /// Note that this only works if the environment was originally serialized
     /// using `save_to_dir`.
     pub fn new_from_dir<R: Rng + CryptoRng>(toplevel_path: &Path, rng: &mut R) -> Self {
+        Self::new_from_dir_impl(toplevel_path, false, rng)
+    }
+
+    /// Deserializes a new `NiDkgTestEnvironment` from disk.
+    /// The crypto components are initialized with remote vaults.
+    ///
+    /// Note that this only works if the environment was originally serialized
+    /// using `save_to_dir`.
+    pub fn new_from_dir_with_remote_vault<R: Rng + CryptoRng>(
+        toplevel_path: &Path,
+        rng: &mut R,
+    ) -> Self {
+        Self::new_from_dir_impl(toplevel_path, true, rng)
+    }
+
+    fn new_from_dir_impl<R: Rng + CryptoRng>(
+        toplevel_path: &Path,
+        use_remote_vault: bool,
+        rng: &mut R,
+    ) -> Self {
         fn node_ids_from_dir_names(toplevel_path: &Path) -> BTreeMap<NodeId, PathBuf> {
             std::fs::read_dir(toplevel_path)
                 .expect("crypto_root directory doesn't exist")
@@ -642,14 +833,20 @@ impl NiDkgTestEnvironment {
             crypto_components: BTreeMap::new(),
             registry_data,
             registry,
+            use_remote_vault,
         };
         for (node_id, crypto_root) in node_ids_from_dir_names(toplevel_path) {
-            let crypto_component = TempCryptoComponent::builder()
+            let crypto_component_builder = TempCryptoComponent::builder()
                 .with_temp_dir_source(crypto_root)
                 .with_registry(Arc::clone(&ret.registry) as Arc<_>)
                 .with_node_id(node_id)
-                .with_rng(ChaCha20Rng::from_seed(rng.gen()))
-                .build();
+                .with_rng(ChaCha20Rng::from_seed(rng.gen()));
+            let crypto_component_builder = if use_remote_vault {
+                crypto_component_builder.with_remote_vault()
+            } else {
+                crypto_component_builder
+            };
+            let crypto_component = crypto_component_builder.build();
             ret.crypto_components.insert(node_id, crypto_component);
         }
 
@@ -671,15 +868,21 @@ impl NiDkgTestEnvironment {
         &mut self,
         ni_dkg_config: &NiDkgConfig,
         node_id: NodeId,
+        use_remote_vault: bool,
         rng: &mut R,
     ) {
         // Insert TempCryptoComponent
-        let temp_crypto = TempCryptoComponent::builder()
+        let temp_crypto_builder = TempCryptoComponent::builder()
             .with_registry(Arc::clone(&self.registry) as Arc<_>)
             .with_node_id(node_id)
             .with_keys(NodeKeysToGenerate::only_dkg_dealing_encryption_key())
-            .with_rng(ChaCha20Rng::from_seed(rng.gen()))
-            .build();
+            .with_rng(ChaCha20Rng::from_seed(rng.gen()));
+        let temp_crypto_builder = if use_remote_vault {
+            temp_crypto_builder.with_remote_vault()
+        } else {
+            temp_crypto_builder
+        };
+        let temp_crypto = temp_crypto_builder.build();
         let dkg_dealing_encryption_pubkey = temp_crypto
             .current_node_public_keys()
             .expect("Failed to retrieve node public keys")

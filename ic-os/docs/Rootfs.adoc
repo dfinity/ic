@@ -115,7 +115,7 @@ data might leak to it). This is facilitated in the following way:
   serves as a template defining initial structure of /var).
 
 * The unit file triggering this script is dynamically generated through
-  +/etc/systemd/system-generators/mount-generator+: The generater will
+  +/etc/systemd/system-generators/mount-generator+: The generator will
   check which partition is the correct one to use and synthesize a proper
   unit file.
 
@@ -135,11 +135,11 @@ customization of the installation using node-specific information. This includes
 For all of the above, the system expects a file +ic-bootstrap.tar+ supplied on a removable storage medium (e.g.
 a USB stick or an optical medium).
 
-==== Journalbeat configuration
+==== Filebeat configuration
 
-The Journalbeat configuration is performed using a file +journalbeat.conf+ in
+The Filebeat configuration is performed using a file +filebeat.conf+ in
 the bootstrap tarball. It must contain lines of "key=value= statements,
 with the following keys supported:
 
-* journalbeat_hosts:    space-separated list of logging hosts
-* journalbeat_tags:     space-separated list of tags
+* elasticsearch_hosts:    space-separated list of logging hosts
+* elasticsearch_tags:     space-separated list of tags

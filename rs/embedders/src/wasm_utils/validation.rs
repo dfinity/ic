@@ -1,26 +1,25 @@
 //! This module is responsible for validating the wasm binaries that are
 //! installed on the Internet Computer.
 
-use super::{wasm_transform::Body, Complexity, WasmImportsDetails, WasmValidationDetails};
+use super::{Complexity, WasmImportsDetails, WasmValidationDetails};
 
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_replicated_state::canister_state::execution_state::{
     CustomSection, CustomSectionType, WasmMetadata,
 };
-use ic_types::{NumBytes, NumInstructions};
+use ic_types::{NumBytes, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES};
+use ic_wasm_transform::{Body, DataSegment, DataSegmentKind, Module};
 use ic_wasm_types::{BinaryEncodedWasm, WasmValidationError};
 use std::{
     cmp,
     collections::{BTreeMap, HashMap, HashSet},
 };
-use wasmtime::Config;
 
 use crate::wasm_utils::instrumentation::{
     ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
 };
-use crate::{
-    wasm_utils::wasm_transform::{DataSegment, DataSegmentKind, Module},
-    wasmtime_embedder::{STABLE_BYTEMAP_MEMORY_NAME, STABLE_MEMORY_NAME, WASM_HEAP_MEMORY_NAME},
+use crate::wasmtime_embedder::{
+    STABLE_BYTEMAP_MEMORY_NAME, STABLE_MEMORY_NAME, WASM_HEAP_MEMORY_NAME,
 };
 use wasmparser::{ExternalKind, FuncType, Operator, StructuralType, TypeRef, ValType};
 
@@ -35,9 +34,9 @@ pub const RESERVED_SYMBOLS: [&str; 6] = [
     STABLE_BYTEMAP_MEMORY_NAME,
 ];
 
-const WASM_FUNCTION_COMPLEXITY_LIMIT: Complexity = Complexity(15_000);
+const WASM_FUNCTION_COMPLEXITY_LIMIT: Complexity = Complexity(1_000_000);
 const WASM_FUNCTION_SIZE_LIMIT: usize = 1_000_000;
-const MAX_CODE_SECTION_SIZE_IN_BYTES: u32 = 10 * 1024 * 1024;
+pub const MAX_CODE_SECTION_SIZE_IN_BYTES: u32 = 10 * 1024 * 1024;
 
 // Represents the expected function signature for any System APIs the Internet
 // Computer provides or any special exported user functions.
@@ -770,6 +769,36 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 },
             )],
         ),
+        (
+            "in_replicated_execution",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: vec![ValType::I32],
+                },
+            )],
+        ),
+        (
+            "cycles_burn128",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64, ValType::I64, ValType::I32],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "cycles_burn128_64",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64, ValType::I64, ValType::I64],
+                    return_type: vec![],
+                },
+            )],
+        ),
     ];
 
     valid_system_apis
@@ -1008,7 +1037,7 @@ fn validate_export_section(
 
         let mut seen_funcs: HashSet<&str> = HashSet::new();
         let valid_exported_functions = get_valid_exported_functions();
-        let valid_system_functions = vec![
+        let valid_system_functions = [
             "canister_init",
             "canister_pre_upgrade",
             "canister_post_upgrade",
@@ -1138,13 +1167,25 @@ fn validate_data_section(module: &Module) -> Result<(), WasmValidationError> {
     Ok(())
 }
 
-// Checks that no more than `max_globals` are defined in the module.
+// Checks that no more than `max_globals` are defined in the module
+// and all globals have supported type.
 fn validate_global_section(module: &Module, max_globals: usize) -> Result<(), WasmValidationError> {
     if module.globals.len() > max_globals {
         return Err(WasmValidationError::TooManyGlobals {
             defined: module.globals.len(),
             allowed: max_globals,
         });
+    }
+    for global in &module.globals {
+        match global.ty.content_type {
+            ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 => (),
+            _ => {
+                return Err(WasmValidationError::InvalidGlobalSection(format!(
+                    "Unsupported global type: {:?}",
+                    global.ty.content_type
+                )))
+            }
+        }
     }
     Ok(())
 }
@@ -1305,7 +1346,7 @@ fn validate_custom_section(
     Ok(WasmMetadata::new(validated_custom_sections))
 }
 
-fn new_wasm_function_complexity(body: &Body<'_>) -> Complexity {
+fn wasm_function_complexity(body: &Body<'_>) -> Complexity {
     use Operator::*;
 
     let complexity = body
@@ -1319,11 +1360,15 @@ fn new_wasm_function_complexity(body: &Body<'_>) -> Complexity {
             | BrIf { .. }
             | BrTable { .. }
             | Call { .. }
-            | CallIndirect { .. } => 50,
-            TableGet { .. } => 12,
+            | CallIndirect { .. }
+            // `MemoryGrow` and `TableGrow` add `Call` instructions after
+            // instrumentation.
+            | MemoryGrow { .. }
+            | TableGrow { .. } => 50,
+            TableGet { .. } => 14,
             RefFunc { .. } => 8,
             TableSet { .. } => 7,
-            TableGrow { .. } => 6,
+            RefIsNull => 6,
             TableFill { .. }
             | I32TruncF32S
             | I32TruncF32U
@@ -1350,9 +1395,7 @@ fn new_wasm_function_complexity(body: &Body<'_>) -> Complexity {
             | F64Abs
             | TableCopy { .. }
             | TableInit { .. }
-            | MemoryCopy { .. }
-            | MemoryGrow { .. }
-            | RefIsNull => 4,
+            | MemoryCopy { .. } => 4,
             F32Copysign
             | F64Copysign
             | F64Eq
@@ -1459,27 +1502,6 @@ fn new_wasm_function_complexity(body: &Body<'_>) -> Complexity {
     Complexity(complexity)
 }
 
-fn wasm_function_complexity(body: &Body<'_>) -> Complexity {
-    let complexity = body
-        .instructions
-        .iter()
-        .filter(|instruction| {
-            matches!(
-                instruction,
-                Operator::Block { .. }
-                    | Operator::Loop { .. }
-                    | Operator::If { .. }
-                    | Operator::Br { .. }
-                    | Operator::BrIf { .. }
-                    | Operator::BrTable { .. }
-                    | Operator::Call { .. }
-                    | Operator::CallIndirect { .. }
-            )
-        })
-        .count() as u64;
-    Complexity(complexity)
-}
-
 fn validate_code_section(
     module: &Module,
 ) -> Result<(NumInstructions, Complexity), WasmValidationError> {
@@ -1489,7 +1511,6 @@ fn validate_code_section(
     for (index, func_body) in module.code_sections.iter().enumerate() {
         let size = func_body.instructions.len();
         let complexity = wasm_function_complexity(func_body);
-        let new_complexity = new_wasm_function_complexity(func_body);
         if complexity > WASM_FUNCTION_COMPLEXITY_LIMIT {
             return Err(WasmValidationError::FunctionComplexityTooHigh {
                 index,
@@ -1497,7 +1518,7 @@ fn validate_code_section(
                 allowed: WASM_FUNCTION_COMPLEXITY_LIMIT.0 as usize,
             });
         } else {
-            max_complexity = cmp::max(max_complexity, new_complexity);
+            max_complexity = cmp::max(max_complexity, complexity);
         }
 
         if size > WASM_FUNCTION_SIZE_LIMIT {
@@ -1513,19 +1534,62 @@ fn validate_code_section(
     Ok((max_function_size, max_complexity))
 }
 
-/// Sets Wasmtime flags to ensure deterministic execution.
-pub fn ensure_determinism(config: &mut Config) {
+/// Returns a Wasmtime config that is used for Wasm validation.
+pub fn wasmtime_validation_config(embedder_config: &EmbeddersConfig) -> wasmtime::Config {
+    let mut config = wasmtime::Config::default();
+
+    // Keep this in the alphabetical order to simplify comparison with new
+    // `wasmtime::Config` methods in a new version of wasmtime.
+
+    // NaN canonicalization is needed for determinism.
+    config.cranelift_nan_canonicalization(true);
+    // Disable optimizations to keep compilation simple and fast.
+    // The assumption is that Wasm binaries have already been optimized.
+    config.cranelift_opt_level(wasmtime::OptLevel::None);
+    // Disabling the address map saves about 20% of compile code size.
+    config.generate_address_map(false);
+    // The signal handler uses Posix signals, not Mach ports on MacOS.
+    config.macos_use_mach_ports(false);
+    config.wasm_backtrace(false);
+    config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Disable);
+    config.wasm_bulk_memory(true);
+    config.wasm_function_references(false);
+    // Wasm memory64 and multi-memory features are disabled during validation,
+    // but enabled during execution for the Wasm-native stable memory
+    // implementation.
+    config.wasm_memory64(false);
+    config.wasm_multi_memory(false);
+    config.wasm_reference_types(true);
+    // The SIMD instructions are disable for determinism.
+    config.wasm_relaxed_simd(false);
+    config.wasm_simd(false);
+    // Tail calls may be enabled in the future.
+    config.wasm_tail_call(false);
+    // Threads are disabled for determinism.
+    config.wasm_threads(false);
+
     config
-        .wasm_threads(false)
-        .wasm_simd(false)
-        .cranelift_nan_canonicalization(true);
+        // The maximum size in bytes where a linear memory is considered
+        // static. Setting this to maximum Wasm memory size will guarantee
+        // the memory is always static.
+        //
+        // If there is a change in the size of the largest memories we
+        // expect to see then the changes will likely need to be coordinated
+        // with a change in how we create the memories in the implementation
+        // of `wasmtime::MemoryCreator`.
+        .static_memory_maximum_size(MAX_STABLE_MEMORY_IN_BYTES)
+        .max_wasm_stack(embedder_config.max_wasm_stack_size);
+    config
 }
 
-fn can_compile(wasm: &BinaryEncodedWasm) -> Result<(), WasmValidationError> {
-    let mut config = wasmtime::Config::default();
-    ensure_determinism(&mut config);
+fn can_compile(
+    wasm: &BinaryEncodedWasm,
+    embedder_config: &EmbeddersConfig,
+) -> Result<(), WasmValidationError> {
+    let mut config = wasmtime_validation_config(embedder_config);
     // Support 64-bit main memory.
     config.wasm_memory64(true);
+
     let engine = wasmtime::Engine::new(&config).map_err(|_| {
         WasmValidationError::WasmtimeValidation(String::from("Failed to initialize Wasm engine"))
     })?;
@@ -1581,7 +1645,7 @@ pub(super) fn validate_wasm_binary<'a>(
     config: &EmbeddersConfig,
 ) -> Result<(WasmValidationDetails, Module<'a>), WasmValidationError> {
     check_code_section_size(wasm)?;
-    can_compile(wasm)?;
+    can_compile(wasm, config)?;
     let module = Module::parse(wasm.as_slice(), false)
         .map_err(|err| WasmValidationError::DecodingError(format!("{}", err)))?;
     let imports_details = validate_import_section(&module)?;

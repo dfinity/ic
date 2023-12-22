@@ -4,9 +4,8 @@ use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
 use ic_interfaces::{
-    artifact_pool::{MutablePool, UnvalidatedArtifact},
-    consensus_pool::{ChangeAction, ChangeSet},
-    time_source::SysTimeSource,
+    consensus_pool::{ChangeAction, ChangeSet, ValidatedConsensusArtifact},
+    p2p::consensus::{MutablePool, UnvalidatedArtifact},
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
@@ -17,6 +16,7 @@ use ic_types::{
         BlockProposal, CatchUpPackage, ConsensusMessageHashable, Finalization, HasHeight,
         Notarization, RandomBeacon, RandomTape,
     },
+    time::UNIX_EPOCH,
     Height, RegistryVersion, SubnetId,
 };
 use prost::Message;
@@ -82,15 +82,18 @@ pub(crate) enum ExitPoint {
 
 /// Deserialize the CUP at the given height and inserts it into the pool.
 pub(crate) fn insert_cup_at_height(
-    pool: &mut dyn MutablePool<ConsensusArtifact, ChangeSet>,
+    pool: &mut dyn MutablePool<ConsensusArtifact, ChangeSet = ChangeSet>,
     backup_dir: &Path,
     height: Height,
 ) -> Result<(), ReplayError> {
     let file = &cup_file_name(backup_dir, height);
     if let Some(cup) = read_cup_file(file) {
         pool.apply_changes(
-            &SysTimeSource::new(),
-            ChangeAction::AddToValidated(cup.into_message()).into(),
+            ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+                msg: cup.into_message(),
+                timestamp: UNIX_EPOCH,
+            })
+            .into(),
         );
         Ok(())
     } else {
@@ -98,15 +101,26 @@ pub(crate) fn insert_cup_at_height(
     }
 }
 
-/// Deserializes the CUP file and returns it.
-pub(crate) fn read_cup_file(file: &Path) -> Option<CatchUpPackage> {
+pub(crate) fn read_cup_proto_file(file: &Path) -> Option<pb::CatchUpPackage> {
     let buffer = read_file(file);
 
-    let Ok(protobuf) = pb::CatchUpPackage::decode(buffer.as_slice()) else {
-        rename_file(file);
-        println!("Protobuf decoding of CUP failed");
-        return None;
-    };
+    match pb::CatchUpPackage::decode(buffer.as_slice()) {
+        Ok(proto) => Some(proto),
+        Err(err) => {
+            rename_file(file);
+            println!(
+                "Protobuf decoding of CUP at {} failed: {:?}",
+                file.display(),
+                err
+            );
+            None
+        }
+    }
+}
+
+/// Deserializes the CUP file and returns it.
+pub(crate) fn read_cup_file(file: &Path) -> Option<CatchUpPackage> {
+    let protobuf = read_cup_proto_file(file)?;
 
     match CatchUpPackage::try_from(&protobuf) {
         Ok(cup) => Some(cup),
@@ -308,14 +322,8 @@ pub(crate) fn deserialize_consensus_artifacts(
             }
         }
 
-        // Insert block proposals.
-        for file_name in height_artifacts
-            .proposals
-            .iter()
-            // If there was a finalization, insert only the finalized proposal.
-            // Otherwise, insert all.
-            .filter(|name| name.contains(finalized_block_hash.unwrap_or("")))
-        {
+        // Insert the finalized block proposal.
+        if let Some(file_name) = height_artifacts.proposals.first() {
             let file = path.join(file_name);
             let proposal = read_artifact_if_correct_height::<BlockProposal, pb::BlockProposal>(
                 &file,
@@ -381,8 +389,8 @@ pub(crate) fn deserialize_consensus_artifacts(
         )?;
         artifacts.push(rt.into_message());
 
-        // Insert the notarizations.
-        for file_name in &height_artifacts.notarizations {
+        // Insert the finalized notarization.
+        for file_name in &height_artifacts.notarizations.first() {
             let file = path.join(file_name);
             let not = read_artifact_if_correct_height::<Notarization, pb::Notarization>(
                 &file,

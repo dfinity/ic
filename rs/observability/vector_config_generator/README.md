@@ -50,7 +50,7 @@ The metrics are:
   update latency
 - `discovery_registries_update_latency_seconds_count` (Counter): Number of
   registry update latency events
-- `metrics_endpoint_tcp_connections_total` (Counter): Numver of connections done
+- `metrics_endpoint_tcp_connections_total` (Counter): Number of connections done
   to the metrics endpoint
 
 ## Safe shutdown

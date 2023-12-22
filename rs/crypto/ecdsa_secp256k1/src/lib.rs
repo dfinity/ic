@@ -53,7 +53,7 @@ format instead of PKCS #8.
 
 If the RFC 5915 block is destined to be included in a PKCS #8 encoding,
 then we omit the curve parameter, as the curve is instead specified in
-the PKCS #8 privateKeyAlgorithm field. This is controled by the `include_curve`
+the PKCS #8 privateKeyAlgorithm field. This is controlled by the `include_curve`
 parameter.
 
 The public key can be optionally specified in the ECPrivateKey structure;
@@ -316,7 +316,7 @@ impl PrivateKey {
         Some(sig.to_bytes().into())
     }
 
-    /// Return the public key cooresponding to this private key
+    /// Return the public key corresponding to this private key
     pub fn public_key(&self) -> PublicKey {
         let key = self.key.verifying_key();
         PublicKey { key: *key }

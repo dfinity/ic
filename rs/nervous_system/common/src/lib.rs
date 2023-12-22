@@ -1,12 +1,10 @@
 use by_address::ByAddress;
-use candid::{CandidType, Deserialize};
 use core::{
     cmp::Reverse,
     fmt::Debug,
     ops::{Add, AddAssign, Div, Mul, Sub},
 };
-use dfn_core::api::{time_nanos, CanisterId};
-use ic_base_types::PrincipalId;
+use dfn_core::api::time_nanos;
 use ic_canister_log::{export, GlobalBuffer, LogBuffer, LogEntry};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
@@ -14,7 +12,6 @@ use ic_ledger_core::Tokens;
 use maplit::hashmap;
 use priority_queue::priority_queue::PriorityQueue;
 use rust_decimal::Decimal;
-use serde::Serialize;
 use std::{
     collections::HashMap,
     convert::TryInto,
@@ -23,12 +20,11 @@ use std::{
     str::FromStr,
 };
 
+pub mod binary_search;
 pub mod cmc;
 pub mod dfn_core_stable_mem_utils;
 pub mod ledger;
 pub mod memory_manager_upgrade_storage;
-
-pub const BASIS_POINTS_PER_UNITY: u64 = 10_000;
 
 // 10^8
 pub const E8: u64 = 100_000_000;
@@ -120,31 +116,6 @@ impl fmt::Debug for NervousSystemError {
     }
 }
 
-/// Description of a change to the authz of a specific method on a specific
-/// canister that must happen for a given canister change/add/remove
-/// to be viable
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
-pub struct MethodAuthzChange {
-    pub canister: CanisterId,
-    pub method_name: String,
-    pub principal: Option<PrincipalId>,
-    pub operation: AuthzChangeOp,
-}
-
-/// The operation to execute. Variable names in comments refer to the fields
-/// of AuthzChange.
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
-pub enum AuthzChangeOp {
-    /// 'canister' must add a principal to the authorized list of 'method_name'.
-    /// If 'add_self' is true, the canister_id to be authorized is the canister
-    /// being added/changed, if it's false, 'principal' is used instead, which
-    /// must be Some in that case..
-    Authorize { add_self: bool },
-    /// 'canister' must remove 'principal' from the authorized list of
-    /// 'method_name'. 'principal' must always be Some.
-    Deauthorize,
-}
-
 /// A more convenient (but explosive) way to do token math. Not suitable for
 /// production use! Only for use in tests.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -212,7 +183,7 @@ impl ExplosiveTokens {
 
     // This is a bit special and is an interface optimization that serves a
     // common use case: proportional scaling. E.g. Suppose you have two
-    // accounts, one with 100 ICP and aother with 200 ICP. From these two
+    // accounts, one with 100 ICP and another with 200 ICP. From these two
     // sources, you want to raise 30 ICP. If you want the accounts to be used
     // "proportionally", then you'd source 10 ICP from the first account, and 20
     // ICP from the second. To calculate these, you would do
@@ -764,15 +735,38 @@ pub fn total_memory_size_bytes() -> usize {
     0
 }
 
-/// Returns the amount of stable memory that the calling canister has allocated.
+/// Returns the number of stable memory pages that the calling canister has allocated.
 #[cfg(target_arch = "wasm32")]
-pub fn stable_memory_size_bytes() -> usize {
-    dfn_core::api::stable_memory_size_in_pages() as usize * WASM_PAGE_SIZE_BYTES
+pub fn stable_memory_num_pages() -> u64 {
+    dfn_core::stable::stable64_size()
 }
 
 #[cfg(not(any(target_arch = "wasm32")))]
-pub fn stable_memory_size_bytes() -> usize {
+pub fn stable_memory_num_pages() -> u64 {
     0
+}
+
+/// Returns the amount of stable memory that the calling canister has allocated.
+#[cfg(target_arch = "wasm32")]
+pub fn stable_memory_size_bytes() -> u64 {
+    dfn_core::stable::stable64_size() * (WASM_PAGE_SIZE_BYTES as u64)
+}
+
+#[cfg(not(any(target_arch = "wasm32")))]
+pub fn stable_memory_size_bytes() -> u64 {
+    0
+}
+
+// Given 2 numbers `dividend`` and `divisor`, break the dividend to `divisor * quotient + remainder`
+// where `remainder < divisor`, using safe arithmetic. Returns `(quotient, remainder)`.
+fn checked_div_mod(dividend: usize, divisor: usize) -> (usize, usize) {
+    let quotient = dividend
+        .checked_div(divisor)
+        .expect("Failed to calculate quotient");
+    let remainder = dividend
+        .checked_rem(divisor)
+        .expect("Failed to calculate remainder");
+    (quotient, remainder)
 }
 
 #[cfg(test)]

@@ -1,23 +1,27 @@
 [package]
 name = "ic-crypto-internal-tls"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-base64 = "0.11.0"
 ic-crypto-internal-basic-sig-ed25519 = { path = "../basic_sig/ed25519" }
 ic-crypto-secrets-containers = { path = "../../../secrets_containers" }
 ic-types = { path = "../../../../types/types" }
-openssl = "0.10.55"
 rand = "0.8"
-serde = { version = "1.0.99", features = [ "derive" ] }
-serde_bytes = "0.11"
+rcgen = { workspace = true }
+serde = { workspace = true }
+time = "0.3.20"
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 
 [dev-dependencies]
 assert_matches = "1.5.0"
-ic-crypto-test-utils = { path = "../../../test_utils" }
+ic-crypto-node-key-validation = { path = "../../../node_key_validation" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../test_utils/reproducible_rng" }
+ic-protobuf = { path = "../../../../protobuf" }
 rand_chacha = "0.3"
-serde_cbor = "0.11.1"
+serde_cbor = { workspace = true }
 hex = "0.4"
+x509-parser = { version = "0.15.1" }

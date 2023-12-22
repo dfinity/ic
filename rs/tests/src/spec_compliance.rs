@@ -1,6 +1,6 @@
 use crate::canister_http::lib::get_universal_vm_address;
 use crate::driver::boundary_node::{BoundaryNode, BoundaryNodeVm};
-use crate::driver::ic::{InternetComputer, Subnet};
+use crate::driver::ic::{InternetComputer, NrOfVCPUs, Subnet, VmResources};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
     await_boundary_node_healthy, HasDependencies, HasPublicApiUrl, HasTopologySnapshot,
@@ -25,7 +25,7 @@ const EXCLUDED: &[&str] = &[
     // to start with something that is always false
     "(1 == 0)",
     // the replica does not yet check that the effective canister id is valid in all cases
-    "$0 ~ /wrong effective canister id.in mangement call/",
+    "$0 ~ /wrong effective canister id.in management call/",
     "$0 ~ /access denied with different effective canister id/",
     // Recursive calls from queries are now allowed.
     // When composite queries are enabled, we should clean up and re-enable this test
@@ -35,28 +35,19 @@ const EXCLUDED: &[&str] = &[
 pub fn config_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_requests: bool) {
     use crate::driver::test_env_api::{retry, secs};
     use crate::util::block_on;
-    use hyper::client::connect::HttpConnector;
     use hyper::Client;
-    use hyper_tls::HttpsConnector;
+    use hyper_rustls::HttpsConnectorBuilder;
     use std::env;
 
-    if http_requests {
-        env::set_var(
-            "SSL_CERT_FILE",
-            env.get_dependency_path("ic-os/guestos/rootfs/dev-certs/canister_http_test_ca.cert"),
-        );
-        env::remove_var("NIX_SSL_CERT_FILE");
-
-        // Set up Universal VM for httpbin testing service
-        UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
-            .with_config_img(env.get_dependency_path("rs/tests/http_uvm_config_image.zst"))
-            .start(&env)
-            .expect("failed to set up universal VM");
-    }
-
+    let vm_resources = VmResources {
+        vcpus: Some(NrOfVCPUs::new(16)),
+        memory_kibibytes: None,
+        boot_image_minimal_size_gibibytes: None,
+    };
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
+                .with_default_vm_resources(vm_resources)
                 .with_features(SubnetFeatures {
                     http_requests,
                     ..SubnetFeatures::default()
@@ -65,6 +56,7 @@ pub fn config_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_request
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
+                .with_default_vm_resources(vm_resources)
                 .with_features(SubnetFeatures {
                     http_requests,
                     ..SubnetFeatures::default()
@@ -100,13 +92,25 @@ pub fn config_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_request
     });
 
     if http_requests {
+        env::set_var(
+            "SSL_CERT_FILE",
+            env.get_dependency_path("ic-os/guestos/rootfs/dev-certs/canister_http_test_ca.cert"),
+        );
+        env::remove_var("NIX_SSL_CERT_FILE");
+
+        // Set up Universal VM for httpbin testing service
+        UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
+            .with_config_img(env.get_dependency_path("rs/tests/http_uvm_config_image.zst"))
+            .start(&env)
+            .expect("failed to set up universal VM");
         let log = env.logger();
         retry(log.clone(), secs(300), secs(10), || {
             block_on(async {
-                let mut http_connector = HttpConnector::new();
-                http_connector.enforce_http(false);
-                let mut https_connector = HttpsConnector::new_with_connector(http_connector);
-                https_connector.https_only(true);
+                let https_connector = HttpsConnectorBuilder::new()
+                    .with_native_roots()
+                    .https_only()
+                    .enable_http1()
+                    .build();
                 let client = Client::builder().build::<_, hyper::Body>(https_connector);
 
                 let webserver_ipv6 = get_universal_vm_address(&env);
@@ -192,14 +196,18 @@ pub fn test_subnet(
 
 fn subnet_config(subnet: &SubnetSnapshot) -> String {
     format!(
-        "(\"{}\",{},{},[{}],[{}])",
+        "(\"{}\",{},[{}],[{}],[{}])",
         subnet.subnet_id,
         match subnet.subnet_type() {
             SubnetType::VerifiedApplication => "verified_application",
             SubnetType::Application => "application",
             SubnetType::System => "system",
         },
-        REPLICATION_FACTOR,
+        subnet
+            .nodes()
+            .map(|n| format!("\"{}\"", n.node_id))
+            .collect::<Vec<String>>()
+            .join(","),
         subnet
             .subnet_canister_ranges()
             .iter()

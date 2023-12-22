@@ -33,7 +33,7 @@ DEV_DEPENDENCIES = [
     "//rs/registry/routing_table",
     "//rs/registry/subnet_type",
     "//rs/test_utilities",
-    "@crate_index//:mockall_0_7_2",
+    "@crate_index//:mockall",
     "@crate_index//:wat",
 ]
 
@@ -47,7 +47,7 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_canister_sandbox_backend_lib",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 

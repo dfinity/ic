@@ -2,7 +2,10 @@ use std::{
     fs::File,
     net::{IpAddr, SocketAddr},
     path::PathBuf,
-    sync::Arc,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -22,7 +25,8 @@ use chacha20poly1305::{KeyInit, XChaCha20Poly1305};
 use clap::Parser;
 use futures::future::TryFutureExt;
 use ic_agent::{
-    agent::http_transport::ReqwestHttpReplicaV2Transport, identity::Secp256k1Identity, Agent,
+    agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport,
+    identity::Secp256k1Identity, Agent,
 };
 use instant_acme::{Account, AccountCredentials, NewAccount};
 use opentelemetry::{
@@ -54,7 +58,10 @@ use crate::{
     metrics::{MetricParams, WithMetrics},
     registration::{Create, Get, Remove, State, Update, UpdateType},
     verification::CertificateVerifier,
-    work::{Dispense, DispenseError, Peek, PeekError, Process, Queue, WithDetectRenewal},
+    work::{
+        Dispense, DispenseError, Peek, PeekError, Process, Queue, WithDetectImportance,
+        WithDetectRenewal,
+    },
 };
 
 mod acme;
@@ -71,6 +78,9 @@ mod verification;
 mod work;
 
 const SERVICE_NAME: &str = "certificate-issuer";
+
+pub(crate) static TASK_DELAY_SEC: AtomicU64 = AtomicU64::new(60);
+pub(crate) static TASK_ERROR_DELAY_SEC: AtomicU64 = AtomicU64::new(10 * 60);
 
 #[derive(Parser)]
 #[command(name = SERVICE_NAME)]
@@ -110,7 +120,7 @@ struct Cli {
     acme_account_id: Option<String>,
 
     #[arg(long)]
-    acme_account_key: Option<String>,
+    acme_account_key_path: Option<PathBuf>,
 
     #[arg(long, default_value = "https://acme-v02.api.letsencrypt.org")]
     acme_provider_url: String,
@@ -119,13 +129,23 @@ struct Cli {
     cloudflare_api_url: String,
 
     #[arg(long)]
-    cloudflare_api_key: String,
+    cloudflare_api_key_path: PathBuf,
 
     #[arg(long, default_value = "60")]
     peek_sleep_sec: u64,
 
+    /// A set of important domains, to be used in metrics
+    #[arg(long, default_value = "", value_delimiter = ',')]
+    important_domains: Vec<String>,
+
     #[arg(long, default_value = "127.0.0.1:9090")]
     metrics_addr: SocketAddr,
+
+    #[arg(long)]
+    task_delay_sec: Option<u64>,
+
+    #[arg(long)]
+    task_error_delay_sec: Option<u64>,
 }
 
 #[tokio::main]
@@ -153,6 +173,15 @@ async fn main() -> Result<(), Error> {
 
     let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs { registry }));
     let metrics_router = Router::new().route("/metrics", get(metrics_handler));
+
+    // Task delays
+    if let Some(task_delay_sec) = cli.task_delay_sec {
+        TASK_DELAY_SEC.store(task_delay_sec, Ordering::SeqCst);
+    }
+
+    if let Some(task_error_delay_sec) = cli.task_error_delay_sec {
+        TASK_ERROR_DELAY_SEC.store(task_error_delay_sec, Ordering::SeqCst);
+    }
 
     // Orchestrator
     let agent = {
@@ -190,18 +219,25 @@ async fn main() -> Result<(), Error> {
         || GOOGLE_IPS.to_owned(), // default
     );
 
-    let resolver = Resolver(TokioAsyncResolver::tokio(
-        ResolverConfig::from_parts(
-            None,
-            vec![],
-            NameServerConfigGroup::from_ips_clear(
-                &name_servers,         // ips
-                cli.name_servers_port, // port
-                true,                  // trust_nx_responses
+    let resolver = {
+        let mut opts = ResolverOpts::default();
+
+        // Disable caching of DNS results
+        opts.cache_size = 0;
+
+        Resolver(TokioAsyncResolver::tokio(
+            ResolverConfig::from_parts(
+                None,
+                vec![],
+                NameServerConfigGroup::from_ips_clear(
+                    &name_servers,         // ips
+                    cli.name_servers_port, // port
+                    true,                  // trust_nx_responses
+                ),
             ),
-        ),
-        ResolverOpts::default(),
-    )?);
+            opts,
+        )?)
+    };
 
     let resolver = WithMetrics(resolver, MetricParams::new(&meter, SERVICE_NAME, "resolve"));
 
@@ -362,7 +398,7 @@ async fn main() -> Result<(), Error> {
             .layer(Extension(MetricsMiddlewareArgs {
                 counter: meter
                     .u64_counter("requests_total")
-                    .with_description("Counts occurences of requests")
+                    .with_description("Counts occurrences of requests")
                     .init(),
                 recorder: meter
                     .f64_histogram("request_duration")
@@ -375,14 +411,16 @@ async fn main() -> Result<(), Error> {
     // ACME
     let Cli {
         acme_account_id,
-        acme_account_key,
+        acme_account_key_path,
         acme_provider_url,
         ..
     } = cli;
 
-    let acme_account = match (acme_account_id, acme_account_key) {
+    let acme_account = match (acme_account_id, acme_account_key_path) {
         // Re-use existing account
-        (Some(id), Some(key)) => {
+        (Some(id), Some(path)) => {
+            let key =
+                std::fs::read_to_string(path).context("failed to open acme account key file")?;
             let acme_credentials: AccountCredentials = serde_json::from_str(&format!(
                 r#"{{
                     "id": "{acme_provider_url}/acme/acct/{id}",
@@ -437,13 +475,20 @@ async fn main() -> Result<(), Error> {
     );
 
     // Cloudflare
-    let dns_creator = Cloudflare::new(&cli.cloudflare_api_url, &cli.cloudflare_api_key)?;
+    let dns_creator = {
+        let cloudflare_api_key = std::fs::read_to_string(cli.cloudflare_api_key_path.clone())
+            .context("failed to open cloudflare api key file")?;
+        Cloudflare::new(&cli.cloudflare_api_url, &cloudflare_api_key)?
+    };
     let dns_creator = WithMetrics(
         dns_creator,
         MetricParams::new(&meter, SERVICE_NAME, "dns_create"),
     );
 
-    let dns_deleter = Cloudflare::new(&cli.cloudflare_api_url, &cli.cloudflare_api_key)?;
+    let dns_deleter = {
+        let cloudflare_api_key = std::fs::read_to_string(cli.cloudflare_api_key_path)?;
+        Cloudflare::new(&cli.cloudflare_api_url, &cloudflare_api_key)?
+    };
     let dns_deleter = WithMetrics(
         dns_deleter,
         MetricParams::new(&meter, SERVICE_NAME, "dns_delete"),
@@ -475,6 +520,7 @@ async fn main() -> Result<(), Error> {
         MetricParams::new(&meter, SERVICE_NAME, "process"),
     );
     let processor = WithDetectRenewal::new(processor, certificate_getter.clone());
+    let processor = WithDetectImportance::new(processor, cli.important_domains);
     let processor = Arc::new(processor);
 
     let sem = Arc::new(Semaphore::new(10));

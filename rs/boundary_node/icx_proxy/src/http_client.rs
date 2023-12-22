@@ -1,17 +1,22 @@
 use std::{
     borrow::Cow,
+    cell::RefCell,
     collections::HashMap,
     fs::File,
+    future::Future,
     hash::{Hash, Hasher},
     io::{Cursor, Read},
     iter,
     net::SocketAddr,
     path::PathBuf,
+    pin::Pin,
     str::FromStr,
     sync::Arc,
+    task::{Context as TaskContext, Poll},
 };
 
 use anyhow::{Context, Error};
+use http::{HeaderMap, HeaderName, HeaderValue};
 use hyper::{
     self,
     body::Bytes,
@@ -23,7 +28,7 @@ use hyper::{
     Client,
 };
 use hyper_rustls::HttpsConnectorBuilder;
-use ic_agent::agent::http_transport;
+use ic_agent::agent::http_transport::hyper_transport;
 use itertools::Either;
 
 use crate::domain_addr::DomainAddr;
@@ -47,7 +52,7 @@ pub struct HttpClientOpts<'a> {
 pub type Body = hyper::Body;
 
 pub trait HyperBody:
-    http_transport::HyperBody
+    hyper_transport::HyperBody
     + From<&'static [u8]>
     + From<&'static str>
     + From<Bytes>
@@ -60,7 +65,7 @@ pub trait HyperBody:
 }
 
 impl<B> HyperBody for B where
-    B: http_transport::HyperBody
+    B: hyper_transport::HyperBody
         + From<&'static [u8]>
         + From<&'static str>
         + From<Bytes>
@@ -72,9 +77,9 @@ impl<B> HyperBody for B where
 {
 }
 
-/// Trait representing the contraints on [`Service`] that [`HyperReplicaV2Transport`] requires.
+/// Trait representing the constraints on [`Service`] that [`HyperReplicaV2Transport`] requires.
 pub trait HyperService<B1: HyperBody>:
-    http_transport::HyperService<B1, ResponseBody = Self::ResponseBody2>
+    hyper_transport::HyperService<B1, ResponseBody = Self::ResponseBody2>
 {
     /// Values yielded in the `Body` of the `Response`.
     type ResponseBody2: HyperBody;
@@ -84,9 +89,105 @@ impl<B1, B2, S> HyperService<B1> for S
 where
     B1: HyperBody,
     B2: HyperBody,
-    S: http_transport::HyperService<B1, ResponseBody = B2>,
+    S: hyper_transport::HyperService<B1, ResponseBody = B2>,
 {
     type ResponseBody2 = B2;
+}
+
+#[allow(clippy::declare_interior_mutable_const)]
+pub const HEADER_X_REQUEST_ID: HeaderName = HeaderName::from_static("x-request-id");
+#[allow(clippy::declare_interior_mutable_const)]
+pub const HEADER_IC_SUBNET_ID: HeaderName = HeaderName::from_static("x-ic-subnet-id");
+#[allow(clippy::declare_interior_mutable_const)]
+pub const HEADER_IC_SUBNET_TYPE: HeaderName = HeaderName::from_static("x-ic-subnet-type");
+#[allow(clippy::declare_interior_mutable_const)]
+pub const HEADER_IC_NODE_ID: HeaderName = HeaderName::from_static("x-ic-node-id");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_CANISTER_ID: HeaderName = HeaderName::from_static("x-ic-canister-id");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_METHOD_NAME: HeaderName = HeaderName::from_static("x-ic-method-name");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_SENDER: HeaderName = HeaderName::from_static("x-ic-sender");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_REQUEST_TYPE: HeaderName = HeaderName::from_static("x-ic-request-type");
+
+// Headers to pass from replica to the caller
+#[allow(clippy::declare_interior_mutable_const)]
+pub const HEADERS_PASS_IN: [HeaderName; 7] = [
+    HEADER_IC_SUBNET_ID,
+    HEADER_IC_NODE_ID,
+    HEADER_IC_SUBNET_TYPE,
+    HEADER_IC_CANISTER_ID,
+    HEADER_IC_METHOD_NAME,
+    HEADER_IC_SENDER,
+    HEADER_IC_REQUEST_TYPE,
+];
+
+// Headers to pass from caller to replica
+#[allow(clippy::declare_interior_mutable_const)]
+pub const HEADERS_PASS_OUT: [HeaderName; 1] = [HEADER_X_REQUEST_ID];
+
+thread_local!(pub static HEADERS_IN: RefCell<HeaderMap<HeaderValue>> = RefCell::new(HeaderMap::new()));
+thread_local!(pub static HEADERS_OUT: RefCell<HeaderMap<HeaderValue>> = RefCell::new(HeaderMap::new()));
+
+// Wrapper for the Hyper client (Hyper service) that uses thread local storage to pass specific HTTP headers back and forth
+#[derive(Clone)]
+pub struct HyperClientWrapper<S> {
+    inner: S,
+}
+
+impl<S> Service<http::Request<Body>> for HyperClientWrapper<S>
+where
+    S: Service<http::Request<Body>, Response = http::Response<Body>>
+        + Clone
+        + Send
+        + Sync
+        + 'static,
+    S::Future: Send,
+{
+    type Response = S::Response;
+    type Error = S::Error;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+
+    fn poll_ready(&mut self, _: &mut TaskContext<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, mut req: http::Request<Body>) -> Self::Future {
+        let clone = self.inner.clone();
+        let mut inner = std::mem::replace(&mut self.inner, clone);
+
+        Box::pin(async move {
+            // Add selected headers to the request
+            HEADERS_OUT.with(|f| {
+                for (k, v) in (*f.borrow()).iter() {
+                    #[allow(clippy::borrow_interior_mutable_const)]
+                    if HEADERS_PASS_OUT.contains(k) {
+                        req.headers_mut().append(k, v.clone());
+                    }
+                }
+            });
+
+            let res = inner.call(req).await;
+
+            // If the request was a success - extract headers from it
+            if let Ok(v) = &res {
+                HEADERS_IN.with(|f| {
+                    let mut m = f.borrow_mut();
+                    m.clear();
+
+                    for (k, v) in v.headers() {
+                        #[allow(clippy::borrow_interior_mutable_const)]
+                        if HEADERS_PASS_IN.contains(k) {
+                            m.append(k, v.clone());
+                        }
+                    }
+                });
+            }
+
+            res
+        })
+    }
 }
 
 pub fn setup(opts: HttpClientOpts) -> Result<impl HyperService<Body>, Error> {
@@ -240,20 +341,15 @@ pub fn setup(opts: HttpClientOpts) -> Result<impl HyperService<Body>, Error> {
     let mut connector = HttpConnector::new_with_resolver(resolver);
     connector.enforce_http(false);
 
-    let build = HttpsConnectorBuilder::new().with_tls_config(tls_config);
-
-    #[cfg(feature = "dev_proxy")]
-    let build = build.https_or_http();
-    #[cfg(not(feature = "dev_proxy"))]
-    let build = build.https_only();
-
-    let connector = build
+    let connector = HttpsConnectorBuilder::new()
+        .with_tls_config(tls_config)
+        .https_or_http()
         .enable_http1()
         .enable_http2()
         .wrap_connector(connector);
 
     let client: Client<_, Body> = Client::builder().build(connector);
-    Ok(client)
+    Ok(HyperClientWrapper { inner: client })
 }
 
 #[derive(Clone, Debug, Eq)]

@@ -26,14 +26,15 @@ rust_library(
     proc_macro_deps = [
         "@crate_index//:async-trait",
     ],
-    version = "0.8.0",
+    version = "0.9.0",
     deps = [
+        "//rs/crypto/sha2",
         "//rs/protobuf",
         "//rs/types/types",
-        "@crate_index//:openssl",
         "@crate_index//:serde",
         "@crate_index//:tokio",
         "@crate_index//:tokio-rustls",
+        "@crate_index//:x509-parser",
     ],
 )
 
@@ -42,7 +43,8 @@ rust_test(
     srcs = glob(["src/**/*.rs"]),
     crate = ":tls_interfaces",
     deps = [
-        "//rs/crypto/test_utils",
+        "//rs/crypto/test_utils/reproducible_rng",
+        "//rs/crypto/test_utils/tls",
         "@crate_index//:assert_matches",
         "@crate_index//:json5",
         "@crate_index//:maplit",

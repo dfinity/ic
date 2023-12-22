@@ -1,8 +1,8 @@
 container-autobuild-protected:
   extends:
-    - .ubuntu-cargo-k8s
+    - .build-k8s
   rules:
-    # Run immediatly on Dockerfile changes pushed to a protected branch - such as master.
+    # Run immediately on Dockerfile changes pushed to a protected branch - such as master.
     - if: '$CI_COMMIT_REF_PROTECTED == "true" && $CI_PIPELINE_SOURCE == "push"'
       changes:
         - gitlab-ci/container/TAG
@@ -37,11 +37,10 @@ container-autobuild-protected:
 
 container-autobuild:
   extends:
-    - .ubuntu-cargo-k8s
+    - .build-k8s
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes:
-        - requirements.txt
         - .bazelversion
         - gitlab-ci/container/**/*
         - gitlab-ci/config/container-image-autobuild.yml
@@ -98,6 +97,11 @@ container-autobuild:
       popd
 
       pushd .devcontainer
+      sed -i -E "s|$IMG_BAZEL_DOCKER_HUB:[^\"]{5,}|$IMG_BAZEL_DOCKER_HUB_FULL|g" -- *
+      popd
+
+      # update github CI docker image
+      pushd .github/workflows
       sed -i -E "s|$IMG_BAZEL_DOCKER_HUB:[^\"]{5,}|$IMG_BAZEL_DOCKER_HUB_FULL|g" -- *
       popd
 

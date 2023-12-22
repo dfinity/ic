@@ -49,7 +49,6 @@ pub fn generate_prost_files(def: &Path, out: &Path) {
     build_state_proto(def, out);
     build_p2p_proto(def, out);
     build_bitcoin_proto(def, out);
-    build_canister_http_proto(def, out);
     build_determinism_test_proto(def, out);
     rustfmt(out).unwrap_or_else(|e| {
         panic!(
@@ -251,6 +250,10 @@ fn build_registry_proto(def: &Path, out: &Path) {
         "#[derive(candid::CandidType, Eq)]",
     );
     config.type_attribute(
+        ".registry.subnet.v1.SubnetFeatures",
+        "#[derive(candid::CandidType, Eq)]",
+    );
+    config.type_attribute(
         ".registry.replica_version",
         "#[derive(serde::Serialize, serde::Deserialize)]",
     );
@@ -274,8 +277,13 @@ fn build_registry_proto(def: &Path, out: &Path) {
         ".registry.node.v1.ConnectionEndpoint",
         "#[derive(Eq, PartialOrd, Ord)]",
     );
+    config.type_attribute(
+        ".registry.api_boundary_node.v1.ApiBoundaryNodeRecord",
+        "#[derive(serde::Serialize, serde::Deserialize)]",
+    );
 
     let registry_files = [
+        def.join("registry/api_boundary_node/v1/api_boundary_node.proto"),
         def.join("registry/crypto/v1/crypto.proto"),
         def.join("registry/node_operator/v1/node_operator.proto"),
         def.join("registry/nns/v1/nns.proto"),
@@ -341,6 +349,7 @@ fn build_state_proto(def: &Path, out: &Path) {
         def.join("state/canister_state_bits/v1/canister_state_bits.proto"),
         def.join("state/queues/v1/queues.proto"),
         def.join("state/sync/v1/manifest.proto"),
+        def.join("state/stats/v1/stats.proto"),
         def.join("state/v1/metadata.proto"),
     ];
 
@@ -359,6 +368,19 @@ fn build_types_proto(def: &Path, out: &Path) {
         ".types.v1.ConsensusMessage",
         "#[allow(clippy::large_enum_variant)]",
     );
+    config.type_attribute(".types.v1.Artifact", "#[allow(clippy::large_enum_variant)]");
+    config.type_attribute(
+        ".types.v1.ArtifactChunk",
+        "#[allow(clippy::large_enum_variant)]",
+    );
+    config.type_attribute(
+        ".types.v1.GossipChunk",
+        "#[allow(clippy::large_enum_variant)]",
+    );
+    config.type_attribute(
+        ".types.v1.GossipMessage",
+        "#[allow(clippy::large_enum_variant)]",
+    );
     let files = [
         def.join("types/v1/ic00_types.proto"),
         def.join("types/v1/types.proto"),
@@ -366,6 +388,9 @@ fn build_types_proto(def: &Path, out: &Path) {
         def.join("types/v1/consensus.proto"),
         def.join("types/v1/ecdsa.proto"),
         def.join("types/v1/signature.proto"),
+        def.join("types/v1/p2p.proto"),
+        def.join("types/v1/canister_http.proto"),
+        def.join("types/v1/artifact.proto"),
     ];
     compile_protos(config, def, &files);
 }
@@ -383,8 +408,8 @@ fn build_p2p_proto(def: &Path, out: &Path) {
     let mut config = base_config(out, "p2p");
     config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
     let files = [
-        def.join("p2p/v1/p2p.proto"),
         def.join("p2p/v1/state_sync_manager.proto"),
+        def.join("p2p/v1/consensus_manager.proto"),
     ];
     compile_protos(config, def, &files);
 }
@@ -397,14 +422,6 @@ fn build_bitcoin_proto(def: &Path, out: &Path) {
     compile_protos(config, def, &files);
 }
 
-/// Generates Rust structs from HTTP from canister adapter Protobuf messages.
-fn build_canister_http_proto(def: &Path, out: &Path) {
-    let mut config = base_config(out, "canister_http");
-    config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
-    let files = [def.join("canister_http/v1/canister_http.proto")];
-    compile_protos(config, def, &files);
-}
-
 /// Generates Rust structs from `determinism_test` Protobuf messages.
 fn build_determinism_test_proto(def: &Path, out: &Path) {
     let files = [def.join("determinism_test/v1/determinism_test.proto")];
@@ -414,6 +431,5 @@ fn build_determinism_test_proto(def: &Path, out: &Path) {
 /// Compiles the given `proto_files`.
 fn compile_protos<P: AsRef<Path>>(mut config: Config, def: &Path, proto_files: &[P]) {
     // https://github.com/tokio-rs/prost/issues/661
-    config.type_attribute(".", "#[allow(clippy::derive_partial_eq_without_eq)]");
     config.compile_protos(proto_files, &[def]).unwrap();
 }

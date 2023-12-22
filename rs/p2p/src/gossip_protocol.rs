@@ -60,8 +60,8 @@ use crate::{
     utils::TransportChannelIdMapper,
     P2PError, P2PErrorCode,
 };
-use ic_interfaces::artifact_manager::ArtifactManager;
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
+use ic_interfaces::p2p::artifact_manager::ArtifactManager;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_transport::{Transport, TransportChannelId};
 use ic_logger::{info, replica_logger::ReplicaLogger};
@@ -204,7 +204,7 @@ impl GossipImpl {
             registry_client,
             transport,
             transport_channel_mapper: TransportChannelIdMapper::new(transport_channels),
-            artifacts_under_construction: RwLock::new(ArtifactDownloadListImpl::new(log)),
+            artifacts_under_construction: RwLock::new(ArtifactDownloadListImpl::default()),
             metrics: DownloadManagementMetrics::new(metrics_registry),
             gossip_config,
             receive_check_caches: RwLock::new(HashMap::new()),
@@ -258,16 +258,11 @@ impl Gossip for GossipImpl {
             .with_label_values(&["in_chunk_request"])
             .start_timer();
 
-        let artifact_chunk = match self
+        let artifact = match self
             .artifact_manager
             .get_validated_by_identifier(&chunk_request.artifact_id)
         {
-            Some(artifact) => artifact.get_chunk(chunk_request.chunk_id).ok_or_else(|| {
-                self.gossip_metrics.requested_chunks_not_found.inc();
-                P2PError {
-                    p2p_error_code: P2PErrorCode::NotFound,
-                }
-            }),
+            Some(artifact) => Ok(artifact.get_chunk()),
             None => {
                 self.gossip_metrics.requested_chunks_not_found.inc();
                 Err(P2PError {
@@ -278,7 +273,7 @@ impl Gossip for GossipImpl {
 
         let gossip_chunk = GossipChunk {
             request: chunk_request,
-            artifact_chunk,
+            artifact,
         };
         let message = GossipMessage::Chunk(gossip_chunk);
         self.transport_send(message, node_id);

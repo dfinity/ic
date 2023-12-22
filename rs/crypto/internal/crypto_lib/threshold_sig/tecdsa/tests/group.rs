@@ -1,5 +1,6 @@
 use ic_crypto_internal_threshold_sig_ecdsa::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use rand::Rng;
 
 #[test]
 fn not_affected_by_point_serialization_bug() -> ThresholdEcdsaResult<()> {
@@ -40,7 +41,7 @@ fn verify_serialization_round_trips_correctly() -> ThresholdEcdsaResult<()> {
         assert_eq!(b, b2);
     }
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     for curve_type in EccCurveType::all() {
         let identity = EccPoint::identity(curve_type);
@@ -53,7 +54,7 @@ fn verify_serialization_round_trips_correctly() -> ThresholdEcdsaResult<()> {
         assert_serialization_round_trips(EccPoint::generator_h(curve_type));
 
         for _r in 0..100 {
-            let s = EccScalar::random(curve_type, &mut rng);
+            let s = EccScalar::random(curve_type, rng);
             let gs = EccPoint::mul_by_g(&s);
 
             assert_serialization_round_trips(gs);
@@ -157,13 +158,13 @@ fn p256_wide_reduce_scalar_expected_value() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn test_scalar_negate() -> ThresholdEcdsaResult<()> {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     for curve in EccCurveType::all() {
         let zero = EccScalar::zero(curve);
 
         for _trial in 0..100 {
-            let random = EccScalar::random(curve, &mut rng);
+            let random = EccScalar::random(curve, rng);
             let n_random = random.negate();
             let should_be_zero = random.add(&n_random)?;
             assert_eq!(should_be_zero, zero);
@@ -198,7 +199,7 @@ fn test_point_mul_by_node_index() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn test_point_mul_naf() -> ThresholdEcdsaResult<()> {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     for curve_type in EccCurveType::all() {
         for window_size in [3, 4, 5, 6, 7] {
             // 0, 1, -1 (maximum value), 100 random values
@@ -207,18 +208,18 @@ fn test_point_mul_naf() -> ThresholdEcdsaResult<()> {
             scalars.push(EccScalar::one(curve_type));
             scalars.push(EccScalar::one(curve_type).negate());
             for _ in 0..100 {
-                scalars.push(EccScalar::random(curve_type, &mut rng));
+                scalars.push(EccScalar::random(curve_type, rng));
             }
 
             // test correctness for the generated scalars
             for scalar in scalars {
                 // random point
-                let random_scalar = EccScalar::random(curve_type, &mut rng);
+                let random_scalar = EccScalar::random(curve_type, rng);
                 let mut random_point = EccPoint::mul_by_g(&random_scalar);
                 let expected_point = random_point.scalar_mul(&scalar)?;
-                assert!(!random_point.is_precopmuted());
+                assert!(!random_point.is_precomputed());
                 random_point.precompute(window_size)?;
-                assert!(random_point.is_precopmuted());
+                assert!(random_point.is_precomputed());
                 let computed_point = random_point.scalar_mul_vartime(&scalar)?;
                 assert_eq!(computed_point, expected_point);
             }
@@ -230,7 +231,7 @@ fn test_point_mul_naf() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn test_point_negate() -> ThresholdEcdsaResult<()> {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     for curve_type in EccCurveType::all() {
         let id = EccPoint::identity(curve_type);
@@ -239,7 +240,7 @@ fn test_point_negate() -> ThresholdEcdsaResult<()> {
         assert_eq!(id.negate(), id);
 
         for _trial in 0..100 {
-            let random_scalar = EccScalar::random(curve_type, &mut rng);
+            let random_scalar = EccScalar::random(curve_type, rng);
             let random_point = g.scalar_mul(&random_scalar)?;
             let n_random_point = random_point.negate();
 
@@ -255,17 +256,17 @@ fn test_point_negate() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn test_mul_2_is_correct() -> ThresholdEcdsaResult<()> {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     for curve_type in EccCurveType::all() {
         let g = EccPoint::generator_g(curve_type);
 
         for _iteration in 0..100 {
-            let p_0 = g.scalar_mul(&EccScalar::random(curve_type, &mut rng))?;
-            let p_1 = g.scalar_mul(&EccScalar::random(curve_type, &mut rng))?;
+            let p_0 = g.scalar_mul(&EccScalar::random(curve_type, rng))?;
+            let p_1 = g.scalar_mul(&EccScalar::random(curve_type, rng))?;
 
-            let s_0 = EccScalar::random(curve_type, &mut rng);
-            let s_1 = EccScalar::random(curve_type, &mut rng);
+            let s_0 = EccScalar::random(curve_type, rng);
+            let s_1 = EccScalar::random(curve_type, rng);
 
             let computed_result = EccPoint::mul_2_points(&p_0, &s_0, &p_1, &s_1)?;
             let expected_result = p_0.scalar_mul(&s_0)?.add_points(&p_1.scalar_mul(&s_1)?)?;
@@ -277,11 +278,32 @@ fn test_mul_2_is_correct() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
+fn test_pedersen_is_correct() -> ThresholdEcdsaResult<()> {
+    let rng = &mut reproducible_rng();
+
+    for curve_type in EccCurveType::all() {
+        let g = EccPoint::generator_g(curve_type);
+        let h = EccPoint::generator_h(curve_type);
+
+        for _iteration in 0..100 {
+            let x = EccScalar::random(curve_type, rng);
+            let y = EccScalar::random(curve_type, rng);
+
+            let computed_result = EccPoint::pedersen(&x, &y)?;
+            let expected_result = g.scalar_mul(&x)?.add_points(&h.scalar_mul(&y)?)?;
+            assert_eq!(computed_result, expected_result);
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
 fn test_mul_n_ct_pippenger_is_correct() -> ThresholdEcdsaResult<()> {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     let mut random_point_and_scalar = |curve_type| -> ThresholdEcdsaResult<(EccPoint, EccScalar)> {
-        let p = EccPoint::mul_by_g(&EccScalar::random(curve_type, &mut rng));
-        Ok((p, EccScalar::random(curve_type, &mut rng)))
+        let p = EccPoint::mul_by_g(&EccScalar::random(curve_type, rng));
+        Ok((p, EccScalar::random(curve_type, rng)))
     };
 
     for curve_type in EccCurveType::all() {
@@ -323,15 +345,15 @@ fn test_mul_n_vartime_naf() -> ThresholdEcdsaResult<()> {
     assert_eq!(EccPoint::MIN_LUT_WINDOW_SIZE, 3);
     assert_eq!(EccPoint::MAX_LUT_WINDOW_SIZE, 7);
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     for curve_type in EccCurveType::all() {
         for window_size in [3, 4, 5, 6, 7] {
             let g = EccPoint::generator_g(curve_type);
             let mut random_pair = || -> ThresholdEcdsaResult<_> {
                 Ok((
-                    g.scalar_mul(&EccScalar::random(curve_type, &mut rng))?,
-                    EccScalar::random(curve_type, &mut rng),
+                    g.scalar_mul(&EccScalar::random(curve_type, rng))?,
+                    EccScalar::random(curve_type, rng),
                 ))
             };
 
@@ -352,9 +374,9 @@ fn test_mul_n_vartime_naf() -> ThresholdEcdsaResult<()> {
                         })?;
 
                 for (p, _s) in pairs.iter_mut() {
-                    assert!(!p.is_precopmuted());
+                    assert!(!p.is_precomputed());
                     p.precompute(window_size)?;
-                    assert!(p.is_precopmuted());
+                    assert!(p.is_precomputed());
                 }
 
                 // create refs of pairs
@@ -365,6 +387,30 @@ fn test_mul_n_vartime_naf() -> ThresholdEcdsaResult<()> {
 
                 assert_eq!(computed_result, expected_result);
             }
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_mul2_table() -> ThresholdEcdsaResult<()> {
+    let rng = &mut reproducible_rng();
+
+    for curve in EccCurveType::all() {
+        let g = EccPoint::hash_to_point(curve, &rng.gen::<[u8; 32]>(), b"g")?;
+        let h = EccPoint::hash_to_point(curve, &rng.gen::<[u8; 32]>(), b"h")?;
+
+        let tbl = EccPointMul2Table::new(g.clone(), h.clone())?;
+
+        for _ in 0..100 {
+            let x = EccScalar::random(curve, rng);
+            let y = EccScalar::random(curve, rng);
+
+            let refv = EccPoint::mul_2_points(&g, &x, &h, &y)?;
+
+            let tblv = tbl.mul2(&x, &y)?;
+            assert_eq!(refv, tblv);
         }
     }
 

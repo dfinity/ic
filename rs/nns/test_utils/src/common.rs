@@ -4,7 +4,7 @@ use core::{
     option::Option::{None, Some},
     time::Duration,
 };
-use cycles_minting_canister::CyclesCanisterInitPayload;
+use cycles_minting_canister::{CyclesCanisterInitPayload, CYCLES_LEDGER_CANISTER_ID};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_nns_common::init::{LifelineCanisterInitPayload, LifelineCanisterInitPayloadBuilder};
 use ic_nns_constants::{
@@ -43,7 +43,7 @@ pub struct NnsInitPayloads {
     pub sns_wasms: SnsWasmCanisterInitPayload,
 }
 
-/// Builder to help create the intial payloads for the NNS canisters.
+/// Builder to help create the initial payloads for the NNS canisters.
 pub struct NnsInitPayloadsBuilder {
     pub registry: RegistryCanisterInitPayloadBuilder,
     pub governance: GovernanceCanisterInitPayloadBuilder,
@@ -88,6 +88,7 @@ impl NnsInitPayloadsBuilder {
                 exchange_rate_canister: None,
                 minting_account_id: Some(GOVERNANCE_CANISTER_ID.get().into()),
                 last_purged_notification: Some(1),
+                cycles_ledger_canister_id: Some(CYCLES_LEDGER_CANISTER_ID.try_into().unwrap()),
             }),
             lifeline: LifelineCanisterInitPayloadBuilder::new(),
             genesis_token: GenesisTokenCanisterInitPayloadBuilder::new(),
@@ -126,6 +127,15 @@ impl NnsInitPayloadsBuilder {
 
     pub fn with_test_neurons(&mut self) -> &mut Self {
         self.governance.with_test_neurons();
+        self
+    }
+
+    pub fn with_test_neurons_fund_neurons(
+        &mut self,
+        maturity_equalivaltn_icp_e8s: u64,
+    ) -> &mut Self {
+        self.governance
+            .with_test_neurons_fund_neurons(maturity_equalivaltn_icp_e8s);
         self
     }
 

@@ -60,12 +60,13 @@ use crate::ledger_client::{
     handle_stake_maturity::handle_stake_maturity, handle_start_dissolve::handle_start_dissolve,
     handle_stop_dissolve::handle_stop_dissolve,
 };
-use crate::models::{EnvelopePair, Object, SignedTransaction};
+use crate::models::{EnvelopePair, SignedTransaction};
 use crate::request::request_result::RequestResult;
 use crate::request::transaction_results::TransactionResults;
 use crate::request::Request;
 use crate::request_types::{RequestType, Status};
 use crate::transaction_id::TransactionIdentifier;
+use rosetta_core::objects::ObjectMap;
 
 use self::proposal_info_response::ProposalInfoResponse;
 
@@ -330,12 +331,13 @@ impl LedgerAccess for LedgerClient {
             return Err(ApiError::NotAvailableOffline(false, Details::default()));
         }
         let agent = &self.canister_access.as_ref().unwrap().agent;
+        let arg = Encode!().unwrap();
         let bytes = agent
             .query(
                 &self.governance_canister_id.get().0,
                 "get_pending_proposals",
             )
-            .with_arg(Encode!().unwrap())
+            .with_arg(arg)
             .call()
             .await
             .map_err(|e| ApiError::invalid_request(format!("{}", e)))?;
@@ -610,10 +612,10 @@ impl LedgerClient {
                         result.neuron_id = Some(neuron_id);
                     }
                     OperationOutput::NeuronResponse(response) => {
-                        result.response = Some(Object::from(response));
+                        result.response = Some(ObjectMap::from(response));
                     }
                     OperationOutput::ProposalInfoResponse(response) => {
-                        result.response = Some(Object::from(response));
+                        result.response = Some(ObjectMap::from(response));
                     }
                 }
                 result.status = Status::Completed;

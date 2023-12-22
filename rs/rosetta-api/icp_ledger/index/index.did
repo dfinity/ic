@@ -1,7 +1,17 @@
+type Account = record { owner : principal; subaccount : opt vec nat8 };
 type GetAccountIdentifierTransactionsArgs = record {
   max_results : nat64;
   start : opt nat64;
   account_identifier : text;
+};
+type GetAccountTransactionsArgs = record {
+    account : Account;
+    // The txid of the last transaction seen by the client.
+    // If None then the results will start from the most recent
+    // txid.
+    start : opt nat;
+    // Maximum number of transactions to fetch.
+    max_results : nat;
 };
 type GetAccountIdentifierTransactionsError = record { message : text };
 type GetAccountIdentifierTransactionsResponse = record {
@@ -42,7 +52,7 @@ type Operation = variant {
     spender : text;
   };
 };
-type Result = variant {
+type GetAccountIdentifierTransactionsResult = variant {
   Ok : GetAccountIdentifierTransactionsResponse;
   Err : GetAccountIdentifierTransactionsError;
 };
@@ -60,9 +70,11 @@ service : (InitArg) -> {
   get_account_identifier_balance : (text) -> (nat64) query;
   get_account_identifier_transactions : (
       GetAccountIdentifierTransactionsArgs,
-    ) -> (Result) query;
+    ) -> (GetAccountIdentifierTransactionsResult) query;
+  get_account_transactions : (GetAccountTransactionsArgs) -> (GetAccountIdentifierTransactionsResult) query;
   get_blocks : (GetBlocksRequest) -> (GetBlocksResponse) query;
   http_request : (HttpRequest) -> (HttpResponse) query;
   ledger_id : () -> (principal) query;
   status : () -> (Status) query;
+  icrc1_balance_of : (Account) -> (nat64) query;
 }

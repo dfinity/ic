@@ -12,6 +12,15 @@
         node_ip: "{{ ipv6_address }}",
         listening_port: 4100,
     },
+
+    // ============================================
+    // Configuration of IPv4 networking
+    // ============================================
+    ipv4_config: {
+        public_address: "{{ ipv4_address }}",
+        public_gateway: "{{ ipv4_gateway }}",
+    },
+
     // ============================================
     // Configuration of registry client
     // ============================================
@@ -50,7 +59,10 @@
     crypto: {
         // The directory that should be used to persist crypto state.
         crypto_root: "/var/lib/ic/crypto",
-        csp_vault_type: { unix_socket: "/run/ic-node/crypto-csp/socket" },
+        // The logic and metrics sockets for communicating with the crypto csp vault.
+        // Shall match the values configured in
+        // ic-os/guestos/rootfs/etc/systemd/system/ic-crypto-csp.socket
+        csp_vault_type: { unix_socket: { logic: "/run/ic-node/crypto-csp/socket", metrics: "/run/ic-node/crypto-csp/metrics" } },
     },
 
     // ========================================
@@ -89,9 +101,9 @@
     http_handler: {
         listen_addr: "[{{ ipv6_address }}]:8080",
     },
-    
+
     // ====================================
-    // Configuration of various adapters. 
+    // Configuration of various adapters.
     // ====================================
     adapters_config: {
         // IPC socket and metrics path for BTC Testnet adapter. This UDS path has to be the same as
@@ -229,7 +241,7 @@ table ip6 filter {\n\
   chain OUTPUT {\n\
     type filter hook output priority 0; policy accept;\n\
     meta skuid ic-http-adapter ip6 daddr { ::1/128 } ct state { new } tcp dport { 1-19999 } reject # Block restricted localhost ic-http-adapter HTTPS access\n\
-    meta skuid ic-http-adapter ip6 daddr { 2a00:fb01:400:42::/64, 2001:4d78:40d::/48, 2607:fb58:9005::/48, 2602:fb2b:100::/48, 2607:f6f0:3004::/48, 2a05:d01c:d9:2b00::/56, 2a05:d01c:e2c:a700::/56 } ct state { new } tcp dport { 1-19999 } reject # Block restricted outbound ic-http-adapter HTTPS access\n\
+    meta skuid ic-http-adapter ip6 daddr { 2a00:fb01:400:42::/64, 2001:4d78:40d::/48, 2602:fb2b:110::/48, 2607:fb58:9005::/48, 2602:fb2b:100::/48, 2607:f6f0:3004::/48, 2602:fb2b:120::/48, 2a05:d01c:d9:2b00::/56, 2a05:d01c:e2c:a700::/56 } ct state { new } tcp dport { 1-19999 } reject # Block restricted outbound ic-http-adapter HTTPS access\n\
     <<IPv6_OUTBOUND_RULES>>\n\
   }\n\
 }\n",
@@ -246,6 +258,7 @@ table ip6 filter {\n\
             "2001:470:1:c76::/64",
             "2001:4d78:400:10a::/64",
             "2001:4d78:40d::/48",
+            "2602:fb2b:110::/48",
             "2001:920:401a:1706::/64",
             "2001:920:401a:1708::/64",
             "2001:920:401a:1710::/64",
@@ -287,6 +300,7 @@ table ip6 filter {\n\
             "2604:b900:4001:76::/64",
             "2607:f1d0:10:1::/64",
             "2607:f6f0:3004::/48",
+            "2602:fb2b:120::/48",
             "2607:f758:1220::/64",
             "2607:f758:c300::/64",
             "2607:fb58:9005::/48",

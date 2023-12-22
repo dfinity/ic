@@ -2,6 +2,7 @@
 /// Common System API benchmark functions, types, constants.
 ///
 use criterion::{BatchSize, Criterion};
+use ic_config::embedders::{Config as EmbeddersConfig, MeteringType};
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::{SchedulerConfig, SubnetConfig};
@@ -13,7 +14,7 @@ use ic_execution_environment::{
     IngressHistoryWriterImpl, RoundLimits,
 };
 use ic_interfaces::execution_environment::{
-    ExecutionComplexity, ExecutionMode, IngressHistoryWriter, SubnetAvailableMemory,
+    ExecutionMode, IngressHistoryWriter, SubnetAvailableMemory,
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
@@ -40,7 +41,7 @@ use lazy_static::lazy_static;
 use std::convert::TryFrom;
 use std::sync::Arc;
 
-pub const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(10_000_000_000);
+pub const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(500_000_000_000);
 // Note: this canister ID is required for the `ic0_mint_cycles()`
 pub const LOCAL_CANISTER_ID: u64 = CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET;
 pub const REMOTE_CANISTER_ID: u64 = 1;
@@ -71,7 +72,7 @@ pub struct BenchmarkArgs {
 }
 
 /// Benchmark to run: name (id), WAT, expected number of instructions.
-pub struct Benchmark(pub &'static str, pub String, pub u64);
+pub struct Benchmark(pub String, pub String, pub u64);
 
 pub fn get_execution_args<W>(exec_env: &ExecutionEnvironment, wat: W) -> BenchmarkArgs
 where
@@ -87,7 +88,6 @@ where
     let canister_id = canister_test_id(LOCAL_CANISTER_ID);
     let mut round_limits = RoundLimits {
         instructions: as_round_instructions(MAX_NUM_INSTRUCTIONS),
-        execution_complexity: ExecutionComplexity::MAX,
         subnet_available_memory: *MAX_SUBNET_AVAILABLE_MEMORY,
         compute_allocation_used: 0,
     };
@@ -104,6 +104,7 @@ where
     let mut canister_state = canister_from_exec_state(execution_state, canister_id);
     canister_state.system_state.memory_allocation =
         MemoryAllocation::try_from(NumBytes::from(0)).unwrap();
+    canister_state.system_state.freeze_threshold = 0.into();
 
     // Create call context and callback
     let call_origin =
@@ -248,7 +249,14 @@ where
         own_subnet_id,
         subnet_configs.cycles_account_manager_config,
     ));
-    let config = Config::default();
+    let config = Config {
+        embedders_config: EmbeddersConfig {
+            metering_type: MeteringType::New,
+            ..EmbeddersConfig::default()
+        },
+        ..Default::default()
+    };
+
     let metrics_registry = MetricsRegistry::new();
     let hypervisor = Arc::new(Hypervisor::new(
         config.clone(),
@@ -273,6 +281,12 @@ where
         100,
         config,
         cycles_account_manager,
+        SchedulerConfig::application_subnet().scheduler_cores,
+        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+        subnet_configs.scheduler_config.heap_delta_rate_limit,
+        subnet_configs
+            .scheduler_config
+            .upload_wasm_chunk_instructions,
     );
     for Benchmark(id, wat, expected_instructions) in benchmarks {
         run_benchmark(

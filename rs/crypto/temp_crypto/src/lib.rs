@@ -24,6 +24,7 @@ pub mod internal {
     use ic_base_types::PrincipalId;
     use ic_config::crypto::{CryptoConfig, CspVaultType};
     use ic_crypto::{CryptoComponent, CryptoComponentImpl};
+    use ic_crypto_interfaces_sig_verification::{BasicSigVerifierByPublicKey, CanisterSigVerifier};
     use ic_crypto_internal_csp::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
     use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
     use ic_crypto_internal_csp::vault::local_csp_vault::ProdLocalCspVault;
@@ -38,14 +39,13 @@ pub mod internal {
         RemoteVaultEnvironment, TempCspVaultServer, TokioRuntimeOrHandle,
     };
     use ic_crypto_tls_interfaces::{
-        AllowedClients, AuthenticatedPeer, TlsClientHandshakeError, TlsConfig, TlsConfigError,
+        AuthenticatedPeer, SomeOrAllNodes, TlsClientHandshakeError, TlsConfig, TlsConfigError,
         TlsHandshake, TlsPublicKeyCert, TlsServerHandshakeError, TlsStream,
     };
     use ic_crypto_utils_basic_sig::conversions::derive_node_id;
     use ic_crypto_utils_time::CurrentSystemTimeSource;
     use ic_interfaces::crypto::{
-        BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, CanisterSigVerifier,
-        CheckKeysWithRegistryError, CurrentNodePublicKeysError,
+        BasicSigVerifier, BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
         IDkgDealingEncryptionKeyRotationError, IDkgKeyRotationResult, IDkgProtocol, KeyManager,
         LoadTranscriptResult, MultiSigVerifier, MultiSigner, NiDkgAlgorithm,
         ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner, ThresholdSigVerifier,
@@ -269,7 +269,10 @@ pub mod internal {
             let opt_remote_vault_environment = self.start_remote_vault.then(|| {
                 let vault_server =
                     TempCspVaultServer::start_with_local_csp_vault(Arc::clone(&local_vault));
-                config.csp_vault_type = CspVaultType::UnixSocket(vault_server.vault_socket_path());
+                config.csp_vault_type = CspVaultType::UnixSocket {
+                    logic: vault_server.vault_socket_path(),
+                    metrics: None,
+                };
                 RemoteVaultEnvironment {
                     vault_server,
                     vault_client_runtime: TokioRuntimeOrHandle::new(
@@ -681,7 +684,7 @@ pub mod internal {
         async fn perform_tls_server_handshake(
             &self,
             tcp_stream: TcpStream,
-            allowed_clients: AllowedClients,
+            allowed_clients: SomeOrAllNodes,
             registry_version: RegistryVersion,
         ) -> Result<(Box<dyn TlsStream>, AuthenticatedPeer), TlsServerHandshakeError> {
             self.crypto_component
@@ -716,7 +719,7 @@ pub mod internal {
     {
         fn server_config(
             &self,
-            allowed_clients: AllowedClients,
+            allowed_clients: SomeOrAllNodes,
             registry_version: RegistryVersion,
         ) -> Result<ServerConfig, TlsConfigError> {
             self.crypto_component

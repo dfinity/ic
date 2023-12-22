@@ -97,7 +97,7 @@ impl CanisterQueuesFixture {
         let local_canisters = maplit::btreemap! {
             self.this => {
                 let scheduler_state = SchedulerState::default();
-                let system_state = SystemState::new_running(
+                let system_state = SystemState::new_running_for_testing(
                     CanisterId::from_u64(42),
                     user_test_id(24).get(),
                     Cycles::new(1 << 36),
@@ -578,7 +578,8 @@ fn test_split_input_schedules() {
     assert_eq!(vec![other_4, other_5], queues.remote_schedule());
 
     // After the split we only have `other_1` (and `this`) on the subnet.
-    let system_state = SystemState::new_running(other_1, other_1.get(), Cycles::zero(), 0.into());
+    let system_state =
+        SystemState::new_running_for_testing(other_1, other_1.get(), Cycles::zero(), 0.into());
     let scheduler_state = SchedulerState::new(mock_time());
     let local_canisters = btreemap! {
         other_1 => CanisterState::new(system_state, None, scheduler_state)
@@ -601,12 +602,12 @@ fn test_peek_round_robin() {
     let mut queues = CanisterQueues::default();
     assert!(!queues.has_input());
 
-    let local_senders = vec![
+    let local_senders = [
         canister_test_id(1),
         canister_test_id(2),
         canister_test_id(1),
     ];
-    let remote_senders = vec![
+    let remote_senders = [
         canister_test_id(3),
         canister_test_id(3),
         canister_test_id(4),
@@ -683,7 +684,7 @@ fn test_skip_round_robin() {
     let mut queues = CanisterQueues::default();
     assert!(!queues.has_input());
 
-    let local_senders = vec![
+    let local_senders = [
         canister_test_id(1),
         canister_test_id(2),
         canister_test_id(1),
@@ -755,7 +756,7 @@ fn test_output_into_iter() {
     let mut queues = CanisterQueues::default();
     assert_eq!(0, queues.output_message_count());
 
-    let destinations = vec![other_1, other_2, other_1, other_3, other_2, other_1];
+    let destinations = [other_1, other_2, other_1, other_3, other_2, other_1];
     for (i, id) in destinations.iter().enumerate() {
         queues
             .push_output_request(
@@ -770,7 +771,7 @@ fn test_output_into_iter() {
             .expect("could not push");
     }
 
-    let expected = vec![
+    let expected = [
         (&other_1, 0),
         (&other_2, 1),
         (&other_3, 3),
@@ -850,12 +851,12 @@ fn push_requests(queues: &mut CanisterQueues, input_type: InputQueueType, reques
 #[test]
 fn test_peek_canister_input_does_not_affect_schedule() {
     let mut queues = CanisterQueues::default();
-    let local_senders = vec![
+    let local_senders = [
         canister_test_id(1),
         canister_test_id(2),
         canister_test_id(1),
     ];
-    let remote_senders = vec![canister_test_id(13), canister_test_id(14)];
+    let remote_senders = [canister_test_id(13), canister_test_id(14)];
 
     let local_requests = local_senders
         .iter()
@@ -903,12 +904,12 @@ fn test_peek_canister_input_does_not_affect_schedule() {
 #[test]
 fn test_skip_canister_input() {
     let mut queues = CanisterQueues::default();
-    let local_senders = vec![
+    let local_senders = [
         canister_test_id(1),
         canister_test_id(2),
         canister_test_id(1),
     ];
-    let remote_senders = vec![canister_test_id(13), canister_test_id(14)];
+    let remote_senders = [canister_test_id(13), canister_test_id(14)];
 
     let local_requests = local_senders
         .iter()
@@ -1413,7 +1414,7 @@ fn test_garbage_collect() {
     assert_eq!(CanisterQueues::default(), queues);
 }
 
-/// Tests that even when `garbage_collect()` would otherwis be a no-op, fields
+/// Tests that even when `garbage_collect()` would otherwise be a no-op, fields
 /// are always reset to default.
 #[test]
 fn test_garbage_collect_restores_defaults() {
@@ -1818,7 +1819,7 @@ fn time_out_requests_pushes_correct_reject_responses() {
     let local_canisters = maplit::btreemap! {
         local_canister_id => {
             let scheduler_state = SchedulerState::default();
-            let system_state = SystemState::new_running(
+            let system_state = SystemState::new_running_for_testing(
                 CanisterId::from_u64(42),
                 user_test_id(24).get(),
                 Cycles::new(1 << 36),

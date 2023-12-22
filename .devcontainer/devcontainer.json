@@ -1,5 +1,5 @@
 {
-  "image": "dfinity/ic-build:32e500a2f4a3e049975e2593b8276b02f420ac8965a894b83e9a96c7ab7b05e4",
+  "image": "dfinity/ic-build:05d4f93d618d6f9b9d4260db3aa0b7809165430b00a7f8d3ad03e0daee7bfdcc",
   "remoteUser": "ubuntu",
   "privileged": true,
   "runArgs": [
@@ -53,6 +53,7 @@
         "rust-lang.rust-analyzer",
         "vadimcn.vscode-lldb",
         "bazelbuild.vscode-bazel",
+        "stackbuild.bazel-stack-vscode",
         "bungcip.better-toml"
       ]
     }

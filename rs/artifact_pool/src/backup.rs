@@ -27,7 +27,6 @@ use ic_types::{
         BlockProposal, CatchUpPackage, ConsensusMessage, Finalization, HasHeight, Notarization,
         RandomBeacon, RandomTape,
     },
-    crypto::CryptoHashOf,
     time::{Time, UNIX_EPOCH},
     Height,
 };
@@ -39,7 +38,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         mpsc::{sync_channel, Receiver, SyncSender},
-        RwLock,
+        Arc, RwLock,
     },
     thread::{self, JoinHandle},
     time::Duration,
@@ -242,6 +241,7 @@ pub(super) struct Backup {
     purge_interval: Duration,
     metrics: Metrics,
     log: ReplicaLogger,
+    time_source: Arc<dyn TimeSource>,
 }
 
 impl Backup {
@@ -254,6 +254,7 @@ impl Backup {
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
         age: Box<dyn BackupAge>,
+        time_source: Arc<dyn TimeSource>,
     ) -> Self {
         let metrics = Metrics::new(&metrics_registry);
         let (backup_queue, backup_thread) =
@@ -275,6 +276,7 @@ impl Backup {
             purge_interval,
             metrics,
             log,
+            time_source,
         };
 
         // Due to the fact that the backup is synced to the disk completely
@@ -300,6 +302,7 @@ impl Backup {
         purge_interval: Duration,
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
+        time_source: Arc<dyn TimeSource>,
     ) -> Self {
         Self::new_with_age_func(
             pool,
@@ -310,12 +313,13 @@ impl Backup {
             metrics_registry,
             log,
             Box::new(FileSystemAge {}),
+            time_source,
         )
     }
 
     // Filters the new artifacts and asynchronously writes the relevant artifacts
     // to the disk.
-    pub fn store(&self, time_source: &dyn TimeSource, artifacts: Vec<ConsensusMessage>) {
+    pub fn store(&self, artifacts: Vec<ConsensusMessage>) {
         // If the queue is full, we will block here.
         if self
             .backup_queue
@@ -334,7 +338,8 @@ impl Backup {
         // purging has not finished yet, which is not expected with sufficiently
         // large PURGE_INTERVAL.
         let time_of_last_purge = *self.time_of_last_purge.read().unwrap();
-        if time_source.get_relative_time() >= time_of_last_purge + self.purge_interval {
+        let time_now = self.time_source.get_relative_time();
+        if time_now >= time_of_last_purge + self.purge_interval {
             if self.purging_queue.send(PurgingRequest::Purge).is_err() {
                 error!(
                     self.log,
@@ -344,7 +349,7 @@ impl Backup {
             }
 
             // Set the time to current
-            *self.time_of_last_purge.write().unwrap() = time_source.get_relative_time();
+            *self.time_of_last_purge.write().unwrap() = time_now;
         }
     }
 
@@ -567,7 +572,7 @@ impl BackupArtifact {
         fs::create_dir_all(&file_directory)?;
         let full_path = file_directory.join(file_name);
         // If the file exists, it will be overwritten (this is required on
-        // intializations).
+        // initializations).
         let serialized = self.serialize()?;
         ic_utils::fs::write_using_tmp_file(full_path, |writer| writer.write_all(&serialized))
     }
@@ -601,56 +606,22 @@ impl BackupArtifact {
     /// ways on different replicas, so we need to put their hashes into the artifact
     /// name.
     pub fn file_location(&self, path: &Path) -> (PathBuf, String) {
-        // Create a subdir for the height
-        use BackupArtifact::*;
+        // Create a subdirectory for the height
         let (height, file_name) = match self {
-            Finalization(artifact) => (
-                artifact.height(),
-                format!(
-                    "finalization_{}_{}.bin",
-                    bytes_to_hex_str(&artifact.content.block),
-                    bytes_to_hex_str(&ic_types::crypto::crypto_hash(artifact.as_ref())),
-                ),
-            ),
-            Notarization(artifact) => (
-                artifact.height(),
-                format!(
-                    "notarization_{}_{}.bin",
-                    bytes_to_hex_str(&artifact.content.block),
-                    bytes_to_hex_str(&ic_types::crypto::crypto_hash(artifact.as_ref())),
-                ),
-            ),
-            BlockProposal(artifact) => (
-                artifact.height(),
-                format!(
-                    "block_proposal_{}_{}.bin",
-                    bytes_to_hex_str(artifact.content.get_hash()),
-                    bytes_to_hex_str(&ic_types::crypto::crypto_hash(artifact.as_ref())),
-                ),
-            ),
-            RandomTape(artifact) => (artifact.height(), "random_tape.bin".to_string()),
-            RandomBeacon(artifact) => (artifact.height(), "random_beacon.bin".to_string()),
-            CatchUpPackage(artifact) => (artifact.height(), "catch_up_package.bin".to_string()),
+            BackupArtifact::Finalization(artifact) => (artifact.height(), "finalization.bin"),
+            BackupArtifact::Notarization(artifact) => (artifact.height(), "notarization.bin"),
+            BackupArtifact::BlockProposal(artifact) => (artifact.height(), "block_proposal.bin"),
+            BackupArtifact::RandomTape(artifact) => (artifact.height(), "random_tape.bin"),
+            BackupArtifact::RandomBeacon(artifact) => (artifact.height(), "random_beacon.bin"),
+            BackupArtifact::CatchUpPackage(artifact) => (artifact.height(), "catch_up_package.bin"),
         };
         // We group heights by directories to avoid running into any kind of unexpected
         // FS inode limitations. Each group directory will contain at most
-        // `BACKUP_GROUP_SIZE` heights.
+        // [BACKUP_GROUP_SIZE] heights.
         let group_key = (height.get() / BACKUP_GROUP_SIZE) * BACKUP_GROUP_SIZE;
         let path_with_height = path.join(group_key.to_string()).join(height.to_string());
-        (path_with_height, file_name)
+        (path_with_height, file_name.to_string())
     }
-}
-
-// Dumps a CryptoHash to a hex-encoded string.
-pub(super) fn bytes_to_hex_str<T>(hash: &CryptoHashOf<T>) -> String {
-    hash.clone()
-        .get()
-        .0
-        .iter()
-        .fold(String::new(), |mut hash, byte| {
-            hash.push_str(&format!("{:X}", byte));
-            hash
-        })
 }
 
 #[cfg(test)]

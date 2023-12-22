@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
 load("//bazel:defs.bzl", "rust_bench")
 
 package(default_visibility = ["//visibility:public"])
@@ -9,6 +9,7 @@ DEPENDENCIES = [
     "//rs/config",
     "//rs/constants",
     "//rs/crypto/prng",
+    "//rs/crypto/sha2",
     "//rs/crypto/tecdsa",
     "//rs/crypto/tree_hash",
     "//rs/cycles_account_manager",
@@ -35,6 +36,7 @@ DEPENDENCIES = [
     "//rs/types/wasm_types",
     "//rs/utils",
     "//rs/utils/lru_cache",
+    "//rs/wasm_transform",
     "@crate_index//:candid",
     "@crate_index//:crossbeam-channel",
     "@crate_index//:hex",
@@ -44,7 +46,7 @@ DEPENDENCIES = [
     "@crate_index//:num-rational",
     "@crate_index//:num-traits",
     "@crate_index//:prometheus",
-    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand",
     "@crate_index//:scoped_threadpool",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
@@ -61,7 +63,6 @@ MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/crypto/sha2",
     "//rs/interfaces/state_manager/mocks",
     "//rs/state_machine_tests",
     "//rs/test_utilities",
@@ -76,7 +77,6 @@ DEV_DEPENDENCIES = [
     "@crate_index//:insta",
     "@crate_index//:libflate",
     "@crate_index//:maplit",
-    "@crate_index//:mockall_0_7_2",
     "@crate_index//:proptest",
     "@crate_index//:tempfile",
     "@crate_index//:wat",
@@ -105,7 +105,7 @@ rust_library(
     compile_data = glob(["tests/test-data/**"]),
     crate_name = "ic_execution_environment",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
@@ -117,6 +117,9 @@ rust_test(
     data = DATA,
     env = ENV,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = [
+        "test_macos",
+    ],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
@@ -128,12 +131,18 @@ rust_test_suite(
     data = DATA,
     env = ENV,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = [
+        "test_macos",
+    ],
     deps = [":execution_environment"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_doc_test(
     name = "execution_environment_doc_test",
     crate = ":execution_environment",
+    tags = [
+        "test_macos",
+    ],
 )
 
 BENCH_DEPENDENCIES = [
@@ -164,8 +173,53 @@ rust_library(
     srcs = glob(["benches/lib/src/*.rs"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = BENCH_DEPENDENCIES,
+)
+
+rust_bench(
+    name = "execute_inspect_message_bench",
+    srcs = ["benches/system_api/execute_inspect_message.rs"],
+    data = DATA,
+    env = ENV,
+    deps = [":execution_environment_bench"] + BENCH_DEPENDENCIES,
+)
+
+rust_bench(
+    name = "execute_query_bench",
+    srcs = ["benches/system_api/execute_query.rs"],
+    data = DATA,
+    env = ENV,
+    deps = [":execution_environment_bench"] + BENCH_DEPENDENCIES,
+)
+
+rust_bench(
+    name = "execute_update_bench",
+    srcs = ["benches/system_api/execute_update.rs"],
+    data = DATA,
+    env = ENV,
+    deps = [":execution_environment_bench"] + BENCH_DEPENDENCIES,
+)
+
+rust_bench(
+    name = "wasm_instructions_bench",
+    srcs = ["benches/wasm_instructions/main.rs"],
+    data = DATA,
+    env = ENV,
+    deps = [":execution_environment_bench"] + BENCH_DEPENDENCIES,
+)
+
+rust_bench(
+    name = "scheduler_bench",
+    srcs = ["benches/scheduler.rs"],
+    data = DATA,
+    env = ENV,
+    deps = [
+        ":execution_environment_bench",
+        "//rs/state_machine_tests",
+        "//rs/types/base_types",
+        "//rs/types/types_test_utils",
+    ] + BENCH_DEPENDENCIES,
 )
 
 rust_bench(
@@ -184,39 +238,52 @@ rust_bench(
     ] + BENCH_DEPENDENCIES,
 )
 
-rust_bench(
-    name = "execute_inspect_message_bench",
-    srcs = ["benches/execute_inspect_message.rs"],
-    data = DATA,
-    env = ENV,
-    deps = [":execution_environment_bench"] + BENCH_DEPENDENCIES,
-)
-
-rust_bench(
-    name = "execute_query_bench",
-    srcs = ["benches/execute_query.rs"],
-    data = DATA,
-    env = ENV,
-    deps = [":execution_environment_bench"] + BENCH_DEPENDENCIES,
-)
-
-rust_bench(
-    name = "execute_update_bench",
-    srcs = ["benches/execute_update.rs"],
-    data = DATA,
-    env = ENV,
-    deps = [":execution_environment_bench"] + BENCH_DEPENDENCIES,
-)
-
-rust_bench(
-    name = "scheduler_bench",
-    srcs = ["benches/scheduler.rs"],
-    data = DATA,
-    env = ENV,
+rust_library(
+    name = "utils",
+    srcs = ["benches/management_canister/utils.rs"],
+    aliases = ALIASES,
     deps = [
         ":execution_environment_bench",
+        "//rs/rust_canisters/canister_test",
         "//rs/state_machine_tests",
-        "//rs/types/base_types",
-        "//rs/types/types_test_utils",
+        "@crate_index//:candid",
+        "@crate_index//:serde",
     ] + BENCH_DEPENDENCIES,
+)
+
+rust_bench(
+    name = "management_canister_bench",
+    srcs = glob(["benches/management_canister/*.rs"]),
+    data = DATA + ["//rs/execution_environment/benches/management_canister/test_canister"],
+    env = dict(ENV.items() + [
+        ("TEST_CANISTER_WASM_PATH", "$(rootpath //rs/execution_environment/benches/management_canister/test_canister)"),
+    ]),
+    deps = [
+        ":execution_environment_bench",
+        ":utils",
+        "//rs/rust_canisters/canister_test",
+        "//rs/state_machine_tests",
+        "@crate_index//:candid",
+        "@crate_index//:serde",
+    ] + BENCH_DEPENDENCIES,
+)
+
+rust_binary(
+    name = "fees_and_limits",
+    srcs = ["tools/src/fees_and_limits.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = [
+        "//rs/config",
+        "//rs/embedders",
+        "//rs/replicated_state",
+        "//rs/system_api",
+        "//rs/types/types",
+        "@crate_index//:candid",
+        "@crate_index//:clap",
+        "@crate_index//:eyre",
+        "@crate_index//:ic-agent",
+        "@crate_index//:serde_json",
+        "@crate_index//:tokio",
+    ],
 )

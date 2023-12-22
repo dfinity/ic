@@ -28,19 +28,18 @@ impl GovernanceNeuronMutation for BurnFeesMutation {
         &self,
         gov: &GovernanceMutationProxy,
     ) -> Result<BTreeMap<NeuronId, NeuronDeltas>, GovernanceError> {
-        let neuron = gov.get_neuron(&self.neuron_id)?;
+        let neuron_fees_e8s = gov.with_neuron(&self.neuron_id, |neuron| neuron.neuron_fees_e8s)?;
 
-        let neuron_fees = neuron.neuron_fees_e8s;
         let transaction_fees = gov.transaction_fee();
 
-        if neuron_fees <= transaction_fees {
+        if neuron_fees_e8s <= transaction_fees {
             return Ok(btreemap! {});
         }
 
         Ok(btreemap! {
             self.neuron_id => NeuronDeltas {
-            neuron_fees_e8s: (neuron_fees as i128).neg(),
-            cached_neuron_stake_e8s: (neuron_fees as i128).neg(),
+            neuron_fees_e8s: (neuron_fees_e8s as i128).neg(),
+            cached_neuron_stake_e8s: (neuron_fees_e8s as i128).neg(),
             aging_since_timestamp_seconds: 0,
             dissolve_delay: 0,
             maturity_e8s_equivalent: 0,
@@ -87,8 +86,9 @@ impl GovernanceNeuronMutation for BurnFeesMutation {
 
         let amount_to_subtract = change_amount.saturating_abs();
 
-        let neuron = gov.get_neuron(&self.neuron_id)?;
-        let from_subaccount = neuron.subaccount()?;
+        let from_subaccount = gov
+            .neuron_store
+            .with_neuron(&self.neuron_id, |n| n.subaccount())??;
 
         let _result = gov
             .ledger

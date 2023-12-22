@@ -6,7 +6,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::{anyhow, Context, Error};
+use anyhow::{anyhow, Error};
 use arc_swap::ArcSwapOption;
 use async_scoped::TokioScope;
 use async_trait::async_trait;
@@ -16,22 +16,21 @@ use dashmap::DashMap;
 use http::Method;
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use mockall::automock;
-use opentelemetry::{baggage::BaggageExt, trace::FutureExt, Context as TlmContext, KeyValue};
-use simple_moving_average::{SingleSumSMA, SMA};
+use rayon::prelude::*;
+use tracing::warn;
 use url::Url;
 
 use crate::{
     core::{Run, WithRetryLimited},
     http::HttpClient,
+    metrics::{MetricParamsCheck, WithMetricsCheck},
     persist::Persist,
-    snapshot::RoutingTable,
+    snapshot::RegistrySnapshot,
     snapshot::{Node, Subnet},
 };
 
 struct NodeState {
     ok_count: u8,
-    average_latency: SingleSumSMA<Duration, u32, 10>,
-    success_rate: SingleSumSMA<f32, f32, 10>,
     last_check_id: Wrapping<u64>,
     replica_version: String,
 }
@@ -40,8 +39,6 @@ struct NodeCheckResult {
     node: Node,
     ok_count: u8,
     height: u64,
-    average_latency: f32,
-    success_rate: f32,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -81,7 +78,7 @@ impl fmt::Display for CheckError {
 }
 
 pub struct Runner<P: Persist, C: Check> {
-    published_routing_table: Arc<ArcSwapOption<RoutingTable>>,
+    published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     node_states: Arc<DashMap<Principal, NodeState>>,
     last_check_id: Wrapping<u64>,
     min_ok_count: u8,
@@ -90,39 +87,16 @@ pub struct Runner<P: Persist, C: Check> {
     checker: C,
 }
 
-// Sort given node check results by score and emit nodes
-fn nodes_sort_by_score(mut nodes: Vec<NodeCheckResult>) -> Vec<Node> {
-    // Calculate min/max latencies
-    let latencies = nodes.iter().map(|x| x.average_latency).collect::<Vec<_>>();
-    let latency_min = latencies
-        .clone()
-        .into_iter()
-        .reduce(f32::min)
-        .unwrap_or(0.0);
-    let latency_max = latencies.into_iter().reduce(f32::max).unwrap_or(0.0);
-
-    // Normalize latency to 0..1 range
-    nodes.iter_mut().for_each(|x| {
-        x.average_latency = (x.average_latency - latency_min) / (latency_max - latency_min)
-    });
-
-    // Calculate the score as latency/success_rate - the lower the latency and higher success rate - the lower (better) is score
-    // Score is mapped to 0..1000 range
-    // Sort nodes by score in ascending order
-    nodes.sort_unstable_by_key(|x| ((x.average_latency / x.success_rate) * 1000.0) as u32);
-    nodes.into_iter().map(|x| x.node).collect()
-}
-
 impl<P: Persist, C: Check> Runner<P, C> {
     pub fn new(
-        published_routing_table: Arc<ArcSwapOption<RoutingTable>>,
+        published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
         min_ok_count: u8,
         max_height_lag: u64,
         persist: P,
         checker: C,
     ) -> Self {
         Self {
-            published_routing_table,
+            published_registry_snapshot,
             node_states: Arc::new(DashMap::new()),
             last_check_id: Wrapping(0u64),
             min_ok_count,
@@ -134,32 +108,27 @@ impl<P: Persist, C: Check> Runner<P, C> {
 
     // Perform a health check on a given node
     async fn check_node(&self, node: Node) -> Result<NodeCheckResult, CheckError> {
-        let ctx = TlmContext::current_with_baggage(vec![
-            KeyValue::new("subnet_id", node.subnet_id.to_string()),
-            KeyValue::new("node_id", node.id.to_string()),
-            KeyValue::new("addr", format!("[{}]:{}", node.addr, node.port)),
-        ]);
-
         // Perform Health Check
-        let check_result = self.checker.check(&node).with_context(ctx.clone()).await;
+        let check_result = self.checker.check(&node).await;
 
         // Look up the node state and get a mutable reference if there's any
         // Locking behavior on DashMap is relevant to multiple locks from a single thread
         // In Tokio environment where we have a thread-per-node it shouldn't deadlock
         let node_state = self.node_states.get_mut(&node.id);
 
-        // Just return the result if it's an error while also updating the state
-        if check_result.is_err() {
-            if let Some(mut x) = node_state {
-                x.success_rate.add_sample(0.0);
-                x.ok_count = 0;
-                x.last_check_id = self.last_check_id;
+        let check_result = match check_result {
+            // Just return the result if it's an error while also updating the state
+            Err(e) => {
+                if let Some(mut x) = node_state {
+                    x.ok_count = 0;
+                    x.last_check_id = self.last_check_id;
+                }
+
+                return Err(e);
             }
 
-            return Err(check_result.err().unwrap());
-        }
-
-        let check_result = check_result.unwrap();
+            Ok(v) => v,
+        };
 
         let ok_count = match &node_state {
             // If it's a first success -> set to max
@@ -177,49 +146,32 @@ impl<P: Persist, C: Check> Runner<P, C> {
             }
         };
 
-        // Insert or update the entry and obtain averages
-        let (average_latency, success_rate) = match node_state {
+        let height = check_result.height;
+
+        // Insert or update the entry
+        match node_state {
             None => {
-                let mut average_latency = SingleSumSMA::from_zero(Duration::ZERO);
-                average_latency.add_sample(check_result.latency);
-
-                let mut success_rate = SingleSumSMA::from_zero(0f32);
-                success_rate.add_sample(1.0);
-
                 self.node_states.insert(
                     node.id,
                     NodeState {
-                        average_latency,
-                        success_rate,
                         ok_count,
                         last_check_id: self.last_check_id,
-                        replica_version: check_result.replica_version.clone(),
+                        replica_version: check_result.replica_version,
                     },
                 );
-
-                (check_result.latency.as_secs_f32(), 1.0)
             }
 
             Some(mut e) => {
-                e.average_latency.add_sample(check_result.latency);
-                e.success_rate.add_sample(1.0);
                 e.ok_count = ok_count;
                 e.last_check_id = self.last_check_id;
                 e.replica_version = check_result.replica_version;
-
-                (
-                    e.average_latency.get_average().as_secs_f32(),
-                    e.success_rate.get_average(),
-                )
             }
         };
 
         Ok(NodeCheckResult {
             node,
-            height: check_result.height,
+            height,
             ok_count,
-            average_latency,
-            success_rate,
         })
     }
 
@@ -234,7 +186,7 @@ impl<P: Persist, C: Check> Runner<P, C> {
 
         // Filter out bad nodes
         let mut nodes = nodes
-            .into_iter()
+            .into_par_iter()
             .filter_map(Result::ok) // Filter any green thread errors
             .filter_map(Result::ok) // Filter any `check` errors
             .collect::<Vec<_>>();
@@ -256,12 +208,12 @@ impl<P: Persist, C: Check> Runner<P, C> {
 
         // Filter out nodes that fail the predicates
         let nodes = nodes
-            .into_iter()
+            .into_par_iter()
             .filter(|x| x.height >= min_height) // Filter below min_height
             .filter(|x| x.ok_count >= self.min_ok_count) // Filter below min_ok_count
+            .map(|x| x.node)
             .collect::<Vec<_>>();
 
-        let nodes = nodes_sort_by_score(nodes);
         Subnet { nodes, ..subnet }
     }
 }
@@ -269,11 +221,11 @@ impl<P: Persist, C: Check> Runner<P, C> {
 #[async_trait]
 impl<P: Persist, C: Check> Run for Runner<P, C> {
     async fn run(&mut self) -> Result<(), Error> {
-        // Clone the the latest routing table from the registry if there's one
-        let routing_table = self
-            .published_routing_table
+        // Clone the the latest registry snapshot if there's one
+        let snapshot = self
+            .published_registry_snapshot
             .load_full()
-            .ok_or_else(|| anyhow!("no routing table published"))?
+            .ok_or_else(|| anyhow!("no registry snapshot available"))?
             .as_ref()
             .clone();
 
@@ -282,29 +234,22 @@ impl<P: Persist, C: Check> Run for Runner<P, C> {
 
         // Check all the subnets, using green threads for each subnet
         let ((), subnets) = TokioScope::scope_and_block(|s| {
-            for subnet in routing_table.subnets.into_iter() {
+            for subnet in snapshot.subnets.into_iter() {
                 s.spawn(self.check_subnet(subnet));
             }
         });
 
+        // Filter out failed subnets
+        let subnets = subnets.into_iter().filter_map(Result::ok).collect();
+
         // Clear stale entries.
-        // All entries current have now been updated with `last_check_id`
+        // All entries that existed in a registry have now been updated with `last_check_id`
         // Anything that didn't get touched is stale.
         self.node_states
             .retain(|_, x| x.last_check_id == self.last_check_id);
 
-        // Construct Effective Routing Table
-        let subnets = subnets.into_iter().filter_map(Result::ok).collect();
-        let effective_routing_table = RoutingTable {
-            subnets,
-            ..routing_table
-        };
-
-        // Persist Effective Routing Table
-        self.persist
-            .persist(effective_routing_table)
-            .await
-            .context("failed to persist routing table")?;
+        // Persist the routing table
+        self.persist.persist(subnets).await;
 
         Ok(())
     }
@@ -324,11 +269,15 @@ pub trait Check: Send + Sync {
 
 pub struct Checker {
     http_client: Arc<dyn HttpClient>,
+    timeout: Duration,
 }
 
 impl Checker {
-    pub fn new(http_client: Arc<dyn HttpClient>) -> Self {
-        Self { http_client }
+    pub fn new(http_client: Arc<dyn HttpClient>, timeout: Duration) -> Self {
+        Self {
+            http_client,
+            timeout,
+        }
     }
 }
 
@@ -339,7 +288,8 @@ impl Check for Checker {
         let u = Url::from_str(&format!("https://{}:{}/api/v2/status", node.id, node.port))
             .map_err(|err| CheckError::Generic(err.to_string()))?;
 
-        let request = reqwest::Request::new(Method::GET, u);
+        let mut request = reqwest::Request::new(Method::GET, u);
+        *request.timeout_mut() = Some(self.timeout);
 
         // Execute request
         let start_time = Instant::now();
@@ -396,7 +346,7 @@ impl<T: Check> Check for WithRetryLimited<T> {
         loop {
             let start_time = Instant::now();
 
-            let out = self.0.check(node).with_context(TlmContext::current()).await;
+            let out = self.0.check(node).await;
             // Retry only on network errors
             match &out {
                 Ok(_) => return out,
@@ -419,5 +369,62 @@ impl<T: Check> Check for WithRetryLimited<T> {
     }
 }
 
+#[async_trait]
+impl<T: Check> Check for WithMetricsCheck<T> {
+    async fn check(&self, node: &Node) -> Result<CheckResult, CheckError> {
+        let start_time = Instant::now();
+        let out = self.0.check(node).await;
+        let duration = start_time.elapsed().as_secs_f64();
+
+        let result = match &out {
+            Ok(_) => "ok".to_string(),
+            Err(e) => format!("error_{}", e.short()),
+        };
+
+        let (block_height, replica_version) = out.as_ref().map_or((-1, "unknown"), |out| {
+            (out.height as i64, out.replica_version.as_str())
+        });
+
+        let MetricParamsCheck {
+            counter,
+            recorder,
+            status,
+        } = &self.1;
+
+        let subnet_id = node.subnet_id.to_string();
+        let node_id = node.id.to_string();
+        let node_addr = node.addr.to_string();
+
+        let labels = &[
+            result.as_str(),
+            node_id.as_str(),
+            subnet_id.as_str(),
+            node_addr.as_str(),
+        ];
+
+        counter.with_label_values(labels).inc();
+        recorder.with_label_values(labels).observe(duration);
+        status
+            .with_label_values(&labels[1..4])
+            .set(out.is_ok().into());
+
+        if let Err(e) = &out {
+            warn!(
+                action = "check",
+                result,
+                duration,
+                block_height,
+                replica_version,
+                subnet_id,
+                node_id,
+                node_addr,
+                error = e.to_string(),
+            );
+        }
+
+        out
+    }
+}
+
 #[cfg(test)]
-mod test;
+pub mod test;

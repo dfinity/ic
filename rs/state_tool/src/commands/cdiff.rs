@@ -13,12 +13,12 @@ use ic_types::Height;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-/// Loads the checkponts at `path_a` and `path_b` and diffs them.
+/// Loads the checkpoints at `path_a` and `path_b` and diffs them.
 fn diff_checkpoints(path_a: PathBuf, path_b: PathBuf) -> Result<Changes, CheckpointError> {
     let unused_height = Height::from(0);
     let own_subnet_type = SubnetType::Application;
     let dummy_metrics_registry = ic_metrics::MetricsRegistry::new();
-    let dummy_metrics = CheckpointMetrics::new(&dummy_metrics_registry);
+    let dummy_metrics = CheckpointMetrics::new(&dummy_metrics_registry, crate::commands::logger());
     let state_a = load_checkpoint(
         &CompleteCheckpointLayout::new_untracked(path_a, unused_height)?,
         own_subnet_type,

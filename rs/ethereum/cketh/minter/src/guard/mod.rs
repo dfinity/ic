@@ -1,21 +1,24 @@
 #[cfg(test)]
 mod tests;
 
-use crate::state::{mutate_state, State};
+use crate::state::{mutate_state, State, TaskType};
 use candid::Principal;
 use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
-const MAX_CONCURRENT: usize = 100;
+pub const MAX_CONCURRENT: usize = 100;
+pub const MAX_PENDING: usize = 100;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum GuardError {
     AlreadyProcessing,
     TooManyConcurrentRequests,
+    TooManyPendingRequests,
 }
 
 pub trait RequestsGuardedByPrincipal {
     fn guarded_principals(state: &mut State) -> &mut BTreeSet<Principal>;
+    fn pending_requests_count(state: &State) -> usize;
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -24,6 +27,10 @@ pub struct PendingRetrieveEthRequests;
 impl RequestsGuardedByPrincipal for PendingRetrieveEthRequests {
     fn guarded_principals(state: &mut State) -> &mut BTreeSet<Principal> {
         &mut state.retrieve_eth_principals
+    }
+
+    fn pending_requests_count(state: &State) -> usize {
+        state.eth_transactions.withdrawal_requests_len()
     }
 }
 
@@ -37,11 +44,14 @@ pub struct Guard<PR: RequestsGuardedByPrincipal> {
 }
 
 impl<PR: RequestsGuardedByPrincipal> Guard<PR> {
-    /// Attempts to create a new guard for the current block. Fails if there is
+    /// Attempts to create a new guard for the current code block. Fails if there is
     /// already a pending request for the specified [principal] or if there
     /// are at least [MAX_CONCURRENT] pending requests.
     fn new(principal: Principal) -> Result<Self, GuardError> {
         mutate_state(|s| {
+            if PR::pending_requests_count(s) >= MAX_PENDING {
+                return Err(GuardError::TooManyPendingRequests);
+            }
             let principals = PR::guarded_principals(s);
             if principals.contains(&principal) {
                 return Err(GuardError::AlreadyProcessing);
@@ -70,66 +80,31 @@ pub fn retrieve_eth_guard(
     Guard::new(principal)
 }
 
-/// Guards a block from being executed by different timers at the same time.
-/// This could happen if the execution of a timer takes longer than the interval between two timers.
-#[must_use]
-#[derive(Debug, PartialEq, Eq)]
-pub struct RetrieveEthTimerGuard(());
-
 #[derive(Debug, PartialEq, Eq)]
 pub enum TimerGuardError {
     AlreadyProcessing,
 }
 
-impl RetrieveEthTimerGuard {
-    fn new() -> Result<Self, TimerGuardError> {
-        mutate_state(|s| {
-            if s.retrieve_eth_guarded {
-                return Err(TimerGuardError::AlreadyProcessing);
-            }
-            s.retrieve_eth_guarded = true;
-            Ok(RetrieveEthTimerGuard(()))
-        })
-    }
-}
-
-impl Drop for RetrieveEthTimerGuard {
-    fn drop(&mut self) {
-        mutate_state(|s| {
-            s.retrieve_eth_guarded = false;
-        });
-    }
-}
-
-pub fn retrieve_eth_timer_guard() -> Result<RetrieveEthTimerGuard, TimerGuardError> {
-    RetrieveEthTimerGuard::new()
-}
-
-/// Guards the ckETH mintingnlogic to prevent concurrent execution.
-#[must_use]
 #[derive(Debug, PartialEq, Eq)]
-pub struct MintCkEthGuard(());
+pub struct TimerGuard {
+    task: TaskType,
+}
 
-impl MintCkEthGuard {
-    pub fn new() -> Result<Self, TimerGuardError> {
+impl TimerGuard {
+    pub fn new(task: TaskType) -> Result<Self, TimerGuardError> {
         mutate_state(|s| {
-            if s.cketh_mint_guarded {
+            if !s.active_tasks.insert(task) {
                 return Err(TimerGuardError::AlreadyProcessing);
             }
-            s.cketh_mint_guarded = true;
-            Ok(MintCkEthGuard(()))
+            Ok(Self { task })
         })
     }
 }
 
-impl Drop for MintCkEthGuard {
+impl Drop for TimerGuard {
     fn drop(&mut self) {
         mutate_state(|s| {
-            s.cketh_mint_guarded = false;
+            s.active_tasks.remove(&self.task);
         });
     }
-}
-
-pub fn mint_cketh_guard() -> Result<MintCkEthGuard, TimerGuardError> {
-    MintCkEthGuard::new()
 }

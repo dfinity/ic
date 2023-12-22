@@ -42,15 +42,23 @@ impl GovernanceMutationProxy<'_> {
         }
     }
 
-    /// Retrieve a reference to a neuron, if it exists
-    pub fn get_neuron(&self, neuron_id: &NeuronId) -> Result<&Neuron, GovernanceError> {
+    /// Execute a function with a reference to a neuron, if it exists,
+    /// returning the result or an error.
+    pub fn with_neuron<R>(
+        &self,
+        neuron_id: &NeuronId,
+        modify: impl FnOnce(&Neuron) -> R,
+    ) -> Result<R, GovernanceError> {
         match self {
-            GovernanceMutationProxy::Committing(real) => real.get_neuron(neuron_id),
-            GovernanceMutationProxy::Simulating(simulating) => simulating.get_neuron(neuron_id),
+            GovernanceMutationProxy::Committing(real) => real.with_neuron(neuron_id, modify),
+            GovernanceMutationProxy::Simulating(simulating) => {
+                simulating.with_neuron(neuron_id, modify)
+            }
         }
     }
 
-    /// Retrieve a mutable reference to a neuron, if it exists.
+    /// Execute a function with a mutable reference to a neuron, if it exists,
+    /// returning the result or an error.
     pub fn with_neuron_mut<R>(
         &mut self,
         neuron_id: &NeuronId,
@@ -85,11 +93,16 @@ pub struct SimulatingGovernance<'a> {
 }
 
 impl SimulatingGovernance<'_> {
-    pub fn get_neuron(&self, neuron_id: &NeuronId) -> Result<&Neuron, GovernanceError> {
-        self.neuron_map
-            .get(&neuron_id.id)
-            .map(Ok)
-            .unwrap_or_else(|| self.real_gov.get_neuron(neuron_id))
+    pub fn with_neuron<R>(
+        &self,
+        neuron_id: &NeuronId,
+        modify: impl FnOnce(&Neuron) -> R,
+    ) -> Result<R, GovernanceError> {
+        let result = match self.neuron_map.get(&neuron_id.id) {
+            Some(neuron) => modify(neuron),
+            None => self.real_gov.neuron_store.with_neuron(neuron_id, modify)?,
+        };
+        Ok(result)
     }
 
     pub fn with_neuron_mut<R>(
@@ -99,7 +112,11 @@ impl SimulatingGovernance<'_> {
     ) -> Result<R, GovernanceError> {
         let neuron = match self.neuron_map.entry(neuron_id.id) {
             Entry::Occupied(o) => o.into_mut(),
-            Entry::Vacant(entry) => entry.insert(self.real_gov.get_neuron(neuron_id)?.clone()),
+            Entry::Vacant(entry) => entry.insert(
+                self.real_gov
+                    .neuron_store
+                    .with_neuron(neuron_id, |n| n.clone())?,
+            ),
         };
 
         Ok(modify(neuron))

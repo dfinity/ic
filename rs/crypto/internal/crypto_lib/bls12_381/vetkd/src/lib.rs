@@ -292,7 +292,7 @@ impl EncryptedKey {
     /// The length of the serialized encoding of this type
     pub const BYTES: usize = 2 * G1Affine::BYTES + G2Affine::BYTES;
 
-    /// Combinine several shares into an encrypted key
+    /// Combine several shares into an encrypted key
     pub fn combine(
         nodes: &[(NodeIndex, G2Affine, EncryptedKeyShare)],
         reconstruction_threshold: usize,

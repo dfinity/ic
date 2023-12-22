@@ -1,10 +1,10 @@
+use candid::Encode;
 use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_ic00_types::CanisterStatusResult;
+use ic_nervous_system_clients::{
+    canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
+};
 use ic_nns_constants::LIFELINE_CANISTER_INDEX_IN_NNS_SUBNET;
-
-use candid::Encode;
-use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nns_governance::pb::v1::{
     manage_neuron_response::{Command, MakeProposalResponse},
     proposal::Action,
@@ -55,7 +55,7 @@ fn uninstall_canister_by_proposal() {
         &CanisterIdRecord::from(canister_id),
         PrincipalId::new_anonymous(),
     );
-    assert!(status.unwrap().module_hash().is_some());
+    assert!(status.unwrap().module_hash.is_some());
     // Prepare a proposal to uninstall canister code
     let proposal = Proposal {
         title: Some("<proposal to uninstall an NNS canister>".to_string()),

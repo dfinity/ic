@@ -3,12 +3,8 @@
 //! The target IP addresses and labels are the same for all endpoints, except
 //! that the host IPv6 addresses for `host_node_exporter` are inferred from the
 //! the one used for `replica` according to a fixed address schema. The ports
-//! are set as follows:
+//! are set as per job_types.rs:
 //!
-//! * `host_node_exporter` -> 9100
-//! * `node_exporter`      -> 9100
-//! * `orchestrator`       -> 9091
-//! * `replica`            -> 9090
 #![allow(clippy::await_holding_lock, clippy::result_large_err)]
 use std::{
     collections::{btree_map::Entry, BTreeMap, BTreeSet, HashMap},
@@ -31,7 +27,7 @@ use ic_registry_local_registry::{LocalRegistry, LocalRegistryError};
 use ic_types::{registry::RegistryClientError, NodeId, PrincipalId, RegistryVersion, SubnetId};
 use job_types::{JobType, NodeOS};
 use regex::Regex;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use slog::{warn, Logger};
 use thiserror::Error;
 
@@ -60,7 +56,7 @@ pub trait IcServiceDiscovery: Send + Sync {
 
 /// A [TargetGroup] associates a set of scrape targets with
 /// a set of labels.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct TargetGroup {
     pub node_id: NodeId,
     pub ic_name: String,
@@ -219,7 +215,7 @@ impl IcServiceDiscoveryImpl {
 
         for subnet_id in subnet_ids {
             let t_infos = reg_client
-                .get_subnet_transport_infos(subnet_id, latest_version)
+                .get_subnet_node_records(subnet_id, latest_version)
                 .map_registry_err(latest_version, "get_subnet_transport_info")?;
 
             for (node_id, node_record) in t_infos {
@@ -239,7 +235,7 @@ impl IcServiceDiscoveryImpl {
         // collect information about unassigned nodes
         for node_id in unassigned_node_ids {
             let node_record = reg_client
-                .get_transport_info(node_id, latest_version)
+                .get_node_record(node_id, latest_version)
                 .map_registry_err(latest_version, "get_transport_info")?;
 
             Self::add_node_to_node_targets(
@@ -317,7 +313,11 @@ impl IcServiceDiscovery for IcServiceDiscoveryImpl {
 
         if job == JobType::NodeExporter(NodeOS::Host) {
             mapping = Some(Box::new(|sockaddr: SocketAddr| {
-                guest_to_host_address((set_port(9100))(sockaddr))
+                guest_to_host_address((set_port(job.port()))(sockaddr))
+            }));
+        } else if job == JobType::MetricsProxy {
+            mapping = Some(Box::new(|sockaddr: SocketAddr| {
+                guest_to_host_address((set_port(job.port()))(sockaddr))
             }));
         }
 
@@ -390,7 +390,7 @@ fn some_after(
 ///
 /// (The MAC starts with 0x6a00. The 7'th bit of the first byte is flipped. See
 /// https://en.wikipedia.org/wiki/MAC_address)
-fn guest_to_host_address(sockaddr: SocketAddr) -> Option<SocketAddr> {
+pub fn guest_to_host_address(sockaddr: SocketAddr) -> Option<SocketAddr> {
     match sockaddr.ip() {
         IpAddr::V6(a) if a.segments()[4] == 0x6801 => {
             let s = a.segments();

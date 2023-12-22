@@ -4,7 +4,7 @@ This guide will show you how to setup a local replica with a running Ledger that
 
 == Step 0: Preparations
 
-Before you start, make sure you have DFX. If you don’t have DFX installed, follow instructions on https://smartcontracts.org/[smartcontracts.org] to install it. While not necessary, you should work in an empty directory. Use the following commands to work in an empty repository: 
+Before you start, make sure you have DFX. If you don’t have DFX installed, follow instructions on https://internetcomputer.org/[internetcomputer.org] to install it. While not necessary, you should work in an empty directory. Use the following commands to work in an empty repository: 
 
 [,console]
 ----

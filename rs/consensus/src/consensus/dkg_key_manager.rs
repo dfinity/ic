@@ -424,7 +424,7 @@ impl DkgKeyManager {
             // key removal.
             handle
                 .join()
-                .expect("Key removal thread paniced unexpectedly");
+                .expect("Key removal thread panicked unexpectedly");
         }
 
         // Create list of transcripts that we need to retain, which is all DKG
@@ -538,7 +538,7 @@ fn dkg_id_log_msg(id: &NiDkgId) -> String {
         NiDkgTag::HighThreshold => "high",
     };
 
-    // If the target is local (which it is ususally), we don't log the target
+    // If the target is local (which it is usually), we don't log the target
     let remote = match id.target_subnet {
         NiDkgTargetSubnet::Local => String::from(""),
         NiDkgTargetSubnet::Remote(remote_id) => format!(", remote_target: {:?}", remote_id),

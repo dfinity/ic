@@ -1,4 +1,5 @@
-use candid::{candid_method, CandidType, Encode};
+use candid::{candid_method, CandidType, Decode, Encode};
+use core::cmp::Ordering;
 use cycles_minting_canister::*;
 use dfn_candid::{candid_one, CandidOne};
 use dfn_core::{
@@ -15,10 +16,14 @@ use ic_crypto_tree_hash::{
     WitnessGeneratorImpl,
 };
 use ic_ic00_types::{
-    CanisterIdRecord, CanisterSettingsArgsBuilder, CreateCanisterArgs, Method, IC_00,
+    BoundedVec, CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder,
+    CreateCanisterArgs, Method, IC_00,
 };
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::tokens::CheckedSub;
+use ic_nervous_system_governance::maturity_modulation::{
+    MAX_MATURITY_MODULATION_PERMYRIAD, MIN_MATURITY_MODULATION_PERMYRIAD,
+};
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
@@ -26,6 +31,7 @@ use icp_ledger::{
     AccountIdentifier, Block, BlockIndex, BlockRes, CyclesResponse, Memo, Operation, SendArgs,
     Subaccount, Tokens, TransactionNotification, DEFAULT_TRANSFER_FEE,
 };
+use icrc_ledger_types::icrc1::account::Account;
 use on_wire::{FromWire, IntoWire, NewType};
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use serde::{Deserialize, Serialize};
@@ -55,9 +61,9 @@ const MAX_NOTIFY_HISTORY: usize = 1_000_000;
 /// The maximum number of old notification statuses we purge in one go.
 const MAX_NOTIFY_PURGE: usize = 100_000;
 
-/// The maturity modulation range in basis points.
-const MIN_MATURITY_MODULATION_PERMYRIAD: i32 = -500;
-const MAX_MATURITY_MODULATION_PERMYRIAD: i32 = 500;
+/// Calls to create_canister get rejected outright if they have obviously too few cycles attached.
+/// This is the minimum amount needed for creating a canister as of October 2023.
+const CREATE_CANISTER_MIN_CYCLES: u64 = 100_000_000_000;
 
 thread_local! {
     static STATE: RefCell<Option<State>> = RefCell::new(None);
@@ -118,10 +124,53 @@ pub enum NotificationStatus {
     NotifiedTopUp(Result<Cycles, NotifyError>),
     /// The cached result of a completed canister creation.
     NotifiedCreateCanister(Result<CanisterId, NotifyError>),
+    /// The cached result of a completed cycles mint.
+    NotifiedMint(NotifyMintCyclesResult),
 }
 
+/// Version of the State type.
+///
+/// Each generation of the State type has an associated version.
+/// The version of the State type currently stored in stable storage
+/// is also stored in stable storage as a candid encoded number
+/// just before the candid encoded State value itself.
+///
+/// Let
+///   v         = version of the current (expected) State
+///   State     = current State type
+///   StateVn   = State type of version n
+///   v_s       = version stored in stable storage, the next argument in stable storage
+///               should then contain the candid encoded StateVv_s
+///
+/// If v = v_s + 1 then decode the stable storage as StateVv_s and migrate it to State
+/// If v = v_s     then decode the stable storage as State
+/// If v = v_s - 1 then it means a rollback probably happened because the stored version
+///                is one bigger than the expected version.
+///                To be safe we don't support this and will panic.
+///                Instead a hotfix should be performed.
+#[derive(
+    Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, CandidType,
+)]
+struct StateVersion(u64);
+
+/// Current state type.
+///
+/// IMPORTANT: when changing the state type in a backwards incompatible way make sure to:
+///
+/// * Introduce a new StateV(n+1) type where n is the version of the current State type.
+///
+/// * Set the State type alias to StateV(n+1).
+///
+/// * Introduce a migration function from StateVn -> StateV(n+1).
+///
+/// * Perform this migration in State::decode(...).
+///
+/// * Optionally remove older State types (StateVm where m < n)
+///   because they are no longer needed.
+type State = StateV1;
+
 #[derive(Serialize, Deserialize, Clone, CandidType, Eq, PartialEq, Debug)]
-pub struct State {
+pub struct StateV1 {
     pub ledger_canister_id: CanisterId,
 
     pub governance_canister_id: CanisterId,
@@ -129,6 +178,8 @@ pub struct State {
     /// An ID that provides an interface to a canister that provides exchange
     /// rate information such as the [XRC](https://github.com/dfinity/exchange-rate-canister).
     pub exchange_rate_canister_id: Option<CanisterId>,
+
+    pub cycles_ledger_canister_id: Option<CanisterId>,
 
     /// Account used to burn funds.
     pub minting_account_id: Option<AccountIdentifier>,
@@ -160,8 +211,8 @@ pub struct State {
 
     pub total_cycles_minted: Cycles,
 
-    pub blocks_notified: Option<BTreeMap<BlockIndex, NotificationStatus>>,
-    pub last_purged_notification: Option<BlockIndex>,
+    pub blocks_notified: BTreeMap<BlockIndex, NotificationStatus>,
+    pub last_purged_notification: BlockIndex,
 
     /// The current maturity modulation in basis points (permyriad), i.e.,
     /// a value of 123 corresponds to 1.23%.
@@ -188,14 +239,138 @@ pub struct State {
     pub update_exchange_rate_canister_state: Option<UpdateExchangeRateState>,
 }
 
+impl StateV1 {
+    fn state_version() -> StateVersion {
+        StateVersion(1)
+    }
+}
+
+/// Old state type. The State type migrates from this type.
+///
+/// The difference with State is that StateV0 has Option wrappers
+/// around blocks_notified and last_purged_notification.
+///
+/// TODO: remove this type once the CMC has upgraded to this version.
+#[derive(Serialize, Deserialize, Clone, CandidType, Eq, PartialEq, Debug)]
+pub struct StateV0 {
+    pub ledger_canister_id: CanisterId,
+    pub governance_canister_id: CanisterId,
+    pub exchange_rate_canister_id: Option<CanisterId>,
+    pub cycles_ledger_canister_id: Option<CanisterId>,
+    pub minting_account_id: Option<AccountIdentifier>,
+    pub authorized_subnets: BTreeMap<PrincipalId, Vec<SubnetId>>,
+    pub default_subnets: Vec<SubnetId>,
+    pub icp_xdr_conversion_rate: Option<IcpXdrConversionRate>,
+    pub average_icp_xdr_conversion_rate: Option<IcpXdrConversionRate>,
+    pub recent_icp_xdr_rates: Option<Vec<IcpXdrConversionRate>>,
+    pub cycles_per_xdr: Cycles,
+    pub cycles_limit: Cycles,
+    pub limiter: limiter::Limiter,
+    pub total_cycles_minted: Cycles,
+
+    pub blocks_notified: Option<BTreeMap<BlockIndex, NotificationStatus>>,
+    pub last_purged_notification: Option<BlockIndex>,
+
+    pub maturity_modulation_permyriad: Option<i32>,
+    pub subnet_types_to_subnets: Option<BTreeMap<String, BTreeSet<SubnetId>>>,
+    pub update_exchange_rate_canister_state: Option<UpdateExchangeRateState>,
+}
+
+/// Migrate from the old state type to the current one.
+fn migrate(state_v0: StateV0) -> StateV1 {
+    let StateV0 {
+        ledger_canister_id,
+        governance_canister_id,
+        exchange_rate_canister_id,
+        cycles_ledger_canister_id,
+        minting_account_id,
+        authorized_subnets,
+        default_subnets,
+        icp_xdr_conversion_rate,
+        average_icp_xdr_conversion_rate,
+        recent_icp_xdr_rates,
+        cycles_per_xdr,
+        cycles_limit,
+        limiter,
+        total_cycles_minted,
+        blocks_notified,
+        last_purged_notification,
+        maturity_modulation_permyriad,
+        subnet_types_to_subnets,
+        update_exchange_rate_canister_state,
+    } = state_v0;
+
+    let blocks_notified = blocks_notified.unwrap_or_default();
+    let last_purged_notification = last_purged_notification.unwrap_or_default();
+
+    StateV1 {
+        ledger_canister_id,
+        governance_canister_id,
+        exchange_rate_canister_id,
+        cycles_ledger_canister_id,
+        minting_account_id,
+        authorized_subnets,
+        default_subnets,
+        icp_xdr_conversion_rate,
+        average_icp_xdr_conversion_rate,
+        recent_icp_xdr_rates,
+        cycles_per_xdr,
+        cycles_limit,
+        limiter,
+        total_cycles_minted,
+        blocks_notified,
+        last_purged_notification,
+        maturity_modulation_permyriad,
+        subnet_types_to_subnets,
+        update_exchange_rate_canister_state,
+    }
+}
+
 impl State {
     fn encode(&self) -> Vec<u8> {
-        candid::encode_one(self).unwrap()
+        Encode!(&Self::state_version(), &self).unwrap()
     }
 
     fn decode(bytes: &[u8]) -> Result<Self, String> {
-        candid::decode_one(bytes)
-            .map_err(|err| format!("Decoding cycles minting canister state failed: {}", err))
+        let mut deserializer = candid::de::IDLDeserialize::new(bytes).unwrap();
+        match deserializer.get_value::<StateVersion>() {
+            // When stable storage contains a StateV0 encoded value
+            // decoding it as a StateVersion will fail (this has been experimentally verified).
+            // In this case we decode stable storage as a StateV0 and migrate it to the desired StateV1.
+            Err(_) => {
+                print("[cycles] state has not been migrated to the new versioned State format yet, doing that now ...");
+                let state_v0: StateV0 = Decode!(bytes, StateV0)
+                    .expect("stable storage needs to contain a candid-encoded StateV0 value!");
+                let state_v1: StateV1 = migrate(state_v0);
+                Ok(state_v1)
+            }
+            Ok(stored_state_version) => {
+                let current_state_version: StateVersion = Self::state_version();
+                match stored_state_version.cmp(&current_state_version) {
+                    Ordering::Greater =>
+                        return Err(format!(
+                            "[cycles] ERROR: stored state version {:?} is greater than the current state version {:?}! \
+                            This likely means a rollback happened. This is not supported. Please upgrade to a hotfix instead.",
+                            stored_state_version, current_state_version
+                        )),
+                    Ordering::Less =>
+                        return Err(format!(
+                            "[cycles] ERROR: stored state version {:?} is lesser than the current state version {:?}! \
+                            Did you forget to migrate the old to the current type?",
+                            stored_state_version, current_state_version
+                        )),
+                    Ordering::Equal =>
+                        print(format!(
+                            "[cycles] INFO: stored state version {:?} equals the current state version {:?}. \
+                            Continuing to decode the stable storage ... ",
+                            stored_state_version, current_state_version,
+                        )),
+                }
+                let state = deserializer.get_value::<State>().unwrap();
+                deserializer.done().unwrap();
+                Ok(state)
+            }
+        }
     }
 
     // Keep the size of blocks_notified map not larger than max_history.
@@ -205,23 +380,15 @@ impl State {
         let mut cnt = 0;
         // Remove elements from the beginning of self.blocks_notified until either
         // it is small enough, or MAX_NOTIFY_PURGE entries have been removed.
-        while self.blocks_notified.as_ref().unwrap().len() > max_history && cnt < MAX_NOTIFY_PURGE {
+        while self.blocks_notified.len() > max_history && cnt < MAX_NOTIFY_PURGE {
             // pop_first is nightly only
-            let block_height = *self
-                .blocks_notified
-                .as_ref()
-                .unwrap()
-                .iter()
-                .next()
-                .unwrap()
-                .0;
-            self.blocks_notified.as_mut().unwrap().remove(&block_height);
+            let block_height = *self.blocks_notified.iter().next().unwrap().0;
+            self.blocks_notified.remove(&block_height);
             last_purged = block_height;
             cnt += 1;
         }
         // make sure this grows monotonically (a delayed callback might have added older status)
-        last_purged = last_purged.max(self.last_purged_notification.unwrap());
-        self.last_purged_notification = Some(last_purged);
+        self.last_purged_notification = last_purged.max(self.last_purged_notification);
     }
 }
 
@@ -234,6 +401,7 @@ impl Default for State {
             ledger_canister_id: CanisterId::ic_00(),
             governance_canister_id: CanisterId::ic_00(),
             exchange_rate_canister_id: None,
+            cycles_ledger_canister_id: None,
             minting_account_id: None,
             authorized_subnets: BTreeMap::new(),
             default_subnets: vec![],
@@ -250,8 +418,8 @@ impl Default for State {
             cycles_limit: 50_000_000_000_000_000u128.into(), // == 50 Pcycles/hour
             limiter: limiter::Limiter::new(resolution, max_age),
             total_cycles_minted: Cycles::zero(),
-            blocks_notified: Some(BTreeMap::new()),
-            last_purged_notification: Some(0),
+            blocks_notified: BTreeMap::new(),
+            last_purged_notification: 0,
             maturity_modulation_permyriad: Some(0),
             subnet_types_to_subnets: Some(BTreeMap::new()),
             update_exchange_rate_canister_state: Some(UpdateExchangeRateState::default()),
@@ -276,7 +444,7 @@ fn init(maybe_args: Option<CyclesCanisterInitPayload>) {
     let args =
         maybe_args.expect("Payload is expected to initialization the cycles minting canister.");
     print(format!(
-        "[cycles] init() with ledger canister {}, governance canister {}, exchange rate canister {}, and minting account {}",
+        "[cycles] init() with ledger canister {}, governance canister {}, exchange rate canister {}, minting account {}, and cycles ledger canister {}",
         args.ledger_canister_id.as_ref().map(|x| x.to_string()).unwrap_or_else(|| "<none>".to_string()),
         args.governance_canister_id.as_ref().map(|x| x.to_string()).unwrap_or_else(|| "<none>".to_string()),
         args.exchange_rate_canister.as_ref()
@@ -287,7 +455,10 @@ fn init(maybe_args: Option<CyclesCanisterInitPayload>) {
             .unwrap_or_else(|| "<none>".to_string()),
         args.minting_account_id
             .map(|x| x.to_string())
-            .unwrap_or_else(|| "<none>".to_string())
+            .unwrap_or_else(|| "<none>".to_string()),
+        args.cycles_ledger_canister_id.as_ref()
+            .map(|x| x.to_string())
+            .unwrap_or_else(|| "<none>".to_string()),
     ));
 
     STATE.with(|state| state.replace(Some(State::default())));
@@ -299,9 +470,14 @@ fn init(maybe_args: Option<CyclesCanisterInitPayload>) {
             .governance_canister_id
             .expect("Governance canister ID must be set!");
         state.minting_account_id = args.minting_account_id;
-        state.last_purged_notification = args.last_purged_notification;
+        if let Some(last_purged_notification) = args.last_purged_notification {
+            state.last_purged_notification = last_purged_notification;
+        }
         if let Some(xrc_flag) = args.exchange_rate_canister {
             state.exchange_rate_canister_id = xrc_flag.extract_exchange_rate_canister_id();
+        }
+        if args.cycles_ledger_canister_id.is_some() {
+            state.cycles_ledger_canister_id = args.cycles_ledger_canister_id;
         }
     });
 }
@@ -325,7 +501,7 @@ fn set_authorized_subnetwork_list(who: Option<PrincipalId>, subnets: Vec<SubnetI
     with_state_mut(|state| {
         let governance_canister_id = state.governance_canister_id;
 
-        if CanisterId::new(caller()) != Ok(governance_canister_id) {
+        if CanisterId::unchecked_from_principal(caller()) != governance_canister_id {
             panic!("Only the governance canister can set authorized subnetwork lists.");
         }
 
@@ -380,7 +556,7 @@ fn update_subnet_type_() {
 fn update_subnet_type(args: UpdateSubnetTypeArgs) -> UpdateSubnetTypeResult {
     let governance_canister_id = with_state(|state| state.governance_canister_id);
 
-    if CanisterId::new(caller()) != Ok(governance_canister_id) {
+    if CanisterId::unchecked_from_principal(caller()) != governance_canister_id {
         panic!("Only the governance canister can update the available subnet types.");
     }
 
@@ -452,7 +628,7 @@ fn change_subnet_type_assignment(
 ) -> ChangeSubnetTypeAssignmentResult {
     let governance_canister_id = with_state(|state| state.governance_canister_id);
 
-    if CanisterId::new(caller()) != Ok(governance_canister_id) {
+    if CanisterId::unchecked_from_principal(caller()) != governance_canister_id {
         panic!(
             "Only the governance canister can change the assignment of subnets to subnet types."
         );
@@ -1008,6 +1184,16 @@ fn notify_create_canister_() {
     over_async(candid_one, notify_create_canister)
 }
 
+#[export_name = "canister_update create_canister"]
+fn create_canister_() {
+    over_async(candid_one, create_canister)
+}
+
+#[export_name = "canister_update notify_mint_cycles"]
+fn notify_mint_cycles_() {
+    over_async(candid_one, notify_mint_cycles)
+}
+
 fn is_transient_error<T>(result: &Result<T, NotifyError>) -> bool {
     if let Err(e) = result {
         return e.is_retriable();
@@ -1031,20 +1217,25 @@ async fn notify_top_up(
 ) -> Result<Cycles, NotifyError> {
     let cmc_id = dfn_core::api::id();
     let sub = Subaccount::from(&canister_id);
-    let expected_to = AccountIdentifier::new(cmc_id.get(), Some(sub));
+    let expected_destination_account = AccountIdentifier::new(cmc_id.get(), Some(sub));
 
-    let (amount, from) = fetch_transaction(block_index, expected_to, MEMO_TOP_UP_CANISTER).await?;
+    let (amount, from) = fetch_transaction(
+        block_index,
+        expected_destination_account,
+        MEMO_TOP_UP_CANISTER,
+    )
+    .await?;
 
     let maybe_early_result = with_state_mut(|state| {
         state.purge_old_notifications(MAX_NOTIFY_HISTORY);
 
-        if block_index <= state.last_purged_notification.unwrap() {
+        if block_index <= state.last_purged_notification {
             return Some(Err(NotifyError::TransactionTooOld(
-                state.last_purged_notification.unwrap() + 1,
+                state.last_purged_notification + 1,
             )));
         }
 
-        match state.blocks_notified.as_mut().unwrap().entry(block_index) {
+        match state.blocks_notified.entry(block_index) {
             Entry::Occupied(entry) => match entry.get() {
                 NotificationStatus::Processing => Some(Err(NotifyError::Processing)),
                 NotificationStatus::NotifiedTopUp(result) => Some(result.clone()),
@@ -1053,6 +1244,9 @@ async fn notify_top_up(
                         "The same payment is already processed as create canister request".into(),
                     )))
                 }
+                NotificationStatus::NotifiedMint(_) => Some(Err(NotifyError::InvalidTransaction(
+                    "The same payment is already processed as mint request".into(),
+                ))),
             },
             Entry::Vacant(entry) => {
                 entry.insert(NotificationStatus::Processing);
@@ -1067,12 +1261,91 @@ async fn notify_top_up(
             let result = process_top_up(canister_id, from, amount).await;
 
             with_state_mut(|state| {
-                state.blocks_notified.as_mut().unwrap().insert(
+                state.blocks_notified.insert(
                     block_index,
                     NotificationStatus::NotifiedTopUp(result.clone()),
                 );
                 if is_transient_error(&result) {
-                    state.blocks_notified.as_mut().unwrap().remove(&block_index);
+                    state.blocks_notified.remove(&block_index);
+                }
+            });
+
+            result
+        }
+    }
+}
+
+/// Mints cycles from ICP and deposits the cycles into the cycles ledger
+///
+/// If the cycles are supposed to be deposited to a different canister use `notify_top_up` instead.
+///
+/// # Arguments
+///
+/// * `block_height` -  The height of the block you would like to send a
+///   notification about.
+/// * `to_subaccount` - Cycles ledger subaccount to which the cycles are minted to.
+#[candid_method(update, rename = "notify_mint_cycles")]
+async fn notify_mint_cycles(
+    NotifyMintCyclesArg {
+        block_index,
+        to_subaccount,
+        deposit_memo,
+    }: NotifyMintCyclesArg,
+) -> NotifyMintCyclesResult {
+    let cmc_id = dfn_core::api::id();
+    let subaccount = Subaccount::from(&caller());
+    let expected_destination_account = AccountIdentifier::new(cmc_id.get(), Some(subaccount));
+    let to_account = Account {
+        owner: caller().into(),
+        subaccount: to_subaccount,
+    };
+
+    let (amount, from) =
+        fetch_transaction(block_index, expected_destination_account, MEMO_MINT_CYCLES).await?;
+
+    let maybe_early_result = with_state_mut(|state| {
+        state.purge_old_notifications(MAX_NOTIFY_HISTORY);
+
+        if block_index <= state.last_purged_notification {
+            return Some(Err(NotifyError::TransactionTooOld(
+                state.last_purged_notification + 1,
+            )));
+        }
+
+        match state.blocks_notified.entry(block_index) {
+            Entry::Occupied(entry) => match entry.get() {
+                NotificationStatus::Processing => Some(Err(NotifyError::Processing)),
+                NotificationStatus::NotifiedMint(resp) => Some(resp.clone()),
+                NotificationStatus::NotifiedCreateCanister(_) => {
+                    Some(Err(NotifyError::InvalidTransaction(
+                        "The same payment is already processed as a create canister request."
+                            .into(),
+                    )))
+                }
+                NotificationStatus::NotifiedTopUp(_) => Some(Err(NotifyError::InvalidTransaction(
+                    "The same payment is already processed as a top up request.".into(),
+                ))),
+            },
+            Entry::Vacant(entry) => {
+                entry.insert(NotificationStatus::Processing);
+                None
+            }
+        }
+    });
+
+    match maybe_early_result {
+        Some(result) => result,
+        None => {
+            let result =
+                process_mint_cycles(to_account, amount, deposit_memo, from, subaccount).await;
+
+            with_state_mut(|state| {
+                state.blocks_notified.insert(
+                    block_index,
+                    NotificationStatus::NotifiedMint(result.clone()),
+                );
+                if is_transient_error(&result) {
+                    state.blocks_notified.remove(&block_index);
                 }
             });
 
@@ -1089,34 +1362,52 @@ async fn notify_top_up(
 ///   notification about.
 /// * `controller` - PrincipalId of the canister controller.
 #[candid_method(update, rename = "notify_create_canister")]
+#[allow(deprecated)]
 async fn notify_create_canister(
     NotifyCreateCanister {
         block_index,
         controller,
         subnet_type,
+        subnet_selection,
+        settings,
     }: NotifyCreateCanister,
 ) -> Result<CanisterId, NotifyError> {
     let cmc_id = dfn_core::api::id();
     let sub = Subaccount::from(&controller);
-    let expected_to = AccountIdentifier::new(cmc_id.get(), Some(sub));
+    let expected_destination_account = AccountIdentifier::new(cmc_id.get(), Some(sub));
+    let subnet_selection =
+        get_subnet_selection(subnet_type, subnet_selection).map_err(|error_message| {
+            NotifyError::Other {
+                error_code: NotifyErrorCode::BadSubnetSelection as u64,
+                error_message,
+            }
+        })?;
 
-    let (amount, from) = fetch_transaction(block_index, expected_to, MEMO_CREATE_CANISTER).await?;
+    let (amount, from) = fetch_transaction(
+        block_index,
+        expected_destination_account,
+        MEMO_CREATE_CANISTER,
+    )
+    .await?;
 
     let maybe_early_result = with_state_mut(|state| {
         state.purge_old_notifications(MAX_NOTIFY_HISTORY);
 
-        if block_index <= state.last_purged_notification.unwrap() {
+        if block_index <= state.last_purged_notification {
             return Some(Err(NotifyError::TransactionTooOld(
-                state.last_purged_notification.unwrap() + 1,
+                state.last_purged_notification + 1,
             )));
         }
 
-        match state.blocks_notified.as_mut().unwrap().entry(block_index) {
+        match state.blocks_notified.entry(block_index) {
             Entry::Occupied(entry) => match entry.get() {
                 NotificationStatus::Processing => Some(Err(NotifyError::Processing)),
                 NotificationStatus::NotifiedCreateCanister(resp) => Some(resp.clone()),
                 NotificationStatus::NotifiedTopUp(_) => Some(Err(NotifyError::InvalidTransaction(
                     "The same payment is already processed as a top up request.".into(),
+                ))),
+                NotificationStatus::NotifiedMint(_) => Some(Err(NotifyError::InvalidTransaction(
+                    "The same payment is already processed as a mint request.".into(),
                 ))),
             },
             Entry::Vacant(entry) => {
@@ -1129,19 +1420,66 @@ async fn notify_create_canister(
     match maybe_early_result {
         Some(result) => result,
         None => {
-            let result = process_create_canister(controller, from, amount, subnet_type).await;
+            let result =
+                process_create_canister(controller, from, amount, subnet_selection, settings).await;
 
             with_state_mut(|state| {
-                state.blocks_notified.as_mut().unwrap().insert(
+                state.blocks_notified.insert(
                     block_index,
                     NotificationStatus::NotifiedCreateCanister(result.clone()),
                 );
                 if is_transient_error(&result) {
-                    state.blocks_notified.as_mut().unwrap().remove(&block_index);
+                    state.blocks_notified.remove(&block_index);
                 }
             });
 
             result
+        }
+    }
+}
+
+#[candid_method(update, rename = "create_canister")]
+#[allow(deprecated)]
+async fn create_canister(
+    CreateCanister {
+        settings,
+        subnet_selection,
+        subnet_type,
+    }: CreateCanister,
+) -> Result<CanisterId, CreateCanisterError> {
+    let cycles = dfn_core::api::msg_cycles_available();
+    if cycles < CREATE_CANISTER_MIN_CYCLES {
+        return Err(CreateCanisterError::Refunded {
+            refund_amount: cycles.into(),
+            create_error: "Insufficient cycles attached.".to_string(),
+        });
+    }
+    let subnet_selection =
+        get_subnet_selection(subnet_type, subnet_selection).map_err(|error_message| {
+            CreateCanisterError::Refunded {
+                refund_amount: cycles.into(),
+                create_error: error_message,
+            }
+        })?;
+
+    // will always succeed because only calls from canisters can have cycles attached
+    let calling_canister = caller().try_into().unwrap();
+
+    dfn_core::api::msg_cycles_accept(cycles);
+    match do_create_canister(caller(), cycles.into(), subnet_selection, settings, false).await {
+        Ok(canister_id) => Ok(canister_id),
+        Err(create_error) => {
+            let refund_amount = cycles.saturating_sub(BAD_REQUEST_CYCLES_PENALTY as u64);
+            match deposit_cycles(calling_canister, refund_amount.into(), false).await {
+                Ok(()) => Err(CreateCanisterError::Refunded {
+                    refund_amount: refund_amount.into(),
+                    create_error,
+                }),
+                Err(refund_error) => Err(CreateCanisterError::RefundFailed {
+                    create_error,
+                    refund_error,
+                }),
+            }
         }
     }
 }
@@ -1196,13 +1534,14 @@ fn memo_to_intent_str(memo: Memo) -> String {
     match memo {
         MEMO_CREATE_CANISTER => "CreateCanister".into(),
         MEMO_TOP_UP_CANISTER => "TopUp".into(),
-        _ => "unrecognized".into(),
+        MEMO_MINT_CYCLES => "MintCycles".into(),
+        a => format!("unrecognized: {a:?}"),
     }
 }
 
 async fn fetch_transaction(
     block_index: BlockIndex,
-    expected_to: AccountIdentifier,
+    expected_destination_account: AccountIdentifier,
     expected_memo: Memo,
 ) -> Result<(Tokens, AccountIdentifier), NotifyError> {
     let ledger_id = with_state(|state| state.ledger_canister_id);
@@ -1219,10 +1558,10 @@ async fn fetch_transaction(
             ))
         }
     };
-    if to != expected_to {
+    if to != expected_destination_account {
         return Err(NotifyError::InvalidTransaction(format!(
             "Destination account in the block ({}) different than in the notification ({})",
-            to, expected_to
+            to, expected_destination_account
         )));
     }
     let memo = block.transaction().memo;
@@ -1250,7 +1589,7 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
 
     let ledger_canister_id = with_state(|state| state.ledger_canister_id);
 
-    if CanisterId::new(caller) != Ok(ledger_canister_id) {
+    if CanisterId::unchecked_from_principal(caller) != ledger_canister_id {
         return Err(format!(
             "This canister can only be notified by the ledger canister ({}), not by {}.",
             ledger_canister_id, caller
@@ -1259,30 +1598,27 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
 
     // We need this check if MAX_NOTIFY_HISTORY is smaller than max number of transactions
     // the ledger can process within 24h
-    let last_purged_notification = with_state(|state| state.last_purged_notification.unwrap());
+    let last_purged_notification = with_state(|state| state.last_purged_notification);
 
     if tn.block_height <= last_purged_notification {
         return Err(NotifyError::TransactionTooOld(last_purged_notification + 1).to_string());
     }
 
     let block_height = tn.block_height;
-    with_state_mut(
-        |state| match state.blocks_notified.as_mut().unwrap().entry(block_height) {
-            Entry::Occupied(entry) => match entry.get() {
-                NotificationStatus::Processing => Err("Another notification is in progress".into()),
-                NotificationStatus::NotifiedTopUp(resp) => {
-                    Err(format!("Already notified: {:?}", resp))
-                }
-                NotificationStatus::NotifiedCreateCanister(resp) => {
-                    Err(format!("Already notified: {:?}", resp))
-                }
-            },
-            Entry::Vacant(entry) => {
-                entry.insert(NotificationStatus::Processing);
-                Ok(())
+    with_state_mut(|state| match state.blocks_notified.entry(block_height) {
+        Entry::Occupied(entry) => match entry.get() {
+            NotificationStatus::Processing => Err("Another notification is in progress".into()),
+            NotificationStatus::NotifiedTopUp(resp) => Err(format!("Already notified: {:?}", resp)),
+            NotificationStatus::NotifiedCreateCanister(resp) => {
+                Err(format!("Already notified: {:?}", resp))
             }
+            NotificationStatus::NotifiedMint(resp) => Err(format!("Already notified: {:?}", resp)),
         },
-    )?;
+        Entry::Vacant(entry) => {
+            entry.insert(NotificationStatus::Processing);
+            Ok(())
+        }
+    })?;
 
     let from = AccountIdentifier::new(tn.from, tn.from_subaccount);
 
@@ -1292,7 +1628,7 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
             .ok_or_else(|| "Reserving requires a principal.".to_string())?)
             .try_into()
             .map_err(|err| format!("Cannot parse subaccount: {}", err))?;
-        match process_create_canister(controller, from, tn.amount, None).await {
+        match process_create_canister(controller, from, tn.amount, None, None).await {
             Ok(canister_id) => (
                 Ok(CyclesResponse::CanisterCreated(canister_id)),
                 Some(NotificationStatus::NotifiedCreateCanister(Ok(canister_id))),
@@ -1346,18 +1682,10 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
 
     with_state_mut(|state| {
         if let Some(status) = notification_status {
-            state
-                .blocks_notified
-                .as_mut()
-                .unwrap()
-                .insert(block_height, status);
+            state.blocks_notified.insert(block_height, status);
         }
         if is_transient_error(&cycles_response) {
-            state
-                .blocks_notified
-                .as_mut()
-                .unwrap()
-                .remove(&block_height);
+            state.blocks_notified.remove(&block_height);
         }
     });
 
@@ -1394,7 +1722,8 @@ async fn process_create_canister(
     controller: PrincipalId,
     from: AccountIdentifier,
     amount: Tokens,
-    subnet_type: Option<String>,
+    subnet_selection: Option<SubnetSelection>,
+    settings: Option<CanisterSettingsArgs>,
 ) -> Result<CanisterId, NotifyError> {
     let cycles = tokens_to_cycles(amount)?;
 
@@ -1408,13 +1737,40 @@ async fn process_create_canister(
     // Create the canister. If this fails, refund. Either way,
     // return a result so that the notification cannot be retried.
     // If refund fails, we allow to retry.
-    match create_canister(controller, cycles, subnet_type).await {
+    match do_create_canister(controller, cycles, subnet_selection, settings, true).await {
         Ok(canister_id) => {
             burn_and_log(sub, amount).await;
             Ok(canister_id)
         }
         Err(err) => {
-            let refund_block = refund(sub, from, amount, CREATE_CANISTER_REFUND_FEE).await?;
+            let refund_block = refund_icp(sub, from, amount, CREATE_CANISTER_REFUND_FEE).await?;
+            Err(NotifyError::Refunded {
+                reason: err,
+                block_index: refund_block,
+            })
+        }
+    }
+}
+
+async fn process_mint_cycles(
+    to_account: Account,
+    amount: Tokens,
+    deposit_memo: Option<Vec<u8>>,
+    from: AccountIdentifier,
+    sub: Subaccount,
+) -> NotifyMintCyclesResult {
+    let cycles = tokens_to_cycles(amount)?;
+    match do_mint_cycles(to_account, cycles, deposit_memo).await {
+        Ok(deposit_result) => {
+            burn_and_log(sub, amount).await;
+            Ok(NotifyMintCyclesSuccess {
+                block_index: deposit_result.block_index,
+                minted: cycles.into(),
+                balance: deposit_result.balance,
+            })
+        }
+        Err(err) => {
+            let refund_block = refund_icp(sub, from, amount, MINT_CYCLES_REFUND_FEE).await?;
             Err(NotifyError::Refunded {
                 reason: err,
                 block_index: refund_block,
@@ -1437,13 +1793,13 @@ async fn process_top_up(
         canister_id, cycles
     ));
 
-    match deposit_cycles(canister_id, cycles).await {
+    match deposit_cycles(canister_id, cycles, true).await {
         Ok(()) => {
             burn_and_log(sub, amount).await;
             Ok(cycles)
         }
         Err(err) => {
-            let refund_block = refund(sub, from, amount, TOP_UP_CANISTER_REFUND_FEE).await?;
+            let refund_block = refund_icp(sub, from, amount, TOP_UP_CANISTER_REFUND_FEE).await?;
             Err(NotifyError::Refunded {
                 reason: err.to_string(),
                 block_index: refund_block,
@@ -1497,7 +1853,7 @@ async fn burn_and_log(from_subaccount: Subaccount, amount: Tokens) {
 /// minus the transaction fee (which is gone) and the fee for the
 /// action (which is burned). Returns the index of the block in which
 /// the refund was done.
-async fn refund(
+async fn refund_icp(
     from_subaccount: Subaccount,
     to: AccountIdentifier,
     amount: Tokens,
@@ -1553,8 +1909,14 @@ async fn refund(
     Ok(refund_block_index)
 }
 
-async fn deposit_cycles(canister_id: CanisterId, cycles: Cycles) -> Result<(), String> {
-    ensure_balance(cycles)?;
+async fn deposit_cycles(
+    canister_id: CanisterId,
+    cycles: Cycles,
+    mint_cycles: bool,
+) -> Result<(), String> {
+    if mint_cycles {
+        ensure_balance(cycles)?;
+    }
 
     let res: Result<(), (Option<i32>, String)> = dfn_core::api::call_with_funds_and_cleanup(
         IC_00,
@@ -1576,10 +1938,47 @@ async fn deposit_cycles(canister_id: CanisterId, cycles: Cycles) -> Result<(), S
     Ok(())
 }
 
-async fn create_canister(
+async fn do_mint_cycles(
+    account: Account,
+    cycles: Cycles,
+    deposit_memo: Option<Vec<u8>>,
+) -> Result<CyclesLedgerDepositResult, String> {
+    let Some(cycles_ledger_canister_id) = with_state(|state| state.cycles_ledger_canister_id)
+    else {
+        return Err("No cycles ledger canister id configured.".to_string());
+    };
+
+    ensure_balance(cycles)?;
+
+    let arg = CyclesLedgerDepositArgs {
+        to: account,
+        memo: deposit_memo,
+    };
+    let result: Result<(CyclesLedgerDepositResult,), (Option<i32>, String)> =
+        dfn_core::api::call_with_funds_and_cleanup(
+            cycles_ledger_canister_id,
+            "deposit",
+            dfn_candid::candid_multi_arity,
+            (arg,),
+            dfn_core::api::Funds::new(u128::from(cycles) as u64),
+        )
+        .await;
+
+    result.map(|r| r.0).map_err(|(code, msg)| {
+        format!(
+            "Cycles ledger rejected deposit call with code {}: {:?}",
+            code.unwrap_or_default(),
+            msg
+        )
+    })
+}
+
+async fn do_create_canister(
     controller_id: PrincipalId,
     cycles: Cycles,
-    subnet_type: Option<String>,
+    subnet_selection: Option<SubnetSelection>,
+    settings: Option<CanisterSettingsArgs>,
+    mint_cycles: bool,
 ) -> Result<CanisterId, String> {
     // Retrieve randomness from the system to use later to get a random
     // permutation of subnets. Performing the asynchronous call before
@@ -1587,23 +1986,53 @@ async fn create_canister(
     // subnets change in the meantime.
     let mut rng = get_rng().await?;
 
-    // If subnet_type is `Some`, then use it to determine the eligible list
+    // If subnet_selection is set, then use it to determine the eligible list
     // of subnets. Otherwise, fall back to the list of subnets for the
     // provided controller id.
-    let mut subnets: Vec<SubnetId> = match subnet_type {
-        Some(subnet_type) => with_state(|state| {
-            let subnet_types_to_subnets = state
-                .subnet_types_to_subnets
-                .as_ref()
-                .expect("subnet types to subnets mapping is not `None`");
-            match subnet_types_to_subnets.get(&subnet_type) {
-                Some(s) => Ok(s.iter().copied().collect()),
-                None => Err(format!(
-                    "Provided subnet type {} does not exist",
-                    subnet_type
-                )),
+
+    let mut subnets: Vec<SubnetId> = match subnet_selection {
+        Some(option) => match option {
+            SubnetSelection::Filter(subnet_filter) => {
+                with_state(|state| match subnet_filter.subnet_type {
+                    Some(subnet_type) => {
+                        let subnet_types_to_subnets = state
+                            .subnet_types_to_subnets
+                            .as_ref()
+                            .expect("subnet types to subnets mapping is `None`");
+                        subnet_types_to_subnets
+                            .get(&subnet_type)
+                            .map(|set| set.iter().cloned().collect())
+                            .ok_or(format!(
+                                "Provided subnet type {} does not exist",
+                                subnet_type
+                            ))
+                    }
+                    None => Ok(get_subnets_for(&controller_id)),
+                })
             }
-        }),
+            SubnetSelection::Subnet { subnet } => with_state(|state| {
+                if state.default_subnets.contains(&subnet)
+                    || state
+                        .authorized_subnets
+                        .get(&controller_id)
+                        .map(|subnets| subnets.contains(&subnet))
+                        .unwrap_or(false)
+                    || state
+                        .subnet_types_to_subnets
+                        .as_ref()
+                        .map(|types_to_subnets| {
+                            types_to_subnets
+                                .values()
+                                .any(|subnets| subnets.contains(&subnet))
+                        })
+                        .unwrap_or(false)
+                {
+                    Ok(vec![subnet])
+                } else {
+                    Err(format!("Subnet {} does not exist or {} is not authorized to deploy to that subnet.", subnet, controller_id))
+                }
+            }),
+        },
         None => Ok(get_subnets_for(&controller_id)),
     }?;
 
@@ -1613,11 +2042,24 @@ async fn create_canister(
 
     let mut last_err = None;
 
-    if !subnets.is_empty() {
+    if mint_cycles && !subnets.is_empty() {
         // TODO(NNS1-503): If CreateCanister fails, then we still have minted
         // these cycles.
         ensure_balance(cycles)?;
     }
+
+    let canister_settings = settings
+        .map(|mut settings| {
+            if settings.controllers.is_none() {
+                settings.controllers = Some(BoundedVec::new(vec![controller_id]));
+            }
+            settings
+        })
+        .unwrap_or_else(|| {
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(vec![controller_id])
+                .build()
+        });
 
     for subnet_id in subnets {
         let result: Result<CanisterIdRecord, _> = dfn_core::api::call_with_funds_and_cleanup(
@@ -1625,11 +2067,7 @@ async fn create_canister(
             &Method::CreateCanister.to_string(),
             dfn_candid::candid_one,
             CreateCanisterArgs {
-                settings: Some(
-                    CanisterSettingsArgsBuilder::new()
-                        .with_controllers(vec![controller_id])
-                        .build(),
-                ),
+                settings: Some(canister_settings.clone()),
                 sender_canister_version: Some(dfn_core::api::canister_version()),
             },
             dfn_core::api::Funds::new(cycles.get().try_into().unwrap()),
@@ -1762,6 +2200,7 @@ fn post_upgrade(maybe_args: Option<CyclesCanisterInitPayload>) {
         if let Some(xrc_flag) = args.exchange_rate_canister {
             new_state.exchange_rate_canister_id = xrc_flag.extract_exchange_rate_canister_id();
         }
+        new_state.cycles_ledger_canister_id = args.cycles_ledger_canister_id;
     }
 
     STATE.with(|state| state.replace(Some(new_state)));
@@ -1811,12 +2250,12 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     with_state(|state| {
         w.encode_gauge(
             "cmc_last_purged_notification",
-            state.last_purged_notification.unwrap() as f64,
+            state.last_purged_notification as f64,
             "Block index of the last purged notification.",
         )?;
         w.encode_gauge(
             "cmc_blocks_notified_count",
-            state.blocks_notified.as_ref().unwrap().len() as f64,
+            state.blocks_notified.len() as f64,
             "Number of notifications stored in the cache.",
         )?;
         w.encode_gauge(
@@ -1876,6 +2315,21 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     })
 }
 
+fn get_subnet_selection(
+    subnet_type: Option<String>,
+    subnet_selection: Option<SubnetSelection>,
+) -> Result<Option<SubnetSelection>, String> {
+    if subnet_type.is_some() && subnet_selection.is_some() {
+        Err("Cannot specify subnet_type and subnet_selection at the same time.".to_string())
+    } else if let Some(subnet_type) = subnet_type {
+        Ok(Some(SubnetSelection::Filter(SubnetFilter {
+            subnet_type: Some(subnet_type),
+        })))
+    } else {
+        Ok(subnet_selection)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1889,6 +2343,7 @@ mod tests {
             governance_canister_id: Some(CanisterId::ic_00()),
             exchange_rate_canister: None,
             minting_account_id: None,
+            cycles_ledger_canister_id: None,
             last_purged_notification: Some(0),
         }))
     }
@@ -1902,7 +2357,7 @@ mod tests {
             )),
             default_subnets: vec![SubnetId::from(PrincipalId::new_subnet_test_id(123))],
             total_cycles_minted: Cycles::new(1234),
-            last_purged_notification: Some(33),
+            last_purged_notification: 33,
             ..Default::default()
         };
         state.authorized_subnets.insert(
@@ -1918,12 +2373,11 @@ mod tests {
         }
         blocks_notified.insert(
             60,
-            NotificationStatus::NotifiedCreateCanister(Ok(CanisterId::new(
+            NotificationStatus::NotifiedCreateCanister(Ok(CanisterId::unchecked_from_principal(
                 PrincipalId::new_user_test_id(4),
-            )
-            .unwrap())),
+            ))),
         );
-        state.blocks_notified = Some(blocks_notified);
+        state.blocks_notified = blocks_notified;
 
         let bytes = state.encode();
 
@@ -1938,7 +2392,7 @@ mod tests {
             Cycles::new(block_index as u128)
         }
         let mut state = State {
-            last_purged_notification: Some(0),
+            last_purged_notification: 0,
             ..Default::default()
         };
         let initial_number_of_notifications = 100;
@@ -1949,7 +2403,7 @@ mod tests {
                 NotificationStatus::NotifiedTopUp(Ok(block_index_to_cycles(i))),
             );
         }
-        state.blocks_notified = Some(blocks_notified);
+        state.blocks_notified = blocks_notified;
 
         let target_history_len = 30;
         state.purge_old_notifications(target_history_len);
@@ -1957,31 +2411,18 @@ mod tests {
         let expected_oldest_transaction_index =
             initial_number_of_notifications - target_history_len as u64;
         let expected_last_purged = expected_oldest_transaction_index - 1;
-        assert_eq!(state.last_purged_notification, Some(expected_last_purged));
+        assert_eq!(state.last_purged_notification, expected_last_purged);
+        assert_eq!(state.blocks_notified.get(&expected_last_purged), None);
         assert_eq!(
             state
                 .blocks_notified
-                .as_ref()
-                .unwrap()
-                .get(&expected_last_purged),
-            None
-        );
-        assert_eq!(
-            state
-                .blocks_notified
-                .as_ref()
-                .unwrap()
                 .get(&expected_oldest_transaction_index),
             Some(&NotificationStatus::NotifiedTopUp(Ok(
                 block_index_to_cycles(expected_oldest_transaction_index)
             )))
         );
         assert_eq!(
-            state
-                .blocks_notified
-                .as_ref()
-                .unwrap()
-                .get(&most_recent_transaction_index),
+            state.blocks_notified.get(&most_recent_transaction_index),
             Some(&NotificationStatus::NotifiedTopUp(Ok(
                 block_index_to_cycles(most_recent_transaction_index)
             )))

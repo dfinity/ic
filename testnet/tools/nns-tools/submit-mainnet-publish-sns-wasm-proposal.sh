@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euo pipefail
+set -Eeuo pipefail
 
 NNS_TOOLS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 source "$NNS_TOOLS_DIR/lib/include.sh"
@@ -78,7 +78,7 @@ submit_nns_publish_sns_wasm_proposal_mainnet() {
 
 }
 
-# We download a verison of IC_ADMIN compatible with the previous release
+# We download a version of IC_ADMIN compatible with the previous release
 if ! is_variable_set IC_ADMIN; then
     if [ ! -f "$MY_DOWNLOAD_DIR/ic-admin" ]; then
         PREVIOUS_VERSION=$(extract_previous_version "$PROPOSAL_FILE")

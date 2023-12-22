@@ -12,9 +12,10 @@ use hyper::{
     service::Service,
     Client as HyperClient, Method, StatusCode, Uri as HyperUri,
 };
-use hyper_tls::HttpsConnector as HyperTlsConnector;
+use hyper_rustls::HttpsConnector as HyperTlsConnector;
 use itertools::Either;
 use serde_cbor::Value;
+use std::sync::Arc;
 use std::{
     borrow::Cow,
     collections::HashMap,
@@ -110,19 +111,41 @@ impl Service<dns::Name> for DnsResolverWithOverrides {
     }
 }
 
+struct DangerAcceptInvalidCerts {}
+impl rustls::client::ServerCertVerifier for DangerAcceptInvalidCerts {
+    fn verify_server_cert(
+        &self,
+        _end_entity: &rustls::Certificate,
+        _intermediates: &[rustls::Certificate],
+        _server_name: &rustls::ServerName,
+        _scts: &mut dyn Iterator<Item = &[u8]>,
+        _ocsp_response: &[u8],
+        _now: std::time::SystemTime,
+    ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
+        Ok(rustls::client::ServerCertVerified::assertion())
+    }
+}
+
 impl HttpClient {
     pub fn new_with_config(config: HttpClientConfig) -> Self {
-        let native_tls_connector = native_tls::TlsConnector::builder()
-            .use_sni(false)
-            .request_alpns(&["h2"])
-            .danger_accept_invalid_certs(true)
-            .build()
-            .expect("failed to build tls connector");
         let mut http_connector =
             HyperConnector::new_with_resolver(DnsResolverWithOverrides::new(config.overrides));
         http_connector.enforce_http(false);
-        let https_connector =
-            HyperTlsConnector::from((http_connector, native_tls_connector.into()));
+
+        let mut rustls_config = rustls::ClientConfig::builder()
+            .with_safe_defaults()
+            .with_custom_certificate_verifier(Arc::new(DangerAcceptInvalidCerts {}))
+            .with_no_client_auth();
+        rustls_config.enable_sni = false;
+        let https_connector = hyper_rustls::HttpsConnectorBuilder::new()
+            .with_tls_config(rustls_config)
+            .https_or_http();
+        let https_connector = if config.http2_only {
+            https_connector.enable_http2()
+        } else {
+            https_connector.enable_http1().enable_http2()
+        };
+        let https_connector = https_connector.wrap_connector(http_connector);
 
         let hyper = HyperClient::builder()
             .pool_idle_timeout(config.pool_idle_timeout)
@@ -193,7 +216,7 @@ impl HttpClient {
 
         let is_update_call = uri.path().ends_with("/call");
 
-        // update calls with a response code of 200 indicates an error ocurred.
+        // update calls with a response code of 200 indicates an error occurred.
         if !status.is_success() || (is_update_call && status == StatusCode::OK) {
             let readable_response = if is_update_call {
                 format!("{:?}", serde_cbor::from_slice::<Value>(&parsed_body))

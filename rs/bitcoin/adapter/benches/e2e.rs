@@ -12,6 +12,7 @@ use ic_btc_types_internal::BitcoinAdapterRequestWrapper;
 use ic_btc_types_internal::BitcoinAdapterResponseWrapper;
 use ic_btc_types_internal::GetSuccessorsRequestInitial;
 use ic_config::adapters::AdaptersConfig;
+use ic_config::bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig;
 use ic_interfaces_adapter_client::Options;
 use ic_interfaces_adapter_client::RpcAdapterClient;
 use ic_logger::replica_logger::no_op_logger;
@@ -147,7 +148,12 @@ fn e2e(criterion: &mut Criterion) {
         bench.iter(|| {
             // The adapter will do a BFS, going through all the blocks in the forks until enough unprocessed blocks are collected.
             client
-                .send_blocking(wrapped.clone(), Options::default())
+                .send_blocking(
+                    wrapped.clone(),
+                    Options {
+                        timeout: BitcoinPayloadBuilderConfig::default().adapter_timeout,
+                    },
+                )
                 .expect("Failed to send request.");
         })
     });

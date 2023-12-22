@@ -104,10 +104,10 @@ export class ResponseCache {
   }
 
   /**
-   * Decides wether it should cache the response using the available etag and cache control headers.
+   * Decides whether it should cache the response using the available etag and cache control headers.
    * @param request Request is used to calculate the cache key
    * @param response Response being cached
-   * @param options Wether it should use method, search and vary headers to compose the key
+   * @param options Whether it should use method, search and vary headers to compose the key
    */
   public async save({
     request,

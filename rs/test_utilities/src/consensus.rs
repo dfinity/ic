@@ -2,13 +2,9 @@
 pub mod batch;
 pub mod fake;
 
-use mockall::predicate::*;
-use mockall::*;
-
 use crate::crypto::empty_ni_dkg_transcripts_with_committee;
-use ic_base_types::RegistryVersion;
 use ic_interfaces::{
-    consensus_pool::{ChangeAction, ConsensusPoolCache},
+    consensus_pool::{ChangeAction, ConsensusPoolCache, ConsensusTime},
     validation::*,
 };
 use ic_interfaces_registry::RegistryClient;
@@ -62,25 +58,6 @@ pub fn assert_action_invalid<T: ConsensusMessageHashable>(action: ChangeAction, 
     }
 }
 
-mock! {
-
-    pub ConsensusCache {}
-
-    pub trait ConsensusPoolCache: Send + Sync {
-        fn finalized_block(&self) -> Block;
-
-        fn consensus_time(&self) -> Option<Time>;
-
-        fn catch_up_package(&self) -> CatchUpPackage;
-
-        fn summary_block(&self) -> Block;
-
-        fn cup_as_protobuf(&self) -> pb::CatchUpPackage;
-
-        fn get_oldest_registry_version_in_use(&self) -> RegistryVersion;
-    }
-}
-
 // CachedData for fake ConsensusPoolCache
 struct CachedData {
     finalized_block: Block,
@@ -124,11 +101,7 @@ impl FakeConsensusPoolCache {
     }
 }
 
-impl ConsensusPoolCache for FakeConsensusPoolCache {
-    fn finalized_block(&self) -> Block {
-        self.cache.read().unwrap().finalized_block.clone()
-    }
-
+impl ConsensusTime for FakeConsensusPoolCache {
     fn consensus_time(&self) -> Option<Time> {
         let cache = &*self.cache.read().unwrap();
         if cache.finalized_block.height() == Height::from(0) {
@@ -136,6 +109,12 @@ impl ConsensusPoolCache for FakeConsensusPoolCache {
         } else {
             Some(cache.finalized_block.context.time)
         }
+    }
+}
+
+impl ConsensusPoolCache for FakeConsensusPoolCache {
+    fn finalized_block(&self) -> Block {
+        self.cache.read().unwrap().finalized_block.clone()
     }
 
     fn catch_up_package(&self) -> CatchUpPackage {

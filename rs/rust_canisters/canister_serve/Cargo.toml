@@ -1,8 +1,5 @@
 [package]
 name = "ic-canister-serve"
-version = "0.1.0"
-edition = "2021"
-authors = ["The Internet Computer Project Developers"]
 description = "A library for serving assets over the http_endpoint of smart contracts running on the Internet Computer."
 license = "Apache-2.0"
 readme = "README.md"
@@ -10,6 +7,9 @@ documentation = "https://docs.rs/ic-canister-serve"
 keywords = ["internet-computer", "dfinity", "canister"]
 repository = "https://github.com/dfinity/ic"
 include = ["src", "Cargo.toml", "LICENSE", "README.md"]
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
 
 [dependencies]
 by_address = "1.1.0"
@@ -18,5 +18,5 @@ ic-cdk = { workspace = true }
 ic-metrics-encoder = "1.1.0"
 maplit = "1.0.2"
 priority-queue = "1.3.1"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0.40"
+serde = { workspace = true }
+serde_json = { workspace = true }

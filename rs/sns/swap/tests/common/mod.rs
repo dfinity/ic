@@ -28,7 +28,9 @@ use ic_sns_swap::{
         SetModeCallResult, SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap,
         SweepResult, TransferableAmount,
     },
-    swap::{principal_to_subaccount, CLAIM_SWAP_NEURONS_BATCH_SIZE},
+    swap::{
+        principal_to_subaccount, CLAIM_SWAP_NEURONS_BATCH_SIZE, NEURON_BASKET_MEMO_RANGE_START,
+    },
 };
 use icrc_ledger_types::icrc1::account::Account;
 use std::{
@@ -72,14 +74,20 @@ pub fn select_direct_investment_neurons<'a>(
     neurons
 }
 
-pub fn verify_participant_balances(
+pub fn verify_direct_participant_icp_balances(
     swap: &Swap,
     buyer_principal: &PrincipalId,
     icp_balance_e8s: u64,
-    sns_balance_e8s: u64,
 ) {
     let buyer = swap.buyers.get(&buyer_principal.to_string()).unwrap();
     assert_eq!(icp_balance_e8s, buyer.amount_icp_e8s());
+}
+
+pub fn verify_direct_participant_sns_balances(
+    swap: &Swap,
+    buyer_principal: &PrincipalId,
+    sns_balance_e8s: u64,
+) {
     let total_neuron_recipe_sns_e8s_for_principal: u64 =
         select_direct_investment_neurons(&swap.neuron_recipes, &buyer_principal.to_string())
             .iter()
@@ -92,23 +100,22 @@ pub fn i2principal_id_string(i: u64) -> String {
     Principal::from(PrincipalId::new_user_test_id(i)).to_text()
 }
 
-pub fn create_single_neuron_recipe(amount_e8s: u64, buyer_principal: String) -> SnsNeuronRecipe {
-    SnsNeuronRecipe {
-        sns: Some(TransferableAmount {
-            amount_e8s,
-            transfer_start_timestamp_seconds: 0,
-            transfer_success_timestamp_seconds: 0,
-            amount_transferred_e8s: Some(0),
-            transfer_fee_paid_e8s: Some(0),
-        }),
-        neuron_attributes: Some(NeuronAttributes {
-            memo: 0,
-            dissolve_delay_seconds: 0,
-            followees: vec![],
-        }),
-        investor: Some(Direct(DirectInvestment { buyer_principal })),
-        claimed_status: Some(ClaimedStatus::Pending as i32),
-    }
+pub fn create_successful_swap_neuron_basket(
+    controller: PrincipalId,
+    basket_count: u64,
+) -> Vec<SwapNeuron> {
+    (0..basket_count)
+        .map(|i| SwapNeuron {
+            id: Some(NeuronId {
+                id: compute_neuron_staking_subaccount_bytes(
+                    controller,
+                    NEURON_BASKET_MEMO_RANGE_START + i,
+                )
+                .into(),
+            }),
+            status: ClaimedSwapNeuronStatus::Success as i32,
+        })
+        .collect()
 }
 
 pub fn mock_stub(mut expect: Vec<LedgerExpect>) -> MockLedger {
@@ -265,13 +272,10 @@ pub fn create_generic_sns_neuron_recipes(count: u64) -> Vec<SnsNeuronRecipe> {
 }
 
 pub fn create_generic_cf_participants(count: u64) -> Vec<CfParticipant> {
-    (0..count)
+    (1..count + 1)
         .map(|i| CfParticipant {
             hotkey_principal: i2principal_id_string(i),
-            cf_neurons: vec![CfNeuron {
-                nns_neuron_id: i,
-                amount_icp_e8s: E8,
-            }],
+            cf_neurons: vec![CfNeuron::try_new(i, E8).unwrap()],
         })
         .collect()
 }
@@ -326,7 +330,7 @@ pub async fn open_swap(swap: &mut Swap, params: &Params) {
                 },
             )
             .await;
-        assert!(r.is_ok());
+        r.unwrap();
     }
 }
 
@@ -348,7 +352,7 @@ pub async fn try_error_refund_ok(
     swap: &mut Swap,
     user: &PrincipalId,
     ledger: &MockLedger,
-) -> ic_sns_swap::pb::v1::error_refund_icp_response::Ok {
+) -> error_refund_icp_response::Ok {
     match swap
         .error_refund_icp(
             SWAP_CANISTER_ID,
@@ -374,7 +378,7 @@ pub async fn try_error_refund_err(
     swap: &mut Swap,
     user: &PrincipalId,
     ledger: &MockLedger,
-) -> ic_sns_swap::pb::v1::error_refund_icp_response::Err {
+) -> error_refund_icp_response::Err {
     match swap
         .error_refund_icp(
             SWAP_CANISTER_ID,

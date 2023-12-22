@@ -34,6 +34,7 @@ use crate::driver::test_env_api::{
 use crate::util::*;
 use ic_agent::export::Principal;
 use ic_agent::Identity;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::crypto::SignedBytesWithoutDomainSeparator;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
@@ -83,6 +84,7 @@ pub fn test(env: TestEnv) {
     let agent = malicious_node.with_default_agent(|agent| async move { agent });
     let topo = topology.clone();
     let log = logger.clone();
+    let rng = &mut reproducible_rng();
     block_on({
         async move {
             let canister = UniversalCanister::new_with_retries(
@@ -117,7 +119,7 @@ pub fn test(env: TestEnv) {
             .await;
 
             play_malicious_requests(
-                random_ecdsa_identity(),
+                random_ecdsa_identity(rng),
                 &malicious_node,
                 canister.canister_id(),
             )
@@ -500,7 +502,7 @@ async fn test_request_with_delegation<T: Identity + 'static>(
 
     let signed_delegation = sign_delegation(delegation, identity);
 
-    let public_key_identity = { identity.sign(&[]).unwrap().public_key.unwrap() };
+    let public_key_identity = identity.public_key().unwrap();
 
     // Add the correct public key but the wrong public key
     let envelope = HttpRequestEnvelope {
@@ -531,7 +533,7 @@ async fn test_request_with_delegation<T: Identity + 'static>(
 fn sign_delegation(delegation: Delegation, identity: &impl Identity) -> SignedDelegation {
     let mut msg = b"\x1Aic-request-auth-delegation".to_vec();
     msg.extend(&delegation.as_signed_bytes_without_domain_separator());
-    let signature = identity.sign(&msg).unwrap();
+    let signature = identity.sign_arbitrary(&msg).unwrap();
 
     SignedDelegation::new(delegation, signature.signature.unwrap())
 }

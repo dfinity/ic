@@ -1,0 +1,55 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/crypto/ecdsa_secp256r1",
+    "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
+    "//rs/crypto/test_utils/reproducible_rng",
+    "//rs/crypto/tls_interfaces",
+    "//rs/protobuf",
+    "//rs/types/types",
+    "//rs/registry/fake",
+    "//rs/registry/keys",
+    "//rs/registry/proto_data_provider",
+    "@crate_index//:pkcs8",
+    "@crate_index//:rand",
+    "@crate_index//:signature",
+    "@crate_index//:time",
+    "@crate_index//:tokio",
+    "@crate_index//:tokio-rustls",
+    "@crate_index//:x509-cert",
+]
+
+DEV_DEPENDENCIES = []
+
+MACRO_DEPENDENCIES = []
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "tls",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
+    crate_name = "ic_crypto_test_utils_tls",
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "tls_test",
+    aliases = ALIASES,
+    crate = ":tls",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "tls_integration",
+    srcs = glob(["tests/**/*.rs"]),
+    deps = [":tls"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)

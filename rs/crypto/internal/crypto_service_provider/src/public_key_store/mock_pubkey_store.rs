@@ -1,5 +1,6 @@
 use crate::public_key_store::PublicKeyAddError;
 use crate::public_key_store::PublicKeyGenerationTimestamps;
+use crate::public_key_store::PublicKeyRetainCheckError;
 use crate::public_key_store::PublicKeyRetainError;
 use crate::public_key_store::PublicKeySetOnceError;
 use crate::public_key_store::PublicKeyStore;
@@ -12,7 +13,7 @@ mock! {
     /// Mock PublicKeyStore object for testing interactions
     pub PublicKeyStore {}
 
-    pub trait PublicKeyStore {
+    impl PublicKeyStore for PublicKeyStore {
         fn set_once_node_signing_pubkey(
             &mut self,
             key: PublicKey,
@@ -43,7 +44,9 @@ mock! {
 
         fn add_idkg_dealing_encryption_pubkey(&mut self, key: PublicKey) -> Result<(), PublicKeyAddError>;
 
-        fn retain_most_recent_idkg_public_keys_up_to_inclusive(&mut self, oldest_public_key_to_keep: &PublicKey) -> Result<bool, PublicKeyRetainError>;
+        fn retain_idkg_public_keys_since(&mut self, oldest_public_key_to_keep: &PublicKey) -> Result<bool, PublicKeyRetainError>;
+
+        fn would_retain_idkg_public_keys_modify_pubkey_store(&self, oldest_public_key_to_keep: &PublicKey) -> Result<bool, PublicKeyRetainCheckError>;
 
         fn idkg_dealing_encryption_pubkeys(&self) -> Vec<PublicKey>;
 

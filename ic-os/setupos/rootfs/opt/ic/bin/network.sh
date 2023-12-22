@@ -112,8 +112,8 @@ function get_network_settings() {
         fi
     done
 
-    HOSTOS_IPV6_ADDRESS=$(/opt/ic/bin/generate-deterministic-ipv6.sh --index=0)
-    GUESTOS_IPV6_ADDRESS=$(/opt/ic/bin/generate-deterministic-ipv6.sh --index=1)
+    HOSTOS_IPV6_ADDRESS=$(/opt/ic/bin/setupos_tool generate-ipv6-address --node-type HostOS)
+    GUESTOS_IPV6_ADDRESS=$(/opt/ic/bin/setupos_tool generate-ipv6-address --node-type GuestOS)
 }
 
 function print_network_settings() {

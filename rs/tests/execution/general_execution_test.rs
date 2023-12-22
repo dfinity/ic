@@ -4,7 +4,15 @@ use anyhow::Result;
 
 use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::driver::group::SystemTestSubGroup;
+use ic_tests::execution::api_tests::node_metrics_history_another_subnet_succeeds;
+use ic_tests::execution::api_tests::node_metrics_history_ingress_query_fails;
+use ic_tests::execution::api_tests::node_metrics_history_ingress_update_fails;
+use ic_tests::execution::api_tests::node_metrics_history_non_existing_subnet_fails;
+use ic_tests::execution::api_tests::node_metrics_history_query_fails;
+use ic_tests::execution::api_tests::node_metrics_history_update_succeeds;
 use ic_tests::execution::api_tests::test_controller;
+use ic_tests::execution::api_tests::test_cycles_burn;
+use ic_tests::execution::api_tests::test_in_replicated_execution;
 use ic_tests::execution::api_tests::test_raw_rand_api;
 use ic_tests::execution::big_stable_memory::*;
 use ic_tests::execution::canister_heartbeat::*;
@@ -25,6 +33,14 @@ fn main() -> Result<()> {
                 .add_test(systest!(malicious_input_test))
                 .add_test(systest!(test_raw_rand_api))
                 .add_test(systest!(test_controller))
+                .add_test(systest!(test_in_replicated_execution))
+                .add_test(systest!(test_cycles_burn))
+                .add_test(systest!(node_metrics_history_update_succeeds))
+                .add_test(systest!(node_metrics_history_query_fails))
+                .add_test(systest!(node_metrics_history_another_subnet_succeeds))
+                .add_test(systest!(node_metrics_history_non_existing_subnet_fails))
+                .add_test(systest!(node_metrics_history_ingress_update_fails))
+                .add_test(systest!(node_metrics_history_ingress_query_fails))
                 .add_test(systest!(can_access_big_heap_and_big_stable_memory))
                 .add_test(systest!(can_access_big_stable_memory))
                 .add_test(systest!(can_handle_overflows_when_indexing_stable_memory))
@@ -56,6 +72,7 @@ fn main() -> Result<()> {
                     canister_large_initial_memory_small_memory_allocation
                 ))
                 .add_test(systest!(refunds_after_uninstall_are_refunded))
+                .add_test(systest!(update_settings_of_frozen_canister))
                 .add_test(systest!(
                     update_settings_with_controller_and_controllers_fails
                 ))
@@ -87,6 +104,12 @@ fn main() -> Result<()> {
                 ))
                 .add_test(systest!(canister_heartbeat_can_stop))
                 .add_test(systest!(canister_heartbeat_cannot_reply)),
+            // Enable tests when feature is enabled.
+            // .add_test(systest!(install_large_wasm))
+            // .add_test(systest!(install_large_wasm_with_other_store))
+            // .add_test(systest!(
+            //     install_large_wasm_with_other_store_fails_cross_subnet
+            // )),
         )
         .execute_from_args()?;
 

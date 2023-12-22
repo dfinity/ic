@@ -71,6 +71,10 @@ pub struct BoundaryNodeCustomDomainsConfig {
     pub cloudflare_api_key: String,
     pub issuer_identity: String,
     pub issuer_encryption_key: String,
+    pub task_delay_sec: Option<u64>,
+    pub task_error_delay_sec: Option<u64>,
+    pub peek_sleep_sec: Option<u64>,
+    pub polling_interval_sec: Option<u64>,
 }
 
 /// A builder for the initial configuration of an IC boundary node.
@@ -286,19 +290,19 @@ impl BoundaryNodeWithVm {
         let image_id = create_and_upload_config_disk_image(
             self,
             env,
-            &pot_setup.farm_group_name,
+            &pot_setup.infra_group_name,
             &farm,
             opt_existing_playnet_cert,
         )?;
 
         farm.attach_disk_images(
-            &pot_setup.farm_group_name,
+            &pot_setup.infra_group_name,
             &self.name,
             "usb-storage",
             vec![image_id],
         )?;
 
-        farm.start_vm(&pot_setup.farm_group_name, &self.name)?;
+        farm.start_vm(&pot_setup.infra_group_name, &self.name)?;
 
         if self.has_ipv4 {
             // Provision an A record pointing ic{ix}.farm.dfinity.systems
@@ -351,16 +355,14 @@ impl BoundaryNode {
         self.is_sev = true;
         self.with_required_host_features(vec![HostFeature::AmdSevSnp])
             .with_qemu_cli_args(
-                vec![
-            "-cpu",
+                ["-cpu",
             "EPYC-v4",
             "-machine",
             "memory-encryption=sev0,vmport=off",
             "-object",
             "sev-snp-guest,id=sev0,cbitpos=51,reduced-phys-bits=1",
             "-append",
-            "root=/dev/vda5 console=ttyS0 dfinity.system=A dfinity.boot_state=stable swiotlb=2621"
-        ]
+            "root=/dev/vda5 console=ttyS0 dfinity.system=A dfinity.boot_state=stable swiotlb=2621"]
                 .iter()
                 .map(|s| s.to_string())
                 .collect(),
@@ -432,7 +434,7 @@ impl BoundaryNode {
             self.vm_allocation.clone(),
             self.required_host_features.clone(),
         );
-        let allocated_vm = farm.create_vm(&pot_setup.farm_group_name, create_vm_req)?;
+        let allocated_vm = farm.create_vm(&pot_setup.infra_group_name, create_vm_req)?;
 
         Ok(BoundaryNodeWithVm {
             name: self.name,
@@ -485,6 +487,8 @@ fn create_and_upload_config_disk_image(
     cmd.arg(img_path.clone())
         .arg("--hostname")
         .arg(boundary_node.name.clone())
+        .arg("--env")
+        .arg("test")
         .arg("--accounts_ssh_authorized_keys")
         .arg(ssh_authorized_pub_keys_dir)
         .arg("--elasticsearch_tags")
@@ -499,6 +503,8 @@ fn create_and_upload_config_disk_image(
         .arg("::/0")
         .arg("--ipv6_monitoring_ips")
         .arg("::/0")
+        .arg("--canary-proxy-port")
+        .arg("8888")
         .arg("--elasticsearch_url")
         .arg("https://elasticsearch.testnet.dfinity.systems");
 
@@ -555,7 +561,7 @@ fn create_and_upload_config_disk_image(
         let identity_file = boundary_node_dir.join("certificate_issuer_identity.pem");
         fs::write(&identity_file, cfg.issuer_identity)?;
 
-        // Issuer Encrpytion-Key
+        // Issuer Encryption-Key
         let key_file = boundary_node_dir.join("certificate_issuer_enc_key.pem");
         fs::write(&key_file, cfg.issuer_encryption_key)?;
 
@@ -579,6 +585,26 @@ fn create_and_upload_config_disk_image(
             .arg(identity_file)
             .arg("--certificate_issuer_encryption_key")
             .arg(key_file);
+
+        if let Some(task_delay_sec) = cfg.task_delay_sec {
+            cmd.arg("--certificate_issuer_task_delay_sec")
+                .arg(task_delay_sec.to_string());
+        }
+
+        if let Some(task_error_delay_sec) = cfg.task_error_delay_sec {
+            cmd.arg("--certificate_issuer_task_error_delay_sec")
+                .arg(task_error_delay_sec.to_string());
+        }
+
+        if let Some(peek_sleep_sec) = cfg.peek_sleep_sec {
+            cmd.arg("--certificate_issuer_peek_sleep_sec")
+                .arg(peek_sleep_sec.to_string());
+        }
+
+        if let Some(polling_interval_sec) = cfg.polling_interval_sec {
+            cmd.arg("--certificate_syncer_polling_interval_sec")
+                .arg(polling_interval_sec.to_string());
+        }
     }
 
     let key = "PATH";
@@ -619,13 +645,15 @@ fn create_and_upload_config_disk_image(
     std::io::stdout().write_all(&output.stdout)?;
     std::io::stderr().write_all(&output.stderr)?;
 
-    let image_id = farm.upload_file(compressed_img_path, &mk_compressed_img_path())?;
+    let image_id = farm.upload_file(group_name, compressed_img_path, &mk_compressed_img_path())?;
     info!(farm.logger, "Uploaded image: {}", image_id);
 
     Ok(image_id)
 }
 
 pub trait BoundaryNodeVm {
+    fn get_deployed_boundary_nodes(&self) -> Vec<DeployedBoundaryNode>;
+
     fn get_deployed_boundary_node(&self, name: &str) -> Result<DeployedBoundaryNode>;
 
     fn write_boundary_node_vm(
@@ -637,6 +665,22 @@ pub trait BoundaryNodeVm {
 }
 
 impl BoundaryNodeVm for TestEnv {
+    fn get_deployed_boundary_nodes(&self) -> Vec<DeployedBoundaryNode> {
+        let path = self.get_path(BOUNDARY_NODE_VMS_DIR);
+        if !path.exists() {
+            return vec![];
+        }
+        fs::read_dir(path)
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|e| e.path().is_dir())
+            .map(|e| {
+                let dir = String::from(e.file_name().to_string_lossy());
+                self.get_deployed_boundary_node(&dir).unwrap()
+            })
+            .collect()
+    }
+
     fn get_deployed_boundary_node(&self, name: &str) -> Result<DeployedBoundaryNode> {
         let rel_boundary_node_dir: PathBuf = [BOUNDARY_NODE_VMS_DIR, name].iter().collect();
         let abs_boundary_node_dir = self.get_path(rel_boundary_node_dir.clone());
@@ -687,7 +731,7 @@ impl HasVmName for DeployedBoundaryNode {
 }
 
 impl DeployedBoundaryNode {
-    fn get_vm(&self) -> Result<VMCreateResponse> {
+    pub fn get_vm(&self) -> Result<VMCreateResponse> {
         let vm_path: PathBuf = [BOUNDARY_NODE_VMS_DIR, &self.name].iter().collect();
         self.env
             .read_json_object(vm_path.join(BOUNDARY_NODE_VM_PATH))

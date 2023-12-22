@@ -1,11 +1,14 @@
 [package]
 name = "ic-xnet-endpoint"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 crossbeam-channel = "0.5.5"
-hyper = { version = "0.14.18" , features = ["full", "tcp"] }
+hyper = { version = "0.14.18", features = ["full", "tcp"] }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-certified-stream-store = { path = "../../interfaces/certified_stream_store" }
@@ -17,16 +20,16 @@ ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-types = { path = "../../types/types" }
 ic-xnet-hyper = { path = "../hyper" }
 ic-xnet-uri = { path = "../uri" }
-prometheus = { version = "0.12.0", features = [ "process" ] }
-serde = { version = "1.0.99", features = [ "derive" ] }
-serde_json = "1.0.40"
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
-tokio = { version = "1.15.0", features = ["full"] }
+prometheus = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+slog = { workspace = true }
+tokio = { workspace = true }
 threadpool = "1.8.1"
 url = "2.1.1"
 
 [dev-dependencies]
-bytes = "1.0.1"
+bytes = { workspace = true }
 ic-interfaces-registry-mocks = { path = "../../interfaces/registry/mocks" }
 ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
 ic-registry-keys = { path = "../../registry/keys" }
@@ -35,5 +38,5 @@ ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-test-utilities-metrics = { path = "../../test_utilities/metrics" }
 maplit = "1.0.2"
-prost = "0.11.0"
-reqwest = "0.11.1"
+prost = { workspace = true }
+reqwest = { workspace = true }

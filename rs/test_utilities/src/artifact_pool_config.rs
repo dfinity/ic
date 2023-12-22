@@ -58,8 +58,8 @@ mod tests {
     use crate::types::messages::SignedIngressBuilder;
     use crate::util::mock_time;
     use ic_artifact_pool::ingress_pool::IngressPoolImpl;
-    use ic_interfaces::artifact_pool::{MutablePool, UnvalidatedArtifact};
     use ic_interfaces::ingress_pool::IngressPool;
+    use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities_logger::with_test_replica_logger;
 

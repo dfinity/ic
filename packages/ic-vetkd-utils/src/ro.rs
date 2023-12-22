@@ -9,12 +9,12 @@ pub(crate) struct RandomOracle {
 }
 
 impl RandomOracle {
-    pub(crate) fn new(domain_seperator: &str) -> Self {
+    pub(crate) fn new(domain_separator: &str) -> Self {
         let mut ro = Self {
             shake: Shake256::default(),
         };
 
-        ro.update_str(domain_seperator);
+        ro.update_str(domain_separator);
 
         ro
     }

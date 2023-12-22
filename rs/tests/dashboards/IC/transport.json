@@ -104,7 +104,7 @@
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "Diconnected nodes",
+      "title": "Disconnected nodes",
       "tooltip": {
         "shared": true,
         "sort": 0,

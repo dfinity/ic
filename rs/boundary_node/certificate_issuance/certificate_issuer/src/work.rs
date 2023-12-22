@@ -1,4 +1,6 @@
-use std::{fmt, iter::once, sync::Arc, time::Duration};
+use std::{
+    collections::HashSet, fmt, iter::once, sync::atomic::Ordering, sync::Arc, time::Duration,
+};
 
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
@@ -15,6 +17,7 @@ use crate::{
     check::Check,
     dns::{self, Resolve},
     registration::{Id, Registration, State},
+    TASK_DELAY_SEC, TASK_ERROR_DELAY_SEC,
 };
 
 #[derive(Debug, Clone, Serialize)]
@@ -108,11 +111,21 @@ pub enum ProcessError {
 impl From<&ProcessError> for Duration {
     fn from(error: &ProcessError) -> Self {
         match error {
-            ProcessError::AwaitingAcmeOrderCreation => Duration::from_secs(60),
-            ProcessError::AwaitingDnsPropagation => Duration::from_secs(60),
-            ProcessError::AwaitingAcmeOrderReady => Duration::from_secs(60),
-            ProcessError::FailedUserConfigurationCheck => Duration::from_secs(10 * 60),
-            ProcessError::UnexpectedError(_) => Duration::from_secs(10 * 60),
+            ProcessError::AwaitingAcmeOrderCreation => {
+                Duration::from_secs(TASK_DELAY_SEC.load(Ordering::SeqCst))
+            }
+            ProcessError::AwaitingDnsPropagation => {
+                Duration::from_secs(TASK_DELAY_SEC.load(Ordering::SeqCst))
+            }
+            ProcessError::AwaitingAcmeOrderReady => {
+                Duration::from_secs(TASK_DELAY_SEC.load(Ordering::SeqCst))
+            }
+            ProcessError::FailedUserConfigurationCheck => {
+                Duration::from_secs(TASK_ERROR_DELAY_SEC.load(Ordering::SeqCst))
+            }
+            ProcessError::UnexpectedError(_) => {
+                Duration::from_secs(TASK_ERROR_DELAY_SEC.load(Ordering::SeqCst))
+            }
         }
     }
 }
@@ -409,6 +422,46 @@ impl<T: Process> Process for WithDetectRenewal<T> {
             "is_renewal",
             is_renewal,
         )));
+        self.processor.process(id, task).with_context(ctx).await
+    }
+}
+
+pub struct WithDetectImportance<T: Process> {
+    pub processor: T,
+    pub domains: HashSet<String>,
+}
+
+impl<T: Process> WithDetectImportance<T> {
+    pub fn new(processor: T, domains: Vec<String>) -> Self {
+        Self {
+            processor,
+            domains: domains.into_iter().collect(),
+        }
+    }
+}
+
+pub fn extract_domain(name: &str) -> &str {
+    match name.rmatch_indices('.').nth(1) {
+        Some((idx, _)) => name.split_at(idx + 1).1,
+        None => name,
+    }
+}
+
+#[async_trait]
+impl<T: Process> Process for WithDetectImportance<T> {
+    async fn process(&self, id: &Id, task: &Task) -> Result<(), ProcessError> {
+        let domain = extract_domain(&task.name);
+
+        let is_important = match self.domains.contains(domain) {
+            false => "0",
+            true => "1",
+        };
+
+        let ctx = opentelemetry::Context::current_with_baggage(once(KeyValue::new(
+            "is_important",
+            is_important,
+        )));
+
         self.processor.process(id, task).with_context(ctx).await
     }
 }
@@ -760,5 +813,19 @@ mod tests {
                 other
             )),
         }
+    }
+
+    #[tokio::test]
+    async fn test_extract_domain() -> Result<(), Error> {
+        for tc in [
+            ("example.com", "example.com"),
+            ("a.example.com", "example.com"),
+            ("a.b.example.com", "example.com"),
+            ("a.b.c.example.com", "example.com"),
+        ] {
+            assert_eq!(extract_domain(tc.0), tc.1);
+        }
+
+        Ok(())
     }
 }

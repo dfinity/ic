@@ -16,7 +16,10 @@ use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_ic00_types::{EcdsaKeyId, SetupInitialDKGArgs, SetupInitialDKGResponse};
 use ic_protobuf::registry::{
     node::v1::NodeRecord,
-    subnet::v1::{CatchUpPackageContents, EcdsaConfig, GossipConfig, SubnetRecord},
+    subnet::v1::{
+        CatchUpPackageContents, EcdsaConfig, GossipConfig, SubnetFeatures as pbSubnetFeatures,
+        SubnetRecord,
+    },
 };
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
@@ -162,6 +165,7 @@ impl Registry {
 
     /// Validates runtime payload values that aren't checked by invariants
     /// Ensures all nodes for new subnet a) exist and b) are not in another subnet
+    /// Ensure all nodes for new subnet are not already assigned as ApiBoundaryNode
     /// Ensures that a valid subnet_id is specified for EcdsaKeyRequests
     /// Ensures that ECDSA keys a) exist and b) are present on the requested subnet
     fn validate_create_subnet_payload(&self, payload: &CreateSubnetPayload) {
@@ -197,13 +201,22 @@ impl Registry {
                     subnet_members.insert(NodeId::from(PrincipalId::try_from(v).unwrap()));
                 });
             });
+
         let intersection = subnet_members
             .intersection(&node_ids_hash_set)
             .copied()
             .collect::<HashSet<_>>();
+
         if !intersection.is_empty() {
             panic!("Some Nodes are already members of Subnets");
         }
+
+        // Ensure that none of the Nodes are assigned as ApiBoundaryNode
+        payload.node_ids.iter().cloned().for_each(|id| {
+            if self.get_api_boundary_node_record(id).is_some() {
+                panic!("Some Nodes are already assigned as ApiBoundaryNode");
+            }
+        });
 
         if let Some(ref ecdsa_config) = payload.ecdsa_config {
             match self.validate_ecdsa_initial_config(ecdsa_config, None) {
@@ -226,6 +239,7 @@ pub struct CreateSubnetPayload {
 
     pub subnet_id_override: Option<PrincipalId>,
 
+    // Unused.
     pub ingress_bytes_per_block_soft_cap: u64,
     pub max_ingress_bytes_per_message: u64,
     pub max_ingress_messages_per_block: u64,
@@ -255,7 +269,7 @@ pub struct CreateSubnetPayload {
     pub max_instructions_per_round: u64,
     pub max_instructions_per_install_code: u64,
 
-    pub features: SubnetFeatures,
+    pub features: pbSubnetFeatures,
 
     pub max_number_of_canisters: u64,
     pub ssh_readonly_access: Vec<String>,
@@ -334,7 +348,7 @@ impl From<CreateSubnetPayload> for SubnetRecord {
             max_instructions_per_message: val.max_instructions_per_message,
             max_instructions_per_round: val.max_instructions_per_round,
             max_instructions_per_install_code: val.max_instructions_per_install_code,
-            features: Some(val.features.into()),
+            features: Some(SubnetFeatures::from(val.features).into()),
             max_number_of_canisters: val.max_number_of_canisters,
             ssh_readonly_access: val.ssh_readonly_access,
             ssh_backup_access: val.ssh_backup_access,

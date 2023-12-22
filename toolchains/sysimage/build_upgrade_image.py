@@ -9,8 +9,7 @@ import argparse
 import shutil
 import subprocess
 import sys
-
-from reproducibility import get_tmpdir_checking_block_size, print_artifact_info
+import tempfile
 
 COMPRESSOR_PROGRAMS = {
     "gz": ["--use-compress-program=gzip"],
@@ -36,7 +35,7 @@ def main():
     version_file = args.versionfile
     compression = args.compression
 
-    tmpdir = get_tmpdir_checking_block_size()
+    tmpdir = tempfile.mkdtemp()
 
     subprocess.run(["tar", "xf", boot_image, "--transform=s/partition.img/boot.img/", "-C", tmpdir], check=True)
 
@@ -55,14 +54,13 @@ def main():
         + COMPRESSOR_PROGRAMS[compression]
         + [
             "--sparse",
+            "--hole-detection=raw",
             "-C",
             tmpdir,
             ".",
         ],
         check=True,
     )
-
-    print_artifact_info(out_file)
 
 
 if __name__ == "__main__":

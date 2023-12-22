@@ -20,7 +20,7 @@ impl Registry {
             .map(|RegistryValue { value, .. }| {
                 decode_registry_value::<NodeRewardsTable>(value.clone())
             })
-            .unwrap_or_else(NodeRewardsTable::default);
+            .unwrap_or_default();
 
         node_rewards_table.extend(payload.get_rewards_table());
 

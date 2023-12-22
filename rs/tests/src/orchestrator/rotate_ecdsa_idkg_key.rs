@@ -80,8 +80,8 @@ pub fn test(env: TestEnv) {
         nns_node.effective_canister_id(),
     ));
 
-    let delta = Some(Duration::from_secs(180));
-    let gamma = delta.map(|d| d.div_f64(SUBNET_SIZE as f64).mul_f64(0.85));
+    let delta = Duration::from_secs(180);
+    let gamma = delta.div_f64(SUBNET_SIZE as f64).mul_f64(0.85);
 
     // Timestamps should be none before ECDSA is turned on
     topology_snapshot.root_subnet().nodes().for_each(|n| {
@@ -102,8 +102,7 @@ pub fn test(env: TestEnv) {
         &nns_node,
         &nns_canister,
         root_subnet_id,
-        delta,
-        true,
+        Some(delta),
         &logger,
     );
 
@@ -175,8 +174,8 @@ pub fn test(env: TestEnv) {
                     let rotation_ts =
                         SystemTime::UNIX_EPOCH + Duration::from_millis(k.timestamp.unwrap());
                     let now = SystemTime::now();
-                    assert!(now.duration_since(init_ts).ok() >= delta);
-                    assert!(rotation_ts.duration_since(init_ts).ok() >= delta);
+                    assert!(now.duration_since(init_ts).ok() >= Some(delta));
+                    assert!(rotation_ts.duration_since(init_ts).ok() >= Some(delta));
 
                     let last_init_ts = init_keys
                         .values()
@@ -193,8 +192,8 @@ pub fn test(env: TestEnv) {
 
                     let last_ts = last_init_ts.max(last_rotation_ts).unwrap();
 
-                    assert!(now.duration_since(last_ts).ok() >= gamma);
-                    assert!(rotation_ts.duration_since(last_ts).ok() >= gamma);
+                    assert!(now.duration_since(last_ts).ok() >= Some(gamma));
+                    assert!(rotation_ts.duration_since(last_ts).ok() >= Some(gamma));
                 }
             } else {
                 warn!(logger, "Failed to get key of node {}", n.node_id);
@@ -228,7 +227,7 @@ pub fn test(env: TestEnv) {
 
     assert!(last_rotation
         .duration_since(first_rotation)
-        .map_or(false, |d| d + gamma.unwrap() <= delta.unwrap()));
+        .map_or(false, |d| d + gamma <= delta));
 
     // Ensure ECDSA signing still works
     run_ecdsa_signature_test(&nns_canister, &logger, pub_key);

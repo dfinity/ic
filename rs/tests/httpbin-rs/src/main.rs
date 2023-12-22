@@ -14,7 +14,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use axum_server::tls_openssl::OpenSSLConfig;
+use axum_server::tls_rustls::RustlsConfig;
 use axum_server::HttpConfig;
 use clap::Parser;
 use serde_json::json;
@@ -203,7 +203,8 @@ async fn add_deterministic_headers(res: Response) -> impl IntoResponse {
 async fn main() {
     let args = Cli::parse();
 
-    let config = OpenSSLConfig::from_pem_file(args.cert_file, args.key_file)
+    let config = RustlsConfig::from_pem_file(args.cert_file, args.key_file)
+        .await
         .expect("Failed to load TLS config");
 
     let app = Router::new()
@@ -251,7 +252,7 @@ async fn main() {
 
     let addr = SocketAddr::from((Ipv6Addr::UNSPECIFIED, args.port));
 
-    axum_server::bind_openssl(addr, config)
+    axum_server::bind_rustls(addr, config)
         .http_config(http_config)
         .serve(app.into_make_service())
         .await

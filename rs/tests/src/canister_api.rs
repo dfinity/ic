@@ -9,7 +9,8 @@ use ic_nns_gtc::pb::v1::AccountState;
 use ic_sns_governance::pb::v1::{
     GetMetadataRequest as GetMetadataReq, GetMetadataResponse as GetMetadataRes,
     GetMode as GetModeReq, GetModeResponse as GetModeRes, ListNeurons as ListSnsNeuronsReq,
-    ListNeuronsResponse as ListSnsNeuronsRes, NeuronId,
+    ListNeuronsResponse as ListSnsNeuronsRes, ManageNeuron as ManageSnsNeuronReq,
+    ManageNeuronResponse as ManageSnsNeuronRes, NeuronId,
 };
 use ic_sns_root::{
     pb::v1::ListSnsCanistersResponse as ListSnsCanistersRes,
@@ -322,10 +323,7 @@ impl Request<RefreshBuyerTokensRes> for RefreshBuyerTokensRequest {
     }
     fn payload(&self) -> Vec<u8> {
         Encode!(&RefreshBuyerTokensReq {
-            buyer: self
-                .buyer
-                .map(|p| p.to_string())
-                .unwrap_or_else(|| "".to_string()),
+            buyer: self.buyer.map(|p| p.to_string()).unwrap_or_default(),
             confirmation_text: self.confirmation_text.clone(),
         })
         .unwrap()
@@ -740,6 +738,43 @@ impl ListNnsNeuronsRequest {
 }
 
 #[derive(Clone, Debug)]
+pub struct ManageSnsNeuronRequest {
+    sns_governance_canister: Principal,
+    payload: ManageSnsNeuronReq,
+}
+
+impl Request<ManageSnsNeuronRes> for ManageSnsNeuronRequest {
+    fn mode(&self) -> CallMode {
+        CallMode::Update
+    }
+    fn canister_id(&self) -> Principal {
+        self.sns_governance_canister
+    }
+    fn method_name(&self) -> String {
+        "manage_neuron".to_string()
+    }
+    fn payload(&self) -> Vec<u8> {
+        Encode!(&self.payload).unwrap()
+    }
+}
+
+impl ManageSnsNeuronRequest {
+    pub fn new(
+        governance_canister: Principal,
+        subaccount: Vec<u8>,
+        command: ic_sns_governance::pb::v1::manage_neuron::Command,
+    ) -> Self {
+        Self {
+            sns_governance_canister: governance_canister,
+            payload: ManageSnsNeuronReq {
+                subaccount,
+                command: Some(command),
+            },
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct GetStateRequest {
     mode: CallMode,
     sale_canister: Principal,
@@ -1071,6 +1106,15 @@ impl SnsRequestProvider {
             of_principal,
             mode,
         )
+    }
+
+    pub fn manage_neuron(
+        &self,
+        subaccount: Vec<u8>,
+        command: ic_sns_governance::pb::v1::manage_neuron::Command,
+    ) -> impl Request<ManageSnsNeuronRes> + std::fmt::Debug + Clone + Sync + Send {
+        let sns_governance_canister = self.sns_canisters.governance().get().into();
+        ManageSnsNeuronRequest::new(sns_governance_canister, subaccount, command)
     }
 
     pub fn get_sns_canisters_summary(

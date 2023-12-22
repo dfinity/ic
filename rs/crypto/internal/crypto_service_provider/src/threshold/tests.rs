@@ -46,7 +46,7 @@ pub mod util {
     ) {
         let signature_selection_seed =
             seed.derive("test_threshold_signatures::signature_selection");
-        let mut rng = seed.into_rng();
+        let rng = &mut seed.into_rng();
         let verifier = Csp::builder_for_test()
             .with_vault(
                 LocalCspVault::builder_for_test()
@@ -63,7 +63,7 @@ pub mod util {
             .iter()
             .map(|(csp, key_id)| {
                 csp.csp_vault
-                    .threshold_sign(AlgorithmId::ThresBls12_381, message, *key_id)
+                    .threshold_sign(AlgorithmId::ThresBls12_381, message.to_vec(), *key_id)
             })
             .collect();
         let signatures = signatures.expect("Signing failed");
@@ -75,7 +75,7 @@ pub mod util {
                     if let Some((csp, key_id)) = signers.get(0) {
                         assert!(
                             csp.csp_vault
-                                .threshold_sign(algorithm_id, message, *key_id)
+                                .threshold_sign(algorithm_id, message.to_vec(), *key_id)
                                 .is_err(),
                             "Managed to threshold sign with algorithm ID {:?}",
                             algorithm_id
@@ -95,7 +95,7 @@ pub mod util {
                 );
                 assert!(
                     csp.csp_vault
-                        .threshold_sign(AlgorithmId::ThresBls12_381, message, wrong_key_id)
+                        .threshold_sign(AlgorithmId::ThresBls12_381, message.to_vec(), wrong_key_id)
                         .is_err(),
                     "A randomly generated key_id managed to sign"
                 );
@@ -281,7 +281,7 @@ proptest! {
 
     #[test]
     fn test_threshold_scheme_with_basic_keygen(message in proptest::collection::vec(any::<u8>(), 0..100)) {
-        let mut rng = ReproducibleRng::new();
-        util::test_threshold_scheme_with_basic_keygen(Seed::from_rng(&mut rng), &message);
+        let rng = &mut ReproducibleRng::new();
+        util::test_threshold_scheme_with_basic_keygen(Seed::from_rng(rng), &message);
     }
 }

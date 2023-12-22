@@ -1,7 +1,7 @@
 {
   "name": "@dfinity/service-worker",
   "description": "Service worker to check certification when loading assets from the Internet Computer.",
-  "version": "1.8.7",
+  "version": "1.8.8",
   "license": "Apache-2.0",
   "files": [
     "dist-dev",
@@ -18,14 +18,14 @@
     "@dfinity/agent": "~0.19.0",
     "@dfinity/candid": "~0.19.0",
     "@dfinity/principal": "~0.19.0",
-    "@dfinity/response-verification": "1.0.2",
+    "@dfinity/response-verification": "^1.2.0",
     "idb": "^7.1.1",
     "lit": "^2.8.0"
   },
   "devDependencies": {
     "@peculiar/webcrypto": "^1.4.3",
     "@types/jest": "^29.5.3",
-    "@types/node": "^17.0.22",
+    "@types/node": "^18.0.0",
     "@types/pako": "^1.0.3",
     "@types/uuid": "^9.0.2",
     "@typescript-eslint/eslint-plugin": "^5.16.0",
@@ -50,7 +50,6 @@
     "ts-node": "^10.9.1",
     "typescript": "^5.1.6",
     "uuid": "^9.0.0",
-    "webdriverio": "^8.11.2",
     "webpack": "^5.88.2",
     "webpack-cli": "^5.1.4"
   },
@@ -63,11 +62,8 @@
     "lint:fix": "eslint --fix src",
     "test:coverage": "jest --verbose --collectCoverage",
     "test": "jest",
-    "prettier:check": "prettier --check src e2e",
-    "prettier:format": "prettier --write src e2e",
-    "format:check": "npm run prettier:check",
-    "format:fix": "npm run prettier:format",
-    "format": "npm run prettier:format"
+    "format:check": "prettier --check src e2e",
+    "format": "prettier --write src e2e"
   },
   "engines": {
     "node": "^18",
@@ -89,5 +85,8 @@
     "dapp",
     "service worker",
     "service-worker"
+  ],
+  "workspaces": [
+    "e2e"
   ]
 }

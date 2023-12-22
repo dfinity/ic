@@ -18,6 +18,7 @@ use ic_nns_common::{
     types::UpdateIcpXdrConversionRatePayload,
 };
 use ic_nns_constants::LEDGER_CANISTER_ID;
+use ic_nns_governance::pb::v1::NeuronType;
 use ic_nns_governance::{
     governance::{
         governance_minting_account, neuron_subaccount, Environment, Governance, HeapGrowthPotential,
@@ -189,6 +190,7 @@ pub struct NeuronBuilder {
     joined_community_fund: Option<u64>,
     do_not_create_subaccount: bool,
     spawn_at_timestamp_seconds: Option<u64>,
+    neuron_type: Option<i32>,
 }
 
 impl From<Neuron> for NeuronBuilder {
@@ -214,6 +216,7 @@ impl From<Neuron> for NeuronBuilder {
             joined_community_fund: neuron.joined_community_fund_timestamp_seconds,
             do_not_create_subaccount: false,
             spawn_at_timestamp_seconds: None,
+            neuron_type: neuron.neuron_type,
         }
     }
 }
@@ -237,6 +240,7 @@ impl NeuronBuilder {
             joined_community_fund: None,
             do_not_create_subaccount: false,
             spawn_at_timestamp_seconds: None,
+            neuron_type: None,
         }
     }
 
@@ -258,6 +262,7 @@ impl NeuronBuilder {
             joined_community_fund: None,
             do_not_create_subaccount: false,
             spawn_at_timestamp_seconds: None,
+            neuron_type: None,
         }
     }
 
@@ -333,9 +338,14 @@ impl NeuronBuilder {
         self
     }
 
-    pub fn set_managers(mut self, managers: neuron::Followees) -> Self {
+    pub fn insert_managers(mut self, managers: neuron::Followees) -> Self {
         self.followees
             .insert(Topic::NeuronManagement as i32, managers);
+        self
+    }
+
+    pub fn insert_followees(mut self, topic: Topic, followees: neuron::Followees) -> Self {
+        self.followees.insert(topic as i32, followees);
         self
     }
 
@@ -349,6 +359,11 @@ impl NeuronBuilder {
         spawn_at_timestamp_seconds: Option<u64>,
     ) -> Self {
         self.spawn_at_timestamp_seconds = spawn_at_timestamp_seconds;
+        self
+    }
+
+    pub fn set_neuron_type(mut self, neuron_type: NeuronType) -> Self {
+        self.neuron_type = Some(neuron_type as i32);
         self
     }
 
@@ -391,6 +406,7 @@ impl NeuronBuilder {
             followees: self.followees,
             joined_community_fund_timestamp_seconds: self.joined_community_fund,
             spawn_at_timestamp_seconds: self.spawn_at_timestamp_seconds,
+            neuron_type: self.neuron_type,
             ..Neuron::default()
         }
     }
@@ -884,8 +900,11 @@ impl NNS {
             .unwrap()
     }
 
-    pub fn get_neuron(&self, ident: &NeuronId) -> &Neuron {
-        self.governance.get_neuron(ident).unwrap()
+    pub fn get_neuron(&self, ident: &NeuronId) -> Neuron {
+        self.governance
+            .neuron_store
+            .with_neuron(ident, |n| n.clone())
+            .unwrap()
     }
 
     pub fn get_account_balance(&self, account: AccountIdentifier) -> u64 {
@@ -897,7 +916,7 @@ impl NNS {
     }
 
     pub fn get_neuron_account_id(&self, id: u64) -> AccountIdentifier {
-        LedgerBuilder::neuron_account_id(self.get_neuron(&NeuronId { id }))
+        LedgerBuilder::neuron_account_id(&self.get_neuron(&NeuronId { id }))
     }
 
     pub fn get_neuron_stake(&self, neuron: &Neuron) -> u64 {
@@ -1006,6 +1025,7 @@ impl Default for NNSBuilder {
             governance: GovernanceProto {
                 wait_for_quiet_threshold_seconds: 1,
                 short_voting_period_seconds: 30,
+                neuron_management_voting_period_seconds: Some(30),
                 ..Default::default()
             },
             ledger_transforms: Vec::default(),
@@ -1045,6 +1065,12 @@ impl NNSBuilder {
 
     pub fn set_start_time(mut self, seconds: u64) -> Self {
         self.environment_builder.set_start_time(seconds);
+        self
+    }
+
+    pub fn push_mock_reply(mut self, canister_call_reply: CanisterCallReply) -> Self {
+        self.environment_builder
+            .push_mock_reply(canister_call_reply);
         self
     }
 

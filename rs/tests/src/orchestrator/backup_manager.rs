@@ -156,7 +156,6 @@ pub fn test(env: TestEnv) {
         &nns_canister,
         env.topology_snapshot().root_subnet_id(),
         None,
-        true,
         &log,
     );
     run_ecdsa_signature_test(&nns_canister, &log, key);
@@ -198,7 +197,6 @@ pub fn test(env: TestEnv) {
         versions_hot: 1,
     });
     let config = Config {
-        version: 1,
         push_metrics: false,
         metrics_urls: vec![],
         network_name: "testnet".to_string(),
@@ -208,7 +206,8 @@ pub fn test(env: TestEnv) {
         root_dir: backup_dir.clone(),
         excluded_dirs: vec![],
         ssh_private_key: private_key_path,
-        disk_threshold_warn: 75,
+        hot_disk_resource_threshold_percentage: 75,
+        cold_disk_resource_threshold_percentage: 95,
         slack_token: "NO_TOKEN_IN_TESTING".to_string(),
         cold_storage,
         blacklisted_nodes: None,
@@ -300,7 +299,7 @@ pub fn test(env: TestEnv) {
             good_progress,
         );
         if new_height > 0 && checkpoint > good_progress && archive_height > good_progress {
-            info!(log, "New version was sucessfully backed up and archived");
+            info!(log, "New version was successfully backed up and archived");
             break;
         }
         sleep_secs(5);

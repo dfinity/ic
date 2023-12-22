@@ -22,7 +22,7 @@ use tokio::{
 };
 
 /// The function starts a Tokio task that awaits messages from the ConnectionManager.
-/// After receiving a message, it is dispached to _all_ relevant components for processing.
+/// After receiving a message, it is dispatched to _all_ relevant components for processing.
 /// Having a design where we have a separate task that awaits on messages from the
 /// ConnectionManager, we keep the ConnectionManager free of dependencies like the
 /// TransactionStore or the BlockchainManager.
@@ -57,7 +57,7 @@ pub fn start_main_event_loop(
             if adapter_state.is_idle() {
                 connection_manager.make_idle();
                 blockchain_manager.make_idle().await;
-                // TODO: instead of sleeping here add some async synchonization.
+                // TODO: instead of sleeping here add some async synchronization.
                 sleep(sleep_idle_interval).await;
                 continue;
             }

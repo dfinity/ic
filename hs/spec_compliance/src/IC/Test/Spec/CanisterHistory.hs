@@ -47,7 +47,7 @@ canister_history_tests ecid =
                     c .! #origin @?= mapChangeOrigin o
                     c .! #details @?= mapChangeDetails d
            in [ simpleTestCase "after creation and code deployments" ecid $ \unican -> do
-                  universal_wasm <- getTestWasm "universal_canister"
+                  universal_wasm <- getTestWasm "universal_canister.wasm.gz"
 
                   cid <- ic_provisional_create ic00 ecid Nothing Nothing R.empty
                   info <- get_canister_info unican cid (Just 1)
@@ -61,7 +61,7 @@ canister_history_tests ecid =
                   info <- get_canister_info unican cid (Just 1)
                   void $ check_history info 3 [(2, ChangeFromUser (EntityId defaultUser), CodeDeployment Reinstall (sha256 trivialWasmModule))]
 
-                  ic_install ic00 (enum #upgrade) cid universal_wasm (run no_heartbeat)
+                  ic_install ic00 (enumNothing #upgrade) cid universal_wasm (run no_heartbeat)
                   info <- get_canister_info unican cid (Just 1)
                   void $ check_history info 4 [(3, ChangeFromUser (EntityId defaultUser), CodeDeployment Upgrade (sha256 universal_wasm))]
 
@@ -87,16 +87,15 @@ canister_history_tests ecid =
                 simpleTestCase "after many changes" ecid $ \unican -> do
                   cid <- create ecid
 
-                  void $ forM [1 .. 24] $ \i -> do
-                    ic_set_controllers ic00 cid [defaultUser]
-                    info <- get_canister_info unican cid (Just 20)
-                    let hist =
-                          reverse $
-                            take 20 $
-                              reverse $
-                                (0, ChangeFromUser (EntityId defaultUser), Creation [(EntityId defaultUser)])
-                                  : map (\i -> (i, ChangeFromUser (EntityId defaultUser), ControllersChange [EntityId defaultUser])) [1 .. i]
-                    void $ check_history info (i + 1) hist
+                  void $ forM [1 .. 22] $ \_ -> ic_set_controllers ic00 cid [defaultUser]
+                  info <- get_canister_info unican cid (Just 20)
+                  let hist =
+                        reverse $
+                          take 20 $
+                            reverse $
+                              (0, ChangeFromUser (EntityId defaultUser), Creation [(EntityId defaultUser)])
+                                : map (\i -> (i, ChangeFromUser (EntityId defaultUser), ControllersChange [EntityId defaultUser])) [1 .. 22]
+                  void $ check_history info 23 hist
 
                   return (),
                 testCase "changes from canister" $ do
@@ -130,7 +129,7 @@ canister_history_tests ecid =
                 simpleTestCase "user call to canister_info" ecid $ \cid ->
                   ic_canister_info'' defaultUser cid Nothing >>= is2xx >>= isReject [4],
                 simpleTestCase "calling canister_info" ecid $ \unican -> do
-                  universal_wasm <- getTestWasm "universal_canister"
+                  universal_wasm <- getTestWasm "universal_canister.wasm.gz"
 
                   cid <- ic_provisional_create ic00 ecid Nothing Nothing R.empty
                   ic_install ic00 (enum #install) cid trivialWasmModule ""
@@ -140,7 +139,7 @@ canister_history_tests ecid =
                   info .! #controllers @?= (Vec.fromList [Principal defaultUser])
                   info .! #module_hash @?= (Just $ sha256 universal_wasm)
 
-                  ic_install ic00 (enum #upgrade) cid trivialWasmModule ""
+                  ic_install ic00 (enumNothing #upgrade) cid trivialWasmModule ""
 
                   info <- get_canister_info unican cid Nothing
                   info .! #controllers @?= (Vec.fromList [Principal defaultUser])
@@ -176,5 +175,8 @@ canister_history_tests ecid =
                   void $ check_history info 6 hist
 
                   info <- get_canister_info unican cid (Just 20)
+                  void $ check_history info 6 hist
+
+                  info <- get_canister_info unican cid (Just 200)
                   void $ check_history info 6 hist
               ]

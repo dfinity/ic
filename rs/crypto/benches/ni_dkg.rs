@@ -29,7 +29,7 @@ fn crypto_nidkg_benchmarks(criterion: &mut Criterion) {
     let test_cases = test_cases(&[13, 28, 40]);
 
     for test_case in test_cases {
-        let group = &mut criterion.benchmark_group(test_case.name());
+        let group = &mut criterion.benchmark_group(test_case.name().to_string());
         group
             .sample_size(test_case.sample_size)
             .sampling_mode(test_case.sampling_mode);
@@ -157,7 +157,7 @@ fn bench_load_transcript<M: Measurement, R: Rng + CryptoRng>(
 
                 env_to_copy.save_to_dir(path);
                 (
-                    NiDkgTestEnvironment::new_from_dir(path, rng),
+                    NiDkgTestEnvironment::new_from_dir_with_remote_vault(path, rng),
                     transcript_to_load.clone(),
                     config.random_receiver_id(rng),
                 )
@@ -198,7 +198,7 @@ fn bench_retain_keys<M: Measurement, R: Rng + CryptoRng>(
                         // clean-up the dir if it exists
                         let _ = std::fs::remove_dir_all(path);
                         env_to_copy.save_to_dir(path);
-                        let env = NiDkgTestEnvironment::new_from_dir(path, rng);
+                        let env = NiDkgTestEnvironment::new_from_dir_with_remote_vault(path, rng);
 
                         let mut transcripts = HashSet::new();
                         transcripts.insert(transcript1.clone());
@@ -299,7 +299,7 @@ fn prepare_create_reshare_dealing_test_vectors<R: Rng + CryptoRng>(
         .dealer_count(test_case.num_of_dealers)
         .max_corrupt_dealers(get_faults_tolerated(test_case.num_of_dealers))
         .build(rng);
-    let mut env = NiDkgTestEnvironment::new_for_config(config0.get(), rng);
+    let mut env = NiDkgTestEnvironment::new_for_config_with_remote_vault(config0.get(), rng);
     let transcript0 =
         run_ni_dkg_and_create_single_transcript(config0.get(), &env.crypto_components);
     let config = RandomNiDkgConfig::reshare(transcript0, 0..=0, test_case.num_of_nodes, rng);
@@ -329,7 +329,7 @@ fn prepare_create_initial_dealing_test_vectors<R: Rng + CryptoRng>(
         .dealer_count(test_case.num_of_dealers)
         .max_corrupt_dealers(get_faults_tolerated(test_case.num_of_dealers))
         .build(rng);
-    let env = NiDkgTestEnvironment::new_for_config(config.get(), rng);
+    let env = NiDkgTestEnvironment::new_for_config_with_remote_vault(config.get(), rng);
     (env, config)
 }
 
@@ -347,7 +347,7 @@ fn prepare_verify_dealing_test_vectors<R: Rng + CryptoRng>(
         .dealer_count(test_case.num_of_dealers)
         .max_corrupt_dealers(get_faults_tolerated(test_case.num_of_dealers))
         .build(rng);
-    let env = NiDkgTestEnvironment::new_for_config(config.get(), rng);
+    let env = NiDkgTestEnvironment::new_for_config_with_remote_vault(config.get(), rng);
 
     let mut dealers: Vec<_> = config.dealer_ids().drain().collect();
     dealers.sort_unstable();
@@ -380,7 +380,7 @@ fn prepare_create_transcript_test_vectors<R: Rng + CryptoRng>(
         .dealer_count(test_case.num_of_dealers)
         .max_corrupt_dealers(get_faults_tolerated(test_case.num_of_dealers))
         .build(rng);
-    let mut env = NiDkgTestEnvironment::new_for_config(config.get(), rng);
+    let mut env = NiDkgTestEnvironment::new_for_config_with_remote_vault(config.get(), rng);
     let dealings = create_dealings(config.get(), &env.crypto_components);
     let creator_node_id = config.random_receiver_id(rng);
     retain_only(&mut env, &creator_node_id);
@@ -398,7 +398,7 @@ fn prepare_load_transcript_test_vectors<R: Rng + CryptoRng>(
         .dealer_count(test_case.num_of_dealers)
         .max_corrupt_dealers(get_faults_tolerated(test_case.num_of_dealers))
         .build(rng);
-    let env = NiDkgTestEnvironment::new_for_config(config.get(), rng);
+    let env = NiDkgTestEnvironment::new_for_config_with_remote_vault(config.get(), rng);
     let transcript = run_ni_dkg_and_create_single_transcript(config.get(), &env.crypto_components);
 
     (env, config, transcript)
@@ -422,7 +422,7 @@ fn prepare_retain_keys_test_vectors<R: Rng + CryptoRng>(
         .registry_version(ic_base_types::RegistryVersion::from(1))
         .max_corrupt_dealers(get_faults_tolerated(test_case.num_of_dealers))
         .build(rng);
-    let mut env = NiDkgTestEnvironment::new_for_config(config0.get(), rng);
+    let mut env = NiDkgTestEnvironment::new_for_config_with_remote_vault(config0.get(), rng);
     let transcript0 =
         run_ni_dkg_and_create_single_transcript(config0.get(), &env.crypto_components);
 

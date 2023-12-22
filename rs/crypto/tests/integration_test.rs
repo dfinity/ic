@@ -8,13 +8,14 @@ use ic_crypto::CryptoComponent;
 use ic_crypto_internal_csp_test_utils::remote_csp_vault::{
     get_temp_file_path, start_new_remote_csp_vault_server_for_test,
 };
-use ic_crypto_internal_tls::keygen::generate_tls_key_pair_der;
+use ic_crypto_internal_tls::generate_tls_key_pair_der;
 use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_temp_crypto::{EcdsaSubnetConfig, NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_test_utils::files::temp_dir;
-use ic_crypto_test_utils::tls::x509_certificates::generate_ed25519_cert;
 use ic_crypto_test_utils_keygen::{add_public_key_to_registry, add_tls_cert_to_registry};
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use ic_crypto_test_utils_tls::x509_certificates::generate_ed25519_cert;
 use ic_crypto_utils_time::CurrentSystemTimeSource;
 use ic_interfaces::crypto::KeyManager;
 use ic_interfaces::crypto::{
@@ -35,7 +36,6 @@ use ic_types::crypto::{AlgorithmId, KeyPurpose};
 use ic_types::time::GENESIS;
 use ic_types::{RegistryVersion, Time};
 use ic_types_test_utils::ids::node_test_id;
-use openssl::asn1::Asn1Time;
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use slog::Level;
@@ -71,7 +71,7 @@ fn should_successfully_construct_crypto_component_with_remote_csp_vault() {
     let socket_path = start_new_remote_csp_vault_server_for_test(tokio_rt.handle());
     let temp_dir = temp_dir(); // temp dir with correct permissions
     let crypto_root = temp_dir.path().to_path_buf();
-    let config = CryptoConfig::new_with_unix_socket_vault(crypto_root, socket_path);
+    let config = CryptoConfig::new_with_unix_socket_vault(crypto_root, socket_path, None);
     let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
     CryptoComponent::new_with_fake_node_id(
         &config,
@@ -89,7 +89,7 @@ fn should_not_construct_crypto_component_if_remote_csp_vault_is_missing() {
     let socket_path = get_temp_file_path(); // no CSP vault server is running
     let temp_dir = temp_dir(); // temp dir with correct permissions
     let crypto_root = temp_dir.path().to_path_buf();
-    let config = CryptoConfig::new_with_unix_socket_vault(crypto_root, socket_path);
+    let config = CryptoConfig::new_with_unix_socket_vault(crypto_root, socket_path, None);
     let tokio_rt = new_tokio_runtime();
     let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
     CryptoComponent::new_with_fake_node_id(
@@ -584,11 +584,9 @@ fn should_fail_check_keys_with_registry_if_committee_key_pop_is_malformed() {
 
 #[test]
 fn should_fail_check_keys_with_registry_if_tls_cert_secret_key_is_missing() {
+    let rng = &mut reproducible_rng();
     let cert_without_corresponding_secret_key = X509PublicKeyCert {
-        certificate_der: generate_ed25519_cert()
-            .1
-            .to_der()
-            .expect("Failed to convert X509 to DER"),
+        certificate_der: generate_ed25519_cert(rng).cert_der(),
     };
     let crypto = TestKeygenCrypto::builder()
         .with_node_keys_to_generate(NodeKeysToGenerate::all())
@@ -813,13 +811,13 @@ fn should_fail_check_keys_with_registry_if_no_idkg_key_in_registry() {
 /// Ensure the structs are consistent and then update the test below.
 #[test]
 fn algorithm_id_should_match_algorithm_id_proto() {
-    let algorithm_id_variants = 17;
+    let algorithm_id_variants = 18;
     assert_eq!(AlgorithmId::iter().count(), algorithm_id_variants);
 
     for i in 0..algorithm_id_variants {
-        assert!(AlgorithmIdProto::from_i32(i as i32).is_some());
+        assert!(AlgorithmIdProto::try_from(i as i32).is_ok());
     }
-    assert!(AlgorithmIdProto::from_i32(algorithm_id_variants as i32).is_none());
+    assert!(AlgorithmIdProto::try_from(algorithm_id_variants as i32).is_err());
 
     assert_eq!(
         AlgorithmId::Placeholder as i32,
@@ -885,6 +883,10 @@ fn algorithm_id_should_match_algorithm_id_proto() {
     assert_eq!(
         AlgorithmId::MegaSecp256k1 as i32,
         AlgorithmIdProto::MegaSecp256k1 as i32
+    );
+    assert_eq!(
+        AlgorithmId::ThresholdEcdsaSecp256r1 as i32,
+        AlgorithmIdProto::ThresholdEcdsaSecp256r1 as i32
     );
 }
 
@@ -1020,11 +1022,11 @@ fn should_fail_check_keys_with_registry_if_registry_tls_cert_has_no_matching_sec
         .build();
     let (tls_cert_without_corresponding_secret_key, _tls_cert_der) = {
         let mut csprng = ChaChaRng::from_seed([9u8; 32]);
-        let not_before = Asn1Time::from_unix(123).expect("unable to create Asn1Time");
-        let not_after = Asn1Time::from_unix(456).expect("unable to create Asn1Time");
+        let not_before = 123_u64;
+        let not_after_unix_time = 456_u64;
         let common_name = "another_common_name";
         let (x509_cert, _key_pair) =
-            generate_tls_key_pair_der(&mut csprng, common_name, &not_before, &not_after)
+            generate_tls_key_pair_der(&mut csprng, common_name, not_before, not_after_unix_time)
                 .expect("error generating TLS key pair");
         (
             ic_crypto_tls_interfaces::TlsPublicKeyCert::new_from_der(x509_cert.bytes.clone())

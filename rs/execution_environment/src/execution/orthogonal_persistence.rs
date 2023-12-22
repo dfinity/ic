@@ -11,9 +11,9 @@
 use core::cmp::min;
 use std::sync::Arc;
 
-use ic_embedders::wasm_utils::wasm_transform::{DataSegmentKind, Module};
 use ic_replicated_state::{canister_state::execution_state::WasmBinary, Memory};
 use ic_sys::{PageIndex, PAGE_SIZE};
+use ic_wasm_transform::{DataSegmentKind, Module};
 use wasmparser::Operator;
 
 struct DataSegment {

@@ -8,7 +8,6 @@ import subprocess
 import sys
 import time
 import uuid
-from pathlib import Path
 from typing import List
 
 import gflags
@@ -21,7 +20,7 @@ sys.path.append(os.path.dirname(this_script_dir))
 from common import ssh  # noqa
 
 FLAGS = gflags.FLAGS
-gflags.DEFINE_string("farm_group_name", None, "Farm group name to use. Default is testvm-$user-$time")
+gflags.DEFINE_string("infra_group_name", None, "Farm group name to use. Default is testvm-$user-$time")
 gflags.DEFINE_string("ci_runner_tags", None, "Allocate VMs close to the CI runner, when running on CI")
 gflags.DEFINE_integer("farm_ttl_secs", 3600, "VM expiry in seconds")
 
@@ -38,7 +37,7 @@ DEFAULT_NUM_VCPUS = 2
 #
 # Please also keep this in sync with the DEFAULT_PROMETHEUS_VM_IMG_SHA256 constant in:
 # rs/tests/src/driver/prometheus_vm.rs
-PROMETHEUS_VM_DISK_IMG_SHA256 = "c8ec611778a36a3926cedc100f4bcbf058ce5540347e299da54e221c8a19bdaf"
+PROMETHEUS_VM_DISK_IMG_SHA256 = "419f884458cb8158c12b294e8d79d355c836188d416f9b6dd7b63abd08cb9f94"
 PROMETHEUS_VM_DISK_IMG_URL = (
     f"{DOWNLOAD_BASE_URL}/farm/prometheus-vm/{PROMETHEUS_VM_DISK_IMG_SHA256}/x86_64-linux/prometheus-vm.img.zst"
 )
@@ -223,8 +222,8 @@ class Farm(object):
         self.version = version
         self.subnet_config = subnet_config
 
-        if FLAGS.farm_group_name is not None:
-            self.group_name = FLAGS.farm_group_name
+        if FLAGS.infra_group_name is not None:
+            self.group_name = FLAGS.infra_group_name
         else:
             if "CI_JOB_ID" in os.environ:
                 test_id = os.environ["CI_JOB_ID"]
@@ -381,8 +380,7 @@ class Farm(object):
         from common import ictools
 
         # Generate config image
-        p = Path(__file__).parents[2]
-        path = os.path.join(p, self.artifacts_path, "ic-prep")
+        path = os.path.join(self.artifacts_path, "ic-prep")
         FLAGS.ic_prep_bin = path
         self.ic_config = ictools.ic_prep(
             subnets=self.ic_node_ipv6s,
@@ -396,9 +394,9 @@ class Farm(object):
             extra_config = ictools.build_ssh_extra_config()
 
             if "TEST_ES_HOSTNAMES" in os.environ:
-                extra_config["journalbeat_hosts"] = os.environ["TEST_ES_HOSTNAMES"].replace(",", " ")
+                extra_config["elasticsearch_hosts"] = os.environ["TEST_ES_HOSTNAMES"].replace(",", " ")
 
-            extra_config["journalbeat_tags"] = f"scalability_suite {self.group_name}"
+            extra_config["elasticsearch_tags"] = f"scalability_suite {self.group_name}"
 
             config_image = ictools.build_ic_prep_inject_config(
                 self.ic_config,

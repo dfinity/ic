@@ -68,7 +68,7 @@ pub fn setup(env: TestEnv) {
         NnsCustomizations::default(),
     );
     set_authorized_subnets(&env);
-    env.sync_prometheus_config_with_topology();
+    env.sync_with_prometheus();
 }
 
 pub fn test_small_messages(env: TestEnv) {
@@ -112,96 +112,99 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
         .build()
         .unwrap();
 
-    rt.block_on(async move {
-        info!(
-            log,
-            "Step 1: Install {} canisters on the subnet..", canister_count
-        );
-        let mut canisters = Vec::new();
-        let agent = app_node.build_canister_agent().await;
+    info!(
+        log,
+        "Step 1: Install {} canisters on the subnet..", canister_count
+    );
+    let mut canisters = Vec::new();
+    let agent = rt.block_on(app_node.build_canister_agent());
 
-        let agents = join_all(
-            env.topology_snapshot()
-                .subnets()
-                .find(|s| s.subnet_type() == SubnetType::Application)
-                .unwrap()
-                .nodes()
+    let nodes = env
+        .topology_snapshot()
+        .subnets()
+        .find(|s| s.subnet_type() == SubnetType::Application)
+        .unwrap()
+        .nodes()
+        .collect::<Vec<_>>();
+    let agents = rt.block_on(async {
+        join_all(
+            nodes
+                .into_iter()
                 .map(|n| async move { n.build_canister_agent().await }),
         )
-        .await;
+        .await
+    });
 
-        for _ in 0..canister_count {
-            const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
-            canisters.push(app_node.create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None));
-        }
-        info!(log, "{} canisters installed successfully.", canisters.len());
-        assert_eq!(
-            canisters.len(),
-            canister_count,
-            "Not all canisters deployed successfully, installed {:?} expected {:?}",
-            canisters.len(),
-            canister_count
-        );
-        info!(log, "Step 2: Instantiate and start the workload..");
-        let payload: Vec<u8> = vec![0; message_size];
-        let generator = {
+    for _ in 0..canister_count {
+        const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
+        canisters.push(app_node.create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None));
+    }
+    info!(log, "{} canisters installed successfully.", canisters.len());
+    assert_eq!(
+        canisters.len(),
+        canister_count,
+        "Not all canisters deployed successfully, installed {:?} expected {:?}",
+        canisters.len(),
+        canister_count
+    );
+    info!(log, "Step 2: Instantiate and start the workload..");
+    let payload: Vec<u8> = vec![0; message_size];
+    let generator = {
+        let (agents, canisters, payload) = (agents.clone(), canisters.clone(), payload.clone());
+        move |idx: usize| {
             let (agents, canisters, payload) = (agents.clone(), canisters.clone(), payload.clone());
-            move |idx: usize| {
+            async move {
                 let (agents, canisters, payload) =
                     (agents.clone(), canisters.clone(), payload.clone());
-                async move {
-                    let (agents, canisters, payload) =
-                        (agents.clone(), canisters.clone(), payload.clone());
-                    let request_outcome = canister_requests![
-                        idx,
-                        1 * agents[idx%agents.len()] => GenericRequest::new(canisters[0], "write".to_string(), payload.clone(), CallMode::UpdateNoPolling),
-                        1 * agents[idx%agents.len()] => GenericRequest::new(canisters[1], "write".to_string(), payload.clone(), CallMode::UpdateNoPolling),
-                        1 * agents[idx%agents.len()] => GenericRequest::new(canisters[2], "write".to_string(), payload.clone(), CallMode::UpdateNoPolling),
-                        1 * agents[idx%agents.len()] => GenericRequest::new(canisters[3], "write".to_string(), payload.clone(), CallMode::UpdateNoPolling),
-                    ];
-                    request_outcome.into_test_outcome()
-                }
+                let request_outcome = canister_requests![
+                    idx,
+                    1 * agents[idx%agents.len()] => GenericRequest::new(canisters[0], "write".to_string(), payload.clone(), CallMode::UpdateNoPolling),
+                    1 * agents[idx%agents.len()] => GenericRequest::new(canisters[1], "write".to_string(), payload.clone(), CallMode::UpdateNoPolling),
+                    1 * agents[idx%agents.len()] => GenericRequest::new(canisters[2], "write".to_string(), payload.clone(), CallMode::UpdateNoPolling),
+                    1 * agents[idx%agents.len()] => GenericRequest::new(canisters[3], "write".to_string(), payload.clone(), CallMode::UpdateNoPolling),
+                ];
+                request_outcome.into_test_outcome()
             }
-        };
-        let metrics = Engine::new(log.clone(), generator, rps, duration)
-            .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT)
-            .execute_simply(log.clone())
-            .await;
-        info!(log, "Reporting workload execution results ...");
-        env.emit_report(format!("{}", metrics));
-        info!(
-            log,
-            "Step 3: Assert expected number of success update calls on each canister.."
-        );
-        let requests_count = rps * duration.as_secs_f64();
-        let min_expected_success_calls = (SUCCESS_THRESHOLD * requests_count) as usize;
-        info!(
-            log,
-            "Minimal expected number of success calls {}", min_expected_success_calls,
-        );
-        info!(
-            log,
-            "Number of success calls {}, failure calls {}",
-            metrics.success_calls(),
-            metrics.failure_calls()
-        );
-
-        let min_expected_canister_counter = min_expected_success_calls / canister_count;
-        info!(
-            log,
-            "Minimal expected counter value on canisters {}", min_expected_canister_counter
-        );
-        for canister in canisters.iter() {
-            assert_canister_counter_with_retries(
-                &log,
-                &agent.get(),
-                canister,
-                payload.clone(),
-                min_expected_canister_counter,
-                MAX_RETRIES,
-                RETRY_WAIT,
-            )
-            .await;
         }
-    });
+    };
+    let metrics = rt.block_on(
+        Engine::new(log.clone(), generator, rps, duration)
+            .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT)
+            .execute_simply(log.clone()),
+    );
+    info!(log, "Reporting workload execution results ...");
+    env.emit_report(format!("{}", metrics));
+    info!(
+        log,
+        "Step 3: Assert expected number of success update calls on each canister.."
+    );
+    let requests_count = rps * duration.as_secs_f64();
+    let min_expected_success_calls = (SUCCESS_THRESHOLD * requests_count) as usize;
+    info!(
+        log,
+        "Minimal expected number of success calls {}", min_expected_success_calls,
+    );
+    info!(
+        log,
+        "Number of success calls {}, failure calls {}",
+        metrics.success_calls(),
+        metrics.failure_calls()
+    );
+
+    let min_expected_canister_counter = min_expected_success_calls / canister_count;
+    info!(
+        log,
+        "Minimal expected counter value on canisters {}", min_expected_canister_counter
+    );
+    for canister in canisters.iter() {
+        rt.block_on(assert_canister_counter_with_retries(
+            &log,
+            &agent.get(),
+            canister,
+            payload.clone(),
+            min_expected_canister_counter,
+            MAX_RETRIES,
+            RETRY_WAIT,
+        ));
+    }
 }

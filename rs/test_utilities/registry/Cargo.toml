@@ -1,10 +1,12 @@
 [package]
 name = "ic-test-utilities-registry"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-ic-crypto = { path = "../../crypto" }
 ic-crypto-test-utils-ni-dkg = { path = "../../crypto/test_utils/ni-dkg" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
@@ -15,4 +17,3 @@ ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" 
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-types = { path = "../../types/types" }
-serde_cbor = "0.11.1"

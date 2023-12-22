@@ -7,9 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 ### Fixes
 ### Added
+
+## [1.9.0] - 2023-11-16
+### Fixes
+- Return transaction metadata (`memo` and `created_at_time`) in `/construction/parse`
+- Remove `rosetta-exchanges.ic0.app`
+### Added
+- Add support for ICRC-2
+- Add support for voting staking
+- Add support for auto staking
+- Add the ability to fetch pending proposals and proposal info
+- Add listen to port file to rosetta
+### Changed
 - BREAKING CHANGE: update the database structure to support the ICRC-2 standard transactions.
   The clients have to delete the old database and re-sync the Rosetta node from scratch. 
-- Add ICRC-2 standard support for the edpoints serving the Data API and Indexer
 
 ## [1.8.0] - 2023-01-16
 ### Fixes

@@ -65,7 +65,7 @@ pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> st
             )?;
         }
 
-        // All of the following metrics are superceded (by nns_root_in_flight_proxied_canister_call_count).
+        // All of the following metrics are superseded (by nns_root_in_flight_proxied_canister_call_count).
 
         let canister_status_caller_to_in_flight_count = {
             // I am not sure if this fact is in the spec, but it is in the code.
@@ -94,13 +94,13 @@ pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> st
             canister_status_caller_to_in_flight_count
                 .values()
                 .sum::<u64>() as f64,
-            "Superceded by nns_root_in_flight_proxied_canister_call_count. \
+            "Superseded by nns_root_in_flight_proxied_canister_call_count. \
              Count of open CanisterStatusCalls.",
         )?;
 
         let mut metrics = w.gauge_vec(
             "nns_root_open_canister_status_calls",
-            "Superceded by nns_root_in_flight_proxied_canister_call_count. \
+            "Superseded by nns_root_in_flight_proxied_canister_call_count. \
              The list of counters and canister_ids with open canister_status calls.",
         )?;
         for (canister_id, call_count) in &canister_status_caller_to_in_flight_count {
@@ -134,8 +134,7 @@ fn principal_name(principal_id: PrincipalId) -> String {
         };
     }
 
-    CanisterId::new(principal_id)
-        .ok()
+    Some(CanisterId::unchecked_from_principal(principal_id))
         .and_then(|canister_id| CANISTER_ID_TO_NAME.get(&canister_id))
         .map(|name| format!("{}_canister", name))
         .unwrap_or_else(|| principal_id.to_string())

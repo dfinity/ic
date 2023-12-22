@@ -18,12 +18,11 @@ use serde::{Deserialize, Serialize};
 use std::cmp::{Ordering, PartialOrd};
 use std::convert::TryFrom;
 
-/// CatchUpContent contains all necessary data to bootstrap a subnet's
-/// participant.
+/// [`CatchUpContent`] contains all necessary data to bootstrap a subnet's participant.
 pub type CatchUpContent = CatchUpContentT<HashedBlock>;
 
-/// A generic struct shared between CatchUpContent and CatchUpContentShare.
-/// Consists of objects all occuring at a specific height which we will refer to
+/// A generic struct shared between [`CatchUpContent`] and [`CatchUpContentShare`].
+/// Consists of objects all occurring at a specific height which we will refer to
 /// as the catch up height.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord, Hash)]
 pub struct CatchUpContentT<T> {
@@ -39,7 +38,7 @@ pub struct CatchUpContentT<T> {
 }
 
 impl CatchUpContent {
-    /// Create a new CatchUpContent
+    /// Creates a new [`CatchUpContent`]
     pub fn new(
         block: HashedBlock,
         random_beacon: HashedRandomBeacon,
@@ -52,8 +51,9 @@ impl CatchUpContent {
             state_hash,
         }
     }
-    /// Return the registry version as recorded in the DKG summary of
-    /// the block contained in the CatchUpContent.
+
+    /// Returns the registry version as recorded in the DKG summary of
+    /// the block contained in the [`CatchUpContent`].
     pub fn registry_version(&self) -> RegistryVersion {
         self.block
             .as_ref()
@@ -64,7 +64,7 @@ impl CatchUpContent {
             .registry_version
     }
 
-    /// Create a CatchupContent from a
+    /// Creates a [`CatchupContent`] from a [`CatchUpShareContent`].
     pub fn from_share_content(share: CatchUpShareContent, block: Block) -> Self {
         Self {
             version: share.version,
@@ -141,19 +141,20 @@ impl<T> HasCommittee for CatchUpContentT<T> {
     }
 }
 
-/// CatchUpPackage is signed by a threshold public key. Its CatchUpContent is
+/// [`CatchUpPackage`] is signed by a threshold public key. Its [`CatchUpContent`] is
 /// only trusted if the threshold public key is trusted.
 pub type CatchUpPackage = Signed<CatchUpContent, ThresholdSignature<CatchUpContent>>;
 
 impl CatchUpPackage {
-    /// Return if this CUP is unsigned. This is true for
-    /// Genesis or recovery CUPs.
-    pub fn is_unsigned(&self) -> bool {
-        self.signature.signature.as_ref().0.is_empty()
+    /// Returns whether this CUP is signed.
+    ///
+    /// This is `false` for Genesis and recovery CUPs.
+    pub fn is_signed(&self) -> bool {
+        !self.signature.signature.as_ref().0.is_empty()
     }
 }
 
-/// CatchUpContentHash is the type of a hashed `CatchUpContent`
+/// [`CatchUpContentHash`] is the type of a hashed [`CatchUpContent`]
 pub type CatchUpContentHash = CryptoHashOf<CatchUpContent>;
 
 impl From<&CatchUpPackage> for pb::CatchUpPackage {
@@ -168,7 +169,7 @@ impl From<&CatchUpPackage> for pb::CatchUpPackage {
 
 impl From<CatchUpPackage> for pb::CatchUpPackage {
     fn from(cup: CatchUpPackage) -> Self {
-        (&cup).into()
+        Self::from(&cup)
     }
 }
 
@@ -177,7 +178,7 @@ impl TryFrom<&pb::CatchUpPackage> for CatchUpPackage {
     fn try_from(cup: &pb::CatchUpPackage) -> Result<CatchUpPackage, Self::Error> {
         let ret = CatchUpPackage {
             content: CatchUpContent::try_from(
-                pb::CatchUpContent::decode(&cup.content[..])
+                pb::CatchUpContent::decode(cup.content.as_slice())
                     .map_err(ProxyDecodeError::DecodeError)?,
             )?,
             signature: ThresholdSignature {
@@ -195,7 +196,7 @@ impl TryFrom<&pb::CatchUpPackage> for CatchUpPackage {
     }
 }
 
-/// Content of CatchUpPackageShare uses the block hash to keep its size small.
+/// Content of [`CatchUpPackageShare`] uses the block hash to keep its size small.
 pub type CatchUpShareContent = CatchUpContentT<CryptoHashOf<Block>>;
 
 impl From<&CatchUpContent> for CatchUpShareContent {
@@ -209,8 +210,7 @@ impl From<&CatchUpContent> for CatchUpShareContent {
     }
 }
 
-/// CatchUpPackageShare is signed by individual members in a threshold
-/// committee.
+/// [`CatchUpPackageShare`] is signed by individual members in a threshold committee.
 pub type CatchUpPackageShare = Signed<CatchUpShareContent, ThresholdSignatureShare<CatchUpContent>>;
 
 impl From<&CatchUpPackageShare> for pb::CatchUpPackageShare {
@@ -250,9 +250,9 @@ impl TryFrom<pb::CatchUpPackageShare> for CatchUpPackageShare {
         })
     }
 }
-/// The parameters used to request `CatchUpPackage` (by orchestrator).
+/// The parameters used to request [`CatchUpPackage`] (by orchestrator).
 ///
-/// We make use of the `Ord` trait to determine if one `CatchUpPackage` is newer
+/// We make use of the [`Ord`] trait to determine if one [`CatchUpPackage`] is newer
 /// than the other:
 ///
 /// ```ignore
@@ -266,7 +266,7 @@ pub struct CatchUpPackageParam {
     registry_version: RegistryVersion,
 }
 
-/// The PartialOrd instance is explicitly given below to avoid relying on
+/// The [`PartialOrd`] instance is explicitly given below to avoid relying on
 /// the ordering of the struct fields.
 impl PartialOrd for CatchUpPackageParam {
     fn partial_cmp(&self, other: &CatchUpPackageParam) -> Option<Ordering> {
@@ -289,24 +289,41 @@ impl PartialOrd for CatchUpPackageParam {
 
 impl From<&CatchUpPackage> for CatchUpPackageParam {
     fn from(catch_up_package: &CatchUpPackage) -> Self {
-        Self {
-            height: catch_up_package.height(),
-            registry_version: catch_up_package.content.registry_version(),
-        }
-    }
-}
-impl TryFrom<&pb::CatchUpPackage> for CatchUpPackageParam {
-    type Error = ProxyDecodeError;
-    fn try_from(catch_up_package: &pb::CatchUpPackage) -> Result<Self, Self::Error> {
-        let cup = &CatchUpPackage::try_from(catch_up_package)?;
-        Ok(cup.into())
+        Self::from(&catch_up_package.content)
     }
 }
 
-/// CatchUpContentProtobufBytes holds bytes that represent a protobuf serialized
+impl From<&CatchUpContent> for CatchUpPackageParam {
+    fn from(catch_up_content: &CatchUpContent) -> Self {
+        Self {
+            height: catch_up_content.height(),
+            registry_version: catch_up_content.registry_version(),
+        }
+    }
+}
+
+impl TryFrom<&pb::CatchUpPackage> for CatchUpPackageParam {
+    type Error = ProxyDecodeError;
+    fn try_from(catch_up_package: &pb::CatchUpPackage) -> Result<Self, Self::Error> {
+        let catch_up_content = CatchUpContent::try_from(
+            pb::CatchUpContent::decode(catch_up_package.content.as_slice())
+                .map_err(ProxyDecodeError::DecodeError)?,
+        )?;
+
+        Ok(Self::from(&catch_up_content))
+    }
+}
+
+/// [`CatchUpContentProtobufBytes`] holds bytes that represent a protobuf serialized
 /// catch-up package
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
-pub struct CatchUpContentProtobufBytes(pub Vec<u8>);
+pub struct CatchUpContentProtobufBytes(Vec<u8>);
+
+impl From<&pb::CatchUpPackage> for CatchUpContentProtobufBytes {
+    fn from(proto: &pb::CatchUpPackage) -> Self {
+        Self(proto.content.clone())
+    }
+}
 
 impl SignedBytesWithoutDomainSeparator for CatchUpContentProtobufBytes {
     fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {

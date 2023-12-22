@@ -1,21 +1,24 @@
 [package]
 name = "ic-crypto-internal-basic-sig-iccsa"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 hex = "0.4.2"
-base64 = "0.11.0"
+base64 = { workspace = true }
 ic-certification = { path = "../../../../../certification" }
 ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
 ic-crypto-internal-types = { path = "../../../crypto_lib/types" }
 ic-crypto-tree-hash = { path = "../../../../tree_hash" }
 ic-crypto-sha2 = { path = "../../../../sha2" }
 ic-types = { path = "../../../../../types/types" }
-serde = { version = "1.0.99", features = [ "derive" ] }
-serde_bytes = "0.11"
-serde_cbor = "0.11"
-simple_asn1 = "0.6.1"
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+serde_cbor = { workspace = true }
+simple_asn1 = { workspace = true }
 
 [dev-dependencies]
 # TODO (CRP-912) Replace ic-crypto with ic-crypto-utils-threshold-sig

@@ -1,12 +1,15 @@
-use std::time::Instant;
-
 use async_trait::async_trait;
-use opentelemetry::KeyValue;
+use http_body::{combinators::UnsyncBoxBody, Body as HttpBody, LengthLimitError, Limited};
+use hyper::body;
 use reqwest::{Error as ReqwestError, Request, Response};
-use tracing::info;
+use rustls::Error as RustlsError;
 
-use crate::metrics::{MetricParams, WithMetrics};
+use crate::{core::error_source, dns::DnsError, routes::ErrorCause};
 
+/// Standard response used to pass between middlewares
+pub type AxumResponse = http::Response<UnsyncBoxBody<bytes::Bytes, axum::Error>>;
+
+// TODO remove this wrapper?
 #[async_trait]
 pub trait HttpClient: Send + Sync {
     async fn execute(&self, req: Request) -> Result<Response, ReqwestError>;
@@ -21,78 +24,54 @@ impl HttpClient for ReqwestClient {
     }
 }
 
-#[async_trait]
-impl<T: HttpClient> HttpClient for WithMetrics<T> {
-    async fn execute(&self, req: Request) -> Result<Response, ReqwestError> {
-        let start_time = Instant::now();
-
-        // Attribute (Method)
-        let method = req.method().to_string();
-
-        // Attribute (Scheme)
-        let scheme = req.url().scheme().to_string();
-
-        // Attribute (Host)
-        let host = match req.url().host_str() {
-            Some(h) => h.to_string(),
-            None => "".to_string(),
-        };
-
-        // Attribute (Path)
-        let path = req.url().path().to_string();
-
-        // Attribute (Query)
-        let query = match req.url().query() {
-            Some(q) => q.to_string(),
-            None => "".to_string(),
-        };
-
-        let out = self.0.execute(req).await;
-
-        let status = match out {
-            Ok(_) => "ok",
-            Err(_) => "fail",
-        };
-
-        let duration = start_time.elapsed().as_secs_f64();
-
-        // Attribute (Status Code)
-        let status_code = match &out {
-            Ok(out) => format!("{}", out.status().as_u16()),
-            Err(_) => "".to_string(),
-        };
-
-        let labels = &[
-            KeyValue::new("status", status),
-            // Attributes
-            KeyValue::new("method", method.clone()),
-            KeyValue::new("scheme", scheme.clone()),
-            KeyValue::new("host", host.clone()),
-            KeyValue::new("status_code", status_code.clone()),
-        ];
-
-        let MetricParams {
-            action,
-            counter,
-            recorder,
-        } = &self.1;
-
-        counter.add(1, labels);
-        recorder.record(duration, labels);
-
-        info!(
-            action = action.as_str(),
-            method,
-            scheme,
-            host,
-            path,
-            query,
-            status_code,
-            status,
-            duration,
-            error = ?out.as_ref().err(),
-        );
-
-        out
+// Try to categorize the error that we got from Reqwest call
+pub fn reqwest_error_infer(e: ReqwestError) -> ErrorCause {
+    if e.is_connect() {
+        return ErrorCause::ReplicaErrorConnect;
     }
+
+    if e.is_timeout() {
+        return ErrorCause::ReplicaTimeout;
+    }
+
+    // Check if it's a DNS error
+    if let Some(e) = error_source::<DnsError>(&e) {
+        return ErrorCause::ReplicaErrorDNS(e.to_string());
+    }
+
+    // Check if it's a Rustls error
+    if let Some(e) = error_source::<RustlsError>(&e) {
+        return match e {
+            RustlsError::InvalidCertificate(v) => {
+                ErrorCause::ReplicaTLSErrorCert(format!("{:?}", v))
+            }
+            RustlsError::NoCertificatesPresented => {
+                ErrorCause::ReplicaTLSErrorCert("no certificate presented".into())
+            }
+            _ => ErrorCause::ReplicaTLSErrorOther(e.to_string()),
+        };
+    }
+
+    ErrorCause::ReplicaErrorOther(e.to_string())
+}
+
+// Read the body from the available stream enforcing a size limit
+pub async fn read_streaming_body<H: HttpBody>(
+    body_stream: H,
+    size_limit: usize,
+) -> Result<Vec<u8>, ErrorCause>
+where
+    <H as HttpBody>::Error: std::error::Error + Send + Sync + 'static,
+{
+    let limited_body = Limited::new(body_stream, size_limit);
+
+    let data = body::to_bytes(limited_body).await.map_err(|err| {
+        if err.downcast_ref::<LengthLimitError>().is_some() {
+            ErrorCause::PayloadTooLarge(size_limit)
+        } else {
+            ErrorCause::UnableToReadBody(format!("unable to read response body: {err}"))
+        }
+    })?;
+
+    Ok(data.to_vec())
 }

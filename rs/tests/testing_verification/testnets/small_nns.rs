@@ -83,6 +83,6 @@ pub fn setup(env: TestEnv) {
         .expect("failed to setup BoundaryNode VM");
     install_ii_and_nns_dapp(&env, BOUNDARY_NODE_NAME, None);
     set_authorized_subnets(&env);
-    env.sync_prometheus_config_with_topology();
+    env.sync_with_prometheus();
     await_boundary_node_healthy(&env, BOUNDARY_NODE_NAME);
 }

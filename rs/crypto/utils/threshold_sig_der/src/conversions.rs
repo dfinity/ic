@@ -1,7 +1,8 @@
+use ic_crypto_internal_threshold_sig_bls12381 as bls12_381;
 use ic_crypto_internal_threshold_sig_bls12381_der::public_key_from_der;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
-use ic_types::crypto::{AlgorithmId, CryptoError};
+use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use std::io::{Error, ErrorKind, Result};
 use std::path::Path;
 
@@ -36,7 +37,7 @@ pub fn parse_threshold_sig_key(pem_file: &Path) -> Result<ThresholdSigPublicKey>
         ));
     }
 
-    let decoded = base64::decode(&lines[1..n - 1].join(""))
+    let decoded = base64::decode(lines[1..n - 1].join(""))
         .map_err(|err| invalid_data_err(format!("failed to decode base64: {}", err)))?;
 
     parse_threshold_sig_key_from_der(&decoded)
@@ -62,6 +63,25 @@ pub fn parse_threshold_sig_key_from_der(der_bytes: &[u8]) -> Result<ThresholdSig
         }
     };
     Ok(ThresholdSigPublicKey::from(pk_bytes))
+}
+
+/// Encodes a threshold signature public key into DER.
+///
+/// # Errors
+/// * `CryptoError::MalformedPublicKey`: if the public cannot be DER encoded.
+pub fn threshold_sig_public_key_to_der(pk: ThresholdSigPublicKey) -> CryptoResult<Vec<u8>> {
+    // TODO(CRP-641): add a check that the key is indeed a BLS key.
+    let pk = PublicKeyBytes(pk.into_bytes());
+    bls12_381::api::public_key_to_der(pk)
+}
+
+/// Decodes a threshold signature public key from DER.
+///
+/// # Errors
+/// * `CryptoError::MalformedPublicKey`: if the public cannot be DER decoded.
+pub fn threshold_sig_public_key_from_der(bytes: &[u8]) -> CryptoResult<ThresholdSigPublicKey> {
+    let pk = bls12_381::api::public_key_from_der(bytes)?;
+    Ok(pk.into())
 }
 
 fn invalid_data_err(msg: impl std::string::ToString) -> Error {

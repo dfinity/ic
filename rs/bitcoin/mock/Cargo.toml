@@ -1,7 +1,10 @@
 [package]
 name = "ic-bitcoin-canister-mock"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 bech32 = "0.9.0"
@@ -11,8 +14,8 @@ ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-ckbtc-minter = { path = "../ckbtc/minter" }
 rand = "0.8.5"
-serde = "1.0.130"
-serde_bytes = "0.11"
+serde = { workspace = true }
+serde_bytes = { workspace = true }
 
 [dev-dependencies]
 bitcoin = "0.28.1"

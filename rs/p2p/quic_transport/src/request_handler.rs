@@ -13,8 +13,8 @@
 use std::time::Duration;
 
 use axum::Router;
+use ic_base_types::NodeId;
 use ic_logger::{info, ReplicaLogger};
-use ic_types::NodeId;
 use quinn::{Connection, RecvStream, SendStream};
 use tower::ServiceExt;
 
@@ -24,6 +24,7 @@ use crate::{
         ERROR_TYPE_READ, ERROR_TYPE_WRITE, STREAM_TYPE_BIDI, STREAM_TYPE_UNI,
     },
     utils::{read_request, write_response},
+    ConnId,
 };
 
 const QUIC_METRIC_SCRAPE_INTERVAL: Duration = Duration::from_secs(5);
@@ -31,12 +32,18 @@ const QUIC_METRIC_SCRAPE_INTERVAL: Duration = Duration::from_secs(5);
 pub(crate) async fn run_stream_acceptor(
     log: ReplicaLogger,
     peer_id: NodeId,
+    conn_id: ConnId,
     connection: Connection,
     metrics: QuicTransportMetrics,
     router: Router,
 ) {
     let mut inflight_requests = tokio::task::JoinSet::new();
     let mut quic_metrics_scrape = tokio::time::interval(QUIC_METRIC_SCRAPE_INTERVAL);
+    // The extreme result of a slow handler is that the stream limit will be reach, hence
+    // having buffered up to the stream limit number of messages/requests.
+    // A better approach will be to use a router implemented as a tower service and accept
+    // streams iff the router is ready. Then the actual number of buffered messages is determined
+    // by the handlers instead by the underlying implementation.
     loop {
         tokio::select! {
              _ = quic_metrics_scrape.tick() => {
@@ -50,6 +57,7 @@ pub(crate) async fn run_stream_acceptor(
                                 handle_uni_stream(
                                     log.clone(),
                                     peer_id,
+                                    conn_id,
                                     metrics.clone(),
                                     router.clone(),
                                     uni_rx,
@@ -78,6 +86,7 @@ pub(crate) async fn run_stream_acceptor(
                                 handle_bi_stream(
                                     log.clone(),
                                     peer_id,
+                                    conn_id,
                                     metrics.clone(),
                                     router.clone(),
                                     bi_tx,
@@ -102,7 +111,7 @@ pub(crate) async fn run_stream_acceptor(
             _ = connection.read_datagram() => {},
             Some(completed_request) = inflight_requests.join_next() => {
                 if let Err(err) = completed_request {
-                    // Cancelling tasks is ok. Panicing tasks are not.
+                    // Cancelling tasks is ok. Panicking tasks are not.
                     if err.is_panic() {
                         std::panic::resume_unwind(err.into_panic());
                     }
@@ -118,6 +127,7 @@ pub(crate) async fn run_stream_acceptor(
 async fn handle_bi_stream(
     log: ReplicaLogger,
     peer_id: NodeId,
+    conn_id: ConnId,
     metrics: QuicTransportMetrics,
     router: Router,
     mut bi_tx: SendStream,
@@ -126,11 +136,7 @@ async fn handle_bi_stream(
     let mut request = match read_request(bi_rx).await {
         Ok(request) => request,
         Err(e) => {
-            info!(
-                log,
-                "Failed to read request from bidi stream: {}",
-                e.to_string()
-            );
+            info!(log, "Failed to read request from bidi stream: {}", e);
             metrics
                 .request_handle_errors_total
                 .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_READ])
@@ -140,6 +146,7 @@ async fn handle_bi_stream(
     };
 
     request.extensions_mut().insert::<NodeId>(peer_id);
+    request.extensions_mut().insert::<ConnId>(conn_id);
 
     let svc = router.oneshot(request);
     let stopped = bi_tx.stopped();
@@ -162,7 +169,7 @@ async fn handle_bi_stream(
     // if the other peer has closed the connection. In this case `accept_bi` in the peer event
     // loop will close this connection.
     if let Err(e) = write_response(&mut bi_tx, response).await {
-        info!(log, "Failed to write response to stream: {}", e.to_string());
+        info!(log, "Failed to write response to stream: {}", e);
         metrics
             .request_handle_errors_total
             .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_WRITE])
@@ -180,6 +187,7 @@ async fn handle_bi_stream(
 async fn handle_uni_stream(
     log: ReplicaLogger,
     peer_id: NodeId,
+    conn_id: ConnId,
     metrics: QuicTransportMetrics,
     router: Router,
     uni_rx: RecvStream,
@@ -187,11 +195,7 @@ async fn handle_uni_stream(
     let mut request = match read_request(uni_rx).await {
         Ok(request) => request,
         Err(e) => {
-            info!(
-                log,
-                "Failed to read request from uni stream: {}",
-                e.to_string()
-            );
+            info!(log, "Failed to read request from uni stream: {}", e);
             metrics
                 .request_handle_errors_total
                 .with_label_values(&[STREAM_TYPE_UNI, ERROR_TYPE_READ])
@@ -201,6 +205,7 @@ async fn handle_uni_stream(
     };
 
     request.extensions_mut().insert::<NodeId>(peer_id);
+    request.extensions_mut().insert::<ConnId>(conn_id);
 
     // Record application level errors.
     if !router

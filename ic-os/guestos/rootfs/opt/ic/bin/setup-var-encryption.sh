@@ -18,22 +18,22 @@ function transfer_log_state() {
         echo "Failed to copy previous journal files"
     fi
 
-    # Now, copy journalbeat state files such that it resumes
+    # Now, copy filebeat state files such that it resumes
     # shipping logs from correct place.
     for FILE in meta.json registry; do
-        if [ -f "/mnt/var_old/lib/journalbeat/${FILE}" ]; then
-            if cp -v "/mnt/var_old/lib/journalbeat/${FILE}" "/mnt/var_new/lib/journalbeat/${FILE}"; then
-                chown journalbeat.journalbeat "/mnt/var_new/lib/journalbeat/${FILE}"
-                chmod 600 "/mnt/var_new/lib/journalbeat/${FILE}"
-                chcon system_u:object_r:journalbeat_var_lib_t:s0 "/mnt/var_new/lib/journalbeat/${FILE}"
+        if [ -f "/mnt/var_old/lib/filebeat/${FILE}" ]; then
+            if cp -v "/mnt/var_old/lib/filebeat/${FILE}" "/mnt/var_new/lib/filebeat/${FILE}"; then
+                chown filebeat.filebeat "/mnt/var_new/lib/filebeat/${FILE}"
+                chmod 600 "/mnt/var_new/lib/filebeat/${FILE}"
+                chcon system_u:object_r:filebeat_var_lib_t:s0 "/mnt/var_new/lib/filebeat/${FILE}"
             else
-                echo "Failed to copy journalbeat state file: ${FILE}"
+                echo "Failed to copy filebeat state file: ${FILE}"
             fi
         else
-            echo "Missing journalbeat state file: ${FILE}"
+            echo "Missing filebeat state file: ${FILE}"
         fi
     done
-    ls -lZ "/mnt/var_new/lib/journalbeat"
+    ls -lZ "/mnt/var_new/lib/filebeat"
 }
 
 VAR_PARTITION="$1"

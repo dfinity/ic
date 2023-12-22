@@ -1,52 +1,62 @@
-use std::{
-    sync::Arc,
-    time::{Instant, SystemTime},
-};
+use std::{sync::Arc, time::SystemTime};
 
 use arc_swap::ArcSwapOption;
-use opentelemetry::KeyValue;
+use ic_crypto_utils_tls::{
+    node_id_from_cert_subject_common_name, tls_pubkey_cert_from_rustls_certs,
+};
 use rustls::{
     client::{ServerCertVerified, ServerCertVerifier},
     Certificate, CertificateError, Error as RustlsError, ServerName,
 };
-use tracing::info;
 use x509_parser::{
     prelude::{FromDer, X509Certificate},
     time::ASN1Time,
 };
 
-use crate::{
-    metrics::{MetricParams, WithMetrics},
-    snapshot::RoutingTable,
-};
+use crate::snapshot::RegistrySnapshot;
 
 pub struct TlsVerifier {
-    rt: Arc<ArcSwapOption<RoutingTable>>,
+    rs: Arc<ArcSwapOption<RegistrySnapshot>>,
 }
 
 impl TlsVerifier {
-    pub fn new(rt: Arc<ArcSwapOption<RoutingTable>>) -> Self {
-        Self { rt }
+    pub fn new(rs: Arc<ArcSwapOption<RegistrySnapshot>>) -> Self {
+        Self { rs }
     }
 }
 
 // Implement the certificate verifier which ensures that the certificate
 // that was provided by node during TLS handshake matches its public key from the registry
 // This trait is used by Rustls in reqwest under the hood
-// We don't really check CommonName since the resolver makes sure we connect to the right IP
 impl ServerCertVerifier for TlsVerifier {
     fn verify_server_cert(
         &self,
         end_entity: &Certificate,
-        _intermediates: &[Certificate],
+        intermediates: &[Certificate],
         server_name: &ServerName,
         _scts: &mut dyn Iterator<Item = &[u8]>,
         _ocsp_response: &[u8],
         now: SystemTime,
     ) -> Result<ServerCertVerified, RustlsError> {
+        if !intermediates.is_empty() {
+            return Err(RustlsError::General(format!(
+                "The peer must send exactly one self signed certificate, but it sent {} certificates.",
+                intermediates.len() + 1
+            )));
+        }
+
+        // Check if the CommonName in the certificate can be parsed into a Principal
+        let end_entity_cert = tls_pubkey_cert_from_rustls_certs(std::slice::from_ref(end_entity))?;
+        let node_id = node_id_from_cert_subject_common_name(&end_entity_cert).map_err(|e| {
+            RustlsError::General(format!(
+                "The presented certificate subject CN could not be parsed as node ID: {:?}",
+                e
+            ))
+        })?;
+
         // Load a routing table if we have one
-        let rt = self
-            .rt
+        let rs = self
+            .rs
             .load_full()
             .ok_or_else(|| RustlsError::General("no routing table published".into()))?;
 
@@ -54,7 +64,14 @@ impl ServerCertVerifier for TlsVerifier {
         let node = match server_name {
             // Currently support only DnsName
             ServerName::DnsName(v) => {
-                match rt.nodes.get(v.as_ref()) {
+                // Check if certificate CommonName matches the DNS name
+                if node_id.to_string() != v.as_ref() {
+                    return Err(RustlsError::InvalidCertificate(
+                        CertificateError::NotValidForName,
+                    ));
+                }
+
+                match rs.nodes.get(v.as_ref()) {
                     // If the requested node is not in the routing table
                     None => {
                         return Err(RustlsError::General(format!(
@@ -105,56 +122,5 @@ impl ServerCertVerifier for TlsVerifier {
     }
 }
 
-impl<T: ServerCertVerifier> ServerCertVerifier for WithMetrics<T> {
-    fn verify_server_cert(
-        &self,
-        end_entity: &Certificate,
-        intermediates: &[Certificate],
-        server_name: &ServerName,
-        scts: &mut dyn Iterator<Item = &[u8]>,
-        ocsp_response: &[u8],
-        now: SystemTime,
-    ) -> Result<ServerCertVerified, RustlsError> {
-        let start_time = Instant::now();
-
-        let out = self.0.verify_server_cert(
-            end_entity,
-            intermediates,
-            server_name,
-            scts,
-            ocsp_response,
-            now,
-        );
-
-        let status = match out {
-            Ok(_) => "ok",
-            Err(_) => "fail",
-        };
-
-        let duration = start_time.elapsed().as_secs_f64();
-
-        let labels = &[
-            KeyValue::new("status", status),
-            KeyValue::new("server_name", format!("{server_name:?}")),
-        ];
-
-        let MetricParams {
-            action,
-            counter,
-            recorder,
-        } = &self.1;
-
-        counter.add(1, labels);
-        recorder.record(duration, labels);
-
-        info!(
-            action = action.as_str(),
-            server_name = ?server_name,
-            status,
-            duration,
-            error = ?out.as_ref().err(),
-        );
-
-        out
-    }
-}
+#[cfg(test)]
+pub mod test;

@@ -19,7 +19,7 @@ DEPENDENCIES = [
     "//rs/test_utilities/artifact_pool",
     "//rs/test_utilities/registry",
     "//rs/types/types",
-    "@crate_index//:mockall_0_7_2",
+    "@crate_index//:mockall",
     "@crate_index//:slog",
 ]
 
@@ -33,6 +33,6 @@ rust_library(
     proc_macro_deps = [
         "@crate_index//:strum_macros",
     ],
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )

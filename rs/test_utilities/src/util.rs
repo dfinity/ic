@@ -1,41 +1,7 @@
 use ic_interfaces::time_source::{TimeNotMonotoneError, TimeSource};
 use ic_types::time::{Time, UNIX_EPOCH};
-use std::collections::VecDeque;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
-
-// A mock object that wraps a queue
-#[derive(Default)]
-pub struct FakeQueue<T> {
-    pub queue: Mutex<VecDeque<T>>,
-}
-
-impl<T> FakeQueue<T> {
-    pub fn new() -> FakeQueue<T> {
-        FakeQueue {
-            queue: Mutex::new(VecDeque::new()),
-        }
-    }
-
-    pub fn enqueue(&self, elem: T) {
-        let mut q = self.queue.lock().unwrap();
-        q.push_back(elem)
-    }
-
-    pub fn dequeue(&self) -> Option<T> {
-        let mut q = self.queue.lock().unwrap();
-        q.pop_front()
-    }
-
-    pub fn dump(&self) -> VecDeque<T> {
-        self.replace(VecDeque::new())
-    }
-
-    pub fn replace(&self, new_value: VecDeque<T>) -> VecDeque<T> {
-        let mut q = self.queue.lock().unwrap();
-        std::mem::replace(&mut *q, new_value)
-    }
-}
 
 pub fn mock_time() -> Time {
     UNIX_EPOCH
@@ -83,14 +49,6 @@ impl FastForwardTimeSource {
 impl TimeSource for FastForwardTimeSource {
     fn get_relative_time(&self) -> Time {
         self.0.read().unwrap().current_time
-    }
-}
-
-// A mock for [`TimeSource`]. The created mock struct's name is [`MockTimeSource`].
-mockall::mock! {
-    pub TimeSource {}
-    trait TimeSource: Send + Sync {
-        fn get_relative_time(&self) -> Time;
     }
 }
 

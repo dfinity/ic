@@ -5,6 +5,7 @@ use ic_artifact_pool::{
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus_utils::membership::Membership;
 use ic_interfaces::{
+    batch_payload::ProposalContext,
     consensus::{PayloadBuilder, PayloadValidationError},
     validation::ValidationResult,
 };
@@ -33,7 +34,7 @@ use std::sync::{Arc, RwLock};
 mock! {
     pub PayloadBuilder {}
 
-    pub trait PayloadBuilder {
+    impl PayloadBuilder for PayloadBuilder {
         fn get_payload<'a>(
             &self,
             height: Height,
@@ -42,12 +43,12 @@ mock! {
             subnet_records: &SubnetRecords,
         ) -> BatchPayload;
 
-        fn validate_payload(
+        fn validate_payload<'a>(
             &self,
             height: Height,
+            proposal_context: &ProposalContext<'a>,
             payload: &Payload,
             past_payloads: &[(Height, Time, Payload)],
-            context: &ValidationContext,
         ) -> ValidationResult<PayloadValidationError>;
     }
 }
@@ -107,6 +108,7 @@ pub fn dependencies_with_subnet_records_with_raw_state_manager(
         log,
     )));
     let pool = TestConsensusPool::new(
+        replica_config.node_id,
         subnet_id,
         pool_config,
         time_source.clone(),

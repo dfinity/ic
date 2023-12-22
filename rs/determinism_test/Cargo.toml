@@ -1,10 +1,13 @@
 [package]
 name = "ic-determinism-test"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-clap = "2.33.3"
+clap = { workspace = true }
 hex = "0.4.2"
 ic-config = { path = "../config" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
@@ -26,7 +29,7 @@ ic-state-manager = { path = "../state_manager" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-types = { path = "../types/types" }
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
-tokio = "1.15.0"
+slog = { workspace = true }
+tokio = { workspace = true }
 wat = "1.0.52"
 

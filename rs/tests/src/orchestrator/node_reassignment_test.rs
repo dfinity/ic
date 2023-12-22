@@ -4,7 +4,7 @@ Title:: Node reassignment test
 Goal:: Verify that nodes can be removed from a subnet and later assigned to a different subnet
 
 Runbook::
-. Set up two subnets with four nodes each
+. Set up two subnets
 . Install a message canister in both
 . Verify that the canisters can be updated and the modifications queried
 . Reassign 2 nodes from nns to app subnet
@@ -44,20 +44,21 @@ use crate::{
 };
 
 const DKG_INTERVAL: u64 = 14;
-const SUBNET_SIZE: usize = 4;
+const NNS_SUBNET_SIZE: usize = 4;
+const APP_SUBNET_SIZE: usize = 1;
 
 pub fn config(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_features(SubnetFeatures::default())
-                .add_nodes(SUBNET_SIZE)
+                .add_nodes(NNS_SUBNET_SIZE)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_features(SubnetFeatures::default())
-                .add_nodes(SUBNET_SIZE)
+                .add_nodes(APP_SUBNET_SIZE)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
         )
         .setup_and_start(&env)
@@ -88,6 +89,7 @@ pub fn test(env: TestEnv) {
         &node1.get_public_url(),
         node1.effective_canister_id(),
         nns_msg,
+        log,
     );
     assert!(can_read_msg(
         log,
@@ -112,6 +114,7 @@ pub fn test(env: TestEnv) {
         &app_node.get_public_url(),
         app_node.effective_canister_id(),
         app_msg,
+        log,
     );
     assert!(can_read_msg(
         log,
@@ -188,6 +191,7 @@ pub fn test(env: TestEnv) {
         &node3.get_public_url(),
         node3.effective_canister_id(),
         nns_msg_2,
+        log,
     );
     assert!(can_read_msg_with_retries(
         log,
@@ -203,6 +207,7 @@ pub fn test(env: TestEnv) {
         &app_node.get_public_url(),
         app_node.effective_canister_id(),
         app_msg_2,
+        log,
     );
     assert!(can_read_msg_with_retries(
         log,

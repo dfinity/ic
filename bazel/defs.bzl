@@ -5,21 +5,21 @@ Utilities for building IC replica and canisters.
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 load("//publish:defs.bzl", "release_nostrip_binary")
 
-_COMPRESS_CONCURENCY = 16
+_COMPRESS_CONCURRENCY = 16
 
 def _compress_resources(_os, _input_size):
     """ The function returns resource hints to bazel so it can properly schedule actions.
 
     Check https://bazel.build/rules/lib/actions#run for `resource_set` parameter to find documentation of the function, possible arguments and expected return value.
     """
-    return {"cpu": _COMPRESS_CONCURENCY}
+    return {"cpu": _COMPRESS_CONCURRENCY}
 
 def _gzip_compress(ctx):
     """GZip-compresses source files.
     """
     out = ctx.actions.declare_file(ctx.label.name)
     ctx.actions.run_shell(
-        command = "{pigz} --processes {concurency} --no-name {srcs} --stdout > {out}".format(pigz = ctx.file._pigz.path, concurency = _COMPRESS_CONCURENCY, srcs = " ".join([s.path for s in ctx.files.srcs]), out = out.path),
+        command = "{pigz} --processes {concurrency} --no-name {srcs} --stdout > {out}".format(pigz = ctx.file._pigz.path, concurrency = _COMPRESS_CONCURRENCY, srcs = " ".join([s.path for s in ctx.files.srcs]), out = out.path),
         inputs = ctx.files.srcs,
         outputs = [out],
         tools = [ctx.file._pigz],
@@ -40,13 +40,13 @@ def _zstd_compress(ctx):
     """
     out = ctx.actions.declare_file(ctx.label.name)
 
-    # TODO: install zstd as depedency.
+    # TODO: install zstd as dependency.
     ctx.actions.run(
         executable = "zstd",
         arguments = ["--threads=0", "-10", "-f", "-z", "-o", out.path] + [s.path for s in ctx.files.srcs],
         inputs = ctx.files.srcs,
         outputs = [out],
-        env = {"ZSTDMT_NBWORKERS_MAX": str(_COMPRESS_CONCURENCY)},
+        env = {"ZSTDMT_NBWORKERS_MAX": str(_COMPRESS_CONCURRENCY)},
         resource_set = _compress_resources,
     )
     return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
@@ -55,6 +55,53 @@ zstd_compress = rule(
     implementation = _zstd_compress,
     attrs = {
         "srcs": attr.label_list(allow_files = True),
+    },
+)
+
+def _untar(ctx):
+    """Unpacks tar archives.
+    """
+    out = ctx.actions.declare_directory(ctx.label.name)
+
+    # TODO: install tar as dependency.
+    ctx.actions.run(
+        executable = "tar",
+        arguments = ["-xf", ctx.file.src.path, "-C", out.path],
+        inputs = [ctx.file.src],
+        outputs = [out],
+    )
+    return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
+
+untar = rule(
+    implementation = _untar,
+    attrs = {
+        "src": attr.label(allow_single_file = True),
+    },
+)
+
+def _mcopy(ctx):
+    """Copies Unix files to MSDOS images.
+    """
+    out = ctx.actions.declare_file(ctx.label.name)
+
+    command = "cp -p {fs} {output} && chmod +w {output} ".format(fs = ctx.file.fs.path, output = out.path)
+    for src in ctx.files.srcs:
+        command += "&& mcopy -mi {output} -sQ {src_path} ::/{filename} ".format(output = out.path, src_path = src.path, filename = ctx.attr.remap_paths.get(src.basename, src.basename))
+
+    # TODO: install mcopy as dependency.
+    ctx.actions.run_shell(
+        command = command,
+        inputs = ctx.files.srcs + [ctx.file.fs],
+        outputs = [out],
+    )
+    return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
+
+mcopy = rule(
+    implementation = _mcopy,
+    attrs = {
+        "srcs": attr.label_list(allow_files = True),
+        "fs": attr.label(allow_single_file = True),
+        "remap_paths": attr.string_dict(),
     },
 )
 
@@ -97,7 +144,7 @@ def sha256sum2url(name, src, tags = [], **kwargs):
     Args:
         name:     the name of the rule
         src:      the label that returns the file with sha256 checksum of requested artifact.
-        tags:     additinal tags.
+        tags:     additional tags.
         **kwargs: the rest of arguments to be passed to the underlying rule.
     """
     _sha256sum2url(

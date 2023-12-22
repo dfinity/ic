@@ -1,17 +1,19 @@
 [package]
 name = "ic-crypto-utils-basic-sig"
-version = "0.8.0"
-edition = "2021"
 description = "Conversion utils for keys of basic signatures"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
 
 [dependencies]
-base64 = "0.11.0"
+base64 = { workspace = true }
 ic-protobuf = { path = "../../../protobuf" }
 ic-base-types = { path = "../../../types/base_types" }
 ic-crypto-internal-basic-sig-der-utils = { path = "../../internal/crypto_lib/basic_sig/der_utils" }
 ic-crypto-internal-basic-sig-ed25519 = { path = "../../internal/crypto_lib/basic_sig/ed25519" }
 ic-crypto-internal-types = { path = "../../internal/crypto_lib/types" }
-simple_asn1 = "0.6.1"
+simple_asn1 = { workspace = true }
 ed25519-consensus = "2.0.1"
 
 [dev-dependencies]

@@ -54,5 +54,14 @@ function log_end() {
 }
 
 function find_first_drive() {
+    if [ -e "/dev/vda" ]; then
+        echo "vda"
+        return 0
+    fi
+
     lsblk -nld -o NAME,SIZE | grep 'T$' | grep -o '^\S*' | sort | head -n 1
+}
+
+function get_large_drives() {
+    lsblk -nld -o NAME,SIZE | grep 'T$' | grep -o '^\S*'
 }

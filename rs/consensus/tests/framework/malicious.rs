@@ -4,12 +4,13 @@ use super::ConsensusModifier;
 use ic_consensus::consensus::ConsensusImpl;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::{
-    artifact_pool::ChangeSetProducer,
-    consensus_pool::{ChangeAction::*, ChangeSet, ConsensusPool},
+    consensus_pool::{ChangeAction::*, ChangeSet, ConsensusPool, ValidatedConsensusArtifact},
+    p2p::consensus::ChangeSetProducer,
 };
 use ic_protobuf::types::v1 as pb;
 use ic_types::consensus::{ConsensusMessageHashable, NotarizationShare};
 use ic_types::malicious_flags::MaliciousFlags;
+use ic_types::time::current_time;
 
 /// Simulate a malicious notary that always produces a bad NotarizationShare
 /// by mutating the signature.
@@ -23,7 +24,8 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for InvalidNotaryShareSignature {
         let mut change_set = self.consensus.on_state_change(pool);
         for action in change_set.iter_mut() {
             if let AddToValidated(msg) = action {
-                if let Some(share) = NotarizationShare::assert(msg)
+                let timestamp = msg.timestamp;
+                if let Some(share) = NotarizationShare::assert(&msg.msg)
                     .and_then(|share| pb::NotarizationShare::try_from(share).ok())
                     .map(|mut share| {
                         let len = share.signature.len();
@@ -32,7 +34,13 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for InvalidNotaryShareSignature {
                     })
                     .and_then(|share| NotarizationShare::try_from(share).ok())
                 {
-                    std::mem::swap(action, &mut AddToValidated(share.into_message()));
+                    std::mem::swap(
+                        action,
+                        &mut AddToValidated(ValidatedConsensusArtifact {
+                            msg: share.into_message(),
+                            timestamp,
+                        }),
+                    );
                 }
             }
         }
@@ -57,7 +65,7 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for AbsentNotaryShare {
             .into_iter()
             .filter(|action| {
                 if let AddToValidated(msg) = action {
-                    NotarizationShare::assert(msg).is_none()
+                    NotarizationShare::assert(&msg.msg).is_none()
                 } else {
                     true
                 }
@@ -90,6 +98,7 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for WithMaliciousFlags {
                 &self.consensus.finalizer,
                 &self.consensus.notary,
                 &self.consensus.log,
+                current_time(),
             )
         } else {
             changeset

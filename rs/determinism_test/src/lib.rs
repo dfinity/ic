@@ -13,10 +13,9 @@ use ic_messaging::MessageRoutingImpl;
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::types::messages::SignedIngressBuilder;
 use ic_types::{
-    artifact::SignedIngress,
-    batch::{Batch, BatchMessages},
+    batch::{Batch, BatchMessages, BlockmakerMetrics},
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::MessageId,
+    messages::{MessageId, SignedIngress},
     time::UNIX_EPOCH,
     CanisterId, CryptoHashOfState, Randomness, RegistryVersion,
 };
@@ -36,6 +35,7 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
         registry_version: RegistryVersion::from(1),
         time: UNIX_EPOCH,
         consensus_responses: vec![],
+        blockmaker_metrics: BlockmakerMetrics::new_for_test(),
     }
 }
 
@@ -49,6 +49,7 @@ fn build_batch_with_full_state_hash(message_routing: &dyn MessageRouting) -> Bat
         registry_version: RegistryVersion::from(1),
         time: UNIX_EPOCH,
         consensus_responses: vec![],
+        blockmaker_metrics: BlockmakerMetrics::new_for_test(),
     }
 }
 

@@ -1,6 +1,8 @@
 //! Implementations and serialization tests of the ExhaustiveSet trait
 
-use crate::consensus::{ecdsa::IDkgTranscriptAttributes, Block, BlockPayload};
+use crate::consensus::hashed::Hashed;
+use crate::consensus::{ecdsa::IDkgTranscriptAttributes, BlockPayload};
+use crate::consensus::{CatchUpContent, HashedBlock, HashedRandomBeacon};
 use crate::crypto::canister_threshold_sig::idkg::{
     IDkgDealing, IDkgReceivers, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation,
     IDkgTranscriptParams, IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin, InitialIDkgDealings,
@@ -12,10 +14,10 @@ use crate::crypto::threshold_sig::ni_dkg::{
 };
 use crate::crypto::{
     crypto_hash, AlgorithmId, BasicSig, BasicSigOf, CombinedThresholdSig, CombinedThresholdSigOf,
-    CryptoHash, Signed,
+    CryptoHash, CryptoHashOf, CryptoHashable, Signed,
 };
 use crate::signature::{BasicSignature, BasicSignatureBatch, ThresholdSignature};
-use crate::{Height, ReplicaVersion};
+use crate::{CryptoHashOfState, Height, ReplicaVersion};
 use ic_base_types::{CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_btc_types_internal::{BitcoinAdapterResponse, BitcoinAdapterResponseWrapper};
 use ic_crypto_test_utils_canister_threshold_sigs::random_node_id_excluding;
@@ -171,12 +173,18 @@ impl<T: ExhaustiveSet, const N: usize> ExhaustiveSet for [T; N] {
         let mut result = Vec::new();
         let bound = 1 + exhaust_t.len() / N;
         for _ in 0..bound {
-            // populate array with cylic iterator
+            // populate array with cyclic iterator
             let elem = std::array::from_fn::<T, N, _>(|_| exhaust_iter.next().unwrap().clone());
 
             result.push(elem);
         }
         result
+    }
+}
+
+impl<T> ExhaustiveSet for std::marker::PhantomData<T> {
+    fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
+        vec![std::marker::PhantomData]
     }
 }
 
@@ -272,7 +280,7 @@ impl ExhaustiveSet for CanisterId {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
         PrincipalId::exhaustive_set(rng)
             .into_iter()
-            .map(|id| CanisterId::new(id).unwrap())
+            .map(CanisterId::unchecked_from_principal)
             .collect()
     }
 }
@@ -324,6 +332,25 @@ impl ExhaustiveSet for EcdsaKeyId {
                 curve: elem.0,
                 name: elem.1,
             })
+            .collect()
+    }
+}
+
+impl<V: ExhaustiveSet + CryptoHashable> ExhaustiveSet for Hashed<CryptoHashOf<V>, V> {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        let mut res = Vec::new();
+        for v in V::exhaustive_set(rng) {
+            res.push(Hashed::new(crypto_hash, v));
+        }
+        res
+    }
+}
+
+impl ExhaustiveSet for CatchUpContent {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        <(HashedBlock, HashedRandomBeacon, CryptoHashOfState)>::exhaustive_set(rng)
+            .into_iter()
+            .map(|tuple| Self::new(tuple.0, tuple.1, tuple.2))
             .collect()
     }
 }
@@ -409,7 +436,7 @@ impl ExhaustiveSet for NiDkgTargetId {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
         <[u8; NiDkgTargetId::SIZE]>::exhaustive_set(rng)
             .into_iter()
-            .map(|elem| NiDkgTargetId::new(elem))
+            .map(NiDkgTargetId::new)
             .collect()
     }
 }
@@ -539,12 +566,12 @@ fn dummy_dealings(
 }
 
 #[test]
-fn verify_exhaustive_block() {
-    let set = Block::exhaustive_set(&mut rand::thread_rng());
-    println!("number of block variants: {}", set.len());
-    for block in &set {
-        // serialize & encode the block
-        let bytes = pb::Block::from(block).encode_to_vec();
+fn verify_exhaustive_cup_content() {
+    let set = CatchUpContent::exhaustive_set(&mut rand::thread_rng());
+    println!("number of CUP content variants: {}", set.len());
+    for cup_content in &set {
+        // serialize & encode the CUP content
+        let bytes = pb::CatchUpContent::from(cup_content).encode_to_vec();
 
         // flip bits and check that conversion fails
         let tampered_bytes = bytes
@@ -552,15 +579,15 @@ fn verify_exhaustive_block() {
             .enumerate()
             .map(|(idx, byte)| byte ^ (idx as u8))
             .collect::<Vec<_>>();
-        assert!(pb::Block::decode(tampered_bytes.as_slice()).is_err());
+        assert!(pb::CatchUpContent::decode(tampered_bytes.as_slice()).is_err());
 
         // decode the untampered bytes
-        let proto_block = pb::Block::decode(bytes.as_slice()).unwrap();
-        // deserialize the block
-        let new_block = Block::try_from(proto_block).unwrap();
+        let proto_cup_content = pb::CatchUpContent::decode(bytes.as_slice()).unwrap();
+        // deserialize the CUP content
+        let new_cup_content = CatchUpContent::try_from(proto_cup_content).unwrap();
 
         assert_eq!(
-            block, &new_block,
+            cup_content, &new_cup_content,
             "deserialized block is different from original"
         );
     }

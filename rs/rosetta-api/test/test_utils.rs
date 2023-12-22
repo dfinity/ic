@@ -58,10 +58,9 @@ impl TestLedger {
     pub fn new() -> Self {
         Self {
             blockchain: RwLock::new(Blocks::new_in_memory().unwrap()),
-            canister_id: CanisterId::new(
+            canister_id: CanisterId::unchecked_from_principal(
                 PrincipalId::from_str("5v3p4-iyaaa-aaaaa-qaaaa-cai").unwrap(),
-            )
-            .unwrap(),
+            ),
             governance_canister_id: ic_nns_constants::GOVERNANCE_CANISTER_ID,
             submit_queue: RwLock::new(Vec::new()),
             transfer_fee: DEFAULT_TRANSFER_FEE,
@@ -250,7 +249,7 @@ pub async fn get_balance(
     acc: AccountIdentifier,
 ) -> Result<Tokens, ApiError> {
     let block_id = height.map(|h| PartialBlockIdentifier {
-        index: Some(h as i64),
+        index: Some(h.try_into().unwrap()),
         hash: None,
     });
     let mut msg =

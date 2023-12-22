@@ -26,7 +26,7 @@ use icrc_ledger_types::icrc3::archive::{ArchivedRange, QueryBlockArchiveFn};
 use icrc_ledger_types::icrc3::blocks::{
     BlockRange, GenericBlock, GetBlocksRequest, GetBlocksResponse,
 };
-use icrc_ledger_types::icrc3::transactions::{Approve, Burn, Mint, Transaction, Transfer};
+use icrc_ledger_types::icrc3::transactions::Transaction;
 use num_traits::ToPrimitive;
 use scopeguard::{guard, ScopeGuard};
 use serde::{Deserialize, Serialize};
@@ -37,6 +37,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::hash::Hash;
+use std::io::Read;
 use std::ops::Bound::{Excluded, Included};
 use std::ops::Range;
 use std::time::Duration;
@@ -106,7 +107,7 @@ thread_local! {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct State {
-    // Equals to `true` while the [build_index] task runs.
+    /// Equals to `true` while the [build_index] task runs.
     is_build_index_running: bool,
 
     /// The principal of the ledger canister that is indexed by this index.
@@ -115,11 +116,14 @@ struct State {
     /// The maximum number of transactions returned by [get_blocks].
     max_blocks_per_response: u64,
 
-    // Last wait time in nanoseconds.
+    /// Last wait time in nanoseconds.
     pub last_wait_time: Duration,
 
-    // The fees collectors with the ranges of blocks for which they collected the fee.
+    /// The fees collectors with the ranges of blocks for which they collected the fee.
     fee_collectors: HashMap<Account, Vec<Range<BlockIndex64>>>,
+
+    /// This fee is used if no fee nor effetive_fee is found in Approve blocks.
+    pub last_fee: Option<Tokens>,
 }
 
 // NOTE: the default configuration is dysfunctional, but it's convenient to have
@@ -132,6 +136,7 @@ impl Default for State {
             max_blocks_per_response: DEFAULT_MAX_BLOCKS_PER_RESPONSE,
             last_wait_time: Duration::from_secs(0),
             fee_collectors: Default::default(),
+            last_fee: None,
         }
     }
 }
@@ -242,7 +247,7 @@ fn get_balance(account: Account) -> Tokens {
     with_account_data(|account_data| {
         account_data
             .get(&balance_key(account))
-            .unwrap_or_else(|| Tokens::zero())
+            .unwrap_or_else(Tokens::zero)
     })
 }
 
@@ -251,11 +256,7 @@ fn get_balance(account: Account) -> Tokens {
 fn change_balance(account: Account, f: impl FnOnce(Tokens) -> Tokens) {
     let key = balance_key(account);
     let new_balance = f(get_balance(account));
-    if Tokens::is_zero(&new_balance) {
-        with_account_data(|account_data| account_data.remove(&key));
-    } else {
-        with_account_data(|account_data| account_data.insert(key, new_balance));
-    }
+    with_account_data(|account_data| account_data.insert(key, new_balance));
 }
 
 fn balance_key(account: Account) -> (AccountDataType, (Blob<29>, [u8; 32])) {
@@ -283,8 +284,52 @@ fn init(index_arg: Option<IndexArg>) {
     set_build_index_timer(Duration::from_secs(0));
 }
 
+// The part of the legacy index (//rs/rosetta-api/icrc1/index) state
+// that reads the ledger_id. This struct is used to deserialize
+// the state of the legacy index during post_upgrade in case
+// the upgrade is from the legacy index to the index-ng.
+#[derive(Serialize, Deserialize, Debug)]
+struct LegacyIndexState {
+    pub ledger_id: ic_base_types::CanisterId,
+}
+
+const MAX_LEGACY_STATE_BYTES: u64 = 100_000_000;
+
 #[post_upgrade]
-fn post_upgrade() {
+fn post_upgrade(index_arg: Option<IndexArg>) {
+    // Attempts to read the ledger_id using the legacy index
+    // storage scheme. This trick allows SNSes to update the legacy
+    // index to index-ng.
+    if let Ok(old_state) = ciborium::de::from_reader::<LegacyIndexState, _>(
+        ic_cdk::api::stable::StableReader::default().take(MAX_LEGACY_STATE_BYTES),
+    ) {
+        log!(
+            P1,
+            "Found the state of the old index. ledger-id: {}",
+            old_state.ledger_id
+        );
+        mutate_state(|state| {
+            state.ledger_id = old_state.ledger_id.into();
+        })
+    }
+
+    match index_arg {
+        Some(IndexArg::Upgrade(arg)) => {
+            if let Some(ledger_id) = arg.ledger_id {
+                log!(
+                    P1,
+                    "Found ledger_id in the upgrade arguments. ledger-id: {}",
+                    ledger_id
+                );
+                mutate_state(|state| {
+                    state.ledger_id = ledger_id;
+                });
+            }
+        }
+        Some(IndexArg::Init(..)) => trap("Index upgrade argument cannot be of variant Init"),
+        _ => (),
+    };
+
     // set the first build_index to be called after init
     set_build_index_timer(Duration::from_secs(0));
 }
@@ -474,7 +519,10 @@ fn index_fee_collector(block_index: BlockIndex64, block: &Block<Tokens>) {
             s.fee_collectors
                 .entry(fee_collector)
                 .and_modify(|blocks_ranges| push_block(blocks_ranges, block_index))
-                .or_insert_with(|| vec![block_index..block_index + 1]);
+                .or_insert(vec![Range {
+                    start: block_index,
+                    end: block_index + 1,
+                }]);
         });
     }
 }
@@ -515,6 +563,7 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
                         block_index
                     ))
                 });
+                mutate_state(|s| s.last_fee = Some(fee));
                 debit(
                     block_index,
                     from,
@@ -529,13 +578,33 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
                     credit(block_index, fee_collector, fee);
                 }
             }
-            Operation::Approve { from, fee, .. } => {
-                let fee = block.effective_fee.or(fee).unwrap_or_else(|| {
-                    ic_cdk::trap(&format!(
-                        "Block {} is of type Approve but has no fee or effective fee!",
-                        block_index
-                    ))
-                });
+            Operation::Approve {
+                from, fee, spender, ..
+            } => {
+                let fee = match fee.or(block.effective_fee) {
+                    Some(fee) => fee,
+                    // NB. There was a bug in the ledger which would create
+                    // approve blocks with the fee fields unset. The bug was
+                    // quickly fixed, but there are a few blocks on the mainnet
+                    // that don't have their fee fields populated.
+                    None => match with_state(|state| state.last_fee) {
+                        Some(last_fee) => {
+                            log!(
+                                P1,
+                                "fee and effective_fee aren't set in block {block_index}, using last transfer fee {last_fee}"
+                            );
+                            last_fee
+                        }
+                        None => ic_cdk::trap(&format!("bug: index is stuck because block with index {block_index} doesn't contain a fee and no fee has been recorded before")),
+                    }
+                };
+
+                // It is possible that the spender account has not existed prior to this approve transaction.
+                // Until a transfer_from transaction occurs such account would not show up in a `list_subaccounts` query as the spender is not involved in any credit or debit calls at this point.
+                // To ensure that the account still shows up in the `list_subaccount` query we can simply call `change_balance` without actually changing the balance.
+                // If the account is new, this will add it to the AccountDataMap with balance 0 and thus show up in a `list_subaccount` query.
+                change_balance(spender, |balance| balance);
+
                 debit(block_index, from, fee);
             }
         },
@@ -714,72 +783,7 @@ fn encoded_block_bytes_to_flat_transaction(
             block_index, e
         ))
     });
-    let timestamp = block.timestamp;
-    let created_at_time = block.transaction.created_at_time;
-    let memo = block.transaction.memo;
-    match block.transaction.operation {
-        Operation::Burn {
-            from,
-            amount,
-            spender,
-        } => Transaction::burn(
-            Burn {
-                from,
-                spender,
-                amount: amount.into(),
-                created_at_time,
-                memo,
-            },
-            timestamp,
-        ),
-        Operation::Mint { to, amount } => Transaction::mint(
-            Mint {
-                to,
-                amount: amount.into(),
-                created_at_time,
-                memo,
-            },
-            timestamp,
-        ),
-        Operation::Transfer {
-            from,
-            to,
-            spender,
-            amount,
-            fee,
-        } => Transaction::transfer(
-            Transfer {
-                from,
-                to,
-                spender,
-                amount: amount.into(),
-                fee: fee.map(|fee| fee.into()),
-                created_at_time,
-                memo,
-            },
-            timestamp,
-        ),
-        Operation::Approve {
-            from,
-            spender,
-            amount,
-            expected_allowance,
-            expires_at,
-            fee,
-        } => Transaction::approve(
-            Approve {
-                from,
-                spender,
-                amount: amount.into(),
-                expected_allowance: expected_allowance.map(Into::into),
-                expires_at: expires_at.map(|exp| exp.as_nanos_since_unix_epoch()),
-                fee: fee.map(|fee| fee.into()),
-                created_at_time,
-                memo,
-            },
-            timestamp,
-        ),
-    }
+    block.into()
 }
 
 fn get_oldest_tx_id(account: Account) -> Option<BlockIndex64> {
@@ -793,7 +797,8 @@ fn get_oldest_tx_id(account: Account) -> Option<BlockIndex64> {
         account_block_ids.get(&last_key).map(|_| 0).or_else(|| {
             account_block_ids
                 .iter_upper_bound(&last_key)
-                .find(|((account_bytes, _), _)| account_bytes == &last_key.0)
+                .take_while(|(k, _)| k.0 == account_sha256(account))
+                .next()
                 .map(|(key, _)| key.1 .0)
         })
     })
@@ -839,7 +844,6 @@ fn list_subaccounts(args: ListSubaccountsArgs) -> Vec<Subaccount> {
     })
 }
 
-#[candid_method(query)]
 #[query]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
@@ -943,13 +947,13 @@ candid::export_service!();
 
 #[test]
 fn check_candid_interface() {
-    use candid::utils::{service_compatible, CandidSource};
+    use candid::utils::{service_equal, CandidSource};
     use std::path::PathBuf;
 
     let new_interface = __export_service();
     let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let old_interface = manifest_dir.join("index-ng.did");
-    service_compatible(
+    service_equal(
         CandidSource::Text(&new_interface),
         CandidSource::File(old_interface.as_path()),
     )

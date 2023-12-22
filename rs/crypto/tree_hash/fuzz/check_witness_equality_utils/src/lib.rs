@@ -251,7 +251,7 @@ fn random_label_in_range<R: Rng + CryptoRng>(range: &AbsentLabelRange, rng: &mut
                     .map(|b| rng.gen_range((*b).saturating_add(1)..=u8::MAX))
                     .collect();
                 append_bytes(&mut result, 0..5, rng);
-                // if we accidentially generated `l`, create a label that is
+                // if we accidentally generated `l`, create a label that is
                 // minimally larger
                 if l.as_bytes() == &result[..] {
                     result.push(0);
@@ -279,7 +279,7 @@ fn random_label_in_range<R: Rng + CryptoRng>(range: &AbsentLabelRange, rng: &mut
                     result.push(rng.gen::<u8>());
                 }
             }
-            // if we accidentially generated out of bounds, create a label
+            // if we accidentally generated out of bounds, create a label
             // that is minimally larger than small
             if &result[..] <= sb || &result[..] >= lb {
                 result = sb.iter().chain([0].iter()).cloned().collect();

@@ -516,7 +516,7 @@ pub trait SubnetTransportRegistry {
     /// If the membership list for a subnet can be retrieved, but one of the
     /// requests for a node contained in the membership list fails, the method
     /// panics.
-    fn get_subnet_transport_infos(
+    fn get_subnet_node_records(
         &self,
         subnet_id: SubnetId,
         version: RegistryVersion,
@@ -524,7 +524,7 @@ pub trait SubnetTransportRegistry {
 }
 
 impl<T: RegistryClient + ?Sized> SubnetTransportRegistry for T {
-    fn get_subnet_transport_infos(
+    fn get_subnet_node_records(
         &self,
         subnet_id: SubnetId,
         version: RegistryVersion,

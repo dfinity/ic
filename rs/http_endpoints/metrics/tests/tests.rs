@@ -70,7 +70,7 @@ async fn test_connection_read_timeout() {
         let (mut request_sender, connection) =
             hyper::client::conn::handshake(target_stream).await.unwrap();
 
-        // spawn a task to poll the connection and drive the HTTP state
+        // Spawn a task to poll the connection and drive the HTTP state.
         tokio::spawn(async move {
             connection.await.unwrap();
         });
@@ -165,7 +165,7 @@ async fn test_load_shedding() {
             send_request(&client, addr).await.unwrap().status(),
             StatusCode::OK
         );
-        // reset the counter to 0 after we confirmed there is a listening socket
+        // Reset the counter to 0 after we confirmed there is a listening socket.
         blocking_collector.collect_calls.store(0, Ordering::SeqCst);
         // Send 'max_concurrent_requests' and block their progress.
         for _i in 0..config.max_concurrent_requests {
@@ -191,7 +191,7 @@ async fn test_load_shedding() {
             StatusCode::TOO_MANY_REQUESTS
         );
 
-        // unblock and join the tasks that have sent the initial requets
+        // Unblock and join the tasks that have sent the initial requests.
         for _i in 0..config.max_concurrent_requests + 1 {
             rx.recv().await.unwrap();
         }

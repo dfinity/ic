@@ -217,7 +217,7 @@ impl<Unit, Repr> AmountOf<Unit, Repr>
 where
     Unit: DisplayerOf<AmountOf<Unit, Repr>>,
 {
-    /// `display` provides a machanism to implement a custom display
+    /// `display` provides a mechanism to implement a custom display
     /// for phantom types.
     ///
     /// ```

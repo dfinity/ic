@@ -19,7 +19,7 @@
 -- This module contains function to interact with an Internet Computer instance.
 --
 -- The primary customer here is IC.Test.Spec, i.e the test suite. Therefore, the
--- functions here give access to varoius levels of abstractions, and gives more control
+-- functions here give access to various levels of abstractions, and gives more control
 -- than a “normal” agent library would do.
 --
 -- Also, because of the focus on testing, failures are repoted directly with HUnit’s 'assertFailure'.
@@ -33,6 +33,8 @@ module IC.Test.Agent
     IC00',
     ReqResponse (..),
     ReqStatus (..),
+    NodeSignature (..),
+    QueryResponse (..),
     AgentConfig (..),
     DelegationCanisterRangeCheck (..),
     addExpiry,
@@ -66,6 +68,7 @@ module IC.Test.Agent
     ecdsaSK,
     ecdsaUser,
     enum,
+    enumNothing,
     envelope,
     envelopeFor,
     extractCertData,
@@ -84,7 +87,9 @@ module IC.Test.Agent
     isNoErrReject,
     isPendingOrProcessing,
     isReject,
+    isQueryReject,
     isReply,
+    isQueryReply,
     isResponded,
     okCBOR,
     otherSK,
@@ -135,7 +140,8 @@ import qualified Data.ByteString.Lazy as BS
 import Data.Char
 import Data.Default.Class (def)
 import qualified Data.HashMap.Lazy as HM
-import Data.List (nub)
+import Data.List (find, nub)
+import Data.Maybe (fromJust)
 import Data.Row
 import qualified Data.Row.Variants as V
 import qualified Data.Text as T
@@ -156,6 +162,7 @@ import IC.Certificate.Value
 import IC.Crypto
 import qualified IC.Crypto.DER as DER
 import qualified IC.Crypto.DER_BLS as DER_BLS
+import qualified IC.Crypto.Ed25519 as Ed25519
 import IC.HTTP.CBOR (decode, encode)
 import IC.HTTP.GenR
 import IC.HTTP.GenR.Parse
@@ -165,6 +172,7 @@ import IC.Id.Forms
 import IC.Id.Fresh
 import IC.Management
 import IC.Test.Options
+import IC.Types (rawEntityId)
 import IC.Version
 import Network.Connection
 import Network.HTTP.Client
@@ -202,7 +210,8 @@ cborToBlobPair r = assertFailure $ "Expected list of pairs, got: " <> show r
 -- * Agent configuration
 
 data AgentSubnetConfig = AgentSubnetConfig
-  { tc_node_addresses :: [String],
+  { tc_subnet_id :: Blob,
+    tc_node_addresses :: [String],
     tc_canister_ranges :: [(W.Word64, W.Word64)]
   }
 
@@ -232,7 +241,7 @@ makeAgentConfig allow_self_signed_certs ep' subnets httpbin' to = do
   request <- parseRequest $ ep ++ "/api/v2/status"
   putStrLn $ "Fetching endpoint status from " ++ show ep ++ "..."
   s <-
-    (httpLbs request manager >>= okCBOR >>= statusResonse)
+    (httpLbs request manager >>= okCBOR >>= statusResponse)
       `catch` (\(HUnitFailure _ r) -> putStrLn r >> exitFailure)
 
   putStrLn $ "Spec version tested:  " ++ T.unpack specVersion
@@ -264,10 +273,10 @@ preFlight os = do
   let Httpbin httpbin = lookupOption os
   let PollTimeout to = lookupOption os
   let AllowSelfSignedCerts allow_self_signed_certs = lookupOption os
-  let TestSubnet (_, _, _, test_ranges, test_nodes) = lookupOption os
-  let test_agent_subnet_config = AgentSubnetConfig (map (fixUrl "node") test_nodes) test_ranges
-  let PeerSubnet (_, _, _, peer_ranges, peer_nodes) = lookupOption os
-  let peer_agent_subnet_config = AgentSubnetConfig (map (fixUrl "node") peer_nodes) peer_ranges
+  let TestSubnet (test_id, _, _, test_ranges, test_nodes) = lookupOption os
+  let test_agent_subnet_config = AgentSubnetConfig (rawEntityId test_id) (map (fixUrl "node") test_nodes) test_ranges
+  let PeerSubnet (peer_id, _, _, peer_ranges, peer_nodes) = lookupOption os
+  let peer_agent_subnet_config = AgentSubnetConfig (rawEntityId peer_id) (map (fixUrl "node") peer_nodes) peer_ranges
   makeAgentConfig allow_self_signed_certs ep [test_agent_subnet_config, peer_agent_subnet_config] httpbin to
 
 -- Yes, implicit arguments are frowned upon. But they are also very useful.
@@ -285,6 +294,9 @@ endPoint = tc_endPoint agentConfig
 
 subnets :: (HasAgentConfig) => [AgentSubnetConfig]
 subnets = tc_subnets agentConfig
+
+root_subnet :: (HasAgentConfig) => AgentSubnetConfig
+root_subnet = fromJust $ find (any (\(a, b) -> wordToId' a <= wordToId' 0 && wordToId' 0 <= wordToId' b) . tc_canister_ranges) subnets
 
 agentManager :: (HasAgentConfig) => Manager
 agentManager = tc_manager agentConfig
@@ -390,9 +402,16 @@ senderOf :: GenR -> Blob
 senderOf (GRec hm) | Just (GBlob id) <- HM.lookup "sender" hm = id
 senderOf _ = anonymousUser
 
+addNonceExpiryEnv' :: GenR -> IO (Blob, GenR)
+addNonceExpiryEnv' req = do
+  req <- addNonce req >>= addExpiry
+  env <- envelopeFor (senderOf req) req
+  return (requestId req, env)
+
 addNonceExpiryEnv :: GenR -> IO GenR
 addNonceExpiryEnv req = do
-  addNonce req >>= addExpiry >>= envelopeFor (senderOf req)
+  (_, req) <- addNonceExpiryEnv' req
+  return req
 
 envelopeFor :: Blob -> GenR -> IO GenR
 envelopeFor u content | u == anonymousUser = return $ rec ["content" =: content]
@@ -483,9 +502,11 @@ sync_height cid = forM subnets $ \sub -> do
 
 -- | Add envelope to CBOR request, add a nonce and expiry if it is not there,
 -- post to "read", return decoded CBOR
-queryCBOR :: (HasCallStack, HasAgentConfig) => Blob -> GenR -> IO GenR
+queryCBOR :: (HasCallStack, HasAgentConfig) => Blob -> GenR -> IO (Blob, GenR)
 queryCBOR cid req = do
-  addNonceExpiryEnv req >>= postQueryCBOR cid >>= okCBOR
+  (rid, req) <- addNonceExpiryEnv' req
+  res <- postQueryCBOR cid req >>= okCBOR
+  return (rid, res)
 
 type HTTPErrOr a = Either (Int, String) a
 
@@ -622,6 +643,12 @@ data ReqResponse = Reply Blob | Reject Natural T.Text (Maybe T.Text)
 data ReqStatus = Processing | Pending | Responded ReqResponse | UnknownStatus
   deriving (Eq, Show)
 
+data NodeSignature = NodeSignature {node_sig_timestamp :: Natural, node_sig_signature :: Blob, node_sig_identity :: Blob}
+  deriving (Eq, Show)
+
+data QueryResponse = QueryReply Blob [NodeSignature] | QueryReject Natural T.Text (Maybe T.Text) [NodeSignature]
+  deriving (Eq, Show)
+
 prettyPath :: [Blob] -> String
 prettyPath = concatMap (("/" ++) . shorten 15 . prettyBlob)
 
@@ -727,7 +754,7 @@ isPendingOrProcessing Processing = return ()
 isPendingOrProcessing r = assertFailure $ "Expected pending or processing, got " <> show r
 
 pollDelay :: IO ()
-pollDelay = threadDelay $ 10 * 1000 -- 10 milliseonds
+pollDelay = threadDelay $ 10 * 1000 -- 10 milliseconds
 
 -- How long to wait before checking if a request that should _not_ show up on
 -- the system indeed did not show up
@@ -768,19 +795,29 @@ callResponse =
     error_code <- optionalField text "error_code"
     return $ Reject code msg error_code
 
-queryResponse :: GenR -> IO ReqResponse
+queryResponse :: GenR -> IO QueryResponse
 queryResponse =
   asExceptT . record do
     s <- field text "status"
     case s of
-      "replied" ->
-        Reply <$> field (record (field blob "arg")) "reply"
+      "replied" -> do
+        reply <- field (record (field blob "arg")) "reply"
+        signatures <- field (listOf parseNodeSignature) "signatures"
+        return $ QueryReply reply signatures
       "rejected" -> do
         code <- field nat "reject_code"
         msg <- field text "reject_message"
         error_code <- optionalField text "error_code"
-        return $ Reject code msg error_code
+        signatures <- field (listOf parseNodeSignature) "signatures"
+        return $ QueryReject code msg error_code signatures
       _ -> throwError $ "Unexpected status " <> T.pack (show s)
+  where
+    parseNodeSignature :: Field NodeSignature
+    parseNodeSignature = record $ do
+      t <- field nat "timestamp"
+      s <- field blob "signature"
+      n <- field blob "identity"
+      return $ NodeSignature t s n
 
 isReject :: (HasCallStack) => [Natural] -> ReqResponse -> IO ()
 isReject _ (Reply r) =
@@ -789,6 +826,77 @@ isReject codes (Reject n msg _) = do
   assertBool
     ("Reject code " ++ show n ++ " not in " ++ show codes ++ "\n" ++ T.unpack msg)
     (n `elem` codes)
+
+assertLen :: String -> Int -> BS.ByteString -> IO ()
+assertLen what len bs
+  | BS.length bs == fromIntegral len = return ()
+  | otherwise = assertFailure $ what ++ " has wrong length " ++ show (BS.length bs) ++ ", expected " ++ show len
+
+checkQueryResponse :: (HasCallStack, HasAgentConfig) => Blob -> Blob -> QueryResponse -> IO ()
+checkQueryResponse cid rid r = do
+  cert <- getStateCert defaultUser cid [["subnet"]]
+  (subnet_id, ranges) <-
+    case cert_delegation cert of
+      Just d -> do
+        let subnet_id = del_subnet_id d
+        del_cert <- decodeCert' $ del_certificate d
+        ranges <- certValue @Blob del_cert ["subnet", subnet_id, "canister_ranges"] >>= asCBORBlobPairList
+        return (subnet_id, ranges)
+      Nothing -> do
+        let subnet_id = tc_subnet_id root_subnet
+        ranges <- certValue @Blob cert ["subnet", subnet_id, "canister_ranges"] >>= asCBORBlobPairList
+        return (subnet_id, ranges)
+  unless (checkCanisterIdInRanges' ranges cid) $ assertFailure $ "Canister range check failed"
+  let sigs = case r of
+        QueryReply _ sigs -> sigs
+        QueryReject _ _ _ sigs -> sigs
+  void $ forM sigs $ \sig -> case sig of
+    NodeSignature t s n -> do
+      der_pk <- certValue @Blob cert ["subnet", subnet_id, "node", n, "public_key"]
+      pk <- case DER.decode der_pk of
+        Left err -> assertFailure $ "Node public key is not DER-encoded: " ++ show err
+        Right (suite, pk) -> do
+          assertBool "Node public key is not Ed25519" $ case suite of
+            DER.Ed25519 -> True
+            _ -> False
+          return pk
+      let hash = case r of
+            QueryReply payload _ ->
+              requestId $
+                rec
+                  [ "status" =: GText "replied",
+                    "reply" =: rec ["arg" =: GBlob payload],
+                    "timestamp" =: GNat t,
+                    "request_id" =: GBlob rid
+                  ]
+            QueryReject code msg error_code _ -> do
+              requestId $
+                rec $
+                  [ "status" =: GText "rejected",
+                    "reject_code" =: GNat code,
+                    "reject_message" =: GText msg,
+                    "timestamp" =: GNat t,
+                    "request_id" =: GBlob rid
+                  ]
+                    ++ ["error_code" =: GText err | Just err <- [error_code]]
+      let msg = "\x0Bic-response" <> hash
+      assertLen "Ed25519 public key length" 32 pk
+      assertLen "Ed25519 signature length" 64 s
+      assertBool "Node signature verification failed" $ Ed25519.verify pk msg s
+      return ()
+
+isQueryReject :: (HasCallStack, HasAgentConfig) => Blob -> [Natural] -> (Blob, QueryResponse) -> IO ()
+isQueryReject cid codes (rid, r) = do
+  checkQueryResponse cid rid r
+  aux r
+  where
+    aux (QueryReply r _) =
+      assertFailure $ "Expected reject, got reply:" ++ prettyBlob r
+    aux (QueryReject n msg _ sigs) = do
+      assertBool ("Number of signatures " ++ show (length sigs) ++ "is not equal to one") (length sigs == 1)
+      assertBool
+        ("Reject code " ++ show n ++ " not in " ++ show codes ++ "\n" ++ T.unpack msg)
+        (n `elem` codes)
 
 isErr4xx :: (HasCallStack) => HTTPErrOr a -> IO ()
 isErr4xx (Left (c, msg))
@@ -821,6 +929,18 @@ isReply (Reply b) = return b
 isReply (Reject n msg error_code) =
   assertFailure $ "Unexpected reject (code " ++ show n ++ (maybe "" showErrCode error_code) ++ "): " ++ T.unpack msg
   where
+    showErrCode ec = ", error_code: " ++ T.unpack ec
+
+isQueryReply :: (HasCallStack, HasAgentConfig) => Blob -> (Blob, QueryResponse) -> IO Blob
+isQueryReply cid (rid, r) = do
+  checkQueryResponse cid rid r
+  aux r
+  where
+    aux (QueryReply b sigs) = do
+      assertBool ("Number of signatures " ++ show (length sigs) ++ "is not equal to one") (length sigs == 1)
+      return b
+    aux (QueryReject n msg error_code _) =
+      assertFailure $ "Unexpected reject (code " ++ show n ++ (maybe "" showErrCode error_code) ++ "): " ++ T.unpack msg
     showErrCode ec = ", error_code: " ++ T.unpack ec
 
 -- Convenience decoders
@@ -867,8 +987,8 @@ data StatusResponse = StatusResponse
     status_root_key :: Blob
   }
 
-statusResonse :: (HasCallStack) => GenR -> IO StatusResponse
-statusResonse =
+statusResponse :: (HasCallStack) => GenR -> IO StatusResponse
+statusResponse =
   asExceptT . record do
     v <- field text "ic_api_version"
     _ <- optionalField text "impl_source"
@@ -1015,6 +1135,9 @@ callIC''' ic00' ecid l x = ic00' ecid (T.pack (symbolVal l)) (Candid.encode x)
 
 enum :: (AllUniqueLabels r, KnownSymbol l, (r .! l) ~ ()) => Label l -> Var r
 enum l = V.IsJust l ()
+
+enumNothing :: (AllUniqueLabels r, KnownSymbol l, (r .! l) ~ Maybe t) => Label l -> Var r
+enumNothing l = V.IsJust l Nothing
 
 -- Other utilities
 

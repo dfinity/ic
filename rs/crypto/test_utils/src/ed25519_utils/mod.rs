@@ -1,11 +1,13 @@
 use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, UserPublicKey, DOMAIN_IC_REQUEST};
 use ic_types::messages::MessageId;
-use rand::thread_rng;
+use rand::{CryptoRng, Rng, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 
-pub fn ed25519_signature_and_public_key(
+pub fn ed25519_signature_and_public_key<R: Rng + CryptoRng>(
     request_id: &MessageId,
+    rng: &mut R,
 ) -> (BasicSigOf<MessageId>, UserPublicKey) {
-    let signing_key = ed25519_consensus::SigningKey::new(thread_rng());
+    let signing_key = ed25519_consensus::SigningKey::new(ChaCha20Rng::from_seed(rng.gen()));
     let signature: BasicSigOf<MessageId> = {
         let bytes_to_sign = {
             let mut buf = vec![];

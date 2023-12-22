@@ -149,7 +149,12 @@ fn ensure_notbefore_date_is_latest_at(
             e
         ))
     })?;
-    let current_time_asn1 = ASN1Time::from_timestamp(current_time_i64);
+    let current_time_asn1 = ASN1Time::from_timestamp(current_time_i64).map_err(|e| {
+        invalid_tls_certificate_error(format!(
+            "failed to convert current time ({current_time_i64}) to ASN1Time: {}",
+            e
+        ))
+    })?;
 
     if x509_cert.validity().not_before > current_time_asn1 {
         return Err(invalid_tls_certificate_error(format!(
@@ -164,8 +169,12 @@ fn ensure_notbefore_date_is_latest_at(
 fn ensure_notafter_date_equals_99991231235959z(
     x509_cert: &X509Certificate,
 ) -> Result<(), TlsCertValidationError> {
-    if x509_cert.validity().not_after.to_rfc2822() != "Fri, 31 Dec 9999 23:59:59 +0000" {
-        println!("{}", x509_cert.validity().not_after.to_rfc2822());
+    let not_after_rfc2822 = x509_cert.validity().not_after.to_rfc2822().map_err(|e| {
+        invalid_tls_certificate_error(format!(
+            "invalid notAfter date: cannot format as RFC2822: {e}"
+        ))
+    })?;
+    if not_after_rfc2822 != "Fri, 31 Dec 9999 23:59:59 +0000" {
         return Err(invalid_tls_certificate_error(
             "notAfter date is not RFC 5280 value 99991231235959Z",
         ));

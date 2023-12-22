@@ -216,6 +216,27 @@ fn point_multiexp_constant_time(c: &mut Criterion) {
             );
         }
 
+        {
+            // fixed 2 arguments for special-purpose functions with a fixed number of arguments
+            let num_args = 2;
+            group.bench_with_input(
+                BenchmarkId::new("consttime_pedersen", num_args),
+                &num_args,
+                |b, _size| {
+                    b.iter_batched_ref(
+                        || {
+                            (
+                                random_scalar(curve_type, rng),
+                                random_scalar(curve_type, rng),
+                            )
+                        },
+                        |(x, y)| EccPoint::pedersen(x, y),
+                        BatchSize::SmallInput,
+                    )
+                },
+            );
+        }
+
         // range of arguments for generic functions
         for num_args in [2, 4, 8, 16, 32, 64, 128].iter() {
             group.bench_with_input(
@@ -280,7 +301,7 @@ fn point_mul(c: &mut Criterion) {
     for curve_type in EccCurveType::all() {
         let mut group = c.benchmark_group(format!("crypto_point_multiplication_{}", curve_type));
 
-        group.bench_function("multiply", |b| {
+        group.bench_function("multiply_arbitrary_point", |b| {
             b.iter_batched_ref(
                 || {
                     (
@@ -293,6 +314,14 @@ fn point_mul(c: &mut Criterion) {
             )
         });
 
+        group.bench_function("multiply_generator", |b| {
+            b.iter_batched_ref(
+                || random_scalar(curve_type, rng),
+                |s| EccPoint::mul_by_g(s),
+                BatchSize::SmallInput,
+            )
+        });
+
         group.bench_function("multiply_vartime_online", |b| {
             b.iter_batched_ref(
                 || {
@@ -301,7 +330,7 @@ fn point_mul(c: &mut Criterion) {
                         random_scalar(curve_type, rng),
                     );
                     p.precompute(NafLut::DEFAULT_WINDOW_SIZE)
-                        .expect("failed to precopmute point");
+                        .expect("failed to precompute point");
                     (p, s)
                 },
                 |(p, s)| p.scalar_mul_vartime(s),
@@ -319,7 +348,7 @@ fn point_mul(c: &mut Criterion) {
                 },
                 |(p, s)| {
                     p.precompute(NafLut::DEFAULT_WINDOW_SIZE)
-                        .expect("failed to precopmute point");
+                        .expect("failed to precompute point");
                     p.scalar_mul_vartime(s)
                 },
                 BatchSize::SmallInput,
@@ -337,7 +366,7 @@ fn point_mul(c: &mut Criterion) {
                                 random_scalar(curve_type, rng),
                             );
                             p.precompute(window_size)
-                                .expect("failed to precopmute point");
+                                .expect("failed to precompute point");
                             (p, s)
                         },
                         |(p, s)| p.scalar_mul_vartime(s),
@@ -358,7 +387,7 @@ fn point_mul(c: &mut Criterion) {
                         },
                         |(p, s)| {
                             p.precompute(window_size)
-                                .expect("failed to precopmute point");
+                                .expect("failed to precompute point");
                             p.scalar_mul_vartime(s)
                         },
                         BatchSize::SmallInput,
@@ -371,9 +400,42 @@ fn point_mul(c: &mut Criterion) {
     }
 }
 
+fn point_serialize(c: &mut Criterion) {
+    let rng = &mut reproducible_rng();
+
+    for curve_type in EccCurveType::all() {
+        let mut group = c.benchmark_group(format!("crypto_point_serialization_{}", curve_type));
+
+        group.bench_function(BenchmarkId::new("serialize_compressed", 0), |b| {
+            b.iter_with_setup(|| random_point(curve_type, rng), |p| p.serialize())
+        });
+
+        group.bench_function(BenchmarkId::new("serialize_uncompressed", 0), |b| {
+            b.iter_with_setup(
+                || random_point(curve_type, rng),
+                |p| p.serialize_uncompressed(),
+            )
+        });
+
+        group.bench_function(BenchmarkId::new("deserialize_compressed", 0), |b| {
+            b.iter_with_setup(
+                || random_point(curve_type, rng).serialize(),
+                |p| EccPoint::deserialize(curve_type, &p),
+            );
+        });
+
+        group.bench_function(BenchmarkId::new("deserialize_uncompressed", 0), |b| {
+            b.iter_with_setup(
+                || random_point(curve_type, rng).serialize_uncompressed(),
+                |p| EccPoint::deserialize(curve_type, &p),
+            );
+        });
+    }
+}
+
 criterion_group! {
 name = group_ops;
 config = Criterion::default().measurement_time(Duration::from_secs(30));
-targets = point_multiexp_constant_time, point_multiexp_vartime_total, point_multiexp_vartime_online, point_mul, point_double_vs_addition
+targets = point_multiexp_constant_time, point_multiexp_vartime_total, point_multiexp_vartime_online, point_mul, point_double_vs_addition, point_serialize,
 }
 criterion_main!(group_ops);

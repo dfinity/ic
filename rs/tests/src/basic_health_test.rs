@@ -51,7 +51,7 @@ pub fn config_single_host(env: TestEnv) {
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(4))
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
-    env.sync_prometheus_config_with_topology();
+    env.sync_with_prometheus();
 }
 
 const MSG: &[u8] = b"this beautiful prose should be persisted for future generations";
@@ -125,7 +125,7 @@ pub fn test(env: TestEnv) {
     for ((n, (from, to)), expect) in nodes.iter().zip(canister_info).zip(expected_memory_values) {
         let log = log.clone();
         n.with_default_agent(move |agent| async move {
-            // Note: `from` is the canister id of the univeral canister that was
+            // Note: `from` is the canister id of the universal canister that was
             // installed on `from`.
             info!(log, "Initializing universal canister...");
             let ucan = UniversalCanister::from_canister_id(&agent, from);

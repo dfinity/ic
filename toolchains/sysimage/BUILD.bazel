@@ -1,7 +1,9 @@
+load("@python_deps//:requirements.bzl", "requirement")
+load("@rules_python//python:defs.bzl", "py_binary")
+
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
-    "docker_tar.py",
     "build_vfat_image.py",
     "build_fat32_image.py",
     "build_ext4_image.py",
@@ -10,3 +12,12 @@ exports_files([
     "build_upgrade_image.py",
     "verity_sign.py",
 ])
+
+py_binary(
+    name = "build_container_filesystem_tar",
+    srcs = ["build_container_filesystem_tar.py"],
+    deps = [
+        requirement("invoke"),
+        requirement("configargparse"),
+    ],
+)

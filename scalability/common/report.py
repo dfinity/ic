@@ -110,7 +110,7 @@ class EvaluatedSummaries:
         return (t_median, t_average, t_max, t_min, p99)
 
     def get_success_rate_histograms(self):
-        # Aggregate historgram of successful requests
+        # Aggregate histogram of successful requests
         import itertools
 
         aggregated_rates = {}

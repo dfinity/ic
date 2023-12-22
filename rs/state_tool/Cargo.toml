@@ -1,7 +1,10 @@
 [package]
 name = "ic-state-tool"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -10,7 +13,7 @@ name = "state-tool"
 path = "src/main.rs"
 
 [dependencies]
-clap = { version = "3.1.6", features = ["derive"] }
+clap = { workspace = true }
 hex = "0.4.2"
 ic-config = { path = "../config" }
 ic-logger = { path = "../monitoring/logger" }
@@ -25,8 +28,10 @@ ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
-prost = "0.11.0"
+prost = { workspace = true }
 scoped_threadpool = "0.1.*"
+slog = { workspace = true }
+slog-term = "2.6.0"
 
 [dev-dependencies]
 tempfile = "3.1.0"

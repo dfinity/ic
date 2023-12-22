@@ -10,19 +10,22 @@ use ic_icrc1_ledger_sm_tests::{
 use ic_ledger_core::{block::BlockType, Tokens};
 use ic_state_machine_tests::{ErrorCode, PrincipalId, StateMachine, UserError};
 use icp_ledger::{
-    AccountIdentifier, ArchiveOptions, Block, CandidBlock, FeatureFlags, GetBlocksArgs,
-    GetBlocksRes, InitArgs, LedgerCanisterInitPayload, LedgerCanisterPayload, Operation,
-    QueryBlocksResponse, QueryEncodedBlocksResponse, UpgradeArgs,
+    AccountIdBlob, AccountIdentifier, ArchiveOptions, ArchivedBlocksRange, Block, CandidBlock,
+    CandidOperation, CandidTransaction, FeatureFlags, GetBlocksArgs, GetBlocksRes, GetBlocksResult,
+    InitArgs, LedgerCanisterInitPayload, LedgerCanisterPayload, Operation, QueryBlocksResponse,
+    QueryEncodedBlocksResponse, TimeStamp, UpgradeArgs, DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::{
     account::Account,
     transfer::{Memo, TransferArg, TransferError},
 };
 use icrc_ledger_types::icrc2::allowance::AllowanceArgs;
+use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use num_traits::cast::ToPrimitive;
 use on_wire::{FromWire, IntoWire};
 use serde_bytes::ByteBuf;
 use std::collections::{HashMap, HashSet};
+use std::time::SystemTime;
 
 fn ledger_wasm() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
@@ -74,7 +77,7 @@ fn query_blocks(
         .bytes(),
         QueryBlocksResponse
     )
-    .expect("failed to decode transfer response")
+    .expect("failed to decode query blocks")
 }
 
 fn query_encoded_blocks(
@@ -122,6 +125,14 @@ fn get_blocks_pb(
         .bytes();
     let result: GetBlocksRes = ProtoBuf::from_bytes(bytes).map(|c| c.0).unwrap();
     result
+}
+
+fn account_identifier(env: &StateMachine, ledger: CanisterId, account: Account) -> AccountIdBlob {
+    let bytes = env
+        .query(ledger, "account_identifier", Encode!(&account).unwrap())
+        .expect("failed to calculate account identifier")
+        .bytes();
+    Decode!(&bytes, AccountIdBlob).expect("Unable to decode account_identifier endpoint result")
 }
 
 #[test]
@@ -543,6 +554,7 @@ fn test_feature_flags() {
         .initial_values(initial_balances)
         .transfer_fee(Tokens::from_e8s(10_000))
         .token_symbol_and_name("ICP", "Internet Computer")
+        .feature_flags(FeatureFlags { icrc2: false })
         .build()
         .unwrap();
     let canister_id = env
@@ -575,7 +587,7 @@ fn test_feature_flags() {
         Encode!(&LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
             maximum_number_of_accounts: None,
             icrc1_minting_account: None,
-            feature_flags: None,
+            feature_flags: Some(FeatureFlags { icrc2: false }),
         })))
         .unwrap(),
     )
@@ -652,4 +664,195 @@ fn test_balances_overflow() {
 #[test]
 fn test_approval_trimming() {
     ic_icrc1_ledger_sm_tests::test_approval_trimming(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn account_identifier_test() {
+    let env = StateMachine::new();
+    let payload = LedgerCanisterInitPayload::builder()
+        .minting_account(MINTER.into())
+        .build()
+        .unwrap();
+    let ledger = env
+        .install_canister(ledger_wasm(), Encode!(&payload).unwrap(), None)
+        .expect("Unable to install the Ledger canister with the new init");
+
+    let owner =
+        Principal::try_from("aspvh-rnqud-zk2qo-4objq-d537b-j36qa-l74s3-jricy-57syn-tt5iq-bae")
+            .unwrap();
+
+    // default subaccount
+    let expected_account_id =
+        hex::decode("b43c3536fb53da333e8f93e1703d61b47cee3638103c0bd7ddff8cbdf04b5ca5").unwrap();
+    let account_id = account_identifier(
+        &env,
+        ledger,
+        Account {
+            owner,
+            subaccount: None,
+        },
+    );
+    assert_eq!(expected_account_id, account_id);
+
+    // subaccount 1
+    let expected_account_id =
+        hex::decode("c59f11aa439a50b084e6a28769ac2f43fb95f452f97351b2dd89060e284151e8").unwrap();
+    let subaccount = Some(
+        hex::decode("0000000000000000000000000000000000000000000000000000000000000001")
+            .unwrap()
+            .try_into()
+            .unwrap(),
+    );
+    let account_id = account_identifier(&env, ledger, Account { owner, subaccount });
+    assert_eq!(expected_account_id, account_id);
+
+    // random subaccount
+    let expected_account_id =
+        hex::decode("95eee02ffd99469c20b0488dad381d0b71a97f9b3e4387ad11ad65c3055f10c5").unwrap();
+    let subaccount = Some(
+        hex::decode("C6EE2D822ED28BA50D807AE0969B422E181CD4484D93CD556923938355A4BAA7")
+            .unwrap()
+            .try_into()
+            .unwrap(),
+    );
+    let account_id = account_identifier(&env, ledger, Account { owner, subaccount });
+    assert_eq!(expected_account_id, account_id);
+}
+
+#[test]
+fn test_query_archived_blocks() {
+    let env = StateMachine::new();
+    let payload = LedgerCanisterInitPayload::builder()
+        .minting_account(MINTER.into())
+        .icrc1_minting_account(MINTER)
+        .transfer_fee(Tokens::from_e8s(10_000))
+        .token_symbol_and_name("ICP", "Internet Computer")
+        .archive_options(ArchiveOptions {
+            trigger_threshold: 4,
+            num_blocks_to_archive: 4usize,
+            node_max_memory_size_bytes: None,
+            max_message_size_bytes: None,
+            controller_id: PrincipalId::new_anonymous(),
+            cycles_for_archive_creation: None,
+            max_transactions_per_response: None,
+        })
+        .feature_flags(FeatureFlags { icrc2: true })
+        .build()
+        .unwrap();
+    let ledger = env
+        .install_canister(ledger_wasm(), Encode!(&payload).unwrap(), None)
+        .expect("Unable to install the Ledger canister with the new init");
+
+    let user1 = Principal::from_slice(&[1]);
+    let user2 = Principal::from_slice(&[2]);
+
+    // mint block
+    transfer(&env, ledger, MINTER, user1, 2_000_000_000).unwrap();
+    // burn block
+    transfer(&env, ledger, user1, MINTER, 1_000_000_000).unwrap();
+    // xfer block
+    transfer(&env, ledger, user1, user2, 100_000_000).unwrap();
+    // approve block
+    send_approval(
+        &env,
+        ledger,
+        user2,
+        &ApproveArgs {
+            from_subaccount: None,
+            spender: user1.into(),
+            amount: 100_000_000.into(),
+            expected_allowance: None,
+            expires_at: None,
+            fee: None,
+            memo: None,
+            created_at_time: None,
+        },
+    )
+    .unwrap();
+
+    let res = query_blocks(&env, user1, ledger, 0, 1000);
+    assert_eq!(res.chain_length, 4);
+    assert_eq!(res.first_block_index, 4);
+    assert_eq!(res.archived_blocks.len(), 1);
+    let ArchivedBlocksRange {
+        start,
+        length,
+        callback,
+    } = res.archived_blocks.get(0).unwrap();
+    // query the archive
+    let block_range = Decode!(
+        &env.query(
+            CanisterId::unchecked_from_principal(callback.canister_id.into()),
+            callback.method.to_owned(),
+            Encode!(&GetBlocksArgs {
+                start: *start,
+                length: *length as usize
+            })
+            .unwrap()
+        )
+        .unwrap()
+        .bytes(),
+        GetBlocksResult
+    )
+    .unwrap()
+    .unwrap();
+    let time = env
+        .time()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as u64;
+    assert_eq!(
+        block_range
+            .blocks
+            .iter()
+            .map(|b| b.transaction.to_owned())
+            .collect::<Vec<_>>(),
+        vec![
+            CandidTransaction {
+                memo: icp_ledger::Memo(0),
+                created_at_time: TimeStamp::from_nanos_since_unix_epoch(time),
+                icrc1_memo: None,
+                operation: Some(CandidOperation::Mint {
+                    to: AccountIdentifier::from(user1).to_address(),
+                    amount: Tokens::from_e8s(2_000_000_000)
+                }),
+            },
+            CandidTransaction {
+                memo: icp_ledger::Memo(0),
+                created_at_time: TimeStamp::from_nanos_since_unix_epoch(time),
+                icrc1_memo: None,
+                operation: Some(CandidOperation::Burn {
+                    from: AccountIdentifier::from(user1).to_address(),
+                    amount: Tokens::from_e8s(1_000_000_000),
+                    spender: None
+                }),
+            },
+            CandidTransaction {
+                memo: icp_ledger::Memo(0),
+                created_at_time: TimeStamp::from_nanos_since_unix_epoch(time),
+                icrc1_memo: None,
+                operation: Some(CandidOperation::Transfer {
+                    from: AccountIdentifier::from(user1).to_address(),
+                    to: AccountIdentifier::from(user2).to_address(),
+                    amount: Tokens::from_e8s(100_000_000),
+                    fee: DEFAULT_TRANSFER_FEE,
+                    spender: None,
+                }),
+            },
+            CandidTransaction {
+                memo: icp_ledger::Memo(0),
+                created_at_time: TimeStamp::from_nanos_since_unix_epoch(time),
+                icrc1_memo: None,
+                operation: Some(CandidOperation::Approve {
+                    from: AccountIdentifier::from(user2).to_address(),
+                    spender: AccountIdentifier::from(user1).to_address(),
+                    allowance: Tokens::from_e8s(100_000_000),
+                    allowance_e8s: 100_000_000i128,
+                    expected_allowance: None,
+                    expires_at: None,
+                    fee: DEFAULT_TRANSFER_FEE,
+                }),
+            },
+        ]
+    );
 }

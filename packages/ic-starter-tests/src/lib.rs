@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Context, Result};
-use ic_agent::agent::http_transport::ReqwestHttpReplicaV2Transport;
+use ic_agent::agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport;
 use ic_agent::Agent;
 use std::path::PathBuf;
 use std::process::{Child, Command};

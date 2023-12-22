@@ -1,7 +1,7 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("@io_bazel_rules_docker//container:container.bzl", "container_image")
 load("@io_bazel_rules_docker//contrib:passwd.bzl", "passwd_entry", "passwd_file")
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
+load("@rules_rust//rust:defs.bzl", "rust_binary")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -9,12 +9,10 @@ DEPENDENCIES = [
     "@crate_index//:axum",
     "@crate_index//:axum-server",
     "@crate_index//:clap",
-    "@crate_index//:openssl",
     "@crate_index//:rustls",
     "@crate_index//:rustls-pemfile",
     "@crate_index//:serde_json",
     "@crate_index//:tokio",
-    "@crate_index//:tokio-openssl",
 ]
 
 rust_binary(

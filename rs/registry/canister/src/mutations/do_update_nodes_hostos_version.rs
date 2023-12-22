@@ -10,7 +10,7 @@ use ic_registry_keys::make_node_record_key;
 use ic_registry_transport::update;
 
 impl Registry {
-    pub fn do_update_nodes_hostos_version(&mut self, payload: UpdateNodesHostOsVersionPayload) {
+    pub fn do_update_nodes_hostos_version(&mut self, payload: UpdateNodesHostosVersionPayload) {
         println!("{}do_update_node_hostos_version: {:?}", LOG_PREFIX, payload);
 
         let mut mutations = Vec::new();
@@ -35,7 +35,7 @@ impl Registry {
 ///
 /// The record will be mutated only if the given version exists.
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct UpdateNodesHostOsVersionPayload {
+pub struct UpdateNodesHostosVersionPayload {
     /// The node to update.
     pub node_ids: Vec<NodeId>,
     /// The new HostOS version to use.

@@ -87,6 +87,10 @@ pub struct NNSRecoveryFailoverNodesArgs {
     /// If present the tool will start execution for the provided step, skipping the initial ones
     #[clap(long = "resume")]
     pub next_step: Option<StepType>,
+
+    /// Which steps to skip
+    #[clap(long)]
+    pub skip: Option<Vec<StepType>>,
 }
 
 pub struct NNSRecoveryFailoverNodes {
@@ -95,7 +99,6 @@ pub struct NNSRecoveryFailoverNodes {
     pub params: NNSRecoveryFailoverNodesArgs,
     pub neuron_args: Option<NeuronArgs>,
     recovery: Recovery,
-    interactive: bool,
     logger: Logger,
     new_registry_local_store: PathBuf,
 }
@@ -106,7 +109,6 @@ impl NNSRecoveryFailoverNodes {
         recovery_args: RecoveryArgs,
         neuron_args: Option<NeuronArgs>,
         subnet_args: NNSRecoveryFailoverNodesArgs,
-        interactive: bool,
     ) -> Self {
         let recovery = Recovery::new(
             logger.clone(),
@@ -126,7 +128,6 @@ impl NNSRecoveryFailoverNodes {
             recovery,
             logger,
             new_registry_local_store,
-            interactive,
         }
     }
 
@@ -155,7 +156,11 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
     }
 
     fn interactive(&self) -> bool {
-        self.interactive
+        !self.recovery_args.skip_prompts
+    }
+
+    fn get_skipped_steps(&self) -> Vec<StepType> {
+        self.params.skip.clone().unwrap_or_default()
     }
 
     fn read_step_params(&mut self, step_type: StepType) {

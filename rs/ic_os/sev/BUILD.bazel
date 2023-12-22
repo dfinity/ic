@@ -9,22 +9,24 @@ rust_library(
     proc_macro_deps = [
         "@crate_index//:async-trait",
     ],
-    version = "0.8.0",
+    version = "0.9.0",
     deps = select({
         "@platforms//os:osx": [],
         "//conditions:default": [
             "@crate_index//:sev",
         ],
     }) + [
-        "//rs/ic_os/sev_interfaces",
         "//rs/interfaces/registry",
+        "//rs/monitoring/logger",
         "//rs/registry/helpers",
         "//rs/registry/subnet_features",
+        "//rs/types/base_types",
         "//rs/types/types",
-        "@crate_index//:openssl",
+        "@crate_index//:anyhow",
         "@crate_index//:serde",
         "@crate_index//:serde_cbor",
         "@crate_index//:sha2",
+        "@crate_index//:slog",
         "@crate_index//:thiserror",
         "@crate_index//:tokio",
     ],
@@ -37,5 +39,9 @@ rust_test(
     proc_macro_deps = [
         "@crate_index//:async-trait",
     ],
-    deps = [":sev"],
+    deps = [
+        ":sev",
+        "@crate_index//:assert_matches",
+        "@crate_index//:tempfile",
+    ],
 )

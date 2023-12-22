@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -13,14 +14,17 @@ rust_library(
     proc_macro_deps = [
         "@crate_index//:strum_macros",
     ],
-    version = "0.8.0",
+    rustc_flags = select({
+        "//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
+        "//conditions:default": [],
+    }),
+    version = "0.9.0",
     deps = [
         "//rs/bitcoin/types/internal",
         "//rs/protobuf",
         "//rs/types/base_types",
         "//rs/types/error_types",
         "@crate_index//:candid",
-        "@crate_index//:float-cmp",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:num-traits",
         "@crate_index//:serde",

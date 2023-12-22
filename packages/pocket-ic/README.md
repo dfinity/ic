@@ -1,8 +1,57 @@
-# Pocket IC
+# PocketIC Rust: A Canister Testing Library
 
-## A Canister Testing Framework for Community Developers
+[PocketIC](https://github.com/dfinity/pocketic) is a local canister testing solution for the [Internet Computer](https://internetcomputer.org/).  
+This testing library works together with the **PocketIC server**, allowing you to interact with your local IC instances and the canisters thereon. 
 
-This is a prototype! 
+With PocketIC Rust, testing canisters is as simple as calling rust functions.
+Here is a simple example:
 
-This is a library for lightweight canister testing. Initially, it will target the state-machine-test binary and expose its client API, just like [this client library](https://crates.io/crates/ic-test-state-machine-client).
+```rust
+use candid::encode_one;
+use pocket_ic::PocketIc;
 
+ #[test]
+ fn test_counter_canister() {
+    let pic = PocketIc::new();
+    // Create an empty canister as the anonymous principal and add cycles.
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, 2_000_000_000_000);
+    
+    let wasm_bytes = load_counter_wasm(...);
+    pic.install_canister(canister_id, wasm_bytes, vec![], None);
+    // 'inc' is a counter canister method.
+    call_counter_canister(&pic, canister_id, "inc");
+    // Check if it had the desired effect.
+    let reply = call_counter_canister(&pic, canister_id, "read");
+    assert_eq!(reply, WasmResult::Reply(vec![0, 0, 0, 1]));
+ }
+
+fn call_counter_canister(pic: &PocketIc, canister_id: CanisterId, method: &str) -> WasmResult {
+    pic.update_call(canister_id, Principal::anonymous(), method, encode_one(()).unwrap())
+        .expect("Failed to call counter canister")
+}
+```
+
+## Getting Started
+
+### Quickstart
+* Download the latest **PocketIC server** from the [PocketIC repo](https://github.com/dfinity/pocketic).
+* Leave the binary in your current working directory, or specify the path to the binary by setting the `POCKET_IC_BIN` environment variable before running your tests.
+* Add PocketIC Rust to your project with `cargo add pocket-ic`.
+* Import PocketIC with `use pocket_ic::PocketIc`, and create a new PocketIC instance with `let pic = PocketIc::new()` in your Rust code and start testing!
+
+### Examples
+For a simple but complete example with the counter canister, see [here](tests/tests.rs#L19).
+For an example with cross canister calls on two different subnets with the ledger canister, see [here](tests/tests.rs#L57).
+
+For larger test suites with more complex test setups, consider the [OpenChat](https://github.com/open-chat-labs/open-chat/tree/master/backend/integration_tests/src) integration test suite.
+Note that instances are shared among test cases there, which is not recommended in general.
+
+## Documentation
+* [How to use this library](HOWTO.md)
+* [PocketIC repo](https://github.com/dfinity/pocketic)
+* [Why PocketIC](https://github.com/dfinity/pocketic#why-pocketic)
+* [Changelog of PocketIC Rust](CHANGELOG.md)
+
+## Contributing
+If you decide to contribute, we encourage you to announce it on the [Forum](https://forum.dfinity.org/)!

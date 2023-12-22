@@ -1,4 +1,7 @@
-type BuyerState = record { icp : opt TransferableAmount };
+type BuyerState = record {
+  icp : opt TransferableAmount;
+  has_created_neuron_recipes : opt bool;
+};
 type CanisterCallError = record { code : opt int32; description : text };
 type CanisterStatusResultV2 = record {
   status : CanisterStatusType;
@@ -10,7 +13,11 @@ type CanisterStatusResultV2 = record {
 };
 type CanisterStatusType = variant { stopped; stopping; running };
 type CfInvestment = record { hotkey_principal : text; nns_neuron_id : nat64 };
-type CfNeuron = record { nns_neuron_id : nat64; amount_icp_e8s : nat64 };
+type CfNeuron = record {
+  has_created_neuron_recipes : opt bool;
+  nns_neuron_id : nat64;
+  amount_icp_e8s : nat64;
+};
 type CfParticipant = record {
   hotkey_principal : text;
   cf_neurons : vec CfNeuron;
@@ -26,6 +33,8 @@ type DerivedState = record {
   sns_tokens_per_icp : float32;
   buyer_total_icp_e8s : nat64;
   cf_participant_count : opt nat64;
+  neurons_fund_participation_icp_e8s : opt nat64;
+  direct_participation_icp_e8s : opt nat64;
   direct_participant_count : opt nat64;
   cf_neuron_count : opt nat64;
 };
@@ -37,6 +46,7 @@ type Err_2 = record {
   existing_ticket : opt Ticket;
   error_type : int32;
 };
+type Error = record { message : opt text };
 type ErrorRefundIcpRequest = record { source_principal_id : opt principal };
 type ErrorRefundIcpResponse = record { result : opt Result };
 type FailedUpdate = record {
@@ -45,8 +55,10 @@ type FailedUpdate = record {
 };
 type FinalizeSwapResponse = record {
   set_dapp_controllers_call_result : opt SetDappControllersCallResult;
+  create_sns_neuron_recipes_result : opt SweepResult;
   settle_community_fund_participation_result : opt SettleCommunityFundParticipationResult;
   error_message : opt text;
+  settle_neurons_fund_participation_result : opt SettleNeuronsFundParticipationResult;
   set_mode_call_result : opt SetModeCallResult;
   sweep_icp_result : opt SweepResult;
   claim_neuron_result : opt SweepResult;
@@ -64,6 +76,8 @@ type GetDerivedStateResponse = record {
   sns_tokens_per_icp : opt float64;
   buyer_total_icp_e8s : opt nat64;
   cf_participant_count : opt nat64;
+  neurons_fund_participation_icp_e8s : opt nat64;
+  direct_participation_icp_e8s : opt nat64;
   direct_participant_count : opt nat64;
   cf_neuron_count : opt nat64;
 };
@@ -77,9 +91,13 @@ type GetSaleParametersResponse = record { params : opt Params };
 type GetStateResponse = record { swap : opt Swap; derived : opt DerivedState };
 type GovernanceError = record { error_message : text; error_type : int32 };
 type Icrc1Account = record { owner : opt principal; subaccount : opt vec nat8 };
+type IdealMatchedParticipationFunction = record {
+  serialized_representation : opt text;
+};
 type Init = record {
   nns_proposal_id : opt nat64;
   sns_root_canister_id : text;
+  neurons_fund_participation : opt bool;
   min_participant_icp_e8s : opt nat64;
   neuron_basket_construction_parameters : opt NeuronBasketConstructionParameters;
   fallback_controller_principal_ids : vec text;
@@ -94,12 +112,15 @@ type Init = record {
   transaction_fee_e8s : opt nat64;
   icp_ledger_canister_id : text;
   sns_ledger_canister_id : text;
+  neurons_fund_participation_constraints : opt NeuronsFundParticipationConstraints;
   neurons_fund_participants : opt NeuronsFundParticipants;
   should_auto_finalize : opt bool;
   max_participant_icp_e8s : opt nat64;
   sns_governance_canister_id : text;
+  min_direct_participation_icp_e8s : opt nat64;
   restricted_countries : opt Countries;
   min_icp_e8s : opt nat64;
+  max_direct_participation_icp_e8s : opt nat64;
 };
 type InvalidUserAmount = record {
   min_amount_icp_e8s_included : nat64;
@@ -108,6 +129,13 @@ type InvalidUserAmount = record {
 type Investor = variant {
   CommunityFund : CfInvestment;
   Direct : DirectInvestment;
+};
+type LinearScalingCoefficient = record {
+  slope_numerator : opt nat64;
+  intercept_icp_e8s : opt nat64;
+  from_direct_participation_icp_e8s : opt nat64;
+  slope_denominator : opt nat64;
+  to_direct_participation_icp_e8s : opt nat64;
 };
 type ListCommunityFundParticipantsRequest = record {
   offset : opt nat64;
@@ -136,13 +164,23 @@ type NeuronBasketConstructionParameters = record {
 };
 type NeuronId = record { id : vec nat8 };
 type NeuronsFundParticipants = record { cf_participants : vec CfParticipant };
+type NeuronsFundParticipationConstraints = record {
+  coefficient_intervals : vec LinearScalingCoefficient;
+  max_neurons_fund_participation_icp_e8s : opt nat64;
+  min_direct_participation_threshold_icp_e8s : opt nat64;
+  ideal_matched_participation_function : opt IdealMatchedParticipationFunction;
+};
 type NewSaleTicketRequest = record {
   subaccount : opt vec nat8;
   amount_icp_e8s : nat64;
 };
 type NewSaleTicketResponse = record { result : opt Result_2 };
 type Ok = record { block_height : opt nat64 };
-type Ok_1 = record { ticket : opt Ticket };
+type Ok_1 = record {
+  neurons_fund_participation_icp_e8s : opt nat64;
+  neurons_fund_neurons_count : opt nat64;
+};
+type Ok_2 = record { ticket : opt Ticket };
 type OpenRequest = record {
   cf_participants : vec CfParticipant;
   params : opt Params;
@@ -157,7 +195,9 @@ type Params = record {
   sns_token_e8s : nat64;
   sale_delay_seconds : opt nat64;
   max_participant_icp_e8s : nat64;
+  min_direct_participation_icp_e8s : opt nat64;
   min_icp_e8s : nat64;
+  max_direct_participation_icp_e8s : opt nat64;
 };
 type Participant = record {
   participation : opt BuyerState;
@@ -168,7 +208,8 @@ type Possibility = variant {
   Err : CanisterCallError;
 };
 type Possibility_1 = variant { Ok : Response; Err : CanisterCallError };
-type Possibility_2 = variant { Ok : record {}; Err : CanisterCallError };
+type Possibility_2 = variant { Ok : Ok_1; Err : Error };
+type Possibility_3 = variant { Ok : record {}; Err : CanisterCallError };
 type RefreshBuyerTokensRequest = record {
   confirmation_text : opt text;
   buyer : text;
@@ -179,13 +220,16 @@ type RefreshBuyerTokensResponse = record {
 };
 type Response = record { governance_error : opt GovernanceError };
 type Result = variant { Ok : Ok; Err : Err };
-type Result_1 = variant { Ok : Ok_1; Err : Err_1 };
-type Result_2 = variant { Ok : Ok_1; Err : Err_2 };
+type Result_1 = variant { Ok : Ok_2; Err : Err_1 };
+type Result_2 = variant { Ok : Ok_2; Err : Err_2 };
 type SetDappControllersCallResult = record { possibility : opt Possibility };
 type SetDappControllersResponse = record { failed_updates : vec FailedUpdate };
-type SetModeCallResult = record { possibility : opt Possibility_2 };
+type SetModeCallResult = record { possibility : opt Possibility_3 };
 type SettleCommunityFundParticipationResult = record {
   possibility : opt Possibility_1;
+};
+type SettleNeuronsFundParticipationResult = record {
+  possibility : opt Possibility_2;
 };
 type SnsNeuronRecipe = record {
   sns : opt TransferableAmount;
@@ -202,7 +246,9 @@ type Swap = record {
   cf_participants : vec CfParticipant;
   init : opt Init;
   already_tried_to_auto_finalize : opt bool;
+  neurons_fund_participation_icp_e8s : opt nat64;
   purge_old_tickets_last_completion_timestamp_nanoseconds : opt nat64;
+  direct_participation_icp_e8s : opt nat64;
   lifecycle : int32;
   purge_old_tickets_next_principal : opt vec nat8;
   buyers : vec record { text; BuyerState };
@@ -254,7 +300,7 @@ service : (Init) -> {
       ListSnsNeuronRecipesResponse,
     ) query;
   new_sale_ticket : (NewSaleTicketRequest) -> (NewSaleTicketResponse);
-  notify_payment_failure : (record {}) -> (Ok_1);
+  notify_payment_failure : (record {}) -> (Ok_2);
   open : (OpenRequest) -> (record {});
   refresh_buyer_tokens : (RefreshBuyerTokensRequest) -> (
       RefreshBuyerTokensResponse,

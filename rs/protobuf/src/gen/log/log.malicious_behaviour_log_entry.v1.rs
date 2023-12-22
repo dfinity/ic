@@ -5,7 +5,6 @@ pub struct MaliciousBehaviourLogEntry {
     #[prost(enumeration = "MaliciousBehaviour", tag = "1")]
     pub malicious_behaviour: i32,
 }
-#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum MaliciousBehaviour {
@@ -61,6 +60,35 @@ impl MaliciousBehaviour {
             MaliciousBehaviour::CorruptOwnStateAtHeights => {
                 "MALICIOUS_BEHAVIOUR_CORRUPT_OWN_STATE_AT_HEIGHTS"
             }
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "MALICIOUS_BEHAVIOUR_UNSPECIFIED" => Some(Self::Unspecified),
+            "MALICIOUS_BEHAVIOUR_GOSSIP_DROP_REQUESTS" => Some(Self::GossipDropRequests),
+            "MALICIOUS_BEHAVIOUR_GOSSIP_ARTIFACT_NOT_FOUND" => Some(Self::GossipArtifactNotFound),
+            "MALICIOUS_BEHAVIOUR_GOSSIP_SEND_MANY_ARTIFACTS" => Some(Self::GossipSendManyArtifacts),
+            "MALICIOUS_BEHAVIOUR_GOSSIP_SEND_INVALID_ARTIFACTS" => {
+                Some(Self::GossipSendInvalidArtifacts)
+            }
+            "MALICIOUS_BEHAVIOUR_GOSSIP_SEND_LATE_ARTIFACTS" => Some(Self::GossipSendLateArtifacts),
+            "MALICIOUS_BEHAVIOUR_PROPOSE_EQUIVOCATING_BLOCKS" => {
+                Some(Self::ProposeEquivocatingBlocks)
+            }
+            "MALICIOUS_BEHAVIOUR_PROPOSE_EMPTY_BLOCKS" => Some(Self::ProposeEmptyBlocks),
+            "MALICIOUS_BEHAVIOUR_FINALIZE_ALL" => Some(Self::FinalizeAll),
+            "MALICIOUS_BEHAVIOUR_NOTARIZE_ALL" => Some(Self::NotarizeAll),
+            "MALICIOUS_BEHAVIOUR_TWEAK_DKG" => Some(Self::TweakDkg),
+            "MALICIOUS_BEHAVIOUR_CERTIFY_INVALID_HASH" => Some(Self::CertifyInvalidHash),
+            "MALICIOUS_BEHAVIOUR_MALFUNCTIONING_XNET_ENDPOINT" => {
+                Some(Self::MalfunctioningXnetEndpoint)
+            }
+            "MALICIOUS_BEHAVIOUR_DISABLE_EXECUTION" => Some(Self::DisableExecution),
+            "MALICIOUS_BEHAVIOUR_CORRUPT_OWN_STATE_AT_HEIGHTS" => {
+                Some(Self::CorruptOwnStateAtHeights)
+            }
+            _ => None,
         }
     }
 }

@@ -20,12 +20,12 @@ use ic_interfaces::execution_environment::StableMemoryApi;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::PAGE_SIZE;
 use ic_types::NumInstructions;
+use ic_wasm_transform::Body;
 use wasmparser::{BlockType, FuncType, Operator, ValType};
 use wasmtime_environ::WASM_PAGE_SIZE;
 
 use super::{
     instrumentation::{MemoryMode, SpecialIndices},
-    wasm_transform::Body,
     SystemApiFunc,
 };
 

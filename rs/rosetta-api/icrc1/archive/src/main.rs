@@ -308,7 +308,6 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     Ok(())
 }
 
-#[candid_method(query)]
 #[query]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
@@ -334,7 +333,7 @@ fn main() {}
 
 #[test]
 fn check_candid_interface() {
-    use candid::utils::{service_compatible, CandidSource};
+    use candid::utils::{service_equal, CandidSource};
     use std::path::PathBuf;
 
     candid::export_service!();
@@ -345,7 +344,7 @@ fn check_candid_interface() {
     let old_interface =
         PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("archive.did");
 
-    service_compatible(
+    service_equal(
         CandidSource::Text(&new_interface),
         CandidSource::File(old_interface.as_path()),
     )

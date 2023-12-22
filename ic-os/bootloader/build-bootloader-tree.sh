@@ -21,7 +21,7 @@ done
 trap 'rm -rf "${TMPDIR}"; docker rm -f "${CONTAINER}"' exit
 TMPDIR=$(mktemp -d -t build-image-XXXXXXXXXXXX)
 
-BASE_IMAGE="dfinity/ic-build-bazel@sha256:1978886cfda51b09057bffd60f2e5edb588c6c0b74de87696cd4e964335dba87"
+BASE_IMAGE="docker.io/dfinity/ic-build-bazel@sha256:1978886cfda51b09057bffd60f2e5edb588c6c0b74de87696cd4e964335dba87"
 
 docker build --iidfile ${TMPDIR}/iidfile - <<<"
     FROM $BASE_IMAGE

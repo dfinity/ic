@@ -1,5 +1,5 @@
 // This module defines how replicated queries are executed.
-// See https://smartcontracts.org/docs/interface-spec/index.html#rule-message-execution
+// See https://internetcomputer.org/docs/interface-spec/index.html#rule-message-execution
 //
 // A replicated query is a call to a `canister_query` function in update
 // context.
@@ -17,6 +17,7 @@ use ic_types::{
 
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::methods::{FuncRef, WasmMethod};
+use prometheus::IntCounter;
 
 // Execute an inter-canister request or an ingress message as a replicated query.
 #[allow(clippy::too_many_arguments)]
@@ -29,6 +30,7 @@ pub fn execute_replicated_query(
     round: RoundContext,
     round_limits: &mut RoundLimits,
     subnet_size: usize,
+    state_changes_error: &IntCounter,
 ) -> ExecuteMessageResult {
     // A replicated query runs without DTS.
     let instruction_limits = &execution_parameters.instruction_limits;
@@ -36,11 +38,13 @@ pub fn execute_replicated_query(
     let instruction_limit = instruction_limits.message();
     // Withdraw execution cycles.
     let memory_usage = canister.memory_usage();
+    let message_memory_usage = canister.message_memory_usage();
     let compute_allocation = canister.scheduler_state.compute_allocation;
 
     let prepaid_execution_cycles = match round.cycles_account_manager.prepay_execution_cycles(
         &mut canister.system_state,
         memory_usage,
+        message_memory_usage,
         compute_allocation,
         instruction_limit,
         subnet_size,
@@ -65,7 +69,7 @@ pub fn execute_replicated_query(
             instruction_limit,
             instruction_limit,
             prepaid_execution_cycles,
-            round.execution_refund_error_counter,
+            round.counters.execution_refund_error,
             subnet_size,
             round.log,
         );
@@ -90,7 +94,7 @@ pub fn execute_replicated_query(
             instruction_limit,
             instruction_limit,
             prepaid_execution_cycles,
-            round.execution_refund_error_counter,
+            round.counters.execution_refund_error,
             subnet_size,
             round.log,
         );
@@ -108,6 +112,7 @@ pub fn execute_replicated_query(
     let call_origin = CallOrigin::from(&req);
 
     let memory_usage = canister.memory_usage();
+    let message_memory_usage = canister.message_memory_usage();
 
     let api_type =
         ApiType::replicated_query(time, req.method_payload().to_vec(), *req.sender(), None);
@@ -122,11 +127,13 @@ pub fn execute_replicated_query(
         time,
         canister.system_state.clone(),
         memory_usage,
+        message_memory_usage,
         execution_parameters,
         FuncRef::Method(method),
         canister.execution_state.clone().unwrap(),
         round.network_topology,
         round_limits,
+        state_changes_error,
     );
 
     let result = output.wasm_result;
@@ -140,7 +147,7 @@ pub fn execute_replicated_query(
         output.num_instructions_left,
         instruction_limit,
         prepaid_execution_cycles,
-        round.execution_refund_error_counter,
+        round.counters.execution_refund_error,
         subnet_size,
         round.log,
     );

@@ -1,13 +1,16 @@
 load("//ic-os:defs.bzl", "icos_build")
 load("//ic-os/guestos:defs.bzl", "image_deps")
 
+exports_files(["build_container_filesystem_config.txt"])
+
 # The macro contains several targets.
 # Check
 #       //ic-os/guestos/BUILD.bazel for examples
 #    or //ic-os/defs.bzl for the full list of targets.
 icos_build(
     name = "dev-malicious",
-    image_deps = image_deps,
+    ic_version = "//bazel:rc_only_version.txt",
+    image_deps_func = image_deps,
     malicious = True,
     mode = "dev",
     upload_prefix = "guest-os",

@@ -36,14 +36,14 @@ fn get_num_leaves_works_correctly() {
 
 #[test]
 fn try_remove_leaf_removes_leaves_correctly() {
-    let mut rng = ReproducibleRng::new();
+    let rng = &mut ReproducibleRng::new();
 
     let mut empty_tree = subtree!();
-    try_remove_leaf(&mut empty_tree, &mut rng);
+    try_remove_leaf(&mut empty_tree, rng);
     assert_eq!(empty_tree, subtree!());
 
     let mut one_leaf_tree = subtree_empty_values!(b"1");
-    try_remove_leaf(&mut one_leaf_tree, &mut rng);
+    try_remove_leaf(&mut one_leaf_tree, rng);
     assert_eq!(one_leaf_tree, empty_tree);
 
     let mut five_leaf_tree = subtree!(
@@ -56,11 +56,11 @@ fn try_remove_leaf_removes_leaves_correctly() {
     assert_eq!(get_num_leaves(&five_leaf_tree), 5);
 
     for i in 1..=5 {
-        try_remove_leaf(&mut five_leaf_tree, &mut rng);
+        try_remove_leaf(&mut five_leaf_tree, rng);
         assert_eq!(get_num_leaves(&five_leaf_tree), 5 - i);
     }
 
-    try_remove_leaf(&mut five_leaf_tree, &mut rng);
+    try_remove_leaf(&mut five_leaf_tree, rng);
     assert_eq!(get_num_leaves(&five_leaf_tree), 0);
 
     assert_eq!(
@@ -146,7 +146,7 @@ fn remove_leaf_removes_leaves_correctly() {
 }
 
 #[test]
-fn pahts_to_empty_subtrees_returns_correct_paths() {
+fn paths_to_empty_subtrees_returns_correct_paths() {
     let empty_tree = subtree!();
     let empty_tree_paths = paths_to_empty_subtrees(&empty_tree);
     assert_eq!(empty_tree_paths.len(), 0);
@@ -170,10 +170,10 @@ fn pahts_to_empty_subtrees_returns_correct_paths() {
 
 #[test]
 fn try_remove_empty_subtree_removes_empty_substrees_correctly() {
-    let mut rng = ReproducibleRng::new();
+    let rng = &mut ReproducibleRng::new();
 
     let mut empty_tree = subtree!();
-    try_remove_empty_subtree(&mut empty_tree, &mut rng);
+    try_remove_empty_subtree(&mut empty_tree, rng);
     assert_eq!(paths_to_empty_subtrees(&empty_tree).len(), 0);
     assert_eq!(empty_tree, subtree!());
 
@@ -187,10 +187,10 @@ fn try_remove_empty_subtree_removes_empty_substrees_correctly() {
         b"i" => subtree_empty_values!(b"j", b"k")
     );
 
-    try_remove_empty_subtree(&mut two_empty_subtrees, &mut rng);
+    try_remove_empty_subtree(&mut two_empty_subtrees, rng);
     assert_eq!(paths_to_empty_subtrees(&two_empty_subtrees).len(), 1);
 
-    try_remove_empty_subtree(&mut two_empty_subtrees, &mut rng);
+    try_remove_empty_subtree(&mut two_empty_subtrees, rng);
     assert_eq!(paths_to_empty_subtrees(&two_empty_subtrees).len(), 0);
 
     assert_eq!(
@@ -239,12 +239,12 @@ fn remove_empty_subtree_in_path_removes_correct_empty_substrees() {
 
 #[test]
 fn add_subtree_and_leaf_works_correctly() {
-    let mut rng = ReproducibleRng::new();
+    let rng = &mut ReproducibleRng::new();
     let mut tree = subtree!();
     for i in 1..100 {
-        add_leaf(&mut tree, &mut rng);
+        add_leaf(&mut tree, rng);
         assert_eq!(get_num_leaves(&tree), i, "{tree:?}");
-        add_empty_subtree(&mut tree, &mut rng);
+        add_empty_subtree(&mut tree, rng);
         assert_eq!(all_subtrees(&tree).len(), i + 1, "{tree:?}");
     }
 }
@@ -415,12 +415,12 @@ fn modify_leaf_modifies_correct_leaf() {
 
 #[test]
 fn get_num_labels_works_correctly() {
-    let mut rng = ReproducibleRng::new();
+    let rng = &mut ReproducibleRng::new();
     let mut tree = subtree!();
     for i in 0..100 {
-        add_leaf(&mut tree, &mut rng);
+        add_leaf(&mut tree, rng);
         assert_eq!(get_num_labels(&tree), 2 * i + 1, "{tree:?}");
-        add_empty_subtree(&mut tree, &mut rng);
+        add_empty_subtree(&mut tree, rng);
         assert_eq!(get_num_labels(&tree), 2 * i + 2, "{tree:?}");
     }
 }

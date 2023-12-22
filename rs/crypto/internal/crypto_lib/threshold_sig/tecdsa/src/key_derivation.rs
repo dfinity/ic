@@ -1,42 +1,22 @@
 use crate::*;
 use ic_crypto_internal_hmac::{Hmac, Sha512};
 
+/// Derivation Index
+///
+/// In BIP32 and SLIP-0010, derivation indicies are 32 bit
+/// integers. We support an extension of BIP32 which uses arbitrary
+/// byte strings. If each of the index values is 4 bytes long
+/// then the derivation is compatable with standard BIP32 / SLIP-0010
 #[derive(Debug, Clone)]
 pub struct DerivationIndex(pub Vec<u8>);
 
-impl DerivationIndex {
-    /// Return the BIP32 "next" derivation path
-    ///
-    /// This is only used very rarely. In the case that a derivation index is a
-    /// 4 byte big-endian encoding of an integer less than 2**31-1, the behavior
-    /// matches that of standard BIP32.
-    ///
-    /// For the index 2**31-1, if the exceptional condition occurs, this will
-    /// return a BIP32 "hardened" derivation index, which is non-sensical for BIP32.
-    /// This is a corner case in the BIP32 spec and it seems that few implementations
-    /// handle it correctly.
-    pub fn next(&self) -> Self {
-        let mut n = self.0.clone();
-
-        n.reverse();
-
-        let mut carry = 1u8;
-        for w in &mut n {
-            let (v, c) = w.overflowing_add(carry);
-            *w = v;
-            carry = u8::from(c);
-        }
-
-        if carry != 0 {
-            n.push(carry);
-        }
-
-        n.reverse();
-
-        Self(n)
-    }
-}
-
+/// Derivation Path for BIP32 / SLIP-0010
+///
+/// A derivation path is simply a sequence of DerivationIndex
+///
+/// Implements SLIP-0010
+/// <https://github.com/satoshilabs/slips/blob/master/slip-0010.md>
+/// which is an extension of BIP32 to additional curves.
 #[derive(Debug, Clone)]
 pub struct DerivationPath {
     path: Vec<DerivationIndex>,
@@ -84,22 +64,22 @@ impl DerivationPath {
     /// BIP32 CKD used to implement CKDpub and CKDpriv
     ///
     /// See <https://en.bitcoin.it/wiki/BIP_0032#Child_key_derivation_.28CKD.29_functions>
+    /// and <https://github.com/satoshilabs/slips/blob/master/slip-0010.md>
     ///
     /// Extended to support larger inputs, which is needed for
-    /// deriving the canister public key
+    /// deriving the canister public key.
     ///
     /// This handles both public and private derivation, depending on the value of key_input
+    ///
+    /// We handle the exceptional case that the HMAC output is larger than the
+    /// group order following SLIP-0010 rather than BIP32. This allows us to
+    /// easily support other curves beyond secp256k1.
     fn bip32_ckd(
         key_input: &[u8],
         curve_type: EccCurveType,
         chain_key: &[u8],
         index: &DerivationIndex,
     ) -> ThresholdEcdsaResult<(Vec<u8>, EccScalar)> {
-        // BIP32 is only defined for secp256k1
-        if curve_type != EccCurveType::K256 {
-            return Err(ThresholdEcdsaError::CurveMismatch);
-        }
-
         let mut hmac = Hmac::<Sha512>::new(chain_key);
 
         hmac.write(key_input);
@@ -113,7 +93,10 @@ impl DerivationPath {
 
         // If iL >= order, try again with the "next" index
         if key_offset.serialize() != hmac_output[..32] {
-            Self::bip32_ckd(key_input, curve_type, chain_key, &index.next())
+            let mut next_input = [0u8; 33];
+            next_input[0] = 0x01;
+            next_input[1..].copy_from_slice(&new_chain_key);
+            Self::bip32_ckd(&next_input, curve_type, chain_key, index)
         } else {
             Ok((new_chain_key, key_offset))
         }
@@ -125,26 +108,32 @@ impl DerivationPath {
     ///
     /// Extended to support larger inputs, which is needed for
     /// deriving the canister public key
+    ///
+    /// This follows SLIP-0010 to accomodate other curves. For K256, SLIP-0010
+    /// and BIP32 are identical (with overwhelming probability; they differ in
+    /// an exceptional case that occurs ~1 in 2**128 key derivations)
     fn bip32_ckdpub(
         public_key: &EccPoint,
         chain_key: &[u8],
         index: &DerivationIndex,
     ) -> ThresholdEcdsaResult<(EccPoint, Vec<u8>, EccScalar)> {
-        let (new_chain_key, key_offset) = Self::bip32_ckd(
-            &public_key.serialize(),
-            public_key.curve_type(),
-            chain_key,
-            index,
-        )?;
+        let mut ckd_input = public_key.serialize();
 
-        let new_key = public_key.add_points(&EccPoint::mul_by_g(&key_offset))?;
+        loop {
+            let (new_chain_key, key_offset) =
+                Self::bip32_ckd(&ckd_input, public_key.curve_type(), chain_key, index)?;
 
-        // If the new key is infinity, try again with the next index
-        if new_key.is_infinity()? {
-            return Self::bip32_ckdpub(public_key, chain_key, &index.next());
+            let new_key = public_key.add_points(&EccPoint::mul_by_g(&key_offset))?;
+
+            // If the new key is not infinity, we're done: return the new key
+            if !new_key.is_infinity()? {
+                return Ok((new_key, new_chain_key, key_offset));
+            }
+
+            // Otherwise set up the next input as defined by SLIP-0010
+            ckd_input[0] = 0x01;
+            ckd_input[1..].copy_from_slice(&new_chain_key);
         }
-
-        Ok((new_key, new_chain_key, key_offset))
     }
 
     pub fn derive_tweak(
@@ -177,27 +166,19 @@ impl DerivationPath {
 
         let curve_type = master_public_key.curve_type();
 
-        if curve_type == EccCurveType::K256 {
-            let mut derived_key = master_public_key.clone();
-            let mut derived_chain_key = chain_code.to_vec();
-            let mut derived_offset = EccScalar::zero(curve_type);
+        let mut derived_key = master_public_key.clone();
+        let mut derived_chain_key = chain_code.to_vec();
+        let mut derived_offset = EccScalar::zero(curve_type);
 
-            for idx in self.path() {
-                let (next_derived_key, next_chain_key, next_offset) =
-                    Self::bip32_ckdpub(&derived_key, &derived_chain_key, idx)?;
+        for idx in self.path() {
+            let (next_derived_key, next_chain_key, next_offset) =
+                Self::bip32_ckdpub(&derived_key, &derived_chain_key, idx)?;
 
-                derived_key = next_derived_key;
-                derived_chain_key = next_chain_key;
-                derived_offset = derived_offset.add(&next_offset)?;
-            }
-
-            Ok((derived_offset, derived_chain_key))
-        } else {
-            // Key derivation is not currently defined for curves other than secp256k1
-            Err(ThresholdEcdsaError::InvalidArguments(format!(
-                "Currently key derivation not defined for {}",
-                curve_type
-            )))
+            derived_key = next_derived_key;
+            derived_chain_key = next_chain_key;
+            derived_offset = derived_offset.add(&next_offset)?;
         }
+
+        Ok((derived_offset, derived_chain_key))
     }
 }

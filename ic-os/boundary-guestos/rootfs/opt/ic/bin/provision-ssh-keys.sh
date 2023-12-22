@@ -34,7 +34,7 @@ fi
 
 # Transfer keys from master location, set up permissions and label, swap
 # out old keys.
-cp "${ORIGIN}" "${HOMEDIR}/.ssh/authorized_keys.new"
+cp -L "${ORIGIN}" "${HOMEDIR}/.ssh/authorized_keys.new"
 chmod 600 "${HOMEDIR}/.ssh/authorized_keys.new"
 chown -R "${ACCOUNT}:${GROUP}" "${HOMEDIR}"
 chcon --reference="${HOMEDIR}/.ssh/authorized_keys" "${HOMEDIR}/.ssh/authorized_keys.new"

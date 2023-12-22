@@ -202,6 +202,7 @@ mod tests {
             ComputeAllocation::default(),
             Cycles::new(1_000_000),
             Cycles::zero(),
+            None,
             BTreeMap::new(),
             CyclesAccountManager::new(
                 NumInstructions::from(1_000_000_000),
@@ -253,6 +254,7 @@ mod tests {
             ),
             globals,
             canister_current_memory_usage: NumBytes::from(0),
+            canister_current_message_memory_usage: NumBytes::from(0),
             execution_parameters: execution_parameters(),
             subnet_available_memory: SubnetAvailableMemory::new(
                 i64::MAX / 2,
@@ -281,6 +283,7 @@ mod tests {
             ),
             globals,
             canister_current_memory_usage: NumBytes::from(0),
+            canister_current_message_memory_usage: NumBytes::from(0),
             execution_parameters: execution_parameters(),
             subnet_available_memory: SubnetAvailableMemory::new(
                 i64::MAX / 2,
@@ -298,7 +301,7 @@ mod tests {
         pub ControllerService {
         }
 
-        trait ControllerService {
+        impl ControllerService for ControllerService {
             fn execution_finished(
                 &self, req : protocol::ctlsvc::ExecutionFinishedRequest
             ) -> rpc::Call<protocol::ctlsvc::ExecutionFinishedReply>;

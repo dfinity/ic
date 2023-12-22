@@ -30,7 +30,7 @@ use ic_test_utilities::consensus::fake::FakeVerifier;
 use ic_test_utilities_registry::{
     add_subnet_record, insert_initial_dkg_transcript, SubnetRecordBuilder,
 };
-use ic_types::batch::BatchMessages;
+use ic_types::batch::{BatchMessages, BlockmakerMetrics};
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::{
     batch::Batch,
@@ -167,7 +167,7 @@ pub fn run_drun(uo: DrunOptions) -> Result<(), String> {
     // Hardcoded magic values to create a ReplicaConfig that parses.
     let mut subnet_config = SubnetConfig::new(subnet_type);
 
-    // If an intruction limit was specified, update the config with the provided instruction limit.
+    // If an instruction limit was specified, update the config with the provided instruction limit.
     if let Some(instruction_limit) = instruction_limit {
         subnet_config.scheduler_config.max_instructions_per_message =
             NumInstructions::new(instruction_limit);
@@ -268,7 +268,7 @@ pub fn run_drun(uo: DrunOptions) -> Result<(), String> {
                 // http_handler::get_latest_certified_state_and_data_certificate
                 print_query_result(query_handler.query(
                     q,
-                    state_manager.get_latest_state().take(),
+                    state_manager.get_latest_state(),
                     Vec::new(),
                 ));
             }
@@ -349,6 +349,7 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
         registry_version: RegistryVersion::from(1),
         time: time::current_time(),
         consensus_responses: vec![],
+        blockmaker_metrics: BlockmakerMetrics::new_for_test(),
     }
 }
 /// Block till the given ingress message has finished executing and

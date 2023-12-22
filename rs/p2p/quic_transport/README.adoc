@@ -1,0 +1,70 @@
+
+= Transport = 
+:toc:
+
+== Overview ==
+
+The IC Transport layer enables message delivery between nodes within a subnet.
+
+== Requirements ==
+
+[cols="1,1"]
+|===
+| **What ?**
+| **Why ?**
+
+
+| https://en.wikipedia.org/wiki/Reliability_(computer_networking)[Reliable data delivery] - the sender knows if a message was delivered succesfully to the recepient.
+| Applications on top of the transport layer are simpler to implement when this abstraction exists. E.g. they don't need to re-implement TCP or QUIC.
+
+| https://en.wikipedia.org/wiki/Multiplexing[Multiplexing] - allowing messages to reach all the endpoints independently, and hence independent of packet losses involving other messages.
+| No head-of-line blocking delays. The transport layer implements a RPC-like abstraction that can process requests concurrently and independently.
+
+| https://en.wikipedia.org/wiki/Network_congestion#Congestion_control[Fair congestion control] - if a server is at capacity regardless of the reason then messages should be processed fairly across different connections.
+| In cases where a replica receives more requests than it can handle (e.g. malicious peer, bug, or it just cannot keep up with processing), messages from particular peer should not be favoured over other messages because it is unknown which peers are malicious.
+
+| Application specific handshake - TLS, SEV-SNP attestation.
+| Security.
+
+| Persistent connections.
+| P2P applications require fast exchange of data (e.g. ICP consensus protocol) so opening, closing and performing TLS handshake often introduces prohibitive high latency overhead.
+
+| Bounded memory.
+| There should be no operational burden. Having unbounded data structures implies there is high risk of nodes OOMing. If an OOM event happens most likely an operation mitigation is required in order to decrease the memory usage.
+
+|===
+
+
+== Architecture ==
+
+Transport is devided into two logical parts - sending and receiving.
+
+For the sending side, transport exposes two API calls - `+rpc+` and `+push+`. For both the `+push+` and `+rpc+` method calls, the caller specifies destination, payload and an URI.
+The key difference between the two is that the `+push+` method doesn't return a response from the receving side.
+It is effectively the same as `+rpc+` just slightly more performant because there is less data to be exchanged. 
+
+[source, rust]
+----
+    async fn rpc(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<Response<Bytes>, SendError>;
+
+    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), SendError>;
+----
+
+The receiving side, is a collection of callbacks, called handlers. Each possible URI is associated with a single handler. 
+When a message is received by transport, a handler is chosen using the URI and invoked with the payload (a.k.a. routing).
+
+== Handlers ==
+
+As a rule of thumb, if a handler doesn't return a response the sender should use the `+push+` method for sending data.
+
+A handler implements an async interface. This implies that a handler must satisfy all Tokio requirements for async code.
+Some handlers may use synchronous APIs that block the running thread for longer periods of time (>100 microseconds). 
+In order to make request processing https://docs.rs/tokio/latest/tokio/task/index.html[non-blocking], the handler can use a https://docs.rs/threadpool/latest/threadpool/[threadpool] and https://docs.rs/tokio/latest/tokio/sync/oneshot/index.html[Tokio oneshot channel] for communicating the result back.
+Job execution starts in the threadpool iff the parent task was not cancelled.
+A nice writeup about async and blocking operations can be found in https://ryhl.io/blog/async-what-is-blocking/[Alice Ryhl's blog post].
+
+== Implementation design decisions ==
+
+1. Use QUIC to statisfy the first two requirements ("Reliable data delivery" and "Multiplexing").
+2. Open new QUIC stream for each message, instead of one stream per handler/URI. TODO: explain.
+3. Handlers are always ready to process messages, hence the router is always ready to accept streams. TODO: explain.

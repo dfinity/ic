@@ -18,6 +18,7 @@ pub enum DkgKeyRemovalError {
     FsKeyNotInSecretKeyStoreError(KeyNotFoundError),
     TransientInternalError(InternalError),
     KeyNotFoundError(KeyNotFoundError),
+    KeyIdInstantiationError(InternalError),
 }
 
 impl fmt::Display for DkgKeyRemovalError {

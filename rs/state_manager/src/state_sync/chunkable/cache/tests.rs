@@ -24,7 +24,7 @@ impl TestEnvironment {
     fn new(log: ReplicaLogger) -> Self {
         let root_dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
         let cache = Arc::new(parking_lot::RwLock::new(StateSyncCache::new(log.clone())));
-        let metrics = StateManagerMetrics::new(&MetricsRegistry::new());
+        let metrics = StateManagerMetrics::new(&MetricsRegistry::new(), log.clone());
         let state_layout = StateLayout::try_new(
             log.clone(),
             root_dir.path().to_owned(),
@@ -74,14 +74,14 @@ fn fake_complete() -> DownloadState {
         version: StateSyncVersion::V0,
         sub_manifest_hashes: vec![],
     };
-    let artifact = Artifact::StateSync(StateSyncMessage {
+    let artifact = StateSyncMessage {
         height: Height::new(0),
         root_hash: CryptoHashOfState::from(CryptoHash(vec![0; 32])),
         checkpoint_root: PathBuf::new(),
         manifest,
         meta_manifest: Arc::new(meta_manifest),
         state_sync_file_group: Default::default(),
-    });
+    };
     DownloadState::Complete(Box::new(artifact))
 }
 

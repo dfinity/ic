@@ -2,21 +2,30 @@
 A macro to build multiple versions of the ICOS image (i.e., dev vs prod)
 """
 
-load("//toolchains/sysimage:toolchain.bzl", "disk_image", "docker_tar", "ext4_image", "sha256sum", "tar_extract", "upgrade_image")
-load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
-load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("//bazel:defs.bzl", "gzip_compress", "sha256sum2url", "zstd_compress")
 load("//bazel:output_files.bzl", "output_files")
-load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
+load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
+load("//toolchains/sysimage:toolchain.bzl", "build_container_filesystem", "disk_image", "ext4_image", "sha256sum", "tar_extract", "upgrade_image")
 
-def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, upgrades = True, vuln_scan = True, visibility = None, ic_version = "//bazel:version.txt"):
+def icos_build(
+        name,
+        upload_prefix,
+        image_deps_func,
+        mode = None,
+        malicious = False,
+        upgrades = True,
+        vuln_scan = True,
+        visibility = None,
+        ic_version = "//bazel:version.txt"):
     """
     Generic ICOS build tooling.
 
     Args:
       name: Name for the generated filegroup.
       upload_prefix: Prefix to be used as the target when uploading
-      image_deps: Function to be used to generate image manifest
+      image_deps_func: Function to be used to generate image manifest
       mode: dev or prod. If not specified, will use the value of `name`
       malicious: if True, bundle the `malicious_replica`
       upgrades: if True, build upgrade images as well
@@ -28,7 +37,7 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
     if mode == None:
         mode = name
 
-    image_deps = image_deps(mode, malicious)
+    image_deps = image_deps_func(mode, malicious)
 
     # -------------------- Version management --------------------
 
@@ -38,6 +47,7 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
         out = "version.txt",
         allow_symlink = True,
         visibility = visibility,
+        tags = ["manual"],
     )
 
     if upgrades:
@@ -46,44 +56,33 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
             srcs = [":copy_version_txt"],
             outs = ["version-test.txt"],
             cmd = "sed -e 's/.*/&-test/' < $< > $@",
+            tags = ["manual"],
         )
 
     # -------------------- Build grub partition --------------------
 
-    build_grub_partition("partition-grub.tar", grub_config = image_deps.get("grub_config", default = None))
+    build_grub_partition("partition-grub.tar", grub_config = image_deps.get("grub_config", default = None), tags = ["manual"])
 
-    # -------------------- Build the docker image --------------------
+    # -------------------- Build the container image --------------------
 
-    build_args = ["BUILD_TYPE=" + mode]
+    build_container_filesystem_config_file = Label(image_deps.get("build_container_filesystem_config_file"))
 
-    # set root password only in dev mode
-    if mode == "dev":
-        build_args.extend(["ROOT_PASSWORD=root"])
-
-    elif mode == "dev-sev":
-        build_args.extend(["ROOT_PASSWORD=root"])
-
-    file_build_args = {image_deps["base_image"]: "BASE_IMAGE"}
-
-    docker_tar(
-        visibility = visibility,
+    build_container_filesystem(
         name = "rootfs-tree.tar",
-        dep = [image_deps["docker_context"]],
-        build_args = build_args,
-        file_build_args = file_build_args,
-        target_compatible_with = [
-            "@platforms//os:linux",
-        ],
+        context_files = [image_deps["container_context_files"]],
+        config_file = build_container_filesystem_config_file,
+        target_compatible_with = ["@platforms//os:linux"],
+        tags = ["manual"],
     )
 
     tar_extract(
-        visibility = visibility,
         name = "file_contexts",
         src = "rootfs-tree.tar",
         path = "etc/selinux/default/contexts/files/file_contexts",
         target_compatible_with = [
             "@platforms//os:linux",
         ],
+        tags = ["manual"],
     )
 
     # -------------------- Extract root partition --------------------
@@ -104,13 +103,12 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
         strip_paths = [
             "/run",
             "/boot",
+            "/var",
         ],
         target_compatible_with = [
             "@platforms//os:linux",
         ],
-        # As it consumes version.txt it currently changes all the time - caching it makes no sense.
-        # TODO(IDX-2606): Remove when at least dev images will use stable version.
-        tags = ["no-remote-cache"],
+        tags = ["manual"],
     )
 
     if upgrades:
@@ -134,22 +132,20 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
             target_compatible_with = [
                 "@platforms//os:linux",
             ],
-            # As it consumes version.txt it currently changes all the time - caching it makes no sense.
-            # TODO(IDX-2606): Remove when at least dev images will use stable version.
-            tags = ["no-remote-cache"],
+            tags = ["manual"],
         )
 
     # -------------------- Extract boot partition --------------------
 
     if "boot_args_template" not in image_deps:
-        native.alias(name = "partition-root.tar", actual = ":partition-root-unsigned.tar", visibility = [Label("//visibility:private")])
-        native.alias(name = "extra_boot_args", actual = image_deps["extra_boot_args"], visibility = [Label("//visibility:private")])
+        native.alias(name = "partition-root.tar", actual = ":partition-root-unsigned.tar")
+        native.alias(name = "extra_boot_args", actual = image_deps["extra_boot_args"])
 
         if upgrades:
-            native.alias(name = "partition-root-test.tar", actual = ":partition-root-test-unsigned.tar", visibility = [Label("//visibility:private")])
-            native.alias(name = "extra_boot_test_args", actual = image_deps["extra_boot_args"], visibility = [Label("//visibility:private")])
+            native.alias(name = "partition-root-test.tar", actual = ":partition-root-test-unsigned.tar")
+            native.alias(name = "extra_boot_test_args", actual = image_deps["extra_boot_args"])
     else:
-        native.alias(name = "extra_boot_args_template", actual = image_deps["boot_args_template"], visibility = [Label("//visibility:private")])
+        native.alias(name = "extra_boot_args_template", actual = image_deps["boot_args_template"])
 
         native.genrule(
             name = "partition-root-sign",
@@ -158,9 +154,7 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
             cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tar) -r $(location partition-root-hash)",
             executable = False,
             tools = ["//toolchains/sysimage:verity_sign.py"],
-            # As it consumes partition-root-unsigned.tar that uses version.txt it currently changes all the time - caching it makes no sense.
-            # TODO(IDX-2606): Remove when at least dev images will use stable version.
-            tags = ["no-remote-cache"],
+            tags = ["manual"],
         )
 
         native.genrule(
@@ -171,6 +165,7 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
             ],
             outs = ["extra_boot_args"],
             cmd = "sed -e s/ROOT_HASH/$$(cat $(location :partition-root-hash))/ < $(location :extra_boot_args_template) > $@",
+            tags = ["manual"],
         )
 
         if upgrades:
@@ -180,6 +175,7 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
                 outs = ["partition-root-test.tar", "partition-root-test-hash"],
                 cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root-test.tar) -r $(location partition-root-test-hash)",
                 tools = ["//toolchains/sysimage:verity_sign.py"],
+                tags = ["manual"],
             )
 
             native.genrule(
@@ -190,6 +186,7 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
                 ],
                 outs = ["extra_boot_test_args"],
                 cmd = "sed -e s/ROOT_HASH/$$(cat $(location :partition-root-test-hash))/ < $(location :extra_boot_args_template) > $@",
+                tags = ["manual"],
             )
 
     ext4_image(
@@ -214,6 +211,7 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
         target_compatible_with = [
             "@platforms//os:linux",
         ],
+        tags = ["manual"],
     )
 
     if upgrades:
@@ -239,11 +237,12 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
             target_compatible_with = [
                 "@platforms//os:linux",
             ],
+            tags = ["manual"],
         )
 
     # -------------------- Assemble disk image --------------------
 
-    # Build a list of custom partitions with a funciton, to allow "injecting" build steps at this point
+    # Build a list of custom partitions with a function, to allow "injecting" build steps at this point
     if "custom_partitions" not in image_deps:
         custom_partitions = []
     else:
@@ -259,9 +258,7 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
             ":partition-root.tar",
         ] + custom_partitions,
         expanded_size = image_deps.get("expanded_size", default = None),
-        # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
-        # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
-        tags = ["no-remote-cache"],
+        tags = ["manual"],
         target_compatible_with = [
             "@platforms//os:linux",
         ],
@@ -270,32 +267,36 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
     zstd_compress(
         name = "disk-img.tar.zst",
         srcs = [":disk-img.tar"],
+        visibility = visibility,
+        tags = ["manual"],
     )
 
     sha256sum(
         name = "disk-img.tar.zst.sha256",
         srcs = [":disk-img.tar.zst"],
         visibility = visibility,
+        tags = ["manual"],
     )
 
     sha256sum2url(
         name = "disk-img.tar.zst.cas-url",
         src = ":disk-img.tar.zst.sha256",
         visibility = visibility,
+        tags = ["manual"],
     )
 
     gzip_compress(
         name = "disk-img.tar.gz",
         srcs = [":disk-img.tar"],
-        # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
-        # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
-        tags = ["no-remote-cache"],
         visibility = visibility,
+        tags = ["manual"],
     )
 
     sha256sum(
         name = "disk-img.tar.gz.sha256",
         srcs = [":disk-img.tar.gz"],
+        visibility = visibility,
+        tags = ["manual"],
     )
 
     # -------------------- Assemble upgrade image --------------------
@@ -305,9 +306,7 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
             name = "update-img.tar",
             boot_partition = ":partition-boot.tar",
             root_partition = ":partition-root.tar",
-            # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
-            # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
-            tags = ["no-remote-cache"],
+            tags = ["manual"],
             target_compatible_with = [
                 "@platforms//os:linux",
             ],
@@ -317,40 +316,43 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
         zstd_compress(
             name = "update-img.tar.zst",
             srcs = [":update-img.tar"],
+            visibility = visibility,
+            tags = ["manual"],
         )
 
         sha256sum(
             name = "update-img.tar.zst.sha256",
             srcs = [":update-img.tar.zst"],
             visibility = visibility,
+            tags = ["manual"],
         )
 
         sha256sum2url(
             name = "update-img.tar.zst.cas-url",
             src = ":update-img.tar.zst.sha256",
             visibility = visibility,
+            tags = ["manual"],
         )
 
         gzip_compress(
             name = "update-img.tar.gz",
             srcs = [":update-img.tar"],
-            # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
-            # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
-            tags = ["no-remote-cache"],
+            visibility = visibility,
+            tags = ["manual"],
         )
 
         sha256sum(
             name = "update-img.tar.gz.sha256",
             srcs = [":update-img.tar.gz"],
+            visibility = visibility,
+            tags = ["manual"],
         )
 
         upgrade_image(
             name = "update-img-test.tar",
             boot_partition = ":partition-boot-test.tar",
             root_partition = ":partition-root-test.tar",
-            # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
-            # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
-            tags = ["no-remote-cache"],
+            tags = ["manual"],
             target_compatible_with = [
                 "@platforms//os:linux",
             ],
@@ -360,31 +362,36 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
         zstd_compress(
             name = "update-img-test.tar.zst",
             srcs = [":update-img-test.tar"],
+            visibility = visibility,
+            tags = ["manual"],
         )
 
         sha256sum(
             name = "update-img-test.tar.zst.sha256",
             srcs = [":update-img-test.tar.zst"],
             visibility = visibility,
+            tags = ["manual"],
         )
 
         sha256sum2url(
             name = "update-img-test.tar.zst.cas-url",
             src = ":update-img-test.tar.zst.sha256",
             visibility = visibility,
+            tags = ["manual"],
         )
 
         gzip_compress(
             name = "update-img-test.tar.gz",
             srcs = [":update-img-test.tar"],
-            # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
-            # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
-            tags = ["no-remote-cache"],
+            visibility = visibility,
+            tags = ["manual"],
         )
 
         sha256sum(
             name = "update-img-test.tar.gz.sha256",
             srcs = [":update-img-test.tar.gz"],
+            visibility = visibility,
+            tags = ["manual"],
         )
 
     # -------------------- Upload artifacts --------------------
@@ -405,13 +412,14 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
                 ":disk-img.tar.gz",
             ],
             remote_subdir = upload_prefix + "/disk-img" + upload_suffix,
+            visibility = visibility,
         )
 
         output_files(
             name = "disk-img-url",
             target = ":upload_disk-img",
             basenames = ["upload_disk-img_disk-img.tar.zst.url"],
-            visibility = ["//visibility:public"],
+            visibility = visibility,
             tags = ["manual"],
         )
 
@@ -426,6 +434,14 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
                 ],
                 remote_subdir = upload_prefix + "/update-img" + upload_suffix,
                 visibility = visibility,
+            )
+
+            output_files(
+                name = "update-img-url",
+                target = ":upload_update-img",
+                basenames = ["upload_update-img_update-img.tar.zst.url"],
+                visibility = visibility,
+                tags = ["manual"],
             )
 
     # end if upload_prefix != None
@@ -443,10 +459,90 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
             ],
             env = {
                 "trivy_path": "$(rootpath @trivy//:trivy)",
-                "DOCKER_TAR": "$(rootpaths :rootfs-tree.tar)",
+                "CONTAINER_TAR": "$(rootpaths :rootfs-tree.tar)",
                 "TEMPLATE_FILE": "$(rootpath //ic-os:vuln-scan/vuln-scan.html)",
             },
+            tags = ["manual"],
         )
+
+    # -------------------- VM Developer Tools --------------------
+
+    native.genrule(
+        name = "launch-remote-vm",
+        srcs = [
+            "//rs/ic_os/launch-single-vm",
+            ":disk-img.tar.zst.cas-url",
+            ":disk-img.tar.zst.sha256",
+            "//ic-os:scripts/build-bootstrap-config-image.sh",
+            ":version.txt",
+        ],
+        outs = ["launch_remote_vm_script"],
+        cmd = """
+        BIN="$(location //rs/ic_os/launch-single-vm:launch-single-vm)"
+        VERSION="$$(cat $(location :version.txt))"
+        URL="$$(cat $(location :disk-img.tar.zst.cas-url))"
+        SHA="$$(cat $(location :disk-img.tar.zst.sha256))"
+        SCRIPT="$(location //ic-os:scripts/build-bootstrap-config-image.sh)"
+        cat <<EOF > $@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "\\$$BUILD_WORKSPACE_DIRECTORY"
+$$BIN --version "$$VERSION" --url "$$URL" --sha256 "$$SHA" --build-bootstrap-script "$$SCRIPT"
+EOF
+        """,
+        executable = True,
+        tags = ["manual"],
+    )
+
+    native.genrule(
+        name = "launch-local-vm",
+        srcs = [
+            ":disk-img.tar",
+        ],
+        outs = ["launch_local_vm_script"],
+        cmd = """
+        IMAGE="$(location :disk-img.tar)"
+        cat <<EOF > $@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "\\$$BUILD_WORKSPACE_DIRECTORY"
+TEMP=\\$$(mktemp -d)
+CID=\\$$((\\$$RANDOM + 3))
+cp $$IMAGE \\$$TEMP
+cd \\$$TEMP
+tar xf disk-img.tar
+qemu-system-x86_64 -machine type=q35,accel=kvm -enable-kvm -nographic -m 4G -bios /usr/share/OVMF/OVMF_CODE.fd -device vhost-vsock-pci,guest-cid=\\$$CID -drive file=disk.img,format=raw,if=virtio
+EOF
+        """,
+        executable = True,
+        tags = ["manual"],
+    )
+
+    # Same as above but without KVM support to run inside VMs and containers
+    # VHOST for nested VMs is not configured at the moment (should be possible)
+    native.genrule(
+        name = "launch-local-vm-no-kvm",
+        srcs = [
+            ":disk-img.tar",
+        ],
+        outs = ["launch_local_vm_script_no_kvm"],
+        cmd = """
+        IMAGE="$(location :disk-img.tar)"
+        cat <<EOF > $@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "\\$$BUILD_WORKSPACE_DIRECTORY"
+TEMP=\\$$(mktemp -d)
+CID=\\$$((\\$$RANDOM + 3))
+cp $$IMAGE \\$$TEMP
+cd \\$$TEMP
+tar xf disk-img.tar
+qemu-system-x86_64 -machine type=q35 -nographic -m 4G -bios /usr/share/OVMF/OVMF_CODE.fd -drive file=disk.img,format=raw,if=virtio
+EOF
+        """,
+        executable = True,
+        tags = ["manual"],
+    )
 
     # -------------------- final "return" target --------------------
     # The good practice is to have the last target in the macro with `name = name`.
@@ -468,13 +564,19 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
 
 # end def icos_build
 
-def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibility = None, ic_version = "//bazel:version.txt"):
+def boundary_node_icos_build(
+        name,
+        image_deps_func,
+        mode = None,
+        sev = False,
+        visibility = None,
+        ic_version = "//bazel:version.txt"):
     """
     A boundary node ICOS build parameterized by mode.
 
     Args:
       name: Name for the generated filegroup.
-      image_deps: Function to be used to generate image manifest
+      image_deps_func: Function to be used to generate image manifest
       mode: dev, or prod. If not specified, will use the value of `name`
       sev: if True, build an SEV-SNP enabled image
       visibility: See Bazel documentation
@@ -483,26 +585,7 @@ def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibil
     if mode == None:
         mode = name
 
-    image_deps = image_deps(mode, sev = sev)
-
-    rootfs_args = []
-
-    if mode == "dev":
-        rootfs_args = [
-            "ROOT_PASSWORD=root",
-            "SW=false",
-        ]
-    elif mode == "prod":
-        rootfs_args = [
-            "ROOT_PASSWORD=",
-            "SW=true",
-        ]
-
-    if sev:
-        base_suffix = "snp"
-    else:
-        base_suffix = "prod"
-    file_build_args = {"//ic-os/boundary-guestos:rootfs/docker-base." + base_suffix: "BASE_IMAGE"}
+    image_deps = image_deps_func(mode, sev = sev)
 
     native.sh_binary(
         name = "vuln-scan",
@@ -514,24 +597,22 @@ def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibil
         ],
         env = {
             "trivy_path": "$(rootpath @trivy//:trivy)",
-            "DOCKER_TAR": "$(rootpaths :rootfs-tree.tar)",
+            "CONTAINER_TAR": "$(rootpaths :rootfs-tree.tar)",
             "TEMPLATE_FILE": "$(rootpath //ic-os:vuln-scan/vuln-scan.html)",
         },
+        tags = ["manual"],
     )
 
     build_grub_partition("partition-grub.tar")
 
-    docker_tar(
-        visibility = visibility,
+    build_container_filesystem_config_file = Label(image_deps["build_container_filesystem_config_file"])
+
+    build_container_filesystem(
         name = "rootfs-tree.tar",
-        dep = ["//ic-os/boundary-guestos:rootfs-files"],
-        build_args = [
-            "BUILD_TYPE=" + mode,
-        ] + rootfs_args,
-        file_build_args = file_build_args,
-        target_compatible_with = [
-            "@platforms//os:linux",
-        ],
+        context_files = ["//ic-os/boundary-guestos:rootfs-files"],
+        config_file = build_container_filesystem_config_file,
+        target_compatible_with = ["@platforms//os:linux"],
+        tags = ["manual"],
     )
 
     ext4_image(
@@ -540,6 +621,7 @@ def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibil
         target_compatible_with = [
             "@platforms//os:linux",
         ],
+        tags = ["manual"],
     )
 
     copy_file(
@@ -547,6 +629,7 @@ def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibil
         src = ic_version,
         out = "version.txt",
         allow_symlink = True,
+        tags = ["manual"],
     )
 
     ext4_image(
@@ -571,6 +654,7 @@ def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibil
         target_compatible_with = [
             "@platforms//os:linux",
         ],
+        tags = ["manual"],
     )
 
     ext4_image(
@@ -589,9 +673,7 @@ def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibil
             "/run",
             "/boot",
         ],
-        # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
-        # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
-        tags = ["no-remote-cache"],
+        tags = ["manual"],
         target_compatible_with = [
             "@platforms//os:linux",
         ],
@@ -604,6 +686,7 @@ def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibil
         cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tar) -r $(location partition-root-hash)",
         executable = False,
         tools = ["//toolchains/sysimage:verity_sign.py"],
+        tags = ["manual"],
     )
 
     native.genrule(
@@ -614,6 +697,7 @@ def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibil
         ],
         outs = ["extra_boot_args"],
         cmd = "sed -e s/ROOT_HASH/$$(cat $(location :partition-root-hash))/ < $(location //ic-os/boundary-guestos:bootloader/extra_boot_args.template) > $@",
+        tags = ["manual"],
     )
 
     disk_image(
@@ -627,9 +711,7 @@ def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibil
             ":partition-root.tar",
         ],
         expanded_size = "50G",
-        # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
-        # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
-        tags = ["no-remote-cache"],
+        tags = ["manual"],
         target_compatible_with = [
             "@platforms//os:linux",
         ],
@@ -638,26 +720,36 @@ def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibil
     zstd_compress(
         name = "disk-img.tar.zst",
         srcs = ["disk-img.tar"],
+        visibility = visibility,
+        tags = ["manual"],
     )
 
     sha256sum(
         name = "disk-img.tar.zst.sha256",
         srcs = [":disk-img.tar.zst"],
         visibility = visibility,
+        tags = ["manual"],
     )
 
     sha256sum2url(
         name = "disk-img.tar.zst.cas-url",
         src = ":disk-img.tar.zst.sha256",
         visibility = visibility,
+        tags = ["manual"],
     )
 
     gzip_compress(
         name = "disk-img.tar.gz",
         srcs = ["disk-img.tar"],
-        # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
-        # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
-        tags = ["no-remote-cache"],
+        visibility = visibility,
+        tags = ["manual"],
+    )
+
+    sha256sum(
+        name = "disk-img.tar.gz.sha256",
+        srcs = [":disk-img.tar.gz"],
+        visibility = visibility,
+        tags = ["manual"],
     )
 
     upload_suffix = ""
@@ -673,12 +765,14 @@ def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibil
             ":disk-img.tar.gz",
         ],
         remote_subdir = "boundary-os/disk-img" + upload_suffix,
+        visibility = visibility,
     )
 
     output_files(
         name = "disk-img-url",
         target = ":upload_disk-img",
         basenames = ["upload_disk-img_disk-img.tar.zst.url"],
+        visibility = visibility,
         tags = ["manual"],
     )
 
@@ -688,13 +782,18 @@ def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibil
         visibility = visibility,
     )
 
-def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None, ic_version = "//bazel:version.txt"):
+def boundary_api_guestos_build(
+        name,
+        image_deps_func,
+        mode = None,
+        visibility = None,
+        ic_version = "//bazel:version.txt"):
     """
     A boundary API GuestOS build parameterized by mode.
 
     Args:
       name: Name for the generated filegroup.
-      image_deps: Function to be used to generate image manifest
+      image_deps_func: Function to be used to generate image manifest
       mode: dev, or prod. If not specified, will use the value of `name`
       visibility: See Bazel documentation
       ic_version: the label pointing to the target that returns IC version
@@ -702,18 +801,7 @@ def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None,
     if mode == None:
         mode = name
 
-    image_deps = image_deps()
-
-    rootfs_args = []
-
-    if mode == "dev":
-        rootfs_args = [
-            "ROOT_PASSWORD=root",
-        ]
-    elif mode == "prod":
-        rootfs_args = [
-            "ROOT_PASSWORD=",
-        ]
+    image_deps = image_deps_func(mode)
 
     native.sh_binary(
         name = "vuln-scan",
@@ -725,26 +813,22 @@ def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None,
         ],
         env = {
             "trivy_path": "$(rootpath @trivy//:trivy)",
-            "DOCKER_TAR": "$(rootpaths :rootfs-tree.tar)",
+            "CONTAINER_TAR": "$(rootpaths :rootfs-tree.tar)",
             "TEMPLATE_FILE": "$(rootpath //ic-os:vuln-scan/vuln-scan.html)",
         },
+        tags = ["manual"],
     )
 
     build_grub_partition("partition-grub.tar")
 
-    docker_tar(
-        visibility = visibility,
+    build_container_filesystem_config_file = Label(image_deps["build_container_filesystem_config_file"])
+
+    build_container_filesystem(
         name = "rootfs-tree.tar",
-        dep = ["//ic-os/boundary-api-guestos:rootfs-files"],
-        build_args = [
-            "BUILD_TYPE=" + mode,
-        ] + rootfs_args,
-        file_build_args = {
-            "//ic-os/boundary-api-guestos:rootfs/docker-base.prod": "BASE_IMAGE",
-        },
-        target_compatible_with = [
-            "@platforms//os:linux",
-        ],
+        context_files = ["//ic-os/boundary-api-guestos:rootfs-files"],
+        config_file = build_container_filesystem_config_file,
+        target_compatible_with = ["@platforms//os:linux"],
+        tags = ["manual"],
     )
 
     ext4_image(
@@ -753,6 +837,7 @@ def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None,
         target_compatible_with = [
             "@platforms//os:linux",
         ],
+        tags = ["manual"],
     )
 
     copy_file(
@@ -760,6 +845,7 @@ def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None,
         src = ic_version,
         out = "version.txt",
         allow_symlink = True,
+        tags = ["manual"],
     )
 
     ext4_image(
@@ -784,6 +870,7 @@ def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None,
         target_compatible_with = [
             "@platforms//os:linux",
         ],
+        tags = ["manual"],
     )
 
     ext4_image(
@@ -805,6 +892,7 @@ def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None,
         target_compatible_with = [
             "@platforms//os:linux",
         ],
+        tags = ["manual"],
     )
 
     native.genrule(
@@ -814,6 +902,7 @@ def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None,
         cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tar) -r $(location partition-root-hash)",
         executable = False,
         tools = ["//toolchains/sysimage:verity_sign.py"],
+        tags = ["manual"],
     )
 
     native.genrule(
@@ -824,6 +913,7 @@ def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None,
         ],
         outs = ["extra_boot_args"],
         cmd = "sed -e s/ROOT_HASH/$$(cat $(location :partition-root-hash))/ < $(location //ic-os/boundary-api-guestos:bootloader/extra_boot_args.template) > $@",
+        tags = ["manual"],
     )
 
     disk_image(
@@ -840,28 +930,42 @@ def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None,
         target_compatible_with = [
             "@platforms//os:linux",
         ],
+        tags = ["manual"],
     )
 
     zstd_compress(
         name = "disk-img.tar.zst",
         srcs = ["disk-img.tar"],
+        visibility = visibility,
+        tags = ["manual"],
     )
 
     sha256sum(
         name = "disk-img.tar.zst.sha256",
         srcs = [":disk-img.tar.zst"],
         visibility = visibility,
+        tags = ["manual"],
     )
 
     sha256sum2url(
         name = "disk-img.tar.zst.cas-url",
         src = ":disk-img.tar.zst.sha256",
         visibility = visibility,
+        tags = ["manual"],
     )
 
     gzip_compress(
         name = "disk-img.tar.gz",
         srcs = ["disk-img.tar"],
+        visibility = visibility,
+        tags = ["manual"],
+    )
+
+    sha256sum(
+        name = "disk-img.tar.gz.sha256",
+        srcs = [":disk-img.tar.gz"],
+        visibility = visibility,
+        tags = ["manual"],
     )
 
     upload_suffix = ""
@@ -882,6 +986,7 @@ def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None,
         name = "disk-img-url",
         target = ":upload_disk-img",
         basenames = ["upload_disk-img_disk-img.tar.zst.url"],
+        visibility = visibility,
         tags = ["manual"],
     )
 

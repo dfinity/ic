@@ -5,30 +5,56 @@
 # directory must be a valid corpus.
 
 set -x
-# Create a dummy input directory
+
 # If you would like to include your own corpus,
-# INPUT_DIR=/path/to/corpus
-INPUT_DIR=$(mktemp -d)
-echo "A dummy corpus file to make AFL work" >$INPUT_DIR/seed_corpus.txt
+# export INPUT_DIR=/path/to/corpus
+if [[ -z "$INPUT_DIR" ]]; then
+    INPUT_DIR=$(mktemp -d)
+    echo "A dummy corpus file to make AFL work" >$INPUT_DIR/seed_corpus.txt
+fi
 
 # Output directory
-OUTPUT_DIR=$(mktemp -d)
+if [[ -z "$OUTPUT_DIR" ]]; then
+    OUTPUT_DIR=$(mktemp -d)
+fi
+
+cleanup() {
+    echo "Input directory ${INPUT_DIR}"
+    echo "Output directory ${OUTPUT_DIR}"
+}
+
+trap cleanup EXIT
+
+# This allows us to skip false positive crashes for wasm runtime
+if [[ "$1" == *"wasmtime"* ]] || [[ "$1" == *"wasm_executor"* ]]; then
+    # We handle segv for wasm execution
+    ALLOW_USER_SEGV_HANDLER=1
+    # SIGILL is used to handle unreachable
+    HANDLE_SIGILL=0
+    HANDLE_SEGV=1
+    HANDLE_SIGFPE=1
+else
+    ALLOW_USER_SEGV_HANDLER=0
+    HANDLE_SIGILL=2
+    HANDLE_SEGV=2
+    HANDLE_SIGFPE=2
+fi
 
 ASAN_OPTIONS="abort_on_error=1:\
-            alloc_dealloc_mismach=0:\
+            alloc_dealloc_mismatch=0:\
             allocator_may_return_null=1:\
             allocator_release_to_os_interval_ms=500:\
-            allow_user_segv_handler=0:\
+            allow_user_segv_handler=$ALLOW_USER_SEGV_HANDLER:\
             check_malloc_usable_size=0:\
             detect_leaks=0:\
             detect_odr_violation=0:\
             detect_stack_use_after_return=1:\
             fast_unwind_on_fatal=0:\
             handle_abort=2:\
-            handle_segv=2:\
+            handle_segv=$HANDLE_SEGV:\
             handle_sigbus=2:\
-            handle_sigfpe=2:\
-            handle_sigill=2:\
+            handle_sigfpe=$HANDLE_SIGFPE:\
+            handle_sigill=$HANDLE_SIGILL:\
             max_uar_stack_size_log=16:\
             print_scariness=1:\
             print_summary=1:\
@@ -43,7 +69,7 @@ LSAN_OPTIONS="handle_abort=1:\
             handle_segv=1:\
             handle_sigbus=1:\
             handle_sigfpe=1:\
-            handle_sigill=1:\
+            handle_sigill=$HANDLE_SIGILL:\
             print_summary=1:\
             print_suppressions=0:\
             symbolize=0:\

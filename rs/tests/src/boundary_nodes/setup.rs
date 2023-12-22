@@ -3,6 +3,7 @@ use crate::{
         api_boundary_node::{ApiBoundaryNode, ApiBoundaryNodeVm},
         boundary_node::{BoundaryNode, BoundaryNodeVm},
         ic::{InternetComputer, Subnet},
+        prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
         test_env_api::{
             retry_async, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
@@ -40,6 +41,9 @@ pub fn setup_ic_with_bn(
     env: TestEnv,
 ) {
     let log = env.logger();
+    PrometheusVm::default()
+        .start(&env)
+        .expect("failed to start prometheus VM");
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
@@ -105,9 +109,6 @@ pub fn setup_ic_with_bn(
     ))
     .unwrap_or_else(|_| panic!("Failed to poll registry. This is not an {bn_type:#?} error. It is a test environment issue."));
     info!(log, "Latest registry {latest}: {routes:?}");
-    info!(log, "Waiting for routes file");
-    let routes_path = "/var/opt/nginx/ic/ic_routes.js";
-    let sleep_command = format!("while grep -q '// PLACEHOLDER' {routes_path}; do sleep 5; done");
     match bn_type {
         BoundaryNodeType::BoundaryNode => {
             let bn = env
@@ -120,12 +121,6 @@ pub fn setup_ic_with_bn(
                 log,
                 "Boundary node {bn_name} has IPv4 {:?}",
                 bn.block_on_ipv4().unwrap()
-            );
-            let cmd_output = bn.block_on_bash_script(&sleep_command);
-            info!(
-                log,
-                "Boundary node {bn_name} ran `{sleep_command}`: '{}'",
-                cmd_output.unwrap().trim(),
             );
             info!(log, "Checking BN health");
             bn.await_status_is_healthy()
@@ -149,12 +144,6 @@ pub fn setup_ic_with_bn(
                 "Api Boundary node {bn_name} has IPv4 {:?}",
                 bn.block_on_ipv4().unwrap()
             );
-            let cmd_output = bn.block_on_bash_script(&sleep_command);
-            info!(
-                log,
-                "Api boundary node {bn_name} ran `{sleep_command}`: '{}'",
-                cmd_output.unwrap().trim(),
-            );
             info!(log, "Checking API BN health");
             bn.await_status_is_healthy()
                 .expect("Api Boundary node did not come up healthy.");
@@ -166,4 +155,35 @@ pub fn setup_ic_with_bn(
             debug!(log, "systemctl {bn_name} = '{list_dependencies}'");
         }
     };
+    env.sync_with_prometheus();
+}
+
+pub fn setup_ic(env: TestEnv) {
+    let log = env.logger();
+    PrometheusVm::default()
+        .start(&env)
+        .expect("failed to start prometheus VM");
+    InternetComputer::new()
+        .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
+        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
+        .with_unassigned_nodes(2)
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
+    let nns_node = env
+        .topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .unwrap();
+    NnsInstallationBuilder::new()
+        .install(&nns_node, &env)
+        .expect("could not install NNS canisters");
+    info!(&log, "Checking readiness of all replica nodes ...");
+    for subnet in env.topology_snapshot().subnets() {
+        for node in subnet.nodes() {
+            node.await_status_is_healthy()
+                .expect("Replica did not come up healthy.");
+        }
+    }
+    env.sync_with_prometheus();
 }

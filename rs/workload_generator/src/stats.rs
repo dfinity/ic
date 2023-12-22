@@ -346,7 +346,7 @@ impl fmt::Display for Summary {
                 11 => "workload generator: update send failed",
                 33 => "workload generator: update request status rejected",
                 44 => {
-                    "workload generator: timed out before update reuqest status rejected or replied"
+                    "workload generator: timed out before update request status rejected or replied"
                 }
                 _ => "HTTP status code",
             };

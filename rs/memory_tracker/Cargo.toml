@@ -1,23 +1,23 @@
 [package]
 name = "memory_tracker"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bit-vec = "0.5"
+bit-vec = "0.6.3"
 ic-logger = { path = "../monitoring/logger" }
 ic-config = { path = "../config" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-sys = { path = "../sys" }
 ic-utils = { path = "../utils" }
 libc = "0.2.91"
-nix = "0.23.0"
-slog = { version = "2.5.2", features = [
-    "nested-values",
-    "release_max_level_debug",
-] }
+nix = { workspace = true }
+slog = { workspace = true }
 lazy_static = "1.4.0"
 
 [features]

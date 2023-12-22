@@ -97,6 +97,14 @@ impl EccCurveType {
         }
     }
 
+    pub fn from_algorithm(alg_id: ic_types::crypto::AlgorithmId) -> Option<Self> {
+        match alg_id {
+            AlgorithmId::ThresholdEcdsaSecp256k1 => Some(EccCurveType::K256),
+            AlgorithmId::ThresholdEcdsaSecp256r1 => Some(EccCurveType::P256),
+            _ => None,
+        }
+    }
+
     /// Return a vector over all available curve types
     ///
     /// This is mostly useful for tests
@@ -299,8 +307,8 @@ impl EccScalar {
     }
 
     pub fn from_seed(curve: EccCurveType, seed: Seed) -> Self {
-        let mut rng = seed.into_rng();
-        Self::random(curve, &mut rng)
+        let rng = &mut seed.into_rng();
+        Self::random(curve, rng)
     }
 
     /// Return true iff self is equal to zero
@@ -388,6 +396,16 @@ impl<'de> Deserialize<'de> for EccScalar {
 #[derive(Clone, Eq, PartialEq, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 pub enum EccScalarBytes {
     K256(Box<[u8; 32]>),
+    P256(Box<[u8; 32]>),
+}
+
+impl EccScalarBytes {
+    pub fn curve_type(&self) -> EccCurveType {
+        match self {
+            Self::K256(_) => EccCurveType::K256,
+            Self::P256(_) => EccCurveType::P256,
+        }
+    }
 }
 
 impl TryFrom<&EccScalarBytes> for EccScalar {
@@ -396,6 +414,7 @@ impl TryFrom<&EccScalarBytes> for EccScalar {
     fn try_from(bytes: &EccScalarBytes) -> ThresholdEcdsaSerializationResult<Self> {
         match bytes {
             EccScalarBytes::K256(raw) => EccScalar::deserialize(EccCurveType::K256, raw.as_ref()),
+            EccScalarBytes::P256(raw) => EccScalar::deserialize(EccCurveType::P256, raw.as_ref()),
         }
     }
 }
@@ -410,8 +429,10 @@ impl TryFrom<&EccScalar> for EccScalarBytes {
                     ThresholdEcdsaSerializationError(format!("{:?}", e))
                 })?))
             }
-            _ => {
-                panic!("we don't support other curves yet at the higher layers");
+            EccCurveType::P256 => {
+                Ok(Self::P256(scalar.serialize().try_into().map_err(|e| {
+                    ThresholdEcdsaSerializationError(format!("{:?}", e))
+                })?))
             }
         }
     }
@@ -664,7 +685,7 @@ impl EccPoint {
         Ok(())
     }
 
-    pub fn is_precopmuted(&self) -> bool {
+    pub fn is_precomputed(&self) -> bool {
         self.precompute.is_some()
     }
 
@@ -706,7 +727,7 @@ impl EccPoint {
                 Ok(())
             }
             None => Err(ThresholdEcdsaError::InvalidArguments(String::from(
-                "No precopmuted information in EccPoint. Forgot to call precopmute()?",
+                "No precomputed information in EccPoint. Forgot to call precompute()?",
             ))),
         }
     }
@@ -748,7 +769,7 @@ impl EccPoint {
         use subtle::ConstantTimeEq;
         if points.is_empty() {
             return Err(ThresholdEcdsaError::InvalidArguments(String::from(
-                "The input to constant-time select from slice must contain at least one elememt",
+                "The input to constant-time select from slice must contain at least one element",
             )));
         }
         let mut result = Self::identity(points[0].curve_type());
@@ -800,7 +821,7 @@ impl EccPoint {
             match &pt.precompute {
                 Some(lut) => Ok(lut),
                 None => Err(ThresholdEcdsaError::InvalidArguments(String::from(
-                    "No precopmuted information in EccPoint. Forgot to call precompute()?",
+                    "No precomputed information in EccPoint. Forgot to call precompute()?",
                 ))),
             }
         };
@@ -910,17 +931,25 @@ impl EccPoint {
         Ok(accum)
     }
 
-    pub fn pedersen(scalar1: &EccScalar, scalar2: &EccScalar) -> ThresholdEcdsaResult<Self> {
-        let curve_type = scalar1.curve_type();
-        let g = Self::generator_g(curve_type);
-        let h = Self::generator_h(curve_type);
-        Self::mul_2_points(&g, scalar1, &h, scalar2)
+    /// Compute a Pedersen commitment
+    ///
+    /// Equivalent to EccPoint::mul_2_points(g, x, h, y) but takes
+    /// advantage of precomputation on g/h
+    pub fn pedersen(x: &EccScalar, y: &EccScalar) -> ThresholdEcdsaResult<Self> {
+        match x.curve_type() {
+            EccCurveType::P256 => PRECOMPUTED_PEDERSEN_GX_HY_P256.mul2(x, y),
+            other_curve => {
+                let g = Self::generator_g(other_curve);
+                let h = Self::generator_h(other_curve);
+                Self::mul_2_points(&g, x, &h, y)
+            }
+        }
     }
 
     pub fn mul_by_g(scalar: &EccScalar) -> Self {
         match scalar {
-            EccScalar::K256(s) => secp256k1::Point::generator().mul(s).into(),
-            EccScalar::P256(s) => secp256r1::Point::generator().mul(s).into(),
+            EccScalar::K256(s) => secp256k1::Point::mul_by_g(s).into(),
+            EccScalar::P256(s) => secp256r1::Point::mul_by_g(s).into(),
         }
     }
 
@@ -957,7 +986,7 @@ impl EccPoint {
     /// The output is in SEC1 format, and will be 1 header byte
     /// followed by a two field elements, which for K256 and P256 is
     /// 32 bytes long each.
-    fn serialize_uncompressed(&self) -> Vec<u8> {
+    pub fn serialize_uncompressed(&self) -> Vec<u8> {
         match &self.point {
             EccPointInternal::K256(pt) => pt.serialize_uncompressed(),
             EccPointInternal::P256(pt) => pt.serialize_uncompressed(),
@@ -1051,6 +1080,7 @@ impl EccPoint {
 
     /// # Errors
     /// * CurveMismatch in case of inconsistent points.
+    #[inline(always)]
     fn conditional_select(a: &Self, b: &Self, choice: Choice) -> ThresholdEcdsaResult<Self> {
         match (&a.point, &b.point) {
             (EccPointInternal::K256(pt_a), EccPointInternal::K256(pt_b)) => {
@@ -1065,6 +1095,7 @@ impl EccPoint {
 
     /// # Errors
     /// * CurveMismatch in case of inconsistent points.
+    #[inline(always)]
     fn conditional_assign(&mut self, other: &Self, choice: Choice) -> ThresholdEcdsaResult<()> {
         *self = Self::conditional_select(self, other, choice)?;
         Ok(())
@@ -1380,7 +1411,7 @@ pub struct NafLut {
 impl NafLut {
     /// Inclusive bounds of the LUT.
     /// Manually the bounds can be computed as an "all-one" NAF value, e.g.,
-    /// "1 0 1 0 1" for `window_size == 5` (recall that in NAF there can be no adjecent non-zero values)
+    /// "1 0 1 0 1" for `window_size == 5` (recall that in NAF there can be no adjacent non-zero values)
     const BOUND: [usize; 8] = [0, 1, 2, 5, 10, 21, 42, 85];
     pub const MIN_WINDOW_SIZE: usize = 3;
     pub const MAX_WINDOW_SIZE: usize = 7;
@@ -1483,5 +1514,165 @@ impl NafLut {
             num_negatives + (i.unsigned_abs() as usize) - lower_bound - 1
         };
         &self.multiplications[array_index]
+    }
+}
+
+lazy_static::lazy_static! {
+
+    static ref PRECOMPUTED_PEDERSEN_GX_HY_P256: EccPointMul2Table =
+       EccPointMul2Table::for_generators_of_curve(EccCurveType::P256).unwrap();
+
+}
+
+/// Structure for precomputed multiplication g*x+h*y
+///
+/// It works by precomputing a series of table, each of which
+/// consists of a linear combination of (a multiple of) g and h;
+/// each table is used for only a single window.
+///
+/// We use a 2 bit window, so in each iteration examine 4 bits of
+/// scalar (2 from x and 2 from y).
+///
+/// At each iteration we select a single element from the table. If
+/// all the bits of x and y are zero then the element is always the
+/// identity, which is omitted from each table to save space.
+///
+/// The first 15 elements are:
+///  [g, 2*g, 3*g, h, g + h, 2*g + h, 3*g + h, 2*h, g + 2*h, 2*g + 2*h, 3*g + 2*h, 3*h, g + 3*h, 2*g + 3*h, 3*g + 3*h]
+///
+/// The next 15 elements are the same except replace g with 4*g, and h
+/// by 4*h:
+///  [4*g, 8*g, 12*g, 4*h, 4*g + 4*h, ...]
+///
+/// And so on. During the online part of the algorithm, we examine two
+/// bits of x and two bits of y, and choose one of the table elements,
+/// adding it to our accumulator.
+///
+/// This approach is only competitive if g and h are very long lived;
+/// the precomputation step is quite expensive. It is intended for use
+/// with the standard generators, which are known at compile time.
+pub struct EccPointMul2Table {
+    table: Vec<EccPoint>,
+}
+
+impl EccPointMul2Table {
+    /// The number of bits we examine in each scalar per iteration
+    const WINDOW_BITS: usize = 2;
+    /// The value of 2^WINDOW_BITS
+    const WINDOW_ELEM: usize = 1 << Self::WINDOW_BITS;
+    // 2^(2*w) elements minus one (since it is always the identity)
+    const TABLE_ELEM_PER_BIT: usize = (1 << (2 * Self::WINDOW_BITS)) - 1;
+
+    pub fn for_generators_of_curve(curve: EccCurveType) -> ThresholdEcdsaResult<Self> {
+        let g = EccPoint::generator_g(curve);
+        let h = EccPoint::generator_h(curve);
+        Self::new(g, h)
+    }
+
+    pub fn new(mut x: EccPoint, mut y: EccPoint) -> ThresholdEcdsaResult<Self> {
+        let curve = x.curve_type();
+        let scalar_bits = curve.scalar_bits();
+        let table_size = Self::TABLE_ELEM_PER_BIT * scalar_bits;
+
+        let mut table = Vec::with_capacity(table_size);
+
+        for _ in 0..scalar_bits {
+            let x2 = x.double();
+            let x3 = x2.add_points(&x)?;
+            let x4 = x2.double();
+
+            let y2 = y.double();
+            let y3 = y2.add_points(&y)?;
+            let y4 = y2.double();
+
+            let x_w = [&x, &x2, &x3];
+            let y_w = [&y, &y2, &y3];
+
+            // compute linear combinations of x/y ignoring the case of i == 0
+            // as that is always the identity
+            for i in 1..1 + Self::TABLE_ELEM_PER_BIT {
+                let x_i = i % Self::WINDOW_ELEM;
+                let y_i = i / Self::WINDOW_ELEM;
+
+                let x_pt: Option<&EccPoint> = if x_i > 0 { Some(x_w[x_i - 1]) } else { None };
+                let y_pt: Option<&EccPoint> = if y_i > 0 { Some(y_w[y_i - 1]) } else { None };
+
+                // Avoid a point addition unless we have to combine two points:
+                let accum = match (x_pt, y_pt) {
+                    (Some(x), Some(y)) => x.add_points(y)?,
+                    (Some(x), None) => x.clone(),
+                    (None, Some(y)) => y.clone(),
+                    (None, None) => unreachable!("At least one bit is set in the index"),
+                };
+
+                table.push(accum);
+            }
+
+            x = x4;
+            y = y4;
+        }
+
+        Ok(Self { table })
+    }
+
+    /// Computes g*a + h*b where g and h are the points specified during construction
+    pub fn mul2(&self, a: &EccScalar, b: &EccScalar) -> ThresholdEcdsaResult<EccPoint> {
+        let curve = self.table[0].curve_type();
+
+        if a.curve_type() != curve || b.curve_type() != curve {
+            return Err(ThresholdEcdsaError::CurveMismatch);
+        }
+
+        let scalar_bits = curve.scalar_bits();
+
+        // The number of windows (of WINDOW_BITS size) required to examine every
+        // bit of a scalar of this curve.
+        let windows = (scalar_bits + Self::WINDOW_BITS - 1) / Self::WINDOW_BITS;
+
+        let s1 = a.serialize();
+        let s2 = b.serialize();
+
+        let mut accum = EccPoint::identity(curve);
+
+        for i in 0..windows {
+            let tbl_i =
+                &self.table[Self::TABLE_ELEM_PER_BIT * i..Self::TABLE_ELEM_PER_BIT * (i + 1)];
+
+            let w1 = Self::extract(&s1, windows - 1 - i);
+            let w2 = Self::extract(&s2, windows - 1 - i);
+
+            let w = w1 + (w2 << Self::WINDOW_BITS);
+
+            accum = accum.add_points(&Self::ct_select(tbl_i, w)?)?;
+        }
+
+        Ok(accum)
+    }
+
+    // Return the i'th 2-bit window of scalar
+    #[inline(always)]
+    fn extract(scalar: &[u8], i: usize) -> usize {
+        let b = scalar[i / 4];
+        let shift = 6 - 2 * (i % 4);
+        ((b >> shift) % 4) as usize
+    }
+
+    // Constant time table lookup
+    //
+    // This version is specifically adapted to this algorithm. If
+    // index is zero, then it returns the identity element. Otherwise
+    // it returns from[index-1].
+    #[inline(always)]
+    fn ct_select(from: &[EccPoint], index: usize) -> ThresholdEcdsaResult<EccPoint> {
+        use subtle::ConstantTimeEq;
+        let mut result = EccPoint::identity(from[0].curve_type());
+
+        let index = index.wrapping_sub(1);
+        for (i, val) in from.iter().enumerate() {
+            let choice = usize::ct_eq(&i, &index);
+            result = EccPoint::conditional_select(&result, val, choice)?;
+        }
+
+        Ok(result)
     }
 }

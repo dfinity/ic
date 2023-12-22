@@ -11,10 +11,11 @@ enum Source {
 
 // Returns the number of accessed pages for throughput computation.
 fn accessed_pages(step: usize) -> Option<Throughput> {
-    // The methods of `heap.wat` iterate over a 1GB memory region
-    // accessing 8 bytes for each step.
+    // The methods of `heap.wat` iterate over a 1GB memory region.
     let pages_in_step = (step + 4095) / 4096;
-    Some(Throughput::Elements(((1 << 30) / pages_in_step) as u64))
+    Some(Throughput::Elements(
+        ((1 << 30) / 4096 / pages_in_step) as u64,
+    ))
 }
 
 fn bench_name(method: &str, source: Source) -> String {

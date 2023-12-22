@@ -4,7 +4,10 @@
 // but it doesn't seem like making this always available creates much risk. A
 // the same time, trying to hide this behind "test" would create more hurdles.
 use super::*;
+use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1 as pb;
+use ic_neurons_fund::{PolynomialMatchingFunction, SerializableFunction};
+use ic_sns_swap::pb::v1::{IdealMatchedParticipationFunction, LinearScalingCoefficient};
 use lazy_static::lazy_static;
 
 // Alias types from crate::pb::v1::...
@@ -59,7 +62,7 @@ lazy_static! {
                 }),
             }),
         }),
-        ledger_parameters: Some(src::LedgerParameters {
+        ledger_parameters: Some(LedgerParameters {
             transaction_fee: Some(pb::Tokens { e8s: Some(11143) }),
             token_name: Some("Most valuable SNS of all time.".to_string()),
             token_symbol: Some("Kanye".to_string()),
@@ -122,11 +125,18 @@ lazy_static! {
             }),
 
             minimum_participants: Some(50),
-            minimum_icp: Some(pb::Tokens {
+
+            minimum_icp: if IS_MATCHED_FUNDING_ENABLED { None } else { Some(pb::Tokens {
                 e8s: Some(12_300_000_000),
-            }),
-            maximum_icp: Some(pb::Tokens {
+            })},
+            maximum_icp: if IS_MATCHED_FUNDING_ENABLED { None } else { Some(pb::Tokens {
                 e8s: Some(25_000_000_000),
+            })},
+            minimum_direct_participation_icp: Some(pb::Tokens {
+                e8s: Some(12_300_000_000-6_100_000_000), // Subtract neurons_fund_investment_icp
+            }),
+            maximum_direct_participation_icp: Some(pb::Tokens {
+                e8s: Some(25_000_000_000-6_100_000_000), // Subtract neurons_fund_investment_icp
             }),
             minimum_participant_icp: Some(pb::Tokens {
                 e8s:  Some(100_000_000)
@@ -140,7 +150,7 @@ lazy_static! {
                     seconds: Some(10_001),
                 })
             }),
-            start_time: Some(pb::GlobalTimeOfDay {
+            start_time: Some(GlobalTimeOfDay {
                seconds_after_utc_midnight: Some(0),
             }),
             duration: Some(pb::Duration {
@@ -150,6 +160,58 @@ lazy_static! {
             neurons_fund_investment_icp: Some(pb::Tokens {
                 e8s: Some(6_100_000_000),
             }),
+            neurons_fund_participation: Some(false),
         })
+    };
+
+    pub static ref CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING: CreateServiceNervousSystem = {
+        let swap_parameters = CREATE_SERVICE_NERVOUS_SYSTEM
+            .swap_parameters
+            .clone()
+            .unwrap();
+        CreateServiceNervousSystem {
+            swap_parameters: Some(src::SwapParameters {
+                minimum_direct_participation_icp: Some(pb::Tokens {
+                    e8s: Some(36_000 * E8),
+                }),
+                maximum_direct_participation_icp: Some(pb::Tokens {
+                    e8s: Some(45_000 * E8),
+                }),
+                minimum_participant_icp: Some(pb::Tokens {
+                    e8s: Some(50 * E8),
+                }),
+                maximum_participant_icp: Some(pb::Tokens {
+                    e8s: Some(1_000 * E8),
+                }),
+                // Unset legacy fields
+                minimum_icp: None,
+                maximum_icp: None,
+                neurons_fund_investment_icp: None,
+                neurons_fund_participation: Some(true),
+                ..swap_parameters
+            }),
+            ..CREATE_SERVICE_NERVOUS_SYSTEM.clone()
+        }
+    };
+
+    pub static ref NEURONS_FUND_PARTICIPATION_CONSTRAINTS: NeuronsFundParticipationConstraints = NeuronsFundParticipationConstraints {
+        min_direct_participation_threshold_icp_e8s: Some(
+            36_000 * E8,
+        ),
+        max_neurons_fund_participation_icp_e8s: Some(
+            45_000 * E8,
+        ),
+        coefficient_intervals: vec![LinearScalingCoefficient {
+            from_direct_participation_icp_e8s: Some(0),
+            to_direct_participation_icp_e8s: Some(u64::MAX),
+            slope_numerator: Some(1),
+            slope_denominator: Some(1),
+            intercept_icp_e8s: Some(0),
+        }],
+        ideal_matched_participation_function: Some(IdealMatchedParticipationFunction {
+            serialized_representation: Some(
+                PolynomialMatchingFunction::new(u64::MAX).unwrap().serialize(),
+            ),
+        }),
     };
 }

@@ -1,11 +1,14 @@
 [package]
 name = "ic-crypto-internal-basic-sig-der-utils"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 hex = "0.4.2"
-simple_asn1 = "0.6.1"
+simple_asn1 = { workspace = true }
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 ic-types = { path = "../../../../../types/types" }
 

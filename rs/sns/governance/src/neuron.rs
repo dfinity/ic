@@ -526,7 +526,7 @@ impl Neuron {
     /// for the voting power calculation.
     ///
     /// It it is determined as the sum of staked tokens and staked maturity
-    /// minus fees occured for rejected proposals made by this neuron.
+    /// minus fees occurred for rejected proposals made by this neuron.
     fn voting_power_stake_e8s(&self) -> u64 {
         self.cached_neuron_stake_e8s
             .saturating_sub(self.neuron_fees_e8s)
@@ -655,7 +655,7 @@ impl Neuron {
         for permission_type in &permission_types_to_remove {
             let permission_type_is_present = remaining_permission_types.remove(permission_type);
             if !permission_type_is_present {
-                missing_permissions.insert(NeuronPermissionType::from_i32(*permission_type));
+                missing_permissions.insert(NeuronPermissionType::try_from(*permission_type).ok());
             }
         }
 
@@ -713,7 +713,7 @@ impl Neuron {
             .iter()
             .filter_map(|p| {
                 let manage_principals_present = p.permission_type.iter().any(|permission| {
-                    NeuronPermissionType::from_i32(*permission)
+                    NeuronPermissionType::try_from(*permission).ok()
                         == Some(NeuronPermissionType::ManagePrincipals)
                 });
                 if manage_principals_present {
@@ -978,7 +978,7 @@ mod tests {
         }
 
         /// Tests that the voting power is not increased when the neuron meets
-        /// neither bonus criteria (age or disolve delay)
+        /// neither bonus criteria (age or dissolve delay)
         #[test]
         fn test_voting_power_not_eligible_for_boost(
             base_stake in 0u64..1_000_000,

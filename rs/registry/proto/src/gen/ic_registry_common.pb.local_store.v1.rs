@@ -1,5 +1,6 @@
 /// Set of all mutations that, when applied to the registry at version v,
 /// produce the registry at version v+1
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ChangelogEntry {
     /// The default, an empty list, is _invalid_ here.
@@ -7,6 +8,7 @@ pub struct ChangelogEntry {
     pub key_mutations: ::prost::alloc::vec::Vec<KeyMutation>,
 }
 /// A mutation of a single key.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct KeyMutation {
     /// Key.
@@ -20,6 +22,7 @@ pub struct KeyMutation {
     pub mutation_type: i32,
 }
 /// The time when the last certified update was successfully received.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CertifiedTime {
     /// Number of nano seconds since UNIX EPOCH
@@ -27,6 +30,7 @@ pub struct CertifiedTime {
     pub unix_epoch_nanos: u64,
 }
 /// A changelog that is applicable at a specific registry version.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Delta {
     #[prost(uint64, tag = "1")]
@@ -54,6 +58,15 @@ impl MutationType {
             MutationType::InvalidState => "INVALID_STATE",
             MutationType::Set => "SET",
             MutationType::Unset => "UNSET",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "INVALID_STATE" => Some(Self::InvalidState),
+            "SET" => Some(Self::Set),
+            "UNSET" => Some(Self::Unset),
+            _ => None,
         }
     }
 }

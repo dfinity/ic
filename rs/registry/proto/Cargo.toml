@@ -1,11 +1,14 @@
 [package]
 name = "ic-registry-common-proto"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-prost = "0.11.0"
+prost = { workspace = true }
 
 [dev-dependencies]
 ic-registry-common-proto-generator = { path = "./generator" }

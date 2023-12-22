@@ -39,7 +39,7 @@ fn should_generate_node_signing_key_pair_and_store_keys() {
 
     assert_matches!(gen_key_result, CspPublicKey::Ed25519(_));
     assert!(csp_vault
-        .sks_contains(&KeyId::try_from(&gen_key_result).unwrap())
+        .sks_contains(KeyId::try_from(&gen_key_result).unwrap())
         .is_ok());
     assert_eq!(
         csp_vault
@@ -175,7 +175,7 @@ fn should_correctly_sign_compared_to_testvec() {
     // Here we only test with a single test vector: an extensive test with the
     // entire test vector suite is done at the crypto lib level.
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     let key_id = rng.gen::<[u8; 32]>();
 
@@ -197,7 +197,7 @@ fn should_correctly_sign_compared_to_testvec() {
 
     assert_eq!(
         csp_vault
-            .sign(AlgorithmId::Ed25519, &msg, KeyId::from(key_id))
+            .sign(AlgorithmId::Ed25519, msg, KeyId::from(key_id))
             .expect("failed to create signature"),
         sig
     );
@@ -206,9 +206,9 @@ fn should_correctly_sign_compared_to_testvec() {
 #[test]
 fn should_sign_verifiably_with_generated_node_signing_key() {
     let csp_vault = LocalCspVault::builder_for_test().build_into_arc();
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     let msg_len_in_bytes = rng.gen_range(0..1024);
-    let message = random_message(&mut rng, msg_len_in_bytes);
+    let message = random_message(rng, msg_len_in_bytes);
 
     generate_key_pair_and_sign_and_verify_message(csp_vault, &message);
 }
@@ -220,12 +220,12 @@ fn should_fail_to_sign_with_unsupported_algorithm_id() {
         .gen_node_signing_key_pair()
         .expect("failed to generate keys");
 
-    let msg = "sample message";
+    let msg = b"sample message".to_vec();
     for algorithm_id in AlgorithmId::iter() {
         if algorithm_id != AlgorithmId::Ed25519 {
             let sign_result = csp_vault.sign(
                 AlgorithmId::EcdsaP256,
-                msg.as_ref(),
+                msg.clone(),
                 KeyId::try_from(&public_key).unwrap(),
             );
             assert!(sign_result.is_err());
@@ -247,8 +247,8 @@ fn should_fail_to_sign_with_non_existent_key() {
     let (_, pk_bytes) = ed25519::keypair_from_rng(rng);
 
     let key_id = KeyId::try_from(&CspPublicKey::Ed25519(pk_bytes)).unwrap();
-    let msg = "some message";
-    let sign_result = csp_vault.sign(AlgorithmId::Ed25519, msg.as_ref(), key_id);
+    let msg = b"some message".to_vec();
+    let sign_result = csp_vault.sign(AlgorithmId::Ed25519, msg, key_id);
     assert!(sign_result.is_err());
 }
 
@@ -271,7 +271,7 @@ fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
     let msg_len: usize = rng.gen_range(0..1024);
     let msg: Vec<u8> = (0..msg_len).map(|_| rng.gen::<u8>()).collect();
 
-    let result = csp_vault.sign(AlgorithmId::Ed25519, &msg, key_id);
+    let result = csp_vault.sign(AlgorithmId::Ed25519, msg, key_id);
 
     assert_eq!(
         result.expect_err("Unexpected success."),
@@ -283,7 +283,7 @@ fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
 }
 
 pub fn generate_key_pair_and_sign_and_verify_message(csp_vault: Arc<dyn CspVault>, message: &[u8]) {
-    let (pk_bytes, sign_result) = generate_key_pair_and_sign_message(csp_vault, message);
+    let (pk_bytes, sign_result) = generate_key_pair_and_sign_message(csp_vault, message.to_vec());
     assert!(sign_result.is_ok());
     let signature = sign_result.expect("Failed to extract the signature");
     let signature_bytes = match signature {
@@ -295,7 +295,7 @@ pub fn generate_key_pair_and_sign_and_verify_message(csp_vault: Arc<dyn CspVault
 
 pub fn generate_key_pair_and_sign_message(
     csp_vault: Arc<dyn CspVault>,
-    message: &[u8],
+    message: Vec<u8>,
 ) -> (PublicKeyBytes, Result<CspSignature, CspBasicSignatureError>) {
     let csp_pk = csp_vault
         .gen_node_signing_key_pair()

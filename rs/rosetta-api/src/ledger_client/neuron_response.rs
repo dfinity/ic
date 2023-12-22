@@ -1,5 +1,6 @@
-use crate::models::{self, Object};
+use crate::models::{self};
 use ic_types::PrincipalId;
+use rosetta_core::objects::ObjectMap;
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -16,11 +17,11 @@ pub struct NeuronResponse {
     pub(crate) staked_maturity_e8s: Option<u64>,
 }
 
-impl From<NeuronResponse> for Object {
+impl From<NeuronResponse> for ObjectMap {
     fn from(r: NeuronResponse) -> Self {
         match serde_json::to_value(r) {
             Ok(Value::Object(o)) => o,
-            _ => Object::default(),
+            _ => ObjectMap::default(),
         }
     }
 }

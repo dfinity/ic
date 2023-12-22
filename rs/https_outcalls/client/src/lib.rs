@@ -23,7 +23,7 @@ pub fn setup_canister_http_client(
     rt_handle: tokio::runtime::Handle,
     metrics_registry: &MetricsRegistry,
     adapter_config: AdaptersConfig,
-    anononymous_query_handler: AnonymousQueryService,
+    anonymous_query_handler: AnonymousQueryService,
     log: ReplicaLogger,
     subnet_type: SubnetType,
 ) -> Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send> {
@@ -64,7 +64,7 @@ pub fn setup_canister_http_client(
                     Box::new(CanisterHttpAdapterClientImpl::new(
                         rt_handle,
                         channel,
-                        anononymous_query_handler,
+                        anonymous_query_handler,
                         CANISTER_HTTP_CLIENT_CHANNEL_CAPACITY,
                         metrics_registry.clone(),
                         subnet_type,

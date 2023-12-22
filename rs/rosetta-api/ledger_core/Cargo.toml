@@ -1,25 +1,16 @@
 [package]
 name = "ic-ledger-core"
-version = "0.8.0"
-authors = ["The Internet Computer Project Developers"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-async-trait = "0.1.53"
 candid = { workspace = true }
-ciborium = { workspace = true }
-hex = "0.4.2"
-ic-base-types = { path = "../../types/base_types" }
-ic-constants = { path = "../../constants" }
-ic-crypto-sha2 = { path = "../../crypto/sha2/" }
-ic-ic00-types = { path = "../../types/ic00_types" }
-ic-utils = { path = "../../utils" }
-icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
 num-traits = "0.2.12"
-serde = "1.0"
-serde_bytes = "0.11"
+serde = { workspace = true }
+serde_bytes = { workspace = true }
 
 [dev-dependencies]
-proptest = "1.0"
-rand = "0.8"

@@ -1,6 +1,6 @@
 // Set up a testnet containing:
-//   one 2-node System and two 2-node Application subnets, single boundary node, and a p8s (with grafana) VM.
-// All replica nodes use the following resources: 64 vCPUs, 480GiB of RAM, and 500 GiB disk.
+//   one 4-node System, one 4-node Application, and one 1-node Application subnets, a single boundary node, and a p8s (with grafana) VM.
+// All replica nodes use the following resources: 64 vCPUs, 480GiB of RAM, and 2,000 GiB disk.
 //
 // You can setup this testnet with a lifetime of 180 mins by executing the following commands:
 //
@@ -49,14 +49,16 @@ use ic_tests::driver::{
     group::SystemTestGroup,
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
-    test_env_api::{
-        await_boundary_node_healthy, HasTopologySnapshot, NnsCanisterWasmStrategy,
-        NnsCustomizations,
-    },
+    test_env_api::{await_boundary_node_healthy, HasTopologySnapshot, NnsCanisterWasmStrategy},
+};
+use ic_tests::nns_dapp::{
+    install_ii_and_nns_dapp, nns_dapp_customizations, set_authorized_subnets,
 };
 use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 
-const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
+const NUM_FULL_CONSENSUS_APP_SUBNETS: u64 = 1;
+const NUM_SINGLE_NODE_APP_SUBNETS: u64 = 1;
+const NUM_BN: u64 = 1;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -69,48 +71,43 @@ pub fn setup(env: TestEnv) {
     PrometheusVm::default()
         .start(&env)
         .expect("Failed to start prometheus VM");
-    InternetComputer::new()
-        .add_subnet(
-            Subnet::new(SubnetType::System)
-                .with_default_vm_resources(VmResources {
-                    vcpus: Some(NrOfVCPUs::new(64)),
-                    memory_kibibytes: Some(AmountOfMemoryKiB::new(480 << 20)),
-                    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
-                })
-                .add_nodes(2),
-        )
-        .add_subnet(
-            Subnet::new(SubnetType::Application)
-                .with_default_vm_resources(VmResources {
-                    vcpus: Some(NrOfVCPUs::new(64)),
-                    memory_kibibytes: Some(AmountOfMemoryKiB::new(480 << 20)),
-                    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
-                })
-                .add_nodes(2),
-        )
-        .add_subnet(
-            Subnet::new(SubnetType::Application)
-                .with_default_vm_resources(VmResources {
-                    vcpus: Some(NrOfVCPUs::new(64)),
-                    memory_kibibytes: Some(AmountOfMemoryKiB::new(480 << 20)),
-                    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
-                })
-                .add_nodes(2),
-        )
-        .setup_and_start(&env)
+    let vm_resources = VmResources {
+        vcpus: Some(NrOfVCPUs::new(64)),
+        memory_kibibytes: Some(AmountOfMemoryKiB::new(480 << 20)),
+        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(2000)),
+    };
+    let mut ic = InternetComputer::new().with_default_vm_resources(vm_resources);
+    ic = ic.add_subnet(Subnet::new(SubnetType::System).add_nodes(4));
+    for _ in 0..NUM_FULL_CONSENSUS_APP_SUBNETS {
+        ic = ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(4));
+    }
+    for _ in 0..NUM_SINGLE_NODE_APP_SUBNETS {
+        ic = ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(1));
+    }
+    ic.setup_and_start(&env)
         .expect("Failed to setup IC under test");
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
         NnsCanisterWasmStrategy::TakeBuiltFromSources,
-        NnsCustomizations::default(),
+        nns_dapp_customizations(),
     );
-    BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
-        .allocate_vm(&env)
-        .expect("Allocation of BoundaryNode failed.")
-        .for_ic(&env, "")
-        .use_real_certs_and_dns()
-        .start(&env)
-        .expect("failed to setup BoundaryNode VM");
-    env.sync_prometheus_config_with_topology();
-    await_boundary_node_healthy(&env, BOUNDARY_NODE_NAME);
+    set_authorized_subnets(&env);
+    for i in 0..NUM_BN {
+        let bn_name = format!("boundary-node-{}", i);
+        BoundaryNode::new(bn_name)
+            .allocate_vm(&env)
+            .expect("Allocation of BoundaryNode failed.")
+            .for_ic(&env, "")
+            .use_real_certs_and_dns()
+            .start(&env)
+            .expect("failed to setup BoundaryNode VM");
+    }
+    env.sync_with_prometheus();
+    for i in 0..NUM_BN {
+        let bn_name = format!("boundary-node-{}", i);
+        await_boundary_node_healthy(&env, &bn_name);
+        if i == 0 {
+            install_ii_and_nns_dapp(&env, &bn_name, None);
+        }
+    }
 }

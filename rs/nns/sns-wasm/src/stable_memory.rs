@@ -171,6 +171,7 @@ mod test {
         },
     };
     use ic_base_types::PrincipalId;
+    use maplit::btreemap;
 
     #[test]
     fn test_stable_write_and_read_u32() {
@@ -248,6 +249,7 @@ mod test {
             upgrade_path,
             access_controls_enabled: true,
             allowed_principals: vec![],
+            nns_proposal_to_deployed_sns: btreemap! {1 => 0,},
         }
     }
 

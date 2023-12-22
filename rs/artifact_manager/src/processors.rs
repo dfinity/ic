@@ -2,70 +2,95 @@
 //! P2P clients that require consensus over their artifacts.
 
 use ic_interfaces::{
-    artifact_manager::ArtifactProcessor,
-    artifact_pool::{ChangeSetProducer, MutablePool, UnvalidatedArtifact},
+    p2p::{
+        artifact_manager::ArtifactProcessor,
+        consensus::{ChangeResult, ChangeSetProducer, MutablePool, UnvalidatedArtifact},
+    },
     time_source::TimeSource,
 };
-use ic_types::{artifact::*, artifact_kind::*, messages::SignedIngress};
+use ic_types::{artifact::*, artifact_kind::*};
 use std::sync::{Arc, RwLock};
 
-pub struct Processor<P, C> {
+pub struct Processor<
+    A: ArtifactKind + Send,
+    P: MutablePool<A>,
+    C: ChangeSetProducer<P, ChangeSet = <P as MutablePool<A>>::ChangeSet>,
+> {
     pool: Arc<RwLock<P>>,
-    change_set_producer: Box<dyn ChangeSetProducer<P, ChangeSet = C>>,
+    change_set_producer: C,
+    unused: std::marker::PhantomData<A>,
 }
 
-impl<P, C> Processor<P, C> {
-    pub fn new(
-        pool: Arc<RwLock<P>>,
-        change_set_producer: Box<dyn ChangeSetProducer<P, ChangeSet = C>>,
-    ) -> Self {
+impl<
+        A: ArtifactKind + Send,
+        P: MutablePool<A>,
+        C: ChangeSetProducer<P, ChangeSet = <P as MutablePool<A>>::ChangeSet>,
+    > Processor<A, P, C>
+{
+    pub fn new(pool: Arc<RwLock<P>>, change_set_producer: C) -> Self {
         Self {
             pool,
             change_set_producer,
+            unused: std::marker::PhantomData,
         }
     }
 }
 
-impl<A: ArtifactKind, C, P: MutablePool<A, C> + Send + Sync + 'static> ArtifactProcessor<A>
-    for Processor<P, C>
+impl<
+        A: ArtifactKind + Send,
+        P: MutablePool<A> + Send + Sync + 'static,
+        C: ChangeSetProducer<P, ChangeSet = <P as MutablePool<A>>::ChangeSet>,
+    > ArtifactProcessor<A> for Processor<A, P, C>
 {
     fn process_changes(
         &self,
         time_source: &dyn TimeSource,
-        artifacts: Vec<UnvalidatedArtifact<A::Message>>,
-    ) -> (Vec<Advert<A>>, bool) {
+        artifact_events: Vec<UnvalidatedArtifactMutation<A>>,
+    ) -> ChangeResult<A> {
         {
             let mut pool = self.pool.write().unwrap();
-            for artifact in artifacts {
-                pool.insert(artifact)
+            for artifact_event in artifact_events {
+                match artifact_event {
+                    UnvalidatedArtifactMutation::Insert((message, peer_id)) => {
+                        let unvalidated_artifact = UnvalidatedArtifact {
+                            message,
+                            peer_id,
+                            timestamp: time_source.get_relative_time(),
+                        };
+                        pool.insert(unvalidated_artifact);
+                    }
+                    UnvalidatedArtifactMutation::Remove(id) => pool.remove(&id),
+                }
             }
         }
         let change_set = self
             .change_set_producer
             .on_state_change(&self.pool.read().unwrap());
-        let result = self
-            .pool
-            .write()
-            .unwrap()
-            .apply_changes(time_source, change_set);
-
-        (result.adverts, result.changed)
+        self.pool.write().unwrap().apply_changes(change_set)
     }
 }
 
 /// The ingress `OnStateChange` client.
-pub struct IngressProcessor<P, C> {
+pub(crate) struct IngressProcessor<P: MutablePool<IngressArtifact>> {
     /// The ingress pool, protected by a read-write lock and automatic reference
     /// counting.
     ingress_pool: Arc<RwLock<P>>,
     /// The ingress handler.
-    client: Arc<dyn ChangeSetProducer<P, ChangeSet = C> + Send + Sync>,
+    client: Arc<
+        dyn ChangeSetProducer<P, ChangeSet = <P as MutablePool<IngressArtifact>>::ChangeSet>
+            + Send
+            + Sync,
+    >,
 }
 
-impl<P, C> IngressProcessor<P, C> {
+impl<P: MutablePool<IngressArtifact>> IngressProcessor<P> {
     pub fn new(
         ingress_pool: Arc<RwLock<P>>,
-        client: Arc<dyn ChangeSetProducer<P, ChangeSet = C> + Send + Sync>,
+        client: Arc<
+            dyn ChangeSetProducer<P, ChangeSet = <P as MutablePool<IngressArtifact>>::ChangeSet>
+                + Send
+                + Sync,
+        >,
     ) -> Self {
         Self {
             ingress_pool,
@@ -74,31 +99,34 @@ impl<P, C> IngressProcessor<P, C> {
     }
 }
 
-impl<C, P: MutablePool<IngressArtifact, C> + Send + Sync + 'static>
-    ArtifactProcessor<IngressArtifact> for IngressProcessor<P, C>
+impl<P: MutablePool<IngressArtifact> + Send + Sync + 'static> ArtifactProcessor<IngressArtifact>
+    for IngressProcessor<P>
 {
     /// The method processes changes in the ingress pool.
     fn process_changes(
         &self,
         time_source: &dyn TimeSource,
-        artifacts: Vec<UnvalidatedArtifact<SignedIngress>>,
-    ) -> (Vec<Advert<IngressArtifact>>, bool) {
+        artifact_events: Vec<UnvalidatedArtifactMutation<IngressArtifact>>,
+    ) -> ChangeResult<IngressArtifact> {
         {
             let mut ingress_pool = self.ingress_pool.write().unwrap();
-            for artifact in artifacts {
-                ingress_pool.insert(artifact)
+            for artifact_event in artifact_events {
+                match artifact_event {
+                    UnvalidatedArtifactMutation::Insert((message, peer_id)) => {
+                        let unvalidated_artifact = UnvalidatedArtifact {
+                            message,
+                            peer_id,
+                            timestamp: time_source.get_relative_time(),
+                        };
+                        ingress_pool.insert(unvalidated_artifact);
+                    }
+                    UnvalidatedArtifactMutation::Remove(id) => ingress_pool.remove(&id),
+                }
             }
         }
         let change_set = self
             .client
             .on_state_change(&self.ingress_pool.read().unwrap());
-        let result = self
-            .ingress_pool
-            .write()
-            .unwrap()
-            .apply_changes(time_source, change_set);
-        // We ignore the ingress pool's "changed" result and return StateUnchanged,
-        // in order to not trigger an immediate re-processing.
-        (result.adverts, false)
+        self.ingress_pool.write().unwrap().apply_changes(change_set)
     }
 }

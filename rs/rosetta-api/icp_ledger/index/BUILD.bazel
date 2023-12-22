@@ -10,6 +10,7 @@ DEPENDENCIES = [
     "//rs/rosetta-api/icp_ledger",
     "//rs/rust_canisters/http_types",
     "//rs/rust_canisters/canister_log",
+    "//rs/rosetta-api/icrc1/index-ng",
     "@crate_index//:candid",
     "@crate_index//:ciborium",
     "@crate_index//:ic-cdk",
@@ -30,6 +31,7 @@ DEV_DEPENDENCIES = [
     "//rs/types/base_types",
     "@crate_index//:assert_matches",
     "@crate_index//:proptest",
+    "@crate_index//:serde_bytes",
 ]
 
 MACRO_DEPENDENCIES = [

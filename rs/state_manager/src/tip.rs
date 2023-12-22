@@ -5,8 +5,13 @@ use crate::{
 };
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::subnet_id_into_protobuf;
+use ic_config::flag_status::FlagStatus;
 use ic_logger::{error, fatal, info, ReplicaLogger};
-use ic_protobuf::state::system_metadata::v1::{SplitFrom, SystemMetadata};
+use ic_protobuf::state::{
+    stats::v1::Stats,
+    system_metadata::v1::{SplitFrom, SystemMetadata},
+};
+use ic_replicated_state::page_map::{PersistDestination, StorageMetrics};
 #[allow(unused)]
 use ic_replicated_state::{
     canister_state::execution_state::SandboxMemory, CanisterState, NumWasmPages, PageMap,
@@ -93,7 +98,7 @@ pub(crate) enum TipRequest {
         height: Height,
         page_map_types: Vec<PageMapType>,
     },
-    /// Compute manifest, store result into states and perist metadata as result.
+    /// Compute manifest, store result into states and persist metadata as result.
     /// State: *
     ComputeManifest {
         checkpoint_layout: CheckpointLayout<ReadOnly>,
@@ -117,25 +122,39 @@ fn request_timer(metrics: &StateManagerMetrics, name: &str) -> HistogramTimer {
         .start_timer()
 }
 
-fn page_map_path(
-    log: &ReplicaLogger,
+/// Helper struct for some relevant paths. Also see page_map_paths().
+struct PageMapPaths {
+    /// Path of the base file
+    base_file_path: PathBuf,
+    /// All existing overlay files
+    existing_overlays: Vec<PathBuf>,
+    /// If we write a new overlay file, we use this path
+    next_overlay_path: PathBuf,
+}
+
+/// Helper function to collect all relevant paths for a PageMap
+fn page_map_paths(
     tip_handler: &mut TipHandler,
     height: Height,
     page_map_type: &PageMapType,
-) -> PathBuf {
-    page_map_type
-        .path(&tip_handler.tip(height).unwrap_or_else(|err| {
-            fatal!(log, "Failed to flush page map: {}", err);
-        }))
-        .unwrap_or_else(|err| {
-            fatal!(log, "Failed to get path for page map: {}", err);
-        })
+) -> Result<PageMapPaths, LayoutError> {
+    let layout = &tip_handler.tip(height)?;
+    let base_file_path = page_map_type.path(layout)?;
+    let existing_overlays = page_map_type.overlays(layout)?;
+    let next_overlay_path = page_map_type.overlay(layout, height)?;
+
+    Ok(PageMapPaths {
+        base_file_path,
+        existing_overlays,
+        next_overlay_path,
+    })
 }
 
 pub(crate) fn spawn_tip_thread(
     log: ReplicaLogger,
     mut tip_handler: TipHandler,
     state_layout: StateLayout,
+    lsmt_storage: FlagStatus,
     metrics: StateManagerMetrics,
     malicious_flags: MaliciousFlags,
 ) -> (JoinOnDrop<()>, Sender<TipRequest>) {
@@ -170,57 +189,42 @@ pub(crate) fn spawn_tip_thread(
                             debug_assert_eq!(tip_state, TipState::Serialized(height));
                             debug_assert!(have_latest_manifest);
                             have_latest_manifest = false;
-                            let cp = {
-                                let _timer =
-                                    request_timer(&metrics, "tip_to_checkpoint_send_checkpoint");
-                                let tip = tip_handler.tip(height);
-                                match tip {
-                                    Err(err) => {
-                                        sender
-                                            .send(Err(err))
-                                            .expect("Failed to return TipToCheckpoint error");
-                                        continue;
-                                    }
-                                    Ok(tip) => {
-                                        let cp_or_err = state_layout.scratchpad_to_checkpoint(
-                                            tip,
-                                            height,
-                                            Some(&mut thread_pool),
-                                        );
-                                        match cp_or_err {
-                                            Err(err) => {
-                                                sender.send(Err(err)).expect(
-                                                    "Failed to return TipToCheckpoint error",
-                                                );
-                                                continue;
-                                            }
-                                            Ok(cp) => {
-                                                sender.send(Ok(cp.clone())).expect(
-                                                    "Failed to return TipToCheckpoint result",
-                                                );
-                                                cp
-                                            }
+                            let _timer =
+                                request_timer(&metrics, "tip_to_checkpoint_send_checkpoint");
+                            let tip = tip_handler.tip(height);
+                            match tip {
+                                Err(err) => {
+                                    sender
+                                        .send(Err(err))
+                                        .expect("Failed to return TipToCheckpoint error");
+                                    continue;
+                                }
+                                Ok(tip) => {
+                                    let cp_or_err = state_layout.scratchpad_to_checkpoint(
+                                        tip,
+                                        height,
+                                        Some(&mut thread_pool),
+                                    );
+                                    match cp_or_err {
+                                        Err(err) => {
+                                            sender
+                                                .send(Err(err))
+                                                .expect("Failed to return TipToCheckpoint error");
+                                            continue;
+                                        }
+                                        Ok(cp) => {
+                                            sender
+                                                .send(Ok(cp.clone()))
+                                                .expect("Failed to return TipToCheckpoint result");
                                         }
                                     }
                                 }
-                            };
-
-                            let _timer = request_timer(&metrics, "tip_to_checkpoint_reset_tip_to");
-                            tip_handler
-                                .reset_tip_to(&state_layout, &cp, Some(&mut thread_pool))
-                                .unwrap_or_else(|err| {
-                                    fatal!(
-                                        log,
-                                        "Failed to reset tip to checkpoint @{}: {}",
-                                        height,
-                                        err
-                                    );
-                                });
+                            }
                         }
 
                         TipRequest::FlushPageMapDelta { height, pagemaps } => {
                             let _timer = request_timer(&metrics, "flush_unflushed_delta");
-                            #[cfg(debug_assert)]
+                            #[cfg(debug_assertions)]
                             match tip_state {
                                 TipState::ReadyForPageDeltas(h) => debug_assert!(height >= h),
                                 _ => panic!("Unexpected tip state: {:?}", tip_state),
@@ -237,26 +241,41 @@ pub(crate) fn spawn_tip_thread(
                                         (
                                             truncate,
                                             page_map,
-                                            page_map_path(
-                                                &log,
+                                            page_map_paths(
                                                 &mut tip_handler,
                                                 height,
                                                 &page_map_type,
-                                            ),
+                                            )
+                                            .unwrap_or_else(|err| {
+                                                fatal!(log, "Failed to flush page map: {}", err);
+                                            }),
                                         )
                                     },
                                 ),
-                                |(truncate, page_map, path)| {
+                                |(
+                                    truncate,
+                                    page_map,
+                                    PageMapPaths {
+                                        base_file_path,
+                                        existing_overlays,
+                                        next_overlay_path,
+                                    },
+                                )| {
                                     if *truncate {
-                                        truncate_path(&log, path);
+                                        truncate_pagemap(&log, base_file_path, existing_overlays);
                                     }
                                     if page_map.is_some()
                                         && !page_map.as_ref().unwrap().unflushed_delta_is_empty()
                                     {
+                                        let dst = PersistDestination::new(
+                                            base_file_path.clone(),
+                                            next_overlay_path.clone(),
+                                            lsmt_storage,
+                                        );
                                         page_map
                                             .as_ref()
                                             .unwrap()
-                                            .persist_unflushed_delta(path)
+                                            .persist_unflushed_delta(dst, &metrics.storage_metrics)
                                             .unwrap_or_else(|err| {
                                                 fatal!(
                                                     log,
@@ -273,7 +292,7 @@ pub(crate) fn spawn_tip_thread(
                             replicated_state,
                         } => {
                             let _timer = request_timer(&metrics, "serialize_to_tip");
-                            #[cfg(debug_assert)]
+                            #[cfg(debug_assertions)]
                             match tip_state {
                                 TipState::ReadyForPageDeltas(h) => debug_assert!(height >= h),
                                 _ => panic!("Unexpected tip state: {:?}", tip_state),
@@ -291,6 +310,8 @@ pub(crate) fn spawn_tip_thread(
                                     );
                                 }),
                                 &mut thread_pool,
+                                &metrics.storage_metrics,
+                                lsmt_storage,
                             )
                             .unwrap_or_else(|err| {
                                 fatal!(log, "Failed to serialize to tip @{}: {}", height, err);
@@ -303,6 +324,7 @@ pub(crate) fn spawn_tip_thread(
                                 .reset_tip_to(
                                     &state_layout,
                                     &checkpoint_layout,
+                                    lsmt_storage,
                                     Some(&mut thread_pool),
                                 )
                                 .unwrap_or_else(|err| {
@@ -346,6 +368,7 @@ pub(crate) fn spawn_tip_thread(
                             states,
                             persist_metadata_guard,
                         } => {
+                            let _timer = request_timer(&metrics, "compute_manifest");
                             handle_compute_manifest_request(
                                 &mut thread_pool,
                                 &metrics,
@@ -373,6 +396,8 @@ fn serialize_to_tip(
     state: &ReplicatedState,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     thread_pool: &mut scoped_threadpool::Pool,
+    metrics: &StorageMetrics,
+    lsmt_storage: FlagStatus,
 ) -> Result<(), CheckpointError> {
     // Serialize ingress history separately. The `SystemMetadata` proto does not
     // encode it.
@@ -403,8 +428,12 @@ fn serialize_to_tip(
     tip.subnet_queues()
         .serialize((state.subnet_queues()).into())?;
 
+    tip.stats().serialize(Stats {
+        query_stats: state.query_stats().as_query_stats(),
+    })?;
+
     let results = parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
-        serialize_canister_to_tip(log, canister_state, tip)
+        serialize_canister_to_tip(log, canister_state, tip, metrics, lsmt_storage)
     });
 
     for result in results.into_iter() {
@@ -418,6 +447,8 @@ fn serialize_canister_to_tip(
     log: &ReplicaLogger,
     canister_state: &CanisterState,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
+    metrics: &StorageMetrics,
+    lsmt_storage: FlagStatus,
 ) -> Result<(), CheckpointError> {
     let canister_layout = tip.canister(&canister_state.canister_id())?;
     canister_layout
@@ -449,14 +480,24 @@ fn serialize_canister_to_tip(
                         .serialize(&execution_state.wasm_binary.binary)?;
                 }
             }
+            let memory_dst = PersistDestination::new(
+                canister_layout.vmemory_0(),
+                canister_layout.vmemory_0_overlay(tip.height()),
+                lsmt_storage,
+            );
+            let stable_dst = PersistDestination::new(
+                canister_layout.stable_memory_blob(),
+                canister_layout.stable_memory_overlay(tip.height()),
+                lsmt_storage,
+            );
             execution_state
                 .wasm_memory
                 .page_map
-                .persist_delta(&canister_layout.vmemory_0())?;
+                .persist_delta(memory_dst, metrics)?;
             execution_state
                 .stable_memory
                 .page_map
-                .persist_delta(&canister_layout.stable_memory_blob())?;
+                .persist_delta(stable_dst, metrics)?;
 
             Some(ExecutionStateBits {
                 exported_globals: execution_state.exported_globals.clone(),
@@ -469,12 +510,32 @@ fn serialize_canister_to_tip(
             })
         }
         None => {
-            truncate_path(log, &canister_layout.vmemory_0());
-            truncate_path(log, &canister_layout.stable_memory_blob());
+            truncate_pagemap(
+                log,
+                &canister_layout.vmemory_0(),
+                &canister_layout.vmemory_0_overlays()?,
+            );
+            truncate_pagemap(
+                log,
+                &canister_layout.stable_memory_blob(),
+                &canister_layout.stable_memory_overlays()?,
+            );
             canister_layout.wasm().try_delete_file()?;
             None
         }
     };
+
+    let wasm_chunk_store_dst = PersistDestination::new(
+        canister_layout.wasm_chunk_store(),
+        canister_layout.wasm_chunk_store_overlay(tip.height()),
+        lsmt_storage,
+    );
+    canister_state
+        .system_state
+        .wasm_chunk_store
+        .page_map()
+        .persist_delta(wasm_chunk_store_dst, metrics)?;
+
     // Priority credit must be zero at this point
     assert_eq!(canister_state.scheduler_state.priority_credit.get(), 0);
     canister_layout.canister().serialize(
@@ -489,6 +550,7 @@ fn serialize_canister_to_tip(
             cycles_balance: canister_state.system_state.balance(),
             cycles_debit: canister_state.system_state.ingress_induction_cycles_debit(),
             reserved_balance: canister_state.system_state.reserved_balance(),
+            reserved_balance_limit: canister_state.system_state.reserved_balance_limit(),
             execution_state_bits,
             status: canister_state.system_state.status.clone(),
             scheduled_as_first: canister_state
@@ -500,10 +562,10 @@ fn serialize_canister_to_tip(
                 .canister_metrics
                 .skipped_round_due_to_no_messages,
             executed: canister_state.system_state.canister_metrics.executed,
-            interruped_during_execution: canister_state
+            interrupted_during_execution: canister_state
                 .system_state
                 .canister_metrics
-                .interruped_during_execution,
+                .interrupted_during_execution,
             certified_data: canister_state.system_state.certified_data.clone(),
             consumed_cycles_since_replica_started: canister_state
                 .system_state
@@ -537,6 +599,12 @@ fn serialize_canister_to_tip(
                 .get_consumed_cycles_since_replica_started_by_use_cases()
                 .clone(),
             canister_history: canister_state.system_state.get_canister_history().clone(),
+            wasm_chunk_store_metadata: canister_state
+                .system_state
+                .wasm_chunk_store
+                .metadata()
+                .clone(),
+            total_query_stats: canister_state.scheduler_state.total_query_stats.clone(),
         }
         .into(),
     )?;
@@ -556,7 +624,7 @@ fn serialize_canister_to_tip(
 /// file had a lot of writes in the past but is mostly being read now.
 ///
 /// The current defragmentation strategy is to pseudorandomly choose a
-/// chunk of size max_size among the eligble files, read it to memory,
+/// chunk of size max_size among the eligible files, read it to memory,
 /// and write it back to the file. The effect is that this chunk is
 /// definitely unique to the tip at the end of defragmentation.
 pub fn defrag_tip(
@@ -607,7 +675,7 @@ pub fn defrag_tip(
     Ok(())
 }
 
-fn truncate_path(log: &ReplicaLogger, path: &Path) {
+fn truncate_pagemap(log: &ReplicaLogger, path: &Path, overlays: &[PathBuf]) {
     if let Err(err) = nix::unistd::truncate(path, 0) {
         // It's OK if the file doesn't exist, everything else is a fatal error.
         if err != nix::errno::Errno::ENOENT {
@@ -618,6 +686,17 @@ fn truncate_path(log: &ReplicaLogger, path: &Path) {
                 err
             )
         }
+    }
+
+    for overlay in overlays {
+        std::fs::remove_file(overlay).unwrap_or_else(|err| {
+            fatal!(
+                log,
+                "Failed to remove overlay file {}: {}",
+                overlay.display(),
+                err
+            );
+        });
     }
 }
 
@@ -780,6 +859,7 @@ fn handle_compute_manifest_request(
 #[cfg(test)]
 mod test {
     use super::*;
+    use ic_config::state_manager::lsmt_storage_default;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::types::ids::canister_test_id;
     use ic_test_utilities_logger::with_test_replica_logger;
@@ -792,10 +872,16 @@ mod test {
             let root = tmp.path().to_path_buf();
             let layout = StateLayout::try_new(log.clone(), root, &MetricsRegistry::new()).unwrap();
             let metrics_registry = ic_metrics::MetricsRegistry::new();
-            let metrics = StateManagerMetrics::new(&metrics_registry);
+            let metrics = StateManagerMetrics::new(&metrics_registry, log.clone());
             let tip_handler = layout.capture_tip_handler();
-            let (_h, _s) =
-                spawn_tip_thread(log, tip_handler, layout, metrics, MaliciousFlags::default());
+            let (_h, _s) = spawn_tip_thread(
+                log,
+                tip_handler,
+                layout,
+                lsmt_storage_default(),
+                metrics,
+                MaliciousFlags::default(),
+            );
         });
     }
 

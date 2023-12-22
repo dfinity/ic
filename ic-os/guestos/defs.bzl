@@ -30,6 +30,7 @@ def image_deps(mode, malicious = False):
 
             # additional files to install
             "//publish/binaries:canister_sandbox": "/opt/ic/bin/canister_sandbox:0755",
+            "//publish/binaries:guestos_tool": "/opt/ic/bin/guestos_tool:0755",
             "//publish/binaries:ic-btc-adapter": "/opt/ic/bin/ic-btc-adapter:0755",
             "//publish/binaries:ic-consensus-pool-util": "/opt/ic/bin/ic-consensus-pool-util:0755",
             "//publish/binaries:ic-https-outcalls-adapter": "/opt/ic/bin/ic-https-outcalls-adapter:0755",
@@ -39,8 +40,6 @@ def image_deps(mode, malicious = False):
             "//publish/binaries:orchestrator": "/opt/ic/bin/orchestrator:0755",
             ("//publish/malicious:replica" if malicious else "//publish/binaries:replica"): "/opt/ic/bin/replica:0755",  # Install the malicious replica if set
             "//publish/binaries:sandbox_launcher": "/opt/ic/bin/sandbox_launcher:0755",
-            "//publish/binaries:sevctl": "/opt/ic/bin/sevctl:0755",
-            "@sevtool": "/opt/ic/bin/sevtool:0755",
             "//publish/binaries:state-tool": "/opt/ic/bin/state-tool:0755",
             "//publish/binaries:vsock_guest": "/opt/ic/bin/vsock_guest:0755",
             "//ic-os/utils:infogetty": "/opt/ic/bin/infogetty:0755",
@@ -48,8 +47,7 @@ def image_deps(mode, malicious = False):
         },
 
         # Set various configuration values
-        "base_image": Label("//ic-os/guestos:rootfs/docker-base." + mode),
-        "docker_context": Label("//ic-os/guestos:rootfs-files"),
+        "container_context_files": Label("//ic-os/guestos:rootfs-files"),
         "partition_table": Label("//ic-os/guestos:partitions.csv"),
         "expanded_size": "50G",
         "rootfs_size": "3G",
@@ -67,13 +65,33 @@ def image_deps(mode, malicious = False):
     }
 
     # Add extra files depending on image variant
-    extra_rootfs_deps = {
-        "dev": {"//ic-os/guestos:rootfs/allow_console_root": "/etc/allow_console_root:0644"},
-        "dev-sev": {"//ic-os/guestos:rootfs/allow_console_root": "/etc/allow_console_root:0644"},
-        "dev-malicious": {},
-        "prod": {},
+    extra_deps = {
+        "dev": {
+            "build_container_filesystem_config_file": "//ic-os/guestos/envs/dev:build_container_filesystem_config.txt",
+        },
+        "dev-malicious": {
+            "build_container_filesystem_config_file": "//ic-os/guestos/envs/dev-malicious:build_container_filesystem_config.txt",
+        },
+        "dev-sev": {
+            "build_container_filesystem_config_file": "//ic-os/guestos/envs/dev-sev:build_container_filesystem_config.txt",
+        },
+        "prod": {
+            "build_container_filesystem_config_file": "//ic-os/guestos/envs/prod:build_container_filesystem_config.txt",
+        },
     }
 
-    deps["rootfs"].update(extra_rootfs_deps[mode])
+    deps.update(extra_deps[mode])
+
+    # Add extra files depending on image variant
+    extra_rootfs_deps = {
+        "dev": {
+            "//ic-os/guestos:rootfs/allow_console_root": "/etc/allow_console_root:0644",
+        },
+        "dev-sev": {
+            "//ic-os/guestos:rootfs/allow_console_root": "/etc/allow_console_root:0644",
+        },
+    }
+
+    deps["rootfs"].update(extra_rootfs_deps.get(mode, {}))
 
     return deps

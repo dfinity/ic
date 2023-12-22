@@ -19,9 +19,10 @@ use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
-    artifact_pool::{ChangeSetProducer, MutablePool, UnvalidatedArtifact},
-    time_source::{SysTimeSource, TimeSource},
+    p2p::consensus::{ChangeSetProducer, MutablePool, UnvalidatedArtifact},
+    time_source::TimeSource,
 };
+use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::Labeled;
 use ic_interfaces_state_manager_mocks::MockStateManager;
@@ -33,7 +34,6 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CanisterQueues, ReplicatedState, SystemMetadata};
 use ic_test_utilities::{
-    consensus::MockConsensusCache,
     crypto::temp_crypto_component_with_fake_registry,
     cycles_account_manager::CyclesAccountManagerBuilder,
     history::MockIngressHistory,
@@ -45,6 +45,7 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_registry::test_subnet_record;
 use ic_types::{
+    batch::RawQueryStats,
     ingress::{IngressState, IngressStatus},
     malicious_flags::MaliciousFlags,
     messages::{MessageId, SignedIngress},
@@ -188,13 +189,14 @@ where
                         BTreeMap::new(),
                         metadata,
                         CanisterQueues::default(),
+                        RawQueryStats::default(),
                     )),
                 )
             });
 
-            let mut consensus_pool_cache = MockConsensusCache::new();
+            let mut consensus_time = MockConsensusTime::new();
             let time_source_cl = time_source.clone();
-            consensus_pool_cache
+            consensus_time
                 .expect_consensus_time()
                 .returning(move || Some(time_source_cl.get_relative_time()));
 
@@ -221,7 +223,8 @@ where
             let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
             let runtime = tokio::runtime::Runtime::new().unwrap();
             let mut ingress_manager = IngressManager::new(
-                Arc::new(consensus_pool_cache),
+                time_source.clone(),
+                Arc::new(consensus_time),
                 Box::new(ingress_hist_reader),
                 ingress_pool,
                 setup_registry(subnet_id, runtime.handle().clone()),
@@ -294,7 +297,7 @@ fn setup(
 fn on_state_change(pool: &mut IngressPoolImpl, manager: &IngressManager) -> usize {
     let changeset = manager.on_state_change(pool);
     let n = changeset.len();
-    pool.apply_changes(&SysTimeSource::new(), changeset);
+    pool.apply_changes(changeset);
     n
 }
 

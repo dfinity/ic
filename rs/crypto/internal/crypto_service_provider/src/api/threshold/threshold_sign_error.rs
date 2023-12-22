@@ -16,6 +16,7 @@ pub enum CspThresholdSignError {
     MalformedSecretKey {
         algorithm: AlgorithmId,
     },
+    KeyIdInstantiationError(String),
     TransientInternalError {
         internal_error: String,
     },
@@ -66,6 +67,9 @@ impl fmt::Display for CspThresholdSignError {
             ),
             CspThresholdSignError::TransientInternalError { internal_error } => {
                 write!(f, "Transient internal error: {}", internal_error)
+            }
+            CspThresholdSignError::KeyIdInstantiationError(message) => {
+                write!(f, "KeyID instantiation error: {}", message)
             }
         }
     }

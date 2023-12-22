@@ -11,8 +11,8 @@ use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgComplaint, IDkgDealers, IDkgDealing, IDkgMaskedTranscriptOrigin, IDkgReceivers,
-    IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
+    BatchSignedIDkgDealing, IDkgComplaint, IDkgDealers, IDkgDealing, IDkgMaskedTranscriptOrigin,
+    IDkgReceivers, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
     IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::{
@@ -33,6 +33,7 @@ use std::sync::Arc;
 pub mod dummy_values;
 
 pub fn create_idkg_params<R: RngCore + CryptoRng>(
+    alg: AlgorithmId,
     dealer_set: &BTreeSet<NodeId>,
     receiver_set: &BTreeSet<NodeId>,
     operation: IDkgTranscriptOperation,
@@ -43,7 +44,7 @@ pub fn create_idkg_params<R: RngCore + CryptoRng>(
         dealer_set.clone(),
         receiver_set.clone(),
         RegistryVersion::from(0),
-        AlgorithmId::ThresholdEcdsaSecp256k1,
+        alg,
         operation,
     )
     .expect("Should be able to create IDKG params")
@@ -60,6 +61,7 @@ pub fn mock_masked_transcript_type() -> IDkgTranscriptType {
 }
 
 pub fn mock_transcript<R: RngCore + CryptoRng>(
+    alg: AlgorithmId,
     receivers: Option<BTreeSet<NodeId>>,
     transcript_type: IDkgTranscriptType,
     rng: &mut R,
@@ -81,7 +83,7 @@ pub fn mock_transcript<R: RngCore + CryptoRng>(
         registry_version: RegistryVersion::from(314),
         verified_dealings: BTreeMap::new(),
         transcript_type,
-        algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+        algorithm_id: alg,
         internal_transcript_raw: vec![],
     }
 }
@@ -313,6 +315,26 @@ pub mod node {
                 id: node_id,
                 crypto_component: Arc::new(
                     create_crypto_component_with_sign_mega_and_multisign_keys_in_registry(
+                        node_id,
+                        registry,
+                        ReplicaLogger::from(&logger),
+                        rng,
+                    ),
+                ),
+                logger,
+            }
+        }
+
+        pub fn new_with_remote_vault<R: Rng + CryptoRng>(
+            node_id: NodeId,
+            registry: Arc<FakeRegistryClient>,
+            rng: &mut R,
+        ) -> Self {
+            let logger = InMemoryReplicaLogger::new();
+            Node {
+                id: node_id,
+                crypto_component: Arc::new(
+                    create_crypto_component_with_sign_mega_and_multisign_keys_in_registry_and_remote_vault(
                         node_id,
                         registry,
                         ReplicaLogger::from(&logger),
@@ -584,6 +606,30 @@ pub mod node {
             .build()
     }
 
+    fn create_crypto_component_with_sign_mega_and_multisign_keys_in_registry_and_remote_vault<
+        R: Rng + CryptoRng,
+    >(
+        node_id: NodeId,
+        registry: Arc<FakeRegistryClient>,
+        logger: ReplicaLogger,
+        rng: &mut R,
+    ) -> TempCryptoComponentGeneric<ChaCha20Rng> {
+        TempCryptoComponent::builder()
+            .with_registry(Arc::clone(&registry) as Arc<_>)
+            .with_node_id(node_id)
+            .with_keys(ic_crypto_temp_crypto::NodeKeysToGenerate {
+                generate_node_signing_keys: true,
+                generate_committee_signing_keys: true,
+                generate_dkg_dealing_encryption_keys: false,
+                generate_idkg_dealing_encryption_keys: true,
+                generate_tls_keys_and_certificate: false,
+            })
+            .with_logger(logger)
+            .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+            .with_remote_vault()
+            .build()
+    }
+
     impl Debug for Node {
         fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
             f.debug_struct("Node").field("id", &self.id).finish()
@@ -600,7 +646,7 @@ pub mod node {
 
     impl PartialOrd for Node {
         fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-            self.id.partial_cmp(&other.id)
+            Some(self.cmp(other))
         }
     }
 
@@ -1063,6 +1109,24 @@ pub struct CanisterThresholdSigTestEnvironment {
 impl CanisterThresholdSigTestEnvironment {
     /// Creates a new test environment with the given number of nodes.
     pub fn new<R: RngCore + CryptoRng>(num_of_nodes: usize, rng: &mut R) -> Self {
+        Self::new_impl(num_of_nodes, |id, reg, rng| Node::new(id, reg, rng), rng)
+    }
+
+    /// Creates a new test environment with the given number of nodes and
+    /// corresponding remote vaults.
+    pub fn new_with_remote_vault<R: RngCore + CryptoRng>(num_of_nodes: usize, rng: &mut R) -> Self {
+        Self::new_impl(
+            num_of_nodes,
+            |id, reg, rng| Node::new_with_remote_vault(id, reg, rng),
+            rng,
+        )
+    }
+
+    fn new_impl<R, F>(num_of_nodes: usize, node_factory: F, rng: &mut R) -> Self
+    where
+        R: RngCore + CryptoRng,
+        F: Fn(NodeId, Arc<FakeRegistryClient>, &mut R) -> Node,
+    {
         let registry_data = Arc::new(ProtoRegistryDataProvider::new());
         let registry = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
         let registry_version = random_registry_version(rng);
@@ -1075,7 +1139,7 @@ impl CanisterThresholdSigTestEnvironment {
         };
 
         for node_id in n_random_node_ids(num_of_nodes, rng) {
-            let node = Node::new(node_id, Arc::clone(&registry), rng);
+            let node = node_factory(node_id, Arc::clone(&registry), rng);
             env.add_node(node);
         }
         env.registry.update_to_latest_version();
@@ -1833,6 +1897,117 @@ impl IntoBuilder for ThresholdEcdsaSigInputs {
             nonce: *self.nonce(),
             presig_quadruple: self.presig_quadruple().clone(),
             key_transcript: self.key_transcript().clone(),
+        }
+    }
+}
+
+pub struct IDkgTranscriptBuilder {
+    transcript_id: IDkgTranscriptId,
+    receivers: IDkgReceivers,
+    registry_version: RegistryVersion,
+    verified_dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+    transcript_type: IDkgTranscriptType,
+    algorithm_id: AlgorithmId,
+    internal_transcript_raw: Vec<u8>,
+}
+
+impl IDkgTranscriptBuilder {
+    pub fn build(self) -> IDkgTranscript {
+        IDkgTranscript {
+            transcript_id: self.transcript_id,
+            receivers: self.receivers,
+            registry_version: self.registry_version,
+            verified_dealings: self.verified_dealings,
+            transcript_type: self.transcript_type,
+            algorithm_id: self.algorithm_id,
+            internal_transcript_raw: self.internal_transcript_raw,
+        }
+    }
+
+    pub fn corrupt_transcript_id(mut self) -> Self {
+        self.transcript_id = self.transcript_id.increment();
+        self
+    }
+
+    pub fn corrupt_registry_version(mut self) -> Self {
+        self.registry_version += 1.into();
+        self
+    }
+
+    pub fn corrupt_algorithm_id(mut self) -> Self {
+        self.algorithm_id = AlgorithmId::Placeholder;
+        self
+    }
+
+    pub fn remove_some_dealings(mut self, n: usize) -> Self {
+        assert!(n <= self.verified_dealings.len());
+
+        for _ in 0..n {
+            self.verified_dealings
+                .pop_first()
+                .expect("No more dealings remaining");
+        }
+
+        self
+    }
+
+    pub fn remove_a_receiver(mut self) -> Self {
+        let mut receivers = self.receivers.get().clone();
+        receivers.pop_first().expect("have a least 1 receiver");
+        self.receivers = IDkgReceivers::new(receivers).unwrap();
+        self
+    }
+
+    pub fn add_a_new_receiver(mut self) -> Self {
+        let mut receivers = self.receivers.get().clone();
+        let extra_receiver = NodeId::from(PrincipalId::new_node_test_id(i64::MAX as u64));
+        receivers.insert(extra_receiver);
+        self.receivers = IDkgReceivers::new(receivers).unwrap();
+        self
+    }
+
+    pub fn corrupt_transcript_type(mut self) -> Self {
+        self.transcript_type = match self.transcript_type {
+            IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random) => {
+                IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareUnmasked(
+                    self.transcript_id,
+                ))
+            }
+            IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(
+                _id1,
+                id2,
+            )) => IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(id2)),
+            IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(id)) => {
+                IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareUnmasked(id))
+            }
+            IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareUnmasked(id)) => {
+                IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(id))
+            }
+        };
+
+        self
+    }
+
+    pub fn corrupt_internal_transcript_raw<R: CryptoRng + RngCore>(mut self, rng: &mut R) -> Self {
+        let raw_len = self.internal_transcript_raw.len();
+        let corrupted_idx = rng.gen::<usize>() % raw_len;
+        self.internal_transcript_raw[corrupted_idx] ^= 1;
+        self
+    }
+}
+
+impl IntoBuilder for IDkgTranscript {
+    type BuilderType = IDkgTranscriptBuilder;
+
+    fn into_builder(self) -> Self::BuilderType {
+        IDkgTranscriptBuilder {
+            transcript_id: self.transcript_id,
+            receivers: self.receivers,
+            registry_version: self.registry_version,
+            verified_dealings: self.verified_dealings,
+            transcript_type: self.transcript_type,
+            algorithm_id: self.algorithm_id,
+            internal_transcript_raw: self.internal_transcript_raw,
         }
     }
 }

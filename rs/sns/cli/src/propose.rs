@@ -2,7 +2,7 @@ use crate::{
     fetch_canister_controllers_or_exit, get_identity, use_test_neuron_1_owner_identity,
     MakeProposalResponse, NnsGovernanceCanister, SaveOriginalDfxIdentityAndRestoreOnExit,
 };
-use clap::Parser;
+use clap::{ArgGroup, Parser};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
@@ -11,11 +11,16 @@ use ic_nns_governance::pb::v1::{manage_neuron::NeuronIdOrSubaccount, proposal::A
 use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
 use std::{
     collections::HashSet,
-    fmt::{Debug, Display},
-    path::PathBuf,
+    fmt::{Debug, Display, Formatter},
+    fs::{write, OpenOptions},
+    path::{Path, PathBuf},
 };
 
+#[cfg(test)]
+mod propose_tests;
+
 #[derive(Debug, Parser)]
+#[clap(group(ArgGroup::new("neuron-selection").multiple(false).required(true)))]
 pub struct ProposeArgs {
     /// The network to deploy to. This can be "local", "ic", or the URL of an IC
     /// network.
@@ -30,14 +35,14 @@ pub struct ProposeArgs {
     /// must be able to operate this neuron. If not specified, it will be
     /// assumed that the current dfx identity has a neuron with memo == 0.
     /// --neuron_memo is an alternative to this.
-    #[clap(long)]
+    #[clap(long, group = "neuron-selection")]
     pub neuron_id: Option<u64>,
 
     /// This is an alternative to --neuron_id for specifying which neuron to
     /// make the proposal with. This is used in conjunction with the current
     /// principal to calculate the subaccount (belonging to the NNS governance
     /// canister) that holds the ICP that backs the proposing neuron.
-    #[clap(long)]
+    #[clap(long, group = "neuron-selection")]
     pub neuron_memo: Option<u64>,
 
     /// This is a "secret menu" item. It is (yet) another alternative to
@@ -46,8 +51,19 @@ pub struct ProposeArgs {
     /// described in the sns-testing Github repo). In addition to specifying
     /// which neuron to propose with, this also controls the principal that
     /// sends the request.
-    #[clap(long)]
+    #[clap(long, group = "neuron-selection")]
     pub test_neuron_proposer: bool,
+
+    /// An optional flag to save the ProposalId of a successfully submitted
+    /// CreateServiceNervousSystem proposal to the filesystem. The file must
+    /// be writeable, and will be created if it does not exist.    
+    /// The ProposalId will be saved in JSON format. For example:
+    ///
+    ///  {
+    ///      "id": 10
+    ///  }
+    #[clap(long)]
+    pub save_to: Option<PathBuf>,
 }
 
 pub fn exec(args: ProposeArgs) {
@@ -56,28 +72,22 @@ pub fn exec(args: ProposeArgs) {
         init_config_file,
         neuron_id,
         neuron_memo,
+        save_to,
         test_neuron_proposer,
     } = args;
 
-    // Step 0: Validate arguments.
-    let neuron_specifier_count = [
-        neuron_id.is_some(),
-        neuron_memo.is_some(),
-        test_neuron_proposer,
-    ]
-    .into_iter()
-    .filter(|count_this| *count_this)
-    .count();
-    if neuron_specifier_count > 1 {
-        eprintln!(
-            "--neuron-id, --neuron-memo, and --test-neuron-proposer are \
-             mutually exclusive (yet more than one of them was used)."
-        );
-        std::process::exit(1);
-    }
-
-    // Step 1: Load configuration
+    // Step 0: Load configuration
     let proposal = load_configuration_and_validate_or_exit(&network, &init_config_file);
+
+    // Step 1: Ensure the save-to file exists and is writeable if specified.
+    // We do this check without writing the file to ensure the best chance of successfully
+    // saving the data to a file after the Proposal is submitted.
+    if let Some(save_to) = &save_to {
+        if let Err(err) = ensure_file_exists_and_is_writeable(save_to.as_path()) {
+            eprintln!("{}", err);
+            std::process::exit(1);
+        }
+    }
 
     // Step 2: Send the proposal.
     eprintln!("Loaded configuration.");
@@ -115,15 +125,25 @@ pub fn exec(args: ProposeArgs) {
     println!();
     match result {
         Ok(MakeProposalResponse {
-            proposal_id: Some(ProposalId { id }),
+            proposal_id: Some(proposal_id),
         }) => {
             println!("🚀 Success!");
             if network == "ic" {
                 println!("View the proposal here:");
-                println!("https://dashboard.internetcomputer.org/proposal/{}", id);
+                println!(
+                    "https://dashboard.internetcomputer.org/proposal/{}",
+                    proposal_id.id
+                );
             } else {
                 // TODO: Support other networks.
-                println!("Proposal ID: {}", id);
+                println!("Proposal ID: {}", proposal_id.id);
+            }
+
+            if let Some(save_to) = &save_to {
+                if let Err(err) = save_proposal_id_to_file(save_to.as_path(), &proposal_id) {
+                    eprintln!("{}", err);
+                    std::process::exit(1);
+                };
             }
         }
         err => {
@@ -194,8 +214,8 @@ fn load_configuration_and_validate_or_exit(
                 let canister_id: PrincipalId = canister.id.unwrap_or_else(|| {
                     eprintln!(
                         "Internal error: Canister.id was found to be None while \
-                     validating the CreateServiceNervousSystem.dapp_canisters \
-                     field.",
+                        validating the CreateServiceNervousSystem.dapp_canisters \
+                        field.",
                     );
                     std::process::exit(1);
                 });
@@ -235,7 +255,7 @@ struct CanistersWithMissingControllers {
 }
 
 impl Display for CanistersWithMissingControllers {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
         let CanistersWithMissingControllers {
             inspected_canister_count,
             defective_canister_ids,
@@ -271,9 +291,8 @@ fn all_canisters_have_all_required_controllers(
         .iter()
         .filter(|canister_id| {
             let canister_id = PrincipalId::from(**canister_id);
-            let controllers = HashSet::from_iter(
-                fetch_canister_controllers_or_exit(network, canister_id).into_iter(),
-            );
+            let controllers =
+                HashSet::from_iter(fetch_canister_controllers_or_exit(network, canister_id));
             let ok = controllers.is_superset(&required_controllers);
             !ok
         })
@@ -290,4 +309,63 @@ fn all_canisters_have_all_required_controllers(
         inspected_canister_count,
         defective_canister_ids,
     })
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+enum SaveToErrors {
+    FileOpenFailed(PathBuf, String),
+    FileWriteFailed(PathBuf, String),
+    InvalidData(String),
+}
+
+impl Display for SaveToErrors {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let error_string = match self {
+            SaveToErrors::FileOpenFailed(path_buf, reason) => {
+                format!(
+                    "could not open file for writing {:?} due to {}",
+                    path_buf, reason
+                )
+            }
+            SaveToErrors::FileWriteFailed(path_buf, reason) => {
+                format!("could not write to file {:?} due to {}", path_buf, reason)
+            }
+            SaveToErrors::InvalidData(reason) => {
+                format!("could not format data to JSON scheme due to {}", reason)
+            }
+        };
+
+        write!(
+            f,
+            "Unable to save ProposalId to file because {}. \
+            The proposal may or may not have been submitted",
+            error_string
+        )
+    }
+}
+
+/// Ensure that a path to a file exists (by creating it if it does not) and is writeable.
+fn ensure_file_exists_and_is_writeable(path: &Path) -> Result<(), SaveToErrors> {
+    // Make sure the file is writeable. Create it if it does not exist.
+    match OpenOptions::new().create(true).write(true).open(path) {
+        Ok(_) => (),
+        Err(e) => {
+            return Err(SaveToErrors::FileOpenFailed(
+                path.to_path_buf(),
+                e.to_string(),
+            ))
+        }
+    }
+
+    Ok(())
+}
+
+/// Save a `ProposalId` to a file in JSON format
+fn save_proposal_id_to_file(path: &Path, proposal_id: &ProposalId) -> Result<(), SaveToErrors> {
+    let json_str = serde_json::to_string(&proposal_id)
+        .map_err(|e| SaveToErrors::InvalidData(e.to_string()))?;
+
+    write(path, json_str)
+        .map_err(|e| SaveToErrors::FileWriteFailed(path.to_path_buf(), e.to_string()))?;
+    Ok(())
 }

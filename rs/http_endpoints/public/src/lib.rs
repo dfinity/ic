@@ -22,6 +22,7 @@ mod types;
 mod validator_executor;
 
 use crate::{
+    body::BodyReceiverLayer,
     call::CallService,
     catch_up_package::CatchUpPackageService,
     common::{
@@ -30,32 +31,35 @@ use crate::{
     },
     dashboard::DashboardService,
     health_status_refresher::HealthStatusRefreshLayer,
-    metrics::{LABEL_REQUEST_TYPE, LABEL_STATUS, REQUESTS_LABEL_NAMES, REQUESTS_NUM_LABELS},
+    metrics::{
+        LABEL_REQUEST_TYPE, LABEL_STATUS, REQUESTS_LABEL_NAMES, REQUESTS_NUM_LABELS, STATUS_ERROR,
+        STATUS_SUCCESS,
+    },
     pprof::{PprofFlamegraphService, PprofHomeService, PprofProfileService},
     query::QueryService,
-    read_state::ReadStateService,
+    read_state::{canister::CanisterReadStateService, subnet::SubnetReadStateService},
     state_reader_executor::StateReaderExecutor,
     status::StatusService,
     types::*,
     validator_executor::ValidatorExecutor,
 };
 use byte_unit::Byte;
+use bytes::Bytes;
 use crossbeam::{atomic::AtomicCell, channel::Sender};
 use http::method::Method;
 use hyper::{server::conn::Http, Body, Request, Response, StatusCode};
 use ic_async_utils::{receive_body, start_tcp_listener};
 use ic_certification::validate_subnet_delegation_certificate;
 use ic_config::http_handler::Config;
-use ic_crypto_tls_interfaces::TlsHandshake;
+use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
+use ic_crypto_tls_interfaces::{TlsHandshake, TlsStream};
 use ic_crypto_tree_hash::{lookup_path, LabeledTree, Path};
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_interfaces::{
-    artifact_pool::UnvalidatedArtifact,
     consensus_pool::ConsensusPoolCache,
-    crypto::IngressSigVerifier,
+    crypto::BasicSigner,
     execution_environment::{IngressFilterService, QueryExecutionService},
     ingress_pool::IngressPoolThrottler,
-    time_source::TimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
@@ -69,13 +73,15 @@ use ic_registry_client_helpers::{
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    artifact::UnvalidatedArtifactMutation,
+    artifact_kind::IngressArtifact,
     malicious_flags::MaliciousFlags,
     messages::{
         Blob, Certificate, CertificateDelegation, HttpReadState, HttpReadStateContent,
-        HttpReadStateResponse, HttpRequestEnvelope, ReplicaHealthStatus, SignedIngress,
+        HttpReadStateResponse, HttpRequestEnvelope, QueryResponseHash, ReplicaHealthStatus,
     },
     time::expiry_time_from_now,
-    CanisterId, NodeId, SubnetId,
+    NodeId, PrincipalId, SubnetId,
 };
 use metrics::{HttpHandlerMetrics, LABEL_UNKNOWN};
 use rand::Rng;
@@ -88,6 +94,7 @@ use std::{
     sync::{Arc, RwLock},
     time::Duration,
 };
+use strum::{Display, IntoStaticStr};
 use tempfile::NamedTempFile;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
@@ -107,10 +114,9 @@ pub(crate) struct HttpError {
     pub message: String,
 }
 
-pub(crate) type EndpointService = BoxCloneService<Request<Body>, Response<Body>, BoxError>;
+pub(crate) type EndpointService = BoxCloneService<Request<Bytes>, Response<Body>, Infallible>;
 
-/// The struct that handles incoming HTTP requests for the IC replica.
-/// This is collection of thread-safe data members.
+/// Struct that holds all endpoint services.
 #[derive(Clone)]
 struct HttpHandler {
     call_service: EndpointService,
@@ -118,11 +124,11 @@ struct HttpHandler {
     catchup_service: EndpointService,
     dashboard_service: EndpointService,
     status_service: EndpointService,
-    read_state_service: EndpointService,
+    canister_read_state_service: EndpointService,
+    subnet_read_state_service: EndpointService,
     pprof_home_service: EndpointService,
     pprof_profile_service: EndpointService,
     pprof_flamegraph_service: EndpointService,
-    health_status_refresher: HealthStatusRefreshLayer,
 }
 
 // Crates a detached tokio blocking task that initializes the server (reading
@@ -175,7 +181,9 @@ fn start_server_initialization(
             tls_handshake.as_ref(),
         )
         .await;
-        *delegation_from_nns.write().unwrap() = loaded_delegation;
+        if let Some(delegation) = loaded_delegation {
+            *delegation_from_nns.write().unwrap() = Some(delegation);
+        }
         metrics
             .health_status_transitions_total
             .with_label_values(&[
@@ -230,6 +238,11 @@ fn create_port_file(path: PathBuf, port: u16) {
 }
 
 /// Creates HTTP server. The function returns only after a TCP listener is bound to a port.
+///
+/// The optional `delegation_from_nns` field is supposed to be used in tests
+/// to provide a way to "fake" delegations received from the NNS subnet
+/// without having to either mock all the related calls to the registry
+/// or actually make the calls.
 #[allow(clippy::too_many_arguments)]
 pub fn start_server(
     rt_handle: tokio::runtime::Handle,
@@ -238,9 +251,9 @@ pub fn start_server(
     ingress_filter: IngressFilterService,
     query_execution_service: QueryExecutionService,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    ingress_tx: Sender<UnvalidatedArtifact<SignedIngress>>,
-    time_source: Arc<dyn TimeSource>,
+    ingress_tx: Sender<UnvalidatedArtifactMutation<IngressArtifact>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    query_signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
     tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
     ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
@@ -251,6 +264,7 @@ pub fn start_server(
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     subnet_type: SubnetType,
     malicious_flags: MaliciousFlags,
+    delegation_from_nns: Option<CertificateDelegation>,
     pprof_collector: Arc<dyn PprofCollector>,
 ) {
     let listen_addr = config.listen_addr;
@@ -269,7 +283,7 @@ pub fn start_server(
     }
     let metrics = HttpHandlerMetrics::new(metrics_registry);
 
-    let delegation_from_nns = Arc::new(RwLock::new(None));
+    let delegation_from_nns = Arc::new(RwLock::new(delegation_from_nns));
     let health_status = Arc::new(AtomicCell::new(ReplicaHealthStatus::Starting));
     let state_reader_executor = StateReaderExecutor::new(state_reader);
     let call_service = CallService::new_service(
@@ -278,7 +292,6 @@ pub fn start_server(
         metrics.clone(),
         node_id,
         subnet_id,
-        time_source,
         Arc::clone(&registry_client),
         ValidatorExecutor::new(
             Arc::clone(&registry_client),
@@ -294,6 +307,8 @@ pub fn start_server(
         config.clone(),
         log.clone(),
         metrics.clone(),
+        query_signer,
+        node_id,
         Arc::clone(&health_status),
         Arc::clone(&delegation_from_nns),
         ValidatorExecutor::new(
@@ -305,7 +320,7 @@ pub fn start_server(
         Arc::clone(&registry_client),
         query_execution_service,
     );
-    let read_state_service = ReadStateService::new_service(
+    let canister_read_state_service = CanisterReadStateService::new_service(
         config.clone(),
         log.clone(),
         metrics.clone(),
@@ -319,6 +334,14 @@ pub fn start_server(
             log.clone(),
         ),
         Arc::clone(&registry_client),
+    );
+    let subnet_read_state_service = SubnetReadStateService::new_service(
+        config.clone(),
+        log.clone(),
+        metrics.clone(),
+        Arc::clone(&health_status),
+        Arc::clone(&delegation_from_nns),
+        state_reader_executor.clone(),
     );
     let status_service = StatusService::new_service(
         config.clone(),
@@ -373,13 +396,18 @@ pub fn start_server(
         status_service,
         catchup_service,
         dashboard_service,
-        read_state_service,
+        canister_read_state_service,
+        subnet_read_state_service,
         pprof_home_service,
         pprof_profile_service,
         pprof_flamegraph_service,
-        health_status_refresher,
     };
-    let main_service = create_main_service(metrics.clone(), config.clone(), http_handler);
+    let main_service = create_main_service(
+        metrics.clone(),
+        config.clone(),
+        http_handler,
+        health_status_refresher,
+    );
 
     let port_file_path = config.port_file_path.clone();
     // If addr == 0, then a random port will be assigned. In this case it
@@ -422,7 +450,11 @@ pub fn start_server(
                 Err(err) => {
                     // Don't exit the loop on a connection error. We will want to
                     // continue serving.
-                    metrics.observe_connection_error(ConnectionError::Accept, Instant::now());
+                    metrics
+                        .connection_setup_duration
+                        .with_label_values(&[STATUS_ERROR, ConnError::Io.into()])
+                        .observe(0.0);
+
                     error!(log, "Can't accept TCP connection, error = {}", err);
                 }
             }
@@ -434,8 +466,8 @@ fn create_main_service(
     metrics: HttpHandlerMetrics,
     config: Config,
     http_handler: HttpHandler,
+    health_status_refresher: HealthStatusRefreshLayer,
 ) -> BoxCloneService<Request<Body>, Response<Body>, Infallible> {
-    let health_status_refresher = http_handler.health_status_refresher.clone();
     let route_service = service_fn(move |req: RequestWithTimer| {
         let http_handler = http_handler.clone();
         let config = config.clone();
@@ -479,97 +511,134 @@ async fn handshake_and_serve_connection(
     metrics: HttpHandlerMetrics,
 ) -> Result<(), Infallible> {
     let connection_start_time = Instant::now();
-    let mut http = Http::new();
-    http.http2_max_concurrent_streams(config.http_max_concurrent_streams);
-
-    let mut b = [0_u8; 1];
-    let app_layer = match timeout(
-        Duration::from_secs(config.connection_read_timeout_seconds),
-        tcp_stream.peek(&mut b),
+    let peer_addr = tcp_stream.peer_addr();
+    let conn_after_handshake = stream_after_handshake(
+        &log,
+        config.connection_read_timeout_seconds,
+        tcp_stream,
+        tls_handshake,
+        registry_client,
     )
-    .await
-    {
-        // The peek operation didn't timeout, and the peek oparation didn't return
-        // an error.
-        Ok(Ok(_)) => {
-            if b[0] == 22 {
-                AppLayer::Https
-            } else {
-                AppLayer::Http
-            }
-        }
-        Ok(Err(err)) => {
-            error!(log, "Can't peek into TCP stream, error = {}", err);
-            metrics.observe_connection_error(ConnectionError::Peek, connection_start_time);
-            return Ok(());
-        }
+    .await;
+
+    let (connection_result, conn_type_label) = match conn_after_handshake {
         Err(err) => {
             warn!(
                 log,
-                "TCP peeking timeout after {}s, error = {}",
-                config.connection_read_timeout_seconds,
-                err
+                "Handshake failed, error = {:?}, peer_addr = {:?}", err, peer_addr,
             );
-            metrics.observe_connection_error(ConnectionError::PeekTimeout, connection_start_time);
+            metrics
+                .connection_setup_duration
+                .with_label_values(&[STATUS_ERROR, err.into()])
+                .observe(connection_start_time.elapsed().as_secs_f64());
             return Ok(());
         }
-    };
-
-    let connection_result = match app_layer {
-        AppLayer::Https => {
-            let peer_addr = tcp_stream.peer_addr();
-            let tls_stream = match tls_handshake
-                .perform_tls_server_handshake_without_client_auth(
-                    tcp_stream,
-                    registry_client.get_latest_version(),
-                )
-                .await
-            {
-                Err(err) => {
-                    metrics.observe_connection_error(
-                        ConnectionError::TlsHandshake,
-                        connection_start_time,
-                    );
-                    warn!(
-                        log,
-                        "TLS handshake failed, error = {}, peer_addr = {:?}", err, peer_addr,
-                    );
-                    return Ok(());
+        Ok(conn_type) => {
+            let conn_type_label = conn_type.to_string();
+            metrics
+                .connection_setup_duration
+                .with_label_values(&[STATUS_SUCCESS, &conn_type_label])
+                .observe(connection_start_time.elapsed().as_secs_f64());
+            let conn_result = match conn_type {
+                ConnType::Secure(tls_stream) => {
+                    serve_connection_with_read_timeout(
+                        tls_stream,
+                        service,
+                        config.connection_read_timeout_seconds,
+                    )
+                    .await
                 }
-                Ok(tls_stream) => tls_stream,
+                ConnType::Insecure(tcp_stream) => {
+                    serve_connection_with_read_timeout(
+                        tcp_stream,
+                        service,
+                        config.connection_read_timeout_seconds,
+                    )
+                    .await
+                }
             };
-            metrics.observe_successful_connection_setup(app_layer, connection_start_time);
-            serve_connection_with_read_timeout(
-                tls_stream,
-                service,
-                config.connection_read_timeout_seconds,
-            )
-            .await
-        }
-        AppLayer::Http => {
-            metrics.observe_successful_connection_setup(app_layer, connection_start_time);
-            serve_connection_with_read_timeout(
-                tcp_stream,
-                service,
-                config.connection_read_timeout_seconds,
-            )
-            .await
+            (conn_result, conn_type_label)
         }
     };
-
     match connection_result {
         Err(err) => {
-            metrics.observe_abrupt_conn_termination(app_layer, connection_start_time);
             info!(
                 log,
                 "The connection was closed abruptly after {:?}, error = {}",
                 connection_start_time.elapsed(),
                 err
             );
+            metrics
+                .connection_duration
+                .with_label_values(&[STATUS_ERROR, &conn_type_label])
+                .observe(connection_start_time.elapsed().as_secs_f64())
         }
-        Ok(()) => metrics.observe_graceful_conn_termination(app_layer, connection_start_time),
+        Ok(()) => metrics
+            .connection_duration
+            .with_label_values(&[STATUS_SUCCESS, &conn_type_label])
+            .observe(connection_start_time.elapsed().as_secs_f64()),
     }
     Ok(())
+}
+
+#[derive(Display)]
+#[strum(serialize_all = "snake_case")]
+enum ConnType {
+    #[strum(serialize = "secure")]
+    Secure(Box<dyn TlsStream>),
+    #[strum(serialize = "insecure")]
+    Insecure(TcpStream),
+}
+
+#[derive(IntoStaticStr, Debug)]
+#[strum(serialize_all = "snake_case")]
+pub(crate) enum ConnError {
+    #[strum(serialize = "tls_handshake")]
+    TlsHandshake,
+    Io,
+    Timeout,
+}
+
+async fn stream_after_handshake(
+    log: &ReplicaLogger,
+    connection_read_timeout_seconds: u64,
+    tcp_stream: TcpStream,
+    tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
+    registry_client: Arc<dyn RegistryClient>,
+) -> Result<ConnType, ConnError> {
+    let mut b = [0_u8; 1];
+    match timeout(
+        Duration::from_secs(connection_read_timeout_seconds),
+        tcp_stream.peek(&mut b),
+    )
+    .await
+    {
+        // The peek operation was successful within the timeout.
+        Ok(Ok(_)) => {
+            if b[0] == 22 {
+                match tls_handshake
+                    .perform_tls_server_handshake_without_client_auth(
+                        tcp_stream,
+                        registry_client.get_latest_version(),
+                    )
+                    .await
+                {
+                    Err(err) => {
+                        warn!(log, "TLS handshaked failed with: {:?}", err);
+                        Err(ConnError::TlsHandshake)
+                    }
+                    Ok(tls_stream) => Ok(ConnType::Secure(tls_stream)),
+                }
+            } else {
+                Ok(ConnType::Insecure(tcp_stream))
+            }
+        }
+        Ok(Err(err)) => {
+            warn!(log, "Peeking TCP stream failed with: {:?}", err);
+            Err(ConnError::Io)
+        }
+        Err(_) => Err(ConnError::Timeout),
+    }
 }
 
 async fn serve_connection_with_read_timeout<T: AsyncRead + AsyncWrite + 'static>(
@@ -603,7 +672,8 @@ async fn make_router(
     let status_service = http_handler.status_service.clone();
     let catch_up_package_service = http_handler.catchup_service.clone();
     let dashboard_service = http_handler.dashboard_service.clone();
-    let read_state_service = http_handler.read_state_service.clone();
+    let canister_read_state_service = http_handler.canister_read_state_service.clone();
+    let subnet_read_state_service = http_handler.subnet_read_state_service.clone();
     let pprof_home_service = http_handler.pprof_home_service.clone();
     let pprof_profile_service = http_handler.pprof_profile_service.clone();
     let pprof_flamegraph_service = http_handler.pprof_flamegraph_service.clone();
@@ -634,19 +704,47 @@ async fn make_router(
 
             // Check the path
             let path = req.uri().path();
-            let (svc, effective_canister_id) =
+            let (svc, effective_principal_id) =
                 match *path.split('/').collect::<Vec<&str>>().as_slice() {
                     ["", "api", "v2", "canister", effective_canister_id, "call"] => {
                         timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::Call.into());
-                        (call_service, Some(effective_canister_id))
+                        (
+                            call_service,
+                            Some(
+                                PrincipalId::from_str(effective_canister_id)
+                                    .map_err(|err| (effective_canister_id, err.to_string())),
+                            ),
+                        )
                     }
                     ["", "api", "v2", "canister", effective_canister_id, "query"] => {
                         timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::Query.into());
-                        (query_service, Some(effective_canister_id))
+                        (
+                            query_service,
+                            Some(
+                                PrincipalId::from_str(effective_canister_id)
+                                    .map_err(|err| (effective_canister_id, err.to_string())),
+                            ),
+                        )
                     }
                     ["", "api", "v2", "canister", effective_canister_id, "read_state"] => {
                         timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::ReadState.into());
-                        (read_state_service, Some(effective_canister_id))
+                        (
+                            canister_read_state_service,
+                            Some(
+                                PrincipalId::from_str(effective_canister_id)
+                                    .map_err(|err| (effective_canister_id, err.to_string())),
+                            ),
+                        )
+                    }
+                    ["", "api", "v2", "subnet", subnet_id, "read_state"] => {
+                        timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::ReadState.into());
+                        (
+                            subnet_read_state_service,
+                            Some(
+                                PrincipalId::from_str(subnet_id)
+                                    .map_err(|err| (subnet_id, err.to_string())),
+                            ),
+                        )
                     }
                     ["", "_", "catch_up_package"] => {
                         timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::CatchUpPackage.into());
@@ -664,19 +762,19 @@ async fn make_router(
                     }
                 };
 
-            // If url contains effective canister id we attach it to the request.
-            if let Some(effective_canister_id) = effective_canister_id {
-                match CanisterId::from_str(effective_canister_id) {
-                    Ok(effective_canister_id) => {
-                        req.extensions_mut().insert(effective_canister_id);
+            // If url contains effective principal id we attach it to the request.
+            if let Some(effective_principal_id) = effective_principal_id {
+                match effective_principal_id {
+                    Ok(id) => {
+                        req.extensions_mut().insert(id);
                     }
-                    Err(e) => {
+                    Err((id, e)) => {
                         return (
                             make_plaintext_response(
                                 StatusCode::BAD_REQUEST,
                                 format!(
-                                    "Malformed request: Invalid efffective canister id {}: {}",
-                                    effective_canister_id, e
+                                    "Malformed request: Invalid efffective principal id {}: {}",
+                                    id, e
                                 ),
                             ),
                             timer,
@@ -693,7 +791,7 @@ async fn make_router(
             }
             "/" | "/_/" => {
                 timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::RedirectToDashboard.into());
-                return (redirect_to_dasboard_response(), timer);
+                return (redirect_to_dashboard_response(), timer);
             }
             HTTP_DASHBOARD_URL_PATH => {
                 timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::Dashboard.into());
@@ -744,16 +842,14 @@ async fn make_router(
             );
         }
     };
-    let mut svc_per_conn = ServiceBuilder::new()
+    let svc_per_conn = ServiceBuilder::new()
         .load_shed()
         .timeout(Duration::from_secs(config.request_timeout_seconds))
+        .layer(BodyReceiverLayer::new(&config))
         .service(svc);
     (
         svc_per_conn
-            .ready()
-            .await
-            .expect("The load shedder must always be ready.")
-            .call(req)
+            .oneshot(req)
             .await
             .unwrap_or_else(|err| map_box_error_to_response(err)),
         timer,
@@ -1004,14 +1100,14 @@ async fn get_random_node_from_nns_subnet(
         "Failed to choose random nns node. NNS node list: {:?}",
         nns_nodes
     ))?;
-    match registry_client.get_transport_info(*nns_node, registry_client.get_latest_version()) {
+    match registry_client.get_node_record(*nns_node, registry_client.get_latest_version()) {
         Ok(Some(node)) => Ok((*nns_node, node.http.ok_or("No http endpoint for node")?)),
         Ok(None) => Err(format!(
             "No transport info found for nns node. {}",
             nns_node
         )),
         Err(err) => Err(format!(
-            "Failed to get transport info for nns node {}. Err: {}",
+            "failed to get node record for nns node {}. Err: {}",
             nns_node, err
         )),
     }
@@ -1024,7 +1120,7 @@ fn no_content_response() -> Response<Body> {
     response
 }
 
-fn redirect_to_dasboard_response() -> Response<Body> {
+fn redirect_to_dashboard_response() -> Response<Body> {
     // The empty string is simply to uniformize the return type with the cases where
     // the response is not empty.
     let mut response = Response::new(Body::from(""));

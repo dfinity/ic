@@ -6,13 +6,13 @@ rust_library(
     name = "threshold_sig_der",
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_utils_threshold_sig_der",
-    version = "0.8.0",
+    version = "0.9.0",
     deps = [
+        "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
         "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381/der_utils",
         "//rs/crypto/internal/crypto_lib/types",
         "//rs/types/types",
         "@crate_index//:base64",
-        "@crate_index//:openssl",
     ],
 )
 

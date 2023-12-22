@@ -11,11 +11,7 @@ use ic_ic00_types::{
     CanisterIdRecord, InstallCodeArgs, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs,
     IC_00,
 };
-use ic_interfaces::{
-    artifact_pool::UnvalidatedArtifact,
-    execution_environment::{IngressHistoryReader, QueryHandler},
-    time_source::{SysTimeSource, TimeSource},
-};
+use ic_interfaces::execution_environment::{IngressHistoryReader, QueryHandler};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_metrics::MetricsRegistry;
@@ -36,19 +32,20 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types::{
+    artifact::UnvalidatedArtifactMutation,
+    artifact_kind::IngressArtifact,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{SignedIngress, UserQuery},
     replica_config::NODE_INDEX_DEFAULT,
     time::expiry_time_from_now,
-    CanisterId, Height, NodeId, Time,
+    CanisterId, Height, NodeId, ReplicaVersion, Time,
 };
 use prost::Message;
 use slog_scope::info;
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::str::FromStr;
-use std::sync::Arc;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::{
     convert::TryFrom,
@@ -65,18 +62,14 @@ const CYCLES_BALANCE: u128 = 1 << 120;
 /// time.
 #[allow(clippy::await_holding_lock)]
 fn process_ingress(
-    ingress_tx: &CrossbeamSender<UnvalidatedArtifact<SignedIngress>>,
+    ingress_tx: &CrossbeamSender<UnvalidatedArtifactMutation<IngressArtifact>>,
     ingress_hist_reader: &dyn IngressHistoryReader,
     msg: SignedIngress,
     time_limit: Duration,
 ) -> Result<WasmResult, UserError> {
     let msg_id = msg.id();
     ingress_tx
-        .send(UnvalidatedArtifact {
-            message: msg,
-            peer_id: node_test_id(1),
-            timestamp: SysTimeSource::new().get_relative_time(),
-        })
+        .send(UnvalidatedArtifactMutation::Insert((msg, node_test_id(1))))
         .unwrap();
 
     let start = Instant::now();
@@ -156,7 +149,7 @@ where
 /// function calls instead of http calls.
 pub struct LocalTestRuntime {
     pub query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
-    pub ingress_sender: CrossbeamSender<UnvalidatedArtifact<SignedIngress>>,
+    pub ingress_sender: CrossbeamSender<UnvalidatedArtifactMutation<IngressArtifact>>,
     pub ingress_history_reader: Arc<dyn IngressHistoryReader>,
     pub state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     pub node_id: NodeId,
@@ -219,10 +212,9 @@ pub fn get_ic_config() -> IcConfig {
         NodeConfiguration {
             xnet_api: SocketAddr::from_str("0.0.0.1:0").expect("can't fail"),
             public_api: SocketAddr::from_str("128.0.0.1:1").expect("can't fail"),
-            p2p_addr: SocketAddr::from_str("128.0.0.1:100").expect("can't fail"),
             node_operator_principal_id: None,
             secret_key_store: Some(node_sks),
-            chip_id: vec![],
+            chip_id: None,
         },
     );
 
@@ -232,8 +224,7 @@ pub fn get_ic_config() -> IcConfig {
         SubnetConfig::new(
             subnet_index,
             subnet_nodes,
-            None,
-            None,
+            ReplicaVersion::default(),
             None,
             None,
             None,
@@ -262,7 +253,7 @@ pub fn get_ic_config() -> IcConfig {
     IcConfig::new(
         prep_dir,
         topology_config,
-        /* replica_version_id= */ None,
+        ReplicaVersion::default(),
         /* generate_subnet_records= */ true,
         /* nns_subnet_id= */ Some(subnet_index),
         /* release_package_url= */ None,
@@ -341,9 +332,10 @@ where
             ic_replica::setup_ic_stack::construct_ic_stack(
                 &logger,
                 &metrics_registry,
-                tokio::runtime::Handle::current(),
-                tokio::runtime::Handle::current(),
-                tokio::runtime::Handle::current(),
+                &tokio::runtime::Handle::current(),
+                &tokio::runtime::Handle::current(),
+                &tokio::runtime::Handle::current(),
+                &tokio::runtime::Handle::current(),
                 config.clone(),
                 temp_node,
                 subnet_id,
@@ -626,11 +618,9 @@ impl LocalTestRuntime {
             ingress_expiry: 0,
             nonce: None,
         };
-        let result = self.query_handler.query(
-            query,
-            self.state_reader.get_latest_state().take(),
-            Vec::new(),
-        );
+        let result =
+            self.query_handler
+                .query(query, self.state_reader.get_latest_state(), Vec::new());
         if let Ok(WasmResult::Reply(result)) = result.clone() {
             info!(
                 "Response{}: {}",

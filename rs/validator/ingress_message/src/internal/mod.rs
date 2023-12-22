@@ -1,6 +1,5 @@
 use crate::{AuthenticationError, HttpRequestVerifier, RequestValidationError};
-use ic_interfaces::crypto::{BasicSigVerifierByPublicKey, CanisterSigVerifier};
-use ic_interfaces::time_source::TimeSource;
+use ic_crypto_interfaces_sig_verification::{BasicSigVerifierByPublicKey, CanisterSigVerifier};
 use ic_types::crypto::threshold_sig::{IcRootOfTrust, RootOfTrustProvider};
 use ic_types::crypto::{BasicSigOf, CanisterSigOf, CryptoResult, Signable, UserPublicKey};
 use ic_types::messages::{HttpRequest, HttpRequestContent};
@@ -19,7 +18,7 @@ const IC_NNS_ROOT_PUBLIC_KEY_BASE64: &str = r#"MIGCMB0GDSsGAQQBgtx8BQMBAgEGDCsGA
 /// An implementation of [`HttpRequestVerifier`] to verify ingress messages.
 pub struct IngressMessageVerifier<P: RootOfTrustProvider> {
     root_of_trust_provider: P,
-    time_source: Arc<dyn TimeSource>,
+    time_source: TimeProvider,
     validator: ic_validator::HttpRequestVerifierImpl,
 }
 
@@ -81,10 +80,7 @@ impl Default for IngressMessageVerifier<ConstantRootOfTrustProvider> {
 }
 
 impl IngressMessageVerifier<ConstantRootOfTrustProvider> {
-    fn new_internal<T: Into<IcRootOfTrust>>(
-        root_of_trust: T,
-        time_source: Arc<dyn TimeSource>,
-    ) -> Self {
+    fn new_internal<T: Into<IcRootOfTrust>>(root_of_trust: T, time_source: TimeProvider) -> Self {
         IngressMessageVerifier {
             root_of_trust_provider: ConstantRootOfTrustProvider::new(root_of_trust),
             time_source,
@@ -206,6 +202,9 @@ fn to_validation_error(error: ic_validator::RequestValidationError) -> RequestVa
         ic_validator::RequestValidationError::PathTooLongError { length, maximum } => {
             RequestValidationError::PathTooLongError { length, maximum }
         }
+        ic_validator::RequestValidationError::NonceTooBigError { num_bytes, maximum } => {
+            RequestValidationError::NonceTooBigError { num_bytes, maximum }
+        }
     }
 }
 fn to_authentication_lib_error(error: ic_validator::AuthenticationError) -> AuthenticationError {
@@ -260,7 +259,7 @@ impl IngressMessageVerifierBuilder {
     }
 
     pub fn build(self) -> IngressMessageVerifier<ConstantRootOfTrustProvider> {
-        IngressMessageVerifier::new_internal(self.root_of_trust, Arc::new(self.time_provider))
+        IngressMessageVerifier::new_internal(self.root_of_trust, self.time_provider)
     }
 }
 
@@ -272,13 +271,13 @@ pub enum TimeProvider {
     SystemTime,
 }
 
-impl TimeSource for TimeProvider {
+impl TimeProvider {
     fn get_relative_time(&self) -> Time {
         match &self {
             TimeProvider::Constant(time) => *time,
             TimeProvider::SystemTime => {
                 UNIX_EPOCH
-                    + SystemTime::now()
+                    + dfn_core::api::now()
                         .duration_since(SystemTime::UNIX_EPOCH)
                         .expect("SystemTime is before UNIX EPOCH!")
             }

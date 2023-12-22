@@ -15,14 +15,13 @@ import os
 import subprocess
 import sys
 import tarfile
+import tempfile
 
 from crc import INITIAL_CRC, calc_crc
-from reproducibility import get_tmpdir_checking_block_size, print_artifact_info
 
 LVM_HEADER_SIZE_BYTES = int(2048 * 512)
 BYTES_PER_MEBIBYTE = int(2 ** 20)
 EXTENT_SIZE_BYTES = int(4 * BYTES_PER_MEBIBYTE)
-
 
 def main():
     parser = argparse.ArgumentParser()
@@ -30,7 +29,7 @@ def main():
     parser.add_argument("-v", "--volume_table", help="CSV file describing the volume table", type=str)
     parser.add_argument("-n", "--vg-name", metavar="vg_name", help="Volume Group name to use", type=str)
     parser.add_argument("-u", "--vg-uuid", metavar="vg_uuid", help="UUID to use for Volume Group", type=str)
-    parser.add_argument("-p", "--pv-uuid", metavar="pv_uuid", help="UUID to use for Phisical Volume", type=str)
+    parser.add_argument("-p", "--pv-uuid", metavar="pv_uuid", help="UUID to use for Physical Volume", type=str)
     parser.add_argument(
         "partitions",
         metavar="partition",
@@ -52,7 +51,7 @@ def main():
         lvm_entries = read_volume_description(f.read())
     validate_volume_table(lvm_entries)
 
-    tmpdir = get_tmpdir_checking_block_size()
+    tmpdir = tempfile.mkdtemp()
 
     lvm_image = os.path.join(tmpdir, "partition.img")
     prepare_lvm_image(lvm_entries, lvm_image, vg_name, vg_uuid, pv_uuid)
@@ -87,14 +86,13 @@ def main():
             "--group=root:0",
             "--mtime=UTC 1970-01-01 00:00:00",
             "--sparse",
+            "--hole-detection=raw",
             "-C",
             tmpdir,
             "partition.img",
         ],
         check=True,
     )
-
-    print_artifact_info(out_file)
 
 
 def read_volume_description(data):

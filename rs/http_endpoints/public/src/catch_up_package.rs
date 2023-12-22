@@ -1,9 +1,7 @@
 //! Module that deals with requests to /_/catch_up_package
 
-use crate::{
-    body::BodyReceiverLayer, common, types::ApiReqType, EndpointService, HttpHandlerMetrics,
-    LABEL_UNKNOWN,
-};
+use crate::{common, types::ApiReqType, EndpointService, HttpHandlerMetrics, LABEL_UNKNOWN};
+use bytes::Bytes;
 use http::Request;
 use hyper::{Body, Response, StatusCode};
 use ic_config::http_handler::Config;
@@ -32,7 +30,7 @@ impl CatchUpPackageService {
         metrics: HttpHandlerMetrics,
         consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     ) -> EndpointService {
-        let base_service = BoxCloneService::new(
+        BoxCloneService::new(
             ServiceBuilder::new()
                 .layer(GlobalConcurrencyLimitLayer::new(
                     config.max_catch_up_package_concurrent_requests,
@@ -41,12 +39,6 @@ impl CatchUpPackageService {
                     metrics,
                     consensus_pool_cache,
                 }),
-        );
-
-        BoxCloneService::new(
-            ServiceBuilder::new()
-                .layer(BodyReceiverLayer::new(&config))
-                .service(base_service),
         )
     }
 }
@@ -68,7 +60,7 @@ fn protobuf_response<R: Message>(r: &R) -> Response<Body> {
     response
 }
 
-impl Service<Request<Vec<u8>>> for CatchUpPackageService {
+impl Service<Request<Bytes>> for CatchUpPackageService {
     type Response = Response<Body>;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
@@ -78,7 +70,7 @@ impl Service<Request<Vec<u8>>> for CatchUpPackageService {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, request: Request<Vec<u8>>) -> Self::Future {
+    fn call(&mut self, request: Request<Bytes>) -> Self::Future {
         self.metrics
             .request_body_size_bytes
             .with_label_values(&[ApiReqType::CatchUpPackage.into(), LABEL_UNKNOWN])

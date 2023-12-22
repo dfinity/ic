@@ -70,13 +70,6 @@ impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
                 ) {
                     Ok(Some(node_record)) => {
                         let mut endpoints: Vec<ConnectionEndpoint> = Vec::new();
-                        endpoints.extend::<Vec<ConnectionEndpoint>>(
-                            node_record
-                                .p2p_flow_endpoints
-                                .iter()
-                                .filter_map(|flow_endpoint| flow_endpoint.endpoint.clone())
-                                .collect(),
-                        );
                         if let Some(xnet_record) = node_record.xnet {
                             endpoints.push(xnet_record)
                         };
@@ -100,7 +93,6 @@ impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_protobuf::registry::node::v1::FlowEndpoint;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_types::PrincipalId;
@@ -147,12 +139,6 @@ mod tests {
                 (
                     NodeId::from(PrincipalId::new_node_test_id(id as u64)),
                     NodeRecord {
-                        p2p_flow_endpoints: vec![FlowEndpoint {
-                            endpoint: Some(ConnectionEndpoint {
-                                ip_addr: ip.to_string(),
-                                port: 4000,
-                            }),
-                        }],
                         http: Some(ConnectionEndpoint {
                             ip_addr: ip.to_string(),
                             port: 8080,
@@ -162,8 +148,9 @@ mod tests {
                             port: 2457,
                         }),
                         node_operator_id: vec![],
-                        chip_id: vec![],
                         hostos_version_id: None,
+                        chip_id: None,
+                        public_ipv4_config: None,
                     },
                 )
             })

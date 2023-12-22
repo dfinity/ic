@@ -25,12 +25,9 @@
 //!    expiry-instant. Note: This index may contain multiple downloads
 //!    expiring at a given expiry-instant.
 
-use ic_interfaces::artifact_manager::ArtifactManager;
-use ic_logger::{replica_logger::ReplicaLogger, warn};
 use ic_protobuf::registry::subnet::v1::GossipConfig;
 use ic_types::{
     artifact::ArtifactId,
-    chunkable::Chunkable,
     crypto::CryptoHash,
     p2p::{GossipAdvert, MAX_ARTIFACT_TIMEOUT},
     NodeId,
@@ -67,8 +64,7 @@ pub(crate) trait ArtifactDownloadList: Send + Sync {
         advert: &GossipAdvert,
         gossip_config: &GossipConfig,
         max_peers: u32,
-        artifact_manager: &dyn ArtifactManager,
-    ) -> Option<&ArtifactTracker>;
+    ) -> bool;
 
     /// The method removes and returns the expired artifact downloads from the
     /// list.
@@ -105,8 +101,6 @@ pub(crate) struct ArtifactTracker {
     artifact_id: ArtifactId,
     /// Time limit for the artifact download.
     expiry_instant: Instant,
-    /// The artifact, which implements the `Chunkable` interface.
-    pub chunkable: Box<dyn Chunkable + Send + Sync>,
     /// The ID of the node whose quota is charged for this artifact.
     pub peer_id: NodeId,
     // Stores the e2e duration of downloading the artifact.
@@ -114,16 +108,10 @@ pub(crate) struct ArtifactTracker {
 }
 
 impl ArtifactTracker {
-    pub fn new(
-        artifact_id: ArtifactId,
-        expiry_instant: Instant,
-        chunkable: Box<dyn Chunkable + Send + Sync>,
-        peer_id: NodeId,
-    ) -> Self {
+    pub fn new(artifact_id: ArtifactId, expiry_instant: Instant, peer_id: NodeId) -> Self {
         ArtifactTracker {
             artifact_id,
             expiry_instant,
-            chunkable,
             peer_id,
             duration: Instant::now(),
         }
@@ -135,6 +123,7 @@ impl ArtifactTracker {
 }
 
 /// The implementation of the `ArtifactDownloadList` trait.
+#[derive(Default)]
 pub(crate) struct ArtifactDownloadListImpl {
     /// A Hashmap is used for the artifacts because it provides constant lookup time complexity
     /// using the integrity hash.
@@ -142,19 +131,6 @@ pub(crate) struct ArtifactDownloadListImpl {
     artifacts: HashMap<CryptoHash, ArtifactTracker>,
     /// Expiry indices.
     expiry_index: BTreeMap<Instant, Vec<CryptoHash>>,
-    /// The logger instance.
-    log: ReplicaLogger,
-}
-
-impl ArtifactDownloadListImpl {
-    /// The constructor creates an `ArtifactDownloadListImpl` instance.
-    pub fn new(log: ReplicaLogger) -> Self {
-        ArtifactDownloadListImpl {
-            log,
-            artifacts: Default::default(),
-            expiry_index: Default::default(),
-        }
-    }
 }
 
 /// `ArtifactDownloadListImpl` implements the `ArtifactDownloadList` trait.
@@ -167,47 +143,37 @@ impl ArtifactDownloadList for ArtifactDownloadListImpl {
         advert: &GossipAdvert,
         gossip_config: &GossipConfig,
         max_advertizing_peer: u32,
-        artifact_manager: &dyn ArtifactManager,
-    ) -> Option<&ArtifactTracker> {
+    ) -> bool {
         // Schedule a download of an artifact that is not currently being downloaded.
         if !self.artifacts.contains_key(&advert.integrity_hash) {
             let artifact_id = &advert.artifact_id;
 
-            if let Some(chunk_tracker) = artifact_manager.get_chunk_tracker(&advert.artifact_id) {
-                let requested_instant = Instant::now();
-                // Calculate the worst-case time estimate for the artifact download, which
-                // assumes that all chunks for the artifact will time out for
-                // each peer that has advertised the artifact.
-                // In any case the worst-case estimate is bound to a constant.
-                //
-                // TODO: Revisit this in the context of subnets with many nodes: P2P-510
-                let download_eta_ms = std::cmp::min(
-                    std::cmp::max(advert.size as u64 / gossip_config.max_chunk_size as u64, 1)
-                        * max_advertizing_peer as u64
-                        * gossip_config.max_chunk_wait_ms as u64,
-                    MAX_ARTIFACT_TIMEOUT.as_millis() as u64,
-                );
-                let expiry_instant = requested_instant + Duration::from_millis(download_eta_ms);
-                self.artifacts.insert(
-                    advert.integrity_hash.clone(),
-                    ArtifactTracker::new(
-                        artifact_id.clone(),
-                        expiry_instant,
-                        chunk_tracker,
-                        peer_id,
-                    ),
-                );
-                self.expiry_index
-                    .entry(expiry_instant)
-                    .and_modify(|expired_artifacts| {
-                        expired_artifacts.push(advert.integrity_hash.clone())
-                    })
-                    .or_insert_with(|| (vec![advert.integrity_hash.clone()]));
-            } else {
-                warn!(self.log, "Chunk tracker not found for advert {:?}", advert);
-            }
+            let requested_instant = Instant::now();
+            // Calculate the worst-case time estimate for the artifact download, which
+            // assumes that all chunks for the artifact will time out for
+            // each peer that has advertised the artifact.
+            // In any case the worst-case estimate is bound to a constant.
+            //
+            // TODO: Revisit this in the context of subnets with many nodes: P2P-510
+            let download_eta_ms = std::cmp::min(
+                std::cmp::max(advert.size as u64 / gossip_config.max_chunk_size as u64, 1)
+                    * max_advertizing_peer as u64
+                    * gossip_config.max_chunk_wait_ms as u64,
+                MAX_ARTIFACT_TIMEOUT.as_millis() as u64,
+            );
+            let expiry_instant = requested_instant + Duration::from_millis(download_eta_ms);
+            self.artifacts.insert(
+                advert.integrity_hash.clone(),
+                ArtifactTracker::new(artifact_id.clone(), expiry_instant, peer_id),
+            );
+            self.expiry_index
+                .entry(expiry_instant)
+                .and_modify(|expired_artifacts| {
+                    expired_artifacts.push(advert.integrity_hash.clone())
+                })
+                .or_insert_with(|| (vec![advert.integrity_hash.clone()]));
         }
-        self.artifacts.get(&advert.integrity_hash)
+        self.artifacts.get(&advert.integrity_hash).is_some()
     }
 
     ///The function removes and returns the expired artifact downloads from the
@@ -272,111 +238,5 @@ impl ArtifactDownloadList for ArtifactDownloadListImpl {
                 }
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::download_management::tests::TestArtifactManager;
-    use ic_test_utilities::p2p::p2p_test_setup_logger;
-    use ic_test_utilities::types::ids::node_test_id;
-    use ic_types::artifact::ArtifactAttribute;
-    use ic_types::crypto::CryptoHash;
-    use ic_types::p2p;
-    use std::convert::TryFrom;
-
-    /// The function schedules the download of the given number of adverts.
-    fn try_begin_download(
-        num_adverts: i32,
-        gossip_config: &GossipConfig,
-        artifact_manager: &dyn ArtifactManager,
-        artifact_download_list: &mut dyn ArtifactDownloadList,
-    ) -> std::time::Instant {
-        // Insert and remove artifacts.
-        let mut max_expiry = std::time::Instant::now();
-        for advert_id in 0..num_adverts {
-            let gossip_advert = GossipAdvert {
-                artifact_id: ArtifactId::FileTreeSync(advert_id.to_string()),
-                attribute: ArtifactAttribute::FileTreeSync(advert_id.to_string()),
-                size: 0,
-                integrity_hash: CryptoHash(vec![u8::try_from(advert_id).unwrap()]),
-            };
-            let tracker = artifact_download_list
-                .schedule_download(
-                    node_test_id(0),
-                    &gossip_advert,
-                    gossip_config,
-                    1,
-                    artifact_manager,
-                )
-                .unwrap();
-
-            if tracker.expiry_instant > max_expiry {
-                max_expiry = tracker.expiry_instant;
-            }
-        }
-        max_expiry
-    }
-
-    /// The function tests that artifact download list is pruned correctly when
-    /// artifact downloads expire.
-    #[test]
-    fn download_list_expire_test() {
-        // Insert and time out artifacts.
-        let artifact_manager = TestArtifactManager { num_chunks: 0 };
-        let logger = p2p_test_setup_logger();
-        let log: ReplicaLogger = logger.root.clone().into();
-        let mut artifact_download_list = ArtifactDownloadListImpl::new(log);
-        let mut gossip_config = p2p::build_default_gossip_config();
-        gossip_config.max_chunk_wait_ms = 1000;
-        let num_adverts = 30;
-        let max_expiry = try_begin_download(
-            num_adverts,
-            &gossip_config,
-            &artifact_manager,
-            &mut artifact_download_list,
-        );
-
-        while std::time::Instant::now() < max_expiry {
-            std::thread::sleep(std::time::Duration::from_millis(
-                gossip_config.max_chunk_wait_ms as u64,
-            ));
-        }
-
-        let expired = artifact_download_list.prune_expired_downloads();
-        assert_eq!(expired.len(), num_adverts as usize);
-        assert_eq!(artifact_download_list.artifacts.len(), 0);
-
-        // Check that the expired artifact list is empty.
-        let expired = artifact_download_list.prune_expired_downloads();
-        assert_eq!(expired.len(), 0);
-        assert_eq!(artifact_download_list.artifacts.len(), 0);
-    }
-
-    /// The function tests that artifact trackers can be removed from the
-    /// artifact download list.
-    #[test]
-    fn download_list_remove_test() {
-        let artifact_manager = TestArtifactManager { num_chunks: 0 };
-        let logger = p2p_test_setup_logger();
-        let log: ReplicaLogger = logger.root.clone().into();
-        let mut artifact_download_list = ArtifactDownloadListImpl::new(log);
-        let mut gossip_config = p2p::build_default_gossip_config();
-        gossip_config.max_chunk_wait_ms = 1000;
-        let num_adverts = 30;
-        let _max_expiry = try_begin_download(
-            num_adverts,
-            &gossip_config,
-            &artifact_manager,
-            &mut artifact_download_list,
-        );
-
-        for num in 0..num_adverts {
-            let integrity_hash = CryptoHash(vec![u8::try_from(num).unwrap()]);
-            artifact_download_list.get_tracker(&integrity_hash).unwrap();
-            artifact_download_list.remove_tracker(&integrity_hash);
-        }
-        assert_eq!(artifact_download_list.artifacts.len(), 0);
     }
 }

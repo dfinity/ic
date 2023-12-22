@@ -11,6 +11,7 @@ use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, SubnetAvailableMemoryError, WasmExecutionOutput,
 };
 use ic_logger::{error, fatal, info, warn};
+use ic_replicated_state::canister_state::system_state::ReservationError;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use ic_replicated_state::{CanisterState, ExecutionState};
 use ic_state_layout::{CanisterLayout, CheckpointLayout, ReadOnly};
@@ -62,6 +63,15 @@ pub(crate) enum InstallCodeStep {
         instructions_from_compilation: NumInstructions,
         maybe_execution_state: HypervisorResult<ExecutionState>,
         memory_handling: MemoryHandling,
+    },
+    ClearCertifiedData,
+    DeactivateGlobalTimer,
+    BumpCanisterVersion,
+    AddCanisterChange {
+        timestamp_nanos: Time,
+        origin: CanisterChangeOrigin,
+        mode: CanisterInstallModeV2,
+        module_hash: WasmHash,
     },
     HandleWasmExecution {
         canister_state_changes: Option<CanisterStateChanges>,
@@ -119,14 +129,17 @@ impl InstallCodeHelper {
     }
 
     pub fn clear_certified_data(&mut self) {
+        self.steps.push(InstallCodeStep::ClearCertifiedData);
         self.canister.system_state.certified_data = Vec::new();
     }
 
     pub fn deactivate_global_timer(&mut self) {
+        self.steps.push(InstallCodeStep::DeactivateGlobalTimer);
         self.canister.system_state.global_timer = CanisterTimer::Inactive;
     }
 
     pub fn bump_canister_version(&mut self) {
+        self.steps.push(InstallCodeStep::BumpCanisterVersion);
         self.canister.system_state.canister_version += 1;
     }
 
@@ -137,11 +150,16 @@ impl InstallCodeHelper {
         mode: CanisterInstallModeV2,
         module_hash: WasmHash,
     ) {
-        self.canister.system_state.add_canister_change(
+        self.steps.push(InstallCodeStep::AddCanisterChange {
             timestamp_nanos,
-            origin,
-            CanisterChangeDetails::code_deployment(mode.into(), module_hash.to_slice()),
-        );
+            origin: origin.clone(),
+            mode,
+            module_hash: module_hash.clone(),
+        });
+        let details = CanisterChangeDetails::code_deployment(mode.into(), module_hash.to_slice());
+        self.canister
+            .system_state
+            .add_canister_change(timestamp_nanos, origin, details);
     }
 
     pub fn execution_parameters(&self) -> &ExecutionParameters {
@@ -158,6 +176,10 @@ impl InstallCodeHelper {
 
     pub fn canister_memory_usage(&self) -> NumBytes {
         self.canister.memory_usage()
+    }
+
+    pub fn canister_message_memory_usage(&self) -> NumBytes {
+        self.canister.message_memory_usage()
     }
 
     /// Returns a struct with all the necessary information to replay the
@@ -217,26 +239,72 @@ impl InstallCodeHelper {
             instructions_left,
             message_instruction_limit,
             original.prepaid_execution_cycles,
-            round.execution_refund_error_counter,
+            round.counters.execution_refund_error,
             original.subnet_size,
             round.log,
         );
 
         self.canister
             .system_state
-            .apply_ingress_induction_cycles_debit(self.canister.canister_id(), round.log);
+            .apply_ingress_induction_cycles_debit(
+                self.canister.canister_id(),
+                round.log,
+                round.counters.charging_from_balance_error,
+            );
 
         if self.allocated_bytes > self.deallocated_bytes {
+            let bytes = self.allocated_bytes - self.deallocated_bytes;
+
+            let reservation_cycles = round.cycles_account_manager.storage_reservation_cycles(
+                bytes,
+                &original.execution_parameters.subnet_memory_saturation,
+                original.subnet_size,
+            );
+
+            match self
+                .canister
+                .system_state
+                .reserve_cycles(reservation_cycles)
+            {
+                Ok(()) => {}
+                Err(err) => {
+                    let err = match err {
+                        ReservationError::InsufficientCycles {
+                            requested,
+                            available,
+                        } => CanisterManagerError::InsufficientCyclesInMemoryGrow {
+                            bytes,
+                            available,
+                            threshold: requested,
+                        },
+                        ReservationError::ReservedLimitExceed { requested, limit } => {
+                            CanisterManagerError::ReservedCyclesLimitExceededInMemoryGrow {
+                                bytes,
+                                requested,
+                                limit,
+                            }
+                        }
+                    };
+                    return finish_err(
+                        clean_canister,
+                        self.instructions_left(),
+                        original,
+                        round,
+                        err,
+                    );
+                }
+            }
+
             let threshold = round.cycles_account_manager.freeze_threshold_cycles(
                 self.canister.system_state.freeze_threshold,
                 self.canister.memory_allocation(),
                 self.canister.memory_usage(),
+                self.canister.message_memory_usage(),
                 self.canister.compute_allocation(),
                 original.subnet_size,
                 self.canister.system_state.reserved_balance(),
             );
             if self.canister.system_state.balance() < threshold {
-                let bytes = self.allocated_bytes - self.deallocated_bytes;
                 let err = CanisterManagerError::InsufficientCyclesInMemoryGrow {
                     bytes,
                     available: self.canister.system_state.balance(),
@@ -374,10 +442,13 @@ impl InstallCodeHelper {
                 compute_allocation: original.requested_compute_allocation,
                 memory_allocation: original.requested_memory_allocation,
                 freezing_threshold: None,
+                reserved_cycles_limit: None,
             },
             self.canister.memory_usage(),
+            self.canister.message_memory_usage(),
             self.canister.memory_allocation(),
             &round_limits.subnet_available_memory,
+            &original.execution_parameters.subnet_memory_saturation,
             self.canister.compute_allocation(),
             round_limits.compute_allocation_used,
             original.config.compute_capacity,
@@ -387,6 +458,7 @@ impl InstallCodeHelper {
             round.cycles_account_manager,
             original.subnet_size,
             self.canister.system_state.reserved_balance(),
+            self.canister.system_state.reserved_balance_limit(),
         )?;
 
         match original.mode {
@@ -563,9 +635,15 @@ impl InstallCodeHelper {
             .instruction_limits
             .update(output.num_instructions_left);
 
+        debug_assert!(output
+            .wasm_result
+            .clone()
+            .map_or(true, |result| result.is_none()));
         match output.wasm_result {
             Ok(None) => {}
             Ok(Some(_response)) => {
+                debug_assert!(false);
+                round.counters.invalid_system_call_error.inc();
                 fatal!(round.log, "[EXC-BUG] System methods cannot use msg_reply.");
             }
             Err(err) => {
@@ -603,9 +681,10 @@ impl InstallCodeHelper {
                 round.hypervisor.subnet_id(),
                 round.log,
             ) {
+                debug_assert_eq!(err, HypervisorError::OutOfMemory);
                 match &err {
                     HypervisorError::WasmEngineError(err) => {
-                        // TODO(RUN-299): Increment a critical error counter here.
+                        round.counters.state_changes_error.inc();
                         error!(
                             round.log,
                             "[EXC-BUG]: Failed to apply state changes due to a bug: {}", err
@@ -618,7 +697,7 @@ impl InstallCodeHelper {
                         )
                     }
                     _ => {
-                        // TODO(RUN-299): Increment a critical error counter here.
+                        round.counters.state_changes_error.inc();
                         error!(
                             round.log,
                             "[EXC-BUG]: Failed to apply state changes due to an unexpected error: {}", err
@@ -667,6 +746,27 @@ impl InstallCodeHelper {
                 memory_handling,
                 original,
             ),
+            InstallCodeStep::ClearCertifiedData => {
+                self.clear_certified_data();
+                Ok(())
+            }
+            InstallCodeStep::DeactivateGlobalTimer => {
+                self.deactivate_global_timer();
+                Ok(())
+            }
+            InstallCodeStep::BumpCanisterVersion => {
+                self.bump_canister_version();
+                Ok(())
+            }
+            InstallCodeStep::AddCanisterChange {
+                timestamp_nanos,
+                origin,
+                mode,
+                module_hash,
+            } => {
+                self.add_canister_change(timestamp_nanos, origin, mode, module_hash);
+                Ok(())
+            }
             InstallCodeStep::HandleWasmExecution {
                 canister_state_changes,
                 output,
@@ -688,8 +788,7 @@ pub(crate) struct OriginalContext {
     pub canister_layout_path: PathBuf,
     pub config: CanisterMgrConfig,
     pub message: CanisterCall,
-    // TODO(EXC-1454): Make call_id non-optional.
-    pub call_id: Option<InstallCodeCallId>,
+    pub call_id: InstallCodeCallId,
     pub prepaid_execution_cycles: Cycles,
     pub time: Time,
     pub compilation_cost_handling: CompilationCostHandling,
@@ -747,7 +846,11 @@ pub(crate) fn finish_err(
 
     new_canister
         .system_state
-        .apply_ingress_induction_cycles_debit(new_canister.canister_id(), round.log);
+        .apply_ingress_induction_cycles_debit(
+            new_canister.canister_id(),
+            round.log,
+            round.counters.charging_from_balance_error,
+        );
 
     let message_instruction_limit = original.execution_parameters.instruction_limits.message();
     round.cycles_account_manager.refund_unused_execution_cycles(
@@ -755,7 +858,7 @@ pub(crate) fn finish_err(
         instructions_left,
         message_instruction_limit,
         original.prepaid_execution_cycles,
-        round.execution_refund_error_counter,
+        round.counters.execution_refund_error,
         original.subnet_size,
         round.log,
     );

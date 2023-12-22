@@ -13,16 +13,15 @@ use crate::{
 };
 use anyhow::Result;
 use ic_config::subnet_config::SchedulerConfig;
-use ic_crypto::threshold_sig_public_key_to_der;
 use ic_crypto_test_utils_ni_dkg::{initial_dkg_transcript, InitialNiDkgConfig};
+use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_protobuf::registry::{
     crypto::v1::PublicKey,
-    subnet::v1::{
-        CatchUpPackageContents, EcdsaConfig, InitialNiDkgTranscriptRecord, SubnetFeatures,
-        SubnetRecord,
-    },
+    subnet::v1::{CatchUpPackageContents, EcdsaConfig, InitialNiDkgTranscriptRecord, SubnetRecord},
 };
+use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
+use ic_types::crypto::threshold_sig::ni_dkg::ThresholdSigPublicKeyError;
 use ic_types::{
     crypto::{
         threshold_sig::{
@@ -54,11 +53,6 @@ pub struct SubnetConfig {
 
     /// The node ids that belong to this subnetwork.
     pub membership: BTreeMap<NodeIndex, NodeConfiguration>,
-
-    /// soft cap on the maximum size of a block, i.e. if the total size of a
-    /// block exceeds `max_ingress_bytes_per_block`, no more messages can be
-    /// added.
-    pub ingress_bytes_per_block_soft_cap: u64,
 
     /// maximum size of an ingress message
     pub max_ingress_bytes_per_message: u64,
@@ -126,6 +120,12 @@ pub enum InitializeSubnetError {
         source: ThresholdSigPublicKeyBytesConversionError,
     },
 
+    #[error("NI-DKG transcript threshold signature public key: {source}")]
+    NiDkgTranscriptToThresholdSigPublicKey {
+        #[from]
+        source: ThresholdSigPublicKeyError,
+    },
+
     #[error("crypto error: {source}")]
     Crypto {
         #[from]
@@ -147,7 +147,6 @@ pub struct SubnetConfigParams {
     pub initial_notary_delay: Duration,
     pub dkg_interval_length: Height,
     pub max_ingress_bytes_per_message: u64,
-    pub ingress_bytes_per_block_soft_cap: u64,
     pub max_ingress_messages_per_block: u64,
     pub max_block_payload_size: u64,
     pub dkg_dealings_per_block: usize,
@@ -197,7 +196,6 @@ pub fn get_default_config_params(subnet_type: SubnetType, nodes_num: usize) -> S
         initial_notary_delay: dynamic_config.initial_notary_delay,
         dkg_interval_length: dynamic_config.dkg_interval_length,
         max_ingress_bytes_per_message: dynamic_config.max_ingress_bytes_per_message,
-        ingress_bytes_per_block_soft_cap: constants::INGRESS_BYTES_PER_BLOCK_SOFT_CAP,
         max_ingress_messages_per_block: constants::MAX_INGRESS_MESSAGES_PER_BLOCK,
         max_block_payload_size: constants::MAX_BLOCK_PAYLOAD_SIZE,
         dkg_dealings_per_block: constants::DKG_DEALINGS_PER_BLOCK,
@@ -209,8 +207,7 @@ impl SubnetConfig {
     pub fn new(
         subnet_index: SubnetIndex,
         membership: BTreeMap<NodeIndex, NodeConfiguration>,
-        replica_version_id: Option<ReplicaVersion>,
-        ingress_bytes_per_block_soft_cap: Option<u64>,
+        replica_version_id: ReplicaVersion,
         max_ingress_bytes_per_message: Option<u64>,
         max_ingress_messages_per_block: Option<u64>,
         max_block_payload_size: Option<u64>,
@@ -237,9 +234,7 @@ impl SubnetConfig {
         Self {
             subnet_index,
             membership,
-            replica_version_id: replica_version_id.unwrap_or_default(),
-            ingress_bytes_per_block_soft_cap: ingress_bytes_per_block_soft_cap
-                .unwrap_or(config.ingress_bytes_per_block_soft_cap),
+            replica_version_id,
             max_ingress_bytes_per_message: max_ingress_bytes_per_message
                 .unwrap_or(config.max_ingress_bytes_per_message),
             max_ingress_messages_per_block: max_ingress_messages_per_block
@@ -282,12 +277,12 @@ impl SubnetConfig {
 
         let nodes_in_subnet: BTreeSet<NodeId> = initialized_nodes
             .values()
-            .map(|initalized_node| initalized_node.node_id)
+            .map(|initialized_node| initialized_node.node_id)
             .collect();
 
         let membership_nodes: Vec<Vec<u8>> = initialized_nodes
             .values()
-            .map(|initalized_node| initalized_node.node_id.get().into_vec())
+            .map(|initialized_node| initialized_node.node_id.get().into_vec())
             .collect();
 
         let subnet_record = SubnetRecord {
@@ -311,7 +306,7 @@ impl SubnetConfig {
             max_instructions_per_message: self.max_instructions_per_message,
             max_instructions_per_round: self.max_instructions_per_round,
             max_instructions_per_install_code: self.max_instructions_per_install_code,
-            features: Some(self.features),
+            features: Some(self.features.into()),
             max_number_of_canisters: self.max_number_of_canisters,
             ssh_readonly_access: self.ssh_readonly_access,
             ssh_backup_access: self.ssh_backup_access,
@@ -350,9 +345,9 @@ impl SubnetConfig {
             &dkg_dealing_encryption_pubkeys,
             &mut rand::rngs::OsRng,
         );
-        let subnet_threshold_signing_public_key = PublicKey::from(ThresholdSigPublicKey::from(
+        let subnet_threshold_signing_public_key = PublicKey::from(ThresholdSigPublicKey::try_from(
             &ni_dkg_transcript_high_threshold,
-        ));
+        )?);
 
         let subnet_dkg = CatchUpPackageContents {
             initial_ni_dkg_transcript_low_threshold: Some(InitialNiDkgTranscriptRecord::from(

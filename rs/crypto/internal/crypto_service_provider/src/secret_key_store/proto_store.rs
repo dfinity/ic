@@ -325,7 +325,7 @@ impl ProtoSecretKeyStore {
     }
 
     fn ensure_version_is_supported(version: u32) {
-        let supported_versions = vec![1, 2, CURRENT_SKS_VERSION];
+        let supported_versions = [1, 2, CURRENT_SKS_VERSION];
         if !supported_versions.contains(&version) {
             panic!("Unexpected SecretKeyStore-proto version: {}", version)
         }
@@ -448,6 +448,19 @@ impl SecretKeyStore for ProtoSecretKeyStore {
             }
             Ok(())
         })
+    }
+
+    fn retain_would_modify_keystore<F>(&self, filter: F, scope: Scope) -> bool
+    where
+        F: Fn(&KeyId, &CspSecretKey) -> bool + 'static,
+    {
+        for (key_id, (csp_key, maybe_scope)) in self.keys.read().iter() {
+            if maybe_scope == &Some(scope) && !filter(key_id, csp_key) {
+                // Key is to be deleted, i.e., the keystore will be modified.
+                return true;
+            }
+        }
+        false
     }
 }
 

@@ -20,12 +20,18 @@ use clap::Parser;
 use futures::future::TryFutureExt;
 use lazy_static::lazy_static;
 use nix::sys::signal::Signal;
-use opentelemetry::{metrics::MeterProvider as _, sdk::metrics::MeterProvider};
-use opentelemetry_prometheus::exporter;
-use prometheus::{
-    labels, proto::MetricFamily, Encoder as PrometheusEncoder, Registry as PrometheusRegistry,
-    TextEncoder,
+use opentelemetry::{
+    global,
+    sdk::{
+        export::metrics::aggregation,
+        metrics::{controllers, processors, selectors},
+        Resource,
+    },
+    KeyValue,
 };
+use opentelemetry_prometheus::{ExporterBuilder, PrometheusExporter};
+use prometheus::proto::MetricFamily;
+use prometheus::{Encoder as PrometheusEncoder, TextEncoder};
 
 use regex::Regex;
 use tokio::{sync::Semaphore, task};
@@ -149,15 +155,23 @@ async fn main() -> Result<(), Error> {
     )
     .expect("failed to set global subscriber");
 
+    let exporter = Arc::new(
+        ExporterBuilder::new(
+            controllers::basic(
+                processors::factory(
+                    selectors::simple::histogram([]),
+                    aggregation::cumulative_temporality_selector(),
+                )
+                .with_memory(true),
+            )
+            .with_resource(Resource::new(vec![KeyValue::new("service", SERVICE_NAME)]))
+            .build(),
+        )
+        .init(),
+    );
+
     // Metrics
-    let registry: PrometheusRegistry = PrometheusRegistry::new_custom(
-        None,
-        Some(labels! {"service".into() => SERVICE_NAME.into()}),
-    )
-    .unwrap();
-    let exporter = exporter().with_registry(registry.clone()).build()?;
-    let provider = MeterProvider::builder().with_reader(exporter).build();
-    let meter = provider.meter(SERVICE_NAME);
+    let meter = global::meter(SERVICE_NAME);
 
     // Control-Plane
     let routing_table: Arc<Mutex<Option<RoutingTable>>> = Arc::new(Mutex::new(None));
@@ -294,7 +308,7 @@ async fn main() -> Result<(), Error> {
     let metrics_router = Router::new()
         .route("/metrics", get(metrics_handler))
         .with_state(MetricsHandlerArgs {
-            registry: registry.clone(),
+            exporter: Arc::clone(&exporter),
             active_replicas,
             checker_metrics: Arc::clone(&checker_metrics),
         });
@@ -315,11 +329,12 @@ async fn main() -> Result<(), Error> {
             }
         }),
         task::spawn(async move {
+            let exporter = Arc::clone(&exporter);
             let checker_metrics = Arc::clone(&checker_metrics);
 
             loop {
                 let _ = check_persist_runner.run().await;
-                update_checker_metrics(registry.clone(), &checker_metrics);
+                update_checker_metrics(&exporter, &checker_metrics);
             }
         }),
         task::spawn(
@@ -335,19 +350,20 @@ async fn main() -> Result<(), Error> {
 
 #[derive(Clone)]
 struct MetricsHandlerArgs<A> {
-    registry: PrometheusRegistry,
+    exporter: Arc<PrometheusExporter>,
     active_replicas: A,
     checker_metrics: Arc<ArcSwap<Vec<MetricFamily>>>,
 }
 
 // Gathers metrics relevant to node checking and stores them in the ArcSwap
 fn update_checker_metrics(
-    registry: PrometheusRegistry,
+    exporter: &Arc<PrometheusExporter>,
     checker_metrics: &Arc<ArcSwap<Vec<MetricFamily>>>,
 ) {
     // Gather node checker metrics
     let metric_families = Arc::new(
-        registry
+        exporter
+            .registry()
             .gather()
             .into_iter()
             .filter(|x| x.get_name().starts_with(CHECKER_METRIC_PREFIX))
@@ -359,14 +375,15 @@ fn update_checker_metrics(
 
 async fn metrics_handler<A: ActiveChecker>(
     State(MetricsHandlerArgs {
-        registry,
+        exporter,
         active_replicas,
         checker_metrics,
     }): State<MetricsHandlerArgs<A>>,
     _: Request<Body>,
 ) -> Response<Body> {
     // Read out all metrics that are not related to node checking
-    let mut metric_families = registry
+    let mut metric_families = exporter
+        .registry()
         .gather()
         .into_iter()
         .filter(|x| !x.get_name().starts_with(CHECKER_METRIC_PREFIX))

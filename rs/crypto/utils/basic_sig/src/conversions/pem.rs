@@ -79,7 +79,7 @@ pub fn pem_to_der(pem: &str, label: &str) -> io::Result<Vec<u8>> {
         )));
     }
 
-    base64::decode(&lines[start_line_index + 1..end_line_index].join(""))
+    base64::decode(lines[start_line_index + 1..end_line_index].join(""))
         .map_err(|err| invalid_data_err(format!("failed to decode base64: {}", err)))
 }
 
@@ -89,7 +89,7 @@ mod tests {
     const FICTION: &[u8] = b"Zaphod Beeblebrox says hi";
     const PEM_ENCODED_FICTION: &str = r#"
 -----BEGIN PREJUNK-----
-This shoudn't break anything
+This shouldn't break anything
 -----END PREJUNK-----
 -----BEGIN FICTION-----
 WmFwaG9kIEJlZWJsZWJ

@@ -1,15 +1,17 @@
 use std::{fs, net::SocketAddr, path::PathBuf, sync::Arc};
 
 use anyhow::{Context, Error};
-use axum::{handler::Handler, Router};
+use axum::{handler::Handler, middleware, Router};
 use hyper::{self, Response, StatusCode, Uri};
-use ic_agent::{agent::http_transport::HyperReplicaV2Transport, Agent};
+use ic_agent::agent::{http_transport::hyper_transport::HyperReplicaV2Transport, Agent};
+use opentelemetry::metrics::Meter;
 use tracing::{error, info};
 
 use crate::{
     canister_id::ResolverState,
     http_client::{Body, HyperService},
     logging::add_trace_layer,
+    metrics::{with_metrics_middleware, HttpMetricParams},
     validate::Validate,
     DomainAddr,
 };
@@ -40,9 +42,9 @@ pub struct ProxyOpts {
     pub root_key: Option<PathBuf>,
 }
 
-mod agent;
+pub mod agent;
 
-use agent::{handler as agent_handler, Pool};
+use agent::{handler_wrapper as agent_handler, Pool};
 
 trait HandleError {
     type B;
@@ -76,6 +78,7 @@ pub struct SetupArgs<V, C> {
     pub validator: V,
     pub resolver: ResolverState,
     pub client: C,
+    pub meter: Meter,
 }
 
 pub fn setup<C: HyperService<Body> + 'static>(
@@ -96,7 +99,7 @@ pub fn setup<C: HyperService<Body> + 'static>(
         .iter()
         .map(|v| {
             let transport =
-                HyperReplicaV2Transport::create_with_service(v.domain.clone(), client.clone())
+                HyperReplicaV2Transport::create_with_service(v.domain.to_string(), client.clone())
                     .context("failed to create transport")?
                     .with_max_response_body_size(RESPONSE_BODY_SIZE_LIMIT);
 
@@ -127,8 +130,15 @@ pub fn setup<C: HyperService<Body> + 'static>(
         client,
     })));
 
+    let http_metrics = HttpMetricParams::new(&args.meter);
+    let metrics_layer = middleware::from_fn_with_state(http_metrics, with_metrics_middleware);
+
     Ok(Runner {
-        router: add_trace_layer(Router::new().fallback_service(agent_service)),
+        router: add_trace_layer(
+            Router::new()
+                .fallback_service(agent_service)
+                .layer(metrics_layer),
+        ),
         address: opts.address,
         fetch_root_keys,
     })

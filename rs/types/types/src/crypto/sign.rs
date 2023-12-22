@@ -1,5 +1,6 @@
 //! Defines signature types.
 
+use super::hash::domain_separator::DomainSeparator;
 use crate::canister_http::CanisterHttpResponseMetadata;
 use crate::consensus::{
     certification::CertificationContent,
@@ -9,15 +10,8 @@ use crate::consensus::{
     NotarizationContent, RandomBeaconContent, RandomTapeContent,
 };
 use crate::crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing};
-use crate::crypto::hash::{
-    DOMAIN_BLOCK_METADATA, DOMAIN_CATCH_UP_CONTENT, DOMAIN_CERTIFICATION_CONTENT,
-    DOMAIN_CRYPTO_HASH_OF_CANISTER_HTTP_RESPONSE_METADATA, DOMAIN_DEALING_CONTENT,
-    DOMAIN_ECDSA_COMPLAINT_CONTENT, DOMAIN_ECDSA_OPENING_CONTENT, DOMAIN_FINALIZATION_CONTENT,
-    DOMAIN_IDKG_DEALING, DOMAIN_NOTARIZATION_CONTENT, DOMAIN_RANDOM_BEACON_CONTENT,
-    DOMAIN_RANDOM_TAPE_CONTENT, DOMAIN_SIGNED_IDKG_DEALING,
-};
 use crate::crypto::SignedBytesWithoutDomainSeparator;
-use crate::messages::{Delegation, MessageId, WebAuthnEnvelope};
+use crate::messages::{Delegation, MessageId, QueryResponseHash, WebAuthnEnvelope};
 use std::convert::TryFrom;
 
 const SIG_DOMAIN_IC_REQUEST_AUTH_DELEGATION: &str = "ic-request-auth-delegation";
@@ -54,7 +48,10 @@ pub trait SignatureDomain: private::SignatureDomainSeal {
 
 mod private {
     use super::*;
-    use crate::crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing};
+    use crate::{
+        crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing},
+        messages::QueryResponseHash,
+    };
 
     pub trait SignatureDomainSeal {}
 
@@ -77,47 +74,50 @@ mod private {
     impl SignatureDomainSeal for RandomBeaconContent {}
     impl SignatureDomainSeal for RandomTapeContent {}
     impl SignatureDomainSeal for SignableMock {}
+    impl SignatureDomainSeal for QueryResponseHash {}
 }
 
 impl SignatureDomain for CanisterHttpResponseMetadata {
     fn domain(&self) -> Vec<u8> {
-        domain_with_prepended_length(DOMAIN_CRYPTO_HASH_OF_CANISTER_HTTP_RESPONSE_METADATA)
+        domain_with_prepended_length(
+            DomainSeparator::CryptoHashOfCanisterHttpResponseMetadata.as_str(),
+        )
     }
 }
 
 impl SignatureDomain for BlockMetadata {
     fn domain(&self) -> Vec<u8> {
-        domain_with_prepended_length(DOMAIN_BLOCK_METADATA)
+        domain_with_prepended_length(DomainSeparator::BlockMetadata.as_str())
     }
 }
 
 impl SignatureDomain for DealingContent {
     fn domain(&self) -> Vec<u8> {
-        domain_with_prepended_length(DOMAIN_DEALING_CONTENT)
+        domain_with_prepended_length(DomainSeparator::DealingContent.as_str())
     }
 }
 
 impl SignatureDomain for NotarizationContent {
     fn domain(&self) -> Vec<u8> {
-        domain_with_prepended_length(DOMAIN_NOTARIZATION_CONTENT)
+        domain_with_prepended_length(DomainSeparator::NotarizationContent.as_str())
     }
 }
 
 impl SignatureDomain for FinalizationContent {
     fn domain(&self) -> Vec<u8> {
-        domain_with_prepended_length(DOMAIN_FINALIZATION_CONTENT)
+        domain_with_prepended_length(DomainSeparator::FinalizationContent.as_str())
     }
 }
 
 impl SignatureDomain for IDkgDealing {
     fn domain(&self) -> Vec<u8> {
-        domain_with_prepended_length(DOMAIN_IDKG_DEALING)
+        domain_with_prepended_length(DomainSeparator::IdkgDealing.as_str())
     }
 }
 
 impl SignatureDomain for SignedIDkgDealing {
     fn domain(&self) -> Vec<u8> {
-        domain_with_prepended_length(DOMAIN_SIGNED_IDKG_DEALING)
+        domain_with_prepended_length(DomainSeparator::SignedIdkgDealing.as_str())
     }
 }
 
@@ -130,13 +130,13 @@ impl SignatureDomain for EcdsaSigShare {
 
 impl SignatureDomain for EcdsaComplaintContent {
     fn domain(&self) -> Vec<u8> {
-        domain_with_prepended_length(DOMAIN_ECDSA_COMPLAINT_CONTENT)
+        domain_with_prepended_length(DomainSeparator::EcdsaComplaintContent.as_str())
     }
 }
 
 impl SignatureDomain for EcdsaOpeningContent {
     fn domain(&self) -> Vec<u8> {
-        domain_with_prepended_length(DOMAIN_ECDSA_OPENING_CONTENT)
+        domain_with_prepended_length(DomainSeparator::EcdsaOpeningContent.as_str())
     }
 }
 
@@ -161,13 +161,13 @@ impl SignatureDomain for MessageId {
 
 impl SignatureDomain for CertificationContent {
     fn domain(&self) -> Vec<u8> {
-        domain_with_prepended_length(DOMAIN_CERTIFICATION_CONTENT)
+        domain_with_prepended_length(DomainSeparator::CertificationContent.as_str())
     }
 }
 
 impl SignatureDomain for CatchUpContent {
     fn domain(&self) -> Vec<u8> {
-        domain_with_prepended_length(DOMAIN_CATCH_UP_CONTENT)
+        domain_with_prepended_length(DomainSeparator::CatchUpContent.as_str())
     }
 }
 
@@ -176,19 +176,25 @@ impl SignatureDomain for CatchUpContent {
 // necessarily needing to deserialize them into CatchUpContent.
 impl SignatureDomain for CatchUpContentProtobufBytes {
     fn domain(&self) -> Vec<u8> {
-        domain_with_prepended_length(DOMAIN_CATCH_UP_CONTENT)
+        domain_with_prepended_length(DomainSeparator::CatchUpContent.as_str())
     }
 }
 
 impl SignatureDomain for RandomBeaconContent {
     fn domain(&self) -> Vec<u8> {
-        domain_with_prepended_length(DOMAIN_RANDOM_BEACON_CONTENT)
+        domain_with_prepended_length(DomainSeparator::RandomBeaconContent.as_str())
     }
 }
 
 impl SignatureDomain for RandomTapeContent {
     fn domain(&self) -> Vec<u8> {
-        domain_with_prepended_length(DOMAIN_RANDOM_TAPE_CONTENT)
+        domain_with_prepended_length(DomainSeparator::RandomTapeContent.as_str())
+    }
+}
+
+impl SignatureDomain for QueryResponseHash {
+    fn domain(&self) -> Vec<u8> {
+        domain_with_prepended_length(DomainSeparator::QueryResponse.as_str())
     }
 }
 

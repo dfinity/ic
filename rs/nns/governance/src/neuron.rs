@@ -1,7 +1,8 @@
+use crate::pb::v1::NeuronType;
 use crate::{
     governance,
     governance::{
-        LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
+        DEPRECATED_TOPICS, LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
         MAX_NEURON_RECENT_BALLOTS, MAX_NUM_HOT_KEYS_PER_NEURON,
     },
     pb::v1::{
@@ -9,11 +10,16 @@ use crate::{
         GovernanceError, Neuron, NeuronInfo, NeuronState, Topic, Vote,
     },
 };
+#[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::PrincipalId;
+use ic_nervous_system_common::SECONDS_PER_DAY;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::Subaccount;
-use std::collections::{BTreeSet, HashMap};
+use std::{
+    collections::{BTreeSet, HashMap},
+    ops::RangeBounds,
+};
 
 impl Neuron {
     // --- Utility methods on neurons: mostly not for public consumption.
@@ -81,18 +87,25 @@ impl Neuron {
 
     // Returns all principal ids with special permissions..
     pub fn principal_ids_with_special_permissions(&self) -> Vec<PrincipalId> {
-        self.hot_keys
+        let mut principal_ids: Vec<_> = self
+            .hot_keys
             .iter()
             .chain(self.controller.iter())
             .copied()
-            .collect()
+            .collect();
+        // The number of entries is bounded so Vec->HashSet->Vec won't have a clear advantage. Also,
+        // although the order isn't needed by this method and expected use cases, having a stable
+        // ordering (instead of being determined by hash) is usually good for debugging.
+        principal_ids.sort();
+        principal_ids.dedup();
+        principal_ids
     }
 
     pub fn topic_followee_pairs(&self) -> BTreeSet<(Topic, NeuronId)> {
         self.followees
             .iter()
             .filter_map(|(topic, followees)| {
-                let topic = match Topic::from_i32(*topic) {
+                let topic = match Topic::try_from(*topic).ok() {
                     Some(topic) => topic,
                     None => {
                         println!(
@@ -113,9 +126,11 @@ impl Neuron {
             .collect()
     }
 
-    /// Returns true if this is a community fund neuron.
-    pub(crate) fn is_community_fund_neuron(&self) -> bool {
-        self.joined_community_fund_timestamp_seconds.is_some()
+    /// Returns whether self is a member of Neurons Fund.
+    pub(crate) fn is_a_neurons_fund_member(&self) -> bool {
+        self.joined_community_fund_timestamp_seconds
+            .unwrap_or_default()
+            > 0
     }
 
     /// Return the voting power of this neuron.
@@ -239,10 +254,13 @@ impl Neuron {
         }
     }
 
-    pub(crate) fn unstake_maturity_if_dissolved(&mut self, now_seconds: u64) {
-        if self.state(now_seconds) == NeuronState::Dissolved
+    pub(crate) fn ready_to_unstake_maturity(&self, now_seconds: u64) -> bool {
+        self.state(now_seconds) == NeuronState::Dissolved
             && self.staked_maturity_e8s_equivalent.unwrap_or(0) > 0
-        {
+    }
+
+    pub(crate) fn unstake_maturity(&mut self, now_seconds: u64) {
+        if self.ready_to_unstake_maturity(now_seconds) {
             self.maturity_e8s_equivalent = self
                 .maturity_e8s_equivalent
                 .saturating_add(self.staked_maturity_e8s_equivalent.unwrap_or(0));
@@ -629,6 +647,7 @@ impl Neuron {
             stake_e8s: self.minted_stake_e8s(),
             joined_community_fund_timestamp_seconds: self.joined_community_fund_timestamp_seconds,
             known_neuron_data: self.known_neuron_data.as_ref().cloned(),
+            neuron_type: self.neuron_type,
         }
     }
 
@@ -661,7 +680,7 @@ impl Neuron {
     ///
     /// Only a non-dissolving neuron has a non-zero age. The age of all other
     /// neurons (i.e., dissolving and dissolved) is represented as
-    /// `againg_since_timestamp_seconds == u64::MAX`. This method maintains
+    /// `aging_since_timestamp_seconds == u64::MAX`. This method maintains
     /// that invariant.
     pub fn update_stake_adjust_age(&mut self, updated_stake_e8s: u64, now: u64) {
         // If the updated stake is less than the original stake, preserve the
@@ -716,6 +735,145 @@ impl Neuron {
                     now.saturating_sub(new_age_seconds)
                 }
         }
+    }
+
+    /// An inactive neuron is supposed to end up living in stable memory.
+    ///
+    /// The exact criteria is subject to change. Currently, all of the following must hold:
+    ///
+    ///     1. Not seed: NeuronType is not NeuronType::Seed
+    ///     2. Not ect: NeuronType is not NeuronType::Ect
+    ///     3. Not funded: No stake, and no (unstaked) maturity.
+    ///     4. Dissolved sufficiently "long ago": Precisely, dissolved as of now - 2 weeks.
+    ///     5. Member of the Neuron's Fund.
+    ///
+    ///
+    /// Remarks about condition 2:
+    ///
+    /// A. Notice that under these criteria, a Neuron CAN INDEED become inactive merely by the passage
+    /// of time. This is unfortunate, but not catastrophic. As long as "most" inactive Neurons are
+    /// in stable memory, and nothing is relying on "if a Neuron is inactive, then it is in stable
+    /// memory", then we have achieved our goal: save heap space.
+    ///
+    /// B. This is why this method has the `now` parameter.
+    pub fn is_inactive(&self, now: u64) -> bool {
+        // Require condition 1.
+        if self.is_seed_neuron() || self.is_ect_neuron() {
+            return false;
+        }
+
+        // Require condition 2.
+        if self.is_funded() {
+            return false;
+        }
+
+        // Require condition 3.
+
+        // 3.1: Interpret dissolve_state field.
+        let dissolved_at_timestamp_seconds = match self.dissolved_at_timestamp_seconds() {
+            // None -> not dissolving -> will be dissolved in the future -> not dissolved now ->
+            // certainly was not dissolved sufficiently "long" ago!
+            None => {
+                return false;
+            }
+            Some(ok) => ok,
+        };
+
+        // 3.2: Now, we know when self is "dissolved" (could be in the past, present, or future).
+        // Thus, we can evaluate whether that happened sufficiently long ago.
+        let max_dissolved_at_timestamp_seconds_to_be_inactive = now - 2 * 7 * SECONDS_PER_DAY;
+        if dissolved_at_timestamp_seconds > max_dissolved_at_timestamp_seconds_to_be_inactive {
+            return false;
+        }
+
+        // Finally, require condition 3: Member of the Neuron's Fund.
+        if self.is_a_neurons_fund_member() {
+            return false;
+        }
+
+        // All requirements have been met.
+        true
+    }
+
+    pub fn is_seed_neuron(&self) -> bool {
+        self.neuron_type == Some(NeuronType::Seed as i32)
+    }
+
+    pub fn is_ect_neuron(&self) -> bool {
+        self.neuron_type == Some(NeuronType::Ect as i32)
+    }
+
+    pub fn is_genesis_neuron(&self) -> bool {
+        self.is_ect_neuron() || self.is_seed_neuron()
+    }
+
+    pub fn is_funded(&self) -> bool {
+        let amount_e8s = self.stake_e8s() + self.maturity_e8s_equivalent;
+        amount_e8s > 0
+    }
+
+    /// If not dissolving, returns None. Otherwise, returns Some Unix timestamp (seconds) when the
+    /// Neuron is dissolved (could be in the past, present, or future).
+    ///
+    /// Note that when self.dissolve_state == DissolveDelaySeconds(0), even though the Neuron is
+    /// dissolved, we do not know when that happened. This tends to happen when Neurons are first
+    /// created. In those cases, we could have set dissolve_state to
+    /// WhenDissolvedTimestampSeconds(now()), but we didn't. This could be changed for new Neurons,
+    /// but there is no intention to do that (yet).
+    pub fn dissolved_at_timestamp_seconds(&self) -> Option<u64> {
+        use DissolveState::{DissolveDelaySeconds, WhenDissolvedTimestampSeconds};
+        match self.dissolve_state {
+            None => None,
+            Some(WhenDissolvedTimestampSeconds(result)) => Some(result),
+            Some(DissolveDelaySeconds(seconds)) => {
+                if seconds == 0 {
+                    println!(
+                        "{}WARNING: Neuron {:?} is dissolved, but it is not \
+                         known when that happened. Thus, by default, \
+                         dissolved_at_timestamp_seconds is set to None.",
+                        LOG_PREFIX, self.id,
+                    );
+                }
+
+                None
+            }
+        }
+    }
+
+    /// Omit deprecated topics from a Neuron's followees. Used to scrub deprecated
+    /// topics from Governance's APIs.
+    pub(crate) fn without_deprecated_topics_from_followees(mut self) -> Self {
+        for topic in DEPRECATED_TOPICS {
+            let converted_topic = topic as i32;
+            self.followees.remove(&converted_topic);
+        }
+        self
+    }
+}
+
+/// Convert a RangeBounds<NeuronId> to RangeBounds<u64> which is useful for methods
+/// that operate on NeuronId ranges with internal u64 representations in data.
+pub fn neuron_id_range_to_u64_range(range: &impl RangeBounds<NeuronId>) -> impl RangeBounds<u64> {
+    let first = match range.start_bound() {
+        std::ops::Bound::Included(start) => start.id,
+        std::ops::Bound::Excluded(start) => start.id + 1,
+        std::ops::Bound::Unbounded => 0,
+    };
+    let last = match range.end_bound() {
+        std::ops::Bound::Included(end) => end.id,
+        std::ops::Bound::Excluded(end) => end.id - 1,
+        std::ops::Bound::Unbounded => u64::MAX,
+    };
+    first..=last
+}
+
+impl NeuronInfo {
+    pub fn is_seed_neuron(&self) -> bool {
+        self.neuron_type == Some(NeuronType::Seed as i32)
+    }
+
+    pub fn is_ect_neuron(&self) -> bool {
+        self.neuron_type == Some(NeuronType::Ect as i32)
     }
 }
 
@@ -780,7 +938,7 @@ mod tests {
         // This is the weighted average that tells us what the age should be
         // in seconds.
         let expected_new_age_seconds = TWELVE_MONTHS_SECONDS.saturating_mul(10).saturating_div(15);
-        // Decrease the age that we expect from now to get the exected timestamp
+        // Decrease the age that we expect from now to get the expected timestamp
         // since when the neurons should be aging.
         assert_eq!(neuron.age_seconds(NOW), expected_new_age_seconds);
     }
@@ -802,7 +960,7 @@ mod tests {
         // This is the weighted average that tells us what the age should be
         // in seconds.
         let expected_new_age_seconds = TWELVE_MONTHS_SECONDS.saturating_mul(10).saturating_div(15);
-        // Decrease the age that we expect from now to get the exected timestamp
+        // Decrease the age that we expect from now to get the expected timestamp
         // since when the neurons should be aging.
         assert_eq!(neuron.age_seconds(NOW), expected_new_age_seconds);
     }
@@ -823,7 +981,7 @@ mod tests {
         // This is the weighted average that tells us what the age should be
         // in seconds.
         let expected_new_age_seconds = TWELVE_MONTHS_SECONDS.saturating_mul(10).saturating_div(15);
-        // Decrease the age that we expect from now to get the exected timestamp
+        // Decrease the age that we expect from now to get the expected timestamp
         // since when the neurons should be aging.
         assert_eq!(neuron.age_seconds(NOW), expected_new_age_seconds);
     }
@@ -862,7 +1020,7 @@ mod tests {
         let original_aging_since_timestamp_seconds = neuron.aging_since_timestamp_seconds;
         let new_stake_e8s = 5 * E8;
         neuron.update_stake_adjust_age(new_stake_e8s, NOW);
-        // The only effect of the above call shoudl be an update of
+        // The only effect of the above call should be an update of
         // `cached_neuron_stake_e8s`; e.g., the operation does not simply fail.
         assert_eq!(neuron.dissolve_state, original_dissolve_state);
         assert_eq!(neuron.cached_neuron_stake_e8s, new_stake_e8s);

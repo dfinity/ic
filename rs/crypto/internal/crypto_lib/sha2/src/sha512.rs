@@ -1,14 +1,5 @@
 use crate::Context;
-
-#[cfg(not(target_arch = "wasm32"))]
-mod openssl_sha512;
-#[cfg(target_arch = "wasm32")]
-mod rust_sha512;
-
-#[cfg(not(target_arch = "wasm32"))]
-pub(crate) use openssl_sha512::{hash, InternalSha512};
-#[cfg(target_arch = "wasm32")]
-pub(crate) use rust_sha512::{hash, InternalSha512};
+use sha2::Digest;
 
 /// Hasher with fixed algorithm that is guaranteed not to change in the future
 /// or across registry versions. The algorithm used to generate the hash is
@@ -19,7 +10,7 @@ pub(crate) use rust_sha512::{hash, InternalSha512};
 
 #[derive(Default)]
 pub struct Sha512 {
-    sha512: InternalSha512,
+    sha512: sha2::Sha512,
 }
 
 impl Sha512 {
@@ -37,17 +28,22 @@ impl Sha512 {
 
     /// Hashes some data and returns the digest
     pub fn hash(data: &[u8]) -> [u8; 64] {
-        hash(data)
+        let mut hash = Self::new();
+        hash.write(data);
+        hash.finish()
     }
 
     /// Incrementally update the current hash
     pub fn write(&mut self, data: &[u8]) {
-        self.sha512.write(data);
+        self.sha512.update(data);
     }
 
     /// Finishes computing a hash, returning the digest
     pub fn finish(self) -> [u8; 64] {
-        self.sha512.finish()
+        let hash = self.sha512.finalize();
+        hash.as_slice()
+            .try_into()
+            .expect("infallible as length is 64")
     }
 }
 

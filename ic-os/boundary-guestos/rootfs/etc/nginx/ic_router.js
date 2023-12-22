@@ -1,10 +1,26 @@
 import qs from "querystring";
 
-import SUBNET_TABLE from "/var/opt/nginx/ic/ic_routes.js";
 import CANISTER_ID_ALIASES from "/var/opt/nginx/canister_aliases/canister_id_aliases.js";
 import DOMAIN_CANISTER_MAPPINGS from "/var/opt/nginx/domain_canister_mappings.js";
 
 const CANISTER_ID_LENGTH = 27;
+
+const SYSTEM_SUBNET_TABLE = {
+  "canister_range_starts": [
+    "00000000000000000101",
+    "00000000000000070101",
+    "00000000000000080101",
+    "0000000001a000000101",
+    "00000000021000000101",
+  ],
+  "canister_range_ends": [
+    "00000000000000060101",
+    "00000000000000070101",
+    "00000000000fffff0101",
+    "0000000001afffff0101",
+    "00000000021fffff0101",
+  ],
+};
 
 function leftpad(s, len, pad) {
   return (
@@ -54,7 +70,8 @@ function resolveCanisterIdFromUri(uri) {
   if (!m) {
     return "";
   }
-  const canister_id = m[1];
+  let with_prefix = m[1].split("--");
+  const canister_id = with_prefix[with_prefix.length - 1];
   if (canister_id.length != CANISTER_ID_LENGTH) {
     // not a canister id
     return "";
@@ -68,7 +85,8 @@ function extractCanisterIdFromHost(host) {
   if (!m) {
     return "";
   }
-  let canisterId = m[1];
+  let with_prefix = m[1].split("--");
+  let canisterId = with_prefix[with_prefix.length - 1];
 
   // Check if ID is an alias
   if (!!CANISTER_ID_ALIASES[canisterId]) {
@@ -153,90 +171,29 @@ function inferCanisterId(r) {
   return extractCanisterIdFromReferer(r);
 }
 
-function isTableEmpty(r) {
-  return !SUBNET_TABLE["canister_subnets"] ? "1" : "";
-}
-
-function normalizeSubnetType(typ) {
-  return (
-    {
-      application: "application",
-      system: "system",
-    }[typ] || ""
-  );
-}
-
-function route(r) {
+function isSystemSubnet(r) {
   // Canister ID
   let canisterId = inferCanisterId(r);
   if (!canisterId) {
-    return "";
-  }
-
-  if (!("canister_subnets" in SUBNET_TABLE)) {
-    return "";
+    return "0";
   }
 
   canisterId = decodeCanisterId(canisterId);
 
   // Determine subnet
-  const subnetIdx = findSubnet(canisterId, SUBNET_TABLE);
+  const subnetIdx = findSubnet(canisterId, SYSTEM_SUBNET_TABLE);
   if (
-    canisterId < SUBNET_TABLE.canister_range_starts[subnetIdx] ||
-    canisterId > SUBNET_TABLE.canister_range_ends[subnetIdx]
+    canisterId < SYSTEM_SUBNET_TABLE.canister_range_starts[subnetIdx] ||
+    canisterId > SYSTEM_SUBNET_TABLE.canister_range_ends[subnetIdx]
   ) {
-    return "";
+    return "0";
   }
 
-  const subnetId = SUBNET_TABLE.canister_subnets[subnetIdx];
-
-  const subnetNodeIds = SUBNET_TABLE.subnet_node_ids[subnetId] || [];
-  const nodeCount = subnetNodeIds.length;
-  if (nodeCount == 0) {
-    return "";
-  }
-
-  const subnetTypes = SUBNET_TABLE["subnet_types"] || {};
-  const subnetType = normalizeSubnetType(subnetTypes[subnetId]);
-
-  // Choose random node
-  const nodeIdx = Math.floor(Math.random() * nodeCount);
-  const nodeId = subnetNodeIds[nodeIdx];
-
-  return `${nodeId},${subnetId},${subnetType}`;
-}
-
-function randomRoute() {
-  const canisterSubnets = SUBNET_TABLE.canister_subnets || [];
-  const subnetCount = canisterSubnets.length;
-  if (subnetCount == 0) {
-    return "";
-  }
-
-  // Choose random subnet
-  const subnetIdx = Math.floor(Math.random() * subnetCount);
-  const subnetId = canisterSubnets[subnetIdx];
-
-  const subnetNodeIds = SUBNET_TABLE.subnet_node_ids[subnetId] || [];
-  const nodeCount = subnetNodeIds.length;
-  if (nodeCount == 0) {
-    return "";
-  }
-
-  const subnetTypes = SUBNET_TABLE["subnet_types"] || {};
-  const subnetType = normalizeSubnetType(subnetTypes[subnetId]);
-
-  // Choose random node
-  const nodeIdx = Math.floor(Math.random() * nodeCount);
-  const nodeId = subnetNodeIds[nodeIdx];
-
-  return `${subnetId},${subnetType},${nodeId}`;
+  return "1";
 }
 
 export default {
   hostCanisterId,
   inferCanisterId,
-  isTableEmpty,
-  randomRoute,
-  route,
+  isSystemSubnet,
 };

@@ -67,10 +67,13 @@ mod tests {
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
-        canister_state::execution_state::{
-            CustomSection, CustomSectionType, NextScheduledMethod, WasmBinary, WasmMetadata,
+        canister_state::{
+            execution_state::{
+                CustomSection, CustomSectionType, NextScheduledMethod, WasmBinary, WasmMetadata,
+            },
+            system_state::CyclesUseCase,
         },
-        metadata_state::Stream,
+        metadata_state::{Stream, SubnetMetrics},
         page_map::{PageIndex, PAGE_SIZE},
         testing::ReplicatedStateTesting,
         ExecutionState, ExportedFunctions, Global, Memory, NumWasmPages, PageMap, ReplicatedState,
@@ -86,6 +89,7 @@ mod tests {
         crypto::CryptoHash,
         ingress::{IngressState, IngressStatus},
         messages::RequestMetadata,
+        nominal_cycles::NominalCycles,
         xnet::{StreamIndex, StreamIndexedQueue},
         CryptoHashOfPartialState, Cycles, ExecutionRound, Time,
     };
@@ -277,6 +281,26 @@ mod tests {
 
             state.metadata.certification_version = certification_version;
 
+            let mut subnet_metrics = SubnetMetrics::default();
+
+            subnet_metrics.consumed_cycles_by_deleted_canisters = NominalCycles::from(0);
+            subnet_metrics.consumed_cycles_http_outcalls = NominalCycles::from(50_000_000_000);
+            subnet_metrics.consumed_cycles_ecdsa_outcalls = NominalCycles::from(100_000_000_000);
+            subnet_metrics.ecdsa_signature_agreements = 2;
+            subnet_metrics.num_canisters = 5;
+            subnet_metrics.canister_state_bytes = NumBytes::from(5 * 1024 * 1024);
+            subnet_metrics.update_transactions_total = 4200;
+            subnet_metrics.observe_consumed_cycles_with_use_case(
+                CyclesUseCase::Instructions,
+                NominalCycles::from(80_000_000_000),
+            );
+            subnet_metrics.observe_consumed_cycles_with_use_case(
+                CyclesUseCase::RequestAndResponseTransmission,
+                NominalCycles::from(20_000_000_000),
+            );
+
+            state.metadata.subnet_metrics = subnet_metrics;
+
             state
         }
 
@@ -316,6 +340,7 @@ mod tests {
             "62B2E77DFCD17C7E0CE3E762FD37281776C4B0A38CE1B83A1316614C3F849E39",
             "80D4B528CC9E09C775273994261DD544D45EFFF90B655D90FC3A6E3F633ED718",
             "E1108326097AE9BF8212F333F4F46B9619B947CDF2A73F3223BBEBC6FC2033B6",
+            "EEC0156BE3C97CE6D7E7FBE683FFB4641463648DB6AC6818DCF90114E6A9DA72",
         ];
 
         for certification_version in CertificationVersion::iter() {

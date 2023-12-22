@@ -2,8 +2,9 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 
 # Limit the visilibility of the package only to few tools/tests.
 # Users should ideally directly use the //rs/registry/nns_data_provider
-# package and this one should not exists since it is just a thin wrapper.
+# package and this one should not exist since it is just a thin wrapper.
 package(default_visibility = [
+    "//rs/boundary_node/discower_bowndary:__pkg__",
     "//rs/ic_p8s_service_discovery:__pkg__",
     "//rs/registry/admin:__pkg__",
     "//rs/registry/regedit:__pkg__",
@@ -22,6 +23,6 @@ rust_library(
     name = "nns_data_provider_wrappers",
     srcs = glob(["src/**"]),
     crate_name = "ic_registry_nns_data_provider_wrappers",
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )

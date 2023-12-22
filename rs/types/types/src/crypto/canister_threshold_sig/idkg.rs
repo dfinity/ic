@@ -117,7 +117,7 @@ impl IDkgReceivers {
     ///   multisignature shares (i.e. |self| >= verification_threshold(|self|) +
     ///   faults_tolerated(|self|)) (error: `UnsatisfiedVerificationThreshold`)
     ///
-    /// If an invariant is not satisifed, the `Err` as indicated above is
+    /// If an invariant is not satisfied, the `Err` as indicated above is
     /// returned.
     pub fn new(receivers: BTreeSet<NodeId>) -> Result<Self, IDkgParamsValidationError> {
         Self::ensure_receivers_not_empty(&receivers)?;
@@ -240,7 +240,7 @@ impl IDkgDealers {
     /// * Dealers are not empty (error: `DealersEmpty`)
     /// * The number of dealers fits into `NodeIndex` (error: `TooManyDealers`)
     ///
-    /// If an invariant is not satisifed, the `Err` as indicated above is
+    /// If an invariant is not satisfied, the `Err` as indicated above is
     /// returned.
     pub fn new(dealers: BTreeSet<NodeId>) -> Result<Self, IDkgParamsValidationError> {
         Self::ensure_dealers_not_empty(&dealers)?;
@@ -302,8 +302,10 @@ pub struct IDkgTranscriptParams {
     dealers: IDkgDealers,
     receivers: IDkgReceivers,
     registry_version: RegistryVersion,
-    /// Identifies the cryptographic signature scheme used in the protocol.
-    /// Currently only [`AlgorithmId::ThresholdEcdsaSecp256k1`] is supported.
+    /// Identifies the cryptographic signature scheme used in the
+    /// protocol.  Currently only
+    /// [`AlgorithmId::ThresholdEcdsaSecp256k1`] and
+    /// [`AlgorithmId::ThresholdEcdsaSecp256r1`] are supported.
     algorithm_id: AlgorithmId,
     /// Mode of operation for this current execution of the protocol.
     operation_type: IDkgTranscriptOperation,
@@ -498,6 +500,7 @@ impl IDkgTranscriptParams {
     fn ensure_algorithm_id_supported(&self) -> Result<(), IDkgParamsValidationError> {
         match self.algorithm_id {
             AlgorithmId::ThresholdEcdsaSecp256k1 => Ok(()),
+            AlgorithmId::ThresholdEcdsaSecp256r1 => Ok(()),
             _ => Err(IDkgParamsValidationError::UnsupportedAlgorithmId {
                 algorithm_id: self.algorithm_id,
             }),
@@ -700,7 +703,7 @@ pub enum IDkgTranscriptType {
 /// transcript is considered:
 /// * [`Masked`][`IDkgTranscriptType::Masked`] if the commitment perfectly hides the shared value.
 /// * [`Unmasked`][`IDkgTranscriptType::Unmasked`] if the commitment is not perfectly hiding and
-/// may reveal some informaiton about the shared value.
+/// may reveal some information about the shared value.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct IDkgTranscript {
     pub transcript_id: IDkgTranscriptId,
@@ -939,6 +942,12 @@ impl IDkgTranscript {
     pub fn has_receiver(&self, receiver_id: NodeId) -> bool {
         self.receivers.position(receiver_id).is_some()
     }
+
+    /// Returns a copy of the raw internal transcript.
+    #[inline]
+    pub fn transcript_to_bytes(&self) -> Vec<u8> {
+        self.internal_transcript_raw.clone()
+    }
 }
 
 impl Debug for IDkgTranscript {
@@ -972,6 +981,14 @@ pub struct IDkgDealing {
     pub transcript_id: IDkgTranscriptId,
     #[serde(with = "serde_bytes")]
     pub internal_dealing_raw: Vec<u8>,
+}
+
+impl IDkgDealing {
+    /// Returns a copy of the internal dealing.
+    #[inline]
+    pub fn dealing_to_bytes(&self) -> Vec<u8> {
+        self.internal_dealing_raw.clone()
+    }
 }
 
 impl Debug for IDkgDealing {

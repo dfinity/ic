@@ -389,7 +389,7 @@ pub fn merge_path_into_labeled_tree<T: core::fmt::Debug + std::cmp::PartialEq + 
             let (path_label, subpath) = subtree_path
                 .iter()
                 .next()
-                .expect("should containt exactly one child");
+                .expect("should contain exactly one child");
             // if the left subtree contains the label from the right subtree, go one level deeper,
             // otherwise append the right subtree to the left subtree
             if let Some(subagg) = subtree_agg.get_mut(path_label) {

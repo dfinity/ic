@@ -95,7 +95,7 @@ pub struct Response {
 }
 
 /// Canonical representation of `ic_types::funds::Cycles`.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Cycles {
     pub low: u64,
@@ -143,6 +143,20 @@ pub struct SystemMetadata {
     pub id_counter: Option<u64>,
     /// Hash bytes of the previous (partial) canonical state.
     pub prev_state_hash: Option<Vec<u8>>,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
+pub struct SubnetMetrics {
+    /// The number of canisters on this subnet.
+    pub num_canisters: u64,
+    /// The total size of the state taken by canisters on this subnet in bytes.
+    pub canister_state_bytes: u64,
+    /// The total number of cycles consumed by all current and deleted canisters
+    /// on this subnet.
+    pub consumed_cycles_total: Cycles,
+    /// The total number of update transactions processed on this subnet.
+    /// Update transactions include all replicated message executions.
+    pub update_transactions_total: u64,
 }
 
 impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeader {
@@ -307,8 +321,12 @@ impl TryFrom<Request> for ic_types::messages::Request {
         .try_into()?;
 
         Ok(Self {
-            receiver: ic_types::CanisterId::new(request.receiver.as_slice().try_into()?)?,
-            sender: ic_types::CanisterId::new(request.sender.as_slice().try_into()?)?,
+            receiver: ic_types::CanisterId::unchecked_from_principal(
+                request.receiver.as_slice().try_into()?,
+            ),
+            sender: ic_types::CanisterId::unchecked_from_principal(
+                request.sender.as_slice().try_into()?,
+            ),
             sender_reply_callback: request.sender_reply_callback.into(),
             payment,
             method_name: request.method_name,
@@ -348,8 +366,12 @@ impl TryFrom<Response> for ic_types::messages::Response {
         .try_into()?;
 
         Ok(Self {
-            originator: ic_types::CanisterId::new(response.originator.as_slice().try_into()?)?,
-            respondent: ic_types::CanisterId::new(response.respondent.as_slice().try_into()?)?,
+            originator: ic_types::CanisterId::unchecked_from_principal(
+                response.originator.as_slice().try_into()?,
+            ),
+            respondent: ic_types::CanisterId::unchecked_from_principal(
+                response.respondent.as_slice().try_into()?,
+            ),
             originator_reply_callback: response.originator_reply_callback.into(),
             refund,
             response_payload: response.response_payload.try_into()?,
@@ -494,6 +516,31 @@ impl
                 .prev_state_hash
                 .as_ref()
                 .map(|h| h.get_ref().0.clone()),
+        }
+    }
+}
+
+impl
+    From<(
+        &ic_replicated_state::metadata_state::SubnetMetrics,
+        CertificationVersion,
+    )> for SubnetMetrics
+{
+    fn from(
+        (metrics, _certification_version): (
+            &ic_replicated_state::metadata_state::SubnetMetrics,
+            CertificationVersion,
+        ),
+    ) -> Self {
+        let (high, low) = metrics.consumed_cycles_total().into_parts();
+        Self {
+            num_canisters: metrics.num_canisters,
+            canister_state_bytes: metrics.canister_state_bytes.get(),
+            consumed_cycles_total: Cycles {
+                low,
+                high: Some(high),
+            },
+            update_transactions_total: metrics.update_transactions_total,
         }
     }
 }

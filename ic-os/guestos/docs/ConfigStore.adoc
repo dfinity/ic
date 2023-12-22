@@ -61,7 +61,9 @@ Must be a file of key/value pairs separated by "=" (one per line) with the follo
 
 - *ipv6_gateway*: The default IPv6 gateway, only meaningful if ipv6_address is also provided.
 
-- *name_servers*: The name servers to be used. If multiple servers are needed, separate them with spaces. This key is only meaningful if DHCP or SLAAC is not used.
+- *name_servers*: The ipv6 name servers to be used. If multiple servers are needed, separate them with spaces. This key is only meaningful if DHCP or SLAAC is not used.
+
+- *ipv4_name_servers*: The ipv4 name servers to be used. If multiple servers are needed, separate them with spaces. This key is only meaningful if DHCP or SLAAC is not used.
 
 - *hostname*: The hostname, which can be any text in principle but is generally derived from the ID of the physical host (e.g., MAC address).
 
@@ -97,17 +99,16 @@ Must be a file of key/value pairs separated by "=" (one per line) with the follo
 
 This configuration file should only be used for testnet deployments (to achieve shorter retention times) and must be missing for production deployments, where suitable production default values are assumed.
 
-=== journalbeat.conf
+=== filebeat.conf
 
-Configures journalbeat to export logs out of the system.
+Configures filebeat to export logs out of the system.
 
 Must be a file of key/value pairs separated by "=" (one per line) with the following possible keys:
 
-- journalbeat_hosts: Space-separated lists of hosts to ship logs to.
+- elasticsearch_hosts: Space-separated lists of hosts to ship logs to.
+- elasticsearch_tags: Space-separated list of tags to apply to exported log records.
 
-- journalbeat_tags: Space-separated list of tags to apply to exported log records.
-
-If left unspecified, journalbeat will be left unconfigured and no logs are exported.
+If left unspecified, filebeat will be left unconfigured and no logs are exported.
 
 === log.conf
 

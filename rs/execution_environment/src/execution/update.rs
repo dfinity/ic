@@ -1,5 +1,5 @@
 // This module defines how update messages and canister tasks are executed.
-// See https://smartcontracts.org/docs/interface-spec/index.html#rule-message-execution
+// See https://internetcomputer.org/docs/interface-spec/index.html#rule-message-execution
 
 use crate::execution::common::{
     action_to_response, apply_canister_state_changes, finish_call_with_error,
@@ -49,10 +49,12 @@ pub fn execute_update(
             None => {
                 let mut canister = clean_canister;
                 let memory_usage = canister.memory_usage();
+                let message_memory_usage = canister.message_memory_usage();
                 let prepaid_execution_cycles =
                     match round.cycles_account_manager.prepay_execution_cycles(
                         &mut canister.system_state,
                         memory_usage,
+                        message_memory_usage,
                         execution_parameters.compute_allocation,
                         execution_parameters.instruction_limits.message(),
                         subnet_size,
@@ -78,6 +80,7 @@ pub fn execute_update(
         clean_canister.system_state.freeze_threshold,
         clean_canister.system_state.memory_allocation,
         clean_canister.memory_usage(),
+        clean_canister.message_memory_usage(),
         clean_canister.compute_allocation(),
         subnet_size,
         clean_canister.system_state.reserved_balance(),
@@ -131,11 +134,13 @@ pub fn execute_update(
     };
 
     let memory_usage = helper.canister().memory_usage();
+    let message_memory_usage = helper.canister().message_memory_usage();
     let result = round.hypervisor.execute_dts(
         api_type,
         helper.canister().execution_state.as_ref().unwrap(),
         &helper.canister().system_state,
         memory_usage,
+        message_memory_usage,
         original.execution_parameters.clone(),
         FuncRef::Method(original.method.clone()),
         round_limits,
@@ -203,9 +208,11 @@ fn finish_err(
 ) -> ExecuteMessageResult {
     let mut canister = clean_canister;
 
-    canister
-        .system_state
-        .apply_ingress_induction_cycles_debit(canister.canister_id(), round.log);
+    canister.system_state.apply_ingress_induction_cycles_debit(
+        canister.canister_id(),
+        round.log,
+        round.counters.charging_from_balance_error,
+    );
 
     let instruction_limit = original.execution_parameters.instruction_limits.message();
     round.cycles_account_manager.refund_unused_execution_cycles(
@@ -213,7 +220,7 @@ fn finish_err(
         instructions_left,
         instruction_limit,
         original.prepaid_execution_cycles,
-        round.execution_refund_error_counter,
+        round.counters.execution_refund_error,
         original.subnet_size,
         round.log,
     );
@@ -326,7 +333,7 @@ impl UpdateHelper {
     }
 
     /// Finishes an update call execution that could have run multiple rounds
-    /// due to determnistic time slicing.
+    /// due to deterministic time slicing.
     fn finish(
         mut self,
         mut output: WasmExecutionOutput,
@@ -338,7 +345,11 @@ impl UpdateHelper {
     ) -> ExecuteMessageResult {
         self.canister
             .system_state
-            .apply_ingress_induction_cycles_debit(self.canister.canister_id(), round.log);
+            .apply_ingress_induction_cycles_debit(
+                self.canister.canister_id(),
+                round.log,
+                round.counters.charging_from_balance_error,
+            );
 
         // Check that the cycles balance does not go below the freezing
         // threshold after applying the Wasm execution state changes.
@@ -360,6 +371,7 @@ impl UpdateHelper {
                     clean_canister.canister_id(),
                     err,
                 );
+                // Perf counter: no need to update the call context, as it won't be saved.
                 return finish_err(
                     clean_canister,
                     output.num_instructions_left,
@@ -380,6 +392,7 @@ impl UpdateHelper {
             round.network_topology,
             round.hypervisor.subnet_id(),
             round.log,
+            round.counters.state_changes_error,
         );
         let heap_delta = if output.wasm_result.is_ok() {
             NumBytes::from((output.instance_stats.dirty_pages * ic_sys::PAGE_SIZE) as u64)
@@ -387,29 +400,6 @@ impl UpdateHelper {
             NumBytes::from(0)
         };
 
-        let action = self
-            .canister
-            .system_state
-            .call_context_manager_mut()
-            .unwrap()
-            .on_canister_result(self.call_context_id, None, output.wasm_result);
-
-        let response = action_to_response(
-            &self.canister,
-            action,
-            original.call_origin,
-            round.time,
-            round.log,
-        );
-        round.cycles_account_manager.refund_unused_execution_cycles(
-            &mut self.canister.system_state,
-            output.num_instructions_left,
-            original.execution_parameters.instruction_limits.message(),
-            original.prepaid_execution_cycles,
-            round.execution_refund_error_counter,
-            original.subnet_size,
-            round.log,
-        );
         let instructions_used = NumInstructions::from(
             original
                 .execution_parameters
@@ -417,6 +407,35 @@ impl UpdateHelper {
                 .message()
                 .get()
                 .saturating_sub(output.num_instructions_left.get()),
+        );
+        let action = self
+            .canister
+            .system_state
+            .call_context_manager_mut()
+            .unwrap()
+            .on_canister_result(
+                self.call_context_id,
+                None,
+                output.wasm_result,
+                instructions_used,
+            );
+
+        let response = action_to_response(
+            &self.canister,
+            action,
+            original.call_origin,
+            round.time,
+            round.log,
+            round.counters.ingress_with_cycles_error,
+        );
+        round.cycles_account_manager.refund_unused_execution_cycles(
+            &mut self.canister.system_state,
+            output.num_instructions_left,
+            original.execution_parameters.instruction_limits.message(),
+            original.prepaid_execution_cycles,
+            round.counters.execution_refund_error,
+            original.subnet_size,
+            round.log,
         );
         ExecuteMessageResult::Finished {
             canister: self.canister,

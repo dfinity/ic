@@ -1,5 +1,5 @@
-load("//bazel:canisters.bzl", "rust_canister")
 load("@rules_rust//rust:defs.bzl", "rust_test")
+load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -11,6 +11,7 @@ DEPENDENCIES = [
     "@crate_index//:flate2",
     "@crate_index//:serde_cbor",
     "@crate_index//:sha2",
+    "@crate_index//:candid",
 ]
 
 DEV_DEPENDENCIES = []

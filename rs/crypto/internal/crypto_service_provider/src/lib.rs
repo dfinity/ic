@@ -7,8 +7,8 @@
 pub mod api;
 pub mod builder;
 pub mod canister_threshold;
+#[cfg(test)]
 pub mod imported_test_utils;
-pub mod imported_utilities;
 pub mod key_id;
 pub mod keygen;
 pub mod public_key_store;
@@ -34,6 +34,7 @@ use crate::types::{CspPublicKey, ExternalPublicKeys};
 use crate::vault::api::{
     CspPublicKeyStoreError, CspVault, PksAndSksContainsErrors, ValidatePksAndSksError,
 };
+use ic_adapter_metrics::AdapterMetrics;
 use ic_config::crypto::{CryptoConfig, CspVaultType};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
@@ -41,7 +42,7 @@ use ic_logger::{info, new_logger, replica_logger::no_op_logger, ReplicaLogger};
 use ic_types::crypto::CurrentNodePublicKeys;
 use key_id::KeyId;
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -165,8 +166,12 @@ impl Csp {
     ) -> Self {
         match &config.csp_vault_type {
             CspVaultType::InReplica => Self::new_with_in_replica_vault(config, logger, metrics),
-            CspVaultType::UnixSocket(socket_path) => Self::new_with_unix_socket_vault(
-                socket_path,
+            CspVaultType::UnixSocket {
+                logic: logic_socket_path,
+                metrics: metrics_socket_path,
+            } => Self::new_with_unix_socket_vault(
+                logic_socket_path,
+                metrics_socket_path.clone(),
                 tokio_runtime_handle.expect("missing tokio runtime handle"),
                 config,
                 logger,
@@ -192,6 +197,7 @@ impl Csp {
 
     fn new_with_unix_socket_vault(
         socket_path: &Path,
+        metrics_socket_path: Option<PathBuf>,
         rt_handle: tokio::runtime::Handle,
         config: &CryptoConfig,
         logger: Option<ReplicaLogger>,
@@ -202,6 +208,16 @@ impl Csp {
             logger,
             "Proceeding with a remote csp_vault, CryptoConfig: {:?}", config
         );
+        if let (Some(metrics_uds_path), Some(global_metrics)) =
+            (metrics_socket_path, metrics.metrics_registry())
+        {
+            global_metrics.register_adapter(AdapterMetrics::new(
+                "cryptocsp",
+                metrics_uds_path,
+                rt_handle.clone(),
+            ));
+        }
+
         let csp_vault = RemoteCspVault::new(
             socket_path,
             rt_handle,

@@ -1,0 +1,95 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+LIB_DEPENDENCIES = [
+    "//rs/config",
+    "//rs/crypto/iccsa",
+    "//rs/crypto/utils/threshold_sig_der",
+    "//rs/registry/subnet_type",
+    "//rs/registry/proto_data_provider",
+    "//rs/state_machine_tests",
+    "//rs/interfaces/state_manager",
+    "//packages/pocket-ic:pocket-ic",
+    "//rs/types/types",
+    "//rs/types/ic00_types",
+    "//rs/crypto/sha2",
+    "//rs/utils",
+    "//rs/registry/routing_table",
+    "//rs/test_utilities",
+    "@crate_index//:aide",
+    "@crate_index//:axum",
+    "@crate_index//:schemars",
+    "@crate_index//:itertools",
+    "@crate_index//:tokio",
+    "@crate_index//:tempfile",
+    "@crate_index//:candid",
+    "@crate_index//:clap",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+    "@crate_index//:hex",
+    "@crate_index//:rand",
+    "@crate_index//:sha2",
+    "@crate_index//:time",
+    "@crate_index//:tracing",
+    "@crate_index//:tracing-subscriber",
+    "@crate_index//:tracing-appender",
+    "@crate_index//:tower-http",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:base64",
+    "@crate_index//:wat",
+    "@crate_index//:flate2",
+]
+
+TEST_DEPENDENCIES = [
+    "//packages/pocket-ic:pocket-ic",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:reqwest",
+    "@crate_index//:candid",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:serde_derive",
+]
+
+rust_binary(
+    name = "pocket-ic-server",
+    srcs = ["src/main.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = LIB_DEPENDENCIES + [":pocket-ic-server-lib"],
+)
+
+rust_library(
+    name = "pocket-ic-server-lib",
+    srcs = [
+        "src/lib.rs",
+        "src/pocket_ic.rs",
+    ] + glob([
+        "src/state_api/**",
+    ]),
+    crate_name = "pocket_ic_server",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "2.0.1",
+    deps = LIB_DEPENDENCIES,
+)
+
+rust_test(
+    name = "pic_test",
+    srcs = glob(["src/**"]),
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = LIB_DEPENDENCIES,
+)
+
+rust_test(
+    name = "test",
+    srcs = ["tests/api_test.rs"],
+    data = [
+        ":pocket-ic-server",
+    ],
+    env = {
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+    },
+    deps = TEST_DEPENDENCIES,
+)

@@ -2,7 +2,7 @@ use super::*;
 use async_trait::async_trait;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_crypto_tls_interfaces::{
-    AllowedClients, AuthenticatedPeer, TlsClientHandshakeError, TlsConfig, TlsConfigError,
+    AuthenticatedPeer, SomeOrAllNodes, TlsClientHandshakeError, TlsConfig, TlsConfigError,
     TlsHandshake, TlsPublicKeyCert, TlsServerHandshakeError, TlsStream,
 };
 use ic_logger::{debug, new_logger};
@@ -20,7 +20,7 @@ where
 {
     fn server_config(
         &self,
-        allowed_clients: AllowedClients,
+        allowed_clients: SomeOrAllNodes,
         registry_version: RegistryVersion,
     ) -> Result<tokio_rustls::rustls::ServerConfig, TlsConfigError> {
         let log_id = get_log_id(&self.logger, module_path!());
@@ -142,7 +142,7 @@ where
     async fn perform_tls_server_handshake(
         &self,
         tcp_stream: TcpStream,
-        allowed_clients: AllowedClients,
+        allowed_clients: SomeOrAllNodes,
         registry_version: RegistryVersion,
     ) -> Result<(Box<dyn TlsStream>, AuthenticatedPeer), TlsServerHandshakeError> {
         let log_id = get_log_id(&self.logger, module_path!());

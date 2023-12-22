@@ -183,10 +183,9 @@ use std::future::Future;
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use std::{convert::TryFrom, net::IpAddr, str::FromStr, sync::Arc};
-use tokio::runtime::Runtime as Rt;
+use tokio::{runtime::Runtime as Rt, sync::Mutex as TokioMutex};
 use url::Url;
 
 pub const READY_WAIT_TIMEOUT: Duration = Duration::from_secs(500);
@@ -198,7 +197,7 @@ const READY_RESPONSE_TIMEOUT: Duration = Duration::from_secs(6);
 const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(160);
 // Be mindful when modifying this constant, as the event can be consumed by other parties.
 const IC_TOPOLOGY_EVENT_NAME: &str = "ic_topology_created_event";
-const FARM_GROUP_CREATED_EVENT_NAME: &str = "farm_group_name_created_event";
+const INFRA_GROUP_CREATED_EVENT_NAME: &str = "infra_group_name_created_event";
 const KIBANA_URL_CREATED_EVENT_NAME: &str = "kibana_url_created_event";
 pub type NodesInfo = HashMap<NodeId, Option<MaliciousBehaviour>>;
 
@@ -211,9 +210,9 @@ pub fn bail_if_sha256_invalid(sha256: &str, opt_name: &str) -> Result<()> {
 }
 
 /// Checks whether the input string as the form [hostname:port{,hostname:port}]
-pub fn parse_journalbeat_hosts(s: Option<String>) -> Result<Vec<String>> {
-    const HOST_START: &str = r#"^(([[:alnum:]]|[[:alnum:]][[:alnum:]\-]*[[:alnum:]])\.)*"#;
-    const HOST_STOP: &str = r#"([[:alnum:]]|[[:alnum:]][[:alnum:]\-]*[[:alnum:]])"#;
+pub fn parse_elasticsearch_hosts(s: Option<String>) -> Result<Vec<String>> {
+    const HOST_START: &str = r"^(([[:alnum:]]|[[:alnum:]][[:alnum:]\-]*[[:alnum:]])\.)*";
+    const HOST_STOP: &str = r"([[:alnum:]]|[[:alnum:]][[:alnum:]\-]*[[:alnum:]])";
     const PORT: &str = r#":[[:digit:]]{2,5}$"#;
     let s = match s {
         Some(s) => s,
@@ -224,7 +223,7 @@ pub fn parse_journalbeat_hosts(s: Option<String>) -> Result<Vec<String>> {
     let mut res = vec![];
     for target in s.trim().split(',') {
         if !rgx.is_match(target) {
-            bail!("Invalid journalbeat host: '{}'", s);
+            bail!("Invalid filebeat host: '{}'", s);
         }
         res.push(target.to_string());
     }
@@ -236,7 +235,7 @@ pub fn parse_replica_log_debug_overrides(s: Option<String>) -> Result<Vec<String
         Some(s) => s,
         None => return Ok(vec![]),
     };
-    let rgx = r#"^([\w]+::)+[\w]+$"#.to_string();
+    let rgx = r"^([\w]+::)+[\w]+$".to_string();
     let rgx = Regex::new(&rgx).unwrap();
     let mut res = vec![];
     for target in s.trim().split(',') {
@@ -540,12 +539,12 @@ impl TopologySnapshot {
     pub async fn block_for_newest_mainnet_registry_version(&self) -> Result<TopologySnapshot> {
         let duration = Duration::from_secs(720);
         let backoff = Duration::from_secs(2);
-        let prev_version: Arc<Mutex<RegistryVersion>> =
-            Arc::new(Mutex::new(self.local_registry.get_latest_version()));
+        let prev_version: Arc<TokioMutex<RegistryVersion>> =
+            Arc::new(TokioMutex::new(self.local_registry.get_latest_version()));
         let version = retry_async(&self.env.logger(), duration, backoff, || {
             let prev_version = prev_version.clone();
             async move {
-                let mut prev_version = prev_version.lock().unwrap();
+                let mut prev_version = prev_version.lock().await;
                 self.local_registry.sync_with_nns().await?;
                 let version = self.local_registry.get_latest_version();
                 info!(
@@ -642,7 +641,7 @@ impl IcNodeSnapshot {
 
     fn raw_node_record(&self) -> pb_node::NodeRecord {
         self.local_registry
-            .get_transport_info(self.node_id, self.registry_version)
+            .get_node_record(self.node_id, self.registry_version)
             .unwrap_result()
     }
 
@@ -661,6 +660,11 @@ impl IcNodeSnapshot {
         let node_record = self.raw_node_record();
         let connection_endpoint = node_record.http.expect("Node doesn't have URL");
         IpAddr::from_str(&connection_endpoint.ip_addr).expect("Missing IP address in the node")
+    }
+
+    pub fn get_ipv4_configuration(&self) -> Option<pb_node::IPv4InterfaceConfig> {
+        let node_record = self.raw_node_record();
+        node_record.public_ipv4_config
     }
 
     /// Is it accessible via ssh with the `admin` user.
@@ -909,7 +913,7 @@ impl HasRegistryLocalStore for TestEnv {
 
 pub trait HasIcDependencies {
     fn get_farm_url(&self) -> Result<Url>;
-    fn get_journalbeat_hosts(&self) -> Result<Vec<String>>;
+    fn get_elasticsearch_hosts(&self) -> Result<Vec<String>>;
     fn get_initial_replica_version(&self) -> Result<ReplicaVersion>;
     fn get_replica_log_debug_overrides(&self) -> Result<Vec<String>>;
     fn get_ic_os_img_url(&self) -> Result<Url>;
@@ -934,6 +938,8 @@ pub trait HasIcDependencies {
     fn get_api_boundary_node_img_sha256(&self) -> Result<String>;
     fn get_canister_http_test_ca_cert(&self) -> Result<String>;
     fn get_canister_http_test_ca_key(&self) -> Result<String>;
+    fn get_hostos_update_img_test_url(&self) -> Result<Url>;
+    fn get_hostos_update_img_test_sha256(&self) -> Result<String>;
 }
 
 impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
@@ -945,12 +951,12 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
         Ok(Url::parse(&url)?)
     }
 
-    fn get_journalbeat_hosts(&self) -> Result<Vec<String>> {
-        let dep_rel_path = "journalbeat_hosts";
+    fn get_elasticsearch_hosts(&self) -> Result<Vec<String>> {
+        let dep_rel_path = "elasticsearch_hosts";
         let hosts = self
             .read_dependency_to_string(dep_rel_path)
             .unwrap_or_else(|_| "elasticsearch.testnet.dfinity.network:443".to_string());
-        parse_journalbeat_hosts(Some(hosts))
+        parse_elasticsearch_hosts(Some(hosts))
     }
 
     fn get_initial_replica_version(&self) -> Result<ReplicaVersion> {
@@ -978,15 +984,17 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     }
 
     fn get_malicious_ic_os_img_url(&self) -> Result<Url> {
-        let dep_rel_path = "ic-os/guestos/envs/dev-malicious/disk-img.tar.zst.cas-url";
-        let url = self.read_dependency_to_string(dep_rel_path)?;
+        let url = self.read_dependency_from_env_to_string(
+            "ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_CAS_URL",
+        )?;
         Ok(Url::parse(&url)?)
     }
 
     fn get_malicious_ic_os_img_sha256(&self) -> Result<String> {
-        let dep_rel_path = "ic-os/guestos/envs/dev-malicious/disk-img.tar.zst.sha256";
-        let sha256 = self.read_dependency_to_string(dep_rel_path)?;
-        bail_if_sha256_invalid(&sha256, "malicious_ic_os_img_sha256")?;
+        let sha256 = self.read_dependency_from_env_to_string(
+            "ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_SHA256",
+        )?;
+        bail_if_sha256_invalid(&sha256, "ic_os_img_sha256")?;
         Ok(sha256)
     }
 
@@ -1017,15 +1025,17 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     }
 
     fn get_malicious_ic_os_update_img_url(&self) -> Result<Url> {
-        let dep_rel_path = "ic-os/guestos/envs/dev-malicious/update-img.tar.zst.cas-url";
-        let url = self.read_dependency_to_string(dep_rel_path)?;
+        let url = self.read_dependency_from_env_to_string(
+            "ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_CAS_URL",
+        )?;
         Ok(Url::parse(&url)?)
     }
 
     fn get_malicious_ic_os_update_img_sha256(&self) -> Result<String> {
-        let dep_rel_path = "ic-os/guestos/envs/dev-malicious/update-img.tar.zst.sha256";
-        let sha256 = self.read_dependency_to_string(dep_rel_path)?;
-        bail_if_sha256_invalid(&sha256, "malicious_ic_os_update_img_sha256")?;
+        let sha256 = self.read_dependency_from_env_to_string(
+            "ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_SHA256",
+        )?;
+        bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
         Ok(sha256)
     }
 
@@ -1056,8 +1066,7 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     }
 
     fn get_api_boundary_node_img_url(&self) -> Result<Url> {
-        let dep_rel_path =
-            "ic-os/boundary-api-guestos/envs/dev/upload_disk-img_disk-img.tar.zst.proxy-cache-url";
+        let dep_rel_path = "ic-os/boundary-api-guestos/envs/dev/disk-img.tar.zst.cas-url";
         let url = self.read_dependency_to_string(dep_rel_path)?;
         Ok(Url::parse(&url)?)
     }
@@ -1102,6 +1111,21 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
         let dep_rel_path = "ic-os/guestos/rootfs/dev-certs/canister_http_test_ca.key";
         self.read_dependency_to_string(dep_rel_path)
     }
+
+    fn get_hostos_update_img_test_url(&self) -> Result<Url> {
+        let url = self.read_dependency_from_env_to_string(
+            "ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_CAS_URL",
+        )?;
+        Ok(Url::parse(&url)?)
+    }
+
+    fn get_hostos_update_img_test_sha256(&self) -> Result<String> {
+        let sha256 = self.read_dependency_from_env_to_string(
+            "ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_SHA256",
+        )?;
+        bail_if_sha256_invalid(&sha256, "hostos_update_img_sha256")?;
+        Ok(sha256)
+    }
 }
 
 fn fetch_sha256(base_url: String, file: &str) -> Result<String> {
@@ -1133,7 +1157,10 @@ impl HasGroupSetup for TestEnv {
         let log = self.logger();
         if self.get_json_path(GroupSetup::attribute_name()).exists() {
             let group_setup = GroupSetup::read_attribute(self);
-            info!(log, "Group {} already set up.", group_setup.farm_group_name);
+            info!(
+                log,
+                "Group {} already set up.", group_setup.infra_group_name
+            );
         } else {
             let group_setup = GroupSetup::new(group_base_name);
             let farm_base_url = FarmBaseUrl::read_attribute(self);
@@ -1146,7 +1173,7 @@ impl HasGroupSetup for TestEnv {
             };
             farm.create_group(
                 &group_setup.group_base_name,
-                &group_setup.farm_group_name,
+                &group_setup.infra_group_name,
                 group_setup.group_timeout,
                 group_spec,
                 self,
@@ -1154,8 +1181,8 @@ impl HasGroupSetup for TestEnv {
             .unwrap();
             group_setup.write_attribute(self);
             self.ssh_keygen().expect("ssh key generation failed");
-            emit_group_event(&log, &group_setup.farm_group_name);
-            emit_kibana_url_event(&log, &kibana_link(&group_setup.farm_group_name));
+            emit_group_event(&log, &group_setup.infra_group_name);
+            emit_kibana_url_event(&log, &kibana_link(&group_setup.infra_group_name));
         }
     }
 }
@@ -1252,7 +1279,7 @@ pub trait HasWasm {
     ///
     /// # Panics
     ///
-    /// * if `get_artifacs(p)` panics.
+    /// * if `get_artifacts(p)` panics.
     /// * if a .wat-module cannot be compiled
     /// * if a .wasm-module does not start with the expected magic bytes
     fn load_wasm<P: AsRef<Path>>(&self, p: P) -> Vec<u8>;
@@ -1846,7 +1873,7 @@ where
         let farm = Farm::new(farm_base_url, env.logger());
         Box::new(FarmHostedVm {
             farm,
-            group_name: pot_setup.farm_group_name,
+            group_name: pot_setup.infra_group_name,
             vm_name: self.vm_name(),
         })
     }
@@ -2073,7 +2100,7 @@ where
         let farm_base_url = env.get_farm_url().unwrap();
         let farm = Farm::new(farm_base_url, log);
         let group_setup = GroupSetup::read_attribute(&env);
-        let group_name = group_setup.farm_group_name;
+        let group_name = group_setup.infra_group_name;
         farm.create_dns_records(&group_name, dns_records)
             .expect("Failed to create DNS records")
     }
@@ -2098,7 +2125,7 @@ where
         let farm_base_url = env.get_farm_url().unwrap();
         let farm = Farm::new(farm_base_url, log);
         let group_setup = GroupSetup::read_attribute(&env);
-        let group_name = group_setup.farm_group_name;
+        let group_name = group_setup.infra_group_name;
         farm.create_playnet_dns_records(&group_name, dns_records)
             .expect("Failed to create playnet DNS records")
     }
@@ -2120,7 +2147,7 @@ where
         let farm_base_url = env.get_farm_url().unwrap();
         let farm = Farm::new(farm_base_url, log);
         let group_setup = GroupSetup::read_attribute(&env);
-        let group_name = group_setup.farm_group_name;
+        let group_name = group_setup.infra_group_name;
         farm.acquire_playnet_certificate(&group_name)
             .expect("Failed to acquire a certificate for a playnet")
     }
@@ -2188,7 +2215,7 @@ pub fn emit_group_event(log: &slog::Logger, group: &str) {
         group: String,
     }
     let event = log_events::LogEvent::new(
-        FARM_GROUP_CREATED_EVENT_NAME.to_string(),
+        INFRA_GROUP_CREATED_EVENT_NAME.to_string(),
         GroupName {
             message: "Created new Farm group".to_string(),
             group: group.to_string(),

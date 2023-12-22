@@ -61,12 +61,35 @@ class DfinityGitLabConfig:
             self._repo_root_local = pathlib.Path(git_root)
         self.gitlab_url = GITLAB_URL
         self.proj_id = GITLAB_PROJECT_ID
-        if "GITLAB_API_TOKEN" not in os.environ:
-            raise ValueError("Fatal: GITLAB_API_TOKEN env var not set")
-        self._gl = gitlab.Gitlab(self.gitlab_url, private_token=os.environ.get("GITLAB_API_TOKEN"))
         self.ci_cfg = {}
         self.ci_cfg_expanded = {}
         self._ci_cfg_included_file_list = []
+
+
+    @staticmethod
+    def _get_gitlab_token():
+        # first check file created by bazel-ci/main.sh via bazel-test-all
+        gitlab_token_path = f"{os.getenv('HOME')}/.gitlab/api_token"
+        try:
+            with open(gitlab_token_path, "r") as token_file:
+                gitlab_token = token_file.read().strip()
+        except FileNotFoundError:
+            gitlab_token = None
+
+        # if not there, check env var
+        if gitlab_token is None or gitlab_token == "":
+            gitlab_token = os.getenv('GITLAB_API_TOKEN')
+            if gitlab_token is None:
+                raise ValueError(f"Fatal: GITLAB_API_TOKEN env var not set or {gitlab_token_path} empty")
+        return gitlab_token
+
+    @property
+    def _gl(self):
+        global gitlab_login
+        if not 'gitlab_login' in globals():
+            gitlab_token = self._get_gitlab_token()
+            gitlab_login = gitlab.Gitlab(self.gitlab_url, gitlab_token)
+        return gitlab_login
 
     def ci_cfg_reset(self):
         """Reset/clear the CI config."""
@@ -345,6 +368,17 @@ class DfinityGitLabConfig:
         shellcheck(path)
         os.unlink(path)
 
+    @staticmethod
+    def _handle_nested_list(nested_list):
+        new_list = []
+        for el in nested_list:
+            if isinstance(el, list):
+                for sub_el in el:
+                    new_list.append(sub_el)
+            else:
+                new_list.append(el)
+        return new_list
+
     def ci_job_script(self, job_name: str):
         """Dump the script generated for the provided job_name."""
         job = self.ci_cfg_expanded[job_name]
@@ -354,9 +388,11 @@ class DfinityGitLabConfig:
             before_script = "\n".join(before_script)
         script = job.get("script", [])
         if isinstance(script, list):
+            script = self._handle_nested_list(script)
             script = "\n".join(script)
         after_script = job.get("after_script", [])
         if isinstance(after_script, list):
+            after_script = self._handle_nested_list(after_script)
             after_script = "\n".join(after_script)
         vars = "\n".join([f'export {k}="{escape_yaml(v)}"' for k, v in job.get("variables", {}).items()])
         return """\
@@ -432,6 +468,7 @@ exit 0
     def _bash_lint_job(self, job_name: str):
         try:
             self._bash_linter(job_name, self.ci_job_script(job_name))
+            logging.info("Successfully linted job '%s'", job_name)
         except Exception as e:
             logging.error("Failed to lint job '%s'", job_name)
             raise e

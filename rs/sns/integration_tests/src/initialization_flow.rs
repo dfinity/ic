@@ -7,7 +7,9 @@ use ic_nervous_system_proto::pb::v1::{
     Canister, Duration, GlobalTimeOfDay, Image, Percentage, Tokens,
 };
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID};
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_ID, IS_MATCHED_FUNDING_ENABLED, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+};
 use ic_nns_governance::pb::v1::{
     create_service_nervous_system::{
         governance_parameters::VotingRewardParameters,
@@ -107,8 +109,10 @@ lazy_static! {
             }),
             swap_parameters: Some(SwapParameters {
                 minimum_participants: Some(5),
-                minimum_icp: Some(Tokens::from_tokens(500_000)),
-                maximum_icp: Some(Tokens::from_tokens(750_000)),
+                minimum_icp: if IS_MATCHED_FUNDING_ENABLED {None} else {Some(Tokens::from_tokens(500_000))},
+                maximum_icp: if IS_MATCHED_FUNDING_ENABLED {None} else {Some(Tokens::from_tokens(750_000))},
+                minimum_direct_participation_icp: Some(Tokens::from_tokens(499_900)),
+                maximum_direct_participation_icp: Some(Tokens::from_tokens(749_900)),
                 minimum_participant_icp: Some(Tokens::from_tokens(1)),
                 maximum_participant_icp: Some(Tokens::from_tokens(500_000)),
                 neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
@@ -119,7 +123,8 @@ lazy_static! {
                 restricted_countries: None,
                 start_time: GlobalTimeOfDay::from_hh_mm(12, 0).ok(),
                 duration: Some(Duration::from_secs(60 * 60 * 24 * 7)),
-                neurons_fund_investment_icp: Some(Tokens::from_tokens(100)),
+                neurons_fund_investment_icp: if IS_MATCHED_FUNDING_ENABLED { None } else { Some(Tokens::from_tokens(100)) },
+                neurons_fund_participation: if IS_MATCHED_FUNDING_ENABLED { Some(true) } else { None },
             }),
             governance_parameters: Some(GovernanceParameters {
                 proposal_rejection_fee: Some(Tokens::from_e8s(1_000_000_000)),
@@ -160,7 +165,7 @@ impl SnsInitializationFlowTestSetup {
     pub fn default_setup() -> Self {
         let state_machine = StateMachine::new();
 
-        let funded_principals: Vec<_> = (0..10).map(|i| PrincipalId::new_user_test_id(i)).collect();
+        let funded_principals: Vec<_> = (0..10).map(PrincipalId::new_user_test_id).collect();
         let developer_principal_id = *TEST_NEURON_1_OWNER_PRINCIPAL;
 
         let nns_init_payloads = {
@@ -192,7 +197,7 @@ impl SnsInitializationFlowTestSetup {
             // SNS token swap.
             let mut n = 1;
             for (i, neuron) in neurons.values_mut().enumerate() {
-                neuron.maturity_e8s_equivalent = n * 25 * E8;
+                neuron.maturity_e8s_equivalent = n * 250_000 * E8;
                 n *= 3;
 
                 if i < 2 {
@@ -304,6 +309,8 @@ impl SnsInitializationFlowTestSetup {
     }
 }
 
+/// TODO[NNS1-2636]: Reenable this test after Swap starts calling settle_neurons_fund_participation.
+#[ignore]
 #[test]
 fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation() {
     // Step 0: Setup the world and record its state
@@ -568,6 +575,8 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
     assert!(at_least_one_sns_neuron_is_nf_controlled);
 }
 
+/// TODO[NNS1-2636]: Reenable this test after Swap starts calling settle_neurons_fund_participation.
+#[ignore]
 #[test]
 fn test_one_proposal_sns_initialization_success_without_neurons_fund_participation() {
     // Step 0: Setup the world and record its state
@@ -597,6 +606,12 @@ fn test_one_proposal_sns_initialization_success_without_neurons_fund_participati
     // Set the Neurons Fund investment to zero
     if let Some(s) = &mut swap_parameters {
         s.neurons_fund_investment_icp = Some(Tokens::from_tokens(0));
+        if s.minimum_icp.is_some() {
+            s.minimum_direct_participation_icp = s.minimum_icp;
+        }
+        if s.maximum_icp.is_some() {
+            s.maximum_direct_participation_icp = s.maximum_icp;
+        }
     }
 
     // Create the proposal and splice in the dapp canisters and swap_parameters
@@ -979,8 +994,36 @@ fn test_one_proposal_sns_initialization_swap_cannot_be_opened_by_legacy_method()
     let open_swap_request = OpenRequest {
         params: Some(Params {
             min_participants: swap_parameters.minimum_participants() as u32,
-            min_icp_e8s: swap_parameters.minimum_icp.unwrap().e8s(),
-            max_icp_e8s: swap_parameters.maximum_icp.unwrap().e8s(),
+            min_icp_e8s: swap_parameters
+                .minimum_icp
+                .and_then(|icp| icp.e8s)
+                .unwrap_or_else(|| {
+                    swap_parameters
+                        .minimum_direct_participation_icp
+                        .unwrap()
+                        .e8s()
+                }),
+            max_icp_e8s: swap_parameters
+                .maximum_icp
+                .and_then(|icp| icp.e8s)
+                .unwrap_or_else(|| {
+                    swap_parameters
+                        .maximum_direct_participation_icp
+                        .unwrap()
+                        .e8s()
+                }),
+            min_direct_participation_icp_e8s: Some(
+                swap_parameters
+                    .minimum_direct_participation_icp
+                    .unwrap()
+                    .e8s(),
+            ),
+            max_direct_participation_icp_e8s: Some(
+                swap_parameters
+                    .maximum_direct_participation_icp
+                    .unwrap()
+                    .e8s(),
+            ),
             min_participant_icp_e8s: swap_parameters.minimum_participant_icp.unwrap().e8s(),
             max_participant_icp_e8s: swap_parameters.maximum_participant_icp.unwrap().e8s(),
             swap_due_timestamp_seconds: now + (2 * ONE_DAY_SECONDS),
@@ -1014,6 +1057,8 @@ fn test_one_proposal_sns_initialization_swap_cannot_be_opened_by_legacy_method()
         .contains("Invalid lifecycle state to open the swap: must be Pending, was Adopted"));
 }
 
+/// TODO[NNS1-2636]: Reenable this test after Swap starts calling settle_neurons_fund_participation.
+#[ignore]
 #[test]
 fn test_one_proposal_sns_initialization_failed_swap_returns_neurons_fund_and_dapps() {
     // Step 0: Setup the world and record its state
@@ -1258,21 +1303,9 @@ fn test_one_proposal_sns_initialization_supports_multiple_open_swaps() {
     );
 
     // Step 1: Submit and execute the proposal in the NNS
+    let proposal = CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL.clone();
 
-    let mut swap_parameters = CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL
-        .swap_parameters
-        .clone();
-
-    // Set the Neurons Fund investment to zero
-    if let Some(s) = &mut swap_parameters {
-        s.neurons_fund_investment_icp = Some(Tokens::from_tokens(0));
-    }
-    let proposal = CreateServiceNervousSystem {
-        swap_parameters,
-        ..CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL.clone()
-    };
-
-    // Submit the proposal! :)
+    // Submit the proposal!
     let proposal_id = sns_initialization_flow_test.propose_create_service_nervous_system(
         get_neuron_1().principal_id,
         get_neuron_1().neuron_id,

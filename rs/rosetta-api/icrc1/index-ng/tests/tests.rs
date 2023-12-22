@@ -1,38 +1,43 @@
-use candid::{Decode, Encode, Nat};
+use candid::{Decode, Encode, Nat, Principal};
+use ic_agent::identity::Identity;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
+use ic_icrc1::blocks::generic_block_to_encoded_block;
+use ic_icrc1::Block;
 use ic_icrc1_index_ng::{
     FeeCollectorRanges, GetAccountTransactionsArgs, GetAccountTransactionsResponse,
     GetAccountTransactionsResult, GetBlocksResponse, IndexArg, InitArg as IndexInitArg,
     ListSubaccountsArgs, Log, Status, TransactionWithId, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
 };
 use ic_icrc1_ledger::{
-    ChangeFeeCollector, InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument,
+    ChangeFeeCollector, FeatureFlags, InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument,
     UpgradeArgs as LedgerUpgradeArgs,
 };
-use ic_icrc1_test_utils::{valid_transactions_strategy, CallerTransferArg};
+use ic_icrc1_test_utils::{
+    minter_identity, valid_transactions_strategy, ArgWithCaller, LedgerEndpointArg,
+};
+use ic_icrc1_tokens_u64::U64;
 use ic_ledger_canister_core::archive::ArchiveOptions;
+use ic_ledger_core::block::BlockType;
 use ic_state_machine_tests::{StateMachine, WasmResult};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
+use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc3::blocks::{BlockRange, GenericBlock, GetBlocksRequest};
 use icrc_ledger_types::icrc3::transactions::{Mint, Transaction, Transfer};
 use num_traits::cast::ToPrimitive;
 use proptest::test_runner::{Config as TestRunnerConfig, TestRunner};
 use std::collections::HashSet;
 use std::convert::TryInto;
+use std::fmt::Debug;
+use std::hash::Hash;
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 const FEE: u64 = 10_000;
 const ARCHIVE_TRIGGER_THRESHOLD: u64 = 10;
 const NUM_BLOCKS_TO_ARCHIVE: usize = 10;
 const MAX_BLOCKS_FROM_ARCHIVE: u64 = 10;
-
-const MINTER: Account = Account {
-    owner: PrincipalId::new(0, [0u8; 29]).0,
-    subaccount: None,
-};
 
 // Metadata-related constants
 const TOKEN_NAME: &str = "Test Token";
@@ -90,15 +95,17 @@ fn install_ledger(
     initial_balances: Vec<(Account, u64)>,
     archive_options: ArchiveOptions,
     fee_collector_account: Option<Account>,
+    minter_principal: Principal,
 ) -> CanisterId {
     let mut builder = LedgerInitArgsBuilder::with_symbol_and_name(TOKEN_SYMBOL, TOKEN_NAME)
-        .with_minting_account(MINTER)
+        .with_minting_account(minter_principal)
         .with_transfer_fee(FEE)
         .with_metadata_entry(NAT_META_KEY, NAT_META_VALUE)
         .with_metadata_entry(INT_META_KEY, INT_META_VALUE)
         .with_metadata_entry(TEXT_META_KEY, TEXT_META_VALUE)
         .with_metadata_entry(BLOB_META_KEY, BLOB_META_VALUE)
-        .with_archive_options(archive_options);
+        .with_archive_options(archive_options)
+        .with_feature_flags(FeatureFlags { icrc2: true });
     if let Some(fee_collector_account) = fee_collector_account {
         builder = builder.with_fee_collector_account(fee_collector_account);
     }
@@ -196,9 +203,9 @@ fn get_logs(env: &StateMachine, index_id: CanisterId) -> Log {
 // Helper function that calls tick on env until either
 // the index canister has synced all the blocks up to the
 // last one in the ledger or enough attempts passed and therefore
-// it fails
+// it fails.
 fn wait_until_sync_is_completed(env: &StateMachine, index_id: CanisterId, ledger_id: CanisterId) {
-    const MAX_ATTEMPTS: u8 = 100; // no reason for this number
+    const MAX_ATTEMPTS: u8 = 100; // No reason for this number.
     let mut num_blocks_synced = u64::MAX;
     let mut chain_length = u64::MAX;
     for _i in 0..MAX_ATTEMPTS {
@@ -233,7 +240,7 @@ fn icrc1_balance_of(env: &StateMachine, canister_id: CanisterId, account: Accoun
         .expect("Balance must be a u64!")
 }
 
-// Retrieves blocks from the Ledger and the Archives
+// Retrieves blocks from the Ledger and the Archives.
 fn ledger_get_all_blocks(
     env: &StateMachine,
     ledger_id: CanisterId,
@@ -298,7 +305,7 @@ fn get_blocks(
     Decode!(&res, GetBlocksResponse).expect("Failed to decode GetBlocksResponse")
 }
 
-// Returns all blocks in the index by iterating over the pages
+// Returns all blocks in the index by iterating over the pages.
 fn index_get_all_blocks(
     env: &StateMachine,
     index_id: CanisterId,
@@ -326,11 +333,42 @@ fn icrc1_transfer(
     let req = Encode!(&arg).expect("Failed to encode TransferArg");
     let res = env
         .execute_ingress_as(caller, ledger_id, "icrc1_transfer", req)
-        .expect("Failed to transfer tokens")
+        .unwrap_or_else(|e| {
+            panic!(
+                "Failed to transfer tokens. caller:{} arg:{:?} error:{}",
+                caller, arg, e
+            )
+        })
         .bytes();
     Decode!(&res, Result<BlockIndex, TransferError>)
         .expect("Failed to decode Result<BlockIndex, TransferError>")
-        .expect("Failed to transfer tokens")
+        .unwrap_or_else(|e| {
+            panic!(
+                "Failed to transfer tokens. caller:{} arg:{:?} error:{}",
+                caller, arg, e
+            )
+        })
+}
+
+fn apply_arg_with_caller(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    arg: ArgWithCaller,
+) -> BlockIndex {
+    match arg.arg {
+        LedgerEndpointArg::ApproveArg(approve_arg) => icrc2_approve(
+            env,
+            ledger_id,
+            PrincipalId(arg.caller.sender().unwrap()),
+            approve_arg,
+        ),
+        LedgerEndpointArg::TransferArg(transfer_arg) => icrc1_transfer(
+            env,
+            ledger_id,
+            PrincipalId(arg.caller.sender().unwrap()),
+            transfer_arg,
+        ),
+    }
 }
 
 fn transfer(
@@ -352,7 +390,56 @@ fn transfer(
     icrc1_transfer(env, ledger_id, owner.into(), req)
 }
 
-// Same as get_account_transactions but with the old index interface
+fn icrc2_approve(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    caller: PrincipalId,
+    arg: ApproveArgs,
+) -> BlockIndex {
+    let req = Encode!(&arg).expect("Failed to encode ApproveArgs");
+    let res = env
+        .execute_ingress_as(caller, ledger_id, "icrc2_approve", req)
+        .unwrap_or_else(|e| {
+            panic!(
+                "Failed to approve tokens. caller:{} arg:{:?} error:{}",
+                caller, arg, e
+            )
+        })
+        .bytes();
+    Decode!(&res, Result<BlockIndex, ApproveError>)
+        .expect("Failed to decode Result<BlockIndex, ApproveError>")
+        .unwrap_or_else(|e| {
+            panic!(
+                "Failed to approve. caller:{} arg:{:?} error:{:?}",
+                caller, arg, e
+            )
+        })
+}
+
+fn approve(
+    env: &StateMachine,
+    ledger: CanisterId,
+    from: Account,
+    spender: Account,
+    amount: u64,
+) -> u64 {
+    let req = ApproveArgs {
+        from_subaccount: from.subaccount,
+        spender,
+        amount: Nat::from(amount),
+        expected_allowance: None,
+        expires_at: None,
+        fee: None,
+        memo: None,
+        created_at_time: None,
+    };
+    icrc2_approve(env, ledger, PrincipalId(from.owner), req)
+        .0
+        .to_u64()
+        .unwrap()
+}
+
+// Same as get_account_transactions but with the old index interface.
 fn old_get_account_transactions(
     env: &StateMachine,
     index_id: CanisterId,
@@ -430,7 +517,7 @@ fn get_fee_collectors_ranges(env: &StateMachine, index: CanisterId) -> FeeCollec
     .expect("failed to decode get_fee_collectors_ranges response")
 }
 
-// Assert that the index canister contains the same blocks as the ledger
+// Assert that the index canister contains the same blocks as the ledger.
 #[track_caller]
 fn assert_ledger_index_parity(env: &StateMachine, ledger_id: CanisterId, index_id: CanisterId) {
     let ledger_blocks = ledger_get_all_blocks(env, ledger_id, 0, u64::MAX).blocks;
@@ -438,11 +525,23 @@ fn assert_ledger_index_parity(env: &StateMachine, ledger_id: CanisterId, index_i
     assert_eq!(ledger_blocks.len(), index_blocks.len());
 
     for idx in 0..ledger_blocks.len() {
+        let generic_block_ledger = ledger_blocks[idx].clone();
+        let generic_block_index = index_blocks[idx].clone();
+        let encoded_block_ledger =
+            generic_block_to_encoded_block(generic_block_ledger.clone()).unwrap();
+        let encoded_block_index =
+            generic_block_to_encoded_block(generic_block_index.clone()).unwrap();
+        let block_ledger = Block::<U64>::decode(encoded_block_ledger.clone()).unwrap();
+        let block_index = Block::<U64>::decode(encoded_block_index.clone()).unwrap();
+
         assert_eq!(
-            ledger_blocks[idx], index_blocks[idx],
+            generic_block_ledger, generic_block_index,
             "block_index: {}",
             idx
         );
+        assert_eq!(generic_block_ledger, generic_block_index);
+        assert_eq!(encoded_block_ledger, encoded_block_index);
+        assert_eq!(block_ledger, block_index);
     }
 }
 
@@ -452,19 +551,25 @@ fn test_ledger_growing() {
 
     let initial_balances: Vec<_> = vec![(account(1, 0), 1_000_000_000_000)];
     let env = &StateMachine::new();
-    let ledger_id = install_ledger(env, initial_balances, default_archive_options(), None);
+    let ledger_id = install_ledger(
+        env,
+        initial_balances,
+        default_archive_options(),
+        None,
+        minter_identity().sender().unwrap(),
+    );
     let index_id = install_index_ng(env, ledger_id);
 
-    // test initial mint block
+    // Test initial mint block.
     wait_until_sync_is_completed(env, index_id, ledger_id);
     assert_ledger_index_parity(env, ledger_id, index_id);
 
-    // test first transfer block
+    // Test first transfer block.
     transfer(env, ledger_id, account(1, 0), account(2, 0), 1);
     wait_until_sync_is_completed(env, index_id, ledger_id);
     assert_ledger_index_parity(env, ledger_id, index_id);
 
-    // test multiple blocks
+    // Test multiple blocks.
     for (from, to, amount) in [
         (account(1, 0), account(1, 1), 1_000_000),
         (account(1, 0), account(2, 0), 1_000_001),
@@ -475,25 +580,35 @@ fn test_ledger_growing() {
     wait_until_sync_is_completed(env, index_id, ledger_id);
     assert_ledger_index_parity(env, ledger_id, index_id);
 
-    // test archived blocks
+    // Test archived blocks.
     for _i in 0..(ARCHIVE_TRIGGER_THRESHOLD as usize + 1) {
         transfer(env, ledger_id, account(1, 0), account(1, 2), 1);
     }
     wait_until_sync_is_completed(env, index_id, ledger_id);
     assert_ledger_index_parity(env, ledger_id, index_id);
+
+    // Test block with an approval.
+    approve(env, ledger_id, account(1, 0), account(2, 0), 100000);
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+    assert_ledger_index_parity(env, ledger_id, index_id);
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, account(1, 0)),
+        icrc1_balance_of(env, index_id, account(1, 0))
+    );
 }
 
 #[test]
 fn test_archive_indexing() {
     let env = &StateMachine::new();
-    let ledger_id = install_ledger(env, vec![], default_archive_options(), None);
+    let minter = minter_identity().sender().unwrap();
+    let ledger_id = install_ledger(env, vec![], default_archive_options(), None, minter);
     let index_id = install_index_ng(env, ledger_id);
 
-    // test indexing archive by forcing the ledger to archive some transactions
+    // Test indexing archive by forcing the ledger to archive some transactions
     // and by having enough transactions such that the index must use archive
-    // pagination
+    // pagination.
     for i in 0..(ARCHIVE_TRIGGER_THRESHOLD + MAX_BLOCKS_FROM_ARCHIVE * 4) {
-        transfer(env, ledger_id, MINTER, account(i, 0), i * 1_000_000);
+        transfer(env, ledger_id, minter.into(), account(i, 0), i * 1_000_000);
     }
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
@@ -524,7 +639,7 @@ fn assert_tx_eq(tx1: &Transaction, tx2: &Transaction) {
     }
 }
 
-// checks that two txs are equal minus the fields set by the ledger (e.g. timestamp)
+// Checks that two txs are equal minus the fields set by the ledger (e.g. timestamp).
 #[track_caller]
 fn assert_tx_with_id_eq(tx1: &TransactionWithId, tx2: &TransactionWithId) {
     assert_eq!(tx1.id, tx2.id, "id");
@@ -549,11 +664,18 @@ fn assert_txs_with_id_eq(txs1: Vec<TransactionWithId>, txs2: Vec<TransactionWith
 fn test_get_account_transactions() {
     let initial_balances: Vec<_> = vec![(account(1, 0), 1_000_000_000_000)];
     let env = &StateMachine::new();
-    let ledger_id = install_ledger(env, initial_balances, default_archive_options(), None);
+    let minter = minter_identity().sender().unwrap();
+    let ledger_id = install_ledger(
+        env,
+        initial_balances,
+        default_archive_options(),
+        None,
+        minter,
+    );
     let index_id = install_index_ng(env, ledger_id);
 
     // List of the transactions that the test is going to add. This exists to make
-    // the test easier to read
+    // the test easier to read.
     let tx0 = TransactionWithId {
         id: 0.into(),
         transaction: Transaction::mint(
@@ -574,7 +696,7 @@ fn test_get_account_transactions() {
                 to: account(2, 0),
                 spender: None,
                 amount: 1_000_000.into(),
-                fee: None,
+                fee: Some(FEE.into()),
                 created_at_time: None,
                 memo: None,
             },
@@ -589,7 +711,7 @@ fn test_get_account_transactions() {
                 to: account(2, 0),
                 spender: None,
                 amount: 2_000_000.into(),
-                fee: None,
+                fee: Some(FEE.into()),
                 created_at_time: None,
                 memo: None,
             },
@@ -604,7 +726,7 @@ fn test_get_account_transactions() {
                 to: account(1, 1),
                 spender: None,
                 amount: 1_000_000.into(),
-                fee: None,
+                fee: Some(FEE.into()),
                 created_at_time: None,
                 memo: None,
             },
@@ -613,35 +735,35 @@ fn test_get_account_transactions() {
     };
 
     ////////////
-    //// phase 1: only 1 mint to (1, 0)
+    //// Phase 1: only 1 mint to (1, 0).
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
-    // account (1, 0) has one mint
+    // Account (1, 0) has one mint.
     let actual_txs =
         get_account_transactions(env, index_id, account(1, 0), None, u64::MAX).transactions;
     assert_txs_with_id_eq(actual_txs, vec![tx0.clone()]);
 
-    // account (2, 0) has no transactions
+    // Account (2, 0) has no transactions.
     let actual_txs =
         get_account_transactions(env, index_id, account(2, 0), None, u64::MAX).transactions;
     assert_txs_with_id_eq(actual_txs, vec![]);
 
     /////////////
-    //// phase 2: transfer from (1, 0) to (2, 0)
+    //// Phase 2: transfer from (1, 0) to (2, 0).
     transfer(env, ledger_id, account(1, 0), account(2, 0), 1_000_000);
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
-    // account (1, 0) has one transfer and one mint
+    // Account (1, 0) has one transfer and one mint.
     let actual_txs =
         get_account_transactions(env, index_id, account(1, 0), None, u64::MAX).transactions;
     assert_txs_with_id_eq(actual_txs, vec![tx1.clone(), tx0.clone()]);
 
-    // account (2, 0) has one transfer only
+    // Account (2, 0) has one transfer only.
     let actual_txs =
         get_account_transactions(env, index_id, account(2, 0), None, u64::MAX).transactions;
     assert_txs_with_id_eq(actual_txs, vec![tx1.clone()]);
 
-    // account (3, 0), (1, 1) and (2, 1) have no transactions
+    // Account (3, 0), (1, 1) and (2, 1) have no transactions.
     for account in [account(3, 0), account(1, 1), account(2, 1)] {
         let actual_txs =
             get_account_transactions(env, index_id, account, None, u64::MAX).transactions;
@@ -649,24 +771,24 @@ fn test_get_account_transactions() {
     }
 
     ////////////
-    //// phase 3: transfer from (1, 0) to (2, 0)
-    ////          transfer from (2, 0) to (1, 1)
+    //// Phase 3: transfer from (1, 0) to (2, 0)
+    ////          transfer from (2, 0) to (1, 1).
     transfer(env, ledger_id, account(1, 0), account(2, 0), 2_000_000);
     transfer(env, ledger_id, account(2, 0), account(1, 1), 1_000_000);
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
-    // account (1, 0) has two transfers and one mint
+    // Account (1, 0) has two transfers and one mint.
     let actual_txs =
         get_account_transactions(env, index_id, account(1, 0), None, u64::MAX).transactions;
     let expected_txs = vec![tx2.clone(), tx1.clone(), tx0];
     assert_txs_with_id_eq(actual_txs, expected_txs);
 
-    // account (2, 0) has three transfers
+    // Account (2, 0) has three transfers.
     let actual_txs =
         get_account_transactions(env, index_id, account(2, 0), None, u64::MAX).transactions;
     assert_txs_with_id_eq(actual_txs, vec![tx3.clone(), tx2, tx1]);
 
-    // account (1, 1) has one transfer
+    // Account (1, 1) has one transfer.
     let actual_txs =
         get_account_transactions(env, index_id, account(1, 1), None, u64::MAX).transactions;
     assert_txs_with_id_eq(actual_txs, vec![tx3]);
@@ -674,10 +796,17 @@ fn test_get_account_transactions() {
 
 #[test]
 fn test_get_account_transactions_start_length() {
-    // 10 mint transactions to index for the same account
+    // 10 mint transactions to index for the same account.
     let initial_balances: Vec<_> = (0..10).map(|i| (account(1, 0), i * 10_000)).collect();
     let env = &StateMachine::new();
-    let ledger_id = install_ledger(env, initial_balances, default_archive_options(), None);
+    let minter = minter_identity().sender().unwrap();
+    let ledger_id = install_ledger(
+        env,
+        initial_balances,
+        default_archive_options(),
+        None,
+        minter,
+    );
     let index_id = install_index_ng(env, ledger_id);
     let expected_txs: Vec<_> = (0..10)
         .map(|i| TransactionWithId {
@@ -696,7 +825,7 @@ fn test_get_account_transactions_start_length() {
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
-    // get the most n recent transaction with start set to none
+    // Get the most n recent transaction with start set to `None`.
     for n in 1..10 {
         let actual_txs =
             get_account_transactions(env, index_id, account(1, 0), None, n).transactions;
@@ -708,7 +837,7 @@ fn test_get_account_transactions_start_length() {
         assert_txs_with_id_eq(actual_txs, expected_txs.clone());
     }
 
-    // get the most n recent transaction with start set to some index
+    // Get the most n recent transaction with start set to some index.
     for start in 0..=10 {
         for n in 1..(10 - start) {
             let expected_txs: Vec<_> = (0..start)
@@ -725,10 +854,17 @@ fn test_get_account_transactions_start_length() {
 
 #[test]
 fn test_get_account_transactions_pagination() {
-    // 10_000 mint transactions to index for the same account
+    // 10_000 mint transactions to index for the same account.
     let initial_balances: Vec<_> = (0..10_000).map(|i| (account(1, 0), i * 10_000)).collect();
     let env = &StateMachine::new();
-    let ledger_id = install_ledger(env, initial_balances, default_archive_options(), None);
+    let minter = minter_identity().sender().unwrap();
+    let ledger_id = install_ledger(
+        env,
+        initial_balances,
+        default_archive_options(),
+        None,
+        minter,
+    );
     let index_id = install_index_ng(env, ledger_id);
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
@@ -739,15 +875,15 @@ fn test_get_account_transactions_pagination() {
     // The start parameter of the function is the last seen index and the result
     // will contain the next batch of indexes after that one.
 
-    let mut start = None; // the start id of the next batch request
+    let mut start = None; // The start id of the next batch request.
 
-    // if start == Some(0) then we can stop as there is no index that is smaller
+    // If start == `Some(0)` then we can stop as there is no index that is smaller
     // than 0.
     while start != Some(0) {
         let res = get_account_transactions(env, index_id, account(1, 0), start, u64::MAX);
 
-        // if the batch is empty then get_account_transactions
-        // didn't return the expected batch for the given start
+        // If the batch is empty then get_account_transactions
+        // didn't return the expected batch for the given start.
         if res.transactions.is_empty() {
             panic!(
                 "get_account_transactions({:?}, u64::MAX) returned an empty batch!",
@@ -759,13 +895,13 @@ fn test_get_account_transactions_pagination() {
         for TransactionWithId { id, transaction } in &res.transactions {
             let id = id.0.to_u64().unwrap();
 
-            // transactions ids must be unique and in descending order
+            // Transactions ids must be unique and in descending order.
             if let Some(last_seen_txid) = last_seen_txid {
                 assert!(id < last_seen_txid);
             }
             last_seen_txid = Some(id);
 
-            // check the transaction itself
+            // Check the transaction itself.
             assert_tx_eq(
                 &Transaction {
                     kind: "mint".into(),
@@ -785,29 +921,36 @@ fn test_get_account_transactions_pagination() {
         }
 
         // !res.transactions.is_empty() and the check on descending
-        // order guarantee that last_seen_txid < start
+        // order guarantee that last_seen_txid < start.
         start = last_seen_txid;
     }
 }
 
 #[test]
 fn test_icrc1_balance_of() {
-    // 1 case only because the test is expensive to run
+    // 1 case only because the test is expensive to run.
     let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
+    let now = SystemTime::now();
+    let minter = minter_identity();
+    let minter_principal = minter.sender().unwrap();
     runner
         .run(
-            &(valid_transactions_strategy(MINTER, FEE, 100),),
+            &(valid_transactions_strategy(minter, FEE, 100, now),),
             |(transactions,)| {
                 let env = &StateMachine::new();
-                let ledger_id = install_ledger(env, vec![], default_archive_options(), None);
+                // To match the time of the valid transaction strategy we have to align the StateMachine time with the generated strategy
+                env.set_time(now);
+                let ledger_id = install_ledger(
+                    env,
+                    vec![],
+                    default_archive_options(),
+                    None,
+                    minter_principal,
+                );
                 let index_id = install_index_ng(env, ledger_id);
 
-                for CallerTransferArg {
-                    caller,
-                    transfer_arg,
-                } in &transactions
-                {
-                    icrc1_transfer(env, ledger_id, PrincipalId(*caller), transfer_arg.clone());
+                for arg_with_caller in &transactions {
+                    apply_arg_with_caller(env, ledger_id, arg_with_caller.clone());
                 }
                 wait_until_sync_is_completed(env, index_id, ledger_id);
 
@@ -861,24 +1004,31 @@ fn test_list_subaccounts() {
     initial_balances.extend(accounts_2.iter().map(|account| (*account, 10_000)));
 
     let env = &StateMachine::new();
-    let ledger_id = install_ledger(env, initial_balances, default_archive_options(), None);
+    let minter = minter_identity();
+    let ledger_id = install_ledger(
+        env,
+        initial_balances,
+        default_archive_options(),
+        None,
+        minter.sender().unwrap(),
+    );
     let index_id = install_index_ng(env, ledger_id);
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
-    // list account_1.owner subaccounts when no starting subaccount is specified
+    // List account_1.owner subaccounts when no starting subaccount is specified.
     assert_eq!(
         vec![*account_1.effective_subaccount()],
         list_subaccounts(env, index_id, PrincipalId(account_1.owner), None)
     );
 
-    // list account_3.owner subaccounts when no starting subaccount is specified
+    // List account_3.owner subaccounts when no starting subaccount is specified.
     assert_eq!(
         vec![*account_3.effective_subaccount()],
         list_subaccounts(env, index_id, PrincipalId(account_3.owner), None)
     );
 
-    // list account_3.owner subaccounts when an existing starting subaccount is specified but no subaccount is in that range
+    // List account_3.owner subaccounts when an existing starting subaccount is specified but no subaccount is in that range.
     assert!(list_subaccounts(
         env,
         index_id,
@@ -887,14 +1037,14 @@ fn test_list_subaccounts() {
     )
     .is_empty());
 
-    // list acccount_4.owner subaccounts should return the default subaccount
-    // mapped to [0;32]
+    // List account_4.owner subaccounts should return the default subaccount
+    // mapped to [0;32].
     assert_eq!(
         vec![[0; 32]],
         list_subaccounts(env, index_id, PrincipalId(account_4.owner), None)
     );
 
-    // account_2.owner should have two batches of subaccounts
+    // account_2.owner should have two batches of subaccounts.
     let principal_2 = accounts_2.get(0).unwrap().owner;
     let batch_1 = list_subaccounts(env, index_id, PrincipalId(principal_2), None);
     let expected_batch_1: Vec<_> = accounts_2
@@ -922,20 +1072,26 @@ fn test_list_subaccounts() {
 #[test]
 fn test_post_upgrade_start_timer() {
     let env = &StateMachine::new();
+    let minter = minter_identity();
     let ledger_id = install_ledger(
         env,
         vec![(account(1, 0), 10_000_000)],
         default_archive_options(),
         None,
+        minter.sender().unwrap(),
     );
     let index_id = install_index_ng(env, ledger_id);
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
-    env.upgrade_canister(index_id, index_ng_wasm(), vec![])
-        .unwrap();
+    env.upgrade_canister(
+        index_id,
+        index_ng_wasm(),
+        Encode!(&None::<IndexArg>).unwrap(),
+    )
+    .unwrap();
 
-    // check that the index syncs the new block (wait_until_sync_is_completed fails
+    // Check that the index syncs the new block (wait_until_sync_is_completed fails
     // if the new block is not synced).
     transfer(env, ledger_id, account(1, 0), account(2, 0), 2_000_000);
     wait_until_sync_is_completed(env, index_id, ledger_id);
@@ -944,81 +1100,93 @@ fn test_post_upgrade_start_timer() {
 #[test]
 fn test_oldest_tx_id() {
     let env = &StateMachine::new();
+    let minter = minter_identity().sender().unwrap();
     let ledger_id = install_ledger(
         env,
         vec![(account(1, 0), 10_000_000)],
         default_archive_options(),
         None,
+        minter,
     );
     let index_id = install_index_ng(env, ledger_id);
 
-    // account(2, 0) and account(3, 0) have no transactions so oldest_tx_id should be None
+    // account(2, 0) and account(3, 0) have no transactions so oldest_tx_id should be `None`.
     for account in [account(2, 0), account(3, 0)] {
         let oldest_tx_id =
             get_account_transactions(env, index_id, account, None, u64::MAX).oldest_tx_id;
         assert_eq!(None, oldest_tx_id);
     }
 
-    // account(1, 0) oldest_tx_id is 0, i.e. the mint at ledger init
+    // account(1, 0) oldest_tx_id is 0, i.e. the mint at ledger init.
     let oldest_tx_id =
         get_account_transactions(env, index_id, account(1, 0), None, u64::MAX).oldest_tx_id;
     assert_eq!(Some(0.into()), oldest_tx_id);
 
     ////
-    // add one block for account(1, 0) and account(2, 0)
+    // Add one block for account(1, 0) and account(2, 0).
     transfer(env, ledger_id, account(1, 0), account(2, 0), 1_000_000);
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
-    // account(1, 0) oldest_tx_id is still 0
+    // account(1, 0) oldest_tx_id is still 0.
     let oldest_tx_id =
         get_account_transactions(env, index_id, account(1, 0), None, u64::MAX).oldest_tx_id;
     assert_eq!(Some(0.into()), oldest_tx_id);
 
-    // account(2, 0) oldest_tx_id is 1, i.e. the new transfer
+    // account(2, 0) oldest_tx_id is 1, i.e. the new transfer.
     let oldest_tx_id =
         get_account_transactions(env, index_id, account(2, 0), None, u64::MAX).oldest_tx_id;
     assert_eq!(Some(1.into()), oldest_tx_id);
 
-    // account(3, 0) oldest_tx_id is still None
+    // account(3, 0) oldest_tx_id is still `None`.
     let oldest_tx_id =
         get_account_transactions(env, index_id, account(3, 0), None, u64::MAX).oldest_tx_id;
     assert_eq!(None, oldest_tx_id);
 
     ////
-    // add one block for account(1, 0) and account(2, 0)
-    // add the first block for account(3, 0)
+    // Add one block for account(1, 0) and account(2, 0).
+    // Add the first block for account(3, 0).
     transfer(env, ledger_id, account(1, 0), account(2, 0), 2_000_000);
     transfer(env, ledger_id, account(1, 0), account(3, 0), 3_000_000);
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
-    // account(1, 0) oldest_tx_id is still 0
+    // account(1, 0) oldest_tx_id is still 0.
     let oldest_tx_id =
         get_account_transactions(env, index_id, account(1, 0), None, u64::MAX).oldest_tx_id;
     assert_eq!(Some(0.into()), oldest_tx_id);
 
-    // account(2, 0) oldest_tx_id is still 1
+    // account(2, 0) oldest_tx_id is still 1.
     let oldest_tx_id =
         get_account_transactions(env, index_id, account(2, 0), None, u64::MAX).oldest_tx_id;
     assert_eq!(Some(1.into()), oldest_tx_id);
 
-    // account(3, 0) oldest_tx_id is 3, i.e. the last block index
+    // account(3, 0) oldest_tx_id is 3, i.e. the last block index.
     let oldest_tx_id =
         get_account_transactions(env, index_id, account(3, 0), None, u64::MAX).oldest_tx_id;
     assert_eq!(Some(3.into()), oldest_tx_id);
 
-    // there should be no fee collector
+    // There should be no fee collector.
     assert_eq!(get_fee_collectors_ranges(env, index_id).ranges, vec![]);
+}
+
+#[track_caller]
+fn assert_contain_same_elements<T: Debug + Eq + Hash>(vl: Vec<T>, vr: Vec<T>) {
+    assert_eq!(
+        vl.iter().collect::<HashSet<_>>(),
+        vr.iter().collect::<HashSet<_>>(),
+    )
 }
 
 #[test]
 fn test_fee_collector() {
     let env = &StateMachine::new();
     let fee_collector = account(42, 0);
+    let minter = minter_identity().sender().unwrap();
     let ledger_id = install_ledger(
         env,
         vec![(account(1, 0), 10_000_000)], // txid: 0
         default_archive_options(),
         Some(fee_collector),
+        minter,
     );
     let index_id = install_index_ng(env, ledger_id);
 
@@ -1038,12 +1206,12 @@ fn test_fee_collector() {
         icrc1_balance_of(env, index_id, fee_collector)
     );
 
-    assert_eq!(
+    assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
-        vec![(fee_collector, vec![(0.into(), 4.into())])]
+        vec![(fee_collector, vec![(0.into(), 4.into())])],
     );
 
-    // remove the fee collector to burn some transactions fees
+    // Remove the fee collector to burn some transactions fees.
     upgrade_ledger(env, ledger_id, None);
 
     transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 4
@@ -1056,12 +1224,12 @@ fn test_fee_collector() {
         icrc1_balance_of(env, index_id, fee_collector)
     );
 
-    assert_eq!(
+    assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
-        vec![(fee_collector, vec![(0.into(), 4.into())])]
+        vec![(fee_collector, vec![(0.into(), 4.into())])],
     );
 
-    // add a new fee collector different from the first one
+    // Add a new fee collector different from the first one.
     let new_fee_collector = account(42, 42);
     upgrade_ledger(env, ledger_id, Some(new_fee_collector));
 
@@ -1076,15 +1244,15 @@ fn test_fee_collector() {
         );
     }
 
-    assert_eq!(
+    assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
         vec![
+            (new_fee_collector, vec![(6.into(), 7.into())]),
             (fee_collector, vec![(0.into(), 4.into())]),
-            (new_fee_collector, vec![(6.into(), 7.into())])
-        ]
+        ],
     );
 
-    // add back the original fee_collector and make a couple of transactions again
+    // Add back the original fee_collector and make a couple of transactions again.
     upgrade_ledger(env, ledger_id, Some(fee_collector));
 
     transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 7
@@ -1099,36 +1267,43 @@ fn test_fee_collector() {
         );
     }
 
-    assert_eq!(
+    assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
         vec![
+            (new_fee_collector, vec![(6.into(), 7.into())]),
             (
                 fee_collector,
-                vec![(0.into(), 4.into()), (7.into(), 9.into())]
+                vec![(0.into(), 4.into()), (7.into(), 9.into())],
             ),
-            (new_fee_collector, vec![(6.into(), 7.into())])
-        ]
+        ],
     );
 }
 
 #[test]
 fn test_get_account_transactions_vs_old_index() {
     let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
+    let now = SystemTime::now();
+    let minter = minter_identity();
+    let minter_principal = minter.sender().unwrap();
     runner
         .run(
-            &(valid_transactions_strategy(MINTER, FEE, 100),),
+            &(valid_transactions_strategy(minter, FEE, 10, now),),
             |(transactions,)| {
                 let env = &StateMachine::new();
-                let ledger_id = install_ledger(env, vec![], default_archive_options(), None);
+                // To match the time of the valid transaction strategy we have to align the StateMachine time with the generated strategy
+                env.set_time(now);
+                let ledger_id = install_ledger(
+                    env,
+                    vec![],
+                    default_archive_options(),
+                    None,
+                    minter_principal,
+                );
                 let index_ng_id = install_index_ng(env, ledger_id);
                 let index_id = install_index(env, ledger_id);
 
-                for CallerTransferArg {
-                    caller,
-                    transfer_arg,
-                } in &transactions
-                {
-                    icrc1_transfer(env, ledger_id, PrincipalId(*caller), transfer_arg.clone());
+                for arg_with_caller in &transactions {
+                    apply_arg_with_caller(env, ledger_id, arg_with_caller.clone());
                 }
                 wait_until_sync_is_completed(env, index_ng_id, ledger_id);
 
@@ -1142,6 +1317,7 @@ fn test_get_account_transactions_vs_old_index() {
                         old_get_account_transactions(env, index_ng_id, account, None, u64::MAX),
                     );
                 }
+
                 Ok(())
             },
         )
@@ -1150,39 +1326,47 @@ fn test_get_account_transactions_vs_old_index() {
 
 #[test]
 fn test_upgrade_index_to_index_ng() {
-    let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
+    let mut runner = TestRunner::new(TestRunnerConfig {
+        cases: 1,
+        max_shrink_iters: 0,
+        ..Default::default()
+    });
+    let now = SystemTime::now();
+    let minter = minter_identity();
+    let minter_principal = minter.sender().unwrap();
     runner
         .run(
-            &(valid_transactions_strategy(MINTER, FEE, 100),),
+            &(valid_transactions_strategy(minter, FEE, 10, now),),
             |(transactions,)| {
                 let env = &StateMachine::new();
-                let ledger_id = install_ledger(env, vec![], default_archive_options(), None);
+                // To match the time of the valid transaction strategy we have to align the StateMachine time with the generated strategy
+                env.set_time(now);
+                let ledger_id = install_ledger(
+                    env,
+                    vec![],
+                    default_archive_options(),
+                    None,
+                    minter_principal,
+                );
                 let index_ng_id = install_index_ng(env, ledger_id);
                 let index_id = install_index(env, ledger_id);
 
-                for CallerTransferArg {
-                    caller,
-                    transfer_arg,
-                } in &transactions
-                {
-                    icrc1_transfer(env, ledger_id, PrincipalId(*caller), transfer_arg.clone());
+                for arg_with_caller in &transactions {
+                    apply_arg_with_caller(env, ledger_id, arg_with_caller.clone());
                 }
 
                 env.tick();
                 wait_until_sync_is_completed(env, index_ng_id, ledger_id);
 
-                // upgrade the index canister to the index-ng
-                let arg = IndexArg::Init(IndexInitArg {
-                    ledger_id: ledger_id.into(),
-                });
-                let arg = Encode!(&arg).unwrap();
+                // Upgrade the index canister to the index-ng.
+                let arg = Encode!(&None::<IndexArg>).unwrap();
                 env.upgrade_canister(index_id, index_ng_wasm(), arg)
                     .unwrap();
 
                 wait_until_sync_is_completed(env, index_id, ledger_id);
 
-                // check that the old get_account_transactions still works and return
-                // the right data
+                // Check that the old get_account_transactions still works and return
+                // the right data.
                 for account in transactions
                     .iter()
                     .flat_map(|tx| tx.accounts())
@@ -1197,4 +1381,98 @@ fn test_upgrade_index_to_index_ng() {
             },
         )
         .unwrap();
+}
+
+#[test]
+fn test_index_ledger_coherence() {
+    let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
+    let now = SystemTime::now();
+    let minter = minter_identity();
+    let minter_principal = minter.sender().unwrap();
+    runner
+        .run(
+            &(valid_transactions_strategy(minter, FEE, 50, now),),
+            |(transactions,)| {
+                let env = &StateMachine::new();
+                // To match the time of the valid transaction strategy we have to align the StateMachine time with the generated strategy
+                env.set_time(now);
+                let ledger_id = install_ledger(
+                    env,
+                    vec![],
+                    default_archive_options(),
+                    None,
+                    minter_principal,
+                );
+                let index_id = install_index_ng(env, ledger_id);
+
+                for arg_with_caller in &transactions {
+                    apply_arg_with_caller(env, ledger_id, arg_with_caller.clone());
+                }
+                wait_until_sync_is_completed(env, index_id, ledger_id);
+                assert_ledger_index_parity(env, ledger_id, index_id);
+                Ok(())
+            },
+        )
+        .unwrap();
+}
+
+#[test]
+fn test_principal_subaccounts() {
+    let initial_balances: Vec<_> = vec![(account(1, 0), 1_000_000_000_000)];
+    let env = &StateMachine::new();
+    let minter = minter_identity().sender().unwrap();
+    let ledger_id = install_ledger(
+        env,
+        initial_balances,
+        default_archive_options(),
+        None,
+        minter,
+    );
+    let index_id = install_index_ng(env, ledger_id);
+
+    // Test initial mint block.
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+    assert_ledger_index_parity(env, ledger_id, index_id);
+
+    let subaccounts = list_subaccounts(env, index_id, PrincipalId(account(1, 0).owner), None);
+    // There should exist a subaccount for the principal of account (1,0)
+    assert_eq!(subaccounts.len(), 1);
+
+    // Transfer some tokens to a different subaccount
+    transfer(env, ledger_id, account(1, 0), account(1, 1), FEE + 1);
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    let subaccounts = list_subaccounts(env, index_id, PrincipalId(account(1, 0).owner), None);
+
+    // There should exist two subaccounts now for the principal of account (1,0)
+    assert_eq!(subaccounts.len(), 2);
+    assert!(subaccounts.contains(&account(1, 1).subaccount.unwrap()));
+
+    // Reduce balance of subaccount 1 to 0
+    transfer(env, ledger_id, account(1, 1), account(1, 2), 1);
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    // The balance of subaccount 1 should now be 0
+    assert_eq!(icrc1_balance_of(env, ledger_id, account(1, 1)), 0);
+
+    let subaccounts = list_subaccounts(env, index_id, PrincipalId(account(1, 0).owner), None);
+
+    // There should exist three subaccounts now for the principal of account (1,0)
+    assert_eq!(subaccounts.len(), 3);
+    assert!(subaccounts.contains(&account(1, 1).subaccount.unwrap()));
+    assert!(subaccounts.contains(&account(1, 2).subaccount.unwrap()));
+
+    // Make an approve transaction with the spender being a completly new account
+    approve(env, ledger_id, account(1, 0), account(2, 1), 100);
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    // The balance of the new account should be 0. Approve transactions do not change the balance of the spender
+    assert_eq!(icrc1_balance_of(env, ledger_id, account(2, 1)), 0);
+
+    let subaccounts = list_subaccounts(env, index_id, PrincipalId(account(2, 0).owner), None);
+
+    // There should exist one subaccount for the principal of account (2,0)
+    assert_eq!(subaccounts.len(), 1);
+    // The subaccount 1 should show up in a `list_subaccount` query although it has only been involved in an Approve transaction
+    assert!(subaccounts.contains(&account(2, 1).subaccount.unwrap()));
 }

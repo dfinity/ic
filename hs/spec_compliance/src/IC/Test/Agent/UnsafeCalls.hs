@@ -244,8 +244,8 @@ ic_http_get_request ::
   Maybe (String, Blob) ->
   Blob ->
   IO b
-ic_http_get_request ic00 (_, subnet_type, subnet_size, _, _) path max_response_bytes transform canister_id =
-  callIC (ic00 $ http_request_fee request (subnet_type, subnet_size)) "" #http_request request
+ic_http_get_request ic00 (_, subnet_type, subnet_nodes, _, _) path max_response_bytes transform canister_id =
+  callIC (ic00 $ http_request_fee request (subnet_type, fromIntegral $ length subnet_nodes)) "" #http_request request
   where
     request =
       empty
@@ -274,8 +274,8 @@ ic_http_post_request ::
   Maybe (String, Blob) ->
   Blob ->
   IO b
-ic_http_post_request ic00 (_, subnet_type, subnet_size, _, _) path max_response_bytes body headers transform canister_id =
-  callIC (ic00 $ http_request_fee request (subnet_type, subnet_size)) "" #http_request request
+ic_http_post_request ic00 (_, subnet_type, subnet_nodes, _, _) path max_response_bytes body headers transform canister_id =
+  callIC (ic00 $ http_request_fee request (subnet_type, fromIntegral $ length subnet_nodes)) "" #http_request request
   where
     request =
       empty
@@ -304,8 +304,8 @@ ic_http_head_request ::
   Maybe (String, Blob) ->
   Blob ->
   IO b
-ic_http_head_request ic00 (_, subnet_type, subnet_size, _, _) path max_response_bytes body headers transform canister_id =
-  callIC (ic00 $ http_request_fee request (subnet_type, subnet_size)) "" #http_request request
+ic_http_head_request ic00 (_, subnet_type, subnet_nodes, _, _) path max_response_bytes body headers transform canister_id =
+  callIC (ic00 $ http_request_fee request (subnet_type, fromIntegral $ length subnet_nodes)) "" #http_request request
   where
     request =
       empty
@@ -333,8 +333,8 @@ ic_long_url_http_request ::
   Maybe (String, Blob) ->
   Blob ->
   IO b
-ic_long_url_http_request ic00 (_, subnet_type, subnet_size, _, _) proto len transform canister_id =
-  callIC (ic00 $ http_request_fee request (subnet_type, subnet_size)) "" #http_request request
+ic_long_url_http_request ic00 (_, subnet_type, subnet_nodes, _, _) proto len transform canister_id =
+  callIC (ic00 $ http_request_fee request (subnet_type, fromIntegral $ length subnet_nodes)) "" #http_request request
   where
     l = fromIntegral len - (length $ proto ++ httpbin ++ "/ascii/")
     path = take l $ repeat 'x'

@@ -126,11 +126,11 @@ use ic_types::{NumInstructions, MAX_STABLE_MEMORY_IN_BYTES};
 use ic_wasm_types::{BinaryEncodedWasm, WasmError, WasmInstrumentationError};
 use wasmtime_environ::WASM_PAGE_SIZE;
 
-use crate::wasm_utils::wasm_transform::{self, Global, Module};
 use crate::wasmtime_embedder::{
     STABLE_BYTEMAP_MEMORY_NAME, STABLE_MEMORY_NAME, WASM_HEAP_BYTEMAP_MEMORY_NAME,
     WASM_HEAP_MEMORY_NAME,
 };
+use ic_wasm_transform::{self, Global, Module};
 use wasmparser::{
     BlockType, Export, ExternalKind, FuncType, GlobalType, Import, MemoryType, Operator,
     StructuralType, SubType, TypeRef, ValType,
@@ -139,7 +139,7 @@ use wasmparser::{
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
-// The indicies of injected function imports.
+// The indices of injected function imports.
 pub(crate) enum InjectedImports {
     OutOfInstructions = 0,
     UpdateAvailableMemory = 1,
@@ -389,7 +389,7 @@ pub fn instruction_to_cost_new(i: &Operator) -> u64 {
         Operator::GlobalGet { .. } | Operator::GlobalSet { .. } => 2,
 
         // TableGet and TableSet are expensive operations because they
-        // are translated into memory manipulation oprations.
+        // are translated into memory manipulation operations.
         // Results based on benchmarks.
         Operator::TableGet { .. } => 5,
         Operator::TableSet { .. } => 5,
@@ -406,10 +406,11 @@ pub fn instruction_to_cost_new(i: &Operator) -> u64 {
         // into the system, hence their cost is 300. Memory Size and Table Size are
         // cheaper, their cost is 20. Results validated in benchmarks.
         Operator::TableGrow { .. } | Operator::MemoryGrow { .. } => 300,
-        Operator::TableSize { .. } | Operator::MemorySize { .. } => 20,
+        Operator::MemorySize { .. } => 20,
+        Operator::TableSize { .. } => 100,
 
         // Bulk memory ops are of cost 100. They are heavy operations because
-        // they are translated into function calls in the x86 dissasembly. Validated
+        // they are translated into function calls in the x86 disassembly. Validated
         // in benchmarks.
         Operator::MemoryFill { .. }
         | Operator::MemoryCopy { .. }
@@ -422,11 +423,9 @@ pub fn instruction_to_cost_new(i: &Operator) -> u64 {
         Operator::DataDrop { .. } | Operator::ElemDrop { .. } => 300,
 
         // Call instructions are of cost 20. Validated in benchmarks.
-        // The cost is adjusted to 10 after benchmarking with real canisters.
-        Operator::Call { .. }
-        | Operator::CallIndirect { .. }
-        | Operator::ReturnCall { .. }
-        | Operator::ReturnCallIndirect { .. } => 10,
+        // The cost is adjusted to 5 and 10 after benchmarking with real canisters.
+        Operator::Call { .. } => 5,
+        Operator::CallIndirect { .. } => 10,
 
         // Return, drop, unreachable and nop instructions are of cost 1.
         Operator::Return { .. } | Operator::Drop | Operator::Unreachable | Operator::Nop => 1,
@@ -489,7 +488,7 @@ fn add_func_type(module: &mut Module, ty: FuncType) -> u32 {
         }
     }
     module.types.push(SubType {
-        is_final: false,
+        is_final: true,
         supertype_idx: None,
         structural_type: StructuralType::Func(ty),
     });
@@ -522,12 +521,12 @@ fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
 
     for (_, elem_items) in &mut module.elements {
         match elem_items {
-            wasm_transform::ElementItems::Functions(fun_items) => {
+            ic_wasm_transform::ElementItems::Functions(fun_items) => {
                 for idx in fun_items {
                     *idx = f(*idx);
                 }
             }
-            wasm_transform::ElementItems::ConstExprs { ty: _, exprs } => {
+            ic_wasm_transform::ElementItems::ConstExprs { ty: _, exprs } => {
                 for ops in exprs {
                     mutate_instructions(&f, ops)
                 }
@@ -541,8 +540,8 @@ fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
 
     for data_segment in &mut module.data {
         match &mut data_segment.kind {
-            wasm_transform::DataSegmentKind::Passive => {}
-            wasm_transform::DataSegmentKind::Active {
+            ic_wasm_transform::DataSegmentKind::Passive => {}
+            ic_wasm_transform::DataSegmentKind::Active {
                 memory_index: _,
                 offset_expr,
             } => {
@@ -994,7 +993,7 @@ fn export_additional_symbols<'a>(
         End,
     ];
 
-    let func_body = wasm_transform::Body {
+    let func_body = ic_wasm_transform::Body {
         locals: vec![(1, ValType::I64)],
         instructions,
     };
@@ -1082,7 +1081,7 @@ fn export_additional_symbols<'a>(
             I32Sub,
             End,
         ];
-        let func_body = wasm_transform::Body {
+        let func_body = ic_wasm_transform::Body {
             locals: vec![(4, ValType::I32)],
             instructions,
         };
@@ -1185,9 +1184,9 @@ enum InjectionPointCostDetail {
 impl InjectionPointCostDetail {
     /// If the cost is statically known, increment it by the given amount.
     /// Otherwise do nothing.
-    fn increment_cost(&mut self, additonal_cost: u64) {
+    fn increment_cost(&mut self, additional_cost: u64) {
         match self {
-            Self::StaticCost { scope: _, cost } => *cost += additonal_cost,
+            Self::StaticCost { scope: _, cost } => *cost += additional_cost,
             Self::DynamicCost => {}
         }
     }
@@ -1201,9 +1200,9 @@ struct InjectionPoint {
 }
 
 impl InjectionPoint {
-    fn new_static_cost(position: usize, scope: Scope) -> Self {
+    fn new_static_cost(position: usize, scope: Scope, cost: u64) -> Self {
         InjectionPoint {
-            cost_detail: InjectionPointCostDetail::StaticCost { scope, cost: 0 },
+            cost_detail: InjectionPointCostDetail::StaticCost { scope, cost },
             position,
         }
     }
@@ -1384,7 +1383,7 @@ fn write_barrier_instructions<'a>(
     }
 }
 
-fn inject_mem_barrier(func_body: &mut wasm_transform::Body, func_type: &FuncType) {
+fn inject_mem_barrier(func_body: &mut ic_wasm_transform::Body, func_type: &FuncType) {
     use Operator::*;
     let mut val_i32_needed = false;
     let mut val_i64_needed = false;
@@ -1521,7 +1520,7 @@ fn inject_mem_barrier(func_body: &mut wasm_transform::Body, func_type: &FuncType
 // left to support the requested extra memory. If no `memory.grow` or
 // `table.grow` instructions are present then the code remains unchanged.
 fn inject_update_available_memory(
-    func_body: &mut wasm_transform::Body,
+    func_body: &mut ic_wasm_transform::Body,
     func_type: &FuncType,
     main_memory_mode: MemoryMode,
 ) {
@@ -1597,24 +1596,25 @@ fn injections_old(code: &[Operator]) -> Vec<InjectionPoint> {
     let mut stack = Vec::new();
     use Operator::*;
     // The function itself is a re-entrant code block.
-    let mut curr = InjectionPoint::new_static_cost(0, Scope::ReentrantBlockStart);
+    let mut curr = InjectionPoint::new_static_cost(0, Scope::ReentrantBlockStart, 0);
     for (position, i) in code.iter().enumerate() {
         curr.cost_detail.increment_cost(instruction_to_cost(i));
         match i {
             // Start of a re-entrant code block.
             Loop { .. } => {
                 stack.push(curr);
-                curr = InjectionPoint::new_static_cost(position + 1, Scope::ReentrantBlockStart);
+                curr = InjectionPoint::new_static_cost(position + 1, Scope::ReentrantBlockStart, 0);
             }
             // Start of a non re-entrant code block.
             If { .. } | Block { .. } => {
                 stack.push(curr);
-                curr = InjectionPoint::new_static_cost(position + 1, Scope::NonReentrantBlockStart);
+                curr =
+                    InjectionPoint::new_static_cost(position + 1, Scope::NonReentrantBlockStart, 0);
             }
             // End of a code block but still more code left.
             Else | Br { .. } | BrIf { .. } | BrTable { .. } => {
                 res.push(curr);
-                curr = InjectionPoint::new_static_cost(position + 1, Scope::BlockEnd);
+                curr = InjectionPoint::new_static_cost(position + 1, Scope::BlockEnd, 0);
             }
             // `End` signals the end of a code block. If there's nothing more on the stack, we've
             // gone through all the code.
@@ -1653,34 +1653,37 @@ fn injections_new(code: &[Operator]) -> Vec<InjectionPoint> {
     let mut res = Vec::new();
     use Operator::*;
     // The function itself is a re-entrant code block.
-    let mut curr = InjectionPoint::new_static_cost(0, Scope::ReentrantBlockStart);
+    // Start with at least one fuel being consumed because even empty
+    // functions should consume at least some fuel.
+    let mut curr = InjectionPoint::new_static_cost(0, Scope::ReentrantBlockStart, 1);
     for (position, i) in code.iter().enumerate() {
         curr.cost_detail.increment_cost(instruction_to_cost_new(i));
         match i {
             // Start of a re-entrant code block.
             Loop { .. } => {
                 res.push(curr);
-                curr = InjectionPoint::new_static_cost(position + 1, Scope::ReentrantBlockStart);
+                curr = InjectionPoint::new_static_cost(position + 1, Scope::ReentrantBlockStart, 0);
             }
             // Start of a non re-entrant code block.
             If { .. } => {
                 res.push(curr);
-                curr = InjectionPoint::new_static_cost(position + 1, Scope::NonReentrantBlockStart);
+                curr =
+                    InjectionPoint::new_static_cost(position + 1, Scope::NonReentrantBlockStart, 0);
             }
             // End of a code block but still more code left.
             Else | Br { .. } | BrIf { .. } | BrTable { .. } => {
                 res.push(curr);
-                curr = InjectionPoint::new_static_cost(position + 1, Scope::BlockEnd);
+                curr = InjectionPoint::new_static_cost(position + 1, Scope::BlockEnd, 0);
             }
             End => {
                 res.push(curr);
-                curr = InjectionPoint::new_static_cost(position + 1, Scope::BlockEnd);
+                curr = InjectionPoint::new_static_cost(position + 1, Scope::BlockEnd, 0);
             }
             Return | Unreachable | ReturnCall { .. } | ReturnCallIndirect { .. } => {
                 res.push(curr);
                 // This injection point will be unreachable itself (most likely empty)
                 // but we create it to keep the algorithm uniform
-                curr = InjectionPoint::new_static_cost(position + 1, Scope::BlockEnd);
+                curr = InjectionPoint::new_static_cost(position + 1, Scope::BlockEnd, 0);
             }
             // Bulk memory instructions require injected metering __before__ the instruction
             // executes so that size arguments can be read from the stack at runtime.
@@ -1704,13 +1707,13 @@ fn injections_new(code: &[Operator]) -> Vec<InjectionPoint> {
 // Looks for the data section and if it is present, converts it to a vector of
 // tuples (heap offset, bytes) and then deletes the section.
 fn get_data(
-    data_section: &mut Vec<wasm_transform::DataSegment>,
+    data_section: &mut Vec<ic_wasm_transform::DataSegment>,
 ) -> Result<Segments, WasmInstrumentationError> {
     let res = data_section
         .iter()
         .map(|segment| {
             let offset = match &segment.kind {
-                wasm_transform::DataSegmentKind::Active {
+                ic_wasm_transform::DataSegmentKind::Active {
                     memory_index: _,
                     offset_expr,
                 } => match offset_expr {

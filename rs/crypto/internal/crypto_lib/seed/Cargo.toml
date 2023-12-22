@@ -1,7 +1,10 @@
 [package]
 name = "ic-crypto-internal-seed"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-crypto-sha2 = { path = "../../../sha2" }
@@ -9,5 +12,5 @@ ic-types = { path = "../../../../types/types" }
 hex = "0.4"
 rand = "0.8"
 rand_chacha = "0.3"
-serde = { version = "1.0.130", features = ["derive"] }
+serde = { workspace = true }
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }

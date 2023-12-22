@@ -3,14 +3,26 @@
 //
 
 /// Default number of loop iterations.
-const DEFAULT_LOOP_ITERATIONS: usize = 1_000_000;
+pub const DEFAULT_LOOP_ITERATIONS: usize = 1_000;
 /// Default number of repeat times.
-const DEFAULT_REPEAT_TIMES: usize = 1_000;
+pub const DEFAULT_REPEAT_TIMES: usize = 7_000;
+/// Number of loop iterations to confirm the result.
+///
+/// The main overhead comes from the call itself, so 1000 times more loop iterations
+/// take just 4 time more in the wall time.
+pub const CONFIRMATION_LOOP_ITERATIONS: usize = 1_000_000;
+/// Number of repeat times to confirm the result.
+///
+/// The idea behind the confirmation is that the same operation but repeated twice
+/// should take roughly two times more time to execute, i.e. there are no optimizations.
+///
+/// Note, the maximum compilation complexity is 15K.
+pub const CONFIRMATION_REPEAT_TIMES: usize = 14_000;
 
 ////////////////////////////////////////////////////////////////////////
 /// WAT Block Builder
 
-/// Represents a block of WAT code with corresponding imports and local variables.
+/// Represent a block of WAT code with corresponding imports and local variables.
 #[derive(Default)]
 pub struct Block {
     imports: Vec<String>,
@@ -19,69 +31,89 @@ pub struct Block {
 }
 
 impl Block {
-    /// Appends a line of code to the back of the block.
-    pub fn line<S: Into<String>>(mut self, code: S) -> Self {
+    /// Add a new `line` of code.
+    pub fn line(&mut self, code: &str) -> &mut Self {
         self.lines.push(code.into());
         self
     }
 
-    /// Loops the block code.
-    pub fn loop_(mut self) -> Self {
-        self.locals.push("(local $i i32)".into());
+    /// Add a new `import`.
+    pub fn import(&mut self, code: &str) -> &mut Self {
+        self.imports.push(code.into());
+        self
+    }
+
+    /// Add a new `local`.
+    pub fn local(&mut self, code: &str) -> &mut Self {
+        self.locals.push(code.into());
+        self
+    }
+
+    /// Loop the current block of code for `n` iterations.
+    pub fn loop_n(mut self, n: usize) -> Self {
+        self.local("(local $i i32)");
 
         self.lines = wrap_lines(
-            "(loop $loop",
-            wrap_lines(
-                format!(
-                    "(if (i32.lt_s (get_local $i) (i32.const {DEFAULT_LOOP_ITERATIONS})) (then"
-                ),
-                wrap_lines(
-                    "(set_local $i (i32.add (get_local $i) (i32.const 1)))",
-                    self.lines,
-                    "(br $loop)",
-                ),
-                ")",
-            ),
-            "))",
+            &format!("(local.set $i (i32.const {n})) (loop $loop"),
+            self.lines,
+            "(br_if $loop (local.tee $i (i32.sub (local.get $i) (i32.const 1)))))",
         );
 
         self
     }
 
-    /// Repeats the line of code.
-    pub fn repeat<B, R, E>(mut self, begin: B, repeat: R, end: E) -> Self
-    where
-        B: Into<String>,
-        R: Into<String>,
-        E: Into<String>,
-    {
-        self.lines.extend(vec![
-            begin.into(),
-            repeat.into().repeat(DEFAULT_REPEAT_TIMES),
-            end.into(),
-        ]);
+    /// Repeat the line of code `n` times.
+    pub fn repeat_n(mut self, n: usize, code: &str) -> Self {
+        for _ in 0..n {
+            self.line(code);
+        }
         self
     }
 
-    /// Disables compiler optimizations for the value on stack by adding it
-    /// to the local `black_box` variable.
-    pub fn black_box_result(mut self) -> Self {
+    /// Define variables and functions used in the `code` snippet.
+    pub fn define_variables_and_functions(mut self, code: &str) -> Self {
+        for name in ["x", "y", "zero"] {
+            for ty in ["i32", "i64", "f32", "f64"] {
+                if code.contains(&format!("${name}_{ty}")) {
+                    self.declare_variable(name, ty);
+                }
+            }
+        }
+        if code.contains("$empty") {
+            self.import("(func $empty (result i32) (i32.const 0))");
+        }
+        if code.contains("$empty_return_call") {
+            self.import("(func $empty_return_call (result i32) return_call $empty)");
+        }
+        if code.contains("$result_i32") {
+            self.import("(type $result_i32 (func (result i32)))")
+                .import("(func $empty_indirect (type $result_i32) (i32.const 0))")
+                .import("(table 10 funcref)")
+                .import("(elem (i32.const 7) $empty_indirect)");
+        }
+        self
+    }
+
+    /// Declare a `black_box` variable with specified `name` and `type`.
+    pub fn declare_variable(&mut self, name: &str, ty: &str) -> &mut Self {
+        let init_val = match name {
+            "x" => "1000000007",
+            "y" => "1337",
+            "zero" => "0",
+            _ => panic!("Error getting initial value for variable {name}"),
+        };
+        let var = format!("${name}_{ty}");
+        self.import(&format!(
+            "(global {var} (mut {ty}) ({ty}.const {init_val}))"
+        ))
+        .local(&format!("(local {var} {ty})"));
         self.lines
-            .push("(set_local $black_box (i32.add (get_local $black_box)))".into());
+            .insert(0, format!("(local.set {var} (global.get {var}))"));
+        self.line(&format!("(global.set {var} (local.get {var}))"));
         self
     }
 
-    /// Disable compiler optimizations for the local `black_box` variable.
-    pub fn global_black_box(mut self) -> Self {
-        self.imports
-            .push("(global $black_box (mut i32) (i32.const 0))".into());
-        self.locals.push("(local $black_box i32)".into());
-        self.lines
-            .push("(set_global $black_box (get_local $black_box))".into());
-        self
-    }
-
-    /// Transforms the block into an update function.
+    /// Transform the block into an update function.
     pub fn into_update_func(self) -> Func {
         Func {
             imports: self.imports,
@@ -97,7 +129,7 @@ impl Block {
 ////////////////////////////////////////////////////////////////////////
 /// WAT Function Builder
 
-/// Represents a WAT function with corresponding imports.
+/// Represent a WAT function with corresponding imports.
 #[derive(Default)]
 pub struct Func {
     imports: Vec<String>,
@@ -105,11 +137,20 @@ pub struct Func {
 }
 
 impl Func {
-    /// Transforms the function into a test module WAT representation.
+    /// Transform the function into a test module WAT representation.
     pub fn into_test_module_wat(self) -> String {
         wrap_lines(
             "(module",
-            [self.imports, vec!["(memory $mem 1)".into()], self.lines].concat(),
+            [
+                self.imports,
+                vec![
+                    "(table $table 10 funcref)".into(),
+                    "(elem func 0)".into(),
+                    "(memory $mem 1)".into(),
+                ],
+                self.lines,
+            ]
+            .concat(),
             ")",
         )
         .join("\n")
@@ -119,15 +160,39 @@ impl Func {
 ////////////////////////////////////////////////////////////////////////
 /// Helper functions
 
-/// Returns a new block prepended and appended with the specified lines.
-fn wrap_lines<P, S>(prefix: P, lines: Vec<String>, suffix: S) -> Vec<String>
-where
-    P: Into<String>,
-    S: Into<String>,
-{
+/// Return a new block prepended and appended with the specified lines.
+fn wrap_lines(prefix: &str, lines: Vec<String>, suffix: &str) -> Vec<String> {
     vec![prefix.into()]
         .into_iter()
         .chain(lines.into_iter().map(|l| format!("    {l}")))
-        .chain(vec![suffix.into()].into_iter())
+        .chain(vec![suffix.into()])
         .collect()
+}
+
+/// Return the destination type for the given operation, i.e. for `i32.wrap_i64` returns `i32`
+pub fn dst_type(op: &str) -> &'static str {
+    if op.starts_with("i64") {
+        return "i64";
+    } else if op.starts_with("f32") {
+        return "f32";
+    } else if op.starts_with("f64") {
+        return "f64";
+    }
+    // Fallback to i32 type.
+    "i32"
+}
+
+/// Return the source type for the given operation, i.e. for `i32.wrap_i64` returns `i64`
+pub fn src_type(op: &str) -> &'static str {
+    if op.contains("_i32") {
+        return "i32";
+    } else if op.contains("_i64") {
+        return "i64";
+    } else if op.contains("_f32") {
+        return "f32";
+    } else if op.contains("_f64") {
+        return "f64";
+    }
+    // Fallback to the destination type, i.e. for `i64.eqz` returns `i64`.
+    dst_type(op)
 }

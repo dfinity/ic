@@ -7,7 +7,7 @@
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct HostOsVersionRecord {
+pub struct HostosVersionRecord {
     /// The URLs against which a HTTP GET request will return a release package
     /// that corresponds to this version.
     #[prost(string, repeated, tag = "1")]

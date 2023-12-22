@@ -1,54 +1,37 @@
-use http::{Method, Response, Uri};
-use hyper::{body::HttpBody as _, client::Client, client::HttpConnector, Body};
-use hyper_tls::HttpsConnector;
+use flate2::read::GzDecoder;
+use http::Method;
 use ic_crypto_sha2::Sha256;
 use ic_logger::{info, warn, ReplicaLogger};
+use reqwest::{Client, Response};
 use std::error::Error;
 use std::fmt;
 use std::fs::{self, File};
 use std::io;
 use std::io::prelude::*;
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
-
-use flate2::read::GzDecoder;
 use tar::Archive;
 
 /// Streams HTTP response bodies to files
 pub struct FileDownloader {
-    http_client: Client<HttpsConnector<HttpConnector>, Body>,
+    client: Client,
     logger: Option<ReplicaLogger>,
     /// This is a timeout that is applied to the downloading each chunk that is
     /// yielded, not to the entire downloading of the file.
     timeout: Duration,
-    allow_redirects: bool,
 }
 
 impl FileDownloader {
     pub fn new(logger: Option<ReplicaLogger>) -> Self {
-        Self::new_with_timeout(logger, Duration::from_secs(15), false)
+        Self::new_with_timeout(logger, Duration::from_secs(15))
     }
 
-    pub fn new_with_timeout(
-        logger: Option<ReplicaLogger>,
-        timeout: Duration,
-        allow_redirects: bool,
-    ) -> Self {
-        let https = HttpsConnector::new();
-        let http_client = Client::builder().build::<_, hyper::Body>(https);
-
+    pub fn new_with_timeout(logger: Option<ReplicaLogger>, timeout: Duration) -> Self {
         Self {
-            http_client,
+            client: Client::new(),
             logger,
             timeout,
-            allow_redirects,
         }
-    }
-
-    pub fn follow_redirects(mut self) -> FileDownloader {
-        self.allow_redirects = true;
-        self
     }
 
     /// Download a .tar.gz file from `url`, verify its hash if given, and
@@ -120,7 +103,12 @@ impl FileDownloader {
         }
         let response = self.http_get(url).await?;
         if let Some(logger) = &self.logger {
-            info!(logger, "Request initiated");
+            info!(
+                logger,
+                "Download request initiated to {:?}, headers: {:?}",
+                response.remote_addr(),
+                response.headers()
+            );
         }
         self.stream_response_body_to_file(response, file_path)
             .await?;
@@ -136,79 +124,33 @@ impl FileDownloader {
     }
 
     /// Perform a HTTP GET against the given URL
-    async fn http_get(&self, url: &str) -> FileDownloadResult<Response<Body>> {
-        let url: Uri = url
-            .parse::<Uri>()
-            .map_err(|e| FileDownloadError::bad_url(url, e))?;
-
-        let response = tokio::time::timeout(self.timeout, self.http_client.get(url.clone()))
-            .await
-            .map_err(|_| FileDownloadError::TimeoutError)?
-            .map_err(FileDownloadError::from)?;
+    async fn http_get(&self, url: &str) -> FileDownloadResult<Response> {
+        let response = self.client.get(url).timeout(self.timeout).send().await?;
 
         if response.status().is_success() {
-            return Ok(response);
+            Ok(response)
+        } else {
+            Err(FileDownloadError::NonSuccessResponse(Method::GET, response))
         }
-
-        if response.status().is_redirection() && self.allow_redirects {
-            match response.headers().get(http::header::LOCATION) {
-                Some(url) => {
-                    let url = url.to_str().unwrap();
-                    let url: Uri = url
-                        .parse::<Uri>()
-                        .map_err(|e| FileDownloadError::bad_url(url, e))?;
-                    let response =
-                        tokio::time::timeout(self.timeout, self.http_client.get(url.clone()))
-                            .await
-                            .map_err(|_| FileDownloadError::TimeoutError)?
-                            .map_err(FileDownloadError::from)?;
-                    if response.status().is_success() {
-                        return Ok(response);
-                    }
-                    return Err(FileDownloadError::HttpError(HttpError::NonSuccessResponse(
-                        Method::GET,
-                        url,
-                        response.status(),
-                    )));
-                }
-                None => {
-                    return Err(FileDownloadError::HttpError(
-                        HttpError::RedirectMissingHeader(
-                            Method::GET,
-                            http::header::LOCATION,
-                            response.status(),
-                        ),
-                    ))
-                }
-            }
-        }
-
-        Err(FileDownloadError::HttpError(HttpError::NonSuccessResponse(
-            Method::GET,
-            url,
-            response.status(),
-        )))
     }
 
     /// Stream the bytes of a given HTTP response body into the given file
     async fn stream_response_body_to_file(
         &self,
-        mut response: Response<Body>,
+        mut response: Response,
         file_path: &Path,
     ) -> FileDownloadResult<()> {
         let mut output_file = File::create(file_path)
             .map_err(|e| FileDownloadError::file_create_error(file_path, e))?;
 
-        while let Some(next) = tokio::time::timeout(self.timeout, response.data())
+        while let Some(chunk) = tokio::time::timeout(self.timeout, response.chunk())
             .await
-            .map_err(|_| FileDownloadError::TimeoutError)?
+            .map_err(|_| FileDownloadError::TimeoutError)??
         {
-            let chunk = next.map_err(FileDownloadError::from)?;
             output_file
                 .write_all(&chunk)
                 .map_err(|e| FileDownloadError::file_write_error(file_path, e))?;
         }
-
         Ok(())
     }
 }
@@ -230,11 +172,11 @@ pub fn check_file_hash(path: &Path, expected_sha256_hex: &str) -> FileDownloadRe
     let computed_sha256_hex = compute_sha256_hex(path)?;
 
     if computed_sha256_hex != expected_sha256_hex {
-        Err(FileDownloadError::file_hash_mismatch_error(
-            computed_sha256_hex,
-            expected_sha256_hex.into(),
-            path.to_path_buf(),
-        ))
+        Err(FileDownloadError::FileHashMismatchError {
+            computed_hash: computed_sha256_hex,
+            expected_hash: expected_sha256_hex.into(),
+            file_path: path.to_path_buf(),
+        })
     } else {
         Ok(())
     }
@@ -261,8 +203,11 @@ pub enum FileDownloadError {
     /// An IO error occurred
     IoError(String, io::Error),
 
-    /// An error occurred when making an HTTP request for a binary
-    HttpError(HttpError),
+    /// A reqwest HTTP client produced an error
+    ReqwestError(reqwest::Error),
+
+    /// A non-success HTTP response was received from the given URI
+    NonSuccessResponse(http::Method, Response),
 
     /// A file's computed hash did not match the expected hash
     FileHashMismatchError {
@@ -274,66 +219,28 @@ pub enum FileDownloadError {
 }
 
 impl FileDownloadError {
-    pub fn file_create_error(file_path: &Path, e: io::Error) -> Self {
+    pub(crate) fn file_create_error(file_path: &Path, e: io::Error) -> Self {
         FileDownloadError::IoError(format!("Failed to create file: {:?}", file_path), e)
     }
 
-    pub fn file_write_error(file_path: &Path, e: io::Error) -> Self {
+    pub(crate) fn file_write_error(file_path: &Path, e: io::Error) -> Self {
         FileDownloadError::IoError(format!("Failed to write to file: {:?}", file_path), e)
     }
 
-    pub fn file_open_error(file_path: &Path, e: io::Error) -> Self {
+    pub(crate) fn file_open_error(file_path: &Path, e: io::Error) -> Self {
         FileDownloadError::IoError(format!("Failed to open file: {:?}", file_path), e)
     }
 
-    pub fn file_remove_error(file_path: &Path, e: io::Error) -> Self {
+    pub(crate) fn file_remove_error(file_path: &Path, e: io::Error) -> Self {
         FileDownloadError::IoError(format!("Failed to remove file: {:?}", file_path), e)
     }
 
-    pub fn file_copy_error(src: &Path, dest: &Path, e: io::Error) -> Self {
-        FileDownloadError::IoError(
-            format!("Failed to copy file from {:?} to {:?}", src, dest),
-            e,
-        )
-    }
-
-    pub fn file_set_permissions_error(file_path: &Path, e: io::Error) -> Self {
-        FileDownloadError::IoError(
-            format!("Failed to set permissions on file: {:?}", file_path),
-            e,
-        )
-    }
-
-    pub fn dir_create_error(dir: &Path, e: io::Error) -> Self {
-        FileDownloadError::IoError(format!("Failed to create dir: {:?}", dir), e)
-    }
-
-    pub fn untar_error(file_path: &Path, e: io::Error) -> Self {
+    pub(crate) fn untar_error(file_path: &Path, e: io::Error) -> Self {
         FileDownloadError::IoError(format!("Failed to unpack tar file: {:?}", file_path), e)
     }
 
-    pub fn tar_gz_temp_dir_error(e: io::Error) -> Self {
-        FileDownloadError::IoError("Failed to create .tar.gz extraction tmpdir".into(), e)
-    }
-
-    pub fn bad_url(url: &str, e: http::uri::InvalidUri) -> Self {
-        FileDownloadError::HttpError(HttpError::MalformedUrl(url.to_string(), e))
-    }
-
-    pub fn compute_hash_error(file_path: &Path, e: io::Error) -> Self {
+    pub(crate) fn compute_hash_error(file_path: &Path, e: io::Error) -> Self {
         FileDownloadError::IoError(format!("Failed to hash of: {:?}", file_path), e)
-    }
-
-    pub fn file_hash_mismatch_error(
-        computed_hash: String,
-        expected_hash: String,
-        file_path: PathBuf,
-    ) -> Self {
-        FileDownloadError::FileHashMismatchError {
-            computed_hash,
-            expected_hash,
-            file_path,
-        }
     }
 }
 
@@ -342,28 +249,18 @@ impl fmt::Display for FileDownloadError {
         match self {
             FileDownloadError::IoError(msg, e) => write!(
                 f,
-                "IO error, message: {:?}, error: {:?}",
+                "IO error, message: {}, error: {:?}",
                 msg, e
             ),
-            FileDownloadError::HttpError(HttpError::MalformedUrl(bad_url, e)) => write!(
+            FileDownloadError::ReqwestError(e) => write!(
                 f,
-                "Unable to parse URL: {:?}, error: {:?}",
-                bad_url, e
-            ),
-            FileDownloadError::HttpError(HttpError::HyperError(e)) => write!(
-                f,
-                "Encountered error when making HTTP request: {:?}",
+                "Encountered error when making Http request: {}",
                 e
             ),
-            FileDownloadError::HttpError(HttpError::NonSuccessResponse(method, uri, status_code)) => write!(
+            FileDownloadError::NonSuccessResponse(method, response) => write!(
                 f,
-                "Received non-success response from endpoint: method: {:?}, uri: {:?}, status_code: {:?}",
-                method.as_str(), uri, status_code
-            ),
-            FileDownloadError::HttpError(HttpError::RedirectMissingHeader(method, header, status_code)) => write!(
-                f,
-                "Received a redirect response from endpoint but a header is missing: method: {:?}, header: {:?}, status_code: {:?}",
-                method.as_str(), header, status_code
+                "Received non-success response from endpoint: method: {}, uri: {}, remote_addr: {:?}, status_code: {}, headers: {:?}",
+                method.as_str(), response.url(), response.remote_addr(), response.status(), response.headers()
             ),
             FileDownloadError::FileHashMismatchError { computed_hash, expected_hash, file_path } =>
                 write!(
@@ -380,26 +277,199 @@ impl fmt::Display for FileDownloadError {
     }
 }
 
-impl From<hyper::Error> for FileDownloadError {
-    fn from(e: hyper::Error) -> Self {
-        FileDownloadError::HttpError(HttpError::HyperError(e))
+impl From<reqwest::Error> for FileDownloadError {
+    fn from(e: reqwest::Error) -> Self {
+        FileDownloadError::ReqwestError(e)
     }
 }
 
 impl Error for FileDownloadError {}
 
-/// An HTTP error that File Downloader may encounter
-#[derive(Debug)]
-pub enum HttpError {
-    /// Failed to parse this String as a URL
-    MalformedUrl(String, http::uri::InvalidUri),
+#[cfg(test)]
+mod tests {
+    use assert_matches::assert_matches;
+    use ic_test_utilities_in_memory_logger::{assertions::LogEntriesAssert, InMemoryReplicaLogger};
+    use mockito::{Mock, ServerGuard};
+    use slog::Level;
+    use tempfile::{NamedTempFile, TempPath};
+    use tokio::test;
 
-    /// A hyper HTTP client produced an error
-    HyperError(hyper::Error),
+    use super::*;
 
-    /// A non-success HTTP response was received from the given URI
-    NonSuccessResponse(http::Method, http::Uri, http::StatusCode),
+    struct Setup {
+        pub server: ServerGuard,
+        pub data: Mock,
+        pub redirect: Mock,
+        pub temp: TempPath,
+        pub logger: InMemoryReplicaLogger,
+    }
 
-    /// A redirect response without a required header
-    RedirectMissingHeader(http::Method, http::HeaderName, http::StatusCode),
+    impl Setup {
+        fn new(body: &str) -> Self {
+            let mut server = mockito::Server::new();
+            let redirect = server
+                .mock("GET", "/redirect")
+                .with_status(301)
+                .with_header("Location", &server.url())
+                .create();
+            let data = server
+                .mock("GET", "/")
+                .with_status(200)
+                .with_body(body)
+                .create();
+
+            let temp = NamedTempFile::new()
+                .expect("Failed to create tmp file")
+                .into_temp_path();
+            std::fs::remove_file(&temp).expect("Failed to remove file");
+
+            Self {
+                server,
+                data,
+                redirect,
+                temp,
+                logger: InMemoryReplicaLogger::new(),
+            }
+        }
+
+        fn expect_routes(mut self, data_hits: usize, redirect_hits: usize) -> Self {
+            self.data = self.data.expect(data_hits);
+            self.redirect = self.redirect.expect(redirect_hits);
+            self
+        }
+
+        fn url(&self) -> String {
+            self.server.url()
+        }
+
+        fn assert(&self) {
+            self.data.assert();
+            self.redirect.assert();
+        }
+    }
+
+    fn hash(data: &str) -> String {
+        let mut hasher = Sha256::new();
+        hasher
+            .write_all(data.as_bytes())
+            .expect("Failed to write data");
+        hex::encode(hasher.finish())
+    }
+
+    #[test]
+    async fn test_file_downloader_handles_redirects() {
+        let body = String::from("Success");
+        let hash = hash(&body);
+        let setup = Setup::new(&body).expect_routes(1, 1);
+
+        let downloader = FileDownloader::new(None);
+        downloader
+            .download_file(
+                &format!("{}/redirect", setup.url()),
+                &setup.temp,
+                Some(hash),
+            )
+            .await
+            .expect("Download failed");
+
+        let result = std::fs::read_to_string(&setup.temp).expect("Failed to read file");
+        assert_eq!(result, body);
+        setup.assert();
+    }
+
+    #[test]
+    async fn test_hash_mismatch_returns_error() {
+        let body = String::from("Success");
+        let hash = hash(&body);
+        let invalid_hash = format!("invalid_{}", hash);
+        let setup = Setup::new(&body).expect_routes(1, 0);
+
+        let downloader = FileDownloader::new(Some(ReplicaLogger::from(&setup.logger)));
+
+        let result = downloader
+            .download_file(&setup.url(), &setup.temp, Some(invalid_hash))
+            .await;
+        assert_matches!(result, Err(FileDownloadError::FileHashMismatchError { .. }));
+
+        setup.assert();
+
+        let logs = setup.logger.drain_logs();
+        LogEntriesAssert::assert_that(logs)
+            .has_only_one_message_containing(&Level::Info, "Response read");
+    }
+
+    #[test]
+    async fn test_download_succeeds_if_file_exists() {
+        let body = String::from("Success");
+        let hash = hash(&body);
+
+        let setup = Setup::new(&body).expect_routes(1, 0);
+
+        // Correct file already exists
+        std::fs::write(&setup.temp, &body).unwrap();
+
+        // Download the file without expected hash (it should be overwritten)
+        let logger = InMemoryReplicaLogger::new();
+        let downloader = FileDownloader::new(Some(ReplicaLogger::from(&logger)));
+        downloader
+            .download_file(&setup.url(), &setup.temp, None)
+            .await
+            .expect("Download failed");
+
+        let result = std::fs::read_to_string(&setup.temp).expect("Failed to read file");
+        assert_eq!(result, body);
+
+        let logs = logger.drain_logs();
+        LogEntriesAssert::assert_that(logs)
+            .has_exactly_n_messages_containing(0, &Level::Info, "File already exists")
+            .has_only_one_message_containing(&Level::Info, "Response read");
+
+        // Download it again, this time expecting the correct hash
+        let logger = InMemoryReplicaLogger::new();
+        let downloader = FileDownloader::new(Some(ReplicaLogger::from(&logger)));
+        downloader
+            .download_file(&setup.url(), &setup.temp, Some(hash))
+            .await
+            .expect("Download failed");
+
+        let result = std::fs::read_to_string(&setup.temp).expect("Failed to read file");
+        assert_eq!(result, body);
+
+        // We should not download anything, as the file already exists.
+        let logs = logger.drain_logs();
+        LogEntriesAssert::assert_that(logs)
+            .has_only_one_message_containing(&Level::Info, "File already exists")
+            .has_exactly_n_messages_containing(0, &Level::Info, "Response read");
+
+        setup.assert();
+    }
+
+    #[test]
+    async fn test_download_overwrites_existing_file() {
+        let body = String::from("Success");
+        let hash = hash(&body);
+
+        let setup = Setup::new(&body).expect_routes(1, 0);
+
+        // An unexpected file already exists
+        std::fs::write(&setup.temp, "unexpected content").unwrap();
+
+        // It should be overwritten with the correct file
+        let downloader = FileDownloader::new(Some(ReplicaLogger::from(&setup.logger)));
+        downloader
+            .download_file(&setup.url(), &setup.temp, Some(hash))
+            .await
+            .expect("Download failed");
+
+        let result = std::fs::read_to_string(&setup.temp).expect("Failed to read file");
+        assert_eq!(result, body);
+
+        setup.assert();
+
+        let logs = setup.logger.drain_logs();
+        LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
+            &Level::Warning,
+            "File already exists, but hash check failed",
+        );
+    }
 }

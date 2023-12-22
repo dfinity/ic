@@ -12,8 +12,7 @@ import os
 import shutil
 import subprocess
 import sys
-
-from reproducibility import get_tmpdir_checking_block_size, print_artifact_info
+import tempfile
 
 
 def parse_size(s):
@@ -115,7 +114,7 @@ def install_extra_files(fs_basedir, fakeroot_statefile, extra_files):
         )
 
 
-def prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, limit_prefix):
+def prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, dir_to_extract):
     if in_file:
         subprocess.run(
             [
@@ -128,7 +127,7 @@ def prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, limit_prefix)
                 "--numeric-owner",
                 "-C",
                 fs_basedir,
-                limit_prefix,
+                dir_to_extract,
             ],
             check=True,
         )
@@ -236,7 +235,7 @@ def main():
     if limit_prefix and limit_prefix[0] == "/":
         limit_prefix = limit_prefix[1:]
 
-    tmpdir = get_tmpdir_checking_block_size()
+    tmpdir = tempfile.mkdtemp()
 
     if file_contexts_file:
         original_file_contexts = open(file_contexts_file, "r").read()
@@ -255,6 +254,7 @@ def main():
     prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, limit_prefix)
     strip_files(fs_basedir, fakeroot_statefile, strip_paths)
     install_extra_files(fs_basedir, fakeroot_statefile, extra_files)
+    subprocess.run(['sync'], check=True)
 
     # Now build the basic filesystem image. Wrap again in fakeroot
     # so correct permissions are read for all files etc.
@@ -268,12 +268,15 @@ def main():
 
     # 1. SELinux context of the root inode does not get set correctly.
     if file_contexts_file:
+        subprocess.run(['sync'], check=True)
         fixup_selinux_root_context(original_file_contexts, limit_prefix, image_file)
 
+    subprocess.run(['sync'], check=True)
     # 2. Ownership of all inodes is root.root, but that is not what it is
     # supposed to be in the final image
     fixup_permissions(os.path.join(fs_basedir, limit_prefix), fakeroot_statefile, image_file)
 
+    subprocess.run(['sync'], check=True)
     # Wrap the built filesystem image up in a tar file. Use sparse to
     # deflate all the zeroes left unwritten during build.
     subprocess.run(
@@ -286,14 +289,13 @@ def main():
             "--group=root:0",
             "--mtime=UTC 1970-01-01 00:00:00",
             "--sparse",
+            "--hole-detection=raw",
             "-C",
             tmpdir,
             "partition.img",
         ],
         check=True,
     )
-
-    print_artifact_info(out_file)
 
 
 if __name__ == "__main__":

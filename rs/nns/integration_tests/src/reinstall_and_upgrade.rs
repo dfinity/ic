@@ -6,10 +6,7 @@ use ic_ic00_types::CanisterInstallMode;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_2_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
-use ic_nns_common::{
-    pb::v1::MethodAuthzInfo,
-    types::{NeuronId, UpdateIcpXdrConversionRatePayload},
-};
+use ic_nns_common::types::{NeuronId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID};
 use ic_nns_governance::pb::v1::{Governance as GovernanceProto, NnsFunction};
 use ic_nns_gtc::{
@@ -64,13 +61,13 @@ fn test_reinstall_and_upgrade_canisters_canonical_ordering() {
                 if mode == CanisterInstallMode::Upgrade {
                     println!("[Update] Canister: {:?}", canister.canister_id());
                     if canister.canister_id() == LIFELINE_CANISTER_ID {
-                        let methods_authz: Vec<MethodAuthzInfo> = vec![];
+                        let arg: Vec<String> = vec![];
                         upgrade_nns_canister_with_arg_by_proposal(
                             canister,
                             &nns_canisters.governance,
                             &nns_canisters.root,
                             append_inert(Some(&wasm)),
-                            Encode!(&methods_authz).unwrap(),
+                            Encode!(&arg).unwrap(),
                         )
                         .await;
                     } else {

@@ -188,10 +188,10 @@ mod test_utils {
     {
         fn default() -> Self {
             Self {
-                csprng: Box::new(|| ReproducibleRng::new()),
-                node_secret_key_store: Box::new(|| TempSecretKeyStore::new()),
-                canister_secret_key_store: Box::new(|| TempSecretKeyStore::new()),
-                public_key_store: Box::new(|| TempPublicKeyStore::new()),
+                csprng: Box::new(ReproducibleRng::new),
+                node_secret_key_store: Box::new(TempSecretKeyStore::new),
+                canister_secret_key_store: Box::new(TempSecretKeyStore::new),
+                public_key_store: Box::new(TempPublicKeyStore::new),
                 time_source: FastForwardTimeSource::new(),
                 logger: no_op_logger(),
                 metrics: Arc::new(CryptoMetrics::none()),

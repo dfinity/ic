@@ -19,6 +19,9 @@ mod autonomy;
 mod bad_input;
 
 #[cfg(test)]
+mod copy_inactive_neurons_to_stable_memory;
+
+#[cfg(test)]
 mod cycles_minting_canister;
 
 #[cfg(test)]
@@ -29,9 +32,6 @@ mod node_provider_remuneration;
 
 #[cfg(test)]
 mod governance_mem_test;
-
-#[cfg(test)]
-mod governance_memory_migration_test;
 
 #[cfg(test)]
 mod governance_get_build_metadata_test;
@@ -95,6 +95,9 @@ mod update_unassigned_nodes_config;
 
 #[cfg(test)]
 mod wait_for_quiet;
+
+#[cfg(test)]
+mod governance_migrations;
 
 #[cfg(test)]
 mod governance_neurons;

@@ -107,6 +107,9 @@ options may be specified:
     monitoring (e.g., prometheus) traffic. Multiple block may be specified separated by
     commas.
 
+  --canary-proxy-port
+    the portnumber to run the canary proxy on. Canary proxy disabled if not provided
+
   --require_seo_certification
     flag to enforce certification for all crawler and bot requests that are redirected
     to icx-proxy to bypass the service worker.
@@ -147,15 +150,34 @@ options may be specified:
     (and the corresponding private keys) before uploading them to the certificate
     orchestrator canister.
 
+  --certificate_issuer_task_delay_sec
+    delay in seconds that is added to the processing deadline for any task that
+    the certificate issuer submits to the certificate orchestrator.
+
+  --certificate_issuer_task_error_delay_sec
+    delay in seconds that is added to the processing deadline for any task that
+    failed while processing in the certificate issuer.
+
+  --certificate_issuer_peek_sleep_sec
+    time between peeks by the certificate issuer to fetch a new task from the
+    certificate orchestrator.
+
+  --certificate_syncer_polling_interval_sec
+    time between polling the certificate issuer for custom domain updates (i.e.,
+    newly registered, modified, or removed custom domains).
+
   --ic_registry_local_store
     path to a local registry store to be used instead of the one provided by the
     registry replicator.
+
+  --env
+    deployment environment (dev/prod/test)
 
 EOF
 }
 
 # Arguments:
-# - $1 the comma seperated list of IPv4 addresses/prefixes
+# - $1 the comma separated list of IPv4 addresses/prefixes
 function check_ipv4_prefixes() {
     local ipv4_prefixes="$1"
     local fail=0
@@ -176,7 +198,7 @@ function check_ipv4_prefixes() {
 }
 
 # Arguments:
-# - $1 the comma seperated list of IPv6 addresses/prefixes
+# - $1 the comma separated list of IPv6 addresses/prefixes
 function check_ipv6_prefixes() {
     local ipv6_prefixes="$1"
     local fail=0
@@ -198,7 +220,7 @@ function check_ipv6_prefixes() {
 # of the given variable names are set
 #
 # Arguments:
-# - $@ space seperated list of variable names
+# - $@ space separated list of variable names
 function check_variables() {
     declare -a REQUIRED_VARIABLES=($@)
 
@@ -225,12 +247,17 @@ function build_ic_bootstrap_tar() {
     local OUT_FILE="$1"
     shift
 
-    local IPV4_HTTP_IPS IPV6_HTTP_IPS IPV6_DEBUG_IPS IPV6_MONITORING_IPS REQUIRE_SEO_CERTIFICATION REQUIRE_UNDERSCORE_CERTIFICATION
-
+    # Firewall
+    local IPV4_HTTP_IPS IPV6_HTTP_IPS IPV6_DEBUG_IPS IPV6_MONITORING_IPS
+    # Flags
+    local REQUIRE_SEO_CERTIFICATION REQUIRE_UNDERSCORE_CERTIFICATION
+    # Canary Proxy
+    local CANARY_PROXY_PORT
     # Custom domains
     local CERTIFICATE_ORCHESTRATOR_URI CERTIFICATE_ORCHESTRATOR_CANISTER_ID CERTIFICATE_ISSUER_DELEGATION_DOMAIN
     local CERTIFICATE_ISSUER_ACME_PROVIDER_URL CERTIFICATE_ISSUER_CLOUDFLARE_API_URL CERTIFICATE_ISSUER_CLOUDFLARE_API_KEY
     local CERTIFICATE_ISSUER_NAME_SERVERS CERTIFICATE_ISSUER_NAME_SERVERS_PORT CERTIFICATE_ISSUER_IDENTITY CERTIFICATE_ISSUER_ENCRYPTION_KEY
+    local CERTIFICATE_ISSUER_TASK_DELAY_SEC CERTIFICATE_ISSUER_TASK_ERROR_DELAY_SEC CERTIFICATE_ISSUER_PEEK_SLEEP_SEC
 
     while true; do
         if [ $# == 0 ]; then
@@ -306,6 +333,9 @@ function build_ic_bootstrap_tar() {
             --ipv6_monitoring_ips)
                 IPV6_MONITORING_IPS="$2"
                 ;;
+            --canary-proxy-port)
+                CANARY_PROXY_PORT="$2"
+                ;;
             --require_seo_certification)
                 REQUIRE_SEO_CERTIFICATION="$2"
                 ;;
@@ -342,9 +372,25 @@ function build_ic_bootstrap_tar() {
             --certificate_issuer_encryption_key)
                 CERTIFICATE_ISSUER_ENCRYPTION_KEY="$2"
                 ;;
+            --certificate_issuer_task_delay_sec)
+                CERTIFICATE_ISSUER_TASK_DELAY_SEC="$2"
+                ;;
+            --certificate_issuer_task_error_delay_sec)
+                CERTIFICATE_ISSUER_TASK_ERROR_DELAY_SEC="$2"
+                ;;
+            --certificate_issuer_peek_sleep_sec)
+                CERTIFICATE_ISSUER_PEEK_SLEEP_SEC="$2"
+                ;;
+            --certificate_syncer_polling_interval_sec)
+                CERTIFICATE_SYNCER_POLLING_INTERVAL_SEC="$2"
+                ;;
             --ic_registry_local_store)
                 IC_REGISTRY_LOCAL_STORE="$2"
                 ;;
+            --env)
+                ENV="$2"
+                ;;
+
             *)
                 err "Unrecognized option: $1"
                 usage
@@ -361,6 +407,14 @@ function build_ic_bootstrap_tar() {
         fail=1
     elif [[ ! "${HOSTNAME}" =~ ^[a-zA-Z]+([a-zA-Z0-9])*(-+[a-zA-Z0-9]*)*$ ]]; then
         err "Invalid hostname: '${HOSTNAME}'"
+        fail=1
+    fi
+
+    if [ -z ${ENV+x} ]; then
+        err "--env not set"
+        fail=1
+    elif [[ ! "${ENV}" =~ ^(dev|prod|test)$ ]]; then
+        err "--env should be set to one of: dev/prod/test"
         fail=1
     fi
 
@@ -474,7 +528,9 @@ EOF
     cat >"${BN_VARS_PATH}" <<EOF
 $(printf "system_domains=%s\n" "${SYSTEM_DOMAINS[@]}")
 $(printf "application_domains=%s\n" "${APPLICATION_DOMAINS[@]}")
+canary_proxy_port=${CANARY_PROXY_PORT:-}
 denylist_url=${DENYLIST_URL:-}
+env=${ENV:-}
 elasticsearch_url=${ELASTICSEARCH_URL}
 elasticsearch_tags=${ELASTICSEARCH_TAGS:-}
 ipv4_http_ips=${IPV4_HTTP_IPS}
@@ -483,6 +539,12 @@ ipv6_debug_ips=${IPV6_DEBUG_IPS}
 ipv6_monitoring_ips=${IPV6_MONITORING_IPS}
 require_seo_certification=${REQUIRE_SEO_CERTIFICATION:-}
 require_underscore_certification=${REQUIRE_UNDERSCORE_CERTIFICATION:-}
+ip_hash_salt=${IP_HASH_SALT:-"undefined"}
+logging_url=${LOGGING_URL:-"http://127.0.0.1:12345"}
+logging_user=${LOGGING_USER:-"undefined"}
+logging_password=${LOGGING_PASSWORD:-"undefined"}
+# Default to 1% sampling rate (value is 1/N)
+logging_2xx_sample_rate=${LOGGING_2XX_SAMPLE_RATE:-100}
 EOF
 
     # setup the prober identity
@@ -514,6 +576,15 @@ certificate_issuer_name_servers_port=${CERTIFICATE_ISSUER_NAME_SERVERS_PORT}
 certificate_issuer_acme_provider_url=${CERTIFICATE_ISSUER_ACME_PROVIDER_URL}
 certificate_issuer_cloudflare_api_url=${CERTIFICATE_ISSUER_CLOUDFLARE_API_URL}
 certificate_issuer_cloudflare_api_key=${CERTIFICATE_ISSUER_CLOUDFLARE_API_KEY}
+${CERTIFICATE_ISSUER_TASK_DELAY_SEC:+certificate_issuer_task_delay_sec=${CERTIFICATE_ISSUER_TASK_DELAY_SEC}}
+${CERTIFICATE_ISSUER_TASK_ERROR_DELAY_SEC:+certificate_issuer_task_error_delay_sec=${CERTIFICATE_ISSUER_TASK_ERROR_DELAY_SEC}}
+${CERTIFICATE_ISSUER_PEEK_SLEEP_SEC:+certificate_issuer_peek_sleep_sec=${CERTIFICATE_ISSUER_PEEK_SLEEP_SEC}}
+EOF
+    fi
+
+    if [[ ! -z "${CERTIFICATE_SYNCER_POLLING_INTERVAL_SEC:-}" ]]; then
+        cat >"${BOOTSTRAP_TMPDIR}/certificate_syncer.conf" <<EOF
+certificate_syncer_polling_interval_sec=${CERTIFICATE_SYNCER_POLLING_INTERVAL_SEC}
 EOF
     fi
 
@@ -536,11 +607,15 @@ function build_ic_bootstrap_diskimage() {
     shift
 
     local TMPDIR=$(mktemp -d)
-    build_ic_bootstrap_tar "${TMPDIR}/ic-bootstrap.tar" "$@"
+    local TAR="${TMPDIR}/ic-bootstrap.tar"
+    build_ic_bootstrap_tar "${TAR}" "$@"
 
-    truncate -s 10M "${OUT_FILE}"
-    mkfs.vfat "${OUT_FILE}"
-    mcopy -i "${OUT_FILE}" -o "${TMPDIR}/ic-bootstrap.tar" ::
+    size=$(du --bytes "${TAR}" | awk '{print $1}')
+    size=$((2 * size + 1048576))
+    echo "image size: $size"
+    truncate -s $size "${OUT_FILE}"
+    mkfs.vfat -n CONFIG "${OUT_FILE}"
+    mcopy -i "${OUT_FILE}" -o "${TAR}" ::
 
     rm -rf "${TMPDIR}"
 }

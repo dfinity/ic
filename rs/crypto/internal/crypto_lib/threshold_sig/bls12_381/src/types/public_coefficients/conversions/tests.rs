@@ -54,9 +54,9 @@ fn public_coefficients_bytes_size_should_be_correct() {
 /// not much to check apart from length.
 #[test]
 fn public_coefficients_from_polynomial_should_be_correct() {
-    let mut rng = ChaChaRng::from_seed([1u8; 32]);
+    let rng = &mut ChaChaRng::from_seed([1u8; 32]);
     for size in 0_usize..10 {
-        let polynomial = Polynomial::random(size, &mut rng);
+        let polynomial = Polynomial::random(size, rng);
         let public_coefficients = PublicCoefficients::from(polynomial);
         assert_eq!(size, public_coefficients.coefficients.len());
     }
@@ -70,9 +70,9 @@ fn public_key_for_public_coefficients_should_be_correct() {
         },
         G2Projective::identity(),
     )];
-    let mut rng = ChaChaRng::from_seed([1u8; 32]);
+    let rng = &mut ChaChaRng::from_seed([1u8; 32]);
     for _ in 0..3 {
-        let polynomial = Polynomial::random(5, &mut rng);
+        let polynomial = Polynomial::random(5, rng);
         let public_coefficients = PublicCoefficients::from(&polynomial);
         let public_key = public_key_from_secret_key(polynomial.coeff(0));
         test_vectors.push((public_coefficients, public_key.0));
@@ -96,8 +96,8 @@ fn public_key_for_empty_public_coefficients_should_be_zero() {
 /// coefficient
 #[test]
 fn public_key_for_non_empty_public_coefficients_should_be_correct() {
-    let mut rng = ChaChaRng::from_seed([1u8; 32]);
-    let polynomial = Polynomial::random(5, &mut rng);
+    let rng = &mut ChaChaRng::from_seed([1u8; 32]);
+    let polynomial = Polynomial::random(5, rng);
     let public_coefficients = PublicCoefficients::from(&polynomial);
     let public_key = PublicKey::from(&public_coefficients);
     assert_eq!(public_coefficients.coefficients[0], public_key);

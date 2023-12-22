@@ -10,7 +10,7 @@ from scanner.dependency_scanner import DependencyScanner
 from scanner.manager.npm_dependency_manager import NPMDependencyManager
 from scanner.scanner_job_type import ScannerJobType
 
-DEFAULT_NODE_VERSION = 19
+DEFAULT_NODE_VERSION = "19"
 
 REPOS_TO_SCAN = [
     Repository(
@@ -23,7 +23,7 @@ REPOS_TO_SCAN = [
                 owner=Team.TRUST_TEAM,
             )
         ],
-        18,
+        "18.17.1",
     ),
     Repository(
         "nns-dapp",
@@ -35,7 +35,7 @@ REPOS_TO_SCAN = [
                 owner=Team.GIX_TEAM,
             )
         ],
-        18,
+        "18.17.1",
     ),
     Repository(
         "internet-identity",
@@ -71,7 +71,8 @@ REPOS_TO_SCAN = [
                 owner=Team.SDK_TEAM,
             )
         ],
-        16),
+        DEFAULT_NODE_VERSION,
+    ),
     Repository(
         "cycles-wallet",
         "https://github.com/dfinity/cycles-wallet",
@@ -120,18 +121,21 @@ REPOS_TO_SCAN = [
         ],
         DEFAULT_NODE_VERSION,
     ),
-    Repository(
-        "ic-docutrack",
-        "https://github.com/dfinity/ic-docutrack",
-        [
-            Project(
-                name="frontend",
-                path="ic-docutrack/frontend",
-                owner=Team.EXECUTION_TEAM,
-            )
-        ],
-        DEFAULT_NODE_VERSION,
-    ),
+    # Removing ic-docutrack temporarily since it supports
+    # only pnpm and not npm
+
+    # Repository(
+    #     "ic-docutrack",
+    #     "https://github.com/dfinity/ic-docutrack",
+    #     [
+    #         Project(
+    #             name="frontend",
+    #             path="ic-docutrack/frontend",
+    #             owner=Team.EXECUTION_TEAM,
+    #         )
+    #     ],
+    #     DEFAULT_NODE_VERSION,
+    # ),
 ]
 
 if __name__ == "__main__":

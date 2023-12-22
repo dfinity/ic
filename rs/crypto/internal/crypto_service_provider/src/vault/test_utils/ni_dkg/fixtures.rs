@@ -88,14 +88,20 @@ impl MockNode {
         receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
         resharing_public_coefficients: Option<CspPublicCoefficients>,
     ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateReshareDealingError> {
-        let maybe_reshared_secret_id = resharing_public_coefficients.as_ref().map(KeyId::from);
+        let maybe_reshared_secret_id =
+            resharing_public_coefficients
+                .as_ref()
+                .map(|public_coefficients| {
+                    KeyId::try_from(public_coefficients)
+                        .expect("computing key id from public coefficients should not fail")
+                });
         self.csp_vault
             .create_dealing(
                 algorithm_id,
                 dealer_index,
                 threshold,
                 epoch,
-                &receiver_keys,
+                receiver_keys,
                 maybe_reshared_secret_id,
             )
             .map_err(ni_dkg_errors::CspDkgCreateReshareDealingError::from)

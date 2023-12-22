@@ -7,25 +7,31 @@ mod ingress;
 mod self_validating;
 mod xnet;
 
-pub use self::canister_http::{CanisterHttpPayload, MAX_CANISTER_HTTP_PAYLOAD_SIZE};
-pub use self::execution_environment::EpochStats;
-pub use self::execution_environment::QueryStatsPayload;
-pub use self::ingress::{IngressPayload, IngressPayloadError};
-pub use self::self_validating::{SelfValidatingPayload, MAX_BITCOIN_PAYLOAD_IN_BYTES};
-pub use self::xnet::XNetPayload;
-
-use super::{
+pub use self::{
+    canister_http::{CanisterHttpPayload, MAX_CANISTER_HTTP_PAYLOAD_SIZE},
+    execution_environment::{
+        CanisterQueryStats, LocalQueryStats, QueryStats, QueryStatsPayload, RawQueryStats,
+        TotalQueryStats,
+    },
+    ingress::{IngressPayload, IngressPayloadError},
+    self_validating::{SelfValidatingPayload, MAX_BITCOIN_PAYLOAD_IN_BYTES},
+    xnet::XNetPayload,
+};
+use crate::{
+    crypto::canister_threshold_sig::MasterEcdsaPublicKey,
     messages::{Response, SignedIngress},
     xnet::CertifiedStreamSlice,
     Height, Randomness, RegistryVersion, SubnetId, Time,
 };
-use crate::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
+use ic_base_types::NodeId;
 use ic_btc_types_internal::BitcoinAdapterResponse;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_ic00_types::EcdsaKeyId;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryInto};
+
+pub const ENABLE_QUERY_STATS: bool = false;
 
 /// The `Batch` provided to Message Routing for deterministic processing.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -47,6 +53,8 @@ pub struct Batch {
     pub time: Time,
     /// Responses to subnet calls that require consensus' involvement.
     pub consensus_responses: Vec<Response>,
+    /// Information about block makers
+    pub blockmaker_metrics: BlockmakerMetrics,
 }
 
 /// The context built by Consensus for deterministic processing. Captures all
@@ -93,6 +101,7 @@ pub struct BatchMessages {
     pub signed_ingress_msgs: Vec<SignedIngress>,
     pub certified_stream_slices: BTreeMap<SubnetId, CertifiedStreamSlice>,
     pub bitcoin_adapter_responses: Vec<BitcoinAdapterResponse>,
+    pub query_stats: Option<QueryStatsPayload>,
 }
 
 impl BatchPayload {
@@ -105,6 +114,12 @@ impl BatchPayload {
             signed_ingress_msgs: self.ingress.try_into()?,
             certified_stream_slices: self.xnet.stream_slices,
             bitcoin_adapter_responses: self.self_validating.0,
+            query_stats: match ENABLE_QUERY_STATS {
+                true => QueryStatsPayload::deserialize(&self.query_stats)
+                    .ok()
+                    .flatten(),
+                false => None,
+            },
         })
     }
 
@@ -115,6 +130,22 @@ impl BatchPayload {
             && self.canister_http.is_empty()
     }
 }
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BlockmakerMetrics {
+    pub blockmaker: NodeId,
+    pub failed_blockmakers: Vec<NodeId>,
+}
+
+impl BlockmakerMetrics {
+    pub fn new_for_test() -> Self {
+        Self {
+            blockmaker: NodeId::new(ic_base_types::PrincipalId::new_node_test_id(0)),
+            failed_blockmakers: vec![],
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

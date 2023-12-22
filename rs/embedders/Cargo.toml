@@ -1,7 +1,10 @@
 [package]
 name = "ic-embedders"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 anyhow = "1.0.31"
@@ -17,28 +20,25 @@ ic-metrics = { path = "../monitoring/metrics" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-utils-lru-cache = { path = "../utils/lru_cache" }
+ic-wasm-transform = { path = "../wasm_transform" }
 ic-wasm-types = { path = "../types/wasm_types" }
 libc = "0.2.91"
 libflate = "1.1.2"
 memory_tracker = { path = "../memory_tracker" }
-nix = "0.23.0"
-prometheus = { version = "0.12.0", features = ["process"] }
-serde = { version = "1.0.99", features = ["derive"] }
-serde_bytes = "0.11"
-slog = { version = "2.5.2", features = [
-    "nested-values",
-    "release_max_level_debug",
-] }
+nix = { workspace = true }
+prometheus = { workspace = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+slog = { workspace = true }
 slog-term = "2.6.0"
-wasmtime = { version = "10.0.1", default-features = false, features = [
+wasmtime = { version = "14.0.4", default-features = false, features = [
     'cranelift',
     'parallel-compilation',
-    'posix-signals-on-macos',
 ] }
-wasmtime-environ = "10.0.1"
-wasmtime-runtime = "10.0.1"
-wasm-encoder = "0.31.0"
-wasmparser = "0.109.0"
+wasmtime-environ = "14.0.4"
+wasmtime-runtime = "14.0.4"
+wasm-encoder = "0.35.0"
+wasmparser = "0.115.0"
 rayon = "1.5.1"
 
 
@@ -55,13 +55,10 @@ ic-test-utilities-execution-environment = { path = "../test_utilities/execution_
 lazy_static = "1.4.0"
 maplit = "1.0.2"
 proptest = "1.0"
-slog = { version = "2.5.2", features = [
-    "nested-values",
-    "release_max_level_debug",
-] }
+slog = { workspace = true }
 assert_matches = "1.3.0"
 insta = "1.8.0"
-pretty_assertions = "0.6.1"
+pretty_assertions = { workspace = true }
 wasmprinter = "0.2.45"
 wast = "53.0.0"
 wat = "1.0.57"

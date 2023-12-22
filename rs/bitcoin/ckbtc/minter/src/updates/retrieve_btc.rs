@@ -14,7 +14,7 @@ use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_ckbtc_kyt::Error as KytError;
-use ic_icrc1_client_cdk::{CdkRuntime, ICRC1Client};
+use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::account::Subaccount;
 use icrc_ledger_types::icrc1::transfer::Memo;
@@ -253,6 +253,10 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         block_index,
         received_at: ic_cdk::api::time(),
         kyt_provider: Some(kyt_provider),
+        reimbursement_account: Some(Account {
+            owner: caller,
+            subaccount: None,
+        }),
     };
 
     log!(
@@ -304,7 +308,9 @@ pub async fn retrieve_btc_with_approval(
     }
 
     let _guard = retrieve_btc_guard(caller)?;
-    let (min_amount, btc_network) = read_state(|s| (s.retrieve_btc_min_amount, s.btc_network));
+    let (min_retrieve_amount, btc_network, kyt_fee) =
+        read_state(|s| (s.retrieve_btc_min_amount, s.btc_network, s.kyt_fee));
+    let min_amount = max(min_retrieve_amount, kyt_fee);
     if args.amount < min_amount {
         return Err(RetrieveBtcWithApprovalError::AmountTooLow(min_amount));
     }
@@ -316,7 +322,6 @@ pub async fn retrieve_btc_with_approval(
         ));
     }
 
-    let kyt_fee = read_state(|s| s.kyt_fee);
     let burn_memo_icrc2 = BurnMemo::Convert {
         address: Some(&args.address),
         kyt_fee: Some(kyt_fee),
@@ -337,7 +342,6 @@ pub async fn retrieve_btc_with_approval(
             let (_uuid, status, kyt_provider) = kyt_result;
             match status {
                 BtcAddressCheckStatus::Tainted => {
-                    assert!(args.amount >= kyt_fee);
                     mutate_state(|s| {
                         state::audit::schedule_deposit_reimbursement(
                             s,
@@ -346,9 +350,11 @@ pub async fn retrieve_btc_with_approval(
                                 subaccount: args.from_subaccount,
                             },
                             args.amount,
-                            ReimbursementReason::TaintedDestination,
+                            ReimbursementReason::TaintedDestination {
+                                kyt_provider,
+                                kyt_fee,
+                            },
                             block_index,
-                            kyt_fee,
                         );
                     });
                     schedule_now(TaskType::ProcessLogic);
@@ -365,11 +371,18 @@ pub async fn retrieve_btc_with_approval(
 
             let request = RetrieveBtcRequest {
                 // NB. We charge the KYT fee from the retrieve amount.
-                amount: args.amount - kyt_fee,
+                amount: args
+                    .amount
+                    .checked_sub(kyt_fee)
+                    .expect("retrieve btc underflow"),
                 address: parsed_address,
                 block_index,
                 received_at: ic_cdk::api::time(),
                 kyt_provider: Some(kyt_provider),
+                reimbursement_account: Some(Account {
+                    owner: caller,
+                    subaccount: args.from_subaccount,
+                }),
             };
 
             mutate_state(|s| state::audit::accept_retrieve_btc_request(s, request));
@@ -394,7 +407,6 @@ pub async fn retrieve_btc_with_approval(
                     args.amount,
                     ReimbursementReason::CallFailed,
                     block_index,
-                    0,
                 );
             });
 
@@ -431,7 +443,7 @@ async fn balance_of(user: Principal) -> Result<u64, RetrieveBtcError> {
                 msg, code
             ))
         })?;
-    Ok(result)
+    Ok(result.0.to_u64().expect("nat does not fit into u64"))
 }
 
 async fn burn_ckbtcs(user: Principal, amount: u64, memo: Memo) -> Result<u64, RetrieveBtcError> {
@@ -464,7 +476,7 @@ async fn burn_ckbtcs(user: Principal, amount: u64, memo: Memo) -> Result<u64, Re
         })?;
 
     match result {
-        Ok(block_index) => Ok(block_index),
+        Ok(block_index) => Ok(block_index.0.to_u64().expect("nat does not fit into u64")),
         Err(TransferError::InsufficientFunds { balance }) => Err(RetrieveBtcError::InsufficientFunds {
             balance: balance.0.to_u64().expect("unreachable: ledger balance does not fit into u64")
         }),
@@ -534,7 +546,7 @@ async fn burn_ckbtcs_icrc2(
         })?;
 
     match result {
-        Ok(block_index) => Ok(block_index),
+        Ok(block_index) => Ok(block_index.0.to_u64().expect("nat does not fit into u64")),
         Err(TransferFromError::InsufficientFunds { balance }) => Err(RetrieveBtcWithApprovalError::InsufficientFunds {
             balance: balance.0.to_u64().expect("unreachable: ledger balance does not fit into u64")
         }),

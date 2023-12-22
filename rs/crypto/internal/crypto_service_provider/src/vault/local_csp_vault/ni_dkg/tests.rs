@@ -5,6 +5,7 @@ use crate::public_key_store::PublicKeySetOnceError;
 use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
 use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
 use crate::secret_key_store::SecretKeyStoreInsertionError;
+use crate::threshold::ni_dkg::NIDKG_THRESHOLD_SCOPE;
 use crate::vault::api::NiDkgCspVault;
 use crate::vault::local_csp_vault::ni_dkg::ni_dkg_clib::types::FsEncryptionKeySetWithPop;
 use crate::vault::local_csp_vault::ni_dkg::ni_dkg_clib::types::FsEncryptionSecretKey;
@@ -12,11 +13,13 @@ use crate::vault::local_csp_vault::ni_dkg::CspFsEncryptionKeySet;
 use crate::vault::local_csp_vault::ni_dkg::CspNiDkgTranscript;
 use crate::vault::local_csp_vault::ni_dkg::CspSecretKey;
 use crate::vault::local_csp_vault::ni_dkg::Epoch;
+use crate::vault::local_csp_vault::ni_dkg::NIDKG_FS_SCOPE;
 use crate::vault::local_csp_vault::LocalCspVault;
 use crate::vault::test_utils;
 use crate::vault::test_utils::ni_dkg::fixtures::MockNetwork;
 use assert_matches::assert_matches;
 use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::InternalError;
+use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::CspDkgUpdateFsEpochError;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgCreateFsKeyError, CspDkgLoadPrivateKeyError,
 };
@@ -24,11 +27,14 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::FsEncryptionPublicKey;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::Transcript;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
-use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+use ic_crypto_test_utils::set_of;
+use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+use ic_types::crypto::error::KeyNotFoundError;
 use ic_types::crypto::AlgorithmId;
 use ic_types_test_utils::ids::NODE_42;
 
 use crate::key_id::KeyId;
+use ic_crypto_internal_seed::Seed;
 use mockall::Sequence;
 use proptest::prelude::*;
 use std::io;
@@ -62,6 +68,44 @@ proptest! {
 #[test]
 fn test_retention() {
     test_utils::ni_dkg::test_retention(|| LocalCspVault::builder_for_test().build_into_arc());
+}
+
+#[test]
+fn should_not_call_retain_if_keystore_would_not_be_modified() {
+    let active_key_ids = set_of(&[KeyId::from([0u8; 32])]);
+    let mut sks = MockSecretKeyStore::new();
+    sks.expect_retain_would_modify_keystore()
+        .withf(|_filter, scope| *scope == NIDKG_THRESHOLD_SCOPE)
+        .return_const(false)
+        .times(1);
+    sks.expect_retain().never();
+    let csp = LocalCspVault::builder_for_test()
+        .with_node_secret_key_store(sks)
+        .build();
+
+    assert_eq!(csp.retain_threshold_keys_if_present(active_key_ids), Ok(()));
+}
+
+#[test]
+fn should_call_retain_if_keystore_would_be_modified() {
+    let active_key_ids = set_of(&[KeyId::from([0u8; 32])]);
+    let mut sks = MockSecretKeyStore::new();
+    let mut seq = Sequence::new();
+    sks.expect_retain_would_modify_keystore()
+        .times(1)
+        .in_sequence(&mut seq)
+        .withf(|_filter, scope| *scope == NIDKG_THRESHOLD_SCOPE)
+        .return_const(true);
+    sks.expect_retain()
+        .times(1)
+        .in_sequence(&mut seq)
+        .withf(|_filter, scope| *scope == NIDKG_THRESHOLD_SCOPE)
+        .return_const(Ok(()));
+    let csp = LocalCspVault::builder_for_test()
+        .with_node_secret_key_store(sks)
+        .build();
+
+    assert_eq!(csp.retain_threshold_keys_if_present(active_key_ids), Ok(()));
 }
 
 #[test]
@@ -209,6 +253,266 @@ fn should_return_transient_internal_error_from_load_threshold_signing_key_if_nid
         Err(CspDkgLoadPrivateKeyError::TransientInternalError(InternalError{internal_error}))
         if internal_error.contains(INTERNAL_ERROR)
     );
+}
+
+#[test]
+fn should_return_error_if_update_forward_secure_key_with_wrong_algorithm_id() {
+    let mut sks = MockSecretKeyStore::new();
+    let key_id = KeyId::from([0u8; 32]);
+    sks.expect_get().never();
+    sks.expect_insert_or_replace().never();
+    let csp = LocalCspVault::builder_for_test()
+        .with_node_secret_key_store(sks)
+        .build();
+    let epoch_to_update_to = Epoch::from(2);
+
+    let wrong_algorithm = AlgorithmId::from(0);
+
+    let result = csp.update_forward_secure_epoch(wrong_algorithm, key_id, epoch_to_update_to);
+    assert_matches!(
+        result,
+        Err(CspDkgUpdateFsEpochError::UnsupportedAlgorithmId(
+            AlgorithmId::Placeholder
+        ))
+    );
+}
+
+#[test]
+fn should_not_update_forward_secure_key_if_key_is_missing() {
+    const INTERNAL_ERROR: &str = "Cannot update forward secure key if it is missing";
+    let mut sks = MockSecretKeyStore::new();
+    let sks_key_id = KeyId::from([0u8; 32]);
+    sks.expect_get()
+        .withf(move |key_id_| key_id_ == &sks_key_id)
+        .times(1)
+        .return_const(None);
+    sks.expect_insert_or_replace().never();
+    let csp = LocalCspVault::builder_for_test()
+        .with_node_secret_key_store(sks)
+        .build();
+    let epoch_to_update_to = Epoch::from(2);
+
+    let result = csp.update_forward_secure_epoch(
+        AlgorithmId::NiDkg_Groth20_Bls12_381,
+        sks_key_id,
+        epoch_to_update_to,
+    );
+
+    assert_matches!(
+        result,
+        Err(CspDkgUpdateFsEpochError::FsKeyNotInSecretKeyStoreError(KeyNotFoundError{internal_error, key_id}))
+        if internal_error.contains(INTERNAL_ERROR) && key_id.contains(&sks_key_id.to_string())
+    );
+}
+
+#[test]
+fn should_not_update_forward_secure_key_if_epoch_in_sks_is_newer_than_the_one_to_update_to() {
+    let mut sks = MockSecretKeyStore::new();
+    let key_id = KeyId::from([0u8; 32]);
+    let rng = &mut reproducible_rng();
+    let epoch_in_sks = Epoch::from(3);
+    let fs_enc_key_set = fs_encryption_key_set_with_epoch(key_id, epoch_in_sks, rng);
+    sks.expect_get()
+        .withf(move |key_id_| key_id_ == &key_id)
+        .times(1)
+        .return_const(Some(fs_enc_key_set));
+    sks.expect_insert_or_replace().never();
+    let csp = LocalCspVault::builder_for_test()
+        .with_node_secret_key_store(sks)
+        .build();
+    let epoch_to_update_to = Epoch::from(2);
+
+    assert_eq!(
+        csp.update_forward_secure_epoch(
+            AlgorithmId::NiDkg_Groth20_Bls12_381,
+            key_id,
+            epoch_to_update_to
+        ),
+        Ok(())
+    );
+}
+
+#[test]
+fn should_not_update_forward_secure_key_if_epoch_to_update_to_is_identical_to_that_in_sks() {
+    let mut sks = MockSecretKeyStore::new();
+    let key_id = KeyId::from([0u8; 32]);
+    let rng = &mut reproducible_rng();
+    let epoch = Epoch::from(1);
+    let fs_enc_key_set = fs_encryption_key_set_with_epoch(key_id, epoch, rng);
+    sks.expect_get()
+        .withf(move |key_id_| key_id_ == &key_id)
+        .times(1)
+        .return_const(Some(fs_enc_key_set));
+    sks.expect_insert_or_replace().never();
+    let csp = LocalCspVault::builder_for_test()
+        .with_node_secret_key_store(sks)
+        .build();
+
+    assert_eq!(
+        csp.update_forward_secure_epoch(AlgorithmId::NiDkg_Groth20_Bls12_381, key_id, epoch),
+        Ok(())
+    );
+}
+
+#[test]
+fn should_update_forward_secure_key_if_epoch_to_update_to_is_newer_than_that_in_sks() {
+    let mut sks = MockSecretKeyStore::new();
+    let key_id = KeyId::from([0u8; 32]);
+    let rng = &mut reproducible_rng();
+    let epoch_in_sks = Epoch::from(1);
+    let fs_enc_key_set = fs_encryption_key_set_with_epoch(key_id, epoch_in_sks, rng);
+    let epoch_to_update_to = Epoch::from(2);
+    sks.expect_get()
+        .withf(move |key_id_| key_id_ == &key_id)
+        .times(2)
+        .return_const(Some(fs_enc_key_set));
+    sks.expect_insert_or_replace()
+        .withf(move |key_id_, key_, _scope| {
+            key_id_ == &key_id
+                && key_epoch_matches(key_id, key_.clone(), epoch_to_update_to)
+                && _scope == &Some(NIDKG_FS_SCOPE)
+        })
+        .times(1)
+        .return_const(Ok(()));
+    let csp = LocalCspVault::builder_for_test()
+        .with_node_secret_key_store(sks)
+        .build();
+
+    assert_eq!(
+        csp.update_forward_secure_epoch(
+            AlgorithmId::NiDkg_Groth20_Bls12_381,
+            key_id,
+            epoch_to_update_to
+        ),
+        Ok(())
+    );
+}
+
+#[test]
+fn should_not_update_forward_secure_key_in_sks_if_epoch_in_sks_was_updated_to_the_epoch_to_update_to_in_the_meantime(
+) {
+    let mut sks = MockSecretKeyStore::new();
+    let key_id = KeyId::from([0u8; 32]);
+    let rng = &mut reproducible_rng();
+    let old_epoch_in_sks = Epoch::from(1);
+    let fs_enc_key_set = fs_encryption_key_set_with_epoch(key_id, old_epoch_in_sks, rng);
+    let epoch_to_update_to = Epoch::from(2);
+    let fs_enc_key_set_with_updated_epoch =
+        update_fs_encryption_key_set_epoch(fs_enc_key_set.clone(), key_id, epoch_to_update_to, rng);
+    let mut get_call_counter = 0;
+    sks.expect_get()
+        .withf(move |key_id_| key_id_ == &key_id)
+        .returning(move |_| match get_call_counter {
+            0 => {
+                get_call_counter += 1;
+                Some(fs_enc_key_set.clone())
+            }
+            1 => {
+                get_call_counter += 1;
+                Some(fs_enc_key_set_with_updated_epoch.clone())
+            }
+            _ => panic!("get called too many times!"),
+        });
+    sks.expect_insert_or_replace().never();
+    let csp = LocalCspVault::builder_for_test()
+        .with_node_secret_key_store(sks)
+        .build();
+
+    assert_eq!(
+        csp.update_forward_secure_epoch(
+            AlgorithmId::NiDkg_Groth20_Bls12_381,
+            key_id,
+            epoch_to_update_to
+        ),
+        Ok(())
+    );
+}
+
+#[test]
+fn should_update_forward_secure_key_in_sks_if_epoch_in_sks_was_updated_to_an_older_epoch_than_the_one_to_update_to(
+) {
+    let mut sks = MockSecretKeyStore::new();
+    let key_id = KeyId::from([0u8; 32]);
+    let rng = &mut reproducible_rng();
+    let old_epoch_in_sks = Epoch::from(1);
+    let fs_enc_key_set = fs_encryption_key_set_with_epoch(key_id, old_epoch_in_sks, rng);
+    let intermediate_epoch_in_sks = Epoch::from(2);
+    let new_epoch_to_update_to = Epoch::from(3);
+    let fs_enc_key_set_with_intermediate_epoch = update_fs_encryption_key_set_epoch(
+        fs_enc_key_set.clone(),
+        key_id,
+        intermediate_epoch_in_sks,
+        rng,
+    );
+    let mut get_call_counter = 0;
+    sks.expect_get()
+        .withf(move |key_id_| key_id_ == &key_id)
+        .returning(move |_| match get_call_counter {
+            0 => {
+                get_call_counter += 1;
+                Some(fs_enc_key_set.clone())
+            }
+            1 => {
+                get_call_counter += 1;
+                Some(fs_enc_key_set_with_intermediate_epoch.clone())
+            }
+            _ => panic!("get called too many times!"),
+        });
+    sks.expect_insert_or_replace()
+        .withf(move |key_id_, key_, _scope| {
+            key_id_ == &key_id
+                && key_epoch_matches(key_id, key_.clone(), new_epoch_to_update_to)
+                && _scope == &Some(NIDKG_FS_SCOPE)
+        })
+        .times(1)
+        .return_const(Ok(()));
+    let csp = LocalCspVault::builder_for_test()
+        .with_node_secret_key_store(sks)
+        .build();
+
+    assert_eq!(
+        csp.update_forward_secure_epoch(
+            AlgorithmId::NiDkg_Groth20_Bls12_381,
+            key_id,
+            new_epoch_to_update_to
+        ),
+        Ok(())
+    );
+}
+
+fn key_epoch_matches(key_id: KeyId, csp_secret_key: CspSecretKey, epoch: Epoch) -> bool {
+    let (_key_set, secret_key) =
+        super::specialize_key_set_and_deserialize_secret_key(key_id, Some(csp_secret_key))
+            .expect("specializing should succeed");
+    secret_key.current_epoch() == Some(epoch)
+}
+
+fn fs_encryption_key_set_with_epoch(
+    key_id: KeyId,
+    epoch: Epoch,
+    rng: &mut ReproducibleRng,
+) -> CspSecretKey {
+    let fs_key_pair = ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::create_forward_secure_key_pair(Seed::from_rng(rng), &[0u8; 4]);
+    let fs_enc_key_set =
+        CspSecretKey::FsEncryption(CspFsEncryptionKeySet::Groth20WithPop_Bls12_381(fs_key_pair));
+    update_fs_encryption_key_set_epoch(fs_enc_key_set, key_id, epoch, rng)
+}
+
+fn update_fs_encryption_key_set_epoch(
+    csp_secret_key: CspSecretKey,
+    key_id: KeyId,
+    epoch: Epoch,
+    rng: &mut ReproducibleRng,
+) -> CspSecretKey {
+    use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::forward_secure::SysParam;
+
+    let (mut key_set, mut secret_key) =
+        super::specialize_key_set_and_deserialize_secret_key(key_id, Some(csp_secret_key))
+            .expect("specializing should succeed");
+    secret_key.update_to(epoch, SysParam::global(), rng);
+    assert_eq!(secret_key.current_epoch(), Some(epoch));
+    key_set.secret_key = secret_key.serialize();
+    CspSecretKey::FsEncryption(CspFsEncryptionKeySet::Groth20WithPop_Bls12_381(key_set))
 }
 
 fn csp_vault_with_fs_key_id_and_mock_secret_key_store_insert_error(

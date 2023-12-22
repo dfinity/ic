@@ -36,7 +36,7 @@ use icrc_ledger_types::{
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{BTreeMap, VecDeque};
 use std::time::Duration;
 
 const TRANSACTION_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
@@ -426,7 +426,7 @@ impl From<ApprovalKey> for (Account, Account) {
 impl<Tokens: TokensType> LedgerContext for Ledger<Tokens> {
     type AccountId = Account;
     type Approvals = AllowanceTable<ApprovalKey, Account, Tokens>;
-    type BalancesStore = HashMap<Self::AccountId, Tokens>;
+    type BalancesStore = BTreeMap<Self::AccountId, Tokens>;
     type Tokens = Tokens;
 
     fn balances(&self) -> &Balances<Self::BalancesStore> {

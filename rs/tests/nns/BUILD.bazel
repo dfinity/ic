@@ -1,5 +1,5 @@
+load("//rs/tests:common.bzl", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
-load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "MAINNET_REVISION_RUNTIME_DEPS", "NNS_CANISTER_RUNTIME_DEPS")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -10,23 +10,22 @@ exports_files([
 # nns_upgrade_test is a manual system-test that deploys an IC with a NNS that is recovered from the latest mainnet state.
 system_test(
     name = "nns_upgrade_test",
+    colocated_test_driver_vm_forward_ssh_agent = True,
+    colocated_test_driver_vm_required_host_features = ["dc=zh1"],
+    colocated_test_driver_vm_resources = {
+        "vcpus": 16,
+        "boot_image_minimal_size_gibibytes": 100,
+    },
+    env_inherit = ["SSH_AUTH_SOCK"],
     tags = [
-        "local",
-        "manual",
+        "experimental_system_test_colocation",
         "no-cache",
         "no-sandbox",
+        "system_test_nightly_nns",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
-        NNS_CANISTER_RUNTIME_DEPS +
-        BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS +
-        MAINNET_REVISION_RUNTIME_DEPS +
-        GRAFANA_RUNTIME_DEPS + [
-            "//rs/replay:ic-replay",
-            "//rs/tests:recovery/binaries",
-            ":secret_key.pem",
-        ],
+    test_timeout = "eternal",
+    runtime_deps = IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS,
     deps = [
         "//rs/tests",
         "//rs/tests/nns/ic_mainnet_nns_recovery",

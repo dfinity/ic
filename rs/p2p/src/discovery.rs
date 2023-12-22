@@ -83,7 +83,7 @@ impl GossipImpl {
             let version = RegistryVersion::from(version);
             let node_records = self
                 .registry_client
-                .get_subnet_transport_infos(self.subnet_id, version)
+                .get_subnet_node_records(self.subnet_id, version)
                 .unwrap_or(None)
                 .unwrap_or_default();
             for node in node_records {
@@ -96,15 +96,9 @@ impl GossipImpl {
 
 fn get_peer_addr(node_record: &NodeRecord) -> Option<SocketAddr> {
     node_record
-        .p2p_flow_endpoints
-        .get(0)
-        .and_then(|flow_enpoint| flow_enpoint.endpoint.as_ref())
-        .and_then(|endpoint| {
-            Some((
-                IpAddr::from_str(&endpoint.ip_addr).ok()?,
-                endpoint.port.try_into().ok()?,
-            ))
-        })
+        .http
+        .as_ref()
+        .and_then(|endpoint| Some((IpAddr::from_str(&endpoint.ip_addr).ok()?, 4100)))
         .map(SocketAddr::from)
 }
 
@@ -112,11 +106,11 @@ fn get_peer_addr(node_record: &NodeRecord) -> Option<SocketAddr> {
 mod tests {
     use super::*;
     use crate::download_management::tests::new_test_gossip_impl_with_registry;
+    use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
     use ic_interfaces_registry::RegistryClient;
-    use ic_protobuf::registry::node::v1::{ConnectionEndpoint, FlowEndpoint};
+    use ic_protobuf::registry::node::v1::ConnectionEndpoint;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_test_utilities::{
-        consensus::MockConsensusCache,
         p2p::{p2p_test_setup_logger, test_group_set_registry, P2P_SUBNET_ID_DEFAULT},
         port_allocation::allocate_ports,
         types::ids::subnet_test_id,
@@ -125,47 +119,23 @@ mod tests {
 
     #[test]
     fn test_get_peer_addr() {
-        {
-            let node_record: NodeRecord = Default::default();
-            let peer_addr = get_peer_addr(&node_record);
-            assert!(peer_addr.is_none());
-        }
-        {
-            let mut node_record: NodeRecord = Default::default();
-            node_record.p2p_flow_endpoints.push(FlowEndpoint {
-                endpoint: Some(ConnectionEndpoint {
-                    ip_addr: "2001:db8:0:1:1:1:1:1".to_string(),
-                    port: 200,
-                }),
-            });
+        let node_record: NodeRecord = Default::default();
+        let peer_addr = get_peer_addr(&node_record);
+        assert!(peer_addr.is_none());
 
-            let peer_addr = get_peer_addr(&node_record).unwrap();
-            assert_eq!(
-                peer_addr.to_string(),
-                "[2001:db8:0:1:1:1:1:1]:200".to_string()
-            );
-        }
-        {
-            let mut node_record: NodeRecord = Default::default();
-            node_record.p2p_flow_endpoints.push(FlowEndpoint {
-                endpoint: Some(ConnectionEndpoint {
-                    ip_addr: "2001:db8:0:1:1:1:1:1".to_string(),
-                    port: 100,
-                }),
-            });
-            node_record.p2p_flow_endpoints.push(FlowEndpoint {
-                endpoint: Some(ConnectionEndpoint {
-                    ip_addr: "2001:db8:0:1:1:1:1:2".to_string(),
-                    port: 200,
-                }),
-            });
+        let node_record = NodeRecord {
+            http: Some(ConnectionEndpoint {
+                ip_addr: "2001:db8:0:1:1:1:1:1".to_string(),
+                port: 200,
+            }),
+            ..Default::default()
+        };
 
-            let peer_addr = get_peer_addr(&node_record).unwrap();
-            assert_eq!(
-                peer_addr.to_string(),
-                "[2001:db8:0:1:1:1:1:1]:100".to_string()
-            );
-        }
+        let peer_addr = get_peer_addr(&node_record).unwrap();
+        assert_eq!(
+            peer_addr.to_string(),
+            "[2001:db8:0:1:1:1:1:1]:4100".to_string()
+        );
     }
 
     #[test]
@@ -185,7 +155,7 @@ mod tests {
         registry_client.update_to_latest_version();
 
         // Create consensus cache that returns a oldest registry version higher than the the local view.
-        let mut mock_consensus_cache = MockConsensusCache::new();
+        let mut mock_consensus_cache = MockConsensusPoolCache::new();
         let consensus_registry_client = registry_client.clone();
         mock_consensus_cache
             .expect_get_oldest_registry_version_in_use()

@@ -22,6 +22,29 @@ mod execution_tests {
         )"#;
 
     #[test]
+    fn compilation_of_repeated_instructions_succeeds() {
+        let mut test = ExecutionTestBuilder::new().build();
+        let wat = format!(
+            r#"
+            (module
+                (func (result i64)
+                    (i64.const 1)
+                    {}
+                )
+                (func)
+            )"#,
+            "(i64.add (i64.const 1))".repeat(20_000)
+        );
+        test.canister_from_wat(wat).unwrap();
+        let largest_function_metric = fetch_histogram_stats(
+            test.metrics_registry(),
+            "hypervisor_largest_function_instruction_count",
+        )
+        .unwrap();
+        assert_eq!(largest_function_metric.count, 1);
+    }
+
+    #[test]
     fn compilation_metrics_are_recorded_during_installation() {
         let mut test = ExecutionTestBuilder::new().build();
         let wat1 = r#"
@@ -456,7 +479,7 @@ mod execution_tests {
         assert!(canister_state.execution_state.is_none());
         canister_state.execution_state = Some(ExecutionState::new(
             PathBuf::new(),
-            // Without the '\x00asm' prefix, the check for wasm code lengt will fail.
+            // Without the '\x00asm' prefix, the check for wasm code length will fail.
             WasmBinary::new(CanisterModule::new(b"invalid wasm".to_vec())),
             ExportedFunctions::new(
                 vec![WasmMethod::Update("go".to_string())]

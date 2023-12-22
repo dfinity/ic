@@ -39,7 +39,6 @@ MACRO_DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
-    "//rs/test_utilities",
     "@crate_index//:itertools",
 ]
 

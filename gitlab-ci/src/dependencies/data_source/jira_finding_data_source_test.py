@@ -185,7 +185,7 @@ def test_get_finding_return_issue(jira_ds, jira_lib_mock):
         "|https://crates.io/crates/syn|syn|1.0|\n",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerabilities")[0]: "||*id*||*name*||*description*||*score*||*risk*||\n"
         "|https://rustsec.org/advisories/RUSTSEC-2020-0159|RUSTSEC-2020-0159|Potential segfault in localtime_r invocations|-1| |\n"
-        "|[https://rustsec.org/advisories/RUSTSEC-2022-0051|https://rustsec.org/advisories/RUSTSEC-2022-0051]|RUSTSEC-2022-0051|Memory corruption in liblz4|100|crit|\n",
+        "|[https://rustsec.org/advisories/RUSTSEC-2022-0051|https://rustsec.org/advisories/RUSTSEC-2022-0051]|RUSTSEC-2022-0051|Memory corruption in liblz4|100|crit: [look here for more info| https://example.com] or be smart [https://example.com|https://example.com|smart-link]|\n",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("patch_versions")[
             0
         ]: "||*dep / vuln*||RUSTSEC-2020-0159||RUSTSEC-2022-0051||\n"
@@ -228,7 +228,7 @@ def test_get_finding_return_issue(jira_ds, jira_lib_mock):
     assert res1.vulnerabilities[1].name == "RUSTSEC-2022-0051"
     assert res1.vulnerabilities[1].description == "Memory corruption in liblz4"
     assert res1.vulnerabilities[1].score == 100
-    assert res1.vulnerabilities[1].risk_note == "crit"
+    assert res1.vulnerabilities[1].risk_note == "crit: [look here for more info| https://example.com] or be smart [https://example.com|https://example.com|smart-link]"
     assert len(res1.first_level_dependencies) == 1
     assert res1.first_level_dependencies[0].id == "https://crates.io/crates/syn"
     assert res1.first_level_dependencies[0].name == "syn"
@@ -470,7 +470,7 @@ def test_create_finding_special_character_escaping(jira_ds, jira_lib_mock):
         "repo",
         "scanner",
         Dependency("id{code}and|pipe{code}", "{code}name{code}", "ver|sion", {"id{code}": ["123;456", ";789"]}),
-        [Vulnerability("id{code}", "{code}na|me{code}", "|description|", 0, "pipe|and{code}")],
+        [Vulnerability("id{code}", "{code}na|me{code}", "|description|", 0, "[url with pipe is fine|https://example.com] and{code}")],
         [Dependency("|id|", "{code}name", "ver{code}|sion", {"id{code}": [";321;", "98;7"]})],
         ["proj1{code}", "|proj2", "pr{code}oject3|"],
         [],
@@ -493,7 +493,7 @@ def test_create_finding_special_character_escaping(jira_ds, jira_lib_mock):
     )
     assert (
         mem.store[key][JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerabilities")[0]]
-        == "||*id*||*name*||*description*||*score*||*risk*||\n|id\\{code}|\\{code}na:me\\{code}|:description:|0|pipe:and\\{code}|\n"
+        == "||*id*||*name*||*description*||*score*||*risk*||\n|id\\{code}|\\{code}na:me\\{code}|:description:|0|[url with pipe is fine|https://example.com] and\\{code}|\n"
     )
     assert (
         mem.store[key][JIRA_FINDING_TO_CUSTOM_FIELD.get("patch_versions")[0]]

@@ -1,22 +1,24 @@
 [package]
 name = "ic-async-utils"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 async-stream = "0.3.4"
+bytes = { workspace = true }
 byte-unit = "4.0.14"
-derive_more = "0.99.17"
-futures = "0.3.13"
+derive_more = { git = "https://github.com/dfinity-lab/derive_more", rev = "9f1b894e6fde640da4e9ea71a8fc0e4dd98d01da" }
+futures = { workspace = true }
 futures-util = "0.3.13"
 hyper = { version = "0.14.16", features = ["full"] }
 ic-types = { path = "../types/types" }
-prometheus = { version = "0.12.0", features = [ "process" ] }
-slog = "2.5.2"
-tokio = { version = "1.15.0", features = ["full"] }
-tonic = "0.8.2"
-tower =  { version = "0.4.8", features = ["load-shed", "limit", "steer"] }
+slog = { workspace = true }
+tokio = { workspace = true }
+tonic = { workspace = true }
+tower = { workspace = true }
 
 [dev-dependencies]
-bytes = "1.0.1"
 rand = "0.8.3"

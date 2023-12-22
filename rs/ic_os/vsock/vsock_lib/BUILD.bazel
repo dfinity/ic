@@ -11,6 +11,7 @@ DEPENDENCIES = [
     "@crate_index//:sha2",
     "@crate_index//:reqwest",
     "@crate_index//:regex",
+    "@crate_index//:anyhow",
 ]
 
 MACRO_DEPENDENCIES = []

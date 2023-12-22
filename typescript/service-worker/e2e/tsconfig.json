@@ -1,13 +1,10 @@
 {
   "compilerOptions": {
-    "types": ["node"],
-    "lib": ["DOM"],
-    "module": "ESNext",
+    "types": ["node", "jest"],
+    "esModuleInterop": true,
     "target": "ESNext",
-    "moduleResolution": "node",
-    "skipLibCheck": true,
-    "outDir": "./dist",
-    "allowSyntheticDefaultImports": true
+    "moduleResolution": "Node",
+    "module": "NodeNext"
   },
-  "include": ["specs/**/*.mts", "utils/**/*.mts"]
+  "include": ["specs/**/*.ts", "utils/**/*.ts"]
 }

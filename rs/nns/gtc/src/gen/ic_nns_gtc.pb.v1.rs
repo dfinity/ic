@@ -1,5 +1,7 @@
 /// The internal state of the Genesis Token Canister
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Gtc {
     /// Maps account addresses to the state of the account
     #[prost(map = "string, message", tag = "1")]
@@ -26,7 +28,9 @@ pub struct Gtc {
     pub whitelisted_accounts_to_forward: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 /// The state of a GTC account
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AccountState {
     /// The neuron IDs of the neurons that exist in the Governance canister that
     /// were created on behalf of this account. These neurons, which initially
@@ -67,7 +71,9 @@ pub struct AccountState {
     #[prost(bool, tag = "11")]
     pub is_whitelisted_for_forwarding: bool,
 }
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TransferredNeuron {
     /// The ID of the transferred neuron
     #[prost(message, optional, tag = "1")]

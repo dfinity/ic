@@ -169,7 +169,7 @@ impl IcServiceDiscoveryImpl {
 
         for subnet_id in subnet_ids {
             let t_infos = reg_client
-                .get_subnet_transport_infos(subnet_id, latest_version)
+                .get_subnet_node_records(subnet_id, latest_version)
                 .map_registry_err(latest_version, "get_subnet_transport_info")?;
 
             for (node_id, node_record) in t_infos {
@@ -188,7 +188,7 @@ impl IcServiceDiscoveryImpl {
         // collect information about unassigned nodes
         for node_id in unassigned_node_ids {
             let node_record = reg_client
-                .get_transport_info(node_id, latest_version)
+                .get_node_record(node_id, latest_version)
                 .map_registry_err(latest_version, "get_transport_info")?;
 
             let socket_addr =

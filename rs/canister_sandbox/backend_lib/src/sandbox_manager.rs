@@ -14,6 +14,7 @@
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt::{Debug, Formatter};
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -136,6 +137,7 @@ impl Execution {
                 allocated_bytes,
                 allocated_message_bytes,
                 instance_stats,
+                system_api_call_counters,
             },
             deltas,
             instance_or_system_api,
@@ -143,6 +145,7 @@ impl Execution {
             exec_input.func_ref,
             exec_input.api_type,
             exec_input.canister_current_memory_usage,
+            exec_input.canister_current_message_memory_usage,
             exec_input.execution_parameters,
             exec_input.subnet_available_memory,
             exec_input.sandbox_safe_system_state,
@@ -153,7 +156,7 @@ impl Execution {
             &exec_input.globals,
             self.sandbox_manager.log.clone(),
             exec_input.wasm_reserved_pages,
-            Arc::new(out_of_instructions_handler),
+            Rc::new(out_of_instructions_handler),
         );
 
         match wasm_result {
@@ -173,7 +176,8 @@ impl Execution {
                             // process.
                             Ok(mut instance) => instance
                                 .store_data_mut()
-                                .system_api
+                                .system_api_mut()
+                                .expect("System api not present in the wasmtime instance")
                                 .take_system_state_changes(),
                             Err(system_api) => system_api.into_system_state_changes(),
                         };
@@ -199,6 +203,7 @@ impl Execution {
                     allocated_message_bytes,
                     num_instructions_left,
                     instance_stats,
+                    system_api_call_counters,
                 };
                 self.sandbox_manager.controller.execution_finished(
                     protocol::ctlsvc::ExecutionFinishedRequest {
@@ -224,6 +229,7 @@ impl Execution {
                     allocated_bytes,
                     allocated_message_bytes,
                     instance_stats,
+                    system_api_call_counters,
                 };
 
                 self.sandbox_manager.controller.execution_finished(
@@ -331,11 +337,13 @@ impl SandboxManager {
             wasm_id,
         );
         let deserialization_timer = Instant::now();
-        let module = self.embedder.deserialize_module(serialized_module);
-        let cache = Arc::new(EmbedderCache::new(module.clone()));
+        let instance_pre = self
+            .embedder
+            .deserialize_module_and_pre_instantiate(serialized_module);
+        let cache = Arc::new(EmbedderCache::new(instance_pre.clone()));
         let deserialization_time = deserialization_timer.elapsed();
         guard.caches.insert(wasm_id, Arc::clone(&cache));
-        match module {
+        match instance_pre {
             Ok(_) => Ok((cache, deserialization_time)),
             Err(err) => Err(err),
         }

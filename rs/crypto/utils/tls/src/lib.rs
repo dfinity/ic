@@ -5,12 +5,9 @@ use std::str::FromStr;
 
 use ic_base_types::{NodeId, PrincipalId};
 use ic_crypto_tls_interfaces::{MalformedPeerCertificateError, TlsPublicKeyCert};
-use openssl::{
-    nid::Nid,
-    string::OpensslString,
-    x509::{X509NameEntries, X509NameEntryRef},
-};
 use tokio_rustls::rustls::{Certificate, CertificateError, Error};
+use x509_parser::certificate::X509Certificate;
+use x509_parser::x509::X509Name;
 
 /// Parses rustls Certificates to `TlsPublicKeyCert`.
 /// Certificate is considered well encoded iff:
@@ -34,43 +31,50 @@ pub fn tls_pubkey_cert_from_rustls_certs(certs: &[Certificate]) -> Result<TlsPub
 pub fn node_id_from_cert_subject_common_name(
     cert: &TlsPublicKeyCert,
 ) -> Result<NodeId, MalformedPeerCertificateError> {
-    let common_name_entry = ensure_exactly_one_subject_common_name_entry(cert)?;
-    let common_name = common_name_entry_as_string(common_name_entry)?;
-    let principal_id = parse_principal_id(common_name)?;
+    let x509_cert = parse_x509_certificate(cert.as_der())?;
+    let subject_cn = single_subject_cn_as_str(&x509_cert)?;
+    let principal_id = parse_principal_id(subject_cn)?;
     Ok(NodeId::from(principal_id))
 }
 
-fn ensure_exactly_one_subject_common_name_entry(
-    cert: &TlsPublicKeyCert,
-) -> Result<&X509NameEntryRef, MalformedPeerCertificateError> {
-    if common_name_entries(cert).count() > 1 {
-        return Err(MalformedPeerCertificateError::new(
-            "Too many X509NameEntryRefs",
-        ));
+fn parse_x509_certificate(
+    certificate_der: &[u8],
+) -> Result<X509Certificate, MalformedPeerCertificateError> {
+    let (remainder, x509_cert) =
+        x509_parser::parse_x509_certificate(certificate_der).map_err(|e| {
+            MalformedPeerCertificateError::new(&format!("failed to parse DER: {:?}", e))
+        })?;
+    if !remainder.is_empty() {
+        return Err(MalformedPeerCertificateError::new(&format!(
+            "DER not fully consumed when parsing. Remainder: {remainder:?}",
+        )));
     }
-    common_name_entries(cert)
-        .next()
-        .ok_or_else(|| MalformedPeerCertificateError::new("Missing X509NameEntryRef"))
+    Ok(x509_cert)
 }
 
-fn common_name_entry_as_string(
-    common_name_entry: &X509NameEntryRef,
-) -> Result<OpensslString, MalformedPeerCertificateError> {
-    common_name_entry.data().as_utf8().map_err(|e| {
-        MalformedPeerCertificateError::new(&format!("ASN1 to UTF-8 conversion error: {}", e))
+fn single_subject_cn_as_str<'a>(
+    x509_cert: &'a X509Certificate,
+) -> Result<&'a str, MalformedPeerCertificateError> {
+    single_cn_as_str(x509_cert.subject()).map_err(|e| {
+        MalformedPeerCertificateError::new(&format!("invalid subject common name (CN): {}", e))
     })
 }
 
-fn parse_principal_id(
-    common_name: OpensslString,
-) -> Result<PrincipalId, MalformedPeerCertificateError> {
-    PrincipalId::from_str(common_name.as_ref()).map_err(|e| {
+fn single_cn_as_str<'a>(name: &'a X509Name<'_>) -> Result<&'a str, String> {
+    let mut cn_iter = name.iter_common_name();
+    let first_cn_str = cn_iter
+        .next()
+        .ok_or("missing common name (CN)")?
+        .as_str()
+        .map_err(|e| format!("common name (CN) not a string: {:?}", e))?;
+    if cn_iter.next().is_some() {
+        return Err("found second common name (CN) entry, but expected a single one".to_string());
+    }
+    Ok(first_cn_str)
+}
+
+fn parse_principal_id(common_name: &str) -> Result<PrincipalId, MalformedPeerCertificateError> {
+    PrincipalId::from_str(common_name).map_err(|e| {
         MalformedPeerCertificateError::new(&format!("Principal ID parse error: {}", e))
     })
-}
-
-fn common_name_entries(cert: &TlsPublicKeyCert) -> X509NameEntries {
-    cert.as_x509()
-        .subject_name()
-        .entries_by_nid(Nid::COMMONNAME)
 }

@@ -56,7 +56,7 @@ pub fn test_ckbtc_addresses(env: TestEnv) {
             owner: None,
             subaccount: None,
         };
-        let arg = &Encode!(&arg).expect("Error while encoding arg.");
+        let arg = Encode!(&arg).expect("Error while encoding arg.");
         let res = agent
             .update(&minter, "get_btc_address")
             .with_arg(arg)
@@ -77,7 +77,7 @@ pub fn test_ckbtc_addresses(env: TestEnv) {
             owner: None,
             subaccount: None,
         };
-        let arg = &Encode!(&arg).expect("Error while encoding argument.");
+        let arg = Encode!(&arg).expect("Error while encoding argument.");
         let res = agent
             .update(&minter, "get_withdrawal_account")
             .with_arg(arg)

@@ -181,7 +181,6 @@ pub struct CanisterQueues {
 }
 /// Nested message and enum types in `CanisterQueues`.
 pub mod canister_queues {
-    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
     #[repr(i32)]
     pub enum NextInputQueue {
@@ -201,6 +200,16 @@ pub mod canister_queues {
                 NextInputQueue::LocalSubnet => "NEXT_INPUT_QUEUE_LOCAL_SUBNET",
                 NextInputQueue::Ingress => "NEXT_INPUT_QUEUE_INGRESS",
                 NextInputQueue::RemoteSubnet => "NEXT_INPUT_QUEUE_REMOTE_SUBNET",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "NEXT_INPUT_QUEUE_UNSPECIFIED" => Some(Self::Unspecified),
+                "NEXT_INPUT_QUEUE_LOCAL_SUBNET" => Some(Self::LocalSubnet),
+                "NEXT_INPUT_QUEUE_INGRESS" => Some(Self::Ingress),
+                "NEXT_INPUT_QUEUE_REMOTE_SUBNET" => Some(Self::RemoteSubnet),
+                _ => None,
             }
         }
     }

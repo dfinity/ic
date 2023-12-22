@@ -10,7 +10,7 @@ use icp_ledger::Tokens;
 use on_wire::FromWire;
 use std::convert::{TryFrom, TryInto};
 
-use crate::models::operation::Operation;
+use crate::models::Operation;
 use serde::{Deserialize, Serialize};
 
 pub mod request_result;

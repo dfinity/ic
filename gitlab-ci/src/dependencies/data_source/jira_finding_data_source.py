@@ -76,7 +76,7 @@ class JiraFindingDataSource(FindingDataSource):
     subscribers: List[FindingDataSourceSubscriber]
     findings: Dict[Tuple[str, str, str, str], Tuple[Finding, Issue]]
     findings_cached_for_scanner: Set[str]
-    deleted_findings_cached: Dict[Tuple[str, str, str], List[Finding]]
+    deleted_findings_cached: Dict[Tuple[str, str, str], List[Tuple[Finding, Issue]]]
     risk_assessors: List[User]
 
     def __init__(self, subscribers: List[FindingDataSourceSubscriber], custom_jira: Optional[JIRA] = None):
@@ -94,7 +94,7 @@ class JiraFindingDataSource(FindingDataSource):
     def __finding_to_jira_vulnerabilities(vulnerabilities: List[Vulnerability]) -> str:
         vuln_table: str = "||*id*||*name*||*description*||*score*||*risk*||\n"
         for vuln in vulnerabilities:
-            vuln_table += f"|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.id)}|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.name)}|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.description)}|{vuln.score}|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.risk_note if vuln.risk_note != JIRA_VULNERABILITY_TABLE_RISK_NOTE_MIGRATION_LABEL else ' ')}|\n"
+            vuln_table += f"|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.id)}|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.name)}|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.description)}|{vuln.score}|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.risk_note if vuln.risk_note != JIRA_VULNERABILITY_TABLE_RISK_NOTE_MIGRATION_LABEL else ' ', True)}|\n"
         return vuln_table
 
     @staticmethod
@@ -113,17 +113,52 @@ class JiraFindingDataSource(FindingDataSource):
             return None
 
         for row in vuln_table[1:-1]:
-            parts: List[str] = row.split("|")
+            # each row is parsed char by char
+            # "|" is treated as column separator unless it appears within square brackets,
+            # because in that case it is a link: [link text | http://www.example.com]
+            # or a smart link: [http://www.example.com | http://www.example.com | smart-link]
+            # nested square brackets are not supported
+            parts: List[str] = []
+            is_link = False
+            parsed = ''
+            for c in row:
+                if c == '[':
+                    if is_link:
+                        # nested links are not supported
+                        return None
+                    else:
+                        is_link = True
+                        parsed += c
+                elif c == ']':
+                    is_link = False
+                    parsed += c
+                elif c == '|':
+                    if is_link:
+                        parsed += c
+                    else:
+                        parts.append(parsed)
+                        parsed = ''
+                else:
+                    parsed += c
+            parts.append(parsed)
+
+            if len(parts) > 1 and parts[1].startswith('[') and parts[1].endswith(']'):
+                # jira has changed the vulnerability id to a wiki markup link, e.g.
+                # [https://avd.aquasec.com/nvd/cve-2023-35823|https://avd.aquasec.com/nvd/cve-2023-35823]
+                # change it back to https://avd.aquasec.com/nvd/cve-2023-35823
+                vuln_id_parts = parts[1].split("|")
+                if len(vuln_id_parts) != 2:
+                    # unexpected format
+                    return None
+                parts[1] = vuln_id_parts[0][1:]
+
             if len(parts) == 5:
                 # backwards compatibility for entries that don't have risk column
                 res.append(Vulnerability(id=parts[1], name=parts[2], description=parts[3], score=int(parts[4]), risk_note=JIRA_VULNERABILITY_TABLE_RISK_NOTE_MIGRATION_LABEL))
             elif len(parts) == 6:
                 res.append(Vulnerability(id=parts[1], name=parts[2], description=parts[3], score=int(parts[4]), risk_note=parts[5]))
-            elif len(parts) == 7:
-                # temporary fix to handle markdown rendering of id as [url | url]
-                # Ex: |[https://avd.aquasec.com/nvd/cve-2023-35823|https://avd.aquasec.com/nvd/cve-2023-35823]|CVE-2023-35823|race condition ()|7|Low
-                res.append(Vulnerability(id=parts[1].lstrip("["), name=parts[3], description=parts[4], score=int(parts[5]), risk_note=parts[6]))
             else:
+                # unexpected format
                 return None
         return res
 
@@ -308,10 +343,10 @@ class JiraFindingDataSource(FindingDataSource):
         return int(datetime.timestamp(datetime.strptime(due_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)))
 
     @staticmethod
-    def __finding_to_jira_escape_wiki_renderer_chars(text: str) -> str:
+    def __finding_to_jira_escape_wiki_renderer_chars(text: str, pipe_allowed: bool = False) -> str:
         res = ""
         for i in range(len(text)):
-            if text[i] == "|":
+            if text[i] == "|" and not pipe_allowed:
                 res += ":"
             elif text[i] == "{" and (i == 0 or text[i - 1] != "\\"):
                 res += "\\{"
@@ -512,7 +547,7 @@ class JiraFindingDataSource(FindingDataSource):
     ) -> List[Finding]:
         cache_key = (repository, scanner, dependency_id)
         if cache_key in self.deleted_findings_cached:
-            return deepcopy(self.deleted_findings_cached[cache_key])
+            return deepcopy(list(map(lambda x:x[0], self.deleted_findings_cached[cache_key])))
 
         logging.debug(f"get_deleted_findings({repository}, {scanner}, {dependency_id})")
         jql_query: str = (
@@ -531,9 +566,9 @@ class JiraFindingDataSource(FindingDataSource):
         for issue in issues:
             finding: Finding = self.__jira_to_finding(issue)
             if finding.repository == repository and finding.scanner == scanner and finding.vulnerable_dependency.id == dependency_id:
-                result.append(finding)
+                result.append((finding, issue))
         self.deleted_findings_cached[cache_key] = result
-        return deepcopy(result)
+        return deepcopy(list(map(lambda x:x[0], result)))
 
     def commit_has_block_exception(self, commit_type: CommitType, commit_hash: str) -> bool:
         logging.debug(f"commit_has_block_exception({commit_type}, {commit_hash})")
@@ -591,11 +626,20 @@ class JiraFindingDataSource(FindingDataSource):
 
     def link_findings(self, finding_a: Finding, finding_b: Finding):
         logging.debug(f"link_findings({finding_a}, {finding_b})")
-        self.__load_findings_for_scanner(finding_a.scanner)
-        self.__load_findings_for_scanner(finding_b.scanner)
 
-        if finding_a.id() in self.findings and finding_b.id() in self.findings:
+        # finding_a might be a deleted finding or an existing finding
+        deleted_finding_cache_key = (finding_a.repository, finding_a.scanner, finding_a.vulnerable_dependency.id)
+        jira_issue_a = None
+        if deleted_finding_cache_key in self.deleted_findings_cached:
+            for finding_issue in self.deleted_findings_cached[deleted_finding_cache_key]:
+                if finding_issue[0].more_info == finding_a.more_info:
+                    jira_issue_a = finding_issue[1]
+                    break
+        if not jira_issue_a and finding_a.id() in self.findings:
             _, jira_issue_a = self.findings[finding_a.id()]
+
+        # finding_b is always an existing finding
+        if jira_issue_a and finding_b.id() in self.findings:
             _, jira_issue_b = self.findings[finding_b.id()]
             self.jira.create_issue_link(type="Relates", inwardIssue=jira_issue_a.key, outwardIssue=jira_issue_b.key)
 

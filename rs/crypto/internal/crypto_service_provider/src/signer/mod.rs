@@ -11,8 +11,8 @@ use ic_crypto_internal_basic_sig_ecdsa_secp256r1 as ecdsa_secp256r1;
 use ic_crypto_internal_basic_sig_ed25519 as ed25519;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult};
 use ic_crypto_internal_multi_sig_bls12381 as multi_sig;
+use ic_crypto_sha2::Sha256;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
-use openssl::sha::sha256;
 
 #[cfg(test)]
 mod tests;
@@ -21,9 +21,10 @@ impl CspSigner for Csp {
     fn sign(
         &self,
         algorithm_id: AlgorithmId,
-        message: &[u8],
+        message: Vec<u8>,
         key_id: KeyId,
     ) -> CryptoResult<CspSignature> {
+        let message_len = message.len();
         match algorithm_id {
             AlgorithmId::Ed25519 => {
                 let result = self
@@ -34,7 +35,7 @@ impl CspSigner for Csp {
                     MetricsDomain::BasicSignature,
                     "sign_basic",
                     "message",
-                    message.len(),
+                    message_len,
                     MetricsResult::from(&result),
                 );
                 result
@@ -48,7 +49,7 @@ impl CspSigner for Csp {
                     MetricsDomain::MultiSignature,
                     "sign_multi",
                     "message",
-                    message.len(),
+                    message_len,
                     MetricsResult::from(&result),
                 );
                 result
@@ -75,7 +76,7 @@ impl CspSigner for Csp {
                 // ECDSA CLib impl. does not hash the message (as hash algorithm can vary
                 // in ECDSA), so we do it here with SHA256, which is the only
                 // supported hash currently.
-                let msg_hash = sha256(msg);
+                let msg_hash = Sha256::hash(msg);
                 ecdsa_secp256r1::verify(signature, &msg_hash, &public_key)
             }
             (
@@ -86,7 +87,7 @@ impl CspSigner for Csp {
                 // ECDSA CLib impl. does not hash the message (as hash algorithm can vary
                 // in ECDSA), so we do it here with SHA256, which is the only
                 // supported hash currently.
-                let msg_hash = sha256(msg);
+                let msg_hash = Sha256::hash(msg);
                 ecdsa_secp256k1::verify(signature, &msg_hash, &public_key)
             }
             (

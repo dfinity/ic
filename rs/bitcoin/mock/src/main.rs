@@ -1,12 +1,17 @@
 use candid::candid_method;
 use ic_btc_interface::{
     Address, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
-    MillisatoshiPerByte, Network, SendTransactionRequest, Utxo,
+    MillisatoshiPerByte, Network, Utxo, UtxosFilterInRequest,
 };
+use ic_cdk::api::management_canister::bitcoin::{BitcoinNetwork, SendTransactionRequest};
 use ic_cdk_macros::{init, update};
 use serde_bytes::ByteBuf;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
+
+// We use 12 as the default tip height to mint all
+// the utxos with height 1 in the minter.
+const DEFAULT_TIP_HEIGHT: u32 = 12;
 
 fn main() {}
 
@@ -21,6 +26,7 @@ pub struct State {
     pub utxo_to_address: BTreeMap<Utxo, Address>,
     // Pending transactions.
     pub mempool: BTreeSet<ByteBuf>,
+    pub tip_height: u32,
 }
 
 impl Default for State {
@@ -32,6 +38,7 @@ impl Default for State {
             address_to_utxos: BTreeMap::new(),
             utxo_to_address: BTreeMap::new(),
             mempool: BTreeSet::new(),
+            tip_height: DEFAULT_TIP_HEIGHT,
         }
     }
 }
@@ -64,9 +71,16 @@ fn init(network: Network) {
             utxo_to_address: BTreeMap::new(),
             address_to_utxos: BTreeMap::new(),
             mempool: BTreeSet::new(),
+            tip_height: DEFAULT_TIP_HEIGHT,
         };
         *s.borrow_mut() = state;
     });
+}
+
+#[candid_method(update)]
+#[update]
+fn set_tip_height(tip_height: u32) {
+    mutate_state(|s| s.tip_height = tip_height);
 }
 
 #[candid_method(update)]
@@ -75,17 +89,25 @@ fn bitcoin_get_utxos(utxos_request: GetUtxosRequest) -> GetUtxosResponse {
     read_state(|s| {
         assert_eq!(utxos_request.network, s.network.into());
 
+        let mut utxos = s
+            .address_to_utxos
+            .get(&utxos_request.address)
+            .cloned()
+            .unwrap_or_default()
+            .iter()
+            .cloned()
+            .collect::<Vec<Utxo>>();
+
+        if let Some(UtxosFilterInRequest::MinConfirmations(min_confirmations)) =
+            utxos_request.filter
+        {
+            utxos.retain(|u| s.tip_height + 1 >= u.height + min_confirmations);
+        }
+
         GetUtxosResponse {
-            utxos: s
-                .address_to_utxos
-                .get(&utxos_request.address)
-                .cloned()
-                .unwrap_or_default()
-                .iter()
-                .cloned()
-                .collect::<Vec<Utxo>>(),
+            utxos,
             tip_block_hash: vec![],
-            tip_height: 0,
+            tip_height: s.tip_height,
             // TODO Handle pagination.
             next_page: None,
         }
@@ -136,7 +158,12 @@ fn set_fee_percentiles(fee_percentiles: Vec<MillisatoshiPerByte>) {
 #[update]
 fn bitcoin_send_transaction(transaction: SendTransactionRequest) {
     mutate_state(|s| {
-        assert_eq!(transaction.network, s.network.into());
+        let cdk_network = match transaction.network {
+            BitcoinNetwork::Mainnet => Network::Mainnet,
+            BitcoinNetwork::Testnet => Network::Testnet,
+            BitcoinNetwork::Regtest => Network::Regtest,
+        };
+        assert_eq!(cdk_network, s.network);
         if s.is_available {
             s.mempool.insert(ByteBuf::from(transaction.transaction));
         }
@@ -172,7 +199,7 @@ fn check_candid_interface_compatibility() {
         }
     }
 
-    fn check_service_compatible(
+    fn check_service_equal(
         new_name: &str,
         new: candid::utils::CandidSource,
         old_name: &str,
@@ -180,7 +207,7 @@ fn check_candid_interface_compatibility() {
     ) {
         let new_str = source_to_str(&new);
         let old_str = source_to_str(&old);
-        match candid::utils::service_compatible(new, old) {
+        match candid::utils::service_equal(new, old) {
             Ok(_) => {}
             Err(e) => {
                 eprintln!(
@@ -204,7 +231,7 @@ fn check_candid_interface_compatibility() {
     let old_interface = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
         .join("bitcoin_mock.did");
 
-    check_service_compatible(
+    check_service_equal(
         "actual ledger candid interface",
         candid::utils::CandidSource::Text(&new_interface),
         "declared candid interface in bitcoin_mock.did file",

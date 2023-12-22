@@ -1,15 +1,17 @@
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_btc_interface::Network;
 use ic_btc_types_internal::{
-    BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, GetSuccessorsRequestInitial,
-    GetSuccessorsResponseComplete,
+    BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, BitcoinReject,
+    GetSuccessorsRequestInitial, GetSuccessorsResponseComplete, SendTransactionRequest,
 };
+use ic_error_types::RejectCode;
 use ic_ic00_types::{
     BitcoinGetSuccessorsResponse, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin,
     Payload as _,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::metadata_state::subnet_call_context_manager::BitcoinSendTransactionInternalContext;
 use ic_replicated_state::replicated_state::testing::ReplicatedStateTesting;
 use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_replicated_state::{
@@ -23,6 +25,7 @@ use ic_test_utilities::state::{arb_replicated_state_with_queues, ExecutionStateB
 use ic_test_utilities::types::ids::{canister_test_id, message_test_id, user_test_id, SUBNET_1};
 use ic_test_utilities::types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::ingress::{IngressState, IngressStatus};
+use ic_types::messages::RejectContext;
 use ic_types::{
     messages::{
         CanisterMessage, Payload, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES,
@@ -92,7 +95,7 @@ impl ReplicatedStateFixture {
         let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
         for canister_id in canister_ids {
             let scheduler_state = SchedulerState::default();
-            let system_state = SystemState::new_running(
+            let system_state = SystemState::new_running_for_testing(
                 *canister_id,
                 user_test_id(24).get(),
                 Cycles::new(1 << 36),
@@ -517,7 +520,9 @@ fn push_input_queues_respects_local_remote_subnet() {
 
     // Push message from the local subnet, should be in the local subnet queue.
     fixture
-        .push_input(request_from(CanisterId::new(SUBNET_ID.get()).unwrap()))
+        .push_input(request_from(CanisterId::unchecked_from_principal(
+            SUBNET_ID.get(),
+        )))
         .unwrap();
     assert_eq!(fixture.local_subnet_input_schedule(&CANISTER_ID).len(), 2);
 }
@@ -575,6 +580,73 @@ fn insert_bitcoin_response() {
 }
 
 #[test]
+fn insert_bitcoin_get_successor_reject_response() {
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
+
+    state.metadata.subnet_call_context_manager.push_context(
+        SubnetCallContext::BitcoinGetSuccessors(BitcoinGetSuccessorsContext {
+            request: RequestBuilder::default().build(),
+            payload: GetSuccessorsRequestInitial {
+                network: Network::Regtest,
+                anchor: vec![],
+                processed_block_hashes: vec![],
+            },
+            time: mock_time(),
+        }),
+    );
+
+    let error_message = "Request failed with error.".to_string();
+    let response = BitcoinReject {
+        message: error_message.clone(),
+        reject_code: RejectCode::SysTransient,
+    };
+
+    state
+        .push_response_bitcoin(BitcoinAdapterResponse {
+            response: BitcoinAdapterResponseWrapper::GetSuccessorsReject(response.clone()),
+            callback_id: 0,
+        })
+        .unwrap();
+    assert_eq!(
+        state.consensus_queue[0].response_payload,
+        Payload::Reject(RejectContext::new(RejectCode::SysTransient, error_message))
+    );
+}
+
+#[test]
+fn insert_bitcoin_send_transaction_reject_response() {
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
+
+    state.metadata.subnet_call_context_manager.push_context(
+        SubnetCallContext::BitcoinSendTransactionInternal(BitcoinSendTransactionInternalContext {
+            request: RequestBuilder::default().build(),
+            payload: SendTransactionRequest {
+                network: Network::Regtest,
+                transaction: vec![],
+            },
+            time: mock_time(),
+        }),
+    );
+
+    let error_message = "Request failed with error.".to_string();
+    let response = BitcoinReject {
+        message: error_message.clone(),
+        reject_code: RejectCode::SysTransient,
+    };
+
+    state
+        .push_response_bitcoin(BitcoinAdapterResponse {
+            response: BitcoinAdapterResponseWrapper::SendTransactionReject(response.clone()),
+            callback_id: 0,
+        })
+        .unwrap();
+    assert_eq!(
+        state.consensus_queue[0].response_payload,
+        Payload::Reject(RejectContext::new(RejectCode::SysTransient, error_message))
+    );
+}
+
+#[test]
 fn time_out_requests_updates_subnet_input_schedules_correctly() {
     let mut fixture = ReplicatedStateFixture::with_canisters(&[CANISTER_ID, OTHER_CANISTER_ID]);
 
@@ -607,7 +679,7 @@ fn time_out_requests_updates_subnet_input_schedules_correctly() {
 
 #[test]
 fn split() {
-    // We will be splitting subnet A into A' and B. C is a third-party subnet.
+    // We will be splitting subnet A into A' and B.
     const SUBNET_A: SubnetId = SUBNET_ID;
     const SUBNET_B: SubnetId = SUBNET_1;
 
@@ -690,7 +762,7 @@ fn split() {
     //
     // Split off subnet A', phase 1.
     //
-    let state_a_phase_1 = fixture
+    let mut state_a = fixture
         .state
         .clone()
         .split(SUBNET_A, &routing_table, None)
@@ -702,13 +774,13 @@ fn split() {
     expected.canister_states.remove(&CANISTER_2);
     // And the split marker should be set.
     expected.metadata.split_from = Some(SUBNET_A);
-    // Otherwise, the state shold be the same.
-    assert_eq!(expected, state_a_phase_1);
+    // Otherwise, the state should be the same.
+    assert_eq!(expected, state_a);
 
     //
     // Subnet A', phase 2.
     //
-    let state_a_phase_2 = state_a_phase_1.after_split();
+    state_a.after_split();
 
     // Ingress history should only contain the message to `CANISTER_1`.
     expected.metadata.ingress_history = make_ingress_history(&[CANISTER_1]);
@@ -720,13 +792,13 @@ fn split() {
     expected.canister_states.insert(CANISTER_1, canister_state);
     // And the split marker should be reset.
     expected.metadata.split_from = None;
-    // Everything else shold be the same as in phase 1.
-    assert_eq!(expected, state_a_phase_2);
+    // Everything else should be the same as in phase 1.
+    assert_eq!(expected, state_a);
 
     //
     // Split off subnet B, phase 1.
     //
-    let state_b_phase_1 = fixture
+    let mut state_b = fixture
         .state
         .clone()
         .split(SUBNET_B, &routing_table, None)
@@ -743,13 +815,13 @@ fn split() {
     expected.metadata.ingress_history = fixture.state.metadata.ingress_history;
     // And the split marker should be set.
     expected.metadata.split_from = Some(SUBNET_A);
-    // Otherwise, the state shold be the same.
-    assert_eq!(expected, state_b_phase_1);
+    // Otherwise, the state should be the same.
+    assert_eq!(expected, state_b);
 
     //
     // Subnet B, phase 2.
     //
-    let state_b_phase_2 = state_b_phase_1.after_split();
+    state_b.after_split();
 
     // Ingress history should only contain the message to `CANISTER_2`.
     expected.metadata.ingress_history = make_ingress_history(&[CANISTER_2]);
@@ -761,8 +833,8 @@ fn split() {
     expected.canister_states.insert(CANISTER_2, canister_state);
     // And the split marker should be reset.
     expected.metadata.split_from = None;
-    // Everything else shold be the same as in phase 1.
-    assert_eq!(expected, state_b_phase_2);
+    // Everything else should be the same as in phase 1.
+    assert_eq!(expected, state_b);
 }
 
 proptest! {

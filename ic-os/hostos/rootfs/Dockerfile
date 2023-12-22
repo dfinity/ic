@@ -22,6 +22,12 @@ RUN mkdir -p /boot/config \
              /boot/grub
 COPY etc /etc
 
+# Change permissions on special files as they are copied.
+# See ic-os/guestos/rootfs/Dockerfile for details
+COPY --chmod=644 etc/hosts /etc/hosts
+COPY --chmod=644 etc/hostname /etc/hostname
+COPY --chmod=644 etc/resolv.conf /etc/resolv.conf
+
 # Update POSIX permissions in /etc/
 RUN find /etc -type d -exec chmod 0755 {} \+ && \
     find /etc -type f -not -path "/etc/hostname" -not -path "/etc/hosts" -not -path "/etc/resolv.conf" -exec chmod 0644 {} \+ && \
@@ -82,7 +88,11 @@ RUN systemctl enable \
     systemd-resolved
 
 # Add user/group entries specified here: /usr/lib/sysusers.d/systemd.conf E.g., systemd-timesync/coredump
-RUN faketime "1970-1-1 0" systemd-sysusers
+RUN systemd-sysusers && \
+    # Fix reproducibility issue. Notes in guestos/rootfs/Dockerfile    
+    usermod -p '!!' systemd-timesync && \
+    usermod -p '!!' systemd-coredump
+
 
 # Set /bin/sh to point to /bin/bash instead of the default /bin/dash
 RUN echo "set dash/sh false" | debconf-communicate && dpkg-reconfigure -fnoninteractive dash
@@ -129,21 +139,6 @@ RUN adduser --system --disabled-password --home /var/lib/admin --shell /bin/bash
     adduser admin vsock && \
     adduser admin sudo
 
-# The "journalbeat" account. Used to run journalbeat binary to send logs of the
-# GuestOS.
-RUN addgroup journalbeat && \
-    adduser --system --disabled-password --shell /usr/sbin/nologin -c "Journalbeat" journalbeat && \
-    adduser journalbeat journalbeat && \
-    adduser journalbeat systemd-journal && \
-    chown root:root /etc/journalbeat/*.yml \
-                    /usr/local/bin/journalbeat && \
-    chown journalbeat:journalbeat /var/lib/journalbeat \
-                                  /var/log/journalbeat && \
-    chmod 0755 /etc/journalbeat && \
-    chmod 0750 /var/lib/journalbeat \
-               /var/log/journalbeat && \
-    chmod 0644 /etc/journalbeat/*.yml
-
 # The "node_exporter" account. Used to run node_exporter binary to export
 # telemetry metrics of the GuestOS.
 RUN addgroup node_exporter && \
@@ -156,18 +151,20 @@ RUN addgroup node_exporter && \
     chmod 0644 /etc/default/node_exporter \
                /etc/node_exporter/web.yml
 
+# User which will run the metrics proxy service.
+# Needs access to the node exporter SSL certificate private key,
+# stored in /etc/node_exporter.
+RUN adduser --system --disabled-password --home /var/lib/metrics-proxy --group --no-create-home metrics-proxy && \
+    usermod -a -G node_exporter metrics-proxy
+
 # Compile locale specification
 RUN localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8
 
-# Clear all files that may lead to indeterministic build.
+# Clear all files that may lead to indeterministic build or are large and unnecessary
 RUN apt-get clean && \
     rm -rf \
-        /var/cache/fontconfig/* /var/cache/ldconfig/aux-cache \
-        /var/log/alternatives.log /var/log/apt/history.log /var/log/apt/term.log /var/log/dpkg.log \
-        /var/lib/apt/lists/* /var/lib/dbus/machine-id \
-        /var/lib/initramfs-tools/5.8.0-50-generic && \
-    find /usr/local/share/fonts -name .uuid | xargs rm && \
-    find /usr/share/fonts -name .uuid | xargs rm && \
+        /usr/local/share/qemu/edk2-arm-code.fd \
+        /usr/local/share/qemu/edk2-arm-vars.fd && \
     find /usr/lib/python3.8 -name "*.pyc" | xargs rm && \
     find /usr/lib/python3 -name "*.pyc" | xargs rm && \
     find /usr/share/python3 -name "*.pyc" | xargs rm && \

@@ -255,7 +255,7 @@ async fn tests_for_stale_data_in_buffer_between_calls(
     // Between every query the input data buffer is expected to be reset
     // and no stale data from previous query can be found. The following
     // test check this case
-    let input = &mut vec![10; (32 * 1024) + 8];
+    let mut input = vec![10; (32 * 1024) + 8];
     for i in input.iter_mut().take(8) {
         *i = 0;
     }
@@ -325,7 +325,7 @@ async fn tests_for_illegal_wasm_memory_access(
             logger,
             &ret_val,
             format!(
-                "proxy_msg_reply_data_appendInput => {} {} Ouput =>",
+                "proxy_msg_reply_data_appendInput => {} {} Output =>",
                 0, 65536
             )
             .as_str(),

@@ -2,10 +2,10 @@ workspace(
     name = "ic",
 )
 
+load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_repository")
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file", "http_jar")
 load("//third_party/lmdb-0.9.70:repository.bzl", "lmdb_repository")
 load("//third_party/lmdb-rkv-0.14.99:repository.bzl", "lmdb_rkv_repository")
-load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file", "http_jar")
-load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_repository")
 
 http_archive(
     name = "aspect_rules_sol",
@@ -38,35 +38,35 @@ bazel_skylib_workspace()
 
 http_archive(
     name = "io_bazel_rules_go",
-    sha256 = "099a9fb96a376ccbbb7d291ed4ecbdfd42f6bc822ab77ae6f1b5cb9e914e94fa",
+    sha256 = "6dc2da7ab4cf5d7bfc7c949776b1b7c733f05e56edc4bcd9022bb249d2e2a996",
     urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/rules_go/releases/download/v0.35.0/rules_go-v0.35.0.zip",
-        "https://github.com/bazelbuild/rules_go/releases/download/v0.35.0/rules_go-v0.35.0.zip",
+        "https://mirror.bazel.build/github.com/bazelbuild/rules_go/releases/download/v0.39.1/rules_go-v0.39.1.zip",
+        "https://github.com/bazelbuild/rules_go/releases/download/v0.39.1/rules_go-v0.39.1.zip",
     ],
 )
 
 http_archive(
     name = "bazel_gazelle",
-    sha256 = "448e37e0dbf61d6fa8f00aaa12d191745e14f07c31cabfa731f0c8e8a4f41b97",
+    sha256 = "727f3e4edd96ea20c29e8c2ca9e8d2af724d8c7778e7923a854b2c80952bc405",
     urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/bazel-gazelle/releases/download/v0.28.0/bazel-gazelle-v0.28.0.tar.gz",
-        "https://github.com/bazelbuild/bazel-gazelle/releases/download/v0.28.0/bazel-gazelle-v0.28.0.tar.gz",
+        "https://mirror.bazel.build/github.com/bazelbuild/bazel-gazelle/releases/download/v0.30.0/bazel-gazelle-v0.30.0.tar.gz",
+        "https://github.com/bazelbuild/bazel-gazelle/releases/download/v0.30.0/bazel-gazelle-v0.30.0.tar.gz",
     ],
 )
 
-load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_dependencies")
 load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies")
+load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_dependencies")
 
 go_rules_dependencies()
 
-go_register_toolchains(go_version = "1.19.3")
+go_register_toolchains(go_version = "1.20.5")
 
 gazelle_dependencies(go_repository_default_config = "//:WORKSPACE.bazel")
 
 http_archive(
     name = "rules_rust",
-    sha256 = "9d04e658878d23f4b00163a72da3db03ddb451273eb347df7d7c50838d698f49",
-    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.26.0/rules_rust-v0.26.0.tar.gz"],
+    sha256 = "1e7114ea2af800c6987ca38daeee13e3ae6e934875b4f7ca24b798857f95431e",
+    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.32.0/rules_rust-v0.32.0.tar.gz"],
 )
 
 load("@rules_rust//rust:repositories.bzl", "rules_rust_dependencies", "rust_register_toolchains")
@@ -81,7 +81,7 @@ rust_register_toolchains(
     # The nightly version is required to compile fuzz tests from Bazel.
     # The version below is chosen so that it is in sync with the non-nightly version.
     versions = [
-        "1.71.1",
+        "1.74.0",
         "nightly/2023-06-01",
     ],
 )
@@ -117,17 +117,17 @@ rules_proto_dependencies()
 rules_proto_toolchains()
 
 load("//bazel:external_crates.bzl", "external_crates_repository")
-load("//bazel/openssl_static_env:defs.bzl", "openssl_static_env")
+load("//bazel/sanitizers_enabled_env:defs.bzl", "sanitizers_enabled_env")
 
-openssl_static_env(name = "openssl_static_env")
+sanitizers_enabled_env(name = "sanitizers_enabled_env")
 
-load("@openssl_static_env//:defs.bzl", "DFINITY_OPENSSL_STATIC")
+load("@sanitizers_enabled_env//:defs.bzl", "SANITIZERS_ENABLED")
 
 external_crates_repository(
     name = "crate_index",
-    cargo_lockfile = "//:Cargo.Bazel.StaticOpenSSL.toml.lock" if DFINITY_OPENSSL_STATIC else "//:Cargo.Bazel.toml.lock",
-    lockfile = "//:Cargo.Bazel.StaticOpenSSL.json.lock" if DFINITY_OPENSSL_STATIC else "//:Cargo.Bazel.json.lock",
-    static_openssl = DFINITY_OPENSSL_STATIC,
+    cargo_lockfile = "//:Cargo.Bazel.Fuzzing.toml.lock" if SANITIZERS_ENABLED else "//:Cargo.Bazel.toml.lock",
+    lockfile = "//:Cargo.Bazel.Fuzzing.json.lock" if SANITIZERS_ENABLED else "//:Cargo.Bazel.json.lock",
+    sanitizers_enabled = SANITIZERS_ENABLED,
 )
 
 load("@crate_index//:defs.bzl", "crate_repositories")
@@ -350,10 +350,10 @@ cc_binary(
 
 http_archive(
     name = "buildifier_prebuilt",
-    sha256 = "0450069a99db3d414eff738dd8ad4c0969928af13dc8614adbd1c603a835caad",
-    strip_prefix = "buildifier-prebuilt-0.4.0",
+    sha256 = "72b5bb0853aac597cce6482ee6c62513318e7f2c0050bc7c319d75d03d8a3875",
+    strip_prefix = "buildifier-prebuilt-6.3.3",
     urls = [
-        "http://github.com/keith/buildifier-prebuilt/archive/0.4.0.tar.gz",
+        "http://github.com/keith/buildifier-prebuilt/archive/6.3.3.tar.gz",
     ],
 )
 
@@ -377,6 +377,22 @@ new_git_repository(
 load("//bazel:rosetta_cli.bzl", "rosetta_cli_repository")
 
 rosetta_cli_repository(name = "rosetta-cli")
+
+# Closure compiler for JavaScript
+http_archive(
+    name = "io_bazel_rules_closure",
+    sha256 = "a3bef45d4d052adfd7b0146efdfe55989753adbb66e1f4fa4fa8c4f9df4f8196",
+    strip_prefix = "rules_closure-4326045ee6c941f12518a2ad5ad990504cf3df9d",
+    urls = [
+        "https://github.com/bazelbuild/rules_closure/archive/4326045ee6c941f12518a2ad5ad990504cf3df9d.zip",
+    ],
+)
+
+load("@io_bazel_rules_closure//closure:repositories.bzl", "rules_closure_dependencies", "rules_closure_toolchains")
+
+rules_closure_dependencies()
+
+rules_closure_toolchains()
 
 # NodeJS dependencies
 
@@ -445,6 +461,16 @@ load("//bazel:dfx.bzl", "dfx")
 
 dfx(name = "dfx")
 
+# sns-quill for SNS testing
+load("//bazel:sns_quill.bzl", "sns_quill")
+
+sns_quill(name = "sns_quill")
+
+# idl2json for SNS testing
+load("//bazel:idl2json.bzl", "idl_to_json")
+
+idl_to_json(name = "idl2json")
+
 load("//bazel:jq.bzl", "jq_repository")
 
 jq_repository(name = "jq")
@@ -492,15 +518,15 @@ new_git_repository(
 http_file(
     name = "mainnet_nns_registry_canister",
     downloaded_file_path = "registry-canister.wasm.gz",
-    sha256 = "9bc9448335cb3d459199bd2f8254a79bd6ca30922ede1d07d1ac2cc45c2acff6",
-    url = "https://download.dfinity.systems/ic/8b60ab1c8c5a6e4cf29d6413debe190e6cd8a6af/canisters/registry-canister.wasm.gz",
+    sha256 = "07cb794acb1454525b1686c1d0ba4c1f68dacd700db932f300b9fb2536bff970",
+    url = "https://download.dfinity.systems/ic/0d8ec8daddaa03b5d5f972d68acb0a7697729bba/canisters/registry-canister.wasm.gz",
 )
 
 http_file(
     name = "mainnet_nns_governance_canister",
     downloaded_file_path = "governance-canister.wasm.gz",
-    sha256 = "4dd34e7277e2d53fd653e4a6189597bf9fcfb3383d8fd9113ffdaeb9548cf8da",
-    url = "https://download.dfinity.systems/ic/8b60ab1c8c5a6e4cf29d6413debe190e6cd8a6af/canisters/governance-canister.wasm.gz",
+    sha256 = "59744b5a9833c747d324316f7b5fc62f725e6eba48e9733da3d26e4b811a7aaa",
+    url = "https://download.dfinity.systems/ic/0d8ec8daddaa03b5d5f972d68acb0a7697729bba/canisters/governance-canister.wasm.gz",
 )
 
 http_file(
@@ -552,8 +578,8 @@ http_file(
 http_file(
     name = "mainnet_nns_sns-wasm-canister",
     downloaded_file_path = "sns-wasm-canister.wasm.gz",
-    sha256 = "727238fdf0081b271f24952a058e9796a68f39d93dbb1269137c16e121cb1549",
-    url = "https://download.dfinity.systems/ic/9bb8f35cccd013b38657c67964c39d48fac6353f/canisters/sns-wasm-canister.wasm.gz",
+    sha256 = "c07b57fac0037ae5e2e979e4217e88e05bd039e4be9f52a5a1b38582edc04b21",
+    url = "https://download.dfinity.systems/ic/0d8ec8daddaa03b5d5f972d68acb0a7697729bba/canisters/sns-wasm-canister.wasm.gz",
 )
 
 # Deployed SNS canisters
@@ -624,6 +650,52 @@ http_file(
     url = "https://github.com/dfinity/bitcoin-canister/releases/download/release%2F2023-06-12/ic-btc-canister.wasm.gz",
 )
 
+# Bitcoin Adapter Mainnet Data for Integration Test
+
+# The files have been generated by syncing bitcoind client, followed
+# by requesting all the desired data using a bash script, such as:
+#
+# declare -a headers=()
+# for h in {0..800000}
+# do
+#     hash=$(bitcoin-cli getblockhash $h)
+#     header=$(bitcoin-cli getblockheader $hash | jq '{version, prev_blockhash:.previousblockhash, merkle_root:.merkleroot, time, bits, nonce}')
+#     headers+=("$header")
+# done
+# echo "[" $(IFS=,; echo "${headers[*]}") "]"
+
+# Contains the first 800_000 headers of the Bitcoin mainnet blockchain.
+http_file(
+    name = "bitcoin_adapter_mainnet_headers",
+    downloaded_file_path = "mainnet_headers_800k.json.gz",
+    sha256 = "fb58cd3c0e2efe298eeb96751ae2276e938b39e2f1d9760ea47a9f3a8288d214",
+    url = "https://download.dfinity.systems/testdata/mainnet_headers_800k.json.gz",
+)
+
+# Contains blocks 350_990 to 350_999 (inclusive) of the Bitcoin mainnet blockchain.
+http_file(
+    name = "bitcoin_adapter_mainnet_blocks",
+    downloaded_file_path = "blocks.json.gz",
+    sha256 = "4ba1e7d0b4a2fea5692bb4c79a4c9e077325312a50facef13256ba8d45bc8f2a",
+    url = "https://download.dfinity.systems/testdata/blocks.json.gz",
+)
+
+# Contains the first 800_000 headers of the Bitcoin testnet blockchain.
+http_file(
+    name = "bitcoin_adapter_testnet_headers",
+    downloaded_file_path = "testnet_headers.json.gz",
+    sha256 = "c01542d816d9631a7e59210aea29c1d46ed805b0bcbfd9e067d8d53a5e5919c8",
+    url = "https://download.dfinity.systems/testdata/testnet_headers.json.gz",
+)
+
+# Contains blocks 350_990 to 350_999 (inclusive) of the Bitcoin testnet blockchain.
+http_file(
+    name = "bitcoin_adapter_testnet_blocks",
+    downloaded_file_path = "testnet_blocks.json.gz",
+    sha256 = "ae57b5b58d8a1e89545c0caedeb114d0dd179e0c5fd4a44e43321b2cdbac74fb",
+    url = "https://download.dfinity.systems/testdata/testnet_blocks.json.gz",
+)
+
 # Internet Identity canister (test build)
 
 http_file(
@@ -638,8 +710,8 @@ http_file(
 http_file(
     name = "nns_dapp_canister",
     downloaded_file_path = "nns_dapp_canister.wasm.gz",
-    sha256 = "6af3470ef980b01eb427bdecde7d7c2c440a8c444f6c1fd6e7a39b251eceaf7a",
-    url = "https://github.com/dfinity/nns-dapp/releases/download/proposal-122512/nns-dapp.wasm.gz",
+    sha256 = "10cd06c5912411a7e038c3a0f3160190ab3cf31b747c9707d1d7332b222a4933",
+    url = "https://github.com/dfinity/nns-dapp/releases/download/sdvp-demo/nns-dapp_test.wasm.gz",
 )
 
 # SNS aggregator canister
@@ -651,13 +723,21 @@ http_file(
     url = "https://github.com/dfinity/nns-dapp/releases/download/proposal-122512/sns_aggregator_dev.wasm.gz",
 )
 
+# Cycles Ledger canister
+
+http_file(
+    name = "cycles-ledger.wasm.gz",
+    sha256 = "4f26aae9edef5b4e2c785c1dc6f312163af055f22954dd99d515d8a862bd59bd",
+    url = "https://github.com/dfinity/cycles-ledger/releases/download/cycles-ledger-v0.2.3/cycles-ledger.wasm.gz",
+)
+
 # Import Python rules
 
 http_archive(
     name = "rules_python",
-    sha256 = "8c15896f6686beb5c631a4459a3aa8392daccaab805ea899c9d14215074b60ef",
-    strip_prefix = "rules_python-0.17.3",
-    url = "https://github.com/bazelbuild/rules_python/archive/refs/tags/0.17.3.tar.gz",
+    sha256 = "9d04041ac92a0985e344235f5d946f71ac543f1b1565f2cdbc9a2aaee8adf55b",
+    strip_prefix = "rules_python-0.26.0",
+    url = "https://github.com/bazelbuild/rules_python/releases/download/0.26.0/rules_python-0.26.0.tar.gz",
 )
 
 load("@rules_python//python:repositories.bzl", "python_register_toolchains")
@@ -719,6 +799,10 @@ load(
     "stack_snapshot",
 )
 
+#
+# Run this command to regenerate lock file after changing the rule above:
+# bazel run @stackage-unpinned//:pin
+#
 stack_snapshot(
     name = "stackage",
     components = {
@@ -820,6 +904,7 @@ stack_snapshot(
         "zlib",
     ],
     snapshot = "nightly-2023-07-29",
+    stack_snapshot_json = "//:stackage_snapshot.json",
 )
 
 http_archive(
@@ -947,3 +1032,15 @@ cc_library(
     strip_prefix = "core-ec77b2817a0e360b1893affe4cfa44d19391efc7",
     urls = ["https://github.com/miracl/core/archive/ec77b2817a0e360b1893affe4cfa44d19391efc7.tar.gz"],
 )
+
+# interface spec v0.22
+http_file(
+    name = "interface_spec",
+    downloaded_file_path = "ic.did",
+    sha256 = "bf3987bd483cf710ff0c54134350ca188c29ff0fdd38567aa4df5e74131543e4",
+    url = "https://raw.githubusercontent.com/dfinity/interface-spec/a82220c1156f5e3e80ea65be6a4f69b766cbe6d1/spec/_attachments/ic.did",
+)
+
+load("//rs/tests:kubeconfig.bzl", "kubeconfig")
+
+kubeconfig()

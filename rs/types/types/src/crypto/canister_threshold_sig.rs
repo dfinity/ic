@@ -283,13 +283,23 @@ impl PreSignatureQuadruple {
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ExtendedDerivationPath {
     pub caller: PrincipalId,
+    // TODO(CRP-2303): replace with `#[serde_as(as = "Vec<serde_with::Bytes>")]`
+    #[serde(deserialize_with = "efficient_vector_of_byte_vectors_deserialization")]
     pub derivation_path: Vec<Vec<u8>>,
 }
 
-impl Display for ExtendedDerivationPath {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
+// This deserialization is efficient and backward-compatible.
+// TODO(CRP-2303): when this is deployed to all nodes, replace the serde
+// implementation on the deserialization of the `derivation_path` variable
+// in `ExtendedDerivationPath` with `#[serde_as(as = "Vec<serde_with::Bytes>")]`.
+fn efficient_vector_of_byte_vectors_deserialization<'de, D>(
+    deserializer: D,
+) -> Result<Vec<Vec<u8>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let result = Vec::<serde_bytes::ByteBuf>::deserialize(deserializer)?;
+    Ok(result.into_iter().map(|buf| buf.into_vec()).collect())
 }
 
 impl fmt::Debug for ExtendedDerivationPath {
@@ -323,6 +333,9 @@ pub struct ThresholdEcdsaSigInputs {
 
 // The byte length of an hashed message for ECDSA signatures over the curve secp256k1.
 pub const ECDSA_SECP256K1_HASH_BYTE_LENGTH: usize = 32;
+
+// The byte length of an hashed message for ECDSA signatures over the curve secp256r1.
+pub const ECDSA_SECP256R1_HASH_BYTE_LENGTH: usize = 32;
 
 impl Display for ThresholdEcdsaSigInputs {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -442,6 +455,12 @@ impl ThresholdEcdsaSigInputs {
         match algorithm_id {
             AlgorithmId::ThresholdEcdsaSecp256k1 => {
                 if hashed_message.len() != ECDSA_SECP256K1_HASH_BYTE_LENGTH {
+                    return Err(error::ThresholdEcdsaSigInputsCreationError::InvalidHashLength);
+                }
+                Ok(())
+            }
+            AlgorithmId::ThresholdEcdsaSecp256r1 => {
+                if hashed_message.len() != ECDSA_SECP256R1_HASH_BYTE_LENGTH {
                     return Err(error::ThresholdEcdsaSigInputsCreationError::InvalidHashLength);
                 }
                 Ok(())

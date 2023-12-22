@@ -3,7 +3,7 @@ use rand::RngCore;
 
 #[test]
 fn no_trivial_output() {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     let mut bytes = [0u8; 16];
     rng.fill_bytes(&mut bytes);
     // bytes is not a zero-initialized string after filling it with random bytes
@@ -16,7 +16,7 @@ fn no_trivial_output() {
 #[test]
 fn outputs_are_distinct() {
     const NUM_OUTPUTS: usize = 1000;
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     let mut outputs = std::collections::HashSet::<[u8; 16]>::new();
 
     for _ in 0..NUM_OUTPUTS {

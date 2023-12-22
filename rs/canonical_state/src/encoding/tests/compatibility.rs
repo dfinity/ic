@@ -5,7 +5,7 @@
 //! longer be backwards-compatible.
 //!
 //! Such changes must be rolled out in stages, in order to maintain backwards
-//! (and ideally forwards) compatibility with one or more preceeding
+//! (and ideally forwards) compatibility with one or more preceding
 //! protocol versions.
 
 use crate::{
@@ -14,7 +14,10 @@ use crate::{
 use assert_matches::assert_matches;
 use ic_error_types::RejectCode;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::metadata_state::SystemMetadata;
+use ic_replicated_state::{
+    canister_state::system_state::CyclesUseCase,
+    metadata_state::{SubnetMetrics, SystemMetadata},
+};
 use ic_test_utilities::types::{
     ids::{canister_test_id, subnet_test_id},
     messages::{RequestBuilder, ResponseBuilder},
@@ -24,8 +27,9 @@ use ic_types::{
     messages::{
         CallbackId, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse, Response,
     },
+    nominal_cycles::NominalCycles,
     xnet::StreamHeader,
-    CryptoHashOfPartialState, Cycles, Funds, Time,
+    CryptoHashOfPartialState, Cycles, Funds, NumBytes, Time,
 };
 use serde_cbor::value::Value;
 use std::collections::{BTreeMap, VecDeque};
@@ -116,6 +120,76 @@ fn canonical_encoding_stream_header_v8_plus() {
         assert_eq!(
             "A4 00 17 01 18 19 02 19 01 00 03 83 01 02 04",
             as_hex(&encode_stream_header(&header, certification_version))
+        );
+    }
+}
+
+/// Canonical CBOR encoding (with certification versions 15 and up) of:
+///
+/// ```no_run
+/// SubnetMetrics {
+///     consumed_cycles_by_deleted_canisters: 0.into(),
+///     consumed_cycles_http_outcalls: 50_000_000_000.into(),
+///     consumed_cycles_ecdsa_outcalls: 100_000_000_000.into(),
+///     consumed_cycles_by_use_case: btreemap! {
+///         CyclesUseCase::Instructions => 80_000_000_000.into(),
+///         CyclesUseCase::RequestAndResponseTransmission => 20_000_000_000.into(),
+///     },
+///     ecdsa_signature_agreements: 2,
+///     num_canisters: 5,
+///     canister_state_bytes: (5 * 1024 * 1024).into(),
+///     update_transactions_total: 4200,
+/// }
+/// ```
+///
+/// Expected:
+///
+/// For the `consumed_cycles_total`, the expected value (250B) is the sum of all
+/// the invividual values above.
+///
+/// ```text
+/// A4                        # map(4)
+///    00                     # field_index(SubnetMetrics::num_canisters)
+///    05                     # unsigned(5)
+///    01                     # field_index(SubnetMetrics::canister_state_bytes)
+///    1A 00500000            # unsigned(5242880)
+///    02                     # field_index(SubnetMetrics::consumed_cycles_total)
+///    A2                     # map(2)
+///       00                  # field_index(Cycles::low)
+///       1B 0000003A35294400 # unsigned(250000000000)
+///       01                  # field_index(Cycles:high)
+///       00                  # unsigned(0)
+///    03                     # field_index(SubnetMetrics::update_transactions_total)
+///    19 1068                # unsigned(4200)
+
+/// ```
+/// Used http://cbor.me/ for printing the human friendly output.
+#[test]
+fn canonical_encoding_subnet_metrics_v15_plus() {
+    for certification_version in
+        all_supported_versions().filter(|v| v >= &CertificationVersion::V15)
+    {
+        let mut metrics = SubnetMetrics::default();
+
+        metrics.consumed_cycles_by_deleted_canisters = NominalCycles::from(0);
+        metrics.consumed_cycles_http_outcalls = NominalCycles::from(50_000_000_000);
+        metrics.consumed_cycles_ecdsa_outcalls = NominalCycles::from(100_000_000_000);
+        metrics.ecdsa_signature_agreements = 2;
+        metrics.num_canisters = 5;
+        metrics.canister_state_bytes = NumBytes::from(5 * 1024 * 1024);
+        metrics.update_transactions_total = 4200;
+        metrics.observe_consumed_cycles_with_use_case(
+            CyclesUseCase::Instructions,
+            NominalCycles::from(80_000_000_000),
+        );
+        metrics.observe_consumed_cycles_with_use_case(
+            CyclesUseCase::RequestAndResponseTransmission,
+            NominalCycles::from(20_000_000_000),
+        );
+
+        assert_eq!(
+            "A4 00 05 01 1A 00 50 00 00 02 A2 00 1B 00 00 00 3A 35 29 44 00 01 00 03 19 10 68",
+            as_hex(&encode_subnet_metrics(&metrics, certification_version))
         );
     }
 }

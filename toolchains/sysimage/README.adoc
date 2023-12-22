@@ -1,7 +1,7 @@
 = Build tools for disk and filesystem images
 
 This directory contains various scripts that allow building
-filesystem and disk images from tar files, and extracting docker
+filesystem and disk images from tar files, and extracting container
 images into appropriately shaped tar files.
 
 It also contains build glue for bazel to make use of these tools
@@ -11,7 +11,7 @@ as build rules.
 
 The following build tools are provided:
 
-* +docker_tar.py+: Build a docker image and convert to tar file
+* +build_container_filesystem_tar.py+: Build a container image and convert to tar file
 
 * +build_vfat_image.py+: Build vfat fs image from tar file
 
@@ -19,29 +19,8 @@ The following build tools are provided:
 
 * +build_disk_image.py+: Build disk image from partition images
 
-The tools are described in more details in the following
-sections.
+Tools details below
 
-=== +docker_tar.py+: Build a docker image and convert to tar file
-
-Call synopsis: +docker_tar.py _dockerarg_ _dockerarg..._ >__out.tar__+
-
-The tool will call +docker build+ with all extra +_dockerargs_+
-passed as arguments to the build. The container will be built,
-subsequently extracted, and then saved as a +.tar+ file. The
-+.tar+ will hold the contents of the docker image as a single
-"flattened" tree (this is different from the output of
-+docker save+ which contains a +.tar+ file consisting of
-multiple layers of the docker build).
-
-Timestamps and other non-reproducible data resulting from docker
-build are squashed in this process, so this also produces
-perfectly reproducible results as long as the +Dockerfile+
-is suitably structured to avoid generating non-reproducible
-artifacts (or takes care of "purging" any non-reproducible
-artifacts at the end of the build).
-
-The resulting +.tar+ file is written to stdout.
 
 === +build_vfat_image.py+ / +build_ext4_image.py+: Build fs image from tar file
 
@@ -135,15 +114,15 @@ be larger than the target partition).
 The bazel rules can be imported using:
 
 ----
-load("//toolchains/sysimage:toolchain.bzl", "docker_tar", "vfat_image", "ext4_image", "disk_image", "tar_extract")
+load("//toolchains/sysimage:toolchain.bzl", "build_container_filesystem_tar", "vfat_image", "ext4_image", "disk_image", "tar_extract")
 ----
 
-=== Build docker image as tar
+=== Build container image as tar
 
 Synopsis:
 [subs="quotes"]
 ----
-docker_tar(
+build_container_filesystem_tar(
   name="__out.tar__",
   src=__dockerbuildir__,
   dep=[__dependencies...__],
@@ -151,12 +130,12 @@ docker_tar(
 )
 ----
 
-Builds a docker image using the given +__dockerbuilddir__+ as build context (this
+Builds a container image using the given +__dockerbuilddir__+ as build context (this
 directory should contain a +Dockerfile+). The bazel build rule needs to be
-pointed at the directory itself. All contents of the docker context directory should
+pointed at the directory itself. All contents of the container context directory should
 be given as additional +__dependencies__+ in order for bazel tracking to work
 correctly. All given +__args__+ are passed as extraneous arguments to the
-+docker build+ command.
++podman build+ command.
 
 === Extract file from tar archive
 
@@ -262,10 +241,10 @@ Optionally, a suffix may be appended to the end of the hash.
 === Example
 
 A complete example to build a disk image using a single partition populated
-from the contents of a docker image:
+from the contents of a container image:
 
 ----
-docker_tar(
+build_container_filesystem_tar(
     name="tree.tar",
     src=":tree",
     dep=glob(["tree/**"]),

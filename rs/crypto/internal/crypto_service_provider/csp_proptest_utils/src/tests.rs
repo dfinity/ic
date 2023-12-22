@@ -4,7 +4,7 @@ use crate::common::MAX_ALGORITHM_ID_INDEX;
 #[test]
 fn should_be_maximal_algorithm_index_id_to_ensure_all_variants_covered_by_strategy() {
     assert_eq!(
-        AlgorithmId::MegaSecp256k1,
+        AlgorithmId::ThresholdEcdsaSecp256r1,
         AlgorithmId::from(MAX_ALGORITHM_ID_INDEX)
     );
     assert_eq!(
@@ -140,6 +140,7 @@ should_have_a_strategy_for_each_variant!(
     UnsupportedAlgorithm { .. },
     WrongSecretKeyType { .. },
     MalformedSecretKey { .. },
+    KeyIdInstantiationError(..),
     TransientInternalError { .. }
 );
 
@@ -244,7 +245,7 @@ should_have_a_strategy_for_each_variant!(
     CspTlsKeygenError::TransientInternalError {
         internal_error: "dummy error to match upon".to_string()
     },
-    InvalidNotAfterDate { .. },
+    InvalidArguments { .. },
     InternalError { .. },
     DuplicateKeyId { .. },
     TransientInternalError { .. },

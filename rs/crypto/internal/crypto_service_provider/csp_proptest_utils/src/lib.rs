@@ -119,7 +119,7 @@ mod common {
     use proptest::prelude::{prop, Strategy};
     use strum::IntoEnumIterator;
 
-    pub(crate) const MAX_ALGORITHM_ID_INDEX: i32 = 16;
+    pub(crate) const MAX_ALGORITHM_ID_INDEX: i32 = 17;
 
     prop_compose! {
         pub fn arb_key_id()(id in uniform32(any::<u8>())) -> KeyId {
@@ -326,6 +326,7 @@ mod csp_threshold_sign_error {
         UnsupportedAlgorithm => {algorithm in arb_algorithm_id()},
         WrongSecretKeyType => {},
         MalformedSecretKey => {algorithm in arb_algorithm_id()},
+        KeyIdInstantiationError => (error in ".*"),
         TransientInternalError => {internal_error in ".*"}
     );
 }
@@ -608,7 +609,7 @@ mod csp_tls_keygen_error {
     use ic_crypto_internal_csp::vault::api::CspTlsKeygenError;
 
     proptest_strategy_for_enum!(CspTlsKeygenError;
-        InvalidNotAfterDate => {message in ".*", not_after in ".*"},
+        InvalidArguments => {message in ".*"},
         InternalError => {internal_error in ".*"},
         DuplicateKeyId => {key_id in arb_key_id()},
         TransientInternalError => {internal_error in ".*"},

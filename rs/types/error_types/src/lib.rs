@@ -64,10 +64,12 @@ impl From<ErrorCode> for RejectCode {
         match err {
             SubnetOversubscribed => SysFatal,
             MaxNumberOfCanistersReached => SysFatal,
-            CanisterOutputQueueFull => SysTransient,
+            CanisterQueueFull => SysTransient,
             IngressMessageTimeout => SysTransient,
             CanisterQueueNotEmpty => SysTransient,
             IngressHistoryFull => SysTransient,
+            CanisterIdAlreadyExists => SysTransient,
+            StopCanisterRequestTimeout => SysTransient,
             CanisterInvalidController => CanisterError,
             CanisterNotFound => DestinationInvalid,
             CanisterMethodNotFound => DestinationInvalid,
@@ -108,6 +110,9 @@ impl From<ErrorCode> for RejectCode {
             InsufficientCyclesInComputeAllocation => CanisterError,
             InsufficientCyclesInMemoryAllocation => CanisterError,
             InsufficientCyclesInMemoryGrow => CanisterError,
+            ReservedCyclesLimitExceededInMemoryAllocation => CanisterError,
+            ReservedCyclesLimitExceededInMemoryGrow => CanisterError,
+            InsufficientCyclesInMessageMemoryGrow => CanisterError,
         }
     }
 }
@@ -118,14 +123,18 @@ impl From<ErrorCode> for RejectCode {
 /// convention: the most significant digit is the corresponding reject
 /// code and the rest is just a sequentially assigned two-digit
 /// number.
-#[derive(Clone, Copy, Debug, PartialEq, EnumIter, Eq, Hash, Serialize, Deserialize)]
+#[derive(
+    PartialOrd, Ord, Clone, Copy, Debug, PartialEq, EnumIter, Eq, Hash, Serialize, Deserialize,
+)]
 pub enum ErrorCode {
     SubnetOversubscribed = 101,
     MaxNumberOfCanistersReached = 102,
-    CanisterOutputQueueFull = 201,
+    CanisterQueueFull = 201,
     IngressMessageTimeout = 202,
     CanisterQueueNotEmpty = 203,
     IngressHistoryFull = 204,
+    CanisterIdAlreadyExists = 205,
+    StopCanisterRequestTimeout = 206,
     CanisterNotFound = 301,
     CanisterMethodNotFound = 302,
     CanisterAlreadyInstalled = 303,
@@ -166,6 +175,9 @@ pub enum ErrorCode {
     InsufficientCyclesInComputeAllocation = 530,
     InsufficientCyclesInMemoryAllocation = 531,
     InsufficientCyclesInMemoryGrow = 532,
+    ReservedCyclesLimitExceededInMemoryAllocation = 533,
+    ReservedCyclesLimitExceededInMemoryGrow = 534,
+    InsufficientCyclesInMessageMemoryGrow = 535,
 }
 
 impl TryFrom<u64> for ErrorCode {
@@ -174,10 +186,12 @@ impl TryFrom<u64> for ErrorCode {
         match err {
             101 => Ok(ErrorCode::SubnetOversubscribed),
             102 => Ok(ErrorCode::MaxNumberOfCanistersReached),
-            201 => Ok(ErrorCode::CanisterOutputQueueFull),
+            201 => Ok(ErrorCode::CanisterQueueFull),
             202 => Ok(ErrorCode::IngressMessageTimeout),
             203 => Ok(ErrorCode::CanisterQueueNotEmpty),
             204 => Ok(ErrorCode::IngressHistoryFull),
+            205 => Ok(ErrorCode::CanisterIdAlreadyExists),
+            206 => Ok(ErrorCode::StopCanisterRequestTimeout),
             301 => Ok(ErrorCode::CanisterNotFound),
             302 => Ok(ErrorCode::CanisterMethodNotFound),
             303 => Ok(ErrorCode::CanisterAlreadyInstalled),
@@ -218,6 +232,9 @@ impl TryFrom<u64> for ErrorCode {
             530 => Ok(ErrorCode::InsufficientCyclesInComputeAllocation),
             531 => Ok(ErrorCode::InsufficientCyclesInMemoryAllocation),
             532 => Ok(ErrorCode::InsufficientCyclesInMemoryGrow),
+            533 => Ok(ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation),
+            534 => Ok(ErrorCode::ReservedCyclesLimitExceededInMemoryGrow),
+            535 => Ok(ErrorCode::InsufficientCyclesInMessageMemoryGrow),
             _ => Err(TryFromError::ValueOutOfRange(err)),
         }
     }
@@ -229,7 +246,7 @@ const MAX_USER_ERROR_DESCRIPTION_LEN_BYTES: usize = 8 * 1024;
 /// The error that is sent back to users of IC if something goes
 /// wrong. It's designed to be copyable and serializable so that we
 /// can persist it in ingress history.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(PartialOrd, Ord, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct UserError {
     code: ErrorCode,
     description: String,
@@ -289,8 +306,9 @@ impl UserError {
             ErrorCode::CanisterWasmEngineError | ErrorCode::QueryCallGraphInternal => true,
             ErrorCode::SubnetOversubscribed
             | ErrorCode::MaxNumberOfCanistersReached
-            | ErrorCode::CanisterOutputQueueFull
+            | ErrorCode::CanisterQueueFull
             | ErrorCode::IngressMessageTimeout
+            | ErrorCode::StopCanisterRequestTimeout
             | ErrorCode::CanisterQueueNotEmpty
             | ErrorCode::CanisterNotFound
             | ErrorCode::CanisterMethodNotFound
@@ -299,6 +317,7 @@ impl UserError {
             | ErrorCode::InsufficientMemoryAllocation
             | ErrorCode::InsufficientCyclesForCreateCanister
             | ErrorCode::SubnetNotFound
+            | ErrorCode::CanisterIdAlreadyExists
             | ErrorCode::CanisterNotHostedBySubnet
             | ErrorCode::CanisterOutOfCycles
             | ErrorCode::CanisterTrapped
@@ -330,7 +349,10 @@ impl UserError {
             | ErrorCode::QueryTimeLimitExceeded
             | ErrorCode::InsufficientCyclesInComputeAllocation
             | ErrorCode::InsufficientCyclesInMemoryAllocation
-            | ErrorCode::InsufficientCyclesInMemoryGrow => false,
+            | ErrorCode::InsufficientCyclesInMemoryGrow
+            | ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation
+            | ErrorCode::ReservedCyclesLimitExceededInMemoryGrow
+            | ErrorCode::InsufficientCyclesInMessageMemoryGrow => false,
         }
     }
 

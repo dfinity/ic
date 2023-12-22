@@ -3,10 +3,11 @@
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
-use ic_interfaces::artifact_pool::MutablePool;
-use ic_interfaces::consensus_pool::{ChangeAction, ChangeSet, ConsensusPool};
+use ic_interfaces::consensus_pool::{
+    ChangeAction, ChangeSet, ConsensusPool, ValidatedConsensusArtifact,
+};
+use ic_interfaces::p2p::consensus::MutablePool;
 use ic_logger::replica_logger::no_op_logger;
-use ic_test_utilities::FastForwardTimeSource;
 use ic_test_utilities::{
     consensus::{fake::*, make_genesis},
     types::ids::{node_test_id, subnet_test_id},
@@ -15,6 +16,7 @@ use ic_test_utilities::{
 use ic_types::{
     batch::{BatchPayload, IngressPayload},
     consensus::{dkg, Block, BlockProposal, ConsensusMessageHashable, HasHeight, Payload, Rank},
+    time::UNIX_EPOCH,
     Height,
 };
 
@@ -26,9 +28,10 @@ where
     T: FnOnce(&mut ConsensusPoolImpl),
 {
     ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-        let mut consensus_pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+        let mut consensus_pool = ConsensusPoolImpl::new(
+            node_test_id(0),
             subnet_test_id(0),
-            make_genesis(ic_types::consensus::dkg::Summary::fake()),
+            (&make_genesis(ic_types::consensus::dkg::Summary::fake())).into(),
             pool_config,
             ic_metrics::MetricsRegistry::new(),
             no_op_logger(),
@@ -65,10 +68,12 @@ fn prepare(pool: &mut ConsensusPoolImpl, num: usize) {
                 .into(),
         );
         let proposal = BlockProposal::fake(block, node_test_id(i as u64));
-        changeset.push(ChangeAction::AddToValidated(proposal.into_message()));
+        changeset.push(ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+            msg: proposal.into_message(),
+            timestamp: UNIX_EPOCH,
+        }));
     }
-    let time_source = FastForwardTimeSource::new();
-    pool.apply_changes(time_source.as_ref(), changeset);
+    pool.apply_changes(changeset);
 }
 
 fn sum_block_heights(pool: &dyn ConsensusPool) -> u64 {

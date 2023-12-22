@@ -1,0 +1,26 @@
+[Unit]
+Description=Filebeat ships systemd journal entries to Elasticsearch
+Documentation=https://www.elastic.co/beats/filebeat
+Wants=network-online.target
+After=network-online.target
+# We must wait for IC bootstrap to complete: It writes various
+# state files and may also be needed to obtain network config.
+After=bootstrap-ic-node.service
+Wants=bootstrap-ic-node.service
+# We must wait for var to be mounted over before interacting with it
+After=var.mount
+Wants=var.mount
+# Only start Filebeat if configuration file exists
+ConditionPathExists=/boot/config/filebeat.conf
+
+[Service]
+User=filebeat
+Group=filebeat
+Environment="GODEBUG='madvdontneed=1'"
+ExecStartPre=+/opt/ic/bin/setup-filebeat-permissions.sh
+ExecStartPre=+/opt/ic/bin/generate-filebeat-config.sh -j /boot/config/filebeat.conf -i /etc/filebeat/filebeat.yml.template -o /run/ic-node/etc/filebeat/filebeat.yml
+ExecStart=/usr/local/bin/filebeat --environment systemd -e --path.home /var/lib/filebeat --path.config /run/ic-node/etc/filebeat --path.data /var/lib/filebeat --path.logs /var/log/filebeat
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

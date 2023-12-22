@@ -1,20 +1,23 @@
 [package]
 name = "ic-prep"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 anyhow = "1.0"
-base64 = "0.11"
-clap = { version = "3.1.6", features = ["derive"] }
-chrono = "0.4.19"
+base64 = { workspace = true }
+clap = { workspace = true }
+chrono = { workspace = true }
 fs_extra = "1.2.0"
 hex = "0.4"
-ic-crypto = { path = "../crypto" }
-ic-nns-common= { path = "../nns/common" }
+ic-nns-common = { path = "../nns/common" }
 ic-crypto-node-key-generation = { path = "../crypto/node_key_generation" }
 ic-crypto-node-key-validation = { path = "../crypto/node_key_validation" }
 ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
+ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
 ic-ic00-types = { path = "../types/ic00_types" }
@@ -29,27 +32,25 @@ ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
 ic-registry-routing-table = { path = "../registry/routing_table" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
+ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-registry-transport = { path = "../registry/transport" }
 ic-types = { path = "../types/types" }
 json5 = "0.4.1"
-openssl = "0.10.55"
 maplit = "1.0.2"
-prost = "0.11.0"
+prost = { workspace = true }
 rand = "0.8"
-reqwest = { version = "0.11.1", features = ["blocking", "native-tls"] }
-serde = { version = "1.0.99", features = ["derive"] }
-serde_json = "1.0.40"
-slog = { version = "2.5.2", features = [
-    "nested-values",
-    "release_max_level_debug",
-] }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+slog = { workspace = true }
 tempfile = "3.1.0"
 thiserror = "1.0"
 url = "2.1.1"
+x509-cert = { workspace = true }
 
 [dev-dependencies]
 assert_matches = "1"
-pretty_assertions = "0.6"
+pretty_assertions = { workspace = true }
 
 [lib]
 name = "ic_prep_lib"

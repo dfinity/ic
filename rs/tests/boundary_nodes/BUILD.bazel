@@ -1,5 +1,5 @@
-load("//rs/tests:system_tests.bzl", "system_test")
 load("//rs/tests:common.bzl", "API_BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "BOUNDARY_NODE_GUESTOS_SEV_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "CUSTOM_DOMAINS_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "system_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -8,6 +8,7 @@ CERTIFICATE_ORCHESTRATOR_RUNTIME_DEPS = ["//rs/boundary_node/certificate_issuanc
 TEST_CANISTERS_RUNTIME_DEPS = [
     "//rs/tests/test_canisters/http_counter",
     "//rs/tests/test_canisters/kv_store",
+    "@asset_canister//file",
 ]
 
 system_test(
@@ -15,7 +16,7 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + TEST_CANISTERS_RUNTIME_DEPS,
+    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + TEST_CANISTERS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
@@ -27,7 +28,7 @@ system_test(
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + TEST_CANISTERS_RUNTIME_DEPS,
+    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + TEST_CANISTERS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
@@ -84,6 +85,40 @@ system_test(
 )
 
 system_test(
+    name = "mainnet_boundary_node_performance_test",
+    colocated_test_driver_vm_required_host_features = ["performance"],
+    colocated_test_driver_vm_resources = {
+        "vcpus": 64,
+        "memory_kibibytes": 512142680,
+        "boot_image_minimal_size_gibibytes": 500,
+    },
+    env_inherit = ["BOUNDARY_NODE_IPV6"],
+    flaky = False,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "mainnet_boundary_node_icx_proxy_performance_test",
+    colocated_test_driver_vm_required_host_features = ["performance"],
+    colocated_test_driver_vm_resources = {
+        "vcpus": 64,
+        "memory_kibibytes": 512142680,
+        "boot_image_minimal_size_gibibytes": 500,
+    },
+    env_inherit = ["BOUNDARY_NODE_IPV6"],
+    flaky = False,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
     name = "custom_domains_integration_test",
     flaky = False,  # remove after when PFOPS-3148 is resolved
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -105,6 +140,15 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = API_BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    runtime_deps = API_BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "api_boundary_node_decentralization_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = API_BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )

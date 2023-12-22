@@ -32,6 +32,9 @@ type ExportPackage = record {
 type InitArg = record {
     rootPrincipals: vec principal;
     idSeed: nat;
+    registrationExpirationTtl: opt nat64;
+    inProgressTtl: opt nat64;
+    managementTaskInterval: opt nat64;
 };
 
 type CreateRegistrationError = variant {

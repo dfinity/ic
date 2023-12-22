@@ -93,7 +93,7 @@ const DEFAULT_MAX_COMMUNITY_FUND_RELATIVE_ERROR: f64 = 0.0;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 
 lazy_static! {
-    static ref INITIAL_ICP_BALANCE: ExplosiveTokens = ExplosiveTokens::from_e8s(100 * E8);
+    static ref INITIAL_ICP_BALANCE: ExplosiveTokens = ExplosiveTokens::from_e8s(1000 * E8);
     static ref DEFAULT_TRANSFER_FEE: ExplosiveTokens =
         ExplosiveTokens::from(DEFAULT_TRANSFER_FEE_TOKENS);
 }
@@ -389,7 +389,7 @@ fn begin_swap_legacy(
 
         use sns_governance_pb::governance_error::ErrorType;
         assert_eq!(
-            ErrorType::from_i32(*error_type).unwrap(),
+            ErrorType::try_from(*error_type).unwrap(),
             ErrorType::PreconditionFailed,
             "{:#?}",
             err
@@ -433,7 +433,7 @@ fn begin_swap_legacy(
                 } = &error;
                 // Inspect the error.
                 assert_eq!(
-                    ErrorType::from_i32(*error_type).unwrap(),
+                    ErrorType::try_from(*error_type).unwrap(),
                     ErrorType::PreconditionFailed,
                     "{:#?}",
                     error
@@ -472,6 +472,12 @@ fn begin_swap_legacy(
         } else {
             ((1.0 - max_community_fund_relative_error) * fund_raising_amount_icp_e8s as f64) as u64
         };
+    assert!(
+        fund_raising_amount_icp_e8s > planned_community_fund_participation_amount.into_e8s() * 2,
+        "fund_raising_amount_icp_e8s must be at least twice planned_community_fund_participation_amount. fund_raising_amount_icp_e8s = {}, planned_community_fund_participation_amount = {}",
+        fund_raising_amount_icp_e8s,
+        planned_community_fund_participation_amount.into_e8s()
+    );
     let proposal = Proposal {
         title: Some("Schedule SNS Token Sale".to_string()),
         summary: "".to_string(),
@@ -481,11 +487,13 @@ fn begin_swap_legacy(
             params: Some(swap_pb::Params {
                 // Succeed as soon as we raise `fund_raising_amount_icp_e8s`. In this case,
                 // SNS tokens and ICP trade at a ratio of `neuron_basket` so each
-                // created neron reached minimum stake requirements.
+                // created neruon reached minimum stake requirements.
                 max_icp_e8s: fund_raising_amount_icp_e8s,
+                max_direct_participation_icp_e8s: None,
                 // We want to make sure our test is exactly right, so we set the
                 // minimum to be just one e8 less than the maximum.
                 min_icp_e8s,
+                min_direct_participation_icp_e8s: None,
 
                 // We need at least one participant, but they can contribute whatever
                 // amount they want (subject to max_icp_e8s for the whole swap).
@@ -493,7 +501,7 @@ fn begin_swap_legacy(
                 // 1.2 ICP to ensure that all participants are able to form SNS
                 // neurons.
                 min_participant_icp_e8s: E8 * 5 / 4,
-                max_participant_icp_e8s: INITIAL_ICP_BALANCE.get_e8s(),
+                max_participant_icp_e8s: planned_participation_amount_per_account.into_e8s(),
                 swap_due_timestamp_seconds: swap_due_from_now_timestamp_seconds(state_machine),
                 sns_token_e8s,
                 neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
@@ -691,6 +699,7 @@ lazy_static! {
         auto_stake_maturity: None,
         not_for_profit: false,
         known_neuron_data: None,
+        neuron_type: None,
     };
 }
 
@@ -1318,7 +1327,7 @@ fn sns_governance_starts_life_in_pre_initialization_swap_mode_but_transitions_to
         } = &err;
         use sns_governance_pb::governance_error::ErrorType;
         assert_eq!(
-            ErrorType::from_i32(*error_type).unwrap(),
+            ErrorType::try_from(*error_type).unwrap(),
             ErrorType::PreconditionFailed,
             "{:#?}",
             err
@@ -1363,7 +1372,7 @@ fn sns_governance_starts_life_in_pre_initialization_swap_mode_but_transitions_to
             use sns_governance_pb::governance_error::ErrorType;
             // Inspect the error.
             assert_eq!(
-                ErrorType::from_i32(*error_type).unwrap(),
+                ErrorType::try_from(*error_type).unwrap(),
                 ErrorType::PreconditionFailed,
                 "{:#?}",
                 error
@@ -1435,7 +1444,7 @@ fn sns_governance_starts_life_in_pre_initialization_swap_mode_but_transitions_to
             CanisterId::try_from(sns_canister_ids.governance.unwrap()).unwrap();
         assert_eq!(
             sns_governance_get_mode(&mut state_machine, sns_governance_canister_id)
-                .map(|mode| Mode::from_i32(mode).unwrap()),
+                .map(|mode| Mode::try_from(mode).unwrap()),
             Ok(Mode::Normal),
         );
 
@@ -1513,7 +1522,7 @@ fn assert_successful_swap_finalizes_correctly_legacy(
         .collect::<HashSet<_>>();
 
     // Step 0: Constants
-    let planned_participation_amount_per_account = ExplosiveTokens::from_e8s(70 * E8);
+    let planned_participation_amount_per_account = ExplosiveTokens::from_e8s(100 * E8);
     let neuron_basket_count = 3;
 
     // Step 1: Prepare the world.
@@ -1627,10 +1636,11 @@ fn assert_successful_swap_finalizes_correctly_legacy(
         );
         assert!(
             (0.0..=max_community_fund_relative_error).contains(&relative_error),
-            "{} vs. {} ({}% error)",
+            "{} vs. {} ({}% error, max allowed is {}%)",
             community_fund_in_escrow,
             planned_community_fund_participation_amount,
             100.0 * relative_error,
+            100.0 * max_community_fund_relative_error,
         );
     }
 
@@ -1655,7 +1665,7 @@ fn assert_successful_swap_finalizes_correctly_legacy(
     // Have all the accounts we created participate in the swap
     for (index, principal_id) in direct_participant_principal_ids.iter().enumerate() {
         println!(
-            "Direct participant {}/{}",
+            "Direct participant {}/{} (participating with {planned_participation_amount_per_account})",
             index + 1,
             direct_participant_count
         );
@@ -1745,6 +1755,13 @@ fn assert_successful_swap_finalizes_correctly_legacy(
                     invalid: 0,
                     global_failures: 0,
                 }),
+                create_sns_neuron_recipes_result: Some(swap_pb::SweepResult {
+                    success: expected_neuron_count,
+                    failure: 0,
+                    skipped: 0,
+                    invalid: 0,
+                    global_failures: 0,
+                }),
                 sweep_sns_result: Some(swap_pb::SweepResult {
                     success: expected_neuron_count,
                     failure: 0,
@@ -1772,6 +1789,7 @@ fn assert_successful_swap_finalizes_correctly_legacy(
                         })),
                     }
                 ),
+                settle_neurons_fund_participation_result: None,
                 error_message: None,
             }
         );
@@ -2161,7 +2179,7 @@ fn assert_successful_swap_finalizes_correctly_legacy(
         }
     }
 
-    // Analogous to the previous loop, insepct the source_nns_neuron_id field,
+    // Analogous to the previous loop, inspect the source_nns_neuron_id field,
     // but this time, in non-Community Fund neurons.
     for principal_id in direct_participant_principal_ids {
         let mut sns_neurons = sns_governance_list_neurons(
@@ -2230,7 +2248,7 @@ fn assert_successful_swap_finalizes_correctly_legacy(
             CanisterId::try_from(sns_canister_ids.governance.unwrap()).unwrap();
         assert_eq!(
             sns_governance_get_mode(&mut state_machine, sns_governance_canister_id)
-                .map(|mode| Mode::from_i32(mode).unwrap()),
+                .map(|mode| Mode::try_from(mode).unwrap()),
             Ok(Mode::Normal),
         );
 
@@ -2427,7 +2445,7 @@ fn swap_lifecycle_sad() {
         let sns_governance_canister_id =
             CanisterId::try_from(sns_canister_ids.governance.unwrap()).unwrap();
         let mode = sns_governance_get_mode(&mut state_machine, sns_governance_canister_id)
-            .map(|mode| Mode::from_i32(mode).unwrap())
+            .map(|mode| Mode::try_from(mode).unwrap())
             .unwrap();
         assert_eq!(mode, Mode::PreInitializationSwap);
     }
@@ -2673,6 +2691,8 @@ fn test_upgrade() {
         min_participants: None,                      // TODO[NNS1-2339]
         min_icp_e8s: None,                           // TODO[NNS1-2339]
         max_icp_e8s: None,                           // TODO[NNS1-2339]
+        min_direct_participation_icp_e8s: None,      // TODO[NNS1-2339]
+        max_direct_participation_icp_e8s: None,      // TODO[NNS1-2339]
         min_participant_icp_e8s: None,               // TODO[NNS1-2339]
         max_participant_icp_e8s: None,               // TODO[NNS1-2339]
         swap_start_timestamp_seconds: None,          // TODO[NNS1-2339]
@@ -2682,6 +2702,8 @@ fn test_upgrade() {
         nns_proposal_id: None,                       // TODO[NNS1-2339]
         neurons_fund_participants: None,             // TODO[NNS1-2339]
         should_auto_finalize: Some(true),
+        neurons_fund_participation_constraints: None,
+        neurons_fund_participation: None,
     })
     .unwrap();
     let canister_id = state_machine
@@ -2782,7 +2804,7 @@ fn test_deletion_of_sale_ticket_legacy() {
         .get_e8s()
     );
 
-    //Call refresh buyer tokens. There exists a valid ticket and the refresh call is expected to be successfull --> the ticket should no longer exist afterwards
+    //Call refresh buyer tokens. There exists a valid ticket and the refresh call is expected to be successful --> the ticket should no longer exist afterwards
     let refresh_response = refresh_buyer_tokens(
         &state_machine,
         &sns_canister_ids.swap(),
@@ -2877,7 +2899,7 @@ fn test_deletion_of_sale_ticket_legacy() {
     )
     .is_ok());
 
-    // Refresh tokens so ticket is deleted: Call is successfull and the existing ticket is deleted.
+    // Refresh tokens so ticket is deleted: Call is successful and the existing ticket is deleted.
     let refresh_response = refresh_buyer_tokens(
         &state_machine,
         &sns_canister_ids.swap(),
@@ -3081,6 +3103,8 @@ fn test_last_man_less_than_min() {
         min_participants: None,                      // TODO[NNS1-2339]
         min_icp_e8s: None,                           // TODO[NNS1-2339]
         max_icp_e8s: None,                           // TODO[NNS1-2339]
+        min_direct_participation_icp_e8s: None,      // TODO[NNS1-2339]
+        max_direct_participation_icp_e8s: None,      // TODO[NNS1-2339]
         min_participant_icp_e8s: None,               // TODO[NNS1-2339]
         max_participant_icp_e8s: None,               // TODO[NNS1-2339]
         swap_start_timestamp_seconds: None,          // TODO[NNS1-2339]
@@ -3090,6 +3114,8 @@ fn test_last_man_less_than_min() {
         nns_proposal_id: None,                       // TODO[NNS1-2339]
         neurons_fund_participants: None,             // TODO[NNS1-2339]
         should_auto_finalize: Some(true),
+        neurons_fund_participation_constraints: None,
+        neurons_fund_participation: None,
     })
     .unwrap();
     state_machine
@@ -3107,6 +3133,8 @@ fn test_last_man_less_than_min() {
             min_participants: 1,
             min_icp_e8s: 1,
             max_icp_e8s,
+            min_direct_participation_icp_e8s: Some(1),
+            max_direct_participation_icp_e8s: Some(max_icp_e8s),
             min_participant_icp_e8s,
             max_participant_icp_e8s,
             swap_due_timestamp_seconds: swap_due_from_now_timestamp_seconds(&state_machine),

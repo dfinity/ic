@@ -2,15 +2,15 @@ pub mod subnet_call_context_manager;
 #[cfg(test)]
 mod tests;
 
-use crate::{
-    canister_state::system_state::CyclesUseCase,
-    metadata_state::subnet_call_context_manager::SubnetCallContextManager,
-};
+use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager;
+use crate::CanisterQueues;
+use crate::{canister_state::system_state::CyclesUseCase, CheckpointLoadingMetrics};
 use ic_base_types::CanisterId;
 use ic_btc_types_internal::BlockBlob;
 use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
 use ic_constants::MAX_INGRESS_TTL;
-use ic_ic00_types::EcdsaKeyId;
+use ic_error_types::{ErrorCode, RejectCode, UserError};
+use ic_ic00_types::{EcdsaKeyId, NodeMetrics, NodeMetricsHistoryResponse};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     registry::subnet::v1 as pb_subnet,
@@ -29,9 +29,12 @@ use ic_registry_routing_table::{
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
+    batch::BlockmakerMetrics,
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus},
-    messages::{is_subnet_id, MessageId, RequestOrResponse},
+    messages::{
+        is_subnet_id, CanisterCall, MessageId, Payload, RejectContext, RequestOrResponse, Response,
+    },
     node_id_into_protobuf, node_id_try_from_option,
     nominal_cycles::NominalCycles,
     state_sync::{StateSyncVersion, CURRENT_STATE_SYNC_VERSION},
@@ -156,6 +159,11 @@ pub struct SystemMetadata {
     /// response limit. To work around this limitation, large responses are paginated
     /// and are stored here temporarily until they're fetched by the calling canister.
     pub bitcoin_get_successors_follow_up_responses: BTreeMap<CanisterId, Vec<BlockBlob>>,
+
+    /// Metrics collecting blockmaker stats (block proposed and failures to propose a block)
+    /// by aggregating them and storing a running total over multiple days by node id and
+    /// timestamp. Observations of blockmaker stats are performed each time a batch is processed.
+    pub blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries,
 }
 
 /// Full description of the IC network toplogy.
@@ -388,6 +396,14 @@ pub struct SubnetMetrics {
     pub consumed_cycles_ecdsa_outcalls: NominalCycles,
     consumed_cycles_by_use_case: BTreeMap<CyclesUseCase, NominalCycles>,
     pub ecdsa_signature_agreements: u64,
+    /// The number of canisters that exist on this subnet.
+    pub num_canisters: u64,
+    /// The total size of the state taken by canisters on this subnet in bytes.
+    pub canister_state_bytes: NumBytes,
+    /// The total number of transactions processed on this subnet.
+    ///
+    /// Transactions here refer to all messages processed in replicated mode.
+    pub update_transactions_total: u64,
 }
 
 impl SubnetMetrics {
@@ -404,6 +420,38 @@ impl SubnetMetrics {
 
     pub fn get_consumed_cycles_by_use_case(&self) -> &BTreeMap<CyclesUseCase, NominalCycles> {
         &self.consumed_cycles_by_use_case
+    }
+
+    pub fn consumed_cycles_total(&self) -> NominalCycles {
+        let mut total = NominalCycles::from(0);
+
+        total += self.consumed_cycles_by_deleted_canisters;
+        total += self.consumed_cycles_http_outcalls;
+        total += self.consumed_cycles_ecdsa_outcalls;
+
+        for (use_case, cycles) in self.consumed_cycles_by_use_case.iter() {
+            match use_case {
+                // For ecdsa outcalls, http outcalls and deleted canisters, skip
+                // updating the total using the use case specific metric as the
+                // update above should be sufficient (the old metric is a superset).
+                CyclesUseCase::ECDSAOutcalls
+                | CyclesUseCase::HTTPOutcalls
+                | CyclesUseCase::DeletedCanisters => {}
+                // Non consumed cycles should not be counted towards the total consumed.
+                CyclesUseCase::NonConsumed => {}
+                // For the remaining use cases simply add the values to the total.
+                CyclesUseCase::Memory
+                | CyclesUseCase::ComputeAllocation
+                | CyclesUseCase::IngressInduction
+                | CyclesUseCase::Instructions
+                | CyclesUseCase::RequestAndResponseTransmission
+                | CyclesUseCase::Uninstall
+                | CyclesUseCase::CanisterCreation
+                | CyclesUseCase::BurnedCycles => total += *cycles,
+            }
+        }
+
+        total
     }
 }
 
@@ -425,6 +473,9 @@ impl From<&SubnetMetrics> for pb_metadata::SubnetMetrics {
                     cycles: Some((&entry.1).into()),
                 })
                 .collect(),
+            num_canisters: Some(item.num_canisters),
+            canister_state_bytes: Some(item.canister_state_bytes.get()),
+            update_transactions_total: Some(item.update_transactions_total),
         }
     }
 }
@@ -458,6 +509,18 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
                     )
                 })
                 .collect(),
+            num_canisters: try_from_option_field(
+                item.num_canisters,
+                "SubnetMetrics::num_canisters",
+            )?,
+            canister_state_bytes: try_from_option_field(
+                item.canister_state_bytes,
+                "SubnetMetrics::canister_state_bytes",
+            )?,
+            update_transactions_total: try_from_option_field(
+                item.update_transactions_total,
+                "SubnetMetrics::update_transactions_total",
+            )?,
         })
     }
 }
@@ -509,14 +572,19 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
                     public_key: public_key.clone(),
                 })
                 .collect(),
+            blockmaker_metrics_time_series: Some((&item.blockmaker_metrics_time_series).into()),
         }
     }
 }
 
-impl TryFrom<pb_metadata::SystemMetadata> for SystemMetadata {
+/// Decodes a `SystemMetadata` proto. The metrics are provided as a side-channel
+/// for recording errors without being forced to return `Err(_)`.
+impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for SystemMetadata {
     type Error = ProxyDecodeError;
 
-    fn try_from(item: pb_metadata::SystemMetadata) -> Result<Self, Self::Error> {
+    fn try_from(
+        (item, metrics): (pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics),
+    ) -> Result<Self, Self::Error> {
         let mut streams = BTreeMap::<SubnetId, Stream>::new();
         for entry in item.streams {
             streams.insert(
@@ -616,6 +684,10 @@ impl TryFrom<pb_metadata::SystemMetadata> for SystemMetadata {
             },
             expected_compiled_wasms: BTreeSet::new(),
             bitcoin_get_successors_follow_up_responses,
+            blockmaker_metrics_time_series: match item.blockmaker_metrics_time_series {
+                Some(blockmaker_metrics) => (blockmaker_metrics, metrics).try_into()?,
+                None => BlockmakerMetricsTimeSeries::default(),
+            },
         })
     }
 }
@@ -651,6 +723,7 @@ impl SystemMetadata {
             subnet_metrics: Default::default(),
             expected_compiled_wasms: BTreeSet::new(),
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
+            blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
         }
     }
 
@@ -862,7 +935,11 @@ impl SystemMetadata {
     /// other metadata were preserved on subnet A' and set to default on subnet B.
     ///
     /// In this second phase, `ingress_history` is pruned, retaining only messages
-    /// in terminal states and messages addressed to local canisters.
+    /// in terminal states and messages addressed to local canisters. Additionally,
+    /// on subnet A' we reject all management canister calls whose execution is in
+    /// progress on one of the canisters migrated to subnet B (hence the
+    /// `subnet_queues` argument); and silently discard the corresponding tasks and
+    /// roll back `Stopping` states on all subnet B canisters.
     ///
     /// Notes:
     ///  * `prev_state_hash` has just been set by `take_tip()` to the checkpoint
@@ -875,77 +952,181 @@ impl SystemMetadata {
     ///    `commit_and_certify()` at the end of the round; and not used before.
     ///  * `heap_delta_estimate` and `expected_compiled_wasms` are expected to be
     ///    empty/zero.
-    #[allow(dead_code)]
-    pub(crate) fn after_split<F>(self, is_local_canister: F) -> Self
-    where
-        F: Fn(&CanisterId) -> bool,
+    pub(crate) fn after_split<F>(
+        &mut self,
+        is_local_canister: F,
+        subnet_queues: &mut CanisterQueues,
+    ) where
+        F: Fn(CanisterId) -> bool,
     {
-        // Take apart `self` and put it back together, in order for the compiler to
-        // enforce an explicit decision whenever new fields are added.
+        // Destructure `self` in order for the compiler to enforce an explicit decision
+        // whenever new fields are added.
+        //
+        // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS a `match`!
         let SystemMetadata {
-            mut ingress_history,
-            streams,
-            canister_allocation_ranges,
-            last_generated_canister_id,
-            prev_state_hash,
+            ref mut ingress_history,
+            streams: _,
+            canister_allocation_ranges: _,
+            last_generated_canister_id: _,
+            prev_state_hash: _,
             // Overwritten as soon as the round begins, no explicit action needed.
-            batch_time,
+            batch_time: _,
             // Overwritten as soon as the round begins, no explicit action needed.
-            network_topology,
-            own_subnet_id,
+            network_topology: _,
+            ref own_subnet_id,
             // `own_subnet_type` has been set by `load_checkpoint()` based on the subnet
             // registry record of B, do not touch it.
-            own_subnet_type,
+            own_subnet_type: _,
             // Overwritten as soon as the round begins, no explicit action needed.
-            own_subnet_features,
+            own_subnet_features: _,
             // Overwritten as soon as the round begins, no explicit action needed.
-            node_public_keys,
-            split_from,
-            subnet_call_context_manager,
+            node_public_keys: _,
+            ref mut split_from,
+            subnet_call_context_manager: _,
             // Set by `commit_and_certify()` at the end of the round. Not used before.
-            state_sync_version,
+            state_sync_version: _,
             // Set by `commit_and_certify()` at the end of the round. Not used before.
-            certification_version,
-            heap_delta_estimate,
-            subnet_metrics,
-            expected_compiled_wasms,
-            bitcoin_get_successors_follow_up_responses,
+            certification_version: _,
+            ref heap_delta_estimate,
+            subnet_metrics: _,
+            ref expected_compiled_wasms,
+            bitcoin_get_successors_follow_up_responses: _,
+            blockmaker_metrics_time_series: _,
         } = self;
 
-        let split_from = split_from.expect("Not a state resulting from a subnet split");
+        let split_from_subnet = split_from.expect("Not a state resulting from a subnet split");
 
         assert_eq!(0, heap_delta_estimate.get());
         assert!(expected_compiled_wasms.is_empty());
 
         // Prune the ingress history.
-        ingress_history = ingress_history.prune_after_split(|canister_id: &CanisterId| {
+        ingress_history.prune_after_split(|canister_id: CanisterId| {
             // An actual local canister.
             is_local_canister(canister_id)
                 // Or this is subnet A' and message is addressed to the management canister.
-                || split_from == own_subnet_id && is_subnet_id(*canister_id, own_subnet_id)
+                || split_from_subnet == *own_subnet_id && is_subnet_id(canister_id, *own_subnet_id)
         });
 
-        SystemMetadata {
-            ingress_history,
-            streams,
-            canister_allocation_ranges,
-            last_generated_canister_id,
-            prev_state_hash,
-            batch_time,
-            network_topology,
-            own_subnet_id,
-            own_subnet_type,
-            own_subnet_features,
-            node_public_keys,
-            // Split complete, reset split marker.
-            split_from: None,
-            subnet_call_context_manager,
-            state_sync_version,
-            certification_version,
-            heap_delta_estimate,
-            subnet_metrics,
-            expected_compiled_wasms,
-            bitcoin_get_successors_follow_up_responses,
+        // Split complete, reset split marker.
+        *split_from = None;
+
+        // Reject in-progress subnet messages that cannot be handled on this
+        // subnet.
+        self.reject_in_progress_management_calls_after_split(&is_local_canister, subnet_queues);
+    }
+
+    /// Creates rejects for all in-progress management messages that cannot or should
+    /// not be handled on this subnet in the second phase of a subnet split.
+    /// Enqueues reject responses into the provided `subnet_queues` for calls originating
+    /// from canisters; and records a `Failed` state in `self.ingress_history` for calls
+    /// originating from ingress messages. The rejects are created for:
+    ///     - All in-progress subnet messages whose target canisters are no longer
+    ///     on this subnet.
+    ///       On the other subnet (which must be *subnet B*), the execution of these same
+    ///     messages, now without matching subnet call contexts, will be silently
+    ///     aborted / rolled back (without producing a response). This is the only way
+    ///     to ensure consistency for a message that would otherwise be executing on one
+    ///     subnet, but for which a response may only be produced by another subnet.
+    ///     - Specific requests that must be entirely handled by the local subnet where
+    ///    the originator canister exists.
+    fn reject_in_progress_management_calls_after_split<F>(
+        &mut self,
+        is_local_canister: F,
+        subnet_queues: &mut CanisterQueues,
+    ) where
+        F: Fn(CanisterId) -> bool,
+    {
+        for install_code_call in self
+            .subnet_call_context_manager
+            .remove_non_local_install_code_calls(&is_local_canister)
+        {
+            self.reject_management_call_after_split(
+                install_code_call.call,
+                install_code_call.effective_canister_id,
+                subnet_queues,
+            );
+        }
+
+        for stop_canister_call in self
+            .subnet_call_context_manager
+            .remove_non_local_stop_canister_calls(&is_local_canister)
+        {
+            self.reject_management_call_after_split(
+                stop_canister_call.call,
+                stop_canister_call.effective_canister_id,
+                subnet_queues,
+            );
+        }
+
+        // Management `RawRand` requests are rejected if the sender has migrated to another subnet.
+        for raw_rand_context in self
+            .subnet_call_context_manager
+            .remove_non_local_raw_rand_calls(&is_local_canister)
+        {
+            let migrated_canister_id = raw_rand_context.request.sender();
+            self.reject_management_call_after_split(
+                CanisterCall::Request(Arc::new(raw_rand_context.request)),
+                migrated_canister_id,
+                subnet_queues,
+            );
+        }
+    }
+
+    /// Rejects the given subnet call targeting `canister_id`, which has migrated to
+    /// a new subnet following a subnet split.
+    ///
+    /// * If the call originated from a canister, enqueues an output reject response
+    ///   on behalf of the subnet into the provided `subnet_queues`.
+    /// * If the call originated from an ingress message, sets its ingress state in
+    ///   `self.ingress_history` to `Failed`.
+    fn reject_management_call_after_split(
+        &mut self,
+        call: CanisterCall,
+        canister_id: CanisterId,
+        subnet_queues: &mut CanisterQueues,
+    ) {
+        match call {
+            CanisterCall::Request(request) => {
+                // Rejecting a request from a canister.
+                let response = Response {
+                    originator: request.sender(),
+                    respondent: request.receiver,
+                    originator_reply_callback: request.sender_reply_callback,
+                    refund: request.payment,
+                    response_payload: Payload::Reject(RejectContext::new(
+                        RejectCode::SysTransient,
+                        format!("Canister {} migrated during a subnet split", canister_id),
+                    )),
+                };
+                subnet_queues.push_output_response(response.into());
+            }
+            CanisterCall::Ingress(ingress) => {
+                let status = IngressStatus::Known {
+                    receiver: ingress.receiver.get(),
+                    user_id: ingress.source,
+                    time: self.time(),
+                    state: IngressState::Failed(UserError::new(
+                        ErrorCode::CanisterNotFound,
+                        format!("Canister {} migrated during a subnet split", canister_id),
+                    )),
+                };
+
+                if let Some(current_status) = self.ingress_history.get(&ingress.message_id) {
+                    assert!(
+                        current_status.is_valid_state_transition(&status),
+                        "message (id='{}', current_status='{:?}') cannot be transitioned to '{:?}'",
+                        ingress.message_id,
+                        current_status,
+                        status
+                    );
+                }
+                self.ingress_history.insert(
+                    ingress.message_id.clone(),
+                    status,
+                    self.time(),
+                    u64::MAX.into(), // No need to enforce ingress memory limits,
+                );
+            }
         }
     }
 }
@@ -1261,10 +1442,8 @@ impl Streams {
                 .or_default() += msg.count_bytes();
         }
         self.streams.entry(destination).or_default().push(msg);
-        debug_assert_eq!(
-            Streams::calculate_stats(&self.streams),
-            self.responses_size_bytes
-        );
+        #[cfg(debug_assertions)]
+        self.debug_validate_stats();
     }
 
     /// Returns a mutable reference to the stream for the given destination
@@ -1272,10 +1451,8 @@ impl Streams {
     pub fn get_mut(&mut self, destination: &SubnetId) -> Option<StreamHandle> {
         // Can't (easily) validate stats when `StreamHandle` gets dropped, but we should
         // at least do it before.
-        debug_assert_eq!(
-            Streams::calculate_stats(&self.streams),
-            self.responses_size_bytes
-        );
+        #[cfg(debug_assertions)]
+        self.debug_validate_stats();
 
         match self.streams.get_mut(destination) {
             Some(stream) => Some(StreamHandle::new(stream, &mut self.responses_size_bytes)),
@@ -1288,10 +1465,8 @@ impl Streams {
     pub fn get_mut_or_insert(&mut self, destination: SubnetId) -> StreamHandle {
         // Can't (easily) validate stats when `StreamHandle` gets dropped, but we should
         // at least do it before.
-        debug_assert_eq!(
-            Streams::calculate_stats(&self.streams),
-            self.responses_size_bytes
-        );
+        #[cfg(debug_assertions)]
+        self.debug_validate_stats();
 
         StreamHandle::new(
             self.streams.entry(destination).or_default(),
@@ -1302,6 +1477,14 @@ impl Streams {
     /// Returns the response sizes by responder canister stat.
     pub fn responses_size_bytes(&self) -> &BTreeMap<CanisterId, usize> {
         &self.responses_size_bytes
+    }
+
+    /// Prunes zero-valued response sizes entries.
+    ///
+    /// This is triggered explicitly by `ReplicatedState` after it has updated the
+    /// canisters' copies of these values (including the zeroes).
+    pub fn prune_zero_responses_size_bytes(&mut self) {
+        self.responses_size_bytes.retain(|_, &mut value| value != 0);
     }
 
     /// Computes the `responses_size_bytes` map from scratch. Used when
@@ -1320,6 +1503,18 @@ impl Streams {
         }
         responses_size_bytes
     }
+
+    /// Checks that the running accounting of the sizes of responses in streams is
+    /// accurate.
+    #[cfg(debug_assertions)]
+    fn debug_validate_stats(&self) {
+        let mut nonzero_responses_size_bytes = self.responses_size_bytes.clone();
+        nonzero_responses_size_bytes.retain(|_, &mut value| value != 0);
+        debug_assert_eq!(
+            Streams::calculate_stats(&self.streams),
+            nonzero_responses_size_bytes
+        );
+    }
 }
 
 /// A mutable reference to a stream owned by a `Streams` struct; bundled with
@@ -1327,7 +1522,6 @@ impl Streams {
 pub struct StreamHandle<'a> {
     stream: &'a mut Stream,
 
-    #[allow(unused)]
     responses_size_bytes: &'a mut BTreeMap<CanisterId, usize>,
 }
 
@@ -1368,14 +1562,18 @@ impl<'a> StreamHandle<'a> {
     }
 
     /// Appends the given message to the tail of the stream.
-    pub fn push(&mut self, message: RequestOrResponse) {
+    ///
+    /// Returns the byte size of the pushed message.
+    pub fn push(&mut self, message: RequestOrResponse) -> usize {
+        let size_bytes = message.count_bytes();
         if let RequestOrResponse::Response(response) = &message {
             *self
                 .responses_size_bytes
                 .entry(response.respondent)
-                .or_default() += message.count_bytes();
+                .or_default() += size_bytes;
         }
         self.stream.push(message);
+        size_bytes
     }
 
     /// Increments the index of the last sent signal.
@@ -1406,10 +1604,6 @@ impl<'a> StreamHandle<'a> {
                     .get_mut(&response.respondent)
                     .expect("No `responses_size_bytes` entry for discarded response");
                 *canister_responses_size_bytes -= msg.count_bytes();
-                // Drop zero counts.
-                if *canister_responses_size_bytes == 0 {
-                    self.responses_size_bytes.remove(&response.respondent);
-                }
             }
         }
 
@@ -1537,7 +1731,7 @@ impl IngressHistoryState {
             if state.is_terminal() {
                 let timeout = time + MAX_INGRESS_TTL;
 
-                // Reset `self.next_terminal_time` in case it is after the current timout
+                // Reset `self.next_terminal_time` in case it is after the current timeout
                 // and the entry is completed or failed.
                 if self.next_terminal_time > timeout && state.is_terminal_with_payload() {
                     self.next_terminal_time = timeout;
@@ -1697,49 +1891,323 @@ impl IngressHistoryState {
     ///  * all terminal states (since they are immutable and will get pruned); and
     ///  * all non-terminal states for ingress messages addressed to local receivers
     ///    (canisters or subnet; as determined by the provided predicate).
-    fn prune_after_split<F>(self, is_local_receiver: F) -> Self
+    fn prune_after_split<F>(&mut self, is_local_receiver: F)
     where
-        F: Fn(&CanisterId) -> bool,
+        F: Fn(CanisterId) -> bool,
     {
-        // Take apart `self` and put it back together, in order for the compiler to
-        // enforce an explicit decision whenever any structural changes are made.
+        // Destructure `self` in order for the compiler to enforce an explicit decision
+        // whenever new fields are added.
+        //
+        // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS a `match`!
         let Self {
-            mut statuses,
-            pruning_times,
-            next_terminal_time,
-            memory_usage: _,
+            ref mut statuses,
+            pruning_times: _,
+            next_terminal_time: _,
+            ref mut memory_usage,
         } = self;
 
         // Filters for messages in terminal states or addressed to local canisters.
         let should_retain = |status: &IngressStatus| match status {
             IngressStatus::Known {
                 receiver, state, ..
-            } => state.is_terminal() || is_local_receiver(&CanisterId::new(*receiver).unwrap()),
+            } => {
+                state.is_terminal()
+                    || is_local_receiver(CanisterId::unchecked_from_principal(*receiver))
+            }
             IngressStatus::Unknown => false,
         };
 
         // Filter `statuses`. `pruning_times` stay the same on both subnets because we
         // preserved all messages in terminal states, regardless of canister.
-        let mut_statuses = Arc::make_mut(&mut statuses);
+        let mut_statuses = Arc::make_mut(statuses);
         let message_ids_to_retain: BTreeSet<_> = mut_statuses
             .iter()
             .filter(|(_, status)| should_retain(status.as_ref()))
             .map(|(message_id, _)| message_id.clone())
             .collect();
         mut_statuses.retain(|message_id, _| message_ids_to_retain.contains(message_id));
-        let memory_usage = Self::compute_memory_usage(mut_statuses);
+        *memory_usage = Self::compute_memory_usage(mut_statuses);
+    }
+}
 
+/// The number of snapshots retained in the `BlockmakerMetricsTimeSeries`.
+const BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS: usize = 60;
+
+/// Converts `Time` to days since Unix epoch. This simply divides the timestamp by
+/// 24 hours.
+pub(crate) fn days_since_unix_epoch(time: Time) -> u64 {
+    time.as_nanos_since_unix_epoch() / (24 * 3600 * 1_000_000_000)
+}
+
+/// Metrics for a time series aggregated from the `BlockmakerMetrics` present in each batch.
+///
+/// Blockmaker stats are continuously accumulated for each node ID. On the first
+/// observation of each day (as determined by `days_since_unix_epoch()`) a snapshot along
+/// with a timestamp of the last observation on the previous day is stored in the metrics.
+/// For each day metrics were aggregated since the first observation, there is exactly one
+/// snapshot in the series (including 'today').
+///
+/// The number of snapshots is capped at `BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS` by
+/// discarding the oldest snapshot(s) once this limit is exceeded.
+///
+/// To ensure the roster of node IDs does not grow indefinitely, Node IDs whose stats are
+/// equal in two consecutive snapshots, are pruned from the metrics such that they are missing
+/// from that point on. If such a node reappears later on, it will be added as a new node with
+/// restarted stats.
+///
+/// There is a runtime invariant (excluding checks at deserialization):
+/// - There are at most `BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS` snapshots.
+///
+/// There is an invariant (including checks at deserialization):
+/// - Each timestamp corresponding to a snapshot maps onto a unique day (as determined
+///   by `days_since_unix_epoch()`).
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct BlockmakerMetricsTimeSeries(BTreeMap<Time, BlockmakerStatsMap>);
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BlockmakerStats {
+    /// Successfully proposed blocks (blocks that became part of the blockchain).
+    blocks_proposed_total: u64,
+    /// Failures to propose a block (when the node was block maker rank R but the
+    /// subnet accepted the block from the block maker with rank S > R).
+    blocks_not_proposed_total: u64,
+}
+
+/// Per-node and overall blockmaker stats.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BlockmakerStatsMap {
+    /// Maps a node ID to it's blockmaker stats.
+    node_stats: BTreeMap<NodeId, BlockmakerStats>,
+    /// Overall blockmaker stats for all node IDs.
+    subnet_stats: BlockmakerStats,
+}
+
+impl BlockmakerStatsMap {
+    /// Observes blockmaker metrics and then returns `self`.
+    fn and_observe(mut self, metrics: &BlockmakerMetrics) -> Self {
+        self.node_stats
+            .entry(metrics.blockmaker)
+            .or_default()
+            .blocks_proposed_total += 1;
+        for failed_blockmaker in &metrics.failed_blockmakers {
+            self.node_stats
+                .entry(*failed_blockmaker)
+                .or_default()
+                .blocks_not_proposed_total += 1;
+        }
+        self.subnet_stats.blocks_proposed_total += 1;
+        self.subnet_stats.blocks_not_proposed_total += metrics.failed_blockmakers.len() as u64;
+
+        self
+    }
+}
+
+impl BlockmakerMetricsTimeSeries {
+    /// Observes blockmaker metrics corresponding to a certain batch time.
+    pub fn observe(&mut self, batch_time: Time, metrics: &BlockmakerMetrics) {
+        let running_stats = match self.0.pop_last() {
+            Some((time, running_stats)) if time > batch_time => {
+                // Outdated metrics are ignored.
+                self.0.insert(time, running_stats);
+                return;
+            }
+            Some((time, mut running_stats)) => {
+                if days_since_unix_epoch(time) < days_since_unix_epoch(batch_time) {
+                    // Prune stale node IDs from `running_stats` by comparing its stats with
+                    // those of the previous day.
+                    if let Some(last_snapshot) =
+                        self.0.last_key_value().map(|(_, val)| &val.node_stats)
+                    {
+                        running_stats.node_stats.retain(|node_id, stats| {
+                            match last_snapshot.get(node_id) {
+                                // Retain node IDs that are not present in the last snapshot;
+                                // and node IDs that are present, but have unequal stats.
+                                None => true,
+                                Some(last_stats) => last_stats != stats,
+                            }
+                        });
+                    }
+
+                    // A new day has started, insert a new snapshot.
+                    self.0.insert(time, running_stats.clone());
+                }
+
+                running_stats
+            }
+            None => BlockmakerStatsMap::default(),
+        };
+
+        // Observe the new metrics and replace `running_stats`.
+        self.0
+            .insert(batch_time, running_stats.and_observe(metrics));
+
+        // Ensure the time series is capped in length.
+        while self.0.len() > BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS {
+            self.0.pop_first();
+        }
+
+        debug_assert!(self.check_soft_invariants().is_ok());
+    }
+
+    /// Check if any soft invariant is violated. We use soft invariants to refer
+    /// to any invariants that the code maintains at all times, but the correctness
+    /// of the code is not influenced if they break.
+    ///
+    /// Also see note [Replicated State Invariants].
+    fn check_soft_invariants(&self) -> Result<(), String> {
+        if self
+            .0
+            .iter()
+            .zip(self.0.iter().skip(1))
+            .any(|((before, _), (after, _))| {
+                days_since_unix_epoch(*before) == days_since_unix_epoch(*after)
+            })
+        {
+            return Err("Found two timestamps on the same day.".into());
+        }
+
+        if self.0.len() > BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS {
+            return Err(format!(
+                "Current metrics len ({}) exceeds limit ({}).",
+                self.0.len(),
+                BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS,
+            ));
+        }
+        Ok(())
+    }
+
+    /// Returns a reference to the running stats (if any).
+    pub fn running_stats(&self) -> Option<(&Time, &BlockmakerStatsMap)> {
+        self.0.last_key_value()
+    }
+
+    /// Returns an iterator pointing at the first element of a chronologically sorted time series
+    /// whose timestamp is above or equal to the given time (excluding the running stats for today).
+    pub fn metrics_since(&self, time: Time) -> impl Iterator<Item = (&Time, &BlockmakerStatsMap)> {
+        // TODO(MR-524): This could be made simpler if the internal data representation would be different. Consider changing this.
+        self.0
+            .iter()
+            .take(self.0.len().saturating_sub(1))
+            .filter(move |(batch_time, _)| *batch_time >= &time)
+            .take(BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS)
+    }
+
+    pub fn node_metrics_history(&self, time: Time) -> Vec<NodeMetricsHistoryResponse> {
+        self.metrics_since(time)
+            .map(|(time, stats_map)| {
+                let node_metrics = stats_map
+                    .node_stats
+                    .iter()
+                    .map(|(node_id, stats)| NodeMetrics {
+                        node_id: node_id.get(),
+                        num_blocks_total: stats.blocks_proposed_total,
+                        num_block_failures_total: stats.blocks_not_proposed_total,
+                    })
+                    .collect();
+                NodeMetricsHistoryResponse {
+                    timestamp_nanos: time.as_nanos_since_unix_epoch(),
+                    node_metrics,
+                }
+            })
+            .collect()
+    }
+}
+
+impl From<&BlockmakerStatsMap> for pb_metadata::BlockmakerStatsMap {
+    fn from(item: &BlockmakerStatsMap) -> Self {
         Self {
-            statuses,
-            pruning_times,
-            next_terminal_time,
-            memory_usage,
+            node_stats: item
+                .node_stats
+                .iter()
+                .map(|(node_id, stats)| pb_metadata::NodeBlockmakerStats {
+                    node_id: Some(node_id_into_protobuf(*node_id)),
+                    blocks_proposed_total: stats.blocks_proposed_total,
+                    blocks_not_proposed_total: stats.blocks_not_proposed_total,
+                })
+                .collect::<Vec<_>>(),
+            blocks_proposed_total: item.subnet_stats.blocks_proposed_total,
+            blocks_not_proposed_total: item.subnet_stats.blocks_not_proposed_total,
         }
     }
 }
 
+impl From<&BlockmakerMetricsTimeSeries> for pb_metadata::BlockmakerMetricsTimeSeries {
+    fn from(item: &BlockmakerMetricsTimeSeries) -> Self {
+        Self {
+            time_stamp_map: item
+                .0
+                .iter()
+                .map(|(time, map)| (time.as_nanos_since_unix_epoch(), map.into()))
+                .collect(),
+        }
+    }
+}
+
+impl TryFrom<pb_metadata::BlockmakerStatsMap> for BlockmakerStatsMap {
+    type Error = ProxyDecodeError;
+
+    fn try_from(item: pb_metadata::BlockmakerStatsMap) -> Result<Self, Self::Error> {
+        Ok(Self {
+            node_stats: item
+                .node_stats
+                .into_iter()
+                .map(|e| {
+                    Ok((
+                        node_id_try_from_option(e.node_id)?,
+                        BlockmakerStats {
+                            blocks_proposed_total: e.blocks_proposed_total,
+                            blocks_not_proposed_total: e.blocks_not_proposed_total,
+                        },
+                    ))
+                })
+                .collect::<Result<BTreeMap<_, _>, Self::Error>>()?,
+            subnet_stats: BlockmakerStats {
+                blocks_proposed_total: item.blocks_proposed_total,
+                blocks_not_proposed_total: item.blocks_not_proposed_total,
+            },
+        })
+    }
+}
+
+/// Decodes a `BlockmakerMetricsTimeSeries` proto. The metrics are provided as a
+/// side-channel for recording errors and stats without being forced to return
+/// `Err(_)`.
+impl
+    TryFrom<(
+        pb_metadata::BlockmakerMetricsTimeSeries,
+        &dyn CheckpointLoadingMetrics,
+    )> for BlockmakerMetricsTimeSeries
+{
+    type Error = ProxyDecodeError;
+
+    fn try_from(
+        (item, metrics): (
+            pb_metadata::BlockmakerMetricsTimeSeries,
+            &dyn CheckpointLoadingMetrics,
+        ),
+    ) -> Result<Self, Self::Error> {
+        let time_series = Self(
+            item.time_stamp_map
+                .into_iter()
+                .map(|(time_nanos, blockmaker_stats_map)| {
+                    Ok((
+                        Time::from_nanos_since_unix_epoch(time_nanos),
+                        blockmaker_stats_map.try_into()?,
+                    ))
+                })
+                .collect::<Result<BTreeMap<_, _>, Self::Error>>()?,
+        );
+
+        if let Err(err) = time_series.check_soft_invariants() {
+            metrics.observe_broken_soft_invariant(err);
+        }
+
+        Ok(time_series)
+    }
+}
+
 pub(crate) mod testing {
-    use super::{StreamMap, Streams};
+    use super::*;
 
     /// Testing only: Exposes `Streams` internals for use in other modules'
     /// tests.
@@ -1756,5 +2224,58 @@ pub(crate) mod testing {
             // Recompute stats from scratch.
             self.responses_size_bytes = Streams::calculate_stats(&self.streams);
         }
+    }
+
+    /// Early warning system / stumbling block forcing the authors of changes adding
+    /// or removing replicated state fields to think about and/or ask the Message
+    /// Routing team to think about any repercussions to the subnet splitting logic.
+    ///
+    /// If you do find yourself having to make changes to this function, it is quite
+    /// possible that you have not broken anything. But there is a non-zero chance
+    /// for changes to the structure of the replicated state to also require changes
+    /// to the subnet splitting logic or risk breaking it. Which is why this brute
+    /// force check exists.
+    ///
+    /// See `ReplicatedState::split()` and `ReplicatedState::after_split()` for more
+    /// context.
+    #[allow(dead_code)]
+    fn subnet_splitting_change_guard_do_not_modify_without_reading_doc_comment() {
+        //
+        // DO NOT MODIFY WITHOUT READING DOC COMMENT!
+        //
+        let ingress_history = IngressHistoryState {
+            statuses: Default::default(),
+            pruning_times: Default::default(),
+            next_terminal_time: UNIX_EPOCH,
+            memory_usage: Default::default(),
+        };
+        //
+        // DO NOT MODIFY WITHOUT READING DOC COMMENT!
+        //
+        let _system_metadata = SystemMetadata {
+            own_subnet_id: SubnetId::new(PrincipalId::new_subnet_test_id(13)),
+            own_subnet_type: SubnetType::Application,
+            ingress_history,
+            // No need to cover streams, they always stay with the subnet.
+            streams: Default::default(),
+            canister_allocation_ranges: Default::default(),
+            last_generated_canister_id: None,
+            batch_time: UNIX_EPOCH,
+            // Not relevant, gets populated every round.
+            network_topology: Default::default(),
+            // Covered in `super::subnet_call_context_manager::testing`.
+            subnet_call_context_manager: Default::default(),
+            own_subnet_features: SubnetFeatures::default(),
+            node_public_keys: Default::default(),
+            split_from: None,
+            prev_state_hash: Default::default(),
+            state_sync_version: CURRENT_STATE_SYNC_VERSION,
+            certification_version: CertificationVersion::V0,
+            heap_delta_estimate: Default::default(),
+            subnet_metrics: Default::default(),
+            expected_compiled_wasms: Default::default(),
+            bitcoin_get_successors_follow_up_responses: Default::default(),
+            blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
+        };
     }
 }

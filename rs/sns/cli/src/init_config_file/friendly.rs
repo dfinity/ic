@@ -26,6 +26,9 @@ mod nns_governance_pb {
     };
 }
 
+#[cfg(test)]
+mod friendly_tests;
+
 // Implements the format used by test_sns_init_v2.yaml in the root of this
 // package. Studying that is a much more ergonomic way of becoming familiar with
 // the format that we are trying to implement here.
@@ -156,10 +159,19 @@ pub(crate) struct RewardRate {
 pub(crate) struct Swap {
     minimum_participants: u64,
 
-    #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
-    minimum_icp: nervous_system_pb::Tokens,
-    #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
-    maximum_icp: nervous_system_pb::Tokens,
+    #[serde(default)]
+    #[serde(with = "ic_nervous_system_humanize::serde::optional_tokens")]
+    minimum_icp: Option<nervous_system_pb::Tokens>,
+    #[serde(default)]
+    #[serde(with = "ic_nervous_system_humanize::serde::optional_tokens")]
+    maximum_icp: Option<nervous_system_pb::Tokens>,
+
+    #[serde(default)]
+    #[serde(with = "ic_nervous_system_humanize::serde::optional_tokens")]
+    minimum_direct_participation_icp: Option<nervous_system_pb::Tokens>,
+    #[serde(default)]
+    #[serde(with = "ic_nervous_system_humanize::serde::optional_tokens")]
+    maximum_direct_participation_icp: Option<nervous_system_pb::Tokens>,
 
     #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
     minimum_participant_icp: nervous_system_pb::Tokens,
@@ -178,8 +190,12 @@ pub(crate) struct Swap {
     #[serde(with = "ic_nervous_system_humanize::serde::duration")]
     duration: nervous_system_pb::Duration,
 
-    #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
-    neurons_fund_investment_icp: nervous_system_pb::Tokens,
+    #[serde(default)]
+    #[serde(with = "ic_nervous_system_humanize::serde::optional_tokens")]
+    neurons_fund_investment_icp: Option<nervous_system_pb::Tokens>,
+
+    #[serde(default)]
+    neurons_fund_participation: Option<bool>,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
@@ -308,7 +324,7 @@ fn parse_image_path(
             image_path, err,
         )
     })?;
-    let image_content = base64::encode(&image_content);
+    let image_content = base64::encode(image_content);
     let base64_encoding = Some(format!("data:image/png;base64,{}", image_content));
     Ok(nervous_system_pb::Image { base64_encoding })
 }
@@ -391,7 +407,7 @@ impl SnsConfigurationFile {
         let url = Some(url.clone());
 
         let logo = parse_image_path(logo, base_path)
-            .map(|logo| Some(logo))
+            .map(Some)
             .map_err(|err| defects.push(err))
             .unwrap_or_default();
 
@@ -626,7 +642,7 @@ impl Token {
 
         // Read the token-logo file contents from the path buf
         let token_logo = parse_image_path(logo, base_path)
-            .map(|image| Some(image))
+            .map(Some)
             .map_err(|err| vec![err])?;
 
         Ok(nns_governance_pb::LedgerParameters {
@@ -729,6 +745,9 @@ impl Swap {
             minimum_icp,
             maximum_icp,
 
+            minimum_direct_participation_icp,
+            maximum_direct_participation_icp,
+
             maximum_participant_icp,
             minimum_participant_icp,
 
@@ -740,12 +759,18 @@ impl Swap {
             start_time,
             duration,
             neurons_fund_investment_icp,
+            neurons_fund_participation,
         } = self;
 
         let minimum_participants = Some(*minimum_participants);
 
-        let minimum_icp = Some(*minimum_icp);
-        let maximum_icp = Some(*maximum_icp);
+        let minimum_icp = *minimum_icp;
+        let maximum_icp = *maximum_icp;
+
+        let minimum_direct_participation_icp = minimum_direct_participation_icp
+            .or_else(|| minimum_icp?.checked_sub(&neurons_fund_investment_icp.unwrap_or_default()));
+        let maximum_direct_participation_icp = maximum_direct_participation_icp
+            .or_else(|| maximum_icp?.checked_sub(&neurons_fund_investment_icp.unwrap_or_default()));
 
         let maximum_participant_icp = Some(*maximum_participant_icp);
         let minimum_participant_icp = Some(*minimum_participant_icp);
@@ -763,13 +788,16 @@ impl Swap {
         let start_time = *start_time;
         let duration = Some(*duration);
 
-        let neurons_fund_investment_icp = Some(*neurons_fund_investment_icp);
+        let neurons_fund_participation = *neurons_fund_participation;
 
         nns_governance_pb::SwapParameters {
             minimum_participants,
 
             minimum_icp,
             maximum_icp,
+
+            minimum_direct_participation_icp,
+            maximum_direct_participation_icp,
 
             maximum_participant_icp,
             minimum_participant_icp,
@@ -781,7 +809,9 @@ impl Swap {
 
             start_time,
             duration,
-            neurons_fund_investment_icp,
+
+            neurons_fund_investment_icp: *neurons_fund_investment_icp,
+            neurons_fund_participation,
         }
     }
 }
@@ -801,6 +831,3 @@ impl VestingSchedule {
         }
     }
 }
-
-#[cfg(test)]
-mod friendly_tests;

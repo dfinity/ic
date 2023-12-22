@@ -3,24 +3,12 @@ Rules to manipulate with artifacts: download, upload etc.
 """
 
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
-load("@openssl_static_env//:defs.bzl", "DFINITY_OPENSSL_STATIC")
+load("//bazel:status.bzl", "FAKE_IC_VERSION")
 
 def _upload_artifact_impl(ctx):
     """
     Uploads an artifact to s3 and returns download link to it
     """
-
-    # To avoid shooting ourselves in the foot, make sure that the upload target
-    # makes explicit whether it's uploading a static openssl binary; and check this against
-    # the `DFINITY_OPENSSL_STATIC` environment variable.
-    if bool(DFINITY_OPENSSL_STATIC) and not ctx.attr.allow_openssl_static:
-        fail("Mismatch between `DFINITY_OPENSSL_STATIC` compilation mode and `allow_openssl_static` target attribute.")
-
-    # To avoid shooting ourselves in the foot, always upload statically linked binaries to a separate upload path.
-    if bool(DFINITY_OPENSSL_STATIC):
-        remote_subdir = "openssl-static-" + ctx.attr.remote_subdir
-    else:
-        remote_subdir = ctx.attr.remote_subdir
 
     uploader = ctx.actions.declare_file(ctx.label.name + "_uploader")
 
@@ -29,15 +17,19 @@ def _upload_artifact_impl(ctx):
     if rclone_endpoint != "":
         rclone_config = ctx.file.rclone_anon_config
 
+    rc = ctx.attr._rc[BuildSettingInfo].value
+
     ctx.actions.expand_template(
         template = ctx.file._artifacts_uploader_template,
         output = uploader,
         substitutions = {
+            "@@RC@@": "True" if rc else "False",
             "@@RCLONE@@": ctx.file._rclone.path,
             "@@RCLONE_CONFIG@@": rclone_config.path,
-            "@@REMOTE_SUBDIR@@": remote_subdir,
+            "@@REMOTE_SUBDIR@@": ctx.attr.remote_subdir,
             "@@VERSION_FILE@@": ctx.version_file.path,
             "@@VERSION_TXT@@": ctx.file._version_txt.path,
+            "@@FAKE_IC_VERSION@@": FAKE_IC_VERSION,
         },
         is_executable = True,
     )
@@ -95,7 +87,6 @@ _upload_artifacts = rule(
     implementation = _upload_artifact_impl,
     executable = True,
     attrs = {
-        "allow_openssl_static": attr.bool(default = False),
         "inputs": attr.label_list(allow_files = True),
         "remote_subdir": attr.string(mandatory = True),
         "rclone_config": attr.label(allow_single_file = True, default = "//:.rclone.conf"),
@@ -104,6 +95,7 @@ _upload_artifacts = rule(
         "_artifacts_uploader_template": attr.label(allow_single_file = True, default = ":upload.bash.template"),
         "_version_txt": attr.label(allow_single_file = True, default = "//bazel:version.txt"),
         "_s3_endpoint": attr.label(default = ":s3_endpoint"),
+        "_rc": attr.label(default = ":rc"),
     },
 )
 

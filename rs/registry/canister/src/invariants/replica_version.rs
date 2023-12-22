@@ -48,7 +48,7 @@ pub(crate) fn check_replica_version_invariants(
             let version_list = decode_or_panic::<BlessedReplicaVersions>(bytes.clone());
             version_list.blessed_version_ids
         })
-        .unwrap_or_else(Vec::default);
+        .unwrap_or_default();
 
     let num_blessed = blessed_version_ids.len();
     let blessed_set = BTreeSet::from_iter(blessed_version_ids);

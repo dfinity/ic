@@ -31,6 +31,8 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::Height;
 use std::{cell::RefCell, sync::Arc};
 
+use super::MINIMUM_CHAIN_LENGTH;
+
 /// The Purger sub-component.
 pub struct Purger {
     prev_expected_batch_height: RefCell<Height>,
@@ -83,7 +85,7 @@ impl Purger {
 
         // During normal operation we need to purge when the finalized tip increases.
         // However, when a number of nodes just restarted and are recomputing the state until
-        // the certified height, we also want to purge when the lastest state height increases,
+        // the certified height, we also want to purge when the latest state height increases,
         // otherwise we might not purge all the recomputed states until the nodes have caught up.
         if certified_height_increased || latest_state_height_increased {
             self.purge_replicated_state_by_finalized_certified_height(pool);
@@ -298,9 +300,6 @@ impl Purger {
     }
 }
 
-/// We always keep a minimum chain length below catch-up height.
-const MINIMUM_CHAIN_LENGTH: u64 = 50;
-
 /// Compute the purge height by looking at available CatchUpPackage(s) in the
 /// validated pool. Usually things with height less than a min_length below the
 /// latest catch up height can be purged, but if there is nothing to purge,
@@ -332,10 +331,10 @@ pub fn get_purge_height(pool_reader: &PoolReader<'_>) -> Option<Height> {
 mod tests {
     use super::*;
     use ic_consensus_mocks::{dependencies, Dependencies};
-    use ic_interfaces::artifact_pool::MutablePool;
+    use ic_interfaces::p2p::consensus::MutablePool;
+    use ic_interfaces_mocks::messaging::MockMessageRouting;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities::message_routing::MockMessageRouting;
     use ic_types::{crypto::CryptoHash, CryptoHashOfState};
     use std::sync::{Arc, RwLock};
 
@@ -344,7 +343,6 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies {
                 mut pool,
-                time_source,
                 state_manager,
                 ..
             } = dependencies(pool_config, 1);
@@ -447,7 +445,7 @@ mod tests {
             );
 
             // No more purge action when called again
-            pool.apply_changes(time_source.as_ref(), changeset);
+            pool.apply_changes(changeset);
             let pool_reader = PoolReader::new(&pool);
             let changeset = purger.on_state_change(&pool_reader);
             assert_eq!(changeset.len(), 0);

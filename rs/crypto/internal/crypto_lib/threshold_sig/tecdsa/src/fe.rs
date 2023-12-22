@@ -86,7 +86,7 @@ impl EccFieldElement {
         }
     }
 
-    /// Return the field element "A" cooresponding to the curve equation
+    /// Return the field element "A" corresponding to the curve equation
     pub fn a(curve: EccCurveType) -> Self {
         match curve {
             EccCurveType::K256 => Self::K256(Secp256k1FieldElement::a()),
@@ -94,7 +94,7 @@ impl EccFieldElement {
         }
     }
 
-    /// Return the field element "B" cooresponding to the curve equation
+    /// Return the field element "B" corresponding to the curve equation
     pub fn b(curve: EccCurveType) -> Self {
         match curve {
             EccCurveType::K256 => Self::K256(Secp256k1FieldElement::b()),
@@ -102,7 +102,7 @@ impl EccFieldElement {
         }
     }
 
-    /// Return the field element "A" cooresponding to the curve equation
+    /// Return the field element "A" corresponding to the curve equation
     /// for the curve used with SSWU hash2curve technique. This may or
     /// may not match the normal "A"
     pub fn sswu_a(curve: EccCurveType) -> Self {
@@ -112,7 +112,7 @@ impl EccFieldElement {
         }
     }
 
-    /// Return the field element "B" cooresponding to the curve equation
+    /// Return the field element "B" corresponding to the curve equation
     /// for the curve used with SSWU hash2curve technique. This may or
     /// may not match the normal "B"
     pub fn sswu_b(curve: EccCurveType) -> Self {

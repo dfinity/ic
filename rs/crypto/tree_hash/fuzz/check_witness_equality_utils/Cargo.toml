@@ -1,8 +1,11 @@
 [package]
 name = "ic-crypto-tree-hash-fuzz-check-witness-equality-utils"
-version = "0.8.0"
 publish = false
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-canonical-state-tree-hash = { path = "../../../../canonical_state/tree_hash" }

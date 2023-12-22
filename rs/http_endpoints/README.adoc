@@ -66,7 +66,7 @@ For example, a user sends requests sequentially over a connection and there is a
 takes longer than `+connection_read_timeout_seconds+` to process a single request.
 Since the user doesn't send a new request until the last one completed, there will be no bytes read by the
 server and the server will just drop the connection. Returning 5xx error is important because if a 
-downstream service is unexpetedly slow this is a server error.
+downstream service is unexpectedly slow this is a server error.
 
 == Rate limiting ==
 
@@ -75,12 +75,12 @@ Rate limiting helps to prevent abuse and misuses of a particular API. The Intern
 by anyone. This makes it is very hard to reason if a user abuses/misuses the API because there is no way to have insight into all different usecases.
 
 People are often tempted to use rate limiting as a DDoS protection, however if there is a proper request queue management 
-implemented then ideally there is no need for any rate limiting mechanism. The system should be able to maintain it's througput even
+implemented then ideally there is no need for any rate limiting mechanism. The system should be able to maintain it's throughput even
 at capacity. 
 
 == Fairness ==
 
-If the system is not at capacity this implies the system througput is enough to process all inputs on time.
+If the system is not at capacity this implies the system throughput is enough to process all inputs on time.
 However, when the system is at capacity, it needs to make sure that it processes requests fairly.
 
 As explained above, there are bounded request queues for different API endpoints. The system is at capacity when queues are full.

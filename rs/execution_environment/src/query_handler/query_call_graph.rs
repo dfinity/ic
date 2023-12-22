@@ -44,7 +44,7 @@ struct PendingCall(CanisterState, CallOrigin, VecDeque<Arc<Request>>);
 ///   response callbacks.
 ///
 /// A note on re-entrancy: currently re-entrant query calls are not allowed.
-/// In other words, if a canister is in the call stack, then an attemp to make a
+/// In other words, if a canister is in the call stack, then an attempt to make a
 /// new query call to that canister will result in an error. This restriction
 /// will be lifted soon.
 pub(super) fn evaluate_query_call_graph(

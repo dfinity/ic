@@ -2,7 +2,7 @@
   extends:
     - .ubuntu-cargo-k8s
   rules:
-    - if: '$CD_ENV == $cd_target_env && $CI_COMMIT_BRANCH =~ /^rc--/ && $CI_COMMIT_MESSAGE =~ /hotfix/i'
+    - if: '$CD_ENV == $cd_target_env && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/ && $CI_COMMIT_MESSAGE =~ /hotfix/i'
       when: manual
       allow_failure: true
     - if: '$CD_ENV == $cd_target_env && $CI_MERGE_REQUEST_TITLE =~ /\[rc\]/'
@@ -60,31 +60,7 @@
 
 # NIGHTLY TESTS
 
-# SCENARIO TEST deploy_nns_prod_state: Tests the NNS state deployment script
-nns-state-deployment-test-nightly:
-  extends: .prod-nightly-test-group-2
-  allow_failure: true #nns state deployment is not needed for release of replica
-  script:
-    - |
-      set -eExou pipefail
-      if [[ -z "$TESTNET2" ]]; then echo "Please set the TESTNET2 environment variable for proper resource_group locking"; exit 1; fi
-      git fetch
-      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
-      export GIT_REVISION
-      $SHELL_WRAPPER timeout 1h ./testnet/tests/scripts/nns_state_deployment_test.sh "$TESTNET" "$CI_JOB_STAGE/$CI_JOB_NAME"
-
 .with-monitoring:
   variables:
     # we need debug-level logs from the following components for IC policy monitoring
     REPLICA_LOG_DEBUG_OVERRIDES: "ic_consensus::consensus::batch_delivery,ic_artifact_manager::processors,ic_consensus::consensus,ic_transport::control_plane"
-
-ingress-manager-proptests-nightly:
-  extends:
-    - .prod-test
-  variables:
-    cd_target_env: "NIGHTLY"
-  timeout: 70 minutes
-  script:
-    - |
-      cd "${CI_PROJECT_DIR}/rs"
-      $SHELL_WRAPPER cargo test --release -p ic-ingress-manager proptest

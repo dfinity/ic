@@ -6,11 +6,13 @@
 use crate::{
     adapters::AdaptersConfig,
     artifact_pool::ArtifactPoolTomlConfig,
+    bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig,
     config_parser::{ConfigError, ConfigSource, ConfigValidate},
     crypto::CryptoConfig,
     execution_environment::Config as HypervisorConfig,
     firewall::Config as FirewallConfig,
     http_handler::Config as HttpHandlerConfig,
+    ipv4_config::IPv4Config,
     logger::Config as LoggerConfig,
     message_routing::Config as MessageRoutingConfig,
     metrics::Config as MetricsConfig,
@@ -49,6 +51,8 @@ pub struct Config {
     pub registration: RegistrationConfig,
     pub nns_registry_replicator: NnsRegistryReplicatorConfig,
     pub adapters_config: AdaptersConfig,
+    pub bitcoin_payload_builder_config: BitcoinPayloadBuilderConfig,
+    pub ipv4_config: IPv4Config,
 }
 
 /// Mirrors the Config struct except that fields are made optional. This is
@@ -72,6 +76,8 @@ pub struct ConfigOptional {
     pub registration: Option<RegistrationConfig>,
     pub nns_registry_replicator: Option<NnsRegistryReplicatorConfig>,
     pub adapters_config: Option<AdaptersConfig>,
+    pub bitcoin_payload_builder_config: Option<BitcoinPayloadBuilderConfig>,
+    pub ipv4_config: Option<IPv4Config>,
 }
 
 impl Config {
@@ -100,6 +106,8 @@ impl Config {
             registration: RegistrationConfig::default(),
             nns_registry_replicator: NnsRegistryReplicatorConfig::default(),
             adapters_config: AdaptersConfig::default(),
+            bitcoin_payload_builder_config: BitcoinPayloadBuilderConfig::default(),
+            ipv4_config: IPv4Config::default(),
         }
     }
 
@@ -152,6 +160,10 @@ impl Config {
                 .nns_registry_replicator
                 .unwrap_or(default.nns_registry_replicator),
             adapters_config: cfg.adapters_config.unwrap_or(default.adapters_config),
+            bitcoin_payload_builder_config: cfg
+                .bitcoin_payload_builder_config
+                .unwrap_or(default.bitcoin_payload_builder_config),
+            ipv4_config: cfg.ipv4_config.unwrap_or(default.ipv4_config),
         })
     }
 

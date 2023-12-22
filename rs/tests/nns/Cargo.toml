@@ -1,15 +1,17 @@
 [package]
 name = "nns-system-tests"
-version = "0.8.0"
-authors = ["The Internet Computer Project Developers"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 anyhow = "1.0.31"
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 tests = { path = ".." }
 ic-mainnet-nns-recovery = { path = "ic_mainnet_nns_recovery" }
-slog = { version = "2.5.2", features = ["release_max_level_trace"] }
+slog = { workspace = true }
 
 [[bin]]
 name = "nns_upgrade_test"

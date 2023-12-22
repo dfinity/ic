@@ -14,13 +14,13 @@ NnsProposal:
 Principals: []
 
 fallback_controller_principals:
-    - ye54c-us65k-r4log-cyhy6-vt33j-z7mwx-ymwzl-yjtti-24xs4-qemd2-rqe
+    - bc7vk-kulc6-vswcu-ysxhv-lsrxo-vkszu-zxku3-xhzmh-iac7m-lwewm-2ae
 
 dapp_canisters: []
 
 Token:
-    name: Batman
-    symbol: BTM
+    name: MyTestnetToken
+    symbol: MTT
     transaction_fee: 1 e8s
     logo: test.png
 
@@ -53,40 +53,31 @@ Distribution:
 
     Neurons:
 
-        - principal: ye54c-us65k-r4log-cyhy6-vt33j-z7mwx-ymwzl-yjtti-24xs4-qemd2-rqe
+        - principal: bc7vk-kulc6-vswcu-ysxhv-lsrxo-vkszu-zxku3-xhzmh-iac7m-lwewm-2ae
           stake: 15 tokens
           memo: 0
           dissolve_delay: 1 years
           vesting_period: 1 year 1 second
 
     InitialBalances:
-        governance: 60 tokens
-        swap: 40 tokens
+        governance: 50 tokens
+        swap: 30_000 tokens
 
-    # Optional, but highly recommended. This is a literal
-    # checksum.
-    total: 115 tokens # 60 + 40 + 15
+    total: 30_065 tokens
 
 Swap:
-    minimum_participants: 50
+    minimum_participants: 1
 
-    minimum_icp: 123 tokens
-    maximum_icp: 65000 tokens
+    minimum_direct_participation_icp: 1000000000 e8s
+    maximum_direct_participation_icp: 30000000000000 e8s
 
-    minimum_participant_icp: 650 tokens
-    maximum_participant_icp: 6500 tokens
-
-    confirmation_text: Hello, world?
-
-    restricted_countries:
-        - US
-        - CH
+    minimum_participant_icp: 1000000000 e8s
+    maximum_participant_icp: 30000000000000 e8s
 
     VestingSchedule:
-        events: 3000
-        interval: 17 days
+        events: 30
+        interval: 2 seconds
 
-    start_time: 12:00 UTC
     duration: 7 days
 
-    neurons_fund_investment_icp: 1_000 tokens
+    neurons_fund_participation: true

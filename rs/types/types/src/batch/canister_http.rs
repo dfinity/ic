@@ -14,7 +14,6 @@ use ic_error_types::{RejectCode, TryFromError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::{
-    canister_http::v1 as canister_http_pb,
     proxy::{try_from_option_field, ProxyDecodeError},
     types::v1 as pb,
 };
@@ -49,15 +48,13 @@ impl CanisterHttpPayload {
     }
 }
 
-impl From<&CanisterHttpResponseWithConsensus>
-    for canister_http_pb::CanisterHttpResponseWithConsensus
-{
+impl From<&CanisterHttpResponseWithConsensus> for pb::CanisterHttpResponseWithConsensus {
     fn from(payload: &CanisterHttpResponseWithConsensus) -> Self {
-        canister_http_pb::CanisterHttpResponseWithConsensus {
-            response: Some(canister_http_pb::CanisterHttpResponse {
+        pb::CanisterHttpResponseWithConsensus {
+            response: Some(pb::CanisterHttpResponse {
                 id: payload.content.id.get(),
                 timeout: payload.content.timeout.as_nanos_since_unix_epoch(),
-                content: Some(canister_http_pb::CanisterHttpResponseContent::from(
+                content: Some(pb::CanisterHttpResponseContent::from(
                     &payload.content.content,
                 )),
                 canister_id: Some(pb::CanisterId::from(payload.content.canister_id)),
@@ -69,33 +66,27 @@ impl From<&CanisterHttpResponseWithConsensus>
                 .signature
                 .signatures_map
                 .iter()
-                .map(
-                    |(signer, signature)| canister_http_pb::CanisterHttpResponseSignature {
-                        signer: (*signer).get().into_vec(),
-                        signature: signature.clone().get().0,
-                    },
-                )
+                .map(|(signer, signature)| pb::CanisterHttpResponseSignature {
+                    signer: (*signer).get().into_vec(),
+                    signature: signature.clone().get().0,
+                })
                 .collect(),
         }
     }
 }
 
-impl From<&CanisterHttpResponseDivergence> for canister_http_pb::CanisterHttpResponseDivergence {
+impl From<&CanisterHttpResponseDivergence> for pb::CanisterHttpResponseDivergence {
     fn from(payload: &CanisterHttpResponseDivergence) -> Self {
-        canister_http_pb::CanisterHttpResponseDivergence {
-            shares: payload.shares.iter().map(Into::into).collect(),
+        pb::CanisterHttpResponseDivergence {
+            shares: payload.shares.iter().cloned().map(Into::into).collect(),
         }
     }
 }
 
-impl TryFrom<canister_http_pb::CanisterHttpResponseWithConsensus>
-    for CanisterHttpResponseWithConsensus
-{
+impl TryFrom<pb::CanisterHttpResponseWithConsensus> for CanisterHttpResponseWithConsensus {
     type Error = ProxyDecodeError;
 
-    fn try_from(
-        payload: canister_http_pb::CanisterHttpResponseWithConsensus,
-    ) -> Result<Self, Self::Error> {
+    fn try_from(payload: pb::CanisterHttpResponseWithConsensus) -> Result<Self, Self::Error> {
         let response = payload
             .response
             .ok_or(ProxyDecodeError::MissingField("response"))?;
@@ -142,11 +133,11 @@ impl TryFrom<canister_http_pb::CanisterHttpResponseWithConsensus>
     }
 }
 
-impl TryFrom<canister_http_pb::CanisterHttpResponseDivergence> for CanisterHttpResponseDivergence {
+impl TryFrom<pb::CanisterHttpResponseDivergence> for CanisterHttpResponseDivergence {
     type Error = ProxyDecodeError;
 
     fn try_from(
-        divergence_response: canister_http_pb::CanisterHttpResponseDivergence,
+        divergence_response: pb::CanisterHttpResponseDivergence,
     ) -> Result<Self, Self::Error> {
         let shares = divergence_response
             .shares
@@ -165,41 +156,39 @@ impl CountBytes for CanisterHttpPayload {
     }
 }
 
-impl From<&CanisterHttpResponseContent> for canister_http_pb::CanisterHttpResponseContent {
+impl From<&CanisterHttpResponseContent> for pb::CanisterHttpResponseContent {
     fn from(content: &CanisterHttpResponseContent) -> Self {
         let inner = match content {
             CanisterHttpResponseContent::Success(payload) => {
-                canister_http_pb::canister_http_response_content::Status::Success(payload.clone())
+                pb::canister_http_response_content::Status::Success(payload.clone())
             }
             CanisterHttpResponseContent::Reject(error) => {
-                canister_http_pb::canister_http_response_content::Status::Reject(
-                    canister_http_pb::CanisterHttpReject {
-                        reject_code: error.reject_code as u32,
-                        message: error.message.clone(),
-                    },
-                )
+                pb::canister_http_response_content::Status::Reject(pb::CanisterHttpReject {
+                    reject_code: error.reject_code as u32,
+                    message: error.message.clone(),
+                })
             }
         };
 
-        canister_http_pb::CanisterHttpResponseContent {
+        pb::CanisterHttpResponseContent {
             status: Some(inner),
         }
     }
 }
 
-impl TryFrom<canister_http_pb::CanisterHttpResponseContent> for CanisterHttpResponseContent {
+impl TryFrom<pb::CanisterHttpResponseContent> for CanisterHttpResponseContent {
     type Error = ProxyDecodeError;
 
-    fn try_from(value: canister_http_pb::CanisterHttpResponseContent) -> Result<Self, Self::Error> {
+    fn try_from(value: pb::CanisterHttpResponseContent) -> Result<Self, Self::Error> {
         Ok(
             match value
                 .status
                 .ok_or(ProxyDecodeError::MissingField("status"))?
             {
-                canister_http_pb::canister_http_response_content::Status::Success(payload) => {
+                pb::canister_http_response_content::Status::Success(payload) => {
                     CanisterHttpResponseContent::Success(payload)
                 }
-                canister_http_pb::canister_http_response_content::Status::Reject(error) => {
+                pb::canister_http_response_content::Status::Reject(error) => {
                     CanisterHttpResponseContent::Reject(CanisterHttpReject {
                         reject_code: RejectCode::try_from(error.reject_code as u64).map_err(
                             |err| match err {
@@ -219,16 +208,16 @@ impl TryFrom<canister_http_pb::CanisterHttpResponseContent> for CanisterHttpResp
     }
 }
 
-impl From<&CanisterHttpResponseShare> for canister_http_pb::CanisterHttpShare {
-    fn from(share: &CanisterHttpResponseShare) -> Self {
-        canister_http_pb::CanisterHttpShare {
-            metadata: Some(canister_http_pb::CanisterHttpResponseMetadata {
+impl From<CanisterHttpResponseShare> for pb::CanisterHttpShare {
+    fn from(share: CanisterHttpResponseShare) -> Self {
+        pb::CanisterHttpShare {
+            metadata: Some(pb::CanisterHttpResponseMetadata {
                 id: share.content.id.get(),
                 timeout: share.content.timeout.as_nanos_since_unix_epoch(),
                 content_hash: share.content.content_hash.clone().get().0,
                 registry_version: share.content.registry_version.get(),
             }),
-            signature: Some(canister_http_pb::CanisterHttpResponseSignature {
+            signature: Some(pb::CanisterHttpResponseSignature {
                 signer: share.signature.signer.get().into_vec(),
                 signature: share.signature.signature.clone().get().0,
             }),
@@ -236,9 +225,9 @@ impl From<&CanisterHttpResponseShare> for canister_http_pb::CanisterHttpShare {
     }
 }
 
-impl TryFrom<canister_http_pb::CanisterHttpShare> for CanisterHttpResponseShare {
+impl TryFrom<pb::CanisterHttpShare> for CanisterHttpResponseShare {
     type Error = ProxyDecodeError;
-    fn try_from(share: canister_http_pb::CanisterHttpShare) -> Result<Self, Self::Error> {
+    fn try_from(share: pb::CanisterHttpShare) -> Result<Self, Self::Error> {
         let metadata = share
             .metadata
             .ok_or(ProxyDecodeError::MissingField("share.metadata"))?;
@@ -309,7 +298,7 @@ mod tests {
                 },
             },
         };
-        let pb_payload = canister_http_pb::CanisterHttpResponseWithConsensus::from(&payload);
+        let pb_payload = pb::CanisterHttpResponseWithConsensus::from(&payload);
         let new_payload = CanisterHttpResponseWithConsensus::try_from(pb_payload).unwrap();
         assert_eq!(payload, new_payload);
     }
@@ -334,7 +323,7 @@ mod tests {
                 },
             }],
         };
-        let pb_payload = canister_http_pb::CanisterHttpResponseDivergence::from(&payload);
+        let pb_payload = pb::CanisterHttpResponseDivergence::from(&payload);
         let new_payload = CanisterHttpResponseDivergence::try_from(pb_payload).unwrap();
         assert_eq!(payload, new_payload);
     }

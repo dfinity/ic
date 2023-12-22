@@ -49,6 +49,8 @@ lazy_static! {
         min_participants: 1,
         min_icp_e8s: 1,
         max_icp_e8s: 10_000_000,
+        min_direct_participation_icp_e8s: Some(1),
+        max_direct_participation_icp_e8s: Some(10_000_000),
         min_participant_icp_e8s: 1_010_000,
         max_participant_icp_e8s: 10_000_000,
         swap_due_timestamp_seconds: StateMachine::new()
@@ -184,6 +186,8 @@ impl PaymentProtocolTestSetup {
             min_participants: None,                      // TODO[NNS1-2339]
             min_icp_e8s: None,                           // TODO[NNS1-2339]
             max_icp_e8s: None,                           // TODO[NNS1-2339]
+            min_direct_participation_icp_e8s: None,      // TODO[NNS1-2339]
+            max_direct_participation_icp_e8s: None,      // TODO[NNS1-2339]
             min_participant_icp_e8s: None,               // TODO[NNS1-2339]
             max_participant_icp_e8s: None,               // TODO[NNS1-2339]
             swap_start_timestamp_seconds: None,          // TODO[NNS1-2339]
@@ -193,6 +197,8 @@ impl PaymentProtocolTestSetup {
             nns_proposal_id: None,                       // TODO[NNS1-2339]
             neurons_fund_participants: None,             // TODO[NNS1-2339]
             should_auto_finalize: Some(true),
+            neurons_fund_participation_constraints: None,
+            neurons_fund_participation: None,
         }
     }
 
@@ -911,7 +917,7 @@ fn test_maximum_reached() {
 }
 
 #[test]
-fn test_committment_below_participant_minimum() {
+fn test_commitment_below_participant_minimum() {
     let user0 = PrincipalId::new_user_test_id(0);
     let user1 = PrincipalId::new_user_test_id(1);
     let user2 = PrincipalId::new_user_test_id(2);
@@ -1021,7 +1027,7 @@ fn test_committment_below_participant_minimum() {
         .refresh_buyer_tokens(&user0, None)
         .is_ok());
 
-    //Check that user1's purchase was registerred
+    //Check that user1's purchase was registered
     assert_eq!(
         payment_flow_protocol
             .get_buyer_state(&user1)
@@ -1032,10 +1038,10 @@ fn test_committment_below_participant_minimum() {
         amount1_0.clone()
     );
 
-    // Check that user2's purchase was not registerred
+    // Check that user2's purchase was not registered
     assert!(payment_flow_protocol.get_buyer_state(&user2).is_none());
 
-    // Check that user0's purchase was registerred and that he has bought the tokens left in the sale
+    // Check that user0's purchase was registered and that he has bought the tokens left in the sale
     assert_eq!(
         payment_flow_protocol
             .get_buyer_state(&user0)

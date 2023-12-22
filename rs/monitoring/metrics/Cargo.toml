@@ -1,22 +1,25 @@
 [package]
 name = "ic-metrics"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-futures = "0.3.21"
+futures = { workspace = true }
 ic-adapter-metrics = { path = "../adapter_metrics" }
 ic-logger = { path = "../logger" }
 libc = "0.2.91"
-prometheus = { version = "0.12.0", features = [ "process" ] }
-slog = "2.7.0"
+prometheus = { workspace = true }
+slog = { workspace = true }
 slog-async = "2.7.0"
-tokio = { version = "1.16.0", features = ["full"] }
-tokio-metrics = "0.2.2"
+tokio = { workspace = true }
+tokio-metrics = "0.3.0"
 
 [dev-dependencies]
 ic-logger = { path = "../logger" }
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
+slog = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = { version = "^0.9", default-features = false }

@@ -14,18 +14,18 @@ use rand::{CryptoRng, Rng, RngCore};
 
 #[test]
 fn should_verify_valid_signature() {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     for with_delegation in [false, true] {
-        let (msg, sig_bytes, canister_pk_bytes, root_pk) = new_test_data(&mut rng, with_delegation);
+        let (msg, sig_bytes, canister_pk_bytes, root_pk) = new_test_data(rng, with_delegation);
         assert!(verify(&msg[..], sig_bytes, canister_pk_bytes, &root_pk).is_ok());
     }
 }
 
 #[test]
 fn should_fail_to_verify_if_cert_in_signature_is_malformed() {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     for with_delegation in [false, true] {
-        let (msg, sig_bytes, canister_pk_bytes, root_pk) = new_test_data(&mut rng, with_delegation);
+        let (msg, sig_bytes, canister_pk_bytes, root_pk) = new_test_data(rng, with_delegation);
         let sig_with_malformed_cert = {
             let mut corrupted_sig_bytes = sig_bytes;
             // position 30 in the sig corrupts the certificate:
@@ -44,9 +44,9 @@ fn should_fail_to_verify_if_cert_in_signature_is_malformed() {
 
 #[test]
 fn should_fail_to_verify_if_signature_cbor_tag_malformed() {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     for with_delegation in [false, true] {
-        let (msg, sig_bytes, canister_pk_bytes, root_pk) = new_test_data(&mut rng, with_delegation);
+        let (msg, sig_bytes, canister_pk_bytes, root_pk) = new_test_data(rng, with_delegation);
         let sig_with_malformed_cbor_tag = {
             let mut corrupted_sig = sig_bytes;
             // position 1 in the sig corrupts the CBOR tag:
@@ -70,9 +70,9 @@ fn should_fail_to_verify_if_signature_cbor_tag_malformed() {
 
 #[test]
 fn should_fail_to_verify_if_signature_has_malformed_cbor() {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     for with_delegation in [false, true] {
-        let (msg, sig_bytes, canister_pk_bytes, root_pk) = new_test_data(&mut rng, with_delegation);
+        let (msg, sig_bytes, canister_pk_bytes, root_pk) = new_test_data(rng, with_delegation);
         let sig_with_malformed_cbor = {
             let mut corrupted_sig = sig_bytes;
             // position 7 in the sig corrupts the CBOR:
@@ -91,9 +91,9 @@ fn should_fail_to_verify_if_signature_has_malformed_cbor() {
 
 #[test]
 fn should_fail_to_verify_on_wrong_message() {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     for with_delegation in [false, true] {
-        let (msg, sig_bytes, canister_pk_bytes, root_pk) = new_test_data(&mut rng, with_delegation);
+        let (msg, sig_bytes, canister_pk_bytes, root_pk) = new_test_data(rng, with_delegation);
         let wrong_msg = b"wrong message";
         assert_ne!(msg, wrong_msg);
 
@@ -108,9 +108,9 @@ fn should_fail_to_verify_on_wrong_message() {
 
 #[test]
 fn should_fail_to_verify_if_signature_certificate_verification_fails() {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     for with_delegation in [false, true] {
-        let (msg, sig_bytes, canister_pk_bytes, root_pk) = new_test_data(&mut rng, with_delegation);
+        let (msg, sig_bytes, canister_pk_bytes, root_pk) = new_test_data(rng, with_delegation);
         let corrupted_sig = {
             let mut corrupted_sig = sig_bytes;
             let len = corrupted_sig.0.len();
@@ -129,10 +129,9 @@ fn should_fail_to_verify_if_signature_certificate_verification_fails() {
 
 #[test]
 fn should_fail_to_verify_on_wrong_pubkey() {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     for with_delegation in [false, true] {
-        let (msg, sig_bytes, mut canister_pk_bytes, root_pk) =
-            new_test_data(&mut rng, with_delegation);
+        let (msg, sig_bytes, mut canister_pk_bytes, root_pk) = new_test_data(rng, with_delegation);
         canister_pk_bytes.0.push(9);
 
         let result = verify(&msg, sig_bytes, canister_pk_bytes, &root_pk);
@@ -146,10 +145,9 @@ fn should_fail_to_verify_on_wrong_pubkey() {
 
 #[test]
 fn should_fail_to_verify_if_public_key_is_malformed() {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     for with_delegation in [false, true] {
-        let (msg, sig_bytes, _canister_pk_bytes, root_pk) =
-            new_test_data(&mut rng, with_delegation);
+        let (msg, sig_bytes, _canister_pk_bytes, root_pk) = new_test_data(rng, with_delegation);
         let malformed_public_key = PublicKeyBytes(vec![42; 3]);
 
         let result = verify(&msg, sig_bytes, malformed_public_key, &root_pk);
@@ -163,9 +161,9 @@ fn should_fail_to_verify_if_public_key_is_malformed() {
 
 #[test]
 fn should_fail_to_verify_on_invalid_root_pubkey() {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     for with_delegation in [false, true] {
-        let (msg, sig_bytes, canister_pk_bytes, root_pk) = new_test_data(&mut rng, with_delegation);
+        let (msg, sig_bytes, canister_pk_bytes, root_pk) = new_test_data(rng, with_delegation);
         let invalid_root_pk = ThresholdSigPublicKey::from(bls12_381::PublicKeyBytes(
             [42; bls12_381::PublicKeyBytes::SIZE],
         ));
@@ -185,9 +183,9 @@ fn should_fail_to_verify_on_invalid_root_pubkey() {
 
 #[test]
 fn should_fail_to_verify_on_wrong_root_pubkey() {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     for with_delegation in [false, true] {
-        let (msg, sig_bytes, canister_pk_bytes, root_pk) = new_test_data(&mut rng, with_delegation);
+        let (msg, sig_bytes, canister_pk_bytes, root_pk) = new_test_data(rng, with_delegation);
         // This is a valid public key different from root_pk. It was extracted using
         // `From<&NiDkgTranscript> for ThresholdSigPublicKey` from an `NiDkgTranscript`
         // in an integration test.

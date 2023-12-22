@@ -4,7 +4,7 @@
     - if: '$CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
       when: manual
       allow_failure: true
-    - if: '$CI_PARENT_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes:
         - gitlab-ci/config/base-images-build.yml
         - ic-os/boundary-guestos/rootfs/Dockerfile.base
@@ -39,7 +39,7 @@
 
 .build-base-image-job:
   extends:
-    - .ubuntu-k8s
+    - .build-k8s
     - .rules-build-base-images
   needs: []
   artifacts:
@@ -75,7 +75,7 @@ build-guestos-base-dev-sev:
     IMAGE: "guestos-base-dev-sev"
     REF_FILE: "ic-os/guestos/rootfs/docker-base.dev-sev"
   script:
-    - BUILD_ARGS=(--build-arg "PACKAGE_FILES=packages.common packages.dev")
+    - BUILD_ARGS=(--build-arg "PACKAGE_FILES=packages.common packages.dev" --build-arg "CPU_SUPPORT=sev")
     - *build-base-image
 
 build-boundaryos-base:
@@ -178,9 +178,23 @@ build-setupos-base-dev-sev:
 
 build-base-images-ref-update:
   extends:
-    - .ubuntu-k8s
+    - .build-k8s
     - .rules-build-base-images
   needs:
+    - build-guestos-base
+    - build-guestos-base-dev
+    - build-guestos-base-dev-sev
+    - build-boundaryos-base
+    - build-boundaryos-base-snp
+    - build-boundaryos-api-guestos-base
+    - build-boundaryos-api-guestos-base-snp
+    - build-hostos-base
+    - build-hostos-base-dev
+    - build-hostos-base-dev-sev
+    - build-setupos-base
+    - build-setupos-base-dev
+    - build-setupos-base-dev-sev
+  dependencies:
     - build-guestos-base
     - build-guestos-base-dev
     - build-guestos-base-dev-sev
@@ -206,7 +220,7 @@ build-base-images-ref-update:
      for FILE in digestfile-*; do
          IMAGE="$(head -1 "$FILE")"
          REF_FILE="$(tail -1 "$FILE")"
-         echo "$IMAGE" > "$REF_FILE"
+         echo "docker.io/$IMAGE" > "$REF_FILE"
      done
      rm -f digestfile*
 

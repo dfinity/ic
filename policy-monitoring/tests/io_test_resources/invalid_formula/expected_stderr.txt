@@ -1,2 +1,0 @@
-[Main.main] Failed to parse formula file
-Fatal error: exception Failure("lexing: empty token")

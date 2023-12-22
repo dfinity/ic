@@ -29,7 +29,7 @@ impl MetricParams {
             action: action.to_string(),
             counter: meter
                 .u64_counter(format!("{namespace}.{action}.total"))
-                .with_description(format!("Counts occurences of {action} calls"))
+                .with_description(format!("Counts occurrences of {action} calls"))
                 .init(),
             recorder: meter
                 .f64_histogram(format!("{namespace}.{action}.duration_sec"))
@@ -59,8 +59,10 @@ impl<T: CreateRegistryClient> CreateRegistryClient for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        counter.add(1, labels);
-        recorder.record(duration, labels);
+        let cx = Context::current();
+
+        counter.add(&cx, 1, labels);
+        recorder.record(&cx, duration, labels);
 
         info!(action, status, duration, error = ?out.as_ref().err());
 
@@ -86,8 +88,10 @@ impl<T: Snapshot> Snapshot for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        counter.add(1, labels);
-        recorder.record(duration, labels);
+        let cx = Context::current();
+
+        counter.add(&cx, 1, labels);
+        recorder.record(&cx, duration, labels);
 
         let (out, registry_version) = match out {
             Ok(rt) => {
@@ -121,8 +125,10 @@ impl<T: Reload> Reload for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        counter.add(1, labels);
-        recorder.record(duration, labels);
+        let cx = Context::current();
+
+        counter.add(&cx, 1, labels);
+        recorder.record(&cx, duration, labels);
 
         info!(action, status, duration, error = ?out.as_ref().err());
 
@@ -153,8 +159,10 @@ impl<T: Persist> Persist for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        counter.add(1, labels);
-        recorder.record(duration, labels);
+        let cx = Context::current();
+
+        counter.add(&cx, 1, labels);
+        recorder.record(&cx, duration, labels);
 
         info!(action, status, duration, error = ?out.as_ref().err());
 
@@ -180,8 +188,10 @@ impl<T: Run> Run for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        counter.add(1, labels);
-        recorder.record(duration, labels);
+        let cx = Context::current();
+
+        counter.add(&cx, 1, labels);
+        recorder.record(&cx, duration, labels);
 
         info!(action, status, duration, error = ?out.as_ref().err());
 
@@ -203,7 +213,7 @@ impl CheckMetricParams {
             action: action.to_string(),
             counter: meter
                 .u64_counter(format!("{namespace}.{action}.total"))
-                .with_description(format!("Counts occurences of {action} calls"))
+                .with_description(format!("Counts occurrences of {action} calls"))
                 .init(),
             recorder: meter
                 .f64_histogram(format!("{namespace}.{action}.duration_sec"))
@@ -254,10 +264,10 @@ impl<T: Check> Check for CheckWithMetrics<T> {
             height_gauge,
         } = &self.1;
 
-        counter.add(1, labels);
-        recorder.record(duration, labels);
-        height_gauge.observe(block_height, gauge_labels);
-        status_gauge.observe(out.is_ok().into(), gauge_labels);
+        counter.add(&cx, 1, labels);
+        recorder.record(&cx, duration, labels);
+        height_gauge.observe(&cx, block_height, gauge_labels);
+        status_gauge.observe(&cx, out.is_ok().into(), gauge_labels);
 
         info!(
             action,

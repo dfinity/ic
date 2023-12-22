@@ -1,23 +1,19 @@
-#![allow(unused)] // TODO(NNS1-2443): Re-enable clippy once we start actually using this code.
-
 use crate::{
-    pb::v1::{
-        governance_error::ErrorType, neuron::Followees, BallotInfo, GovernanceError,
-        KnownNeuronData, Neuron, NeuronStakeTransfer,
-    },
+    neuron::neuron_id_range_to_u64_range,
+    neuron_store::NeuronStoreError,
+    pb::v1::{neuron::Followees, BallotInfo, KnownNeuronData, Neuron, NeuronStakeTransfer},
     storage::Signed32,
 };
-use bytes::Buf;
 use candid::Principal;
 use ic_base_types::PrincipalId;
-use ic_nns_common::pb::v1::{NeuronId, ProposalId};
-use ic_stable_structures::{BoundedStorable, StableBTreeMap, Storable, VectorMemory};
+use ic_nns_common::pb::v1::NeuronId;
+use ic_stable_structures::{BoundedStorable, StableBTreeMap, Storable};
+use itertools::Itertools;
 use lazy_static::lazy_static;
-use maplit::{hashmap, hashset};
+use maplit::hashmap;
 use prost::Message;
 use std::{
     borrow::Cow,
-    cmp::Reverse,
     collections::{BTreeMap as HeapBTreeMap, BTreeSet as HeapBTreeSet, HashMap, HashSet},
     ops::RangeBounds,
 };
@@ -87,7 +83,7 @@ where
     // Collections
     hot_keys_map: StableBTreeMap<(/* Neuron ID */ u64, /* index */ u64), PrincipalId, Memory>,
     recent_ballots_map: StableBTreeMap<(/* Neuron ID */ u64, /* index */ u64), BallotInfo, Memory>,
-    followees_map: StableBTreeMap<FolloweesKey, (), Memory>,
+    followees_map: StableBTreeMap<FolloweesKey, /* followee_id */ u64, Memory>,
 
     // Singletons
     known_neuron_data_map: StableBTreeMap</* Neuron ID */ u64, KnownNeuronData, Memory>,
@@ -107,14 +103,14 @@ where
 /// Notice that when an element is passed (i.e. a Neuron to create and update),
 /// it is consumed, just like with Vec::push, or BTreeMap::insert.
 ///
-/// Notice that all of these return Result<X, GovernanceError>, where X is ()
+/// Notice that all of these return Result<X, NeuronStoreError>, where X is ()
 /// for mutations, and Neuron for read.
 ///
 /// Additionall, there is upsert, which updates or inserts, depending on whether
 /// an entry with the same ID already exists. You can think of this as insert,
 /// but clobbering is allowed.
 ///
-/// Several `Memory`s are used instead of just oneñ, because the size of
+/// Several `Memory`s are used instead of just one, because the size of
 /// serialized Neurons varies significantly, which leads to inefficient use of
 /// space by ic_stable_structures. In other words, the point of breaking out
 /// into multiple `Memory`s is space efficiency. OTOH, this is probably less
@@ -131,7 +127,7 @@ where
     /// Adds a new entry.
     ///
     /// However, if the id is already in use, returns Err.
-    pub fn create(&mut self, mut neuron: Neuron) -> Result<(), GovernanceError> {
+    pub fn create(&mut self, neuron: Neuron) -> Result<(), NeuronStoreError> {
         let neuron_id = Self::id_or_err(&neuron)?;
 
         let DecomposedNeuron {
@@ -148,7 +144,7 @@ where
         validate_recent_ballots(&recent_ballots)?;
 
         // Try to insert into main.
-        let previous_neuron = self.main.insert(neuron_id, neuron);
+        let previous_neuron = self.main.insert(neuron_id.id, neuron);
 
         // Make sure that we did not clobber an existing entry just now.
         match previous_neuron {
@@ -158,20 +154,16 @@ where
             // Yikes! We just clobbered an existing entry! Abort!
             Some(previous_neuron) => {
                 // Restore the original entry.
-                self.main.insert(neuron_id, previous_neuron);
+                self.main.insert(neuron_id.id, previous_neuron);
 
                 // Return Err indicating that ID is already in use.
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::PreconditionFailed,
-                    format!("Neuron ID already in use: {}", neuron_id),
-                ));
+                return Err(NeuronStoreError::NeuronAlreadyExists(neuron_id));
             }
         }
 
         // Auxiliary Data
         // --------------
 
-        let neuron_id = NeuronId { id: neuron_id };
         update_repeated_field(neuron_id, hot_keys, &mut self.hot_keys_map);
         update_repeated_field(neuron_id, recent_ballots, &mut self.recent_ballots_map);
         self.update_followees(neuron_id, followees);
@@ -187,93 +179,20 @@ where
     }
 
     /// Retrieves an existing entry.
-    pub fn read(&self, neuron_id: NeuronId) -> Result<Neuron, GovernanceError> {
-        let neuron_id = neuron_id.id;
-
-        let abridged_neuron = self
+    pub fn read(&self, neuron_id: NeuronId) -> Result<Neuron, NeuronStoreError> {
+        let main_neuron_part = self
             .main
-            .get(&neuron_id)
+            .get(&neuron_id.id)
             // Deal with no entry by blaming it on the caller.
-            .ok_or_else(|| {
-                GovernanceError::new_with_message(
-                    ErrorType::NotFound,
-                    format!("Unable to find neuron with ID {}", neuron_id),
-                )
-            })?;
+            .ok_or_else(|| NeuronStoreError::not_found(neuron_id))?;
 
-        // Auxiliary Data
-        // --------------
-        //
-        // TODO(NNS1-2505): Uninline.
-
-        // 1.
-        let hot_keys = read_repeated_field(NeuronId { id: neuron_id }, &self.hot_keys_map);
-        // 2.
-        let recent_ballots =
-            read_repeated_field(NeuronId { id: neuron_id }, &self.recent_ballots_map);
-
-        // 3.
-        let followees = {
-            let follower_id = neuron_id;
-            let first = FolloweesKey {
-                follower_id,
-                ..FolloweesKey::MIN
-            };
-            let last = FolloweesKey {
-                follower_id,
-                ..FolloweesKey::MAX
-            };
-            let range = self.followees_map.range(first..=last);
-
-            // Convert range to HashMap<topic_id, Followees>.
-            let mut followees = HashMap::</* topic ID */ i32, Followees>::new();
-            for (key, ()) in range {
-                let FolloweesKey {
-                    follower_id,
-                    topic_id,
-                    followee_id,
-                } = key;
-                // assert_eq!(follower_id, neuron_id);
-
-                // Because impl BoundedStorable for i32 does not exist.
-                let topic_id = i32::from(topic_id);
-
-                // Insert followee_id.
-                followees
-                    .entry(topic_id)
-                    .or_default() // Intermediate insert, if necessary.
-                    .followees
-                    .push(NeuronId { id: followee_id }) // Real insert here.
-            }
-            followees
-        };
-
-        // 4.
-        let known_neuron_data = self.known_neuron_data_map.get(&neuron_id);
-        // 5.
-        let transfer = self.transfer_map.get(&neuron_id);
-
-        // Final Assembly
-        // --------------
-
-        let result = DecomposedNeuron {
-            main: abridged_neuron,
-
-            hot_keys,
-            recent_ballots,
-            followees,
-
-            known_neuron_data,
-            transfer,
-        }
-        .reconstitute();
-        Ok(result)
+        Ok(self.reconstitute_neuron(main_neuron_part))
     }
 
     /// Changes an existing entry.
     ///
     /// If the entry does not already exist, returns a NotFound Err.
-    pub fn update(&mut self, mut neuron: Neuron) -> Result<(), GovernanceError> {
+    pub fn update(&mut self, neuron: Neuron) -> Result<(), NeuronStoreError> {
         let neuron_id = Self::id_or_err(&neuron)?;
 
         let DecomposedNeuron {
@@ -293,7 +212,7 @@ where
 
         // Try to insert into main.
         let previous_neuron = self.main.insert(
-            neuron_id,
+            neuron_id.id,
             // clone is done here, because we might later use neuron in an error
             // message. This should be not a big performance hit, because this
             // is an abridged neuron.
@@ -305,22 +224,14 @@ where
             // Yikes! There was no entry before. Abort!
 
             // First, clean up.
-            self.main.remove(&neuron_id);
+            self.main.remove(&neuron_id.id);
 
-            GovernanceError::new_with_message(
-                ErrorType::NotFound,
-                format!(
-                    "Tried to update an existing Neuron in stable memory, \
-                         but there was none: {:#?}",
-                    neuron,
-                ),
-            )
+            NeuronStoreError::not_found(neuron_id)
         })?;
 
         // Auxiliary Data
         // --------------
 
-        let neuron_id = NeuronId { id: neuron_id };
         update_repeated_field(neuron_id, hot_keys, &mut self.hot_keys_map);
         update_repeated_field(neuron_id, recent_ballots, &mut self.recent_ballots_map);
         self.update_followees(neuron_id, followees);
@@ -338,29 +249,18 @@ where
     /// Removes an existing element.
     ///
     /// Returns Err if not found (and no changes are made, of course).
-    pub fn delete(&mut self, neuron_id: NeuronId) -> Result<(), GovernanceError> {
-        let neuron_id = neuron_id.id;
-
-        let deleted_neuron = self.main.remove(&neuron_id);
+    pub fn delete(&mut self, neuron_id: NeuronId) -> Result<(), NeuronStoreError> {
+        let deleted_neuron = self.main.remove(&neuron_id.id);
 
         match deleted_neuron {
             Some(_deleted_neuron) => (),
             None => {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::NotFound,
-                    format!(
-                        "Tried to delete Neuron from stable storage by ID, \
-                         but ID not found: {}",
-                        neuron_id,
-                    ),
-                ));
+                return Err(NeuronStoreError::not_found(neuron_id));
             }
         }
 
         // Auxiliary Data
         // --------------
-
-        let neuron_id = NeuronId { id: neuron_id };
         update_repeated_field(neuron_id, vec![], &mut self.hot_keys_map);
         update_repeated_field(neuron_id, vec![], &mut self.recent_ballots_map);
         self.update_followees(neuron_id, hashmap![]);
@@ -371,58 +271,114 @@ where
         Ok(())
     }
 
-    /// Inserts or updates, depending on whether an entry (with the same ID) is
-    /// already present.
-    ///
-    /// Like insert, but if there is already an entry, it gets clobbered.
-    ///
-    /// This is useful when "writing through"/mirroring mutations on a heap
-    /// Neuron.
-    ///
-    /// Currently, the only way this can return Err is if there is an internal
-    /// bug, which the caller cannot possibly compensate for.
-    pub fn upsert(&mut self, neuron: Neuron) -> Result<(), GovernanceError> {
-        let neuron_id = Self::id_or_err(&neuron)?;
+    pub fn contains(&self, neuron_id: NeuronId) -> bool {
+        self.main.contains_key(&neuron_id.id)
+    }
 
-        let DecomposedNeuron {
-            main: neuron,
+    pub fn len(&self) -> usize {
+        // We can't possibly have usize::MAX neurons, but we casting it in a saturating way anyway.
+        self.main.len().min(usize::MAX as u64) as usize
+    }
+
+    #[allow(dead_code)] // TODO(NNS1-2416): Re-enable clippy once we start actually using this code.
+    pub fn is_empty(&self) -> bool {
+        self.main.is_empty()
+    }
+
+    /// Returns the next neuron_id equal to or higher than the provided neuron_id
+    pub fn range_neurons<R>(&self, range: R) -> impl Iterator<Item = Neuron> + '_
+    where
+        R: RangeBounds<NeuronId>,
+    {
+        let range = neuron_id_range_to_u64_range(&range);
+
+        self.main
+            .range(range)
+            .map(|(_neuron_id, neuron)| self.reconstitute_neuron(neuron))
+    }
+
+    /// Returns all neuron ids as a set. Note that this method can take ~1B instructions and
+    /// probably shouldn't be used outside of upgrades.
+    pub fn stable_neuron_ids(&self) -> HashSet<u64> {
+        self.main
+            .range(u64::MIN..=u64::MAX)
+            .map(|(neuron_id, _)| neuron_id)
+            .collect()
+    }
+
+    /// Returns the number of entries for some of the storage sections.
+    pub fn lens(&self) -> NeuronStorageLens {
+        NeuronStorageLens {
+            hot_keys: self.hot_keys_map.len(),
+            followees: self.followees_map.len(),
+            known_neuron_data: self.known_neuron_data_map.len(),
+        }
+    }
+
+    /// Internal function to take what's in the main map and fill in the remaining data from
+    /// the other stable storage maps.
+    fn reconstitute_neuron(&self, main_neuron_part: Neuron) -> Neuron {
+        let neuron_id = main_neuron_part.id.unwrap();
+        let hot_keys = read_repeated_field(neuron_id, &self.hot_keys_map);
+        let recent_ballots = read_repeated_field(neuron_id, &self.recent_ballots_map);
+        let followees = self.read_followees(neuron_id);
+
+        let known_neuron_data = self.known_neuron_data_map.get(&neuron_id.id);
+        let transfer = self.transfer_map.get(&neuron_id.id);
+
+        DecomposedNeuron {
+            main: main_neuron_part,
 
             hot_keys,
-            followees,
             recent_ballots,
+            followees,
 
             known_neuron_data,
             transfer,
-        } = DecomposedNeuron::from(neuron);
-
-        let _previous_neuron = self.main.insert(
-            neuron_id,
-            // clone is done here, because we might later use neuron in an error
-            // message. This should be not a big performance hit, because this
-            // is an abridged neuron.
-            neuron.clone(),
-        );
-
-        // Auxiliary Data
-        // --------------
-
-        let neuron_id = NeuronId { id: neuron_id };
-        update_repeated_field(neuron_id, hot_keys, &mut self.hot_keys_map);
-        update_repeated_field(neuron_id, recent_ballots, &mut self.recent_ballots_map);
-        self.update_followees(neuron_id, followees);
-
-        update_singleton_field(
-            neuron_id,
-            known_neuron_data,
-            &mut self.known_neuron_data_map,
-        );
-        update_singleton_field(neuron_id, transfer, &mut self.transfer_map);
-
-        Ok(())
+        }
+        .reconstitute()
     }
 
     // Misc Private Helper(s)
     // ----------------------
+
+    fn read_followees(&self, follower_id: NeuronId) -> HashMap</* topic ID */ i32, Followees> {
+        // Read from stable memory.
+        let follower_id = follower_id.id;
+        let first = FolloweesKey {
+            follower_id,
+            ..FolloweesKey::MIN
+        };
+        let last = FolloweesKey {
+            follower_id,
+            ..FolloweesKey::MAX
+        };
+        let range = self.followees_map.range(first..=last);
+
+        range
+            // create groups for topics
+            .group_by(|(followees_key, _followee_id)| followees_key.topic_id)
+            .into_iter()
+            // convert (Signed32, group) into (i32, followees)
+            .map(|(topic, group)| {
+                // FolloweesKey::index represents the followee's index within the followees list for
+                // a specific follower and topic. We have strong guarantee that StableBTreeMap's
+                // range() returns followee entries with ascending `FolloweesKey::index` (because
+                // the Ord implementation of FolloweesKey), and the current implementation of
+                // `group_by()` preserves the order of the elements within groups. Therefore
+                // `sorted_by_key()` below is technically not needed. However, the
+                // `Itertools::group_by` documentation does not specify whether it actually preseves
+                // the order. For this reason we choose to still sort by `FolloweesKey::index`,
+                // instead of relying on an undefined behavior.
+                let followees = group
+                    .sorted_by_key(|(followees_key, _)| followees_key.index)
+                    .map(|(_, followee_id)| NeuronId { id: followee_id })
+                    .collect::<Vec<_>>();
+
+                (i32::from(topic), Followees { followees })
+            })
+            .collect()
+    }
 
     fn update_followees(
         &mut self,
@@ -433,27 +389,28 @@ where
 
         // This will replace whatever was there before (if anything). As
         // elsewhere, "new" does not mean "additional".
-        let new_entries = new_followees
-            .into_iter()
-            .flat_map(|(topic_id, followees)| {
-                let topic_id = Signed32(topic_id);
-                followees
-                    .followees
-                    .into_iter()
-                    .map(move // Take ownership of topic_id.
-                        |followee_id| {
+        let new_entries =
+            new_followees
+                .into_iter()
+                .flat_map(|(topic_id, followees)| {
+                    let topic_id = Signed32(topic_id);
+                    followees.followees.into_iter().enumerate().map(
+                        move // Take ownership of topic_id.
+                        |(index, followee_id)| {
                             let followee_id = followee_id.id;
+                            let index = index as u64;
 
                             let key = FolloweesKey {
                                 follower_id,
                                 topic_id,
-                                followee_id,
+                                index,
                             };
 
-                            (key, ())
-                        })
-            })
-            .collect();
+                            (key, followee_id)
+                        },
+                    )
+                })
+                .collect();
 
         let range = {
             let first = FolloweesKey {
@@ -471,24 +428,26 @@ where
         update_range(new_entries, range, &mut self.followees_map);
     }
 
-    /// Pulls out u64 id from a Neuron.
-    fn id_or_err(neuron: &Neuron) -> Result<u64, GovernanceError> {
+    /// Pulls out NeuronId from a Neuron.
+    fn id_or_err(neuron: &Neuron) -> Result<NeuronId, NeuronStoreError> {
         neuron
             .id
-            .as_ref()
-            // Unwrap id, converting it from NeuronId to simple u64, suitable
-            // for use in StableBTreeMap key.
-            .map(|neuron_id| neuron_id.id)
             // Handle id field not set.
-            .ok_or_else(|| {
-                GovernanceError::new_with_message(
-                    ErrorType::InvalidCommand,
-                    format!("Tried to store a Neuron, but it lacks an id: {:#?}", neuron),
-                )
-            })
+            .ok_or(NeuronStoreError::NeuronIdIsNone)
     }
 }
 
+/// Number of entries for each section of the neuron storage. Only the ones needed are defined.
+pub struct NeuronStorageLens {
+    pub hot_keys: u64,
+    pub followees: u64,
+    pub known_neuron_data: u64,
+}
+
+#[cfg(test)]
+use ic_stable_structures::VectorMemory;
+
+#[cfg(test)]
 pub(crate) fn new_heap_based() -> StableNeuronStore<VectorMemory> {
     StableNeuronStoreBuilder {
         main: VectorMemory::default(),
@@ -613,7 +572,7 @@ lazy_static! {
 ///
 /// Of course, a similar effect can be achieved "manually" by calling
 /// std::mem::take on each of the auxiliary fields, but that is error prone,
-/// because it is very easy forget to take one of the auxilliary fields. By
+/// because it is very easy to forget to take one of the auxiliary fields. By
 /// sticking to this, such mistakes can be avoided.
 ///
 /// Notice that full_neuron in the above example gets consumed. It is "replaced"
@@ -726,10 +685,7 @@ fn update_range<Key, Value, Memory>(
     Value: BoundedStorable,
     Memory: ic_stable_structures::Memory,
 {
-    let new_keys = new_entries
-        .iter()
-        .map(|(k, v)| k.clone())
-        .collect::<HeapBTreeSet<Key>>();
+    let new_keys = new_entries.keys().cloned().collect::<HeapBTreeSet<Key>>();
 
     for (new_key, new_value) in new_entries {
         map.insert(new_key, new_value);
@@ -779,7 +735,7 @@ where
 
 /// Basically, this just means that all elements have a proper ProposalId,
 /// because that's what StableNeuronStore needs.
-fn validate_recent_ballots(recent_ballots: &[BallotInfo]) -> Result<(), GovernanceError> {
+fn validate_recent_ballots(recent_ballots: &[BallotInfo]) -> Result<(), NeuronStoreError> {
     let mut defects = vec![];
 
     for (i, ballot_info) in recent_ballots.iter().enumerate() {
@@ -793,13 +749,12 @@ fn validate_recent_ballots(recent_ballots: &[BallotInfo]) -> Result<(), Governan
         return Ok(());
     }
 
-    Err(GovernanceError::new_with_message(
-        ErrorType::InvalidCommand,
-        format!(
+    Err(NeuronStoreError::InvalidData {
+        reason: format!(
             "Some elements in Neuron.recent_ballots are invalid: {:?}",
             defects
         ),
-    ))
+    })
 }
 
 // StableBTreeMap Compound Keys
@@ -814,19 +769,19 @@ fn validate_recent_ballots(recent_ballots: &[BallotInfo]) -> Result<(), Governan
 struct FolloweesKey {
     follower_id: u64,
     topic_id: Signed32,
-    followee_id: u64,
+    index: u64,
 }
 type FolloweesKeyEquivalentTuple = (u64, (Signed32, u64));
 impl FolloweesKey {
     const MIN: Self = Self {
         follower_id: u64::MIN,
         topic_id: Signed32::MIN,
-        followee_id: u64::MIN,
+        index: u64::MIN,
     };
     const MAX: Self = Self {
         follower_id: u64::MAX,
         topic_id: Signed32::MAX,
-        followee_id: u64::MAX,
+        index: u64::MAX,
     };
 }
 impl Storable for FolloweesKey {
@@ -834,20 +789,20 @@ impl Storable for FolloweesKey {
         let Self {
             follower_id,
             topic_id,
-            followee_id,
+            index,
         } = *self;
-        let tuple: FolloweesKeyEquivalentTuple = (follower_id, (topic_id, followee_id));
+        let tuple: FolloweesKeyEquivalentTuple = (follower_id, (topic_id, index));
         let bytes: Vec<u8> = tuple.to_bytes().to_vec();
         Cow::from(bytes)
     }
 
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
-        let (follower_id, (topic_id, followee_id)) = FolloweesKeyEquivalentTuple::from_bytes(bytes);
+        let (follower_id, (topic_id, index)) = FolloweesKeyEquivalentTuple::from_bytes(bytes);
 
         Self {
             follower_id,
             topic_id,
-            followee_id,
+            index,
         }
     }
 }

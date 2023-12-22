@@ -177,7 +177,7 @@ pub fn test(env: TestEnv) {
         }
 
         // check whether all accounts still sum up
-        let account_holders = vec![&lifeline, &can1, &can2, &can3, &can4, &can5];
+        let account_holders = [&lifeline, &can1, &can2, &can3, &can4, &can5];
         let obtainers = account_holders
             .iter()
             .map(|a| get_uc_balance(&ledger, a))

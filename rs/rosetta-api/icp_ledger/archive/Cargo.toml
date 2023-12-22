@@ -1,8 +1,10 @@
 [package]
 name = "ledger-archive-node-canister"
-version = "0.8.0"
-authors = ["The Internet Computer Project Developers"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 
@@ -19,4 +21,4 @@ ic-metrics-encoder = "1"
 ic-nns-constants = { path = "../../../nns/constants" }
 icp-ledger = { path = "../" }
 lazy_static = "1.4.0"
-serde = "1.0"
+serde = { workspace = true }

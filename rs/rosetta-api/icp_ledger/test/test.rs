@@ -48,7 +48,7 @@ fn create_sender(i: u64) -> Sender {
     Sender::from_keypair(&keypair)
 }
 
-// So we can get the size of EncodedBlock
+// So we can get the size of EncodedBlock.
 fn example_block() -> Block {
     let transaction = Transaction::new(
         AccountIdentifier::new(CanisterId::from_u64(1).get(), None),
@@ -267,7 +267,7 @@ fn upgrade_test() {
 
         let accounts = make_accounts(5, 4);
 
-        // The minting account should be the governance canister
+        // The minting account should be the governance canister.
         let minting_account_principal =
             Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
 
@@ -288,10 +288,10 @@ fn upgrade_test() {
         let GetBlocksRes(blocks_before) = get_blocks_pb(&ledger, 0..20).await?;
         let blocks_before = blocks_before.unwrap();
 
-        // Icrc1 Minting Account should be None at this point
+        // Icrc1 Minting Account should be `None` at this point.
         assert!(get_minting_account(&ledger).await?.is_none());
 
-        // Try upgrading with none
+        // Try upgrading with `None`.
         ledger
             .upgrade_to_self_binary(
                 CandidOne(LedgerCanisterPayload::Upgrade(None))
@@ -302,13 +302,13 @@ fn upgrade_test() {
 
         let GetBlocksRes(blocks_after) = get_blocks_pb(&ledger, 0..20).await?;
         let blocks_after = blocks_after.unwrap();
-        // Blocks should be the same
+        // Blocks should be the same.
         assert_eq!(blocks_before, blocks_after);
 
-        // Icrc1 Minting Account should still be None
+        // Icrc1 Minting Account should still be `None`.
         assert!(get_minting_account(&ledger).await?.is_none());
 
-        // Now try to update with some arguments
+        // Now try to update with some arguments.
         ledger
             .upgrade_to_self_binary(
                 CandidOne(Some(
@@ -326,10 +326,10 @@ fn upgrade_test() {
         let blocks_after = blocks_after.unwrap();
         assert_eq!(blocks_before, blocks_after);
 
-        // Icrc1 Minting Account should still be None
+        // Icrc1 Minting Account should still be `None`.
         assert!(get_minting_account(&ledger).await?.is_none());
 
-        // Now try to update with the minting account argument set
+        // Now try to update with the minting account argument set.
         ledger
             .upgrade_to_self_binary(
                 CandidOne(Some(
@@ -348,7 +348,7 @@ fn upgrade_test() {
         assert_eq!(blocks_before, blocks_after);
 
         let minting_account_post_upgrade: Option<Account> = get_minting_account(&ledger).await?;
-        // Now the icrc1 minting account should be changed to the minting account set during initialization
+        // Now the icrc1 minting account should be changed to the minting account set during initialization.
         assert_eq!(
             minting_account_post_upgrade.unwrap(),
             minting_account_principal.into()
@@ -367,14 +367,14 @@ fn archive_blocks_small_test() {
         println!("[test] accounts: {:?}", accounts);
 
         // For this test we will use a tiny node size. This is because
-        // we want multiple archive nodes to be created
+        // we want multiple archive nodes to be created.
         let blocks_per_archive_node = 2;
         println!(
             "[test] blocks per archive node: {}",
             blocks_per_archive_node
         );
         // The tiny maximum message size will force archiving one block at a
-        // time
+        // time.
         let max_message_size_bytes = 192;
         let node_max_memory_size_bytes =
             example_block().encode().size_bytes() as u64 * blocks_per_archive_node;
@@ -409,7 +409,7 @@ fn archive_blocks_small_test() {
         println!("[test] ledger canister id: {}", ledger.canister_id());
 
         // We will archive all Blocks from the ledger. Retrieving a copy to
-        // compare with archive contents
+        // compare with archive contents.
         let IterBlocksRes(blocks) = ledger
             .query_(
                 "iter_blocks_pb",
@@ -420,7 +420,7 @@ fn archive_blocks_small_test() {
         println!("[test] retrieved {} blocks", blocks.len());
         assert!(blocks.len() == 12);
 
-        // To trigger archiving me need a send
+        // To trigger archiving me need a send.
         println!("[test] calling send() to trigger archiving");
         simple_send(&ledger, &create_sender(12345), &minting_account, 100, 0).await?;
 
@@ -429,14 +429,14 @@ fn archive_blocks_small_test() {
         assert_eq!(ledger_blocks.as_ref().unwrap().len(), 1);
 
         // First we get the CanisterId of each archive node that has been
-        // created
+        // created.
         println!("[test] retrieving nodes");
         let nodes: Vec<CanisterId> = ledger.query_("get_nodes", dfn_candid::candid, ()).await?;
-        // 12 blocks, 2 blocks per archive node = 6 archive nodes
+        // 12 blocks, 2 blocks per archive node = 6 archive nodes.
         assert_eq!(nodes.len(), 6, "expected 6 archive nodes");
         println!("[test] retrieved {} nodes: {:?}", nodes.len(), nodes);
 
-        // Then loop over these nodes and fetch all blocks
+        // Then loop over these nodes and fetch all blocks.
         let mut blocks_from_archive = vec![];
         for n in nodes {
             println!("[test] retrieving blocks from {}. calling iter_blocks()", n);
@@ -454,7 +454,7 @@ fn archive_blocks_small_test() {
                     IterBlocksArgs::new(0usize, 128usize),
                 )
                 .await?;
-            // Because blocks is emptied by append we need the length for the log message
+            // Because blocks is emptied by append we need the length for the log message.
             let blocks_len = blocks.len();
             blocks_from_archive.append(&mut blocks);
             println!(
@@ -465,14 +465,11 @@ fn archive_blocks_small_test() {
             );
         }
 
-        // Finally check that we retrieved what we have expected
+        // Finally check that we retrieved what we have expected.
         assert_eq!(blocks_from_archive, blocks);
 
         // Fetch all blocks through the Motoko proxy canister.
-        let all_blocks: Vec<_> = blocks
-            .into_iter()
-            .chain(ledger_blocks.unwrap().into_iter())
-            .collect();
+        let all_blocks: Vec<_> = blocks.into_iter().chain(ledger_blocks.unwrap()).collect();
 
         let proxy = install_motoko_proxy(&r).await;
         let () = proxy
@@ -543,10 +540,10 @@ fn archive_blocks_large_test() {
         println!("[test] ledger canister id: {}", ledger.canister_id());
 
         // We will archive all Blocks from the ledger. Retrieving a copy to
-        // compare with archive contents
+        // compare with archive contents.
         let blocks = {
             let mut blocks = vec![];
-            // Need to make multiple queries due to query message size limit
+            // Need to make multiple queries due to query message size limit.
             let blocks_per_query: usize = 2000;
             for i in 0usize..(blocks_per_archive_node / blocks_per_query) - 1 {
                 let offset = i * blocks_per_query;
@@ -569,22 +566,22 @@ fn archive_blocks_large_test() {
         };
         assert_eq!(blocks.len(), 4096, "Expected 4096 blocks.");
 
-        // To trigger archiving me need a send
+        // To trigger archiving me need a send.
         println!("[test] calling send() to trigger archiving");
         simple_send(&ledger, &create_sender(12345), &minting_account, 100, 0).await?;
 
         // Only the last (simple_send) transaction should be on the ledger after
-        // archiving blocks
+        // archiving blocks.
         ledger_assert_num_blocks(&ledger, 1).await;
 
         // First we get the CanisterId of each archive node that has been
-        // created
+        // created.
         println!("[test] retrieving nodes");
         let nodes: Vec<CanisterId> = ledger.query_("get_nodes", dfn_candid::candid, ()).await?;
         assert_eq!(nodes.len(), 1, "expected 1 archive node");
         println!("[test] retrieved {} nodes: {:?}", nodes.len(), nodes);
 
-        // Then loop over these nodes and fetch all blocks
+        // Then loop over these nodes and fetch all blocks.
         let mut blocks_from_archive = vec![];
         for n in nodes {
             println!("[test] retrieving blocks from {}. calling iter_blocks()", n);
@@ -592,7 +589,7 @@ fn archive_blocks_large_test() {
 
             let mut blocks = {
                 let mut blocks = vec![];
-                // Need to make multiple queries due to query message size limit
+                // Need to make multiple queries due to query message size limit.
                 let blocks_per_query: usize = 2000;
                 for i in 0usize..blocks_per_archive_node / blocks_per_query {
                     let offset = i * blocks_per_query;
@@ -621,7 +618,7 @@ fn archive_blocks_large_test() {
             );
         }
 
-        // Finally check that we retrieved what we have expected
+        // Finally check that we retrieved what we have expected.
         assert_eq!(blocks_from_archive, blocks);
 
         Ok(())
@@ -714,7 +711,7 @@ fn archived_blocks_ranges() {
             install.bytes(CandidOne(payload).into_bytes()?).await?
         };
 
-        // make a transfer to trigger archiving
+        // Make a transfer to trigger archiving.
         simple_send(&ledger, &create_sender(12345), &minting_account, 100, 0).await?;
 
         for start in 0..10 {
@@ -776,7 +773,7 @@ fn notify_timeout_test() {
                                 .into(),
                         )
                         .initial_values(accounts)
-                        // A tiny notification window so notifications will fail
+                        // A tiny notification window so notifications will fail.
                         .transaction_window(Duration::from_millis(1))
                         .send_whitelist(send_whitelist)
                         .build()
@@ -976,14 +973,14 @@ fn notify_test() {
         assert_eq!(r2, Ok(()));
 
         println!("{:?}", r3);
-        // This is vague because it contains stuff like src spans as it's a panic
+        // This is vague because it contains stuff like src spans as it's a panic.
         assert!(r3
             .unwrap_err()
             .contains("notification state is already true"));
 
         assert_eq!(2, count);
 
-        // Notification of non whitelisted target should fail
+        // Notification of non whitelisted target should fail.
         let block_height: BlockIndex = ledger_canister
             .update_from_sender(
                 "send_pb",
@@ -1012,7 +1009,7 @@ fn notify_test() {
             .update_from_sender("notify_pb", protobuf, notify_not_whitelisted, &sender)
             .await;
 
-        // The nofity method failed - the counter was not increased.
+        // The notify method failed - the counter was not increased.
         assert!(get_metrics(&ledger_canister)
             .await
             .contains("ledger_notify_method_calls 3"));
@@ -1170,7 +1167,9 @@ fn sub_account_test() {
         );
         let from_subaccount = sub_account(1);
         let mut send_whitelist = HashSet::new();
-        send_whitelist.insert(CanisterId::new(sender.get_principal_id()).unwrap());
+        send_whitelist.insert(CanisterId::unchecked_from_principal(
+            sender.get_principal_id(),
+        ));
         let ledger_canister = proj
             .cargo_bin("ledger-canister", &[])
             .install_(
@@ -1248,7 +1247,7 @@ fn check_anonymous_cannot_send() {
     local_test_e(|r| async move {
         let proj = Project::new();
         let sub_account = |x| Some(Subaccount([x; 32]));
-        // The principal ID of the test runner
+        // The principal ID of the test runner.
         let us = PrincipalId::new_anonymous();
         let mut initial_values = HashMap::new();
         initial_values.insert(
@@ -1270,7 +1269,7 @@ fn check_anonymous_cannot_send() {
             )
             .await?;
 
-        // Send a payment from an anonymous user, should fail
+        // Send a payment from an anonymous user, should fail.
         let _: BlockIndex = ledger_canister
             .update_(
                 "send_pb",
@@ -1327,7 +1326,7 @@ fn transaction_test() {
         let acc1 = create_sender(1);
         let acc2 = create_sender(2);
 
-        // Amount is the send amount + the fee + the amount we burn
+        // Amount is the send amount + the fee + the amount we burn.
         let acc1_start_amount = 500 + DEFAULT_TRANSFER_FEE.get_e8s();
         let acc2_start_amount = DEFAULT_TRANSFER_FEE.get_e8s();
 
@@ -1371,7 +1370,7 @@ fn transaction_test() {
             .map(tokens_from_proto)?;
         assert_eq!(supply.get_e8s(), acc1_start_amount + acc2_start_amount);
 
-        // perform a mint
+        // Perform a mint.
         let mint_amount = 100;
         simple_send(&ledger, &acc1, &minting_account, mint_amount, 0).await?;
 
@@ -1387,7 +1386,7 @@ fn transaction_test() {
             acc1_start_amount + acc2_start_amount + mint_amount
         );
 
-        // perform a send
+        // Perform a send.
         let send_amount = 500;
         let send_fee = DEFAULT_TRANSFER_FEE.get_e8s();
         simple_send(&ledger, &acc2, &acc1, send_amount, send_fee).await?;
@@ -1508,7 +1507,7 @@ fn get_block_test() {
         let proj = Project::new();
 
         // For printing and comparing blocks since they're now hidden behind a
-        // trait
+        // trait.
         let blk = |b: &icp_ledger::Block| (b.transaction().into_owned(), b.timestamp());
 
         let minting_account = create_sender(0);
@@ -1518,11 +1517,11 @@ fn get_block_test() {
         // accounts (since each account will generate a Mint transaction).
         let num_blocks = 32u64;
 
-        // Generate initial blocks just below the archive threshold
+        // Generate initial blocks just below the archive threshold.
         let accounts = make_accounts(num_blocks - 1, 1);
 
         // With a target of 32 accounts and 8 blocks per archive we should
-        // generate multiple archive nodes
+        // generate multiple archive nodes.
         let blocks_per_archive_node: usize = 8;
 
         let max_message_size_bytes: usize = 1024 * 1024;
@@ -1565,31 +1564,31 @@ fn get_block_test() {
 
         // Fetch some blocks using block() while they're still inside Ledger.
         // Later on we will archive them all and then block() has to
-        // fetch them from Archive
+        // fetch them from Archive.
         let mut blocks_from_ledger_before_archive = vec![];
         for i in 0..num_blocks - 1 {
             let BlockRes(block) = ledger.query_("block_pb", protobuf, i).await?;
-            // Since blocks are still in the Ledger we should get Some(Ok(block))
+            // Since blocks are still in the Ledger we should get Some(Ok(block)).
             let block = Block::decode(block.unwrap().unwrap()).expect("unable to decode block");
             blocks_from_ledger_before_archive.push(blk(&block))
         }
 
-        // To trigger archiving me need a send. This will create the 32nd block
+        // To trigger archiving me need a send. This will create the 32nd block.
         println!("[test] calling send() to trigger archiving");
         simple_send(&ledger, &create_sender(12345), &minting_account, 100, 0).await?;
 
-        // Make sure Ledger is empty after archiving blocks
+        // Make sure Ledger is empty after archiving blocks.
         ledger_assert_num_blocks(&ledger, 0).await;
 
         // Assert that we have created multiple nodes. We want to make sure
-        // ledger.block() seamlessly fetches Blocks from any node
+        // ledger.block() seamlessly fetches Blocks from any node.
         ledger_assert_num_nodes(&ledger, 4).await;
 
         let mut blocks_from_archive: Vec<(Transaction, TimeStamp)> = vec![];
         for i in 0..num_blocks {
             let block = {
                 let BlockRes(result) = ledger.query_("block_pb", protobuf, BlockArg(i)).await?;
-                // Since blocks are now in the archive we should get Some(Err(canister_id))
+                // Since blocks are now in the archive we should get Some(Err(canister_id)).
                 let canister_id: CanisterId = result.unwrap().unwrap_err();
                 let node: Canister = Canister::new(&r, canister_id);
                 let BlockRes(block) = node.query_("get_block_pb", protobuf, BlockArg(i)).await?;
@@ -1607,14 +1606,14 @@ fn get_block_test() {
         blocks_from_ledger_before_archive.push(blocks_from_archive.last().unwrap().clone());
         assert_eq!(blocks_from_archive, blocks_from_ledger_before_archive);
 
-        // Generate more blocks to almost trigger another archiving operation
+        // Generate more blocks to almost trigger another archiving operation.
         println!("[test] generating additional blocks");
         let acc1 = create_sender(1001);
         for _ in 0..num_blocks - 1 {
             simple_send(&ledger, &acc1, &minting_account, 9999, 0).await?;
         }
 
-        // And fetch the first of the new blocks from from the ledger
+        // And fetch the first of the new blocks from from the ledger.
         let block_index: u64 = num_blocks;
         let BlockRes(block_from_ledger) = ledger
             .query_("block_pb", protobuf, BlockArg(block_index))
@@ -1626,22 +1625,22 @@ fn get_block_test() {
             blk(&block_from_ledger)
         );
 
-        // Then, generate one final block to trigger archiving
+        // Then, generate one final block to trigger archiving.
         println!("[test] generating one more block to trigger archiving");
         simple_send(&ledger, &acc1, &minting_account, 9999, 0).await?;
 
-        // Again, make sure Ledger is empty after archiving blocks
+        // Again, make sure Ledger is empty after archiving blocks.
         ledger_assert_num_blocks(&ledger, 0).await;
 
         // And fetch the block again, at the same index, this time from the
-        // archive
+        // archive.
         let block_from_archive: EncodedBlock = {
             let BlockRes(result) = ledger
                 .query_("block_pb", protobuf, BlockArg(block_index))
                 .await?;
-            // Since the block is now in the archive we should get Some(Err(canister_id))
+            // Since the block is now in the archive we should get Some(Err(canister_id)).
             let canister_id: CanisterId = result.unwrap().unwrap_err();
-            // So we need to fetch it from archive canister directly
+            // So we need to fetch it from archive canister directly.
             let node: Canister = Canister::new(&r, canister_id);
             let BlockRes(block) = node
                 .query_("get_block_pb", protobuf, BlockArg(block_index))
@@ -1682,7 +1681,7 @@ fn get_multiple_blocks_test() {
         // For this test we only need two archive nodes to check the range
         // queries. We will start with 14 blocks, so the first archive node
         // will be filled and then some space will be left in the second. Note
-        // that the number here is **approximate**
+        // that the number here is **approximate**.
         let blocks_per_archive_node: usize = 8;
 
         let max_message_size_bytes: usize = 1024 * 1024;
@@ -1725,24 +1724,24 @@ fn get_multiple_blocks_test() {
         println!("[test] ledger canister id: {}", ledger.canister_id());
 
         let node: Canister = {
-            // To trigger archiving me need a send
+            // To trigger archiving me need a send.
             println!("[test] calling send() to trigger archiving");
             simple_send(&ledger, &create_sender(12345), &minting_account, 100, 0).await?;
 
-            // Make sure Ledger is empty after archiving blocks
+            // Make sure Ledger is empty after archiving blocks.
             ledger_assert_num_blocks(&ledger, 0).await;
 
             // There should be two nodes
             let nodes: Vec<CanisterId> = ledger_assert_num_nodes(&ledger, 2).await;
             // We are interested in the second node which still has some empty
-            // space
+            // space.
             Canister::new(&r, nodes[1])
         };
 
         // Blocks [0 .. 8] (inclusive) are stored in node [0]. Remaining five
-        // blocks in node [1] are those with BlockIndexs 9, 10, 11, 12 and 13
+        // blocks in node [1] are those with BlockIndices 9, 10, 11, 12 and 13.
 
-        // Query Blocks 10 and 11
+        // Query Blocks 10 and 11.
         {
             println!("[test] querying blocks 10 and 11");
             let GetBlocksRes(blocks_from_node) = get_blocks_pb(&node, 10..12).await?;
@@ -1755,7 +1754,7 @@ fn get_multiple_blocks_test() {
             assert!(blocks_from_node.len() == 2);
         }
 
-        // Query Blocks 11 and 12
+        // Query Blocks 11 and 12.
         {
             println!("[test] querying blocks 11 and 12");
             let GetBlocksRes(blocks_from_node) = get_blocks_pb(&node, 11..13).await?;
@@ -1768,7 +1767,7 @@ fn get_multiple_blocks_test() {
             assert!(blocks_from_node.len() == 2);
         }
 
-        // Query Blocks 12 and 13
+        // Query Blocks 12 and 13.
         {
             println!("[test] querying blocks 12 and 13");
             let GetBlocksRes(blocks_from_node) = get_blocks_pb(&node, 12..14).await?;
@@ -1781,7 +1780,7 @@ fn get_multiple_blocks_test() {
             assert!(blocks_from_node.len() == 2);
         }
 
-        // Query all blocks
+        // Query all blocks.
         {
             println!("[test] querying all blocks");
             let GetBlocksRes(blocks_from_node) = get_blocks_pb(&node, 9..14).await?;
@@ -1794,7 +1793,7 @@ fn get_multiple_blocks_test() {
             assert!(blocks_from_node.len() == 5);
         }
 
-        // And some invalid queries
+        // And some invalid queries.
         println!("[test] testing invalid queries to the archive node");
         {
             // outside range left
@@ -1840,7 +1839,7 @@ fn get_multiple_blocks_test() {
         }
 
         println!("[test] generating additional blocks in the ledger");
-        // Generate additional blocks. These should have heights 14 and 15
+        // Generate additional blocks. These should have heights 14 and 15.
         let acc1 = create_sender(1001);
         simple_send(&ledger, &acc1, &minting_account, 9999, 0).await?;
         let acc2 = create_sender(1002);
@@ -1848,7 +1847,7 @@ fn get_multiple_blocks_test() {
 
         {
             println!("[test] querying blocks from the ledger");
-            // Fetch 2 blocks beginning at BlockIndex 14 from the ledger
+            // Fetch 2 blocks beginning at BlockIndex 14 from the ledger.
             let GetBlocksRes(blocks_from_ledger) = get_blocks_pb(&ledger, 14..16).await?;
             let blocks_from_ledger = blocks_from_ledger.unwrap();
             assert!(
@@ -1857,7 +1856,7 @@ fn get_multiple_blocks_test() {
             );
 
             println!("[test] testing invalid queries to the ledger");
-            // And some invalid queries
+            // And some invalid queries.
             let GetBlocksRes(blocks_from_ledger) = get_blocks_pb(&ledger, 10..12).await?;
             blocks_from_ledger.unwrap_err();
 
@@ -1928,12 +1927,12 @@ fn only_ledger_can_append_blocks_to_archive_nodes() {
         };
         println!("[test] ledger canister id: {}", ledger.canister_id());
 
-        // To trigger archiving me need a send
+        // To trigger archiving me need a send.
         println!("[test] calling send() to trigger archiving");
         simple_send(&ledger, &create_sender(12345), &minting_account, 100, 0).await?;
 
         // Check that only the Archive Canister can append blocks to a Node
-        // canister
+        // canister.
         {
             println!(
                 "[test] checking that only ledger canister can append blocks to a node canister"
@@ -2150,7 +2149,7 @@ fn test_transfer_candid() {
             Tokens::from_e8s(1_010_000_000)
         );
 
-        // Test error cases
+        // Test error cases.
         assert_eq!(
             transfer_candid(
                 &ledger,
@@ -2342,7 +2341,7 @@ fn call_with_cleanup() {
             .install_(&r, Vec::new())
             .await?;
 
-        // Check the dirty call behaves badly
+        // Check the dirty call behaves badly.
         let r: Result<(), String> = test_canister.update_("dirty_call", candid, ()).await;
         println!("{:?}", r);
         assert!(r.unwrap_err().contains("Failed successfully"),);

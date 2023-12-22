@@ -1,13 +1,24 @@
 use ic_crypto_ecdsa_secp256k1::PublicKey;
+use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::fmt::{Formatter, LowerHex, UpperHex};
+use std::fmt::{Display, Formatter, LowerHex, UpperHex};
 use std::str::FromStr;
 
+#[cfg(test)]
+mod tests;
+
 /// An Ethereum account address.
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Encode, Decode,
+)]
 #[serde(transparent)]
-pub struct Address(#[serde(with = "crate::serde_data")] [u8; 20]);
+#[cbor(transparent)]
+pub struct Address(
+    #[serde(with = "crate::serde_data")]
+    #[cbor(n(0), with = "minicbor::bytes")]
+    [u8; 20],
+);
 
 impl AsRef<[u8]> for Address {
     fn as_ref(&self) -> &[u8] {
@@ -16,7 +27,9 @@ impl AsRef<[u8]> for Address {
 }
 
 impl Address {
-    pub fn new(bytes: [u8; 20]) -> Self {
+    pub const ZERO: Self = Self([0u8; 20]);
+
+    pub const fn new(bytes: [u8; 20]) -> Self {
         Self(bytes)
     }
 
@@ -73,6 +86,12 @@ impl FromStr for Address {
     }
 }
 
+impl fmt::Debug for Address {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
 impl fmt::Display for Address {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Display address using EIP-55
@@ -102,4 +121,40 @@ impl fmt::Display for Address {
 
 fn keccak(bytes: &[u8]) -> [u8; 32] {
     ic_crypto_sha3::Keccak256::hash(bytes)
+}
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum AddressValidationError {
+    Invalid { error: String },
+    NotSupported(Address),
+    Blocked(Address),
+}
+
+impl Display for AddressValidationError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            AddressValidationError::Invalid { error } => {
+                write!(f, "Invalid address: {}", error)
+            }
+            AddressValidationError::NotSupported(address) => {
+                write!(f, "Address {} is not supported", address)
+            }
+            AddressValidationError::Blocked(address) => {
+                write!(f, "address {} is blocked", address)
+            }
+        }
+    }
+}
+
+/// Validate whether the given address can be used as the destination of an Ethereum transaction.
+pub fn validate_address_as_destination(address: &str) -> Result<Address, AddressValidationError> {
+    let address =
+        Address::from_str(address).map_err(|e| AddressValidationError::Invalid { error: e })?;
+    if address == Address::ZERO {
+        return Err(AddressValidationError::NotSupported(address));
+    }
+    if crate::blocklist::is_blocked(address) {
+        return Err(AddressValidationError::Blocked(address));
+    }
+    Ok(address)
 }

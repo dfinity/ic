@@ -23,12 +23,26 @@ use ic_types::{
 
 const REPLICA_TIME: u64 = 1234567;
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub struct Certificate {
     tree: MixedHashTree,
     signature: Blob,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub delegation: Option<CertificateDelegation>,
+}
+
+impl Certificate {
+    pub fn tree(&self) -> MixedHashTree {
+        self.tree.clone()
+    }
+
+    pub fn signature(&self) -> Blob {
+        self.signature.clone()
+    }
+
+    pub fn delegation(&self) -> Option<CertificateDelegation> {
+        self.delegation.clone()
+    }
 }
 
 #[derive(serde::Serialize, Debug, Clone)]
@@ -90,6 +104,35 @@ impl CertificateData {
 }
 
 #[derive(Debug, Clone)]
+/// A `CertificateBuilder` can be used to construct a valid certificate with an
+/// optional delegation, if the signing subnet is not the root subnet.
+///
+/// An example of building a certificate:
+///
+/// ```compile_fail
+/// use ic_certification_test_utils::{CertificateBuilder, CertificateData};
+/// use ic_crypto_tree_hash::Digest;
+///
+/// let (_cert, _pk, _cbor) = CertificateBuilder::new(CertificateData::CanisterData {
+///     canister_id: canister_test_id(1),
+///     certified_data: Digest::try_from(vec![42; 32]).unwrap(),
+/// })
+/// .with_delegation(CertificateBuilder::new(CertificateData::SubnetData {
+///     subnet_id: subnet_test_id(1),
+///     canister_id_ranges: vec![(canister_test_id(0), canister_test_id(10))],
+/// }))
+/// .build();
+/// ```
+///
+/// The builder returns the certificate (with the optional delegation), the
+/// public root key (which can be used for verification purposes) and finally
+/// a CBOR encoded version of the certificate.
+///
+/// The outer builder should contain the data you're interested in certifying
+/// while the nested builder should contain the `SubnetData` signaling which
+/// canister ranges the subnet is delegated to sign for by the root of trust.
+/// In this example, some dummy `CanisterData` is certified but anything
+/// could be used, e.g. a custom hash tree.
 pub struct CertificateBuilder {
     public_key: ThresholdSigPublicKey,
     secret_key: SecretKeyBytes,

@@ -290,7 +290,7 @@ pub fn prove_chunking<R: RngCore + CryptoRng>(
 
     let second_move = SecondMoveChunking::from(&z_s, &dd, &yy);
 
-    // Second verifier's challege. Forth move in the protocol.
+    // Second verifier's challenge. Forth move in the protocol.
     // x = oracle(e, z_s, dd, yy)
     let second_challenge = chunking_proof_challenge_oracle(&first_challenge, &second_move);
 

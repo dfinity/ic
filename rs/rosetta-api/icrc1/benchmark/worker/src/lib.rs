@@ -1,6 +1,6 @@
 use candid::{CandidType, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1_client_cdk::{CdkRuntime, ICRC1Client};
+use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
 use num_traits::ToPrimitive;
@@ -112,11 +112,14 @@ async fn run_accounts_batch(batch_args: BatchArgs) -> BatchResult {
         }
         let res = batch_result.expect("Error while getting batch result");
         nb_blocks += res.len() as u64;
-        last_block = *res
+        last_block = res
             .last()
             .expect("No block in result")
             .as_ref()
-            .expect("Error while getting last block");
+            .expect("Error while getting last block")
+            .0
+            .to_u64()
+            .expect("nat does not fit into u64");
         ic_cdk::println!(
             "Executed {:?} transfers, last block: {:?}",
             res.len(),
@@ -192,9 +195,12 @@ async fn run_transactions_batch(batch_args: BatchArgs) -> BatchResult {
         }
         let res = batch_result.expect("Error while getting batch result");
         nb_blocks += res.len() as u64;
-        last_block = *res[res.len() - 1]
+        last_block = res[res.len() - 1]
             .as_ref()
-            .expect("Error while getting last block");
+            .expect("Error while getting last block")
+            .0
+            .to_u64()
+            .expect("nat does not fit into u64");
         ic_cdk::println!(
             "Executed {:?} transfers, last block: {:?}",
             res.len(),

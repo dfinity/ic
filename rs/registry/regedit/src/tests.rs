@@ -13,6 +13,7 @@ use ic_prep_lib::{
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
+use ic_types::ReplicaVersion;
 use std::{
     collections::{BTreeMap, HashSet},
     net::SocketAddr,
@@ -131,10 +132,9 @@ pub fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
         NodeConfiguration {
             xnet_api: SocketAddr::from_str("0.0.0.0:0").unwrap(),
             public_api: SocketAddr::from_str("0.0.0.0:8080").unwrap(),
-            p2p_addr: SocketAddr::from_str("0.0.0.0:0").unwrap(),
             node_operator_principal_id: None,
             secret_key_store: None,
-            chip_id: vec![],
+            chip_id: None,
         },
     );
 
@@ -144,8 +144,7 @@ pub fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
         SubnetConfig::new(
             SUBNET_ID,
             subnet_nodes,
-            None,
-            None,
+            ReplicaVersion::default(),
             None,
             None,
             None,
@@ -170,7 +169,7 @@ pub fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
     let ic_config = IcConfig::new(
         /* target_dir= */ temp_dir.path(),
         topology_config,
-        /* replica_version_id= */ None,
+        ReplicaVersion::default(),
         /* generate_subnet_records= */ true, // see note above
         /* nns_subnet_index= */ Some(0),
         /* release_package_url= */ None,

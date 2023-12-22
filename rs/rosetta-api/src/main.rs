@@ -1,10 +1,10 @@
 use clap::Parser;
-use ic_crypto_internal_threshold_sig_bls12381 as bls12_381;
-use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key;
+use ic_crypto_utils_threshold_sig_der::{
+    parse_threshold_sig_key, parse_threshold_sig_key_from_der,
+};
 use ic_rosetta_api::request_handler::RosettaRequestHandler;
 use ic_rosetta_api::rosetta_server::{RosettaApiServer, RosettaApiServerOpt};
 use ic_rosetta_api::{ledger_client, DEFAULT_BLOCKCHAIN, DEFAULT_TOKEN_SYMBOL};
-use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{CanisterId, PrincipalId};
 use std::{path::Path, path::PathBuf, str::FromStr, sync::Arc};
 use url::Url;
@@ -62,6 +62,24 @@ struct Opt {
     expose_metrics: bool,
 }
 
+impl Opt {
+    fn default_url(&self) -> Url {
+        let url = if self.mainnet {
+            "https://ic0.app"
+        } else {
+            "https://exchanges.testnet.dfinity.network"
+        };
+        Url::parse(url).unwrap()
+    }
+
+    fn ic_url(&self) -> Result<Url, String> {
+        match self.ic_url.as_ref() {
+            None => Ok(self.default_url()),
+            Some(s) => Url::parse(s).map_err(|e| format!("Unable to parse --ic-url: {}", e)),
+        }
+    }
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let opt = Opt::parse();
@@ -85,41 +103,34 @@ async fn main() -> std::io::Result<()> {
     };
     log::info!("Listening on {}:{}", opt.listen_address, listen_port);
     let addr = format!("{}:{}", opt.listen_address, listen_port);
+    let url = opt.ic_url().unwrap();
 
-    let (root_key, canister_id, governance_canister_id, url) = if opt.mainnet {
+    let (root_key, canister_id, governance_canister_id) = if opt.mainnet {
         let root_key = match opt.root_key {
             Some(root_key_path) => parse_threshold_sig_key(root_key_path.as_path())?,
             None => {
                 // The mainnet root key
                 let root_key_text = r#"MIGCMB0GDSsGAQQBgtx8BQMBAgEGDCsGAQQBgtx8BQMCAQNhAIFMDm7HH6tYOwi9gTc8JVw8NxsuhIY8mKTx4It0I10U+12cDNVG2WhfkToMCyzFNBWDv0tDkuRn25bWW5u0y3FxEvhHLg1aTRRQX/10hLASkQkcX4e5iINGP5gJGguqrg=="#;
                 let decoded = base64::decode(root_key_text).unwrap();
-                let pubkey_bytes = bls12_381::api::public_key_from_der(&decoded).unwrap();
-                ThresholdSigPublicKey::from(pubkey_bytes)
+                parse_threshold_sig_key_from_der(&decoded).unwrap()
             }
         };
 
         let canister_id = match opt.ic_canister_id {
-            Some(cid) => CanisterId::new(PrincipalId::from_str(&cid[..]).unwrap()).unwrap(),
+            Some(cid) => {
+                CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap())
+            }
             None => ic_nns_constants::LEDGER_CANISTER_ID,
         };
 
         let governance_canister_id = match opt.governance_canister_id {
-            Some(cid) => CanisterId::new(PrincipalId::from_str(&cid[..]).unwrap()).unwrap(),
+            Some(cid) => {
+                CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap())
+            }
             None => ic_nns_constants::GOVERNANCE_CANISTER_ID,
         };
 
-        let url = match opt.ic_url {
-            Some(url) => Url::parse(&url[..]).unwrap(),
-            None => {
-                if opt.not_whitelisted {
-                    Url::parse("https://ic0.app").unwrap()
-                } else {
-                    Url::parse("https://rosetta-exchanges.ic0.app").unwrap()
-                }
-            }
-        };
-
-        (Some(root_key), canister_id, governance_canister_id, url)
+        (Some(root_key), canister_id, governance_canister_id)
     } else {
         let root_key = match opt.root_key {
             Some(root_key_path) => Some(parse_threshold_sig_key(root_key_path.as_path())?),
@@ -130,22 +141,20 @@ async fn main() -> std::io::Result<()> {
         };
 
         let canister_id = match opt.ic_canister_id {
-            Some(cid) => CanisterId::new(PrincipalId::from_str(&cid[..]).unwrap()).unwrap(),
+            Some(cid) => {
+                CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap())
+            }
             None => ic_nns_constants::LEDGER_CANISTER_ID,
         };
 
         let governance_canister_id = match opt.governance_canister_id {
-            Some(cid) => CanisterId::new(PrincipalId::from_str(&cid[..]).unwrap()).unwrap(),
+            Some(cid) => {
+                CanisterId::unchecked_from_principal(PrincipalId::from_str(&cid[..]).unwrap())
+            }
             None => ic_nns_constants::GOVERNANCE_CANISTER_ID,
         };
 
-        // Not connecting to the mainnet, so default to the exchanges url
-        let url = Url::parse(
-            &opt.ic_url
-                .unwrap_or_else(|| "https://exchanges.testnet.dfinity.network".to_string())[..],
-        )
-        .unwrap();
-        (root_key, canister_id, governance_canister_id, url)
+        (root_key, canister_id, governance_canister_id)
     };
 
     let token_symbol = opt

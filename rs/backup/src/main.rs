@@ -10,7 +10,6 @@ use tokio::{runtime::Handle, task::spawn_blocking};
 // Here is an example config file:
 //
 // {
-//     "version": 5,
 //     "push_metrics": true,
 //     "backup_instance": "zh1-spm34",
 //     "nns_url": "https://smallXYZ.testnet.dfinity.network",
@@ -25,7 +24,8 @@ use tokio::{runtime::Handle, task::spawn_blocking};
 //         "tmp"
 //     ],
 //     "ssh_private_key": "/home/my_user/.ssh/id_ed25519_backup",
-//     "disk_threshold_warn": 75,
+//     "hot_disk_resource_threshold_percentage": 75,
+//     "cold_disk_resource_threshold_percentage": 95,
 //     "slack_token": "ABCD1234",
 //     "cold_storage": {
 //         "cold_storage_dir": "/var/cold_storage",

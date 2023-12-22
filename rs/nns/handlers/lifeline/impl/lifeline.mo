@@ -31,7 +31,13 @@ actor {
 
       if (pl.stop_upgrade_start) {
         debug { Prim.debugPrint ("upgrade_root: stopping the root canister " # debug_show root) };
-        await ic00.stop_canister({canister_id = root});
+        try {
+             await ic00.stop_canister({canister_id = root});
+        } catch (err) {
+             debug { Prim.debugPrint ("upgrade_root: failed to stop the root canister") };
+             await ic00.start_canister({canister_id = root});
+             return ();
+        };
       };
 
       debug { Prim.debugPrint ("upgrade_root: about to actuate the management canister") };
@@ -69,13 +75,17 @@ actor {
 
     type CanisterIdRecord = { canister_id : Principal };
 
+    type DefiniteCanisterSettings = {
+        controllers : [Principal];
+
+    };
+
     type CanisterStatusResult = {
-        controller : Principal;
         status : { #stopped; #stopping; #running };
         memory_size : Nat;
         module_hash : ?Blob;
         cycles : Nat;
-        balance : [(Blob, Nat)]
+        settings: DefiniteCanisterSettings;
     };
 
     public shared func canister_status(id : CanisterIdRecord) : async CanisterStatusResult {

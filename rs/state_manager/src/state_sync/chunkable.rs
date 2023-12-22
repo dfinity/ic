@@ -11,9 +11,9 @@ use ic_state_layout::utils::do_copy_overwrite;
 use ic_state_layout::{error::LayoutError, CheckpointLayout, ReadOnly, RwPolicy, StateLayout};
 use ic_sys::mmap::ScopedMmap;
 use ic_types::{
-    artifact::{Artifact, StateSyncMessage},
+    artifact::StateSyncMessage,
     chunkable::{
-        ArtifactChunk, ArtifactChunkData,
+        ArtifactChunk,
         ArtifactErrorCode::{self, ChunkVerificationFailed, ChunksMoreNeeded},
         ChunkId, Chunkable,
     },
@@ -72,7 +72,7 @@ enum DownloadState {
     },
     /// Successfully completed and returned the artifact to P2P, nothing else to
     /// do.
-    Complete(Box<Artifact>),
+    Complete(Box<StateSyncMessage>),
 }
 
 /// An implementation of Chunkable trait that represents a (on-disk) state under
@@ -580,7 +580,7 @@ impl IncompleteState {
             let src_file_index = manifest_old.chunk_table[*src_chunk_index].file_index;
             let entry = chunk_groups
                 .entry((dst_file_index as usize, src_file_index as usize))
-                .or_insert_with(Vec::new);
+                .or_default();
             entry.push((*dst_chunk_index, *src_chunk_index));
         }
 
@@ -776,8 +776,8 @@ impl IncompleteState {
         root_hash: CryptoHashOfState,
         manifest: &Manifest,
         meta_manifest: &MetaManifest,
-    ) -> Artifact {
-        Artifact::StateSync(StateSyncMessage {
+    ) -> StateSyncMessage {
+        StateSyncMessage {
             height,
             root_hash,
             checkpoint_root: state_layout
@@ -790,7 +790,7 @@ impl IncompleteState {
             // `state_sync_file_group` and `checkpoint_root` are not included in the integrity hash of this artifact.
             // Therefore it is OK to pass a default value here as it is only used when fetching chunks.
             state_sync_file_group: Default::default(),
-        })
+        }
     }
 
     fn make_checkpoint(
@@ -1157,17 +1157,12 @@ impl Chunkable for IncompleteState {
         }
     }
 
-    fn add_chunk(&mut self, artifact_chunk: ArtifactChunk) -> Result<Artifact, ArtifactErrorCode> {
+    fn add_chunk(
+        &mut self,
+        artifact_chunk: ArtifactChunk,
+    ) -> Result<StateSyncMessage, ArtifactErrorCode> {
         let ix = artifact_chunk.chunk_id.get();
-
-        let payload = match artifact_chunk.artifact_chunk_data {
-            ArtifactChunkData::SemiStructuredChunkData(ref payload) => payload,
-            other => {
-                warn!(self.log, "State sync chunk has wrong shape {:?}", other);
-                return Err(ChunkVerificationFailed);
-            }
-        };
-
+        let payload = &artifact_chunk.chunk;
         match &mut self.state {
             DownloadState::Complete(ref artifact) => {
                 debug!(

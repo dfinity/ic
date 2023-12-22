@@ -23,8 +23,8 @@ use ic_ic00_types::{
     CanisterInstallMode, CanisterStatusType, EcdsaKeyId, InstallCodeArgs, Method, Payload, IC_00,
 };
 use ic_interfaces::execution_environment::{
-    ExecutionComplexity, ExecutionRoundType, HypervisorError, HypervisorResult,
-    IngressHistoryWriter, InstanceStats, RegistryExecutionSettings, Scheduler, WasmExecutionOutput,
+    ExecutionRoundType, HypervisorError, HypervisorResult, IngressHistoryWriter, InstanceStats,
+    RegistryExecutionSettings, Scheduler, SystemApiCallCounters, WasmExecutionOutput,
 };
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -32,6 +32,7 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::execution_state::{self, WasmMetadata},
+    page_map::TestPageAllocatorFileDescriptorImpl,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
     CanisterState, ExecutionState, ExportedFunctions, InputQueueType, Memory, ReplicatedState,
 };
@@ -509,9 +510,6 @@ impl SchedulerTest {
             instructions: as_round_instructions(
                 self.scheduler.config.max_instructions_per_round / 16,
             ),
-            execution_complexity: ExecutionComplexity::with_cpu(
-                self.scheduler.config.max_instructions_per_round / 16,
-            ),
             subnet_available_memory: self.scheduler.exec_env.subnet_available_memory(&state),
             compute_allocation_used,
         };
@@ -806,6 +804,10 @@ impl SchedulerTestBuilder {
             SchedulerImpl::compute_capacity_percent(self.scheduler_config.scheduler_cores),
             config,
             Arc::clone(&cycles_account_manager),
+            self.scheduler_config.scheduler_cores,
+            Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+            self.scheduler_config.heap_delta_rate_limit,
+            self.scheduler_config.upload_wasm_chunk_instructions,
         );
         let scheduler = SchedulerImpl::new(
             self.scheduler_config,
@@ -818,6 +820,7 @@ impl SchedulerTestBuilder {
             rate_limiting_of_heap_delta,
             rate_limiting_of_instructions,
             deterministic_time_slicing,
+            Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         );
         SchedulerTest {
             state: Some(state),
@@ -856,8 +859,6 @@ pub(crate) struct TestMessage {
     canister: Option<CanisterId>,
     // The number of instructions that execution of this message will use.
     instructions: NumInstructions,
-    // The execution complexity of the message.
-    execution_complexity: ExecutionComplexity,
     // The number of 4KiB pages that execution of this message will writes to.
     dirty_pages: usize,
     // The outgoing calls that will be produced by execution of this message.
@@ -868,13 +869,6 @@ impl TestMessage {
     pub fn dirty_pages(self, dirty_pages: usize) -> TestMessage {
         Self {
             dirty_pages,
-            ..self
-        }
-    }
-
-    pub fn execution_complexity(self, execution_complexity: ExecutionComplexity) -> TestMessage {
-        Self {
-            execution_complexity,
             ..self
         }
     }
@@ -915,7 +909,6 @@ pub(crate) fn ingress(instructions: u64) -> TestMessage {
     TestMessage {
         canister: None,
         instructions: NumInstructions::from(instructions),
-        execution_complexity: ExecutionComplexity::default(),
         dirty_pages: 0,
         calls: vec![],
     }
@@ -926,7 +919,6 @@ pub(crate) fn other_side(callee: CanisterId, instructions: u64) -> TestMessage {
     TestMessage {
         canister: Some(callee),
         instructions: NumInstructions::from(instructions),
-        execution_complexity: ExecutionComplexity::default(),
         dirty_pages: 0,
         calls: vec![],
     }
@@ -938,7 +930,6 @@ pub(crate) fn on_response(instructions: u64) -> TestMessage {
     TestMessage {
         canister: None,
         instructions: NumInstructions::from(instructions),
-        execution_complexity: ExecutionComplexity::default(),
         dirty_pages: 0,
         calls: vec![],
     }
@@ -950,7 +941,6 @@ pub(crate) fn instructions(instructions: u64) -> TestMessage {
     TestMessage {
         canister: None,
         instructions: NumInstructions::from(instructions),
-        execution_complexity: ExecutionComplexity::default(),
         dirty_pages: 0,
         calls: vec![],
     }
@@ -993,6 +983,7 @@ impl WasmExecutor for TestWasmExecutor {
             sandbox_safe_system_state: input.sandbox_safe_system_state,
             execution_parameters: input.execution_parameters,
             canister_current_memory_usage: input.canister_current_memory_usage,
+            canister_current_message_memory_usage: input.canister_current_message_memory_usage,
             call_context_id,
             instructions_executed: NumInstructions::from(0),
             executor: Arc::clone(&self),
@@ -1063,7 +1054,6 @@ impl TestWasmExecutorCore {
             paused.instructions_executed += slice_limit;
             let slice = SliceExecutionOutput {
                 executed_instructions: slice_limit,
-                execution_complexity: ExecutionComplexity::default(),
             };
             self.schedule.push((self.round, canister_id, slice_limit));
             return WasmExecutionResult::Paused(slice, paused);
@@ -1074,7 +1064,6 @@ impl TestWasmExecutorCore {
         if paused.message.instructions > message_limit {
             let slice = SliceExecutionOutput {
                 executed_instructions: instructions_to_execute,
-                execution_complexity: ExecutionComplexity::default(),
             };
             let output = WasmExecutionOutput {
                 wasm_result: Err(HypervisorError::InstructionLimitExceeded),
@@ -1082,6 +1071,7 @@ impl TestWasmExecutorCore {
                 allocated_bytes: NumBytes::from(0),
                 allocated_message_bytes: NumBytes::from(0),
                 instance_stats: InstanceStats::default(),
+                system_api_call_counters: SystemApiCallCounters::default(),
             };
             self.schedule
                 .push((self.round, canister_id, instructions_to_execute));
@@ -1097,6 +1087,7 @@ impl TestWasmExecutorCore {
             message.calls,
             paused.call_context_id,
             paused.canister_current_memory_usage,
+            paused.canister_current_message_memory_usage,
         );
 
         let canister_state_changes = CanisterStateChanges {
@@ -1118,7 +1109,6 @@ impl TestWasmExecutorCore {
         };
         let slice = SliceExecutionOutput {
             executed_instructions: instructions_to_execute,
-            execution_complexity: message.execution_complexity,
         };
         let output = WasmExecutionOutput {
             wasm_result: Ok(None),
@@ -1126,6 +1116,7 @@ impl TestWasmExecutorCore {
             allocated_message_bytes: NumBytes::from(0),
             num_instructions_left: instructions_left,
             instance_stats,
+            system_api_call_counters: SystemApiCallCounters::default(),
         };
         self.schedule
             .push((self.round, canister_id, instructions_to_execute));
@@ -1172,6 +1163,7 @@ impl TestWasmExecutorCore {
         calls: Vec<TestCall>,
         call_context_id: Option<CallContextId>,
         canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
     ) -> SystemStateChanges {
         for call in calls.into_iter() {
             if let Err(error) = self.perform_call(
@@ -1179,6 +1171,7 @@ impl TestWasmExecutorCore {
                 call,
                 call_context_id.unwrap(),
                 canister_current_memory_usage,
+                canister_current_message_memory_usage,
             ) {
                 eprintln!("Skipping a call due to an error: {}", error);
             }
@@ -1193,6 +1186,7 @@ impl TestWasmExecutorCore {
         call: TestCall,
         call_context_id: CallContextId,
         canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
     ) -> Result<(), String> {
         let sender = system_state.canister_id();
         let receiver = call.other_side.canister.unwrap();
@@ -1232,6 +1226,7 @@ impl TestWasmExecutorCore {
         };
         if let Err(req) = system_state.push_output_request(
             canister_current_memory_usage,
+            canister_current_message_memory_usage,
             request,
             prepayment_for_response_execution,
             prepayment_for_response_transmission,
@@ -1354,6 +1349,7 @@ struct TestPausedWasmExecution {
     sandbox_safe_system_state: SandboxSafeSystemState,
     execution_parameters: ExecutionParameters,
     canister_current_memory_usage: NumBytes,
+    canister_current_message_memory_usage: NumBytes,
     call_context_id: Option<CallContextId>,
     instructions_executed: NumInstructions,
     executor: Arc<TestWasmExecutor>,

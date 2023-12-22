@@ -1,26 +1,28 @@
 [package]
 name = "ic-crypto-tls-cert-validation"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ########################################################
 # Because this crate is used in a canister, we can only
 # use dependencies that can be compiled to WebAssembly.
 ########################################################
-chrono = "0.4.19"
 hex = "0.4.2"
 ic-base-types = { path = "../../../types/base_types" }
 ic-crypto-internal-basic-sig-ed25519 = { path = "../../internal/crypto_lib/basic_sig/ed25519" }
 ic-crypto-internal-types = { path = "../../internal/crypto_lib/types" }
+ic-crypto-test-utils-reproducible-rng = { path = "../../test_utils/reproducible_rng" }
 ic-protobuf = { path = "../../../protobuf" }
 ic-types = { path = "../../../types/types" }
-serde = { version = "1.0.99", features = [ "derive" ] }
-x509-parser = { version = "0.9.1" }
+serde = { workspace = true }
+x509-parser = { version = "0.14.0" }
 
 [dev-dependencies]
 assert_matches = "1.5.0"
 curve25519-dalek = "3.0.2"
-ic-crypto-test-utils = { path = "../../test_utils" }
+ic-crypto-test-utils-tls = { path = "../../test_utils/tls" }
 ic-crypto-test-utils-keys = { path = "../../test_utils/keys" }
-openssl = "0.10.55"

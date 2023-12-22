@@ -30,6 +30,7 @@ fn governance_mem_test() {
         include_reward_status: vec![],
         include_status: vec![],
         include_all_manage_neuron_proposals: None,
+        omit_large_fields: Some(false),
     };
 
     let proposals = query(

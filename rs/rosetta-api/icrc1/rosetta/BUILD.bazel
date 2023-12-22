@@ -21,7 +21,7 @@ DEPENDENCIES = [
     "@crate_index//:proptest",
     "@crate_index//:hex",
     "@crate_index//:serde_cbor",
-    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand",
     "@crate_index//:lazy_static",
     "@crate_index//:url",
     "@crate_index//:http",
@@ -29,21 +29,23 @@ DEPENDENCIES = [
     "@crate_index//:tower-request-id",
     "@crate_index//:tracing",
     "@crate_index//:indicatif",
+    "@crate_index//:strum",
     "@crate_index//:tracing-subscriber",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
+    "//rs/rosetta-api",
     "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/icrc1/ledger",
     "//rs/rosetta-api/icrc1/tokens_u64",
     "//rs/rosetta-api/ledger_core",
     "//rs/rosetta-api/ledger_canister_core",
+    "//rs/rosetta-api/rosetta_core:rosetta-core",
     "//rs/types/base_types",
     "//rs/crypto/tree_hash",
 ]
 
 DEV_DEPENDENCIES = [
     "//packages/ic-starter-tests",
-    "//rs/rosetta-api",
     "//rs/test_utilities/load_wasm",
     "//rs/types/ic00_types",
     "//rs/rosetta-api/icrc1/test_utils",
@@ -58,6 +60,7 @@ DEV_DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    "@crate_index//:strum_macros",
 ]
 
 MACRO_DEV_DEPENDENCIES = [
@@ -119,7 +122,6 @@ rust_test_suite_with_extra_srcs(
     name = "icrc_rosetta_integration",
     srcs = [
         "tests/integration_tests.rs",
-        "tests/system_tests.rs",
     ],
     data = LOCAL_REPLICA_DATA,
     env = LOCAL_REPLICA_ENV,
@@ -127,6 +129,20 @@ rust_test_suite_with_extra_srcs(
         "tests/common/*.rs",
         "tests/integration_test_components/*.rs",
         "tests/integration_test_components/blocks_synchronizer/*.rs",
+    ]),
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
+    deps = DEV_DEPENDENCIES + DEPENDENCIES,
+)
+
+rust_test_suite_with_extra_srcs(
+    name = "icrc_rosetta_system",
+    srcs = [
+        "tests/system_tests.rs",
+    ],
+    data = LOCAL_REPLICA_DATA,
+    env = LOCAL_REPLICA_ENV,
+    extra_srcs = glob([
+        "tests/common/*.rs",
     ]),
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = DEV_DEPENDENCIES + DEPENDENCIES,

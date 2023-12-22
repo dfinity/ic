@@ -2,6 +2,7 @@
 curl
 build-essential
 git
+git-lfs
 gnupg
 node-json5
 uuid-dev
@@ -10,6 +11,8 @@ fish
 clang
 iproute2
 shellcheck
+xxd
+vim
 
 # Bitcoin core (for bitcoin adapter integration test)
 libtool
@@ -26,6 +29,7 @@ qemu-system-x86
 
 # Test
 rsync
+lcov
 
 # RUST
 gcc

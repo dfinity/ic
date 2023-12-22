@@ -1,7 +1,10 @@
 [package]
 name = "ic-sns-root"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [[bin]]
 name = "sns-root-canister"
@@ -10,20 +13,17 @@ path = "canister/canister.rs"
 [dependencies]
 async-trait = "0.1.53"
 
-# This MUST be kept in sync with build-info-build in the [build-dependencies] section!
-build-info = { version = "0.0.26", default-features = false, features = [] }
+build-info = { workspace = true }
 
 candid = { workspace = true }
 comparable = { version = "0.5.1", features = ["derive"] }
-dfn_candid = { path = "../../rust_canisters/dfn_candid" }
-futures = "0.3.21"
+futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-log = { path = "../../rust_canisters/canister_log" }
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-ic00-types = { path = "../../types/ic00_types" }
-ic-icrc1 = { path = "../../rosetta-api/icrc1" }
 ic-metrics-encoder = "1"
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
@@ -32,20 +32,17 @@ ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
 ic-sns-swap = { path = "../swap" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
-num-traits = "0.2.12"
-prost = "0.11.0"
-serde = { version = "1.0", features = ["derive"] }
+prost = { workspace = true }
+serde = { workspace = true }
 
 [dev-dependencies]
 ic-sns-root-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 tempfile = "3.1.0"
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { workspace = true }
 
 [build-dependencies]
-# This MUST be kept in sync with build-info in the [dependencies] section!
-build-info-build = { version = "0.0.26", default-features = false, features = [
-] }
+build-info-build = { workspace = true }
 
 [features]
 test = []

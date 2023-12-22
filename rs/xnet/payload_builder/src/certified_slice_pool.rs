@@ -237,7 +237,7 @@ mod messages {
             self.messages = FlatMap::from_key_values(
                 std::mem::take(&mut self.messages)
                     .into_iter()
-                    .chain(suffix.messages.into_iter())
+                    .chain(suffix.messages)
                     .collect(),
             );
             self.count_bytes += suffix_byte_size;
@@ -747,7 +747,6 @@ impl From<Payload> for Vec<u8> {
             Some(payload.header.into()),
             payload.messages.map(|m| m.into()),
         ))
-        .expect("failed to serialize a labeled tree")
     }
 }
 
@@ -904,8 +903,7 @@ impl UnpackedStreamSlice {
     fn pack(self) -> CertifiedStreamSlice {
         CertifiedStreamSlice {
             payload: self.payload.into(),
-            merkle_proof: v1::Witness::proxy_encode(self.merkle_proof)
-                .expect("failed to serialize a witness"),
+            merkle_proof: v1::Witness::proxy_encode(self.merkle_proof),
             certification: self.certification,
         }
     }
@@ -1088,7 +1086,7 @@ impl CertifiedSlicePool {
 
     /// Takes a sub-slice of the stream from `subnet_id` starting at `begin`,
     /// respecting the given message count and byte limits; or, if the provided
-    /// `byte_limit` is too small for a header-only slice, returns `Ok(None)`).
+    /// `byte_limit` is too small for a header-only slice, returns `Ok(None)`.
     ///
     /// If all messages are taken, the slice is removed from the pool.
     ///

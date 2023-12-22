@@ -48,6 +48,10 @@ impl<K: Ord, V> PoolSection<K, V> {
         self.messages.iter()
     }
 
+    pub(crate) fn keys(&self) -> std::collections::btree_map::Keys<'_, K, V> {
+        self.messages.keys()
+    }
+
     pub(crate) fn values(&self) -> std::collections::btree_map::Values<'_, K, V> {
         self.messages.values()
     }

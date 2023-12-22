@@ -42,8 +42,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
-  "id": 276,
-  "iteration": 1667227964247,
+  "id": 9,
   "links": [
     {
       "asDropdown": true,
@@ -60,6 +59,19 @@
   "liveNow": false,
   "panels": [
     {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 141,
+      "panels": [],
+      "title": "Execution Metrics",
+      "type": "row"
+    },
+    {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
@@ -75,7 +87,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 0
+        "y": 1
       },
       "hiddenSeries": false,
       "id": 45,
@@ -95,7 +107,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -166,7 +178,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 0
+        "y": 1
       },
       "hiddenSeries": false,
       "id": 84,
@@ -186,7 +198,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -253,7 +265,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 8
+        "y": 9
       },
       "hiddenSeries": false,
       "id": 85,
@@ -273,7 +285,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -339,7 +351,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 8
+        "y": 9
       },
       "hiddenSeries": false,
       "id": 86,
@@ -359,7 +371,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -425,7 +437,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 16
+        "y": 17
       },
       "hiddenSeries": false,
       "id": 43,
@@ -445,7 +457,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -514,7 +526,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 16
+        "y": 17
       },
       "hiddenSeries": false,
       "id": 73,
@@ -536,7 +548,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -608,7 +620,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 24
+        "y": 25
       },
       "hiddenSeries": false,
       "id": 126,
@@ -628,7 +640,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -697,7 +709,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 24
+        "y": 25
       },
       "hiddenSeries": false,
       "id": 127,
@@ -719,7 +731,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -793,7 +805,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 32
+        "y": 33
       },
       "hiddenSeries": false,
       "id": 63,
@@ -813,7 +825,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -910,7 +922,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 32
+        "y": 33
       },
       "hiddenSeries": false,
       "id": 69,
@@ -930,7 +942,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1000,11 +1012,26 @@
         "uid": "000000001"
       },
       "description": "Distribution of the duration of executing a round, aggregated over **$heatmap_period**.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
+        "overrides": []
+      },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 40
+        "y": 41
       },
       "heatmap": {},
       "hideZeroBuckets": true,
@@ -1014,6 +1041,48 @@
       "legend": {
         "show": true
       },
+      "options": {
+        "calculate": false,
+        "calculation": {},
+        "cellGap": 1,
+        "cellValues": {
+          "decimals": 1
+        },
+        "color": {
+          "exponent": 0.5,
+          "fill": "#73BF69",
+          "min": 0,
+          "mode": "scheme",
+          "reverse": false,
+          "scale": "exponential",
+          "scheme": "Greens",
+          "steps": 128
+        },
+        "exemplars": {
+          "color": "rgba(255,0,255,0.7)"
+        },
+        "filterValues": {
+          "le": 1e-9
+        },
+        "legend": {
+          "show": true
+        },
+        "rowsFrame": {
+          "layout": "auto"
+        },
+        "showValue": "never",
+        "tooltip": {
+          "show": true,
+          "yHistogram": true
+        },
+        "yAxis": {
+          "axisPlacement": "left",
+          "decimals": 0,
+          "reverse": false,
+          "unit": "s"
+        }
+      },
+      "pluginVersion": "9.2.5",
       "reverseYBuckets": false,
       "targets": [
         {
@@ -1075,11 +1144,26 @@
         "uid": "000000001"
       },
       "description": "Distribution of Wasm instructions executed while  executing a message in an execution round, aggregated over **$heatmap_period**.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
+        "overrides": []
+      },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 40
+        "y": 41
       },
       "heatmap": {},
       "hideZeroBuckets": true,
@@ -1089,6 +1173,48 @@
       "legend": {
         "show": true
       },
+      "options": {
+        "calculate": false,
+        "calculation": {},
+        "cellGap": 1,
+        "cellValues": {
+          "decimals": 1
+        },
+        "color": {
+          "exponent": 0.5,
+          "fill": "#73BF69",
+          "min": 0,
+          "mode": "scheme",
+          "reverse": false,
+          "scale": "exponential",
+          "scheme": "Greens",
+          "steps": 128
+        },
+        "exemplars": {
+          "color": "rgba(255,0,255,0.7)"
+        },
+        "filterValues": {
+          "le": 1e-9
+        },
+        "legend": {
+          "show": true
+        },
+        "rowsFrame": {
+          "layout": "auto"
+        },
+        "showValue": "never",
+        "tooltip": {
+          "show": true,
+          "yHistogram": true
+        },
+        "yAxis": {
+          "axisPlacement": "left",
+          "decimals": 0,
+          "reverse": false,
+          "unit": "short"
+        }
+      },
+      "pluginVersion": "9.2.5",
       "reverseYBuckets": false,
       "targets": [
         {
@@ -1150,11 +1276,26 @@
         "uid": "000000001"
       },
       "description": "Distribution of the duration of executing messages in a thread, aggregated over **$heatmap_period**.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
+        "overrides": []
+      },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 48
+        "y": 49
       },
       "heatmap": {},
       "hideZeroBuckets": true,
@@ -1164,6 +1305,48 @@
       "legend": {
         "show": true
       },
+      "options": {
+        "calculate": false,
+        "calculation": {},
+        "cellGap": 1,
+        "cellValues": {
+          "decimals": 1
+        },
+        "color": {
+          "exponent": 0.5,
+          "fill": "#73BF69",
+          "min": 0,
+          "mode": "scheme",
+          "reverse": false,
+          "scale": "exponential",
+          "scheme": "Greens",
+          "steps": 128
+        },
+        "exemplars": {
+          "color": "rgba(255,0,255,0.7)"
+        },
+        "filterValues": {
+          "le": 1e-9
+        },
+        "legend": {
+          "show": true
+        },
+        "rowsFrame": {
+          "layout": "auto"
+        },
+        "showValue": "never",
+        "tooltip": {
+          "show": true,
+          "yHistogram": true
+        },
+        "yAxis": {
+          "axisPlacement": "left",
+          "decimals": 0,
+          "reverse": false,
+          "unit": "s"
+        }
+      },
+      "pluginVersion": "9.2.5",
       "reverseYBuckets": false,
       "targets": [
         {
@@ -1225,11 +1408,26 @@
         "uid": "000000001"
       },
       "description": "Distribution of Wasm instructions executed in a thread while  executing a message, aggregated over **$heatmap_period**.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
+        "overrides": []
+      },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 48
+        "y": 49
       },
       "heatmap": {},
       "hideZeroBuckets": true,
@@ -1239,6 +1437,48 @@
       "legend": {
         "show": true
       },
+      "options": {
+        "calculate": false,
+        "calculation": {},
+        "cellGap": 1,
+        "cellValues": {
+          "decimals": 1
+        },
+        "color": {
+          "exponent": 0.5,
+          "fill": "#73BF69",
+          "min": 0,
+          "mode": "scheme",
+          "reverse": false,
+          "scale": "exponential",
+          "scheme": "Greens",
+          "steps": 128
+        },
+        "exemplars": {
+          "color": "rgba(255,0,255,0.7)"
+        },
+        "filterValues": {
+          "le": 1e-9
+        },
+        "legend": {
+          "show": true
+        },
+        "rowsFrame": {
+          "layout": "auto"
+        },
+        "showValue": "never",
+        "tooltip": {
+          "show": true,
+          "yHistogram": true
+        },
+        "yAxis": {
+          "axisPlacement": "left",
+          "decimals": 0,
+          "reverse": false,
+          "unit": "short"
+        }
+      },
+      "pluginVersion": "9.2.5",
       "reverseYBuckets": false,
       "targets": [
         {
@@ -1303,7 +1543,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 56
+        "y": 57
       },
       "hiddenSeries": false,
       "id": 91,
@@ -1323,7 +1563,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1404,7 +1644,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 56
+        "y": 57
       },
       "hiddenSeries": false,
       "id": 92,
@@ -1424,7 +1664,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1497,7 +1737,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 64
+        "y": 65
       },
       "hiddenSeries": false,
       "id": 81,
@@ -1517,7 +1757,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1590,7 +1830,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 64
+        "y": 65
       },
       "hiddenSeries": false,
       "id": 82,
@@ -1610,7 +1850,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1683,7 +1923,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 72
+        "y": 73
       },
       "hiddenSeries": false,
       "id": 93,
@@ -1703,7 +1943,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1776,7 +2016,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 72
+        "y": 73
       },
       "hiddenSeries": false,
       "id": 94,
@@ -1796,7 +2036,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1866,11 +2106,26 @@
         "uid": "000000001"
       },
       "description": "Distribution of the duration of executing a replicated message, aggregated over **$heatmap_period**.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
+        "overrides": []
+      },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 80
+        "y": 81
       },
       "heatmap": {},
       "hideZeroBuckets": true,
@@ -1880,6 +2135,48 @@
       "legend": {
         "show": true
       },
+      "options": {
+        "calculate": false,
+        "calculation": {},
+        "cellGap": 1,
+        "cellValues": {
+          "decimals": 1
+        },
+        "color": {
+          "exponent": 0.5,
+          "fill": "#73BF69",
+          "min": 0,
+          "mode": "scheme",
+          "reverse": false,
+          "scale": "exponential",
+          "scheme": "Greens",
+          "steps": 128
+        },
+        "exemplars": {
+          "color": "rgba(255,0,255,0.7)"
+        },
+        "filterValues": {
+          "le": 1e-9
+        },
+        "legend": {
+          "show": true
+        },
+        "rowsFrame": {
+          "layout": "auto"
+        },
+        "showValue": "never",
+        "tooltip": {
+          "show": true,
+          "yHistogram": true
+        },
+        "yAxis": {
+          "axisPlacement": "left",
+          "decimals": 0,
+          "reverse": false,
+          "unit": "s"
+        }
+      },
+      "pluginVersion": "9.2.5",
       "reverseYBuckets": false,
       "targets": [
         {
@@ -1951,11 +2248,26 @@
         "uid": "000000001"
       },
       "description": "Distribution of Wasm instructions executed while  executing a replicated message in an execution round, aggregated over **$heatmap_period**.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
+        "overrides": []
+      },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 80
+        "y": 81
       },
       "heatmap": {},
       "hideZeroBuckets": true,
@@ -1965,6 +2277,48 @@
       "legend": {
         "show": true
       },
+      "options": {
+        "calculate": false,
+        "calculation": {},
+        "cellGap": 1,
+        "cellValues": {
+          "decimals": 1
+        },
+        "color": {
+          "exponent": 0.5,
+          "fill": "#73BF69",
+          "min": 0,
+          "mode": "scheme",
+          "reverse": false,
+          "scale": "exponential",
+          "scheme": "Greens",
+          "steps": 128
+        },
+        "exemplars": {
+          "color": "rgba(255,0,255,0.7)"
+        },
+        "filterValues": {
+          "le": 1e-9
+        },
+        "legend": {
+          "show": true
+        },
+        "rowsFrame": {
+          "layout": "auto"
+        },
+        "showValue": "never",
+        "tooltip": {
+          "show": true,
+          "yHistogram": true
+        },
+        "yAxis": {
+          "axisPlacement": "left",
+          "decimals": 0,
+          "reverse": false,
+          "unit": "short"
+        }
+      },
+      "pluginVersion": "9.2.5",
       "reverseYBuckets": false,
       "targets": [
         {
@@ -2025,7 +2379,7 @@
         "type": "prometheus",
         "uid": "000000001"
       },
-      "description": "The average duration of non-replicated query execution excluding compilation (above the zero axis) and the average compilation time per query (below the zero axis).",
+      "description": "The average duration of non-replicated query execution.",
       "fieldConfig": {
         "defaults": {
           "unit": "s"
@@ -2038,7 +2392,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 88
+        "y": 89
       },
       "hiddenSeries": false,
       "id": 89,
@@ -2058,7 +2412,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -2078,21 +2432,112 @@
           "expr": "label_replace(\n    sum by(ic_subnet) (\n          rate(execution_query_duration_seconds_sum{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    )\n  / \n    sum by(ic_subnet) (\n      rate(execution_query_duration_seconds_count{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    )\n ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
           "hide": false,
           "interval": "",
-          "legendFormat": "{{ic_subnet}}-exec",
+          "legendFormat": "{{ic_subnet}}",
           "refId": "D"
-        },
-        {
-          "exemplar": true,
-          "expr": "label_replace(\n    sum by(ic_subnet) (\n      rate(execution_wasm_compile_sum{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    )\n  / \n    sum by(ic_subnet) (\n      rate(execution_query_duration_seconds_count{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    )\n ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
-          "hide": true,
-          "interval": "",
-          "legendFormat": "{{ic_subnet}}-compile",
-          "refId": "A"
         }
       ],
       "thresholds": [],
       "timeRegions": [],
       "title": "Non-replicated query duration, avg",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "transparent": true,
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:257",
+          "format": "s",
+          "logBase": 1,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:258",
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "000000001"
+      },
+      "description": "The average duration of non-replicated inspect_message execution.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "fill": 0,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 89
+      },
+      "hiddenSeries": false,
+      "id": 170,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 2,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "9.2.5",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [
+        {
+          "$$hashKey": "object:294",
+          "alias": "/.*-compile/",
+          "transform": "negative-Y"
+        }
+      ],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": true,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "label_replace(\n    sum by(ic_subnet) (\n          rate(execution_inspect_message_duration_seconds_sum{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    )\n  / \n    sum by(ic_subnet) (\n      rate(execution_inspect_message_duration_seconds_count{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    )\n ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "{{ic_subnet}}",
+          "refId": "D"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "Non-replicated inspect_message duration, avg",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -2145,7 +2590,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 88
+        "y": 89
       },
       "hiddenSeries": false,
       "id": 90,
@@ -2165,7 +2610,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -2217,6 +2662,99 @@
       }
     },
     {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "000000001"
+      },
+      "description": "The average number of Wasm instructions executed while handling a non-replicated inspect_message.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "fill": 0,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 89
+      },
+      "hiddenSeries": false,
+      "id": 171,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 2,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "9.2.5",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": true,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "label_replace(\n    sum by(ic_subnet) (\n      rate(execution_inspect_message_instructions_sum{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    )\n  /\n    sum by(ic_subnet) (\n      rate(execution_inspect_message_instructions_count{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "{{ic_subnet}}",
+          "refId": "D"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "Non-replicated inspect_message instructions, avg",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "transparent": true,
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:316",
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:317",
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
+    },
+    {
       "cards": {
         "cardPadding": 0
       },
@@ -2235,11 +2773,26 @@
         "uid": "000000001"
       },
       "description": "Distribution of non-replicated query execution durations, aggregated over **$heatmap_period**.\n\nNote that queries are not replicated and query load is more or less evenly spread across replicas.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
+        "overrides": []
+      },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 96
+        "y": 97
       },
       "heatmap": {},
       "hideZeroBuckets": true,
@@ -2249,6 +2802,48 @@
       "legend": {
         "show": true
       },
+      "options": {
+        "calculate": false,
+        "calculation": {},
+        "cellGap": 1,
+        "cellValues": {
+          "decimals": 0
+        },
+        "color": {
+          "exponent": 0.5,
+          "fill": "#73BF69",
+          "min": 0,
+          "mode": "scheme",
+          "reverse": false,
+          "scale": "exponential",
+          "scheme": "Greens",
+          "steps": 128
+        },
+        "exemplars": {
+          "color": "rgba(255,0,255,0.7)"
+        },
+        "filterValues": {
+          "le": 1e-9
+        },
+        "legend": {
+          "show": true
+        },
+        "rowsFrame": {
+          "layout": "auto"
+        },
+        "showValue": "never",
+        "tooltip": {
+          "show": true,
+          "yHistogram": true
+        },
+        "yAxis": {
+          "axisPlacement": "left",
+          "decimals": 0,
+          "reverse": false,
+          "unit": "s"
+        }
+      },
+      "pluginVersion": "9.2.5",
       "reverseYBuckets": false,
       "targets": [
         {
@@ -2299,12 +2894,149 @@
         "type": "prometheus",
         "uid": "000000001"
       },
+      "description": "Distribution of non-replicated inspect_message execution durations, aggregated over **$heatmap_period**.\n\nNote that inspect_message executions are not replicated and load is more or less evenly spread across replicas.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 97
+      },
+      "heatmap": {},
+      "hideZeroBuckets": true,
+      "highlightCards": true,
+      "id": 172,
+      "interval": "10s",
+      "legend": {
+        "show": true
+      },
+      "options": {
+        "calculate": false,
+        "calculation": {},
+        "cellGap": 1,
+        "cellValues": {
+          "decimals": 0
+        },
+        "color": {
+          "exponent": 0.5,
+          "fill": "#73BF69",
+          "min": 0,
+          "mode": "scheme",
+          "reverse": false,
+          "scale": "exponential",
+          "scheme": "Greens",
+          "steps": 128
+        },
+        "exemplars": {
+          "color": "rgba(255,0,255,0.7)"
+        },
+        "filterValues": {
+          "le": 1e-9
+        },
+        "legend": {
+          "show": true
+        },
+        "rowsFrame": {
+          "layout": "auto"
+        },
+        "showValue": "never",
+        "tooltip": {
+          "show": true,
+          "yHistogram": true
+        },
+        "yAxis": {
+          "axisPlacement": "left",
+          "decimals": 0,
+          "reverse": false,
+          "unit": "s"
+        }
+      },
+      "pluginVersion": "9.2.5",
+      "reverseYBuckets": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "round(\n  sum by (le) (\n    sum by(le, ic_subnet) (\n      increase(execution_inspect_message_duration_seconds_bucket{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$heatmap_period])\n    )\n  )\n)",
+          "format": "heatmap",
+          "hide": false,
+          "interval": "$heatmap_period",
+          "intervalFactor": 1,
+          "legendFormat": "{{le}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Non-replicated inspect_message duration distribution",
+      "tooltip": {
+        "show": true,
+        "showHistogram": true
+      },
+      "tooltipDecimals": 0,
+      "transparent": true,
+      "type": "heatmap",
+      "xAxis": {
+        "show": true
+      },
+      "yAxis": {
+        "decimals": 0,
+        "format": "s",
+        "logBase": 1,
+        "show": true
+      },
+      "yBucketBound": "auto"
+    },
+    {
+      "cards": {
+        "cardPadding": 0
+      },
+      "color": {
+        "cardColor": "#73BF69",
+        "colorScale": "sqrt",
+        "colorScheme": "interpolateGreens",
+        "exponent": 0.5,
+        "min": 0,
+        "mode": "spectrum"
+      },
+      "dashes": false,
+      "dataFormat": "tsbuckets",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "000000001"
+      },
       "description": "Distribution of non-replicated queries by Wasm instructions executed, aggregated over **$heatmap_period**.\n\nNote that queries are not replicated and query load is more or less evenly spread across replicas.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
+        "overrides": []
+      },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 96
+        "y": 97
       },
       "heatmap": {},
       "hideZeroBuckets": true,
@@ -2314,6 +3046,48 @@
       "legend": {
         "show": true
       },
+      "options": {
+        "calculate": false,
+        "calculation": {},
+        "cellGap": 1,
+        "cellValues": {
+          "decimals": 0
+        },
+        "color": {
+          "exponent": 0.5,
+          "fill": "#73BF69",
+          "min": 0,
+          "mode": "scheme",
+          "reverse": false,
+          "scale": "exponential",
+          "scheme": "Greens",
+          "steps": 128
+        },
+        "exemplars": {
+          "color": "rgba(255,0,255,0.7)"
+        },
+        "filterValues": {
+          "le": 1e-9
+        },
+        "legend": {
+          "show": true
+        },
+        "rowsFrame": {
+          "layout": "auto"
+        },
+        "showValue": "never",
+        "tooltip": {
+          "show": true,
+          "yHistogram": true
+        },
+        "yAxis": {
+          "axisPlacement": "left",
+          "decimals": 0,
+          "reverse": false,
+          "unit": "short"
+        }
+      },
+      "pluginVersion": "9.2.5",
       "reverseYBuckets": false,
       "targets": [
         {
@@ -2328,6 +3102,128 @@
         }
       ],
       "title": "Non-replicated query instructions distribution",
+      "tooltip": {
+        "show": true,
+        "showHistogram": true
+      },
+      "tooltipDecimals": 0,
+      "transparent": true,
+      "type": "heatmap",
+      "xAxis": {
+        "show": true
+      },
+      "yAxis": {
+        "decimals": 0,
+        "format": "short",
+        "logBase": 1,
+        "show": true
+      },
+      "yBucketBound": "auto"
+    },
+    {
+      "cards": {
+        "cardPadding": 0
+      },
+      "color": {
+        "cardColor": "#73BF69",
+        "colorScale": "sqrt",
+        "colorScheme": "interpolateGreens",
+        "exponent": 0.5,
+        "min": 0,
+        "mode": "spectrum"
+      },
+      "dashes": false,
+      "dataFormat": "tsbuckets",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "000000001"
+      },
+      "description": "Distribution of non-replicated inspect_message executions by Wasm instructions executed, aggregated over **$heatmap_period**.\n\nNote that inspect_message executions are not replicated and load is more or less evenly spread across replicas.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 97
+      },
+      "heatmap": {},
+      "hideZeroBuckets": true,
+      "highlightCards": true,
+      "id": 173,
+      "interval": "10s",
+      "legend": {
+        "show": true
+      },
+      "options": {
+        "calculate": false,
+        "calculation": {},
+        "cellGap": 1,
+        "cellValues": {
+          "decimals": 0
+        },
+        "color": {
+          "exponent": 0.5,
+          "fill": "#73BF69",
+          "min": 0,
+          "mode": "scheme",
+          "reverse": false,
+          "scale": "exponential",
+          "scheme": "Greens",
+          "steps": 128
+        },
+        "exemplars": {
+          "color": "rgba(255,0,255,0.7)"
+        },
+        "filterValues": {
+          "le": 1e-9
+        },
+        "legend": {
+          "show": true
+        },
+        "rowsFrame": {
+          "layout": "auto"
+        },
+        "showValue": "never",
+        "tooltip": {
+          "show": true,
+          "yHistogram": true
+        },
+        "yAxis": {
+          "axisPlacement": "left",
+          "decimals": 0,
+          "reverse": false,
+          "unit": "short"
+        }
+      },
+      "pluginVersion": "9.2.5",
+      "reverseYBuckets": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "round(\n  sum by (le) (\n    sum by(le, ic_subnet) (\n      increase(execution_inspect_message_instructions_bucket{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$heatmap_period])\n    )\n  )\n)",
+          "format": "heatmap",
+          "hide": false,
+          "interval": "$heatmap_period",
+          "intervalFactor": 1,
+          "legendFormat": "{{le}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Non-replicated inspect_message instructions distribution",
       "tooltip": {
         "show": true,
         "showHistogram": true
@@ -2368,7 +3264,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 104
+        "y": 105
       },
       "hiddenSeries": false,
       "id": 95,
@@ -2388,7 +3284,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -2448,6 +3344,99 @@
         "type": "prometheus",
         "uid": "000000001"
       },
+      "description": "The maximum duration of a non-replicated inspect_message execution.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "fill": 0,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 105
+      },
+      "hiddenSeries": false,
+      "id": 174,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 2,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "9.2.5",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": true,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "label_replace(\n  max by(ic_subnet) (\n    histogram_quantile(1.0, rate(execution_inspect_message_duration_seconds_bucket{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]))\n  )\n ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "{{ic_subnet}}",
+          "refId": "D"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "Non-replicated inspect_message duration, max",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "transparent": true,
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:259",
+          "format": "s",
+          "logBase": 1,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:260",
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "000000001"
+      },
       "description": "The maximum number of Wasm instructions executed while handling a non-replicated query.",
       "fieldConfig": {
         "defaults": {
@@ -2461,7 +3450,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 104
+        "y": 105
       },
       "hiddenSeries": false,
       "id": 96,
@@ -2481,7 +3470,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -2540,6 +3529,98 @@
         "type": "prometheus",
         "uid": "000000001"
       },
+      "description": "The maximum number of Wasm instructions executed while handling a non-replicated inspect_message.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "fill": 0,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 105
+      },
+      "hiddenSeries": false,
+      "id": 175,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 2,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "9.2.5",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": true,
+      "targets": [
+        {
+          "expr": "label_replace(\n  max by(ic_subnet) (\n    histogram_quantile(1.0, rate(execution_inspect_message_instructions_bucket{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]))\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "{{ic_subnet}}",
+          "refId": "D"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "Non-replicated inspect_message instructions, max",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "transparent": true,
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:318",
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:319",
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "000000001"
+      },
       "description": "The average duration of draining the subnet message queue in an execution round.",
       "fieldConfig": {
         "defaults": {
@@ -2553,7 +3634,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 112
+        "y": 113
       },
       "hiddenSeries": false,
       "id": 77,
@@ -2573,7 +3654,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -2646,7 +3727,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 112
+        "y": 113
       },
       "hiddenSeries": false,
       "id": 79,
@@ -2666,7 +3747,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -2736,11 +3817,26 @@
         "uid": "000000001"
       },
       "description": "Distribution of the duration draining the subnet message queue in an execution round, aggregated over **$heatmap_period**.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
+        "overrides": []
+      },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 120
+        "y": 121
       },
       "heatmap": {},
       "hideZeroBuckets": true,
@@ -2750,6 +3846,48 @@
       "legend": {
         "show": true
       },
+      "options": {
+        "calculate": false,
+        "calculation": {},
+        "cellGap": 1,
+        "cellValues": {
+          "decimals": 1
+        },
+        "color": {
+          "exponent": 0.5,
+          "fill": "#73BF69",
+          "min": 0,
+          "mode": "scheme",
+          "reverse": false,
+          "scale": "exponential",
+          "scheme": "Greens",
+          "steps": 128
+        },
+        "exemplars": {
+          "color": "rgba(255,0,255,0.7)"
+        },
+        "filterValues": {
+          "le": 1e-9
+        },
+        "legend": {
+          "show": true
+        },
+        "rowsFrame": {
+          "layout": "auto"
+        },
+        "showValue": "never",
+        "tooltip": {
+          "show": true,
+          "yHistogram": true
+        },
+        "yAxis": {
+          "axisPlacement": "left",
+          "decimals": 0,
+          "reverse": false,
+          "unit": "s"
+        }
+      },
+      "pluginVersion": "9.2.5",
       "reverseYBuckets": false,
       "targets": [
         {
@@ -2800,11 +3938,26 @@
         "uid": "000000001"
       },
       "description": "Distribution of Wasm instructions executed while draining the subnet message queue in an execution round, aggregated over **$heatmap_period**.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
+        "overrides": []
+      },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 120
+        "y": 121
       },
       "heatmap": {},
       "hideZeroBuckets": true,
@@ -2814,6 +3967,48 @@
       "legend": {
         "show": true
       },
+      "options": {
+        "calculate": false,
+        "calculation": {},
+        "cellGap": 1,
+        "cellValues": {
+          "decimals": 1
+        },
+        "color": {
+          "exponent": 0.5,
+          "fill": "#73BF69",
+          "min": 0,
+          "mode": "scheme",
+          "reverse": false,
+          "scale": "exponential",
+          "scheme": "Greens",
+          "steps": 128
+        },
+        "exemplars": {
+          "color": "rgba(255,0,255,0.7)"
+        },
+        "filterValues": {
+          "le": 1e-9
+        },
+        "legend": {
+          "show": true
+        },
+        "rowsFrame": {
+          "layout": "auto"
+        },
+        "showValue": "never",
+        "tooltip": {
+          "show": true,
+          "yHistogram": true
+        },
+        "yAxis": {
+          "axisPlacement": "left",
+          "decimals": 0,
+          "reverse": false,
+          "unit": "short"
+        }
+      },
+      "pluginVersion": "9.2.5",
       "reverseYBuckets": false,
       "targets": [
         {
@@ -2867,7 +4062,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 128
+        "y": 129
       },
       "hiddenSeries": false,
       "id": 97,
@@ -2887,7 +4082,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -2960,7 +4155,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 128
+        "y": 129
       },
       "hiddenSeries": false,
       "id": 98,
@@ -2980,7 +4175,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -3053,7 +4248,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 136
+        "y": 137
       },
       "hiddenSeries": false,
       "id": 78,
@@ -3073,7 +4268,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -3146,7 +4341,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 136
+        "y": 137
       },
       "hiddenSeries": false,
       "id": 80,
@@ -3166,7 +4361,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -3239,7 +4434,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 144
+        "y": 145
       },
       "hiddenSeries": false,
       "id": 41,
@@ -3259,7 +4454,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -3332,7 +4527,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 144
+        "y": 145
       },
       "hiddenSeries": false,
       "id": 40,
@@ -3352,7 +4547,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -3419,7 +4614,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 152
+        "y": 153
       },
       "hiddenSeries": false,
       "id": 59,
@@ -3439,7 +4634,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -3511,7 +4706,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 152
+        "y": 153
       },
       "hiddenSeries": false,
       "id": 125,
@@ -3531,7 +4726,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -3599,7 +4794,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 160
+        "y": 161
       },
       "hiddenSeries": false,
       "id": 100,
@@ -3619,7 +4814,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -3686,7 +4881,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 160
+        "y": 161
       },
       "hiddenSeries": false,
       "id": 105,
@@ -3706,7 +4901,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -3775,11 +4970,26 @@
         "uid": "000000001"
       },
       "description": "Distribution of non-idle canisters that have a heartbeat or an incoming message, aggregated over **$heatmap_period**.\n\nSuch canisters can be scheduled for execution in a round (but are not necessarily executed due to instruction limits).",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
+        "overrides": []
+      },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 168
+        "y": 169
       },
       "heatmap": {},
       "hideZeroBuckets": true,
@@ -3789,6 +4999,48 @@
       "legend": {
         "show": true
       },
+      "options": {
+        "calculate": false,
+        "calculation": {},
+        "cellGap": 1,
+        "cellValues": {
+          "decimals": 1
+        },
+        "color": {
+          "exponent": 0.5,
+          "fill": "#73BF69",
+          "min": 0,
+          "mode": "scheme",
+          "reverse": false,
+          "scale": "exponential",
+          "scheme": "Greens",
+          "steps": 128
+        },
+        "exemplars": {
+          "color": "rgba(255,0,255,0.7)"
+        },
+        "filterValues": {
+          "le": 1e-9
+        },
+        "legend": {
+          "show": true
+        },
+        "rowsFrame": {
+          "layout": "auto"
+        },
+        "showValue": "never",
+        "tooltip": {
+          "show": true,
+          "yHistogram": true
+        },
+        "yAxis": {
+          "axisPlacement": "left",
+          "decimals": 0,
+          "reverse": false,
+          "unit": "short"
+        }
+      },
+      "pluginVersion": "9.2.5",
       "reverseYBuckets": false,
       "targets": [
         {
@@ -3842,7 +5094,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 168
+        "y": 169
       },
       "hiddenSeries": false,
       "id": 87,
@@ -3862,7 +5114,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -3929,7 +5181,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 176
+        "y": 177
       },
       "hiddenSeries": false,
       "id": 102,
@@ -3949,7 +5201,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -4015,7 +5267,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 176
+        "y": 177
       },
       "hiddenSeries": false,
       "id": 132,
@@ -4035,7 +5287,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -4109,7 +5361,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 184
+        "y": 185
       },
       "hiddenSeries": false,
       "id": 103,
@@ -4129,7 +5381,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -4195,7 +5447,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 184
+        "y": 185
       },
       "hiddenSeries": false,
       "id": 104,
@@ -4215,7 +5467,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -4281,7 +5533,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 192
+        "y": 193
       },
       "hiddenSeries": false,
       "id": 109,
@@ -4301,7 +5553,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -4368,7 +5620,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 192
+        "y": 193
       },
       "hiddenSeries": false,
       "id": 106,
@@ -4388,7 +5640,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -4454,7 +5706,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 200
+        "y": 201
       },
       "hiddenSeries": false,
       "id": 108,
@@ -4474,7 +5726,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -4540,7 +5792,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 200
+        "y": 201
       },
       "hiddenSeries": false,
       "id": 107,
@@ -4560,7 +5812,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -4629,11 +5881,26 @@
         "uid": "000000001"
       },
       "description": "Distribution of memory pages accessed per executed message, aggregated over **$heatmap_period**.\n\nA memory page is 4096 bytes,",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
+        "overrides": []
+      },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 208
+        "y": 209
       },
       "heatmap": {},
       "hideZeroBuckets": true,
@@ -4643,6 +5910,46 @@
       "legend": {
         "show": true
       },
+      "options": {
+        "calculate": false,
+        "calculation": {},
+        "cellGap": 1,
+        "cellValues": {},
+        "color": {
+          "exponent": 0.5,
+          "fill": "#73BF69",
+          "min": 0,
+          "mode": "scheme",
+          "reverse": false,
+          "scale": "exponential",
+          "scheme": "Greens",
+          "steps": 128
+        },
+        "exemplars": {
+          "color": "rgba(255,0,255,0.7)"
+        },
+        "filterValues": {
+          "le": 1e-9
+        },
+        "legend": {
+          "show": true
+        },
+        "rowsFrame": {
+          "layout": "auto"
+        },
+        "showValue": "never",
+        "tooltip": {
+          "show": true,
+          "yHistogram": true
+        },
+        "yAxis": {
+          "axisPlacement": "left",
+          "decimals": 0,
+          "reverse": false,
+          "unit": "none"
+        }
+      },
+      "pluginVersion": "9.2.5",
       "reverseYBuckets": false,
       "targets": [
         {
@@ -4692,11 +5999,26 @@
         "uid": "000000001"
       },
       "description": "Distribution of dirty pages (resulting from memory writes) per executed message, aggregated over **$heatmap_period**.\n\nA memory page is 4096 bytes,",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
+        "overrides": []
+      },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 208
+        "y": 209
       },
       "heatmap": {},
       "hideZeroBuckets": true,
@@ -4706,6 +6028,46 @@
       "legend": {
         "show": true
       },
+      "options": {
+        "calculate": false,
+        "calculation": {},
+        "cellGap": 1,
+        "cellValues": {},
+        "color": {
+          "exponent": 0.5,
+          "fill": "#73BF69",
+          "min": 0,
+          "mode": "scheme",
+          "reverse": false,
+          "scale": "exponential",
+          "scheme": "Greens",
+          "steps": 128
+        },
+        "exemplars": {
+          "color": "rgba(255,0,255,0.7)"
+        },
+        "filterValues": {
+          "le": 1e-9
+        },
+        "legend": {
+          "show": true
+        },
+        "rowsFrame": {
+          "layout": "auto"
+        },
+        "showValue": "never",
+        "tooltip": {
+          "show": true,
+          "yHistogram": true
+        },
+        "yAxis": {
+          "axisPlacement": "left",
+          "decimals": 0,
+          "reverse": false,
+          "unit": "none"
+        }
+      },
+      "pluginVersion": "9.2.5",
       "reverseYBuckets": false,
       "targets": [
         {
@@ -4754,26 +6116,81 @@
         "type": "prometheus",
         "uid": "000000001"
       },
-      "description": "Counts of heap delta rate limited canisters per round, aggregated over **$heatmap_period**.",
+      "description": "The total number of changes in canister history per canister on a subnet.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
+        "overrides": []
+      },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 216
+        "y": 217
       },
       "heatmap": {},
       "hideZeroBuckets": true,
       "highlightCards": true,
-      "id": 131,
+      "id": 140,
       "interval": "10s",
       "legend": {
         "show": true
       },
+      "options": {
+        "calculate": false,
+        "calculation": {},
+        "cellGap": 1,
+        "cellValues": {},
+        "color": {
+          "exponent": 0.5,
+          "fill": "#73BF69",
+          "min": 0,
+          "mode": "scheme",
+          "reverse": false,
+          "scale": "exponential",
+          "scheme": "Greens",
+          "steps": 128
+        },
+        "exemplars": {
+          "color": "rgba(255,0,255,0.7)"
+        },
+        "filterValues": {
+          "le": 1e-9
+        },
+        "legend": {
+          "show": true
+        },
+        "rowsFrame": {
+          "layout": "auto"
+        },
+        "showValue": "never",
+        "tooltip": {
+          "show": true,
+          "yHistogram": true
+        },
+        "yAxis": {
+          "axisPlacement": "left",
+          "decimals": 0,
+          "reverse": false,
+          "unit": "none"
+        }
+      },
+      "pluginVersion": "9.2.5",
       "reverseYBuckets": false,
       "targets": [
         {
           "exemplar": true,
-          "expr": "round(\n  sum by (le) (\n    avg by(le, ic_subnet) (\n      increase(scheduler_heap_delta_rate_limited_canisters_per_round_bucket{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$heatmap_period])\n    )\n  )\n)\n",
+          "expr": "round(\n  sum by (le) (\n    quantile by(le, ic_subnet) (\n    0.5,\n    rate(mr_canister_history_total_num_changes_bucket{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$heatmap_period])\n    )\n  )\n)\n",
           "format": "heatmap",
           "interval": "$heatmap_period",
           "intervalFactor": 1,
@@ -4781,7 +6198,7 @@
           "refId": "A"
         }
       ],
-      "title": "Heap delta rate limited canisters per round",
+      "title": "Total number of changes in canister history per canister",
       "tooltip": {
         "show": true,
         "showHistogram": true
@@ -4818,11 +6235,26 @@
         "uid": "000000001"
       },
       "description": "Distribution of heap delta debits per round, aggregated over **$heatmap_period**. Any entry over the current rate limit should indicate a canister that doesn't get to run in a given round. The current limit is stored in the SchedulerConfig.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
+        "overrides": []
+      },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 216
+        "y": 217
       },
       "heatmap": {},
       "hideZeroBuckets": true,
@@ -4832,6 +6264,46 @@
       "legend": {
         "show": true
       },
+      "options": {
+        "calculate": false,
+        "calculation": {},
+        "cellGap": 1,
+        "cellValues": {},
+        "color": {
+          "exponent": 0.5,
+          "fill": "#73BF69",
+          "min": 0,
+          "mode": "scheme",
+          "reverse": false,
+          "scale": "exponential",
+          "scheme": "Greens",
+          "steps": 128
+        },
+        "exemplars": {
+          "color": "rgba(255,0,255,0.7)"
+        },
+        "filterValues": {
+          "le": 1e-9
+        },
+        "legend": {
+          "show": true
+        },
+        "rowsFrame": {
+          "layout": "auto"
+        },
+        "showValue": "never",
+        "tooltip": {
+          "show": true,
+          "yHistogram": true
+        },
+        "yAxis": {
+          "axisPlacement": "left",
+          "decimals": 0,
+          "reverse": false,
+          "unit": "decbytes"
+        }
+      },
+      "pluginVersion": "9.2.5",
       "reverseYBuckets": false,
       "targets": [
         {
@@ -4863,6 +6335,310 @@
       "yBucketBound": "auto"
     },
     {
+      "cards": {
+        "cardPadding": 0
+      },
+      "color": {
+        "cardColor": "#73BF69",
+        "colorScale": "sqrt",
+        "colorScheme": "interpolateGreens",
+        "exponent": 0.5,
+        "min": 0,
+        "mode": "spectrum"
+      },
+      "dashes": false,
+      "dataFormat": "tsbuckets",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "000000001"
+      },
+      "description": "Counts of heap delta rate limited canisters per round, aggregated over **$heatmap_period**.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 225
+      },
+      "heatmap": {},
+      "hideZeroBuckets": true,
+      "highlightCards": true,
+      "id": 131,
+      "interval": "10s",
+      "legend": {
+        "show": true
+      },
+      "options": {
+        "calculate": false,
+        "calculation": {},
+        "cellGap": 1,
+        "cellValues": {},
+        "color": {
+          "exponent": 0.5,
+          "fill": "#73BF69",
+          "min": 0,
+          "mode": "scheme",
+          "reverse": false,
+          "scale": "exponential",
+          "scheme": "Greens",
+          "steps": 128
+        },
+        "exemplars": {
+          "color": "rgba(255,0,255,0.7)"
+        },
+        "filterValues": {
+          "le": 1e-9
+        },
+        "legend": {
+          "show": true
+        },
+        "rowsFrame": {
+          "layout": "auto"
+        },
+        "showValue": "never",
+        "tooltip": {
+          "show": true,
+          "yHistogram": true
+        },
+        "yAxis": {
+          "axisPlacement": "left",
+          "decimals": 0,
+          "reverse": false,
+          "unit": "none"
+        }
+      },
+      "pluginVersion": "9.2.5",
+      "reverseYBuckets": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "round(\n  sum by (le) (\n    avg by(le, ic_subnet) (\n      increase(scheduler_heap_delta_rate_limited_canisters_per_round_bucket{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$heatmap_period])\n    )\n  )\n)\n",
+          "format": "heatmap",
+          "interval": "$heatmap_period",
+          "intervalFactor": 1,
+          "legendFormat": "{{le}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Heap delta rate limited canisters per round",
+      "tooltip": {
+        "show": true,
+        "showHistogram": true
+      },
+      "transparent": true,
+      "type": "heatmap",
+      "xAxis": {
+        "show": true
+      },
+      "yAxis": {
+        "decimals": 0,
+        "format": "none",
+        "logBase": 1,
+        "show": true
+      },
+      "yBucketBound": "auto"
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "000000001"
+      },
+      "description": "The total number of cycles burned per second in a subnet.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "fill": 0,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 225
+      },
+      "hiddenSeries": false,
+      "id": 88,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 2,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "9.2.5",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": true,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "label_replace(\n  quantile by (ic_subnet) (\n    0.5,\n    deriv(\n      (replicated_state_consumed_cycles_since_replica_started{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"} > 0)[$__rate_interval:10s]\n    )\n  )\n>=\n  0,\n   \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "{{ic_subnet}}",
+          "refId": "D"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "Cycle burn rate",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "transparent": true,
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:332",
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:333",
+          "format": "short",
+          "logBase": 1,
+          "show": false
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "000000001"
+      },
+      "description": "The total number of cycles burned per second in a subnet by use cases.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "fill": 0,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 225
+      },
+      "hiddenSeries": false,
+      "id": 288,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 2,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "9.2.5",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": true,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "label_replace(\n  quantile by (ic_subnet, use_case) (\n    0.5,\n    deriv(\n      (replicated_state_consumed_cycles_from_replica_start{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"} > 0)[$__rate_interval:10s]\n    )\n  )\n>=\n  0,\n   \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "{{ic_subnet}}-{{use_case}}",
+          "refId": "D"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "Cycle burn rate by use cases",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "transparent": true,
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:332",
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:333",
+          "format": "short",
+          "logBase": 1,
+          "show": false
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
+    },
+    {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
@@ -4884,7 +6660,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 224
+        "y": 233
       },
       "hiddenSeries": false,
       "id": 134,
@@ -4904,7 +6680,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -4972,186 +6748,6 @@
         "type": "prometheus",
         "uid": "000000001"
       },
-      "description": "The total number of cycles burned per second in a subnet.",
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "fill": 0,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 224
-      },
-      "hiddenSeries": false,
-      "id": 88,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 2,
-      "nullPointMode": "null",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "8.5.11",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": true,
-      "targets": [
-        {
-          "exemplar": true,
-          "expr": "label_replace(\n  quantile by (ic_subnet) (\n    0.5,\n    deriv(\n      (replicated_state_consumed_cycles_since_replica_started{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"} > 0)[$__rate_interval:10s]\n    )\n  )\n>=\n  0,\n   \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "{{ic_subnet}}",
-          "refId": "D"
-        }
-      ],
-      "thresholds": [],
-      "timeRegions": [],
-      "title": "Cycle burn rate",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "transparent": true,
-      "type": "graph",
-      "xaxis": {
-        "mode": "time",
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "$$hashKey": "object:332",
-          "format": "short",
-          "logBase": 1,
-          "show": true
-        },
-        {
-          "$$hashKey": "object:333",
-          "format": "short",
-          "logBase": 1,
-          "show": false
-        }
-      ],
-      "yaxis": {
-        "align": false
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "000000001"
-      },
-      "description": "The number of sandbox processes in a subnet.",
-      "fill": 0,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 232
-      },
-      "hiddenSeries": false,
-      "id": 135,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 2,
-      "nullPointMode": "null",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "8.5.11",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": true,
-      "targets": [
-        {
-          "exemplar": true,
-          "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      idelta(sandboxed_execution_subprocess_active_last_used_duration_seconds_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "{{ic_subnet}}",
-          "refId": "D"
-        }
-      ],
-      "thresholds": [],
-      "timeRegions": [],
-      "title": "Sandbox processes",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "transparent": true,
-      "type": "graph",
-      "xaxis": {
-        "mode": "time",
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "$$hashKey": "object:328",
-          "format": "none",
-          "logBase": 1,
-          "show": true
-        },
-        {
-          "$$hashKey": "object:329",
-          "format": "short",
-          "logBase": 1,
-          "show": false
-        }
-      ],
-      "yaxis": {
-        "align": false
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "000000001"
-      },
       "description": "The average duration of spawning a sandbox process",
       "fieldConfig": {
         "defaults": {
@@ -5165,7 +6761,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 232
+        "y": 233
       },
       "hiddenSeries": false,
       "id": 133,
@@ -5185,7 +6781,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -5245,17 +6841,17 @@
         "type": "prometheus",
         "uid": "000000001"
       },
-      "description": "How many times the inner round iteration was executed within the outer round",
+      "description": "The number of sandbox processes in a subnet.",
       "fill": 0,
       "fillGradient": 0,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 240
+        "y": 241
       },
       "hiddenSeries": false,
-      "id": 136,
+      "id": 135,
       "legend": {
         "avg": false,
         "current": false,
@@ -5272,7 +6868,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -5283,7 +6879,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n       rate(execution_round_inner_iteration_duration_seconds_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n     /\n     rate(execution_round_duration_seconds_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+          "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      idelta(sandboxed_execution_subprocess_active_last_used_duration_seconds_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
           "hide": false,
           "interval": "",
           "legendFormat": "{{ic_subnet}}",
@@ -5292,7 +6888,7 @@
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "The number of iterations per round",
+      "title": "Sandbox processes",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -5345,7 +6941,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 240
+        "y": 241
       },
       "hiddenSeries": false,
       "id": 137,
@@ -5365,7 +6961,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -5418,24 +7014,24 @@
     },
     {
       "aliasColors": {},
-      "bars": true,
+      "bars": false,
       "dashLength": 10,
       "dashes": false,
       "datasource": {
         "type": "prometheus",
         "uid": "000000001"
       },
-      "description": "Total cycle balance (in trillions of cycles) across all canisters on a subnet",
-      "fill": 4,
+      "description": "How many times the inner round iteration was executed within the outer round",
+      "fill": 0,
       "fillGradient": 0,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 248
+        "y": 249
       },
       "hiddenSeries": false,
-      "id": 138,
+      "id": 136,
       "legend": {
         "avg": false,
         "current": false,
@@ -5445,25 +7041,25 @@
         "total": false,
         "values": false
       },
-      "lines": false,
+      "lines": true,
       "linewidth": 2,
-      "nullPointMode": "null as zero",
+      "nullPointMode": "null",
       "options": {
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [],
       "spaceLength": 10,
-      "stack": true,
+      "stack": false,
       "steppedLine": true,
       "targets": [
         {
           "exemplar": true,
-          "expr": "label_replace(\n   quantile by (ic_subnet) (\n     0.5,\n\n       scheduler_canister_balance_cycles_total{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}\n     /\n       1e12\n   ),\n   \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+          "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n       rate(execution_round_inner_iteration_duration_seconds_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n     /\n     rate(execution_round_duration_seconds_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
           "hide": false,
           "interval": "",
           "legendFormat": "{{ic_subnet}}",
@@ -5472,7 +7068,7 @@
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "Subnet cycles balance (in trillions)",
+      "title": "The number of iterations per round",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -5488,7 +7084,7 @@
       "yaxes": [
         {
           "$$hashKey": "object:328",
-          "format": "short",
+          "format": "none",
           "logBase": 1,
           "show": true
         },
@@ -5519,7 +7115,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 248
+        "y": 249
       },
       "hiddenSeries": false,
       "id": 139,
@@ -5539,7 +7135,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -5599,6 +7195,93 @@
         "type": "prometheus",
         "uid": "000000001"
       },
+      "description": "Total cycle balance (in trillions of cycles) across all canisters on a subnet",
+      "fill": 4,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 257
+      },
+      "hiddenSeries": false,
+      "id": 138,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": false,
+      "linewidth": 2,
+      "nullPointMode": "null as zero",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "9.2.5",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": true,
+      "steppedLine": true,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "label_replace(\n   quantile by (ic_subnet) (\n     0.5,\n\n       scheduler_canister_balance_cycles_total{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}\n     /\n       1e12\n   ),\n   \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "{{ic_subnet}}",
+          "refId": "D"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "Subnet cycles balance (in trillions)",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "transparent": true,
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:328",
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:329",
+          "format": "short",
+          "logBase": 1,
+          "show": false
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": true,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "000000001"
+      },
       "description": "The number of DTS executions per round.",
       "fill": 1,
       "fillGradient": 0,
@@ -5606,7 +7289,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 256
+        "y": 257
       },
       "hiddenSeries": false,
       "id": 139,
@@ -5626,7 +7309,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.2.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -5729,77 +7412,1970 @@
       }
     },
     {
-      "cards": {
-        "cardPadding": 0
-      },
-      "color": {
-        "cardColor": "#73BF69",
-        "colorScale": "sqrt",
-        "colorScheme": "interpolateGreens",
-        "exponent": 0.5,
-        "min": 0,
-        "mode": "spectrum"
-      },
-      "dashes": false,
-      "dataFormat": "tsbuckets",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "000000001"
-      },
-      "description": "The total number of changes in canister history per canister on a subnet.",
+      "collapsed": true,
       "gridPos": {
-        "h": 8,
-        "w": 12,
+        "h": 1,
+        "w": 24,
         "x": 0,
-        "y": 216
+        "y": 265
       },
-      "heatmap": {},
-      "hideZeroBuckets": true,
-      "highlightCards": true,
-      "id": 140,
-      "interval": "10s",
-      "legend": {
-        "show": true
-      },
-      "reverseYBuckets": false,
-      "targets": [
+      "id": 165,
+      "panels": [
         {
-          "exemplar": true,
-          "expr": "round(\n  sum by (le) (\n    quantile by(le, ic_subnet) (\n    0.5,\n    rate(mr_canister_history_total_num_changes_bucket{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$heatmap_period])\n    )\n  )\n)\n",
-          "format": "heatmap",
-          "interval": "$heatmap_period",
-          "intervalFactor": 1,
-          "legendFormat": "{{le}}",
-          "refId": "A"
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "description": "",
+          "gridPos": {
+            "h": 4,
+            "w": 24,
+            "x": 0,
+            "y": 2
+          },
+          "id": 167,
+          "options": {
+            "code": {
+              "language": "plaintext",
+              "showLineNumbers": false,
+              "showMiniMap": false
+            },
+            "content": "- Charts break down the `execute_round` function time into known steps and `(other)`\n- `(other)` represents untracked time\n- `(other)` should be near zero; a non-zero value indicates a problem\n",
+            "mode": "markdown"
+          },
+          "pluginVersion": "9.2.5",
+          "title": "Info",
+          "type": "text"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "axisSoftMin": 0,
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 30,
+                "gradientMode": "hue",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "linear",
+                "lineStyle": {
+                  "fill": "solid"
+                },
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "decimals": 1,
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "s"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "execution_round"
+                },
+                "properties": [
+                  {
+                    "id": "custom.stacking",
+                    "value": {
+                      "group": "A",
+                      "mode": "none"
+                    }
+                  },
+                  {
+                    "id": "custom.gradientMode",
+                    "value": "none"
+                  },
+                  {
+                    "id": "custom.lineWidth",
+                    "value": 3
+                  },
+                  {
+                    "id": "custom.fillOpacity",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.lineStyle",
+                    "value": {
+                      "fill": "solid"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 2
+          },
+          "id": 162,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "legendFormat": "execution_round",
+              "range": true,
+              "refId": "execution_round"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_preparation_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "hide": false,
+              "legendFormat": "· preparation",
+              "range": true,
+              "refId": "· preparation"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_consensus_queue_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "hide": false,
+              "legendFormat": "· consensus_queue",
+              "range": true,
+              "refId": "· consensus_queue"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_subnet_queue_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "hide": false,
+              "legendFormat": "· subnet_queue",
+              "range": true,
+              "refId": "· subnet_queue"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_scheduling_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "hide": false,
+              "legendFormat": "· scheduling",
+              "range": true,
+              "refId": "· scheduling"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_inner_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "hide": true,
+              "legendFormat": "· inner",
+              "range": true,
+              "refId": "· inner"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_inner_heartbeat_overhead_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "hide": false,
+              "legendFormat": "· canister_tasks",
+              "range": true,
+              "refId": "· canister_tasks"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_inner_iteration_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "hide": true,
+              "legendFormat": "· inner_iteration",
+              "range": true,
+              "refId": "· inner_iteration"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_inner_preparation_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "hide": false,
+              "legendFormat": "· inner_loop_prep",
+              "range": true,
+              "refId": "· inner_loop_prep"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n      quantile by (ic, ic_subnet) (\n        0.5,\n        (\n          rate(execution_round_inner_iteration_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n          -\n          (\n            rate(execution_round_inner_preparation_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n            +\n            rate(execution_round_inner_finalization_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n          )\n        )\n    /\n      (rate(execution_round_duration_seconds_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "hide": false,
+              "legendFormat": "· inner_loop_exe",
+              "range": true,
+              "refId": "· inner_loop_exe"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_inner_finalization_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "hide": false,
+              "legendFormat": "· inner_loop_fin",
+              "range": true,
+              "refId": "· inner_loop_fin"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_finalization_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "hide": false,
+              "legendFormat": "· finalization",
+              "range": true,
+              "refId": "· finalization"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      (\n        rate(execution_round_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n        -\n        rate(execution_round_preparation_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n        -\n        rate(execution_round_consensus_queue_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n        -\n        rate(execution_round_subnet_queue_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n        -\n        rate(execution_round_scheduling_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n        -\n        rate(execution_round_inner_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n        -\n        rate(execution_round_finalization_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n      )\n    /\n      (rate(execution_round_duration_seconds_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "hide": false,
+              "legendFormat": "· (other)",
+              "range": true,
+              "refId": "· (other)"
+            }
+          ],
+          "title": "Execute Round Duration, avg",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "axisSoftMin": 0,
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 30,
+                "gradientMode": "hue",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "linear",
+                "lineStyle": {
+                  "fill": "solid"
+                },
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "decimals": 1,
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "percentunit"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "execution_round"
+                },
+                "properties": [
+                  {
+                    "id": "custom.stacking",
+                    "value": {
+                      "group": "A",
+                      "mode": "none"
+                    }
+                  },
+                  {
+                    "id": "custom.gradientMode",
+                    "value": "none"
+                  },
+                  {
+                    "id": "custom.lineWidth",
+                    "value": 3
+                  },
+                  {
+                    "id": "custom.fillOpacity",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.lineStyle",
+                    "value": {
+                      "fill": "solid"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 2
+          },
+          "id": 163,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "legendFormat": "execution_round",
+              "range": true,
+              "refId": "execution_round"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_preparation_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "hide": false,
+              "legendFormat": "· preparation",
+              "range": true,
+              "refId": "· preparation"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_consensus_queue_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "hide": false,
+              "legendFormat": "· consensus_queue",
+              "range": true,
+              "refId": "· consensus_queue"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_subnet_queue_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "hide": false,
+              "legendFormat": "· subnet_queue",
+              "range": true,
+              "refId": "· subnet_queue"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_scheduling_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "hide": false,
+              "legendFormat": "· scheduling",
+              "range": true,
+              "refId": "· scheduling"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_inner_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "hide": true,
+              "legendFormat": "· inner",
+              "range": true,
+              "refId": "· inner"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_inner_heartbeat_overhead_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "hide": false,
+              "legendFormat": "· canister_tasks",
+              "range": true,
+              "refId": "· canister_tasks"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_inner_iteration_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "hide": true,
+              "legendFormat": "· inner_iteration",
+              "range": true,
+              "refId": "· inner_iteration"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_inner_preparation_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "hide": false,
+              "legendFormat": "· inner_loop_prep",
+              "range": true,
+              "refId": "· inner_loop_prep"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n      quantile by (ic, ic_subnet) (\n        0.5,\n        (\n          rate(execution_round_inner_iteration_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n          -\n          (\n            rate(execution_round_inner_preparation_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n            +\n            rate(execution_round_inner_finalization_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n          )\n        )\n    /\n      (rate(execution_round_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "hide": false,
+              "legendFormat": "· inner_loop_exe",
+              "range": true,
+              "refId": "· inner_loop_exe"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_inner_finalization_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "hide": false,
+              "legendFormat": "· inner_loop_fin",
+              "range": true,
+              "refId": "· inner_loop_fin"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_finalization_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "hide": false,
+              "legendFormat": "· finalization",
+              "range": true,
+              "refId": "· finalization"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      (\n        rate(execution_round_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n        -\n        rate(execution_round_preparation_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n        -\n        rate(execution_round_consensus_queue_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n        -\n        rate(execution_round_subnet_queue_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n        -\n        rate(execution_round_scheduling_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n        -\n        rate(execution_round_inner_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n        -\n        rate(execution_round_finalization_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n      )\n    /\n      (rate(execution_round_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "hide": false,
+              "legendFormat": "· (other)",
+              "range": true,
+              "refId": "· (other)"
+            }
+          ],
+          "title": "Execute Round Duration %, avg",
+          "type": "timeseries"
         }
       ],
-      "title": "Total number of changes in canister history per canister",
-      "tooltip": {
-        "show": true,
-        "showHistogram": true
+      "title": "Execute Round Duration",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 266
       },
-      "transparent": true,
-      "type": "heatmap",
-      "xAxis": {
-        "show": true
-      },
-      "yAxis": {
-        "decimals": 0,
-        "format": "none",
-        "logBase": 1,
-        "show": true
-      },
-      "yBucketBound": "auto"
+      "id": 143,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "description": "Non-replicated queries executed per second\n\nThe left Y axis measures replicated messages (shown above the zero line); the right Y axis measures non-replicated queries (shown below the zero line). Note the different scales, as there are usually way more non-replicated queries than other types of messages.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "bars",
+                "fillOpacity": 100,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 0,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "cps"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 3
+          },
+          "id": 145,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "9.2.5",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "exemplar": true,
+              "expr": "sum by (api_type) (rate(sandboxed_execution_executed_message_slices_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",api_type=\"non replicated query\"}[$__rate_interval]))",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{api_type}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Non-replicated query rate",
+          "transparent": true,
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "description": "Query cache hit ratio = hits / (hits + misses)",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "stepAfter",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "percentunit"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 3
+          },
+          "id": 146,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "9.2.5",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "exemplar": true,
+              "expr": "label_replace(\n  sum by(ic_subnet) (\n    rate(execution_query_cache_hits_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  )\n  / \n  (\n    sum by(ic_subnet) (\n      rate(execution_query_cache_hits_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    )\n    +\n    sum by(ic_subnet) (\n      rate(execution_query_cache_misses_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    )\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)\n",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{ic_subnet}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Query cache hit ratio",
+          "transparent": true,
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "description": "Query cache hits per second",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "stepAfter",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "rps"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 11
+          },
+          "id": 147,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "9.2.5",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "exemplar": true,
+              "expr": "label_replace(\n  sum(\n    rate(execution_query_cache_hits_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)\n",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "Total hits",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  sum(\n    rate(execution_query_cache_hits_with_ignored_time_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)\n",
+              "hide": false,
+              "legendFormat": "Hits with ignored time",
+              "range": true,
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  sum(\n    rate(execution_query_cache_hits_with_ignored_canister_balance_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)\n",
+              "hide": false,
+              "legendFormat": "Hits with ignored canister balance",
+              "range": true,
+              "refId": "C"
+            }
+          ],
+          "title": "Query cache hit rate",
+          "transparent": true,
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "description": "Query cache misses per second",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "stepAfter",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "wps"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 11
+          },
+          "id": 148,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "9.2.5",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "exemplar": true,
+              "expr": "label_replace(\n  sum by(ic_subnet) (\n    rate(execution_query_cache_misses_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)\n",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{ic_subnet}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Query cache miss rate",
+          "transparent": true,
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "description": "Query cache evictions per second, i.e. cache entries removed due to the cache size limit",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "stepAfter",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "wps"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 19
+          },
+          "id": 149,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "9.2.5",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "exemplar": true,
+              "expr": "label_replace(\n  sum by(ic_subnet) (\n    rate(execution_query_cache_evicted_entries_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)\n",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{ic_subnet}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Query cache eviction rate",
+          "transparent": true,
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "description": "Distribution of evicted cache entries duration, aggregated over **$heatmap_period**.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "scaleDistribution": {
+                  "type": "linear"
+                }
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 19
+          },
+          "id": 152,
+          "options": {
+            "calculate": false,
+            "cellGap": 1,
+            "color": {
+              "exponent": 0.5,
+              "fill": "dark-orange",
+              "mode": "scheme",
+              "reverse": false,
+              "scale": "exponential",
+              "scheme": "Greens",
+              "steps": 64
+            },
+            "exemplars": {
+              "color": "rgba(255,0,255,0.7)"
+            },
+            "filterValues": {
+              "le": 1e-9
+            },
+            "legend": {
+              "show": true
+            },
+            "rowsFrame": {
+              "layout": "auto"
+            },
+            "tooltip": {
+              "show": true,
+              "yHistogram": false
+            },
+            "yAxis": {
+              "axisPlacement": "left",
+              "reverse": false,
+              "unit": "s"
+            }
+          },
+          "pluginVersion": "9.2.5",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "exemplar": true,
+              "expr": "sum by (le) (\n  avg by(le, ic_subnet) (\n    increase(execution_query_cache_evicted_entries_duration_seconds_bucket{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$heatmap_period])\n  )\n)",
+              "format": "heatmap",
+              "hide": false,
+              "instant": false,
+              "interval": "$heatmap_period",
+              "intervalFactor": 1,
+              "legendFormat": "{{le}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Evicted cache entries duration distribution",
+          "transformations": [],
+          "transparent": true,
+          "type": "heatmap"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "description": "Query cache invalidations per second, i.e. cache entries removed due to some changes",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "stepAfter",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "wps"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 27
+          },
+          "id": 150,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "9.2.5",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "exemplar": true,
+              "expr": "label_replace(\n  sum by(ic_subnet) (\n    rate(execution_query_cache_invalidated_entries_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)\n",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{ic_subnet}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Query cache invalidation rate",
+          "transparent": true,
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "description": "Distribution of invalidated cache entries duration, aggregated over **$heatmap_period**.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "scaleDistribution": {
+                  "type": "linear"
+                }
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 27
+          },
+          "id": 153,
+          "options": {
+            "calculate": false,
+            "cellGap": 1,
+            "color": {
+              "exponent": 0.5,
+              "fill": "dark-orange",
+              "mode": "scheme",
+              "reverse": false,
+              "scale": "exponential",
+              "scheme": "Greens",
+              "steps": 64
+            },
+            "exemplars": {
+              "color": "rgba(255,0,255,0.7)"
+            },
+            "filterValues": {
+              "le": 1e-9
+            },
+            "legend": {
+              "show": true
+            },
+            "rowsFrame": {
+              "layout": "auto"
+            },
+            "tooltip": {
+              "show": true,
+              "yHistogram": false
+            },
+            "yAxis": {
+              "axisPlacement": "left",
+              "reverse": false,
+              "unit": "s"
+            }
+          },
+          "pluginVersion": "9.2.5",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "exemplar": true,
+              "expr": "sum by (le) (\n  avg by(le, ic_subnet) (\n    increase(execution_query_cache_invalidated_entries_duration_seconds_bucket{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$heatmap_period])\n  )\n)",
+              "format": "heatmap",
+              "hide": false,
+              "instant": false,
+              "interval": "$heatmap_period",
+              "intervalFactor": 1,
+              "legendFormat": "{{le}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Invalidated cache entries duration distribution",
+          "transformations": [],
+          "transparent": true,
+          "type": "heatmap"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "description": "Total query cache invalidation reasons per second, i.e. the number of cache entries removed due to some changes",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "stepAfter",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "wps"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 35
+          },
+          "id": 157,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "9.2.5",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "exemplar": true,
+              "expr": "label_replace(\n  sum(\n    rate(execution_query_cache_invalidated_entries_by_time_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)\n",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "System time",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "exemplar": true,
+              "expr": "label_replace(\n  sum(\n    rate(execution_query_cache_invalidated_entries_by_max_expiry_time_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)\n",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "Max expiry time",
+              "range": true,
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  sum(\n    rate(execution_query_cache_invalidated_entries_by_canister_version_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)\n",
+              "hide": false,
+              "legendFormat": "Canister version",
+              "range": true,
+              "refId": "C"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  sum(\n    rate(execution_query_cache_invalidated_entries_by_canister_balance_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)\n",
+              "hide": false,
+              "legendFormat": "Canister balance",
+              "range": true,
+              "refId": "D"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(\n  sum(\n    rate(execution_query_cache_invalidated_entries_by_nested_call_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)\n",
+              "hide": false,
+              "legendFormat": "Nested calls",
+              "range": true,
+              "refId": "E"
+            }
+          ],
+          "title": "Total query cache invalidation reason",
+          "transparent": true,
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "description": "Query cache invalidations by time per second, i.e. the number of cache entries removed due to the time changes",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "stepAfter",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "wps"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 35
+          },
+          "id": 160,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "9.2.5",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "exemplar": true,
+              "expr": "label_replace(\n  sum by(ic_subnet) (\n    rate(execution_query_cache_invalidated_entries_by_time_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)\n",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{ic_subnet}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Query cache invalidation rate by time",
+          "transparent": true,
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "description": "The total size of the whole subnet query caches, in bytes.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "stepAfter",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "bytes"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 43
+          },
+          "id": 154,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "9.2.5",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "exemplar": true,
+              "expr": "label_replace(\n  sum by(ic_subnet) (\n    execution_query_cache_count_bytes{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)\n",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{ic_subnet}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Subnet query cache size",
+          "transparent": true,
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "description": "The total number of the whole subnet query cache elements.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "stepAfter",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 43
+          },
+          "id": 155,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "9.2.5",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "exemplar": true,
+              "expr": "label_replace(\n  sum by(ic_subnet) (\n    execution_query_cache_len{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)\n",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{ic_subnet}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Subnet query cache elements",
+          "transparent": true,
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "description": "The average query cache element size, in bytes.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "stepAfter",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "bytes"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 51
+          },
+          "id": 156,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "9.2.5",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "exemplar": true,
+              "expr": "label_replace(\n  sum by(ic_subnet) (\n    execution_query_cache_count_bytes{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}\n  )\n  /\n  sum by(ic_subnet) (\n    execution_query_cache_len{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)\n",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{ic_subnet}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Average query cache element size",
+          "transparent": true,
+          "type": "timeseries"
+        }
+      ],
+      "title": "Query Caching",
+      "type": "row"
     }
   ],
-  "refresh": false,
-  "schemaVersion": 36,
+  "refresh": "",
+  "schemaVersion": 37,
   "style": "dark",
   "tags": [
     "production"
   ],
   "templating": {
     "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "IC Metrics",
+          "value": "IC Metrics"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "/IC.*/",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
       {
         "current": {
           "selected": false,
@@ -6040,6 +9616,6 @@
   "timezone": "utc",
   "title": "Execution Metrics",
   "uid": "execution-metrics",
-  "version": 74,
+  "version": 8,
   "weekStart": ""
 }

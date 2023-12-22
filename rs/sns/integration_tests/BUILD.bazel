@@ -10,7 +10,6 @@ BASE_DEPENDENCIES = [
     "//rs/crypto/sha2",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
-    "//rs/nns/constants",
     "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/icrc1/ledger",
     "//rs/rosetta-api/icp_ledger/ledger",
@@ -31,7 +30,7 @@ BASE_DEPENDENCIES = [
     "@crate_index//:pretty-bytes",
     "@crate_index//:proptest",
     "@crate_index//:prost",
-    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand",
     "@crate_index//:serde",
     "@crate_index//:serde_yaml",
 ]
@@ -39,15 +38,15 @@ BASE_DEPENDENCIES = [
 # Each target declared in this file may choose either these (release-ready)
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
 DEPENDENCIES = BASE_DEPENDENCIES + [
-    "//rs/sns/cli",
     "//rs/sns/init",
     "//rs/sns/test_utils",
+    "//rs/nns/constants",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/sns/cli:cli--test_feature",
     "//rs/sns/init:init--test_feature",
     "//rs/sns/test_utils:test_utils--test_feature",
+    "//rs/nns/constants:constants--test_feature",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -107,7 +106,7 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_sns_integration_tests",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
@@ -134,7 +133,7 @@ rust_canister(
         "//rs/types/base_types",
         "@crate_index//:pretty-bytes",
         "@crate_index//:prost",
-        "@crate_index//:rand_0_8_4",
+        "@crate_index//:rand",
     ],
 )
 
@@ -149,6 +148,7 @@ DATA_DEPS = [
     "//rs/nns/gtc:genesis-token-canister",
     "//rs/nns/handlers/root/impl:root-canister",
     "//rs/nns/sns-wasm:sns-wasm-canister",
+    "//rs/nns/integration_tests:unstoppable-canister",
     "//rs/registry/canister:registry-canister",
     "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
     "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm",
@@ -181,6 +181,7 @@ ENV = {
     "SNS_SWAP_CANISTER_WASM_PATH": "$(rootpath //rs/sns/swap:sns-swap-canister)",
     "SNS_TEST_DAPP_CANISTER_WASM_PATH": "$(rootpath //rs/sns/integration_tests:sns-test-dapp-canister)",
     "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
+    "UNSTOPPABLE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/integration_tests:unstoppable-canister)",
 }
 
 rust_test_suite_with_extra_srcs(

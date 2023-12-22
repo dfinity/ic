@@ -50,11 +50,11 @@ BASE_DEPENDENCIES = [
     "@crate_index//:hex",
     "@crate_index//:humantime",
     "@crate_index//:ic-btc-interface",
+    "@crate_index//:indexmap",
     "@crate_index//:itertools",
     "@crate_index//:maplit",
     "@crate_index//:pretty_assertions",
     "@crate_index//:prost",
-    "@crate_index//:reqwest",
     "@crate_index//:serde",
     "@crate_index//:serde-bytes-repr",
     "@crate_index//:serde_cbor",
@@ -63,7 +63,6 @@ BASE_DEPENDENCIES = [
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:url",
-    "@crate_index//:walkdir",
 ]
 
 # Each target declared in this file may choose either these (release-ready)

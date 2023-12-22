@@ -1,7 +1,10 @@
 [package]
 name = "ic-drun"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-canister-sandbox-backend-lib = { path = "../canister_sandbox/backend_lib" }
@@ -32,11 +35,11 @@ ic-state-manager = { path = "../state_manager" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-types = { path = "../types/types" }
-clap = { version = "3.1.6", features = ["derive"] }
+clap = { workspace = true }
 hex = "0.4.2"
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
+slog = { workspace = true }
 slog-term = "2.6.0"
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { workspace = true }
 rand = "0.8"
 
 [[bin]]

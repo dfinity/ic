@@ -3,11 +3,13 @@ use canister_test::Runtime;
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_canister_client_sender::Sender;
+use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
+use ic_nervous_system_clients::canister_status::{CanisterStatusResult, CanisterStatusType};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR, TEST_USER1_KEYPAIR,
 };
 use ic_nervous_system_root::change_canister::{
-    AddCanisterProposal, CanisterAction, StopOrStartCanisterProposal,
+    AddCanisterRequest, CanisterAction, StopOrStartCanisterRequest,
 };
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
 use ic_nns_constants::{ALL_NNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
@@ -46,7 +48,7 @@ async fn add_nns_canister(runtime: &Runtime, upgrade_scenario: UpgradeTestingSce
     let name = "new_mega_important_handler".to_string();
 
     // Test adding a new canister to the NNS.
-    let proposal_payload = AddCanisterProposal {
+    let add_canister_request = AddCanisterRequest {
         name: name.clone(),
         wasm_module: UNIVERSAL_CANISTER_WASM.to_vec(),
         arg: vec![],
@@ -54,7 +56,6 @@ async fn add_nns_canister(runtime: &Runtime, upgrade_scenario: UpgradeTestingSce
         memory_allocation: Some(Nat::from(12345678)),
         compute_allocation: Some(Nat::from(12)),
         initial_cycles: 1 << 45,
-        authz_changes: vec![],
     };
 
     let proposal_id = submit_external_update_proposal(
@@ -62,8 +63,8 @@ async fn add_nns_canister(runtime: &Runtime, upgrade_scenario: UpgradeTestingSce
         Sender::from_keypair(&TEST_NEURON_2_OWNER_KEYPAIR),
         ic_nns_common::types::NeuronId(TEST_NEURON_2_ID),
         NnsFunction::NnsCanisterInstall,
-        proposal_payload,
-        "<proposal created by add_nns_canister_and_change_authz>".to_string(),
+        add_canister_request,
+        "<proposal created by add_nns_canister>".to_string(),
         "".to_string(),
     )
     .await;
@@ -151,7 +152,7 @@ fn test_stop_start_nns_canister() {
                 .expect("Couldn't send funds.");
 
             // Submit a proposal to stop the ledger.
-            let payload = StopOrStartCanisterProposal {
+            let stop_or_start_canister_request = StopOrStartCanisterRequest {
                 canister_id: LEDGER_CANISTER_ID,
                 action: CanisterAction::Stop,
             };
@@ -174,7 +175,8 @@ fn test_stop_start_nns_canister() {
                             url: "".to_string(),
                             action: Some(Action::ExecuteNnsFunction(ExecuteNnsFunction {
                                 nns_function: NnsFunction::StopOrStartNnsCanister as i32,
-                                payload: Encode!(&payload).expect("Error encoding payload"),
+                                payload: Encode!(&stop_or_start_canister_request)
+                                    .expect("Error encoding payload"),
                             })),
                         }))),
                     },
@@ -196,27 +198,22 @@ fn test_stop_start_nns_canister() {
                 ProposalStatus::Executed
             );
 
-            // Perform a transfer, should fail.
-            let result: Result<BlockIndex, String> = nns_canisters
-                .ledger
+            // Check that the canister is stopped.
+            let result: Result<CanisterStatusResult, String> = nns_canisters
+                .root
                 .update_from_sender(
-                    "send_pb",
-                    protobuf,
-                    SendArgs {
-                        memo: Memo(0),
-                        amount: Tokens::from_tokens(100).unwrap(),
-                        fee: DEFAULT_TRANSFER_FEE,
-                        from_subaccount: None,
-                        to: AccountIdentifier::new(user2.get_principal_id(), None),
-                        created_at_time: None,
+                    "canister_status",
+                    candid_one,
+                    CanisterIdRecord {
+                        canister_id: nns_canisters.ledger.canister_id(),
                     },
                     &user1,
                 )
                 .await;
 
-            assert!(result.unwrap_err().contains("is stopped"));
+            assert_eq!(result.unwrap().status, CanisterStatusType::Stopped);
 
-            let payload = StopOrStartCanisterProposal {
+            let stop_or_start_canister_request = StopOrStartCanisterRequest {
                 canister_id: LEDGER_CANISTER_ID,
                 action: CanisterAction::Start,
             };
@@ -239,7 +236,8 @@ fn test_stop_start_nns_canister() {
                             url: "".to_string(),
                             action: Some(Action::ExecuteNnsFunction(ExecuteNnsFunction {
                                 nns_function: NnsFunction::StopOrStartNnsCanister as i32,
-                                payload: Encode!(&payload).expect("Error encoding payload"),
+                                payload: Encode!(&stop_or_start_canister_request)
+                                    .expect("Error encoding payload"),
                             })),
                         }))),
                     },

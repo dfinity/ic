@@ -1,5 +1,5 @@
 use crate::embedders::Config as EmbeddersConfig;
-use crate::{flag_status::FlagStatus, subnet_config::MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS};
+use crate::flag_status::FlagStatus;
 use ic_base_types::{CanisterId, NumSeconds};
 use ic_types::{
     Cycles, NumBytes, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES,
@@ -21,11 +21,7 @@ const SUBNET_MEMORY_THRESHOLD: NumBytes = NumBytes::new(450 * GIB);
 /// Logical storage is the amount of storage being used from the point of view
 /// of the canister. The actual storage used by the nodes can be higher as the
 /// IC protocol requires storing copies of the canister state.
-///
-/// The gen 1 machines in production have 3TiB disks. We offer 450GiB to
-/// canisters. The rest will be used to for storing additional copies of the
-/// canister's data and the deltas.
-const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(450 * GIB);
+const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(700 * GIB);
 
 /// This is the upper limit on how much memory can be used by all canister
 /// messages on a given subnet.
@@ -35,7 +31,7 @@ const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(450 * GIB);
 const SUBNET_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(25 * GIB);
 
 /// This is the upper limit on how much memory can be used by the ingress
-/// history on a given subnet. It is lower than the subnet messsage memory
+/// history on a given subnet. It is lower than the subnet message memory
 /// capacity because here we count actual memory consumption as opposed to
 /// memory plus reservations.
 const INGRESS_HISTORY_MEMORY_CAPACITY: NumBytes = NumBytes::new(4 * GIB);
@@ -46,6 +42,9 @@ const SUBNET_WASM_CUSTOM_SECTIONS_MEMORY_CAPACITY: NumBytes = NumBytes::new(2 * 
 
 /// The number of bytes reserved for response callback executions.
 const SUBNET_MEMORY_RESERVATION: NumBytes = NumBytes::new(10 * GIB);
+
+/// The duration a stop_canister has to stop the canister before timing out.
+pub const STOP_CANISTER_TIMEOUT_DURATION: Duration = Duration::from_secs(5 * 60); // 5 minutes
 
 /// This is the upper limit on how big heap deltas all the canisters together
 /// can produce on a subnet in between checkpoints. Once, the total delta size
@@ -61,6 +60,10 @@ const SUBNET_MEMORY_RESERVATION: NumBytes = NumBytes::new(10 * GIB);
 /// canister memory size to guarantee that a message that overwrites the whole
 /// memory can succeed.
 pub(crate) const SUBNET_HEAP_DELTA_CAPACITY: NumBytes = NumBytes::new(140 * GIB);
+
+/// The maximum number of instructions for inspect_message calls.
+const MAX_INSTRUCTIONS_FOR_MESSAGE_ACCEPTANCE_CALLS: NumInstructions =
+    NumInstructions::new(200_000_000);
 
 /// The maximum depth of call graphs allowed for composite query calls
 pub(crate) const MAX_QUERY_CALL_DEPTH: usize = 6;
@@ -95,7 +98,10 @@ const QUERY_SCHEDULING_TIME_SLICE_PER_CANISTER: Duration = Duration::from_millis
 ///
 /// The limit includes both cache keys and values, for successful query
 /// executions and user errors.
-const QUERY_CACHE_CAPACITY: NumBytes = NumBytes::new(100 * MIB);
+const QUERY_CACHE_CAPACITY: NumBytes = NumBytes::new(200 * MIB);
+
+/// The upper limit on how long the cache entry stays valid in the query cache.
+const QUERY_CACHE_MAX_EXPIRY_TIME: Duration = Duration::from_secs(60);
 
 // The ID of the Bitcoin testnet canister.
 pub const BITCOIN_TESTNET_CANISTER_ID: &str = "g4xu7-jiaaa-aaaan-aaaaq-cai";
@@ -112,6 +118,9 @@ const BITCOIN_MAINNET_SOFT_LAUNCH_CANISTER_ID: &str = "gsvzx-syaaa-aaaan-aaabq-c
 
 /// The capacity of the Wasm compilation cache.
 pub const MAX_COMPILATION_CACHE_SIZE: NumBytes = NumBytes::new(10 * GIB);
+
+/// Maximum number of controllers allowed in a request (specified in the interface spec).
+pub const MAX_ALLOWED_CONTROLLERS_COUNT: usize = 10;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(default)]
@@ -144,7 +153,7 @@ pub struct Config {
     pub ingress_history_memory_capacity: NumBytes,
 
     /// The maximum amount of logical storage available to wasm custom sections
-    /// across the whole subnet.    
+    /// across the whole subnet.
     pub subnet_wasm_custom_sections_memory_capacity: NumBytes,
 
     /// The number of bytes reserved for response callback execution.
@@ -179,7 +188,7 @@ pub struct Config {
     /// The maximum number of instructions allowed for a query call graph.
     pub max_query_call_graph_instructions: NumInstructions,
 
-    /// The maxmimum time a query call in non-replicated mode is allowed to run.
+    /// The maximum time a query call in non-replicated mode is allowed to run.
     /// In replicated code we cannot rely on the walltime, since that is not
     /// deterministic.
     pub max_query_call_walltime: Duration,
@@ -218,11 +227,20 @@ pub struct Config {
     /// Query cache capacity in bytes
     pub query_cache_capacity: NumBytes,
 
+    /// The upper limit on how long the cache entry stays valid in the query cache.
+    pub query_cache_max_expiry_time: Duration,
+
     /// The capacity of the Wasm compilation cache.
     pub max_compilation_cache_size: NumBytes,
 
     /// Indicate whether query stats should be collected or not.
     pub query_stats_aggregation: FlagStatus,
+
+    /// Indicate whether the Wasm chunk store feature has been enabled or not.
+    pub wasm_chunk_store: FlagStatus,
+
+    /// The duration a stop_canister has to stop the canister before timing out.
+    pub stop_canister_timeout_duration: Duration,
 }
 
 impl Default for Config {
@@ -240,7 +258,8 @@ impl Default for Config {
         Self {
             embedders_config: EmbeddersConfig::default(),
             create_funds_whitelist: String::default(),
-            max_instructions_for_message_acceptance_calls: MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS,
+            max_instructions_for_message_acceptance_calls:
+                MAX_INSTRUCTIONS_FOR_MESSAGE_ACCEPTANCE_CALLS,
             subnet_memory_threshold: SUBNET_MEMORY_THRESHOLD,
             subnet_memory_capacity: SUBNET_MEMORY_CAPACITY,
             subnet_message_memory_capacity: SUBNET_MESSAGE_MEMORY_CAPACITY,
@@ -254,9 +273,7 @@ impl Default for Config {
             default_provisional_cycles_balance: Cycles::new(100_000_000_000_000),
             // The default freeze threshold is 30 days.
             default_freeze_threshold: NumSeconds::from(30 * 24 * 60 * 60),
-            // Maximum number of controllers allowed in a request (specified in the public
-            // Spec).
-            max_controllers: 10,
+            max_controllers: MAX_ALLOWED_CONTROLLERS_COUNT,
             canister_sandboxing_flag: FlagStatus::Enabled,
             query_execution_threads_total: QUERY_EXECUTION_THREADS_TOTAL,
             query_scheduling_time_slice_per_canister: QUERY_SCHEDULING_TIME_SLICE_PER_CANISTER,
@@ -286,8 +303,11 @@ impl Default for Config {
             composite_queries: FlagStatus::Enabled,
             query_caching: FlagStatus::Enabled,
             query_cache_capacity: QUERY_CACHE_CAPACITY,
+            query_cache_max_expiry_time: QUERY_CACHE_MAX_EXPIRY_TIME,
             max_compilation_cache_size: MAX_COMPILATION_CACHE_SIZE,
             query_stats_aggregation: FlagStatus::Disabled,
+            wasm_chunk_store: FlagStatus::Disabled,
+            stop_canister_timeout_duration: STOP_CANISTER_TIMEOUT_DURATION,
         }
     }
 }

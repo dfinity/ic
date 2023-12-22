@@ -5,14 +5,14 @@ use crate::metrics::{
 };
 use byte_unit::Byte;
 use core::convert::TryFrom;
-use http::{uri::Scheme, Uri};
+use http::{header::USER_AGENT, uri::Scheme, HeaderValue, Uri};
 use hyper::{
     client::HttpConnector,
     header::{HeaderMap, ToStrError},
     Body, Client, Method,
 };
+use hyper_rustls::HttpsConnector;
 use hyper_socks2::SocksConnector;
-use hyper_tls::HttpsConnector;
 use ic_async_utils::{receive_body_without_timeout, BodyReceiveError};
 use ic_https_outcalls_service::{
     canister_http_service_server::CanisterHttpService, CanisterHttpSendRequest,
@@ -20,7 +20,7 @@ use ic_https_outcalls_service::{
 };
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use std::{collections::HashMap, fmt, net::SocketAddr};
+use std::collections::HashMap;
 use tonic::{Request, Response, Status};
 
 /// Hyper only supports a maximum of 32768 headers https://docs.rs/hyper/0.14.23/hyper/header/index.html#limitations-1
@@ -29,6 +29,9 @@ use tonic::{Request, Response, Status};
 const HEADERS_LIMIT: usize = 1_024;
 /// Hyper also limits the size of the HeaderName to 32768. https://docs.rs/hyper/0.14.23/hyper/header/index.html#limitations.
 const HEADER_NAME_VALUE_LIMIT: usize = 8_192;
+
+/// By default most higher-level http libs like `curl` set some `User-Agent` so we do the same here to avoid getting rejected due to strict server requirements.
+const USER_AGENT_ADAPTER: &str = "ic/1.0";
 
 /// implements RPC
 pub struct CanisterHttp {
@@ -91,8 +94,8 @@ impl CanisterHttpService for CanisterHttp {
             ));
         }
 
-        let method = HttpMethod::from_i32(req.method)
-            .ok_or_else(|| {
+        let method = HttpMethod::try_from(req.method)
+            .map_err(|_| {
                 Status::new(
                     tonic::Code::InvalidArgument,
                     "Failed to get HTTP method".to_string(),
@@ -115,13 +118,17 @@ impl CanisterHttpService for CanisterHttp {
             })?;
 
         // Build Http Request.
-        let headers = validate_headers(req.headers).map_err(|err| {
+        let mut headers = validate_headers(req.headers).map_err(|err| {
             self.metrics
                 .request_errors
                 .with_label_values(&[LABEL_REQUEST_HEADERS])
                 .inc();
             err
         })?;
+
+        // Add user-agent header if not present.
+        add_fallback_user_agent_header(&mut headers);
+
         let mut request_size = req.body.len();
         request_size += headers
             .iter()
@@ -131,48 +138,35 @@ impl CanisterHttpService for CanisterHttp {
         // If we are allowed to use socks and condition described in `should_use_socks_proxy` hold,
         // we do the requests through the socks proxy. If not we use the default IPv6 route.
         let http_resp = if req.socks_proxy_allowed {
-            // Http request does not implement clone. So we have to manually contruct a clone.
+            // Http request does not implement clone. So we have to manually construct a clone.
             let req_body_clone = req.body.clone();
             let mut http_req = hyper::Request::new(Body::from(req.body));
             *http_req.headers_mut() = headers;
             *http_req.method_mut() = method;
             *http_req.uri_mut() = uri.clone();
+            let mut http_req_clone = hyper::Request::new(Body::from(req_body_clone));
+            *http_req_clone.headers_mut() = http_req.headers().clone();
+            *http_req_clone.method_mut() = http_req.method().clone();
+            *http_req_clone.uri_mut() = http_req.uri().clone();
 
-            if !should_use_socks_proxy(&uri).await {
-                let mut http_req_clone = hyper::Request::new(Body::from(req_body_clone));
-                *http_req_clone.headers_mut() = http_req.headers().clone();
-                *http_req_clone.method_mut() = http_req.method().clone();
-                *http_req_clone.uri_mut() = http_req.uri().clone();
-                // If we fail to connect through IPv6 we retry with socks.
-                match self.client.request(http_req).await {
-                    Err(direct_err) if direct_err.is_connect() => {
-                        self.metrics.requests_socks.inc();
-                        self.socks_client
-                            .request(http_req_clone)
-                            .await
-                            .map_err(|socks_err| {
-                                RequestError::DirectAndSocks((direct_err, socks_err))
-                            })
-                    }
-                    resp => resp.map_err(|err| RequestError::Direct(err)),
+            match self.client.request(http_req).await {
+                // If we fail we try with the socks proxy. For destinations that are ipv4 only this should
+                // fail fast because our interface does not have an ipv4 assigned.
+                Err(direct_err) => {
+                    self.metrics.requests_socks.inc();
+                    self.socks_client.request(http_req_clone).await.map_err(|e| {
+                        format!("Request failed direct connect {direct_err} and connect through socks {e}")
+                    })
                 }
-            } else {
-                self.metrics.requests_socks.inc();
-                self.socks_client
-                    .request(http_req)
-                    .await
-                    .map_err(|err| RequestError::Socks(err))
+                Ok(resp)=> Ok(resp),
             }
         } else {
             let mut http_req = hyper::Request::new(Body::from(req.body));
             *http_req.headers_mut() = headers;
             *http_req.method_mut() = method;
             *http_req.uri_mut() = uri.clone();
-            self.client
-                .request(http_req)
-                .await
-                .map_err(|err| RequestError::Direct(err))
-        }
+            self.client.request(http_req).await.map_err(|e| format!("Failed to directly connect: {e}"))
+            }
         .map_err(|err| {
             debug!(self.logger, "Failed to connect: {}", err);
             self.metrics
@@ -281,61 +275,6 @@ impl CanisterHttpService for CanisterHttp {
     }
 }
 
-enum RequestError {
-    Direct(hyper::Error),
-    Socks(hyper::Error),
-    DirectAndSocks((hyper::Error, hyper::Error)),
-}
-
-impl fmt::Display for RequestError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Direct(direct_err) => {
-                write!(f, "Request failed: {}", direct_err)
-            }
-            Self::Socks(direct_err) => {
-                write!(f, "Request through socks proxy failed: {}", direct_err)
-            }
-            Self::DirectAndSocks((direct_err, socks_err)) => {
-                write!(
-                    f,
-                    "Request failed to connect: {} fallback to socks also failed: {}",
-                    direct_err, socks_err
-                )
-            }
-        }
-    }
-}
-
-/// Decides if socks proxy should be used to connect to given Uri. In the following cases we do NOT use the proxy:
-/// 1. If we can't get the necessary infromation from the url to do the dns lookup.
-/// 2. If the dns resolution fails.
-/// 3. If we connect to localhost.
-/// 4. If the dns resoultion returns at least a single IPV6.
-async fn should_use_socks_proxy(url: &Uri) -> bool {
-    let host = match url.host() {
-        Some(host) => host,
-        None => return false,
-    };
-    // We use a default port in case no port is specfied becuase `lookup_host` requires us to specify a port.
-    let port = url.port_u16().unwrap_or(443);
-
-    let mut lookup = match tokio::net::lookup_host((host, port)).await {
-        Ok(lookup) => lookup,
-        Err(_) => return false,
-    };
-
-    // Check if localhost address.
-    if lookup.all(|addr| addr.ip().is_loopback()) {
-        return false;
-    }
-
-    if lookup.any(|addr| matches!(addr, SocketAddr::V6(_))) {
-        return false;
-    }
-    true
-}
-
 fn validate_headers(raw_headers: Vec<HttpHeader>) -> Result<HeaderMap, Status> {
     // Check we are within limit for number of headers.
     if raw_headers.len() > HEADERS_LIMIT {
@@ -361,7 +300,7 @@ fn validate_headers(raw_headers: Vec<HttpHeader>) -> Result<HeaderMap, Status> {
     let headers: HeaderMap = HeaderMap::try_from(
         &raw_headers
             .into_iter()
-            .map(|h| (h.name, h.value))
+            .map(|h| (h.name.to_lowercase(), h.value))
             .collect::<HashMap<String, String>>(),
     )
     .map_err(|err| {
@@ -372,6 +311,17 @@ fn validate_headers(raw_headers: Vec<HttpHeader>) -> Result<HeaderMap, Status> {
     })?;
 
     Ok(headers)
+}
+
+/// Adds a fallback user agent header if not already present in headermap
+fn add_fallback_user_agent_header(header_map: &mut HeaderMap) {
+    if !header_map
+        .iter()
+        .map(|h| h.0.as_str().to_lowercase())
+        .any(|h| h == USER_AGENT.as_str().to_lowercase())
+    {
+        header_map.insert(USER_AGENT, HeaderValue::from_static(USER_AGENT_ADAPTER));
+    }
 }
 
 #[cfg(test)]

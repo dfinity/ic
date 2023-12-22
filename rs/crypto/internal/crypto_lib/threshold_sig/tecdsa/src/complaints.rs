@@ -175,10 +175,9 @@ impl IDkgComplaintInternal {
         // Verify that the decrypted opening does *not* match the
         // dealing commitment
 
-        if dealing
-            .commitment
-            .check_opening(complainer_index, &opening)?
-        {
+        let commitment_check = dealing.commitment.check_opening(complainer_index, &opening);
+
+        if commitment_check.is_ok() {
             return Err(ThresholdEcdsaError::InvalidComplaint);
         }
 

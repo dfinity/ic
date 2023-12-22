@@ -420,7 +420,7 @@ impl SigsegvMemoryTracker {
 }
 
 /// This is the old (unoptimized) signal handler. We keep it for use on MacOS
-/// where the new signal handler doesn't work because the [`AcessKind`] is not
+/// where the new signal handler doesn't work because the [`AccessKind`] is not
 /// available.
 pub fn sigsegv_fault_handler_old(
     tracker: &SigsegvMemoryTracker,

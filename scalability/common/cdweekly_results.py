@@ -10,10 +10,11 @@ import sys
 import time
 import traceback
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 
 import gflags
 import pybars
+import requests
 from termcolor import colored
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -41,7 +42,7 @@ HOVERTEMPLATE = """
 %{text}
 """
 
-# Exclude the following experiments from plotting (e.g. for outliers or failed benchmakrs)
+# Exclude the following experiments from plotting (e.g. for outliers or failed benchmarks)
 BLACKLIST = [
     ("0b2e60bb5af556c401c4253e763c13d23e2947be", "1639340737"),
     ("7424ea8c83b86cd7867c0686eaeb2c0285450b12", "1649055686"),
@@ -62,14 +63,35 @@ BLACKLIST = [
 ]
 
 
+# Prefix for API calls to the metrics
+API_PREFIX = "https://ic-api.internetcomputer.org/api/"
+
+
+def get_application_subnets():
+    req = requests.get(f"{API_PREFIX}/subnet-list")
+    num_application_subnets = 0
+    num_application_nodes = 0
+    for subnet in req.json()["subnets"]:
+        if subnet["subnet_type"] != "system":
+            num_application_subnets += 1
+            num_application_nodes += subnet["up_nodes"]
+
+    return (num_application_subnets, num_application_nodes)
+
+
+def get_num_boundary_nodes():
+    req = requests.get(f"{API_PREFIX}/metrics/boundary-nodes-count")
+    return int(req.json()["boundary_nodes_count"][0][1])
+
+
 def convert_date(ts: int):
-    """Conver the given data to a format plotly understands."""
+    """Convert the given data to a format plotly understands."""
     # Also works in plotly: https://plotly.com/javascript/time-series/
     return datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def ensure_report_generated(githash, timestamp):
-    """Atempt to generate report for the given githash and timestamp if not already done."""
+    """Attempt to generate report for the given githash and timestamp if not already done."""
     try:
         target_dir = (
             os.path.join(FLAGS.asset_root, githash, timestamp)
@@ -260,7 +282,7 @@ def parse_rps_experiment_with_evaluated_summary(data, githash, timestamp, meta_d
     return added
 
 
-def parse_rps_experiment_failure_rate(data, githash, timestamp, meta_data, raw_data):
+def parse_rps_experiment_failure_rate(data, githash, timestamp, meta_data, raw_data, **kwargs):
     return parse_rps_experiment_with_evaluated_summary(
         data,
         githash,
@@ -268,13 +290,19 @@ def parse_rps_experiment_failure_rate(data, githash, timestamp, meta_data, raw_d
         meta_data,
         raw_data,
         lambda evaluated_summaries: evaluated_summaries.get_median_failure_rate(),
+        **kwargs
     )
 
 
-def parse_rps_experiment_latency(data, githash, timestamp, meta_data, raw_data):
+def parse_rps_experiment_latency(data, githash, timestamp, meta_data, raw_data, **kwargs):
     return parse_rps_experiment_with_evaluated_summary(
-        data, githash, timestamp, meta_data, raw_data, lambda evaluated_summaries: evaluated_summaries.percentiles[
-            90]
+        data,
+        githash,
+        timestamp,
+        meta_data,
+        raw_data,
+        lambda evaluated_summaries: evaluated_summaries.percentiles[90],
+        **kwargs
     )
 
 
@@ -639,6 +667,11 @@ if __name__ == "__main__":
     misc.load_artifacts("../artifacts/release")
     misc.parse_command_line_args()
 
+    num_app_subnets, num_app_nodes = get_application_subnets()
+    num_boundary_nodes = get_num_boundary_nodes()
+    num_boundary_nodes = int(num_boundary_nodes)
+    print("Boundary nodes: ", num_boundary_nodes)
+
     with open(TEMPLATE_PATH, mode="r") as f:
         compiler = pybars.Compiler()
         source = f.read()
@@ -646,6 +679,10 @@ if __name__ == "__main__":
 
         data = {
             "last_generated": int(time.time()),
+            "last_generated_formatted": str(date.today()),
+            "num_app_subnets": num_app_subnets,
+            "num_app_nodes": num_app_nodes,
+            "num_boundary_nodes": num_boundary_nodes,
         }
 
         # Query counter
@@ -702,6 +739,23 @@ if __name__ == "__main__":
             yaxis_title="Latency",
         )
 
+        # Scale up performance to mainnet
+        # -----------------------------------------------------------------------------
+        latest_query_performance = data["plot_exp1_query"]["plot"][0]["y"][-1]
+        latest_update_performance = data["plot_exp1_update"]["plot"][0]["y"][-1]
+
+        print("query", data["plot_exp1_query"]["plot"][0]["y"], latest_query_performance)
+        print("update", latest_update_performance)
+
+        latest_approx_mainnet_update_performance = num_app_subnets * latest_update_performance
+        latest_approx_mainnet_query_performance = num_app_nodes * latest_query_performance
+
+        data["latest_approx_mainnet_subnet_update_performance"] = "{:,.0f}".format(latest_update_performance)
+        data["latest_approx_mainnet_node_query_performance"] = "{:,.0f}".format(latest_query_performance)
+
+        data["latest_approx_mainnet_update_performance"] = "{:,.0f}".format(latest_approx_mainnet_update_performance)
+        data["latest_approx_mainnet_query_performance"] = "{:,.0f}".format(latest_approx_mainnet_query_performance)
+
         # Boundary nodes
         # --------------------------------------------------------------------------------
         data["plot_boundary_nodes_query_failure_rate"] = render_results(
@@ -751,6 +805,33 @@ if __name__ == "__main__":
             time_start=1639939557,
             filter=filter_multiple_canisters,
         )
+
+        # TECDSA performance
+        # -----------------------------------------------------------------------------
+        experiments = ["run_tecdsa"]
+        request_type = ["query"]  # This is actually wrong, but it is what we write in the experiment file
+        label = "tecdsa"
+
+        print(f"🔍 Searching for {experiments} {request_type} - plotting failure rate")
+        data[f"{label}_failure_rate"] = render_results(
+            experiments,
+            request_type,
+            parse_rps_experiment_failure_rate,
+            None,
+            yaxis_title="Failure rate",
+            f_label=default_label_formatter_from_workload_description
+
+        )
+
+        # print(f"🔍 Searching for {experiments} {request_type} - plotting latency")
+        # data[f"{label}_latency"] = render_results(
+        #     experiments,
+        #     request_type,
+        #     parse_rps_experiment_latency,
+        #     None,
+        #     yaxis_title="Latency",
+        #     f_label=default_label_formatter_from_workload_description
+        # )
 
         # Others
         # -----------------------------------------------------------------------------

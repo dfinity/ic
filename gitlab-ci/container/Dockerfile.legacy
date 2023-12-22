@@ -17,10 +17,10 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
     apt -yqq install --no-install-recommends git openssh-client curl xz-utils time parallel net-tools \
         apt-transport-https ca-certificates curl gnupg lsb-release && \
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg && \
-    curl -L "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_20.04/Release.key" |  apt-key add - && \
+    curl -fsSL "https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable/xUbuntu_20.04/Release.key" | gpg --dearmor | tee /etc/apt/trusted.gpg.d/devel_kubic_libcontainers_stable.gpg > /dev/null && \
     curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null && \
-    echo "deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_20.04/ /" | tee /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list && \
+    echo 'deb http://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_20.04/ /' | tee /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list && \
     echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
     echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-15 main" | tee -a /etc/apt/sources.list.d/llvm.list && \
     curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg  add - && \
@@ -77,12 +77,10 @@ RUN curl --fail https://sh.rustup.rs -sSf \
     chown -R ${USER}.${USER} ${RUSTUP_HOME} ${CARGO_HOME}
 
 # Install AFLplusplus
-ARG AFL_RELEASE_VERSION=4.07c
+ARG AFL_RELEASE_VERSION=v4.08c
 RUN cd /afl && \
     git clone --depth=1 --branch=${AFL_RELEASE_VERSION} https://github.com/AFLplusplus/AFLplusplus.git && \
     cd AFLplusplus && \
-    sed -i 's/(cc_par_cnt + argc >= 1024)/(cc_par_cnt + argc >= 2048)/g' src/afl-cc.c && \
-    sed -i 's/ck_alloc(1024/ck_alloc(2048/g' src/afl-cc.c && \
     STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-15 CC=/usr/bin/clang-15 CXX=/usr/bin/clang++-15 make all && \
     STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-15 CC=/usr/bin/clang-15 CXX=/usr/bin/clang++-15 make install && \
     mv afl-fuzz /afl && \
@@ -91,7 +89,7 @@ RUN cd /afl && \
     rm -rf AFLplusplus
 
 # Since we are cloning multiple NPM repos, we need to have multiple node versions installed
-# to switch between them for comptability.
+# to switch between them for compatibility.
 ARG nvm_version=v0.39.1
 ARG dependency_mgmt_agent_js_node_version=16
 ARG dependency_mgmt_nns_dapp_node_version=18
@@ -153,10 +151,6 @@ USER 0
 RUN mv /usr/bin/docker /usr/bin/docker-bin
 COPY ./gitlab-ci/container/files/containers.conf /etc/containers/containers.conf
 COPY ./gitlab-ci/container/files/docker.sh /usr/bin/docker
-
-# Install all python requirements
-COPY ./requirements.txt /tmp/requirements.txt
-RUN pip3 install --ignore-installed -r /tmp/requirements.txt
 
 # Add mold linker
 ARG mold_version=1.11.0

@@ -174,6 +174,7 @@ mod tests {
                 replica_version: None,
                 key_file: Some(PathBuf::from(dir)),
                 test_mode: true,
+                skip_prompts: true,
             },
             subcommand_args: SubCommand::AppSubnetRecovery(AppSubnetRecoveryArgs {
                 subnet_id: fake_subnet_id(),
@@ -185,6 +186,8 @@ mod tests {
                 upload_node: None,
                 ecdsa_subnet_id: Some(fake_subnet_id()),
                 next_step: None,
+                upgrade_image_url: None,
+                upgrade_image_hash: None,
             }),
             neuron_args: None,
         }

@@ -1,7 +1,7 @@
+use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_standalone_sig_verifier::{
     ecdsa_p256_signature_from_der_bytes, rsa_signature_from_bytes,
 };
-use ic_interfaces::crypto::IngressSigVerifier;
 use ic_types::{
     crypto::{AlgorithmId, BasicSig, BasicSigOf, Signable, UserPublicKey},
     messages::{WebAuthnEnvelope, WebAuthnSignature},

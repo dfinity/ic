@@ -1,10 +1,13 @@
 [package]
 name = "ic-crypto-internal-multi-sig-bls12381"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-base64 = "0.11.0"
+base64 = { workspace = true }
 hex = "0.4.2"
 ic-crypto-internal-bls12-381-type = { path = "../../bls12_381/type"}
 ic-crypto-internal-types = { path = "../../types" }
@@ -14,10 +17,11 @@ ic-protobuf = { path = "../../../../../protobuf" }
 ic-types = { path = "../../../../../types/types" }
 rand = "0.8"
 rand_chacha = "0.3"
-serde = { version = "1.0.99", features = [ "derive" ] }
+serde = { workspace = true }
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 
 [dev-dependencies]
 ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
+ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
 proptest = "1.0"
-serde_cbor = "0.11"
+serde_cbor = { workspace = true }

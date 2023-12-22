@@ -8,7 +8,6 @@ use ic_types::{
     consensus::Threshold,
     crypto::{CryptoError, CryptoHashOf},
     messages::CallbackId,
-    registry::RegistryClientError,
     NodeId, Time,
 };
 
@@ -76,11 +75,9 @@ pub enum CanisterHttpPermanentValidationError {
 /// A transient error that can occur during validation of a [`CanisterHttpPayload`]
 #[derive(Debug)]
 pub enum CanisterHttpTransientValidationError {
-    /// The registry for this subnet could not be retrieved
-    RegistryUnavailable(RegistryClientError),
     /// The state was not available at the time of validation
     StateUnavailable,
-    /// The consensus registry version could not be retreived from the summary
+    /// The consensus registry version could not be retrieved from the summary
     ConsensusRegistryVersionUnavailable,
     /// The feature is not enabled
     Disabled,

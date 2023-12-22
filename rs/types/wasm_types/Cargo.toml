@@ -1,7 +1,10 @@
 [package]
 name = "ic-wasm-types"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
@@ -9,4 +12,4 @@ ic-protobuf = { path = "../../protobuf" }
 ic-sys = { path = "../../sys" }
 ic-types = { path = "../types" }
 ic-utils = { path = "../../utils" }
-serde = { version = "1.0.99", features = ["derive"] }
+serde = { workspace = true }

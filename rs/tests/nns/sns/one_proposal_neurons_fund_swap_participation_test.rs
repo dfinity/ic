@@ -1,8 +1,5 @@
 use anyhow::Result;
-use ic_nervous_system_common::i2d;
-use ic_nervous_system_proto::pb::v1::Tokens;
 use ic_nns_governance::pb::v1::CreateServiceNervousSystem;
-use ic_sns_swap::pb::v1::GetDerivedStateResponse;
 use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::driver::test_env::TestEnv;
 use ic_tests::driver::test_env_api::NnsCanisterWasmStrategy;
@@ -10,12 +7,11 @@ use ic_tests::nns_tests::neurons_fund;
 use ic_tests::nns_tests::neurons_fund::NnsNfNeuron;
 use ic_tests::nns_tests::{
     sns_deployment, sns_deployment::generate_ticket_participants_workload, swap_finalization,
-    swap_finalization::finalize_committed_swap_and_check_success,
+    swap_finalization::finalize_committed_swap,
 };
 use ic_tests::sns_client::test_create_service_nervous_system_proposal;
 use ic_tests::systest;
 use ic_tests::util::block_on;
-use rust_decimal::prelude::ToPrimitive;
 use std::time::Duration;
 
 // At the time of this writing, the empirically-determined maximum is that 2,084
@@ -32,42 +28,25 @@ const NEURONS_FUND_NUM_PARTICIPANTS: u64 = 1500;
 
 fn create_service_nervous_system_proposal() -> CreateServiceNervousSystem {
     const MIN_PARTICIPANTS: u64 = 4;
-    let test_parameters = test_create_service_nervous_system_proposal(MIN_PARTICIPANTS);
-    let test_swap_parameters = test_parameters.swap_parameters.as_ref().unwrap().clone();
-    CreateServiceNervousSystem {
-        swap_parameters: Some(
-            ic_nns_governance::pb::v1::create_service_nervous_system::SwapParameters {
-                neurons_fund_investment_icp: Some(Tokens::from_e8s(
-                    NEURONS_FUND_NUM_PARTICIPANTS
-                        * test_swap_parameters
-                            .minimum_participant_icp
-                            .as_ref()
-                            .unwrap()
-                            .e8s
-                            .unwrap(),
-                )),
-                ..test_swap_parameters
-            },
-        ),
-        ..test_parameters
-    }
+    test_create_service_nervous_system_proposal(MIN_PARTICIPANTS)
 }
 
 fn nns_nf_neurons() -> Vec<NnsNfNeuron> {
-    let cf_contribution = create_service_nervous_system_proposal()
+    let max_nf_contribution = create_service_nervous_system_proposal()
         .swap_parameters
         .unwrap()
-        .neurons_fund_investment_icp
+        .maximum_direct_participation_icp
         .unwrap()
         .e8s
-        .unwrap();
+        .unwrap()
+        * 2;
 
-    neurons_fund::initial_nns_neurons(cf_contribution, NEURONS_FUND_NUM_PARTICIPANTS)
+    neurons_fund::initial_nns_neurons(max_nf_contribution * 10, NEURONS_FUND_NUM_PARTICIPANTS)
 }
 
 fn sns_setup_with_one_proposal(env: TestEnv) {
     sns_deployment::setup(
-        env,
+        &env,
         vec![],
         nns_nf_neurons(),
         create_service_nervous_system_proposal(),
@@ -77,7 +56,7 @@ fn sns_setup_with_one_proposal(env: TestEnv) {
 }
 
 fn wait_for_swap_to_start(env: TestEnv) {
-    block_on(swap_finalization::wait_for_swap_to_start(env));
+    block_on(swap_finalization::wait_for_swap_to_start(&env));
 }
 
 /// Creates ticket participants which will contribute in such a way that they'll hit max_icp_e8s with min_participants.
@@ -95,19 +74,15 @@ fn generate_ticket_participants_workload_necessary_to_close_the_swap(env: TestEn
     // participants, to allow the swap to have enough participants to close.
     let num_participants = swap_params.minimum_participants.unwrap();
 
-    let cf_contribution = create_service_nervous_system_proposal()
-        .swap_parameters
-        .unwrap()
-        .neurons_fund_investment_icp
-        .unwrap()
-        .e8s
-        .unwrap();
-
     // Calculate a value for `contribution_per_user` that will cause the icp
     // raised by the swap to exactly equal `params.max_icp_e8s - cf_contribution`.
     let contribution_per_user = ic_tests::util::divide_perfectly(
-        "max_icp_e8s",
-        swap_params.maximum_icp.unwrap().e8s.unwrap() - cf_contribution,
+        "maximum_direct_participation_icp",
+        swap_params
+            .maximum_direct_participation_icp
+            .unwrap()
+            .e8s
+            .unwrap(),
         num_participants,
     )
     .unwrap();
@@ -116,7 +91,7 @@ fn generate_ticket_participants_workload_necessary_to_close_the_swap(env: TestEn
     // So if we set rps to `1`, and the duration to `num_participants`, we'll
     // have `num_participants` participants.
     generate_ticket_participants_workload(
-        env,
+        &env,
         1,
         Duration::from_secs(num_participants),
         contribution_per_user,
@@ -125,30 +100,8 @@ fn generate_ticket_participants_workload_necessary_to_close_the_swap(env: TestEn
 
 fn finalize_swap(env: TestEnv) {
     let create_service_nervous_system_proposal = create_service_nervous_system_proposal();
-    let swap_params = create_service_nervous_system_proposal
-        .swap_parameters
-        .as_ref()
-        .unwrap()
-        .clone();
-
-    let sns_tokens_per_icp = i2d(create_service_nervous_system_proposal
-        .sns_token_e8s()
-        .unwrap())
-    .checked_div(i2d(swap_params.maximum_icp.unwrap().e8s.unwrap()))
-    .and_then(|d| d.to_f32())
-    .unwrap() as f64;
-
-    let expected_derived_swap_state = GetDerivedStateResponse {
-        direct_participant_count: swap_params.minimum_participants,
-        cf_participant_count: Some(nns_nf_neurons().len() as u64),
-        cf_neuron_count: Some(nns_nf_neurons().len() as u64),
-        buyer_total_icp_e8s: swap_params.maximum_icp.unwrap().e8s,
-        sns_tokens_per_icp: Some(sns_tokens_per_icp),
-    };
-
-    block_on(finalize_committed_swap_and_check_success(
-        env,
-        expected_derived_swap_state,
+    block_on(finalize_committed_swap(
+        &env,
         create_service_nervous_system_proposal,
     ));
 }

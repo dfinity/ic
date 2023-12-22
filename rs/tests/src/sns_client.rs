@@ -64,7 +64,7 @@ use crate::{
 };
 
 pub const SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S: u64 = E8;
-pub const SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S: u64 = 150_000 * E8;
+pub const SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S: u64 = 250_000 * E8;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SnsClient {
@@ -111,7 +111,7 @@ impl SnsClient {
         let request = sns_request_provider.get_sns_governance_mode();
         let res = sns_agent.call_and_parse(&request).await.result().unwrap();
         info!(log, "Received {res:?}");
-        let actual_mode = Mode::from_i32(res.mode.unwrap()).unwrap();
+        let actual_mode = Mode::try_from(res.mode.unwrap()).unwrap();
         assert_eq!(governance_mode, actual_mode);
     }
 
@@ -289,7 +289,7 @@ impl SnsClient {
 
         let sns_client = SnsClient {
             sns_canisters,
-            /// TODO: Provide a wallet canister for static testnet?
+            // TODO: Provide a wallet canister for static testnet?
             wallet_canister_id: PrincipalId::from_str("aaaaa-aa").unwrap(),
             sns_wasm_canister_id: SNS_WASM_CANISTER_ID.get(),
         };
@@ -335,8 +335,8 @@ pub fn openchat_create_service_nervous_system_proposal() -> CreateServiceNervous
         }),
         swap_parameters: Some(SwapParameters {
             minimum_participants: Some(100),
-            minimum_icp: Some(Tokens::from_tokens(500_000)),
-            maximum_icp: Some(Tokens::from_tokens(1_000_000)),
+            minimum_direct_participation_icp: Some(Tokens::from_tokens(500_000)),
+            maximum_direct_participation_icp: Some(Tokens::from_tokens(1_000_000)),
             minimum_participant_icp: Some(Tokens::from_e8s(SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S)),
             maximum_participant_icp: Some(Tokens::from_e8s(SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S)),
             neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
@@ -348,7 +348,11 @@ pub fn openchat_create_service_nervous_system_proposal() -> CreateServiceNervous
             // With a start time of None, NNS Governance in the test configuration should start the swap immediately.
             start_time: None,
             duration: Some(Duration::from_secs(60 * 60 * 24 * 7)),
-            neurons_fund_investment_icp: Some(Tokens::from_tokens(100)),
+            neurons_fund_participation: Some(false),
+            // Deprecated fields
+            minimum_icp: None,
+            maximum_icp: None,
+            neurons_fund_investment_icp: None,
         }),
         ledger_parameters: Some(LedgerParameters {
             transaction_fee: Some(Tokens::from_e8s(100_000)),
@@ -383,23 +387,22 @@ pub fn test_create_service_nervous_system_proposal(
     min_participants: u64,
 ) -> CreateServiceNervousSystem {
     let openchat_parameters = openchat_create_service_nervous_system_proposal();
+    let swap_parameters = openchat_parameters
+        .swap_parameters
+        .as_ref()
+        .unwrap()
+        .clone();
     CreateServiceNervousSystem {
         swap_parameters: Some(
             ic_nns_governance::pb::v1::create_service_nervous_system::SwapParameters {
                 minimum_participants: Some(min_participants),
-                minimum_icp: Some(Tokens::from_e8s(SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S)),
-                maximum_icp: Some(Tokens::from_e8s(SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S)),
                 minimum_participant_icp: Some(Tokens::from_e8s(
                     SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,
                 )),
                 maximum_participant_icp: Some(Tokens::from_e8s(
                     SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S,
                 )),
-                ..openchat_parameters
-                    .swap_parameters
-                    .as_ref()
-                    .unwrap()
-                    .clone()
+                ..swap_parameters
             },
         ),
         ..openchat_parameters
@@ -674,6 +677,7 @@ async fn open_sns_token_swap(nns_api: &'_ Runtime, payload: OpenSnsTokenSwap) {
     let params = payload.params.as_ref().unwrap().clone();
     let () = params
         .validate(&Init {
+            should_auto_finalize: Some(true),
             nns_governance_canister_id: "".to_string(),
             sns_governance_canister_id: "".to_string(),
             sns_ledger_canister_id: "".to_string(),
@@ -682,20 +686,7 @@ async fn open_sns_token_swap(nns_api: &'_ Runtime, payload: OpenSnsTokenSwap) {
             fallback_controller_principal_ids: vec![],
             transaction_fee_e8s: Some(0),
             neuron_minimum_stake_e8s: Some(0),
-            confirmation_text: None,
-            restricted_countries: None,
-            min_participants: None,                      // TODO[NNS1-2339]
-            min_icp_e8s: None,                           // TODO[NNS1-2339]
-            max_icp_e8s: None,                           // TODO[NNS1-2339]
-            min_participant_icp_e8s: None,               // TODO[NNS1-2339]
-            max_participant_icp_e8s: None,               // TODO[NNS1-2339]
-            swap_start_timestamp_seconds: None,          // TODO[NNS1-2339]
-            swap_due_timestamp_seconds: None,            // TODO[NNS1-2339]
-            sns_token_e8s: None,                         // TODO[NNS1-2339]
-            neuron_basket_construction_parameters: None, // TODO[NNS1-2339]
-            nns_proposal_id: None,                       // TODO[NNS1-2339]
-            neurons_fund_participants: None,             // TODO[NNS1-2339]
-            should_auto_finalize: Some(true),
+            ..Default::default()
         })
         .unwrap();
 

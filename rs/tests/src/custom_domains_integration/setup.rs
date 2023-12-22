@@ -1,5 +1,6 @@
 use crate::{
     driver::{
+        asset_canister::{DeployAssetCanister, UploadAssetRequest},
         boundary_node::{
             BoundaryNode, BoundaryNodeCustomDomainsConfig, BoundaryNodeSnapshot, BoundaryNodeVm,
         },
@@ -20,7 +21,7 @@ use serde_json::json;
 use std::{io::Read, net::SocketAddrV6, time::Duration};
 
 use anyhow::{anyhow, Context, Error};
-use candid::{CandidType, Deserialize, Encode, Principal};
+use candid::{Encode, Principal};
 use chacha20poly1305::{aead::OsRng as ChaChaOsRng, KeyInit, XChaCha20Poly1305};
 use ic_agent::{identity::Secp256k1Identity, Identity};
 use ic_interfaces_registry::RegistryValue;
@@ -38,19 +39,6 @@ use tokio::task::{self, JoinHandle};
 
 const CERTIFICATE_ORCHESTRATOR_WASM: &str =
     "rs/boundary_node/certificate_issuance/certificate_orchestrator/certificate_orchestrator.wasm";
-
-const ASSET_CANISTER_WASM: &str = "external/asset_canister/file/assetstorage.wasm.gz";
-
-// required for the file upload to the asset canister
-#[derive(Clone, Debug, CandidType, Deserialize)]
-pub struct StoreArg {
-    pub key: String,
-    pub content_type: String,
-    pub content_encoding: String,
-    pub content: Vec<u8>,
-    pub sha256: Option<Vec<u8>>,
-    pub aliased: Option<bool>,
-}
 
 pub(crate) const CLOUDFLARE_API_PYTHON_PATH: &str = "/config/cloudflare_api.py";
 pub(crate) const PEBBLE_CACHE_PYTHON_PATH: &str = "/config/pebble_cache.py";
@@ -436,6 +424,9 @@ async fn setup_certificate_orchestartor(
                     Encode!(&InitArg {
                         id_seed: 0,
                         root_principals,
+                        registration_expiration_ttl: None,
+                        in_progress_ttl: None,
+                        management_task_interval: None,
                     })
                     .ok(),
                 )
@@ -468,9 +459,10 @@ async fn setup_certificate_orchestartor(
     agent.set_identity(identity);
 
     for p in allowed_principals {
+        let arg = Encode!(&p).context("failed to encode arg")?;
         agent
             .update(&cid, "addAllowedPrincipal")
-            .with_arg(Encode!(&p).context("failed to encode arg")?)
+            .with_arg(arg)
             .call_and_wait()
             .await
             .context("failed to add allowed principal")?;
@@ -510,6 +502,10 @@ async fn setup_boundary_node(
                 contents: XChaCha20Poly1305::generate_key(&mut ChaChaOsRng).to_vec(),
             })
         },
+        task_delay_sec: Some(5),
+        task_error_delay_sec: Some(10),
+        peek_sleep_sec: Some(5),
+        polling_interval_sec: Some(1),
     };
 
     // Start Boundary Node
@@ -883,43 +879,39 @@ async fn wait_for_docker_image(
 pub async fn setup_asset_canister(
     env: TestEnv,
     domain_names: Vec<&str>,
+    index_content: Option<&str>,
 ) -> Result<Principal, Error> {
-    // install an asset canister on an application subnet
-    let app_node = env.get_first_healthy_application_node_snapshot();
-
-    let asset_canister_id = task::spawn_blocking({
-        let app_node = app_node.clone();
-        move || app_node.create_and_install_canister_with_arg(ASSET_CANISTER_WASM, None)
-    })
-    .await
-    .context("failed to spawn task")?;
+    let asset_canister = env
+        .deploy_asset_canister()
+        .await
+        .expect("Could not install asset canister");
 
     // upload the `/.well-known/ic-domains` file
     let file_content = domain_names.join("\n").as_bytes().to_vec();
 
-    let agent = task::spawn_blocking({
-        let app_node = app_node.clone();
-        move || app_node.build_default_agent()
-    })
-    .await
-    .context("failed to spawn task")?;
+    asset_canister
+        .upload_asset(&UploadAssetRequest {
+            key: "/.well-known/ic-domains".to_string(),
+            content: file_content,
+            content_type: "text/plain".to_string(),
+            content_encoding: "identity".to_string(),
+            sha_override: None,
+        })
+        .await?;
 
-    let store_arg = StoreArg {
-        key: "/.well-known/ic-domains".to_string(),
-        content_type: "text/plain".to_string(),
-        content_encoding: "identity".to_string(),
-        content: file_content,
-        sha256: None,
-        aliased: None,
-    };
-    let _out = agent
-        .update(&asset_canister_id, "store")
-        .with_arg(Encode!(&store_arg).unwrap())
-        .call_and_wait()
-        .await
-        .context("failed to upload the .well-known/ic-domains file to the asset canister")?;
+    if let Some(index_content) = index_content {
+        asset_canister
+            .upload_asset(&UploadAssetRequest {
+                key: "/index.html".to_string(),
+                content: index_content.as_bytes().to_vec(),
+                content_type: "text/plain".to_string(),
+                content_encoding: "identity".to_string(),
+                sha_override: None,
+            })
+            .await?;
+    }
 
-    Ok(asset_canister_id)
+    Ok(asset_canister.canister_id)
 }
 
 pub async fn setup_dns_records(
@@ -935,15 +927,31 @@ pub async fn setup_dns_records(
     let base_url = format!("http://[{:?}]:{:?}", docker_host_ip, CLOUDFLARE_API_PORT);
     let client = Client::new();
 
-    // create the zone
-    let url = format!("{}//client/v4/zones", base_url);
-    let json_body = json!({"name": DELEGATION_DOMAIN});
-    let _response = client
-        .post(&url)
-        .json(&json_body)
+    // create the zone if it doesn't exist yet
+    let url = format!("{base_url}//client/v4/zones?name={DELEGATION_DOMAIN}");
+    let response = client
+        .get(&url)
         .send()
         .await
-        .context("failed to configure the DNS records")?;
+        .context("failed to get the zone")?;
+
+    let response_json: serde_json::Value = response
+        .json()
+        .await
+        .context("failed to decode the response")?;
+
+    // if the zone doesn't exist, create it
+    if response_json["result"].is_array() && response_json["result"].as_array().unwrap().is_empty()
+    {
+        let url = format!("{}//client/v4/zones", base_url);
+        let json_body = json!({"name": DELEGATION_DOMAIN});
+        let _response = client
+            .post(&url)
+            .json(&json_body)
+            .send()
+            .await
+            .context("failed to configure the DNS records")?;
+    }
 
     // create the zone
     let url = format!("{}//client/v4/zones", base_url);
@@ -985,7 +993,145 @@ pub async fn setup_dns_records(
     Ok(())
 }
 
-pub fn create_bn_http_client(env: TestEnv) -> Client {
+pub async fn update_dns_records(
+    env: TestEnv,
+    domain_name: &str,
+    canister_id: Principal,
+) -> Result<(), Error> {
+    // get the docker host
+    let docker_host = env
+        .get_deployed_universal_vm(REMOTE_DOCKER_HOST_VM_ID)
+        .unwrap();
+    let docker_host_ip = docker_host.get_vm().unwrap().ipv6;
+    let base_url = format!("http://[{:?}]:{:?}", docker_host_ip, CLOUDFLARE_API_PORT);
+    let client = Client::new();
+
+    // get the zone for the given domain
+    let url = format!("{base_url}//client/v4/zones?name={domain_name}");
+    let response = client
+        .get(&url)
+        .send()
+        .await
+        .context(format!("failed to get the zone for {domain_name}"))?;
+
+    // extract the zone id from the response
+    let response_json: serde_json::Value = response
+        .json()
+        .await
+        .context("failed to decode the response")?;
+    let zone_id = response_json["result"][0]["id"].as_str().unwrap();
+
+    // get the existing record
+    let url = format!(
+        "{base_url}//client/v4/zones/{zone_id}/dns_records?name=_canister-id.{domain_name}"
+    );
+    let response = client.get(&url).send().await.context(format!(
+        "failed to get the DNS records for _canister-id.{domain_name}"
+    ))?;
+
+    // extract the record id from the response
+    let response_json: serde_json::Value = response
+        .json()
+        .await
+        .context("failed to decode the response")?;
+    let record_id = response_json["result"][0]["id"].as_str().unwrap();
+
+    // update the TXT record containing the canister id
+    let url = format!(
+        "{}//client/v4/zones/{}/dns_records/{record_id}",
+        base_url, zone_id
+    );
+    let json_body = json!({"type": "TXT", "name": format!("_canister-id.{domain_name}"), "content": canister_id.to_string()});
+    let _response = client
+        .put(&url)
+        .json(&json_body)
+        .send()
+        .await
+        .context("failed to update the TXT record with the canister id: {}")?;
+
+    Ok(())
+}
+
+pub async fn remove_dns_records(env: TestEnv, domain_name: &str) -> Result<(), Error> {
+    // get the docker host
+    let docker_host = env
+        .get_deployed_universal_vm(REMOTE_DOCKER_HOST_VM_ID)
+        .unwrap();
+    let docker_host_ip = docker_host.get_vm().unwrap().ipv6;
+    let base_url = format!("http://[{:?}]:{:?}", docker_host_ip, CLOUDFLARE_API_PORT);
+    let client = Client::new();
+
+    // get the zone for the given domain
+    let url = format!("{base_url}//client/v4/zones?name={domain_name}");
+    let response = client
+        .get(&url)
+        .send()
+        .await
+        .context("failed to get the zone")?;
+
+    // extract the zone id from the response
+    let response_json: serde_json::Value = response
+        .json()
+        .await
+        .context("failed to decode the response")?;
+    let zone_id = response_json["result"][0]["id"].as_str().unwrap();
+
+    // get the existing record
+    let url = format!(
+        "{base_url}//client/v4/zones/{zone_id}/dns_records?name=_canister-id.{domain_name}"
+    );
+    let response = client.get(&url).send().await.context(format!(
+        "failed to get the DNS records for _canister-id.{domain_name}"
+    ))?;
+
+    // extract the record id from the response
+    let response_json: serde_json::Value = response
+        .json()
+        .await
+        .context("failed to decode the response")?;
+    let record_id = response_json["result"][0]["id"].as_str().unwrap();
+
+    // delete the record
+    let url = format!(
+        "{}//client/v4/zones/{}/dns_records/{record_id}",
+        base_url, zone_id
+    );
+    let _response = client
+        .delete(&url)
+        .send()
+        .await
+        .context("failed to delete record for _canister-id.{domain_name}")?;
+
+    // get the existing record
+    let url = format!(
+        "{base_url}//client/v4/zones/{zone_id}/dns_records?name=_acme-challenge.{domain_name}"
+    );
+    let response = client.get(&url).send().await.context(format!(
+        "failed to get the DNS records for _acme-challenge.{domain_name}"
+    ))?;
+
+    // extract the record id from the response
+    let response_json: serde_json::Value = response
+        .json()
+        .await
+        .context("failed to decode the response")?;
+    let record_id = response_json["result"][0]["id"].as_str().unwrap();
+
+    // delete the record
+    let url = format!(
+        "{}//client/v4/zones/{}/dns_records/{record_id}",
+        base_url, zone_id
+    );
+    let _response = client
+        .delete(&url)
+        .send()
+        .await
+        .context("failed to delete record for _acme-challenge.{domain_name}")?;
+
+    Ok(())
+}
+
+pub fn create_bn_http_client(env: TestEnv, domain_names: Vec<&str>) -> Client {
     // get the boundary node
     let boundary_node = env
         .get_deployed_boundary_node(BOUNDARY_NODE_VM_ID)
@@ -997,13 +1143,31 @@ pub fn create_bn_http_client(env: TestEnv) -> Client {
     let client_builder = ClientBuilder::new().redirect(Policy::none());
     let host = "ic0.app";
     let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 443, 0, 0);
-    let client_builder = client_builder
+    let mut client_builder = client_builder
         .danger_accept_invalid_certs(true)
         .resolve(host, bn_addr.into());
+    for domain_name in domain_names.iter() {
+        client_builder = client_builder.resolve(domain_name, bn_addr.into());
+    }
     client_builder.build().unwrap()
 }
 
 pub enum RegistrationRequestState {
+    Accepted(String),
+    Rejected(String),
+}
+
+pub enum UpdateRequestState {
+    Accepted,
+    Rejected(String),
+}
+
+pub enum RemoveRequestState {
+    Accepted,
+    Rejected(String),
+}
+
+pub enum GetRequestState {
     Accepted(String),
     Rejected(String),
 }
@@ -1045,10 +1209,58 @@ pub async fn submit_registration_request(
     }
 }
 
+pub async fn update_registration(
+    bn_client: Client,
+    registration_id: &str,
+) -> Result<UpdateRequestState, Error> {
+    let url = format!("https://ic0.app/registrations/{registration_id}");
+
+    let response = bn_client
+        .put(url)
+        .send()
+        .await
+        .context("failed to submit the request to update the domain")?;
+
+    // check the response status code
+    if response.status().is_success() {
+        Ok(UpdateRequestState::Accepted)
+    } else {
+        let response_text = response
+            .text()
+            .await
+            .expect("failed to get the text from the response");
+        Ok(UpdateRequestState::Rejected(response_text.to_string()))
+    }
+}
+
+pub async fn remove_registration(
+    bn_client: Client,
+    registration_id: &str,
+) -> Result<RemoveRequestState, Error> {
+    let url = format!("https://ic0.app/registrations/{registration_id}");
+
+    let response = bn_client
+        .delete(url)
+        .send()
+        .await
+        .context("failed to submit the request to remove the domain")?;
+
+    // check the response status code
+    if response.status().is_success() {
+        Ok(RemoveRequestState::Accepted)
+    } else {
+        let response_text = response
+            .text()
+            .await
+            .expect("failed to get the text from the response");
+        Ok(RemoveRequestState::Rejected(response_text.to_string()))
+    }
+}
+
 pub async fn get_registration_status(
     bn_client: Client,
     registration_id: &str,
-) -> Result<String, Error> {
+) -> Result<GetRequestState, Error> {
     let url = format!("https://ic0.app/registrations/{registration_id}");
     let response = bn_client
         .get(url)
@@ -1056,10 +1268,71 @@ pub async fn get_registration_status(
         .await
         .context("failed to get the registration status")?;
 
-    let response_json: serde_json::Value = response
-        .json()
+    // check the response status code
+    if response.status().is_success() {
+        let response_json: serde_json::Value = response
+            .json()
+            .await
+            .context("failed to decode the response")?;
+        let registration_state = response_json["state"].as_str().unwrap();
+        Ok(GetRequestState::Accepted(registration_state.to_string()))
+    } else {
+        let response_text = response
+            .text()
+            .await
+            .expect("failed to get the text from the response");
+        Ok(GetRequestState::Rejected(response_text.to_string()))
+    }
+}
+
+pub fn get_certificate_syncer_state(vm: &dyn SshSession, domain_name: &str) -> String {
+    let cmd = format!(
+        r#"cat /var/opt/nginx/domain_canister_mappings.js | grep -o '"{domain_name}":"[^"]*' | sed 's/"{domain_name}":"//'"#
+    );
+    vm.block_on_bash_script(&cmd).unwrap().trim().to_string()
+}
+
+fn get_service_status(vm: &dyn SshSession, service: &str) -> String {
+    vm.block_on_bash_script(&format!("systemctl is-active {service} 2>&1"))
+        .unwrap()
+}
+
+pub fn is_service_active(vm: &dyn SshSession, service: &str) -> bool {
+    let cmd_output = get_service_status(vm, service);
+    let result = get_service_status(vm, service) == "active";
+    println!("SERVICE-RJB: {service}: {cmd_output} - {result}");
+    result
+}
+
+pub fn get_service_errors(vm: &dyn SshSession, service: &str) -> String {
+    vm.block_on_bash_script(&format!(
+        r#"journalctl -u {service}.service --since "20 seconds ago" -p err | grep "No entries""#
+    ))
+    .unwrap()
+    .trim()
+    .to_string()
+}
+
+pub async fn access_domain(bn_client: Client, domain_name: &str) -> Result<String, Error> {
+    let url = format!("https://{domain_name}");
+    let response = bn_client
+        .get(url)
+        .header(
+            "User-Agent",
+            "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+        )
+        .send()
         .await
-        .context("failed to decode the response")?;
-    let registration_state = response_json["state"].as_str().unwrap();
-    Ok(registration_state.to_string())
+        .context("failed to access the domain")?;
+
+    // check the response status code
+    if response.status().is_success() {
+        let response_text = response
+            .text()
+            .await
+            .expect("failed to get the text from the response");
+        Ok(response_text.to_string())
+    } else {
+        panic!("boundary node returned an error: {:?}", response.status())
+    }
 }

@@ -1,7 +1,10 @@
 [package]
 name = "ic-test-utilities-execution-environment"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-base-types = { path = "../../types/base_types" }
@@ -13,6 +16,7 @@ ic-error-types = { path = "../../types/error_types" }
 ic-execution-environment = { path = "../../execution_environment" }
 ic-ic00-types = { path = "../../types/ic00_types" }
 ic-interfaces = { path = "../../interfaces" }
+ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-registry-provisional-whitelist = { path = "../../registry/provisional_whitelist" }

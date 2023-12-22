@@ -516,7 +516,7 @@ pub(crate) fn proto_response<R, M>(r: R) -> (Response<Body>, usize)
 where
     M: ProtoProxy<R>,
 {
-    let buf = M::proxy_encode(r).expect("Could not serialize response");
+    let buf = M::proxy_encode(r);
     let size_bytes = buf.len();
 
     // Headers borrowed from Spring Framework -- https://bit.ly/32EDqoo -- and Google's Protobuf
@@ -596,7 +596,7 @@ impl XNetEndpointConfig {
     fn try_from(registry: Arc<dyn RegistryClient>, node_id: NodeId) -> Option<XNetEndpointConfig> {
         let version = registry.get_latest_version();
         let node_record = registry
-            .get_transport_info(node_id, version)
+            .get_node_record(node_id, version)
             .unwrap_or_else(|e| {
                 panic!(
                     "Could not retrieve registry record for node {}: {}",

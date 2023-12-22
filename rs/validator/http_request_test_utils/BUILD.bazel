@@ -12,10 +12,9 @@ DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/types",
     "//rs/crypto/secrets_containers",
     "//rs/crypto/test_utils",
-    "//rs/crypto/test_utils/canister_sigs",
     "//rs/crypto/tree_hash",
     "//rs/types/types",
-    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand",
     "@crate_index//:simple_asn1",
     "@crate_index//:strum",
 ]

@@ -1,20 +1,24 @@
+use crate::as_round_instructions;
 use crate::canister_settings::{validate_canister_settings, ValidatedCanisterSettings};
 use crate::execution::install_code::{validate_controller, OriginalContext};
 use crate::execution::{install::execute_install, upgrade::execute_upgrade};
-use crate::execution_environment::{CompilationCostHandling, RoundContext, RoundLimits};
+use crate::execution_environment::{
+    CompilationCostHandling, RoundContext, RoundCounters, RoundLimits,
+};
 use crate::{
-    canister_settings::{CanisterSettings, CanisterSettingsBuilder},
+    canister_settings::CanisterSettings,
     hypervisor::Hypervisor,
     types::{IngressResponse, Response},
     util::GOVERNANCE_CANISTER_ID,
 };
 use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
-use ic_cycles_account_manager::CyclesAccountManager;
+use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterStatusResultV2,
-    CanisterStatusType, InstallCodeArgsV2, Method as Ic00Method,
+    CanisterStatusType, InstallChunkedCodeArgs, InstallCodeArgsV2, Method as Ic00Method,
+    StoredChunksReply, UploadChunkReply,
 };
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, IngressHistoryWriter, SubnetAvailableMemory,
@@ -22,10 +26,16 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::CyclesUseCase;
+use ic_replicated_state::canister_state::system_state::ReservationError;
 use ic_replicated_state::{
-    metadata_state::subnet_call_context_manager::InstallCodeCallId, CallOrigin, CanisterState,
-    CanisterStatus, NetworkTopology, ReplicatedState, SchedulerState, SystemState,
+    canister_state::system_state::{
+        wasm_chunk_store::{self, WasmChunkStore},
+        CyclesUseCase,
+    },
+    metadata_state::subnet_call_context_manager::InstallCodeCallId,
+    page_map::PageAllocatorFileDescriptor,
+    CallOrigin, CanisterState, CanisterStatus, NetworkTopology, ReplicatedState, SchedulerState,
+    SystemState,
 };
 use ic_system_api::ExecutionParameters;
 use ic_types::{
@@ -36,8 +46,8 @@ use ic_types::{
     },
     nominal_cycles::NominalCycles,
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, InvalidComputeAllocationError,
-    InvalidMemoryAllocationError, InvalidQueryAllocationError, MemoryAllocation, NumBytes,
-    NumInstructions, PrincipalId, QueryAllocation, SubnetId, Time,
+    InvalidMemoryAllocationError, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
+    SubnetId, Time,
 };
 use ic_wasm_types::CanisterModule;
 use num_traits::cast::ToPrimitive;
@@ -59,14 +69,14 @@ pub(crate) struct InstallCodeResult {
 ///   canister state with all the changes done during execution.
 /// * If execution has failed, then the result contains the old canister state
 ///   with some changes such charging of execution cycles.
-/// * If exection did not complete, then the result contains the old canister state,
+/// * If execution did not complete, then the result contains the old canister state,
 ///   with some changes such reservation of execution cycles and a continuation.
 #[derive(Debug)]
 pub(crate) enum DtsInstallCodeResult {
     Finished {
         canister: CanisterState,
         message: CanisterCall,
-        call_id: Option<InstallCodeCallId>,
+        call_id: InstallCodeCallId,
         instructions_used: NumInstructions,
         result: Result<InstallCodeResult, CanisterManagerError>,
     },
@@ -102,6 +112,10 @@ pub(crate) struct CanisterMgrConfig {
     pub(crate) own_subnet_type: SubnetType,
     pub(crate) max_controllers: usize,
     pub(crate) rate_limiting_of_instructions: FlagStatus,
+    pub(crate) wasm_chunk_store: FlagStatus,
+    rate_limiting_of_heap_delta: FlagStatus,
+    heap_delta_rate_limit: NumBytes,
+    upload_wasm_chunk_instructions: NumInstructions,
 }
 
 impl CanisterMgrConfig {
@@ -116,6 +130,10 @@ impl CanisterMgrConfig {
         compute_capacity: usize,
         rate_limiting_of_instructions: FlagStatus,
         allocatable_capacity_in_percent: usize,
+        wasm_chunk_store: FlagStatus,
+        rate_limiting_of_heap_delta: FlagStatus,
+        heap_delta_rate_limit: NumBytes,
+        upload_wasm_chunk_instructions: NumInstructions,
     ) -> Self {
         Self {
             subnet_memory_capacity,
@@ -127,6 +145,10 @@ impl CanisterMgrConfig {
             compute_capacity: (compute_capacity * allocatable_capacity_in_percent.min(100) / 100)
                 as u64,
             rate_limiting_of_instructions,
+            wasm_chunk_store,
+            rate_limiting_of_heap_delta,
+            heap_delta_rate_limit,
+            upload_wasm_chunk_instructions,
         }
     }
 }
@@ -140,7 +162,6 @@ pub struct InstallCodeContext {
     pub arg: Vec<u8>,
     pub compute_allocation: Option<ComputeAllocation>,
     pub memory_allocation: Option<MemoryAllocation>,
-    pub query_allocation: QueryAllocation,
 }
 
 impl InstallCodeContext {
@@ -149,14 +170,14 @@ impl InstallCodeContext {
     }
 }
 
-/// Errors that can occur when converting from (sender, [`InstallCodeArgs`]) to
+/// Errors that can occur when converting from (sender, [`InstallCodeArgsV2`]) to
 /// an [`InstallCodeContext`].
 #[derive(Debug)]
 pub enum InstallCodeContextError {
     ComputeAllocation(InvalidComputeAllocationError),
     MemoryAllocation(InvalidMemoryAllocationError),
-    QueryAllocation(InvalidQueryAllocationError),
     InvalidCanisterId(String),
+    InvalidHash(String),
 }
 
 impl From<InstallCodeContextError> for UserError {
@@ -169,13 +190,6 @@ impl From<InstallCodeContextError> for UserError {
                     err.min(),
                     err.max(),
                     err.given()
-                ),
-            ),
-            InstallCodeContextError::QueryAllocation(err) => UserError::new(
-                ErrorCode::CanisterContractViolation,
-                format!(
-                    "QueryAllocation expected to be in the range [{}..{}], got {}",
-                    err.min, err.max, err.given
                 ),
             ),
             InstallCodeContextError::MemoryAllocation(err) => UserError::new(
@@ -192,6 +206,9 @@ impl From<InstallCodeContextError> for UserError {
                     hex::encode(&bytes[..])
                 ),
             ),
+            InstallCodeContextError::InvalidHash(err) => {
+                UserError::new(ErrorCode::CanisterContractViolation, err)
+            }
         }
     }
 }
@@ -202,15 +219,55 @@ impl From<InvalidComputeAllocationError> for InstallCodeContextError {
     }
 }
 
-impl From<InvalidQueryAllocationError> for InstallCodeContextError {
-    fn from(err: InvalidQueryAllocationError) -> Self {
-        Self::QueryAllocation(err)
-    }
-}
-
 impl From<InvalidMemoryAllocationError> for InstallCodeContextError {
     fn from(err: InvalidMemoryAllocationError) -> Self {
         Self::MemoryAllocation(err)
+    }
+}
+
+impl InstallCodeContext {
+    pub(crate) fn chunked_install(
+        origin: CanisterChangeOrigin,
+        args: InstallChunkedCodeArgs,
+        store: &WasmChunkStore,
+    ) -> Result<Self, InstallCodeContextError> {
+        let canister_id = args.target_canister_id();
+        // Assume each chunk uses the full chunk size even though the actual
+        // size might be smaller.
+        let mut wasm_module = Vec::with_capacity(
+            args.chunk_hashes_list.len() * wasm_chunk_store::chunk_size().get() as usize,
+        );
+        for hash in args.chunk_hashes_list {
+            let hash = hash.as_slice().try_into().map_err(|_| {
+                InstallCodeContextError::InvalidHash(
+                    "Chunk hash is invalid. The length is not 32".to_string(),
+                )
+            })?;
+            for page in store.get_chunk_data(&hash).ok_or_else(|| {
+                InstallCodeContextError::InvalidHash(format!(
+                    "Chunk hash {:?} was not found",
+                    &hash[..32]
+                ))
+            })? {
+                wasm_module.extend_from_slice(page)
+            }
+        }
+        let hash = ic_crypto_sha2::Sha256::hash(&wasm_module);
+        if hash[..] != args.wasm_module_hash {
+            return Err(InstallCodeContextError::InvalidHash(format!(
+                "Wasm module hash {:?} does not match given hash {:?}",
+                hash, args.wasm_module_hash
+            )));
+        }
+        Ok(InstallCodeContext {
+            origin,
+            mode: args.mode,
+            canister_id,
+            wasm_module: CanisterModule::new(wasm_module),
+            arg: args.arg,
+            compute_allocation: None,
+            memory_allocation: None,
+        })
     }
 }
 
@@ -219,12 +276,7 @@ impl TryFrom<(CanisterChangeOrigin, InstallCodeArgsV2)> for InstallCodeContext {
 
     fn try_from(input: (CanisterChangeOrigin, InstallCodeArgsV2)) -> Result<Self, Self::Error> {
         let (origin, args) = input;
-        let canister_id = CanisterId::new(args.canister_id).map_err(|err| {
-            InstallCodeContextError::InvalidCanisterId(format!(
-                "Converting canister id {} failed with {}",
-                args.canister_id, err
-            ))
-        })?;
+        let canister_id = CanisterId::unchecked_from_principal(args.canister_id);
         let compute_allocation = match args.compute_allocation {
             Some(ca) => Some(ComputeAllocation::try_from(ca.0.to_u64().ok_or_else(
                 || {
@@ -244,9 +296,6 @@ impl TryFrom<(CanisterChangeOrigin, InstallCodeArgsV2)> for InstallCodeContext {
             None => None,
         };
 
-        // TODO(EXE-294): Query allocations are not supported and should be deleted.
-        let query_allocation = QueryAllocation::default();
-
         Ok(InstallCodeContext {
             origin,
             mode: args.mode,
@@ -255,7 +304,6 @@ impl TryFrom<(CanisterChangeOrigin, InstallCodeArgsV2)> for InstallCodeContext {
             arg: args.arg,
             compute_allocation,
             memory_allocation,
-            query_allocation,
         })
     }
 }
@@ -273,6 +321,12 @@ pub(crate) struct CanisterManager {
     config: CanisterMgrConfig,
     cycles_account_manager: Arc<CyclesAccountManager>,
     ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+}
+
+pub(crate) struct UploadChunkResult {
+    pub(crate) reply: UploadChunkReply,
+    pub(crate) heap_delta_increase: NumBytes,
 }
 
 impl CanisterManager {
@@ -282,6 +336,7 @@ impl CanisterManager {
         config: CanisterMgrConfig,
         cycles_account_manager: Arc<CyclesAccountManager>,
         ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
+        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> Self {
         CanisterManager {
             hypervisor,
@@ -289,6 +344,7 @@ impl CanisterManager {
             config,
             cycles_account_manager,
             ingress_history_writer,
+            fd_factory,
         }
     }
 
@@ -303,10 +359,11 @@ impl CanisterManager {
     ) -> Result<(), UserError> {
         let method_name = ingress.method_name();
         let sender = ingress.sender();
+        let method = Ic00Method::from_str(ingress.method_name());
         // The message is targeted towards the management canister. The
         // actual type of the method will determine if the message should be
         // accepted or not.
-        match Ic00Method::from_str(ingress.method_name()) {
+        match method {
             // The method is either invalid or it is of a type that users
             // are not allowed to send.
             Err(_)
@@ -327,7 +384,8 @@ impl CanisterManager {
             | Ok(Ic00Method::BitcoinGetUtxos)
             | Ok(Ic00Method::BitcoinSendTransaction)
             | Ok(Ic00Method::BitcoinSendTransactionInternal)
-            | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles) => Err(UserError::new(
+            | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles)
+            | Ok(Ic00Method::NodeMetricsHistory) => Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!("Only canisters can call ic00 method {}", method_name),
             )),
@@ -340,10 +398,31 @@ impl CanisterManager {
             | Ok(Ic00Method::StartCanister)
             | Ok(Ic00Method::UninstallCode)
             | Ok(Ic00Method::StopCanister)
-            | Ok(Ic00Method::DeleteCanister) |
-            Ok(Ic00Method::UpdateSettings)|
-            Ok(Ic00Method::InstallCode) |
-            Ok(Ic00Method::SetController) => {
+            | Ok(Ic00Method::DeleteCanister)
+            | Ok(Ic00Method::UpdateSettings)
+            | Ok(Ic00Method::InstallCode)
+            | Ok(Ic00Method::InstallChunkedCode)
+            | Ok(Ic00Method::UploadChunk)
+            | Ok(Ic00Method::StoredChunks)
+            | Ok(Ic00Method::DeleteChunks)
+            | Ok(Ic00Method::ClearChunkStore) => {
+                // Reject large install methods if the flag is not enabled, or
+                // they are not implemented.
+                match method {
+                    Ok(Ic00Method::UploadChunk)
+                    | Ok(Ic00Method::ClearChunkStore)
+                    | Ok(Ic00Method::InstallChunkedCode)
+                    | Ok(Ic00Method::StoredChunks) if self.config.wasm_chunk_store == FlagStatus::Enabled => {}
+                    Ok(Ic00Method::UploadChunk)
+                    | Ok(Ic00Method::StoredChunks)
+                    | Ok(Ic00Method::DeleteChunks)
+                    | Ok(Ic00Method::ClearChunkStore)
+                    | Ok(Ic00Method::InstallChunkedCode) => return Err(UserError::new(
+                        ErrorCode::CanisterRejectedMessage,
+                        "Chunked upload API is not yet implemented"
+                    )),
+                    _ => {}
+                };
                 match effective_canister_id {
                     Some(canister_id) => {
                         let canister = state.canister_state(&canister_id).ok_or_else(|| UserError::new(
@@ -379,7 +458,7 @@ impl CanisterManager {
                         format!("Caller {} is not allowed to call ic00 method {}", sender, method_name)
                     ))
                 }
-            }
+            },
         }
     }
 
@@ -388,14 +467,17 @@ impl CanisterManager {
         settings: CanisterSettings,
         subnet_compute_allocation_usage: u64,
         subnet_available_memory: &SubnetAvailableMemory,
+        subnet_memory_saturation: &ResourceSaturation,
         canister_cycles_balance: Cycles,
         subnet_size: usize,
     ) -> Result<ValidatedCanisterSettings, CanisterManagerError> {
         validate_canister_settings(
             settings,
             NumBytes::new(0),
+            NumBytes::new(0),
             MemoryAllocation::BestEffort,
             subnet_available_memory,
+            subnet_memory_saturation,
             ComputeAllocation::zero(),
             subnet_compute_allocation_usage,
             self.config.compute_capacity,
@@ -405,11 +487,13 @@ impl CanisterManager {
             &self.cycles_account_manager,
             subnet_size,
             Cycles::zero(),
+            None,
         )
     }
 
     /// Applies the requested settings on the canister.
     /// Note: Called only after validating the settings.
+    /// Keep this function in sync with `validate_canister_settings()`.
     fn do_update_settings(
         &self,
         settings: ValidatedCanisterSettings,
@@ -431,25 +515,32 @@ impl CanisterManager {
             canister.scheduler_state.compute_allocation = compute_allocation;
         }
         if let Some(memory_allocation) = settings.memory_allocation() {
-            // This should not happen normally because:
-            //   1. `do_update_settings` is called during canister creation when the
-            //       canister is empty and it should hold that memory usage of the
-            //       canister is 0 and thus any number for memory allocation is bigger.
-            //   2. When updating settings we have validated this holds.
-            //
-            // However, log an error in case it happens for visibility.
-            if let MemoryAllocation::Reserved(bytes) = memory_allocation {
-                if bytes < canister.memory_usage() {
+            if let MemoryAllocation::Reserved(new_bytes) = memory_allocation {
+                let memory_usage = canister.memory_usage();
+                if new_bytes < memory_usage {
+                    // This case is unreachable because the canister settings should have been validated.
                     error!(
                         self.log,
-                        "Requested memory allocation of {} which is smaller than current canister memory usage {}",
-                        bytes,
-                        canister.memory_usage(),
+                        "[EXC-BUG]: Canister {}: unreachable code in update settings: \
+                        memory allocation {} is lower than memory usage {}.",
+                        canister.canister_id(),
+                        new_bytes,
+                        memory_usage,
                     );
                 }
             }
             canister.system_state.memory_allocation = memory_allocation;
         }
+        if let Some(limit) = settings.reserved_cycles_limit() {
+            canister.system_state.set_reserved_balance_limit(limit);
+        }
+        canister
+            .system_state
+            .reserve_cycles(settings.reservation_cycles())
+            .expect(
+                "Reserving cycles should succeed because \
+                    the canister settings have been validated.",
+            );
         if let Some(freezing_threshold) = settings.freezing_threshold() {
             canister.system_state.freeze_threshold = freezing_threshold;
         }
@@ -464,6 +555,7 @@ impl CanisterManager {
         settings: CanisterSettings,
         canister: &mut CanisterState,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: ResourceSaturation,
         subnet_size: usize,
     ) -> Result<(), CanisterManagerError> {
         let sender = origin.origin();
@@ -473,8 +565,10 @@ impl CanisterManager {
         let validated_settings = validate_canister_settings(
             settings,
             canister.memory_usage(),
+            canister.message_memory_usage(),
             canister.memory_allocation(),
             &round_limits.subnet_available_memory,
+            &subnet_memory_saturation,
             canister.compute_allocation(),
             round_limits.compute_allocation_used,
             self.config.compute_capacity,
@@ -484,6 +578,7 @@ impl CanisterManager {
             &self.cycles_account_manager,
             subnet_size,
             canister.system_state.reserved_balance(),
+            canister.system_state.reserved_balance_limit(),
         )?;
 
         let is_controllers_change =
@@ -543,11 +638,13 @@ impl CanisterManager {
         origin: CanisterChangeOrigin,
         sender_subnet_id: SubnetId,
         cycles: Cycles,
-        settings: CanisterSettings,
+        mut settings: CanisterSettings,
         max_number_of_canisters: u64,
         state: &mut ReplicatedState,
         subnet_size: usize,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: ResourceSaturation,
+        canister_creation_error: &IntCounter,
     ) -> (Result<CanisterId, CanisterManagerError>, Cycles) {
         // Creating a canister is possible only in the following cases:
         // 1. sender is on NNS => it can create canister on any subnet
@@ -575,11 +672,17 @@ impl CanisterManager {
             );
         }
 
+        // Set the field to the default value if it is empty.
+        settings
+            .reserved_cycles_limit
+            .get_or_insert_with(|| self.cycles_account_manager.default_reserved_balance_limit());
+
         // Validate settings before `create_canister_helper` applies them
         match self.validate_settings_for_canister_creation(
             settings,
             round_limits.compute_allocation_used,
             &round_limits.subnet_available_memory,
+            &subnet_memory_saturation,
             cycles - fee,
             subnet_size,
         ) {
@@ -594,6 +697,7 @@ impl CanisterManager {
                     state,
                     round_limits,
                     None,
+                    canister_creation_error,
                 ) {
                     Ok(canister_id) => canister_id,
                     Err(err) => return (Err(err), cycles),
@@ -612,10 +716,11 @@ impl CanisterManager {
         &self,
         context: InstallCodeContext,
         message: CanisterCall,
+        call_id: InstallCodeCallId,
         state: &mut ReplicatedState,
         mut execution_parameters: ExecutionParameters,
         round_limits: &mut RoundLimits,
-        execution_refund_error_counter: &IntCounter,
+        round_counters: RoundCounters,
         subnet_size: usize,
     ) -> (
         Result<InstallCodeResult, CanisterManagerError>,
@@ -640,10 +745,11 @@ impl CanisterManager {
             MemoryAllocation::Reserved(bytes) => bytes,
             MemoryAllocation::BestEffort => execution_parameters.canister_memory_limit,
         };
+
         let dts_result = self.install_code_dts(
             context,
             message,
-            None,
+            call_id,
             None,
             old_canister,
             time,
@@ -652,7 +758,7 @@ impl CanisterManager {
             execution_parameters,
             round_limits,
             CompilationCostHandling::CountFullAmount,
-            execution_refund_error_counter,
+            round_counters,
             subnet_size,
         );
         match dts_result {
@@ -701,7 +807,7 @@ impl CanisterManager {
         &self,
         context: InstallCodeContext,
         message: CanisterCall,
-        call_id: Option<InstallCodeCallId>,
+        call_id: InstallCodeCallId,
         prepaid_execution_cycles: Option<Cycles>,
         mut canister: CanisterState,
         time: Time,
@@ -710,7 +816,7 @@ impl CanisterManager {
         execution_parameters: ExecutionParameters,
         round_limits: &mut RoundLimits,
         compilation_cost_handling: CompilationCostHandling,
-        execution_refund_error_counter: &IntCounter,
+        round_counters: RoundCounters,
         subnet_size: usize,
     ) -> DtsInstallCodeResult {
         if let Err(err) = validate_controller(&canister, &context.sender()) {
@@ -727,9 +833,11 @@ impl CanisterManager {
             Some(prepaid_execution_cycles) => prepaid_execution_cycles,
             None => {
                 let memory_usage = canister.memory_usage();
+                let message_memory_usage = canister.message_memory_usage();
                 match self.cycles_account_manager.prepay_execution_cycles(
                     &mut canister.system_state,
                     memory_usage,
+                    message_memory_usage,
                     execution_parameters.compute_allocation,
                     execution_parameters.instruction_limits.message(),
                     subnet_size,
@@ -769,18 +877,28 @@ impl CanisterManager {
             network_topology,
             hypervisor: &self.hypervisor,
             cycles_account_manager: &self.cycles_account_manager,
-            execution_refund_error_counter,
+            counters: round_counters,
             log: &self.log,
             time,
         };
 
         match context.mode {
-            CanisterInstallModeV2::Install | CanisterInstallModeV2::Reinstall => {
-                execute_install(context, canister, original, round.clone(), round_limits)
-            }
-            CanisterInstallModeV2::Upgrade(..) => {
-                execute_upgrade(context, canister, original, round.clone(), round_limits)
-            }
+            CanisterInstallModeV2::Install | CanisterInstallModeV2::Reinstall => execute_install(
+                context,
+                canister,
+                original,
+                round.clone(),
+                round_limits,
+                Arc::clone(&self.fd_factory),
+            ),
+            CanisterInstallModeV2::Upgrade(..) => execute_upgrade(
+                context,
+                canister,
+                original,
+                round.clone(),
+                round_limits,
+                Arc::clone(&self.fd_factory),
+            ),
         }
     }
 
@@ -792,6 +910,7 @@ impl CanisterManager {
         origin: CanisterChangeOrigin,
         canister_id: CanisterId,
         state: &mut ReplicatedState,
+        canister_not_found_error: &IntCounter,
     ) -> Result<(), CanisterManagerError> {
         let sender = origin.origin();
         let time = state.time();
@@ -812,12 +931,14 @@ impl CanisterManager {
             canister,
             time,
             AddCanisterChangeToHistory::Yes(origin),
+            Arc::clone(&self.fd_factory),
         );
         crate::util::process_responses(
             rejects,
             state,
             Arc::clone(&self.ingress_history_writer),
             self.log.clone(),
+            canister_not_found_error,
         );
         Ok(())
     }
@@ -954,9 +1075,11 @@ impl CanisterManager {
             .collect::<Vec<PrincipalId>>();
 
         let canister_memory_usage = canister.memory_usage();
+        let canister_message_memory_usage = canister.message_memory_usage();
         let compute_allocation = canister.scheduler_state.compute_allocation;
         let memory_allocation = canister.memory_allocation();
         let freeze_threshold = canister.system_state.freeze_threshold;
+        let reserved_cycles_limit = canister.system_state.reserved_balance_limit();
 
         Ok(CanisterStatusResultV2::new(
             canister.status(),
@@ -971,44 +1094,28 @@ impl CanisterManager {
             compute_allocation.as_percent(),
             Some(memory_allocation.bytes().get()),
             freeze_threshold.get(),
+            reserved_cycles_limit.map(|x| x.get()),
             self.cycles_account_manager
                 .idle_cycles_burned_rate(
                     memory_allocation,
                     canister_memory_usage,
+                    canister_message_memory_usage,
                     compute_allocation,
                     subnet_size,
                 )
                 .get(),
+            canister.system_state.reserved_balance().get(),
+            canister.scheduler_state.total_query_stats.num_calls,
+            canister.scheduler_state.total_query_stats.num_instructions,
+            canister
+                .scheduler_state
+                .total_query_stats
+                .ingress_payload_size,
+            canister
+                .scheduler_state
+                .total_query_stats
+                .egress_payload_size,
         ))
-    }
-
-    /// Sets a new controller for a canister. Only the current controller of
-    /// the canister is able to run this, otherwise an error is returned.
-    pub(crate) fn set_controller(
-        &self,
-        timestamp_nanos: Time,
-        origin: CanisterChangeOrigin,
-        canister_id: CanisterId,
-        new_controller: PrincipalId,
-        state: &mut ReplicatedState,
-        round_limits: &mut RoundLimits,
-        subnet_size: usize,
-    ) -> Result<(), CanisterManagerError> {
-        let canister = state
-            .canister_state_mut(&canister_id)
-            .ok_or(CanisterManagerError::CanisterNotFound(canister_id))?;
-
-        let settings = CanisterSettingsBuilder::new()
-            .with_controller(new_controller)
-            .build();
-        self.update_settings(
-            timestamp_nanos,
-            origin,
-            settings,
-            canister,
-            round_limits,
-            subnet_size,
-        )
     }
 
     /// Permanently deletes a canister from `ReplicatedState`.
@@ -1103,13 +1210,15 @@ impl CanisterManager {
         &self,
         origin: CanisterChangeOrigin,
         cycles_amount: Option<u128>,
-        settings: CanisterSettings,
+        mut settings: CanisterSettings,
         specified_id: Option<PrincipalId>,
         state: &mut ReplicatedState,
         provisional_whitelist: &ProvisionalWhitelist,
         max_number_of_canisters: u64,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: ResourceSaturation,
         subnet_size: usize,
+        canister_creation_error: &IntCounter,
     ) -> Result<CanisterId, CanisterManagerError> {
         let sender = origin.origin();
 
@@ -1122,12 +1231,18 @@ impl CanisterManager {
             None => self.config.default_provisional_cycles_balance,
         };
 
+        // Set the field to the default value if it is empty.
+        settings
+            .reserved_cycles_limit
+            .get_or_insert_with(|| self.cycles_account_manager.default_reserved_balance_limit());
+
         // Validate settings before `create_canister_helper` applies them
         // No creation fee applied.
         match self.validate_settings_for_canister_creation(
             settings,
             round_limits.compute_allocation_used,
             &round_limits.subnet_available_memory,
+            &subnet_memory_saturation,
             cycles,
             subnet_size,
         ) {
@@ -1141,6 +1256,7 @@ impl CanisterManager {
                 state,
                 round_limits,
                 specified_id,
+                canister_creation_error,
             ),
         }
     }
@@ -1155,7 +1271,7 @@ impl CanisterManager {
         state: &mut ReplicatedState,
         specified_id: PrincipalId,
     ) -> Result<CanisterId, CanisterManagerError> {
-        let new_canister_id = CanisterId::new(specified_id).unwrap();
+        let new_canister_id = CanisterId::unchecked_from_principal(specified_id);
 
         if state.canister_states.get(&new_canister_id).is_some() {
             return Err(CanisterManagerError::CanisterAlreadyExists(new_canister_id));
@@ -1189,6 +1305,7 @@ impl CanisterManager {
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
         specified_id: Option<PrincipalId>,
+        canister_creation_error: &IntCounter,
     ) -> Result<CanisterId, CanisterManagerError> {
         let sender = origin.origin();
 
@@ -1204,7 +1321,7 @@ impl CanisterManager {
         let new_canister_id = match specified_id {
             Some(spec_id) => self.validate_specified_id(state, spec_id)?,
 
-            None => self.generate_new_canister_id(state)?,
+            None => self.generate_new_canister_id(state, canister_creation_error)?,
         };
 
         // Canister id available. Create the new canister.
@@ -1213,6 +1330,7 @@ impl CanisterManager {
             sender,
             cycles,
             self.config.default_freeze_threshold,
+            Arc::clone(&self.fd_factory),
         );
 
         system_state.remove_cycles(creation_fee, CyclesUseCase::CanisterCreation);
@@ -1306,11 +1424,12 @@ impl CanisterManager {
     /// with the newly generated ID already exists.
     //
     // WARNING!!! If you change the logic here, please ensure that the sequence
-    // of NNS canister ids as defined in nns/constants/src/constants.rs are also
+    // of NNS canister ids as defined in nns/constants/src/lib.rs are also
     // updated.
     fn generate_new_canister_id(
         &self,
         state: &mut ReplicatedState,
+        canister_creation_error: &IntCounter,
     ) -> Result<CanisterId, CanisterManagerError> {
         let canister_id = state.metadata.generate_new_canister_id().map_err(|err| {
             error!(self.log, "Unable to generate new canister IDs: {}", err);
@@ -1318,8 +1437,14 @@ impl CanisterManager {
         })?;
 
         // Sanity check: ensure that no canister with this ID exists already.
+        debug_assert!(state.canister_state(&canister_id).is_none());
         if state.canister_state(&canister_id).is_some() {
-            return Err(CanisterManagerError::CanisterAlreadyExists(canister_id));
+            canister_creation_error.inc();
+            error!(
+                self.log,
+                "[EXC-BUG] New canister id {} already exists.", canister_id
+            );
+            return Err(CanisterManagerError::CanisterIdAlreadyExists(canister_id));
         }
 
         Ok(canister_id)
@@ -1334,6 +1459,232 @@ impl CanisterManager {
             .canister_state(&canister_id)
             .ok_or(CanisterManagerError::CanisterNotFound(canister_id))
     }
+
+    pub(crate) fn upload_chunk(
+        &self,
+        sender: PrincipalId,
+        canister: &mut CanisterState,
+        chunk: &[u8],
+        round_limits: &mut RoundLimits,
+        subnet_size: usize,
+        resource_saturation: &ResourceSaturation,
+    ) -> Result<UploadChunkResult, CanisterManagerError> {
+        if self.config.wasm_chunk_store == FlagStatus::Disabled {
+            return Err(CanisterManagerError::WasmChunkStoreError {
+                message: "Wasm chunk store not enabled".to_string(),
+            });
+        }
+
+        // Allow the canister itself to perform this operation.
+        if sender != canister.system_state.canister_id.into() {
+            validate_controller(canister, &sender)?
+        }
+
+        canister
+            .system_state
+            .wasm_chunk_store
+            .can_insert_chunk(chunk)
+            .map_err(|err| CanisterManagerError::WasmChunkStoreError { message: err })?;
+
+        let chunk_bytes = wasm_chunk_store::chunk_size();
+        let new_memory_usage = canister.memory_usage() + chunk_bytes;
+        let instructions = self.config.upload_wasm_chunk_instructions;
+
+        if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled
+            && canister.scheduler_state.heap_delta_debit >= self.config.heap_delta_rate_limit
+        {
+            return Err(CanisterManagerError::WasmChunkStoreError {
+                message: format!(
+                    "Canister is heap delta rate limited. Current delta debit: {}, limit: {}",
+                    canister.scheduler_state.heap_delta_debit, self.config.heap_delta_rate_limit
+                ),
+            });
+        }
+
+        let current_memory_usage = canister.memory_usage();
+        let message_memory = canister.message_memory_usage();
+        let compute_allocation = canister.compute_allocation();
+        // Charge for the upload.
+        let prepaid_cycles = self
+            .cycles_account_manager
+            .prepay_execution_cycles(
+                &mut canister.system_state,
+                current_memory_usage,
+                message_memory,
+                compute_allocation,
+                instructions,
+                subnet_size,
+            )
+            .map_err(|err| CanisterManagerError::WasmChunkStoreError {
+                message: format!("Error charging for 'upload_chunk': {}", err),
+            })?;
+        // To keep the invariant that `prepay_execution_cycles` is always paired
+        // with `refund_unused_execution_cycles` we refund zero immediately.
+        self.cycles_account_manager.refund_unused_execution_cycles(
+            &mut canister.system_state,
+            NumInstructions::from(0),
+            instructions,
+            prepaid_cycles,
+            // This counter is incremented if we refund more
+            // instructions than initially charged, which is impossible
+            // here.
+            &IntCounter::new("no_op", "no_op").unwrap(),
+            subnet_size,
+            &self.log,
+        );
+
+        match canister.memory_allocation() {
+            MemoryAllocation::Reserved(bytes) => {
+                if bytes < new_memory_usage {
+                    return Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
+                        memory_allocation_given: canister.memory_allocation(),
+                        memory_usage_needed: new_memory_usage,
+                    });
+                }
+            }
+            MemoryAllocation::BestEffort => {
+                // Run the following checks on memory usage and return an error
+                // if any fails:
+                // 1. Check new usage will not freeze canister
+                // 2. Check subnet has available memory
+                // 3. Reserve cycles on canister
+                // 4. Actually deduct memory from subnet (asserting it won't fail)
+
+                // Calculate if any cycles will need to be reserved.
+                let reservation_cycles = self.cycles_account_manager.storage_reservation_cycles(
+                    chunk_bytes,
+                    resource_saturation,
+                    subnet_size,
+                );
+
+                // Memory usage will increase by the chunk size, so we need to
+                // check that it doesn't bump us over the freezing threshold.
+                let threshold = self.cycles_account_manager.freeze_threshold_cycles(
+                    canister.system_state.freeze_threshold,
+                    canister.memory_allocation(),
+                    new_memory_usage,
+                    canister.message_memory_usage(),
+                    canister.compute_allocation(),
+                    subnet_size,
+                    canister.system_state.reserved_balance() + reservation_cycles,
+                );
+                // Note: if the subtraction here saturates, then we will get an
+                // error later when trying to actually reserve the cycles.
+                if threshold > canister.system_state.balance() - reservation_cycles {
+                    return Err(CanisterManagerError::WasmChunkStoreError {
+                        message: format!(
+                            "Cannot upload chunk. At least {} additional cycles are required.",
+                            threshold - canister.system_state.balance()
+                        ),
+                    });
+                }
+                // Verify subnet has enough memory.
+                round_limits
+                    .subnet_available_memory
+                    .check_available_memory(chunk_bytes, NumBytes::from(0), NumBytes::from(0))
+                    .map_err(
+                        |_| CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
+                            requested: chunk_bytes,
+                            available: NumBytes::from(
+                                round_limits
+                                    .subnet_available_memory
+                                    .get_execution_memory()
+                                    .max(0) as u64,
+                            ),
+                        },
+                    )?;
+                // Reserve needed cycles if the subnet is becoming saturated.
+                canister
+                    .system_state
+                    .reserve_cycles(reservation_cycles)
+                    .map_err(|err| match err {
+                        ReservationError::InsufficientCycles {
+                            requested,
+                            available,
+                        } => CanisterManagerError::InsufficientCyclesInMemoryGrow {
+                            bytes: chunk_bytes,
+                            available,
+                            threshold: requested,
+                        },
+                        ReservationError::ReservedLimitExceed { requested, limit } => {
+                            CanisterManagerError::ReservedCyclesLimitExceededInMemoryGrow {
+                                bytes: chunk_bytes,
+                                requested,
+                                limit,
+                            }
+                        }
+                    })?;
+                // Actually deduct memory from the subnet. It's safe to unwrap
+                // here because we already checked the available memory above.
+                round_limits.subnet_available_memory
+                            .try_decrement(chunk_bytes, NumBytes::from(0), NumBytes::from(0))
+                            .expect("Error: Cannot fail to decrement SubnetAvailableMemory after checking for availability");
+            }
+        };
+
+        if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
+            canister.scheduler_state.heap_delta_debit += chunk_bytes;
+        }
+
+        round_limits.instructions -= as_round_instructions(instructions);
+
+        // We initially checked that this chunk can be inserted, so the unwarp
+        // here is guaranteed to succeed.
+        let hash = canister
+            .system_state
+            .wasm_chunk_store
+            .insert_chunk(chunk)
+            .expect("Error: Insert chunk cannot fail after checking `can_insert_chunk`");
+        Ok(UploadChunkResult {
+            reply: UploadChunkReply {
+                hash: hash.to_vec(),
+            },
+            heap_delta_increase: chunk_bytes,
+        })
+    }
+
+    pub(crate) fn clear_chunk_store(
+        &self,
+        sender: PrincipalId,
+        canister: &mut CanisterState,
+    ) -> Result<(), CanisterManagerError> {
+        if self.config.wasm_chunk_store == FlagStatus::Disabled {
+            return Err(CanisterManagerError::WasmChunkStoreError {
+                message: "Wasm chunk store not enabled".to_string(),
+            });
+        }
+
+        // Allow the canister itself to perform this operation.
+        if sender != canister.system_state.canister_id.into() {
+            validate_controller(canister, &sender)?
+        }
+        canister.system_state.wasm_chunk_store = WasmChunkStore::new(Arc::clone(&self.fd_factory));
+        Ok(())
+    }
+
+    pub(crate) fn stored_chunks(
+        &self,
+        sender: PrincipalId,
+        canister: &CanisterState,
+    ) -> Result<StoredChunksReply, CanisterManagerError> {
+        if self.config.wasm_chunk_store == FlagStatus::Disabled {
+            return Err(CanisterManagerError::WasmChunkStoreError {
+                message: "Wasm chunk store not enabled".to_string(),
+            });
+        }
+        // Allow the canister itself to perform this operation.
+        if sender != canister.system_state.canister_id.into() {
+            validate_controller(canister, &sender)?
+        }
+
+        let keys = canister
+            .system_state
+            .wasm_chunk_store
+            .keys()
+            .map(|k| serde_bytes::ByteBuf::from(*k))
+            .collect();
+        Ok(StoredChunksReply(keys))
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -1344,6 +1695,7 @@ pub(crate) enum CanisterManagerError {
         controller_provided: PrincipalId,
     },
     CanisterAlreadyExists(CanisterId),
+    CanisterIdAlreadyExists(CanisterId),
     CanisterNotFound(CanisterId),
     CanisterNonEmpty(CanisterId),
     InvalidSenderSubnet(SubnetId),
@@ -1401,6 +1753,19 @@ pub(crate) enum CanisterManagerError {
         available: Cycles,
         threshold: Cycles,
     },
+    ReservedCyclesLimitExceededInMemoryAllocation {
+        memory_allocation: MemoryAllocation,
+        requested: Cycles,
+        limit: Cycles,
+    },
+    ReservedCyclesLimitExceededInMemoryGrow {
+        bytes: NumBytes,
+        requested: Cycles,
+        limit: Cycles,
+    },
+    WasmChunkStoreError {
+        message: String,
+    },
 }
 
 impl From<CanisterManagerError> for UserError {
@@ -1426,6 +1791,12 @@ impl From<CanisterManagerError> for UserError {
                 Self::new(
                     ErrorCode::CanisterNotFound,
                     format!("Canister {} not found.", &canister_id),
+                )
+            }
+            CanisterIdAlreadyExists(canister_id) => {
+                Self::new(
+                    ErrorCode::CanisterIdAlreadyExists,
+                        format!("Unsuccessful canister creation: canister id already exists {}", canister_id)
                 )
             }
             Hypervisor(canister_id, err) => err.into_user_error(&canister_id),
@@ -1600,6 +1971,37 @@ impl From<CanisterManagerError> for UserError {
                          threshold - available)
                 )
             }
+            ReservedCyclesLimitExceededInMemoryAllocation { memory_allocation, requested, limit} =>
+            {
+                Self::new(
+                    ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation,
+                    format!(
+                        "Cannot increase memory allocation to {} due to its reserved cycles limit. \
+                         The current limit ({}) would be exceeded by {}.",
+                        memory_allocation, limit, requested - limit,
+                    ),
+                )
+
+            }
+            ReservedCyclesLimitExceededInMemoryGrow { bytes, requested, limit} =>
+            {
+                Self::new(
+                    ErrorCode::ReservedCyclesLimitExceededInMemoryGrow,
+                    format!(
+                        "Canister cannot grow memory by {} bytes due to its reserved cycles limit. \
+                         The current limit ({}) would exceeded by {}.",
+                        bytes, limit, requested - limit,
+                    ),
+                )
+            }
+            WasmChunkStoreError { message } => {
+                Self::new(
+                    ErrorCode::CanisterContractViolation,
+                    format!(
+                        "Error from Wasm chunk store: {}", message
+                    )
+                )
+            }
         }
     }
 }
@@ -1628,9 +2030,13 @@ pub fn uninstall_canister(
     canister: &mut CanisterState,
     time: Time,
     add_canister_change: AddCanisterChangeToHistory,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Vec<Response> {
     // Drop the canister's execution state.
     canister.execution_state = None;
+
+    // Clear the Wasm chunk store.
+    canister.system_state.wasm_chunk_store = WasmChunkStore::new(fd_factory);
 
     // Drop its certified data.
     canister.system_state.certified_data = Vec::new();
@@ -1724,10 +2130,7 @@ pub(crate) trait PausedInstallCodeExecution: Send + std::fmt::Debug {
     /// Aborts the paused execution.
     /// Returns the original message, the cycles prepaid for execution,
     /// and a call id that exist only for inter-canister messages.
-    fn abort(
-        self: Box<Self>,
-        log: &ReplicaLogger,
-    ) -> (CanisterCall, Option<InstallCodeCallId>, Cycles);
+    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, InstallCodeCallId, Cycles);
 }
 
 #[cfg(test)]

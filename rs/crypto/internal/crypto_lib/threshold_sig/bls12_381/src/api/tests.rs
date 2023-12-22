@@ -60,15 +60,15 @@ fn test_combined_signature_verifies(
     threshold: NumberOfNodes,
     message: &[u8],
 ) {
-    let mut rng = seed.into_rng();
+    let rng = &mut seed.into_rng();
     let (public_coefficients, secret_keys) =
-        util::generate_threshold_key(Seed::from_rng(&mut rng), threshold, group_size)
+        util::generate_threshold_key(Seed::from_rng(rng), threshold, group_size)
             .expect("Failed to deal");
     let signatures: Vec<IndividualSignatureBytes> = secret_keys
         .iter()
         .map(|secret_key| tsig::sign_message(message, secret_key).expect("Failed to sign"))
         .collect();
-    let signatures = select_n(Seed::from_rng(&mut rng), threshold, &signatures);
+    let signatures = select_n(Seed::from_rng(rng), threshold, &signatures);
     let signature =
         tsig::combine_signatures(&signatures, threshold).expect("Failed to combine signatures");
     let public_key =
@@ -128,7 +128,7 @@ fn test_threshold_sig_api_and_core_match(
     threshold: NumberOfNodes,
     message: &[u8],
 ) {
-    let mut rng = seed.into_rng();
+    let rng = &mut seed.into_rng();
     let seed_bytes = rng.gen::<[u8; 32]>();
     let (core_public_coefficients, core_secret_keys) = crypto::tests::util::generate_threshold_key(
         Seed::from_bytes(&seed_bytes),
@@ -224,7 +224,7 @@ fn test_threshold_sig_api_and_core_match(
 fn should_invalid_threshold_signatures_not_be_cached() {
     use crate::cache::*;
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     for _ in 0..10000 {
         let mut pk = [0u8; 96];

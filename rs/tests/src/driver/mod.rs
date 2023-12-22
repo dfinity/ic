@@ -1,5 +1,6 @@
 pub mod action_graph;
 pub mod api_boundary_node;
+pub mod asset_canister;
 pub mod bootstrap;
 pub mod boundary_node;
 pub mod config;
@@ -13,6 +14,7 @@ pub mod group;
 pub mod ic;
 pub mod log_events;
 pub mod logger;
+pub mod nested;
 pub mod node_software_version;
 pub mod plan;
 pub mod port_allocator;

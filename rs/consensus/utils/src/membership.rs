@@ -67,7 +67,7 @@ impl Membership {
     // derived from the genesis random beacon at height 1 is predictable,
     // because the beacon from the genesis height is preconstructed and known in
     // advance
-    fn get_shuffled_nodes(
+    pub fn get_shuffled_nodes(
         &self,
         height: Height,
         previous_beacon: &RandomBeacon,
@@ -304,8 +304,8 @@ pub mod test {
 
     #[test]
     fn test_notarization_threshold_for_safety_and_liveness() {
-        // This test is written assuming that the finalization treshold and
-        // the notarization treshold are the same.
+        // This test is written assuming that the finalization threshold and
+        // the notarization threshold are the same.
         let finalization_uses_notarization_threshold =
             FinalizationContent::committee() == NotarizationContent::committee();
         assert!(finalization_uses_notarization_threshold);

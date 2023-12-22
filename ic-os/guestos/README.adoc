@@ -11,9 +11,19 @@ For more details on the goals, structure, and disk layout of GuestOS, https://do
 
 To build a GuestOS image, refer to the link:../README.adoc[IC-OS README]
 
-=== Running GuestOS
+=== Running GuestOS locally
 
-The GuestOS image (`disk.img`) can booted directly in qemu using the following command:
+This requires QEMU with qemu-system and qemu-kvm installed on the machine.
+
+Bazel can be used to boot a local VM with a GuestOS like this:
+
+    bazel run //ic-os/guestos/envs/dev:launch-local-vm
+
+In a VM or container without KVM support, use:
+
+    bazel run //ic-os/guestos/envs/dev:launch-local-vm-no-kvm
+
+The GuestOS image (`disk.img`) can booted directly in QEMU using the following command:
 
     qemu-system-x86_64 \
     -nographic -m 4G \
@@ -28,7 +38,7 @@ Alternatively, Bazel can be used to perform a testnet deployment. For documentat
 
 Instead of running GuestOS locally in qemu, you can launch a GuestOS virtual machine on Farm:
 
-    bazel run --config=systest //ic-os/guestos:launch-single-vm
+    bazel run --config=systest //ic-os/guestos/envs/dev:launch-remote-vm
 
 The program will spin up a new GuestOS VM on Farm, and the machine can then be accessed via SSH.
 

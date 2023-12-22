@@ -1,0 +1,10 @@
+[Unit]
+Description=Setup ic-boundary
+DefaultDependencies=no
+After=bootstrap-ic-node.service
+Requires=bootstrap-ic-node.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/setup-ic-boundary.sh

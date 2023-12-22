@@ -1,11 +1,13 @@
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_nns_common::types::ProposalId;
-use ic_nns_governance::pb::v1::governance_error::ErrorType;
-use ic_nns_governance::pb::v1::manage_neuron_response::{Command, RegisterVoteResponse};
-use ic_nns_governance::pb::v1::Vote;
-use ic_nns_test_utils::common::NnsInitPayloadsBuilder;
+use ic_nns_governance::pb::v1::{
+    governance_error::ErrorType,
+    manage_neuron_response::{Command, RegisterVoteResponse},
+    Vote,
+};
 use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
     neuron_helpers::{
         get_neuron_1, get_neuron_2, get_neuron_3, get_nonexistent_neuron, get_some_proposal,
         get_unauthorized_neuron, submit_proposal,
@@ -148,7 +150,7 @@ fn proposer_neuron_cannot_vote_explicitly() {
 
     let proposal_id = submit_proposal(&mut state_machine, &n1);
 
-    // neuron 1 already implicitly voted when submitting the poposal
+    // neuron 1 already implicitly voted when submitting the proposal
     let response = nns_cast_vote(
         &mut state_machine,
         n1.principal_id,
@@ -231,7 +233,7 @@ fn cannot_submit_proposals_with_insufficient_funds() {
             .command
             .expect("Making NNS proposal failed");
 
-    assert_matches!(response, Command::Error(ref err) if err.error_type() == ErrorType::PreconditionFailed);
+    assert_matches!(response, Command::Error(ref err) if err.error_type() == ErrorType::InsufficientFunds);
     assert_matches!(response, Command::Error(ref err) if err.error_message.contains("Neuron doesn't have enough minted stake to submit proposal"));
 }
 

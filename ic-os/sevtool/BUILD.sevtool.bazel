@@ -1,5 +1,5 @@
 cc_binary(
-    name = "sevtool",
+    name = "sevtool_bin",
     srcs = [
         "lib/psp-sev.h",
         "src/amdcert.cpp",
@@ -30,6 +30,17 @@ cc_binary(
         "-luuid",
         "-pthread",
     ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+)
+
+genrule(
+    name = "sevtool_cleaned",
+    srcs = ["sevtool_bin"],
+    outs = ["sevtool"],
+    cmd = "objcopy -R .comment -R .note -R .note.gnu.build-id $< $@",
+    executable = True,
     target_compatible_with = [
         "@platforms//os:linux",
     ],

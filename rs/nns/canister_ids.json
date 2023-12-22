@@ -19,6 +19,11 @@
     "mainnet": "qjdve-lqaaa-aaaaa-aaaeq-cai",
     "small01": "qjdve-lqaaa-aaaaa-aaaeq-cai"
   },
+  "icp-ledger-archive-1": {
+    "local": "qsgjb-riaaa-aaaaa-aaaga-cai",
+    "mainnet": "qsgjb-riaaa-aaaaa-aaaga-cai",
+    "small01": "qsgjb-riaaa-aaaaa-aaaga-cai"
+  },
   "root": {
     "local": "r7inp-6aaaa-aaaaa-aaabq-cai",
     "mainnet": "r7inp-6aaaa-aaaaa-aaabq-cai",

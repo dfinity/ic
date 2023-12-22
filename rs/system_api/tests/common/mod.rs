@@ -1,4 +1,4 @@
-use std::{convert::TryFrom, sync::Arc};
+use std::{convert::TryFrom, rc::Rc, sync::Arc};
 
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
 use ic_config::{
@@ -30,6 +30,7 @@ use ic_types::{
 use maplit::btreemap;
 
 pub const CANISTER_CURRENT_MEMORY_USAGE: NumBytes = NumBytes::new(0);
+pub const CANISTER_CURRENT_MESSAGE_MEMORY_USAGE: NumBytes = NumBytes::new(0);
 
 const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
 
@@ -105,6 +106,7 @@ impl ApiTypeBuilder {
             CallContextId::new(1),
             false,
             ExecutionMode::Replicated,
+            0.into(),
         )
     }
 
@@ -117,6 +119,7 @@ impl ApiTypeBuilder {
             call_context_test_id(1),
             false,
             ExecutionMode::Replicated,
+            0.into(),
         )
     }
 }
@@ -137,6 +140,7 @@ pub fn get_system_api(
         api_type,
         sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
+        CANISTER_CURRENT_MESSAGE_MEMORY_USAGE,
         execution_parameters(),
         SubnetAvailableMemory::new(
             SUBNET_MEMORY_CAPACITY,
@@ -148,7 +152,7 @@ pub fn get_system_api(
             .wasm_native_stable_memory,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
-        Arc::new(DefaultOutOfInstructionsHandler {}),
+        Rc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),
     )
 }

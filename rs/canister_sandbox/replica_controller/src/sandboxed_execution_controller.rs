@@ -106,6 +106,8 @@ struct SandboxedExecutionMetrics {
     sandboxed_execution_wasm_imports_msg_cycles_refunded: IntCounter,
     sandboxed_execution_wasm_imports_msg_cycles_accept: IntCounter,
     sandboxed_execution_wasm_imports_mint_cycles: IntCounter,
+    // Critical error for left execution instructions above the maximum limit allowed.
+    sandboxed_execution_instructions_left_error: IntCounter,
 }
 
 impl SandboxedExecutionMetrics {
@@ -256,6 +258,7 @@ impl SandboxedExecutionMetrics {
                 "Number of executed message slices by type and status.",
                 &["api_type", "status"],
             ),
+            sandboxed_execution_instructions_left_error: metrics_registry.error_counter("sandboxed_execution_invalid_instructions_left"),
         }
     }
 
@@ -660,6 +663,7 @@ impl WasmExecutor for SandboxedExecutionController {
             api_type,
             sandbox_safe_system_state,
             canister_current_memory_usage,
+            canister_current_message_memory_usage,
             execution_parameters,
             subnet_available_memory,
             func_ref,
@@ -758,6 +762,7 @@ impl WasmExecutor for SandboxedExecutionController {
                     api_type,
                     globals: execution_state.exported_globals.clone(),
                     canister_current_memory_usage,
+                    canister_current_message_memory_usage,
                     execution_parameters,
                     subnet_available_memory,
                     next_wasm_memory_id,
@@ -1304,6 +1309,9 @@ impl SandboxedExecutionController {
         // If sandbox is compromised this value could be larger than the initial limit.
         if exec_output.wasm.num_instructions_left > message_instruction_limit {
             exec_output.wasm.num_instructions_left = message_instruction_limit;
+            self.metrics
+                .sandboxed_execution_instructions_left_error
+                .inc();
             error!(self.logger, "[EXC-BUG] Canister {} completed execution with more instructions left than the initial limit.", canister_id)
         }
 
@@ -1674,7 +1682,7 @@ fn get_sandbox_process_stats(
 pub fn panic_due_to_exit(output: ExitStatus, pid: u32) {
     match output.code() {
         // Do nothing when the Sandbox Launcher process terminates normally.
-        Some(code) if code == 0 => {}
+        Some(0) => {}
         Some(code) => panic!(
             "Error from launcher process, pid {} exited with status code: {}",
             pid, code

@@ -60,8 +60,8 @@ import Test.Tasty.HUnit
 
 icTests :: TestSubnetConfig -> TestSubnetConfig -> AgentConfig -> TestTree
 icTests my_sub other_sub =
-  let (my_subnet_id_as_entity, my_type, _, ((ecid_as_word64, last_canister_id_as_word64) : _), _) = my_sub
-   in let (other_subnet_id_as_entity, _, _, ((other_ecid_as_word64, _) : _), _) = other_sub
+  let (my_subnet_id_as_entity, my_type, my_nodes, ((ecid_as_word64, last_canister_id_as_word64) : _), _) = my_sub
+   in let (other_subnet_id_as_entity, _, other_nodes, ((other_ecid_as_word64, _) : _), _) = other_sub
        in let my_subnet_id = rawEntityId my_subnet_id_as_entity
            in let other_subnet_id = rawEntityId other_subnet_id_as_entity
                in let my_is_root = isRootTestSubnet my_sub
@@ -188,13 +188,13 @@ icTests my_sub other_sub =
                                                                          ],
                                                                        let inst name = do
                                                                              cid <- create ecid
-                                                                             wasm <- getTestWasm name
+                                                                             wasm <- getTestWasm (name ++ ".wasm")
                                                                              ic_install ic00 (enum #install) cid wasm ""
                                                                              return cid
                                                                         in let good name = testCase ("valid: " ++ name) $ void $ inst name
                                                                             in let bad name = testCase ("invalid: " ++ name) $ do
                                                                                      cid <- create ecid
-                                                                                     wasm <- getTestWasm name
+                                                                                     wasm <- getTestWasm (name ++ ".wasm")
                                                                                      ic_install' ic00 (enum #install) cid wasm "" >>= isReject [5]
                                                                                 in let read cid m =
                                                                                          ( awaitCall cid $
@@ -253,10 +253,10 @@ icTests my_sub other_sub =
                                                                            >>= isErrOrReject [3, 5]
 
                                                                          step "Upgrade"
-                                                                         ic_install ic00 (enum #upgrade) can_id trivialWasmModule ""
+                                                                         ic_install ic00 (enumNothing #upgrade) can_id trivialWasmModule ""
 
                                                                          step "Upgrade as wrong user"
-                                                                         ic_install'' otherUser (enum #upgrade) can_id trivialWasmModule ""
+                                                                         ic_install'' otherUser (enumNothing #upgrade) can_id trivialWasmModule ""
                                                                            >>= isErrOrReject [3, 5]
 
                                                                          step "Change controller"
@@ -291,7 +291,7 @@ icTests my_sub other_sub =
                                                                          cs .! #module_hash @?= Just (sha256 trivialWasmModule)
 
                                                                          step "Upgrade to a compressed module"
-                                                                         ic_install ic00 (enum #upgrade) cid compressedModule ""
+                                                                         ic_install ic00 (enumNothing #upgrade) cid compressedModule ""
 
                                                                          cs <- ic_canister_status ic00 cid
                                                                          cs .! #module_hash @?= Just (sha256 compressedModule),
@@ -342,7 +342,7 @@ icTests my_sub other_sub =
                                                                          call' cid reply >>= isReject [5]
 
                                                                          step "Cannot call (query)?"
-                                                                         query' cid reply >>= isReject [5]
+                                                                         query' cid reply >>= isQueryReject ecid [5]
 
                                                                          step "Upgrade"
                                                                          upgrade cid $ setGlobal (i2b getStatus)
@@ -407,7 +407,7 @@ icTests my_sub other_sub =
                                                                          call' cid reply >>= isReject [5]
 
                                                                          step "Cannot call (query)?"
-                                                                         query' cid reply >>= isReject [5]
+                                                                         query' cid reply >>= isQueryReject ecid [5]
 
                                                                          step "Release the held message"
                                                                          release
@@ -425,7 +425,7 @@ icTests my_sub other_sub =
                                                                          call' cid reply >>= isReject [5]
 
                                                                          step "Cannot call (query)?"
-                                                                         query' cid reply >>= isReject [5],
+                                                                         query' cid reply >>= isQueryReject ecid [5],
                                                                        testCaseSteps "starting a stopping canister" $ \step -> do
                                                                          cid <- install ecid noop
 
@@ -502,7 +502,7 @@ icTests my_sub other_sub =
                                                                            >>= isReject [3]
 
                                                                          step "Cannot call (query)?"
-                                                                         query' cid reply >>= isReject [3]
+                                                                         query' cid reply >>= isQueryReject ecid [3]
 
                                                                          step "Cannot query canister_status"
                                                                          ic_canister_status'' defaultUser cid >>= isErrOrReject [3, 5]
@@ -546,7 +546,7 @@ icTests my_sub other_sub =
                                                                            >>= isReject [3, 5]
 
                                                                          step "Upgrade"
-                                                                         ic_install (ic00via cid) (enum #upgrade) can_id trivialWasmModule ""
+                                                                         ic_install (ic00via cid) (enumNothing #upgrade) can_id trivialWasmModule ""
 
                                                                          step "Change controller"
                                                                          ic_set_controllers (ic00via cid) can_id [cid2]
@@ -564,7 +564,7 @@ icTests my_sub other_sub =
                                                                          step "Reinstall on empty"
                                                                          ic_install (ic00via cid) (enum #reinstall) can_id2 trivialWasmModule "",
                                                                        simpleTestCase "aaaaa-aa (inter-canister, large)" ecid $ \cid -> do
-                                                                         universal_wasm <- getTestWasm "universal_canister"
+                                                                         universal_wasm <- getTestWasm "universal_canister.wasm.gz"
                                                                          can_id <- ic_provisional_create (ic00via cid) ecid Nothing Nothing empty
                                                                          ic_install (ic00via cid) (enum #install) can_id universal_wasm ""
                                                                          do call can_id $ replyData "Hi"
@@ -582,7 +582,7 @@ icTests my_sub other_sub =
                                                                              call cid (replyData "ABCD") >>= is "ABCD",
                                                                            simpleTestCase "Call (query)" ecid $ \cid -> do
                                                                              query cid (replyData "ABCD") >>= is "ABCD",
-                                                                           simpleTestCase "Call no non-existant update method" ecid $ \cid ->
+                                                                           simpleTestCase "Call no non-existent update method" ecid $ \cid ->
                                                                              do
                                                                                awaitCall' cid $
                                                                                  rec
@@ -593,33 +593,34 @@ icTests my_sub other_sub =
                                                                                      "arg" =: GBlob ""
                                                                                    ]
                                                                                >>= isErrOrReject [3],
-                                                                           simpleTestCase "Call no non-existant query method" ecid $ \cid ->
+                                                                           simpleTestCase "Call no non-existent query method" ecid $ \cid ->
                                                                              do
-                                                                               queryCBOR cid $
-                                                                                 rec
-                                                                                   [ "request_type" =: GText "query",
-                                                                                     "sender" =: GBlob defaultUser,
-                                                                                     "canister_id" =: GBlob cid,
-                                                                                     "method_name" =: GText "no_such_update",
-                                                                                     "arg" =: GBlob ""
-                                                                                   ]
-                                                                               >>= queryResponse
-                                                                               >>= isReject [3],
+                                                                               let cbor =
+                                                                                     rec
+                                                                                       [ "request_type" =: GText "query",
+                                                                                         "sender" =: GBlob defaultUser,
+                                                                                         "canister_id" =: GBlob cid,
+                                                                                         "method_name" =: GText "no_such_update",
+                                                                                         "arg" =: GBlob ""
+                                                                                       ]
+                                                                               (rid, res) <- queryCBOR cid cbor
+                                                                               res <- queryResponse res
+                                                                               isQueryReject ecid [3] (rid, res),
                                                                            simpleTestCase "reject" ecid $ \cid ->
                                                                              call' cid (reject "ABCD") >>= isReject [4],
                                                                            simpleTestCase "reject (query)" ecid $ \cid ->
-                                                                             query' cid (reject "ABCD") >>= isReject [4],
+                                                                             query' cid (reject "ABCD") >>= isQueryReject ecid [4],
                                                                            simpleTestCase "No response" ecid $ \cid ->
                                                                              call' cid noop >>= isReject [5],
                                                                            simpleTestCase "No response does not rollback" ecid $ \cid -> do
                                                                              call'' cid (setGlobal "FOO") >>= isErrOrReject [5]
                                                                              query cid (replyData getGlobal) >>= is "FOO",
                                                                            simpleTestCase "No response (query)" ecid $ \cid ->
-                                                                             query' cid noop >>= isReject [5],
+                                                                             query' cid noop >>= isQueryReject ecid [5],
                                                                            simpleTestCase "Double reply" ecid $ \cid ->
                                                                              call' cid (reply >>> reply) >>= isReject [5],
                                                                            simpleTestCase "Double reply (query)" ecid $ \cid ->
-                                                                             query' cid (reply >>> reply) >>= isReject [5],
+                                                                             query' cid (reply >>> reply) >>= isQueryReject ecid [5],
                                                                            simpleTestCase "Reply data append after reply" ecid $ \cid ->
                                                                              call' cid (reply >>> replyDataAppend "foo") >>= isReject [5],
                                                                            simpleTestCase "Reply data append after reject" ecid $ \cid ->
@@ -636,7 +637,7 @@ icTests my_sub other_sub =
                                                                              [ testCase "A canister can request its own status if it does not control itself" $ do
                                                                                  let controllers = [Principal defaultUser, Principal otherUser]
                                                                                  cid <- ic_provisional_create ic00 ecid Nothing Nothing (#controllers .== Vec.fromList controllers)
-                                                                                 universal_wasm <- getTestWasm "universal_canister"
+                                                                                 universal_wasm <- getTestWasm "universal_canister.wasm.gz"
                                                                                  ic_install ic00 (enum #install) cid universal_wasm ""
 
                                                                                  cs <- ic_canister_status (ic00via cid) cid
@@ -645,7 +646,7 @@ icTests my_sub other_sub =
                                                                                testCase "Changing controllers" $ do
                                                                                  let controllers = [Principal defaultUser, Principal otherUser]
                                                                                  cid <- ic_provisional_create ic00 ecid Nothing Nothing (#controllers .== Vec.fromList controllers)
-                                                                                 universal_wasm <- getTestWasm "universal_canister"
+                                                                                 universal_wasm <- getTestWasm "universal_canister.wasm.gz"
                                                                                  ic_install ic00 (enum #install) cid universal_wasm ""
 
                                                                                  -- Set new controller
@@ -661,7 +662,7 @@ icTests my_sub other_sub =
                                                                                testCase "Multiple controllers (provisional)" $ do
                                                                                  let controllers = [Principal defaultUser, Principal otherUser]
                                                                                  cid <- ic_provisional_create ic00 ecid Nothing Nothing (#controllers .== Vec.fromList controllers)
-                                                                                 universal_wasm <- getTestWasm "universal_canister"
+                                                                                 universal_wasm <- getTestWasm "universal_canister.wasm.gz"
                                                                                  ic_install ic00 (enum #install) cid universal_wasm ""
 
                                                                                  -- Controllers should be able to fetch the canister status.
@@ -677,7 +678,7 @@ icTests my_sub other_sub =
                                                                                simpleTestCase "Multiple controllers (aaaaa-aa)" ecid $ \cid -> do
                                                                                  let controllers = [Principal cid, Principal otherUser]
                                                                                  cid2 <- ic_create (ic00viaWithCycles cid 20_000_000_000_000) ecid (#controllers .== Vec.fromList controllers)
-                                                                                 universal_wasm <- getTestWasm "universal_canister"
+                                                                                 universal_wasm <- getTestWasm "universal_canister.wasm.gz"
                                                                                  ic_install (ic00via cid) (enum #install) cid2 universal_wasm ""
 
                                                                                  -- Controllers should be able to fetch the canister status.
@@ -799,17 +800,17 @@ icTests my_sub other_sub =
                                                                                >>= is anonymousUser,
                                                                            simpleTestCase "query, sender explicit" ecid $ \cid ->
                                                                              do
-                                                                               queryCBOR cid $
-                                                                                 rec
-                                                                                   [ "request_type" =: GText "query",
-                                                                                     "canister_id" =: GBlob cid,
-                                                                                     "sender" =: GBlob anonymousUser,
-                                                                                     "method_name" =: GText "query",
-                                                                                     "arg" =: GBlob (run (replyData caller))
-                                                                                   ]
-                                                                               >>= queryResponse
-                                                                               >>= isReply
-                                                                               >>= is anonymousUser
+                                                                               let cbor =
+                                                                                     rec
+                                                                                       [ "request_type" =: GText "query",
+                                                                                         "canister_id" =: GBlob cid,
+                                                                                         "sender" =: GBlob anonymousUser,
+                                                                                         "method_name" =: GText "query",
+                                                                                         "arg" =: GBlob (run (replyData caller))
+                                                                                       ]
+                                                                               (rid, res) <- queryCBOR cid cbor
+                                                                               res <- queryResponse res
+                                                                               isQueryReply ecid (rid, res) >>= is anonymousUser
                                                                          ],
                                                                        testGroup
                                                                          "state"
@@ -884,7 +885,7 @@ icTests my_sub other_sub =
                                                                                        ),
                                                                                    "Q"
                                                                                      =: twoContexts
-                                                                                       ( reqResponse
+                                                                                       ( queryResponse
                                                                                            ( \prog -> do
                                                                                                cid <- install ecid noop
                                                                                                query' cid (prog >>> reply)
@@ -959,6 +960,7 @@ icTests my_sub other_sub =
                                                                              -- context builder helpers
                                                                              httpResponse act = (act >=> is2xx >=> void . isReply, act >=> isErrOrReject [5])
                                                                              reqResponse act = (act >=> void . isReply, act >=> isReject [5])
+                                                                             queryResponse act = (act >=> void . isQueryReply ecid, act >=> isQueryReject ecid [5])
                                                                              boolTest act = (act >=> is True, act >=> is False)
                                                                              twoContexts (aNT1, aT1) (aNT2, aT2) = (\p -> aNT1 p >> aNT2 p, \p -> aT1 p >> aT2 p)
 
@@ -1020,6 +1022,7 @@ icTests my_sub other_sub =
                                                                                  t "time" star $ ignore getTime,
                                                                                  t "performance_counter" star $ ignore $ performanceCounter (int 0),
                                                                                  t "is_controller" star $ ignore $ isController "",
+                                                                                 t "in_replicated_execution" star $ ignore inReplicatedExecution,
                                                                                  t "canister_version" star $ ignore $ canisterVersion,
                                                                                  t "global_timer_set" "I G U Ry Rt C T" $ ignore $ apiGlobalTimerSet (int64 0),
                                                                                  t "debug_print" star $ debugPrint "hello",
@@ -1091,7 +1094,7 @@ icTests my_sub other_sub =
                                                                              getStateCert' defaultUser cid2 [["canisters", cid, "controllers"]] >>= isErr4xx,
                                                                            -- read_state tested in read_state group
                                                                            --
-                                                                           simpleTestCase "in mangement call" ecid $ \cid1 -> do
+                                                                           simpleTestCase "in management call" ecid $ \cid1 -> do
                                                                              cid2 <- create ecid
                                                                              let req =
                                                                                    rec
@@ -1112,7 +1115,7 @@ icTests my_sub other_sub =
                                                                                        "arg" =: GBlob (run reply)
                                                                                      ]
                                                                              addNonceExpiryEnv req >>= postCallCBOR "foobar" >>= code4xx,
-                                                                           simpleTestCase "invalid textual represenation" ecid $ \cid1 -> do
+                                                                           simpleTestCase "invalid textual representation" ecid $ \cid1 -> do
                                                                              let req =
                                                                                    rec
                                                                                      [ "request_type" =: GText "call",
@@ -1203,16 +1206,16 @@ icTests my_sub other_sub =
                                                                                        >>> reply
                                                                                    >>= isReject [5]
                                                                              ],
-                                                                           simpleTestCase "to nonexistant canister" ecid $ \cid ->
+                                                                           simpleTestCase "to nonexistent canister" ecid $ \cid ->
                                                                              call cid (inter_call "foo" "bar" defArgs) >>= isRelay >>= isReject [3],
-                                                                           simpleTestCase "to nonexistant canister (user id)" ecid $ \cid ->
+                                                                           simpleTestCase "to nonexistent canister (user id)" ecid $ \cid ->
                                                                              call cid (inter_call defaultUser "bar" defArgs) >>= isRelay >>= isReject [3],
-                                                                           simpleTestCase "to nonexistant method" ecid $ \cid ->
+                                                                           simpleTestCase "to nonexistent method" ecid $ \cid ->
                                                                              call cid (inter_call cid "bar" defArgs) >>= isRelay >>= isReject [3],
                                                                            simpleTestCase "Call from query method traps (in update call)" ecid $ \cid ->
                                                                              callToQuery'' cid (inter_query cid defArgs) >>= is2xx >>= isReject [5],
                                                                            simpleTestCase "Call from query method traps (in query call)" ecid $ \cid ->
-                                                                             query' cid (inter_query cid defArgs) >>= isReject [5],
+                                                                             query' cid (inter_query cid defArgs) >>= isQueryReject ecid [5],
                                                                            simpleTestCase "Call from query method traps (in inter-canister-call)" ecid $ \cid ->
                                                                              do
                                                                                call cid $
@@ -1281,7 +1284,7 @@ icTests my_sub other_sub =
                                                                                >>= is "First reply"
 
                                                                              -- now check that the callback trapped and did not actual change the global
-                                                                             -- to make this test reliabe, stop and start the canister, this will
+                                                                             -- to make this test reliable, stop and start the canister, this will
                                                                              -- ensure all outstanding callbacks are handled
                                                                              barrier [cid]
 
@@ -1354,7 +1357,7 @@ icTests my_sub other_sub =
                                                                          step "Writing stable memory (failing)"
                                                                          call' cid (stableWrite (int 0) "FOO") >>= isReject [5]
                                                                          step "Set stable mem (failing, query)"
-                                                                         query' cid (stableWrite (int 0) "FOO") >>= isReject [5]
+                                                                         query' cid (stableWrite (int 0) "FOO") >>= isQueryReject ecid [5]
 
                                                                          step "Growing stable memory"
                                                                          call cid (replyData (i2b (stableGrow (int 1)))) >>= is "\x0\x0\x0\x0"
@@ -1389,7 +1392,7 @@ icTests my_sub other_sub =
                                                                          call' cid (stable64Write (int64 0) "FOO") >>= isReject [5]
 
                                                                          step "Set stable mem (failing, query)"
-                                                                         query' cid (stable64Write (int64 0) "FOO") >>= isReject [5]
+                                                                         query' cid (stable64Write (int64 0) "FOO") >>= isQueryReject ecid [5]
 
                                                                          step "Growing stable memory"
                                                                          call cid (replyData (i64tob (stable64Grow (int64 1)))) >>= is "\x0\x0\x0\x0\x0\x0\x0\x0"
@@ -1425,10 +1428,10 @@ icTests my_sub other_sub =
                                                                          query cid (replyData (i64tob stable64Size)) >>= is "\x01\x00\x01\x00\x0\x0\x0\x0"
 
                                                                          step "Using 32 bit API with large stable memory"
-                                                                         query' cid (ignore stableSize) >>= isReject [5]
-                                                                         query' cid (ignore $ stableGrow (int 1)) >>= isReject [5]
-                                                                         query' cid (stableWrite (int 0) "BAZ") >>= isReject [5]
-                                                                         query' cid (ignore $ stableRead (int 0) (int 3)) >>= isReject [5]
+                                                                         query' cid (ignore stableSize) >>= isQueryReject ecid [5]
+                                                                         query' cid (ignore $ stableGrow (int 1)) >>= isQueryReject ecid [5]
+                                                                         query' cid (stableWrite (int 0) "BAZ") >>= isQueryReject ecid [5]
+                                                                         query' cid (ignore $ stableRead (int 0) (int 3)) >>= isQueryReject ecid [5]
 
                                                                          step "Using 64 bit API with large stable memory"
                                                                          call cid (replyData (i64tob (stable64Grow (int64 1)))) >>= is "\x01\x00\x01\x00\x0\x0\x0\x0"
@@ -1470,7 +1473,7 @@ icTests my_sub other_sub =
                                                                              res <- query cid (replyData $ i2b $ isController (bytes $ BS.replicate 29 0)) >>= asWord32
                                                                              res @?= 0,
                                                                            simpleTestCase "argument is not a valid principal" ecid $ \cid -> do
-                                                                             query' cid (replyData $ i2b $ isController (bytes $ BS.replicate 30 0)) >>= isReject [5]
+                                                                             query' cid (replyData $ i2b $ isController (bytes $ BS.replicate 30 0)) >>= isQueryReject ecid [5]
                                                                          ],
                                                                        testGroup "upgrades" $
                                                                          let installForUpgrade on_pre_upgrade =
@@ -1610,13 +1613,13 @@ icTests my_sub other_sub =
                                                                            testCase "uninstall and reinstall wipes state" $ do
                                                                              cid <- install ecid (setGlobal "FOO")
                                                                              ic_uninstall ic00 cid
-                                                                             universal_wasm <- getTestWasm "universal_canister"
+                                                                             universal_wasm <- getTestWasm "universal_canister.wasm.gz"
                                                                              ic_install ic00 (enum #install) cid universal_wasm (run (setGlobal "BAR"))
                                                                              query cid (replyData getGlobal) >>= is "BAR",
                                                                            testCase "uninstall and reinstall wipes stable memory" $ do
                                                                              cid <- install ecid (ignore (stableGrow (int 1)) >>> stableWrite (int 0) "FOO")
                                                                              ic_uninstall ic00 cid
-                                                                             universal_wasm <- getTestWasm "universal_canister"
+                                                                             universal_wasm <- getTestWasm "universal_canister.wasm.gz"
                                                                              ic_install ic00 (enum #install) cid universal_wasm (run (setGlobal "BAR"))
                                                                              query cid (replyData (i2b stableSize)) >>= asWord32 >>= is 0
                                                                              do
@@ -1633,7 +1636,7 @@ icTests my_sub other_sub =
                                                                              cid <- install ecid $ setCertifiedData "FOO"
                                                                              query cid (replyData getCertificate) >>= extractCertData cid >>= is "FOO"
                                                                              ic_uninstall ic00 cid
-                                                                             universal_wasm <- getTestWasm "universal_canister"
+                                                                             universal_wasm <- getTestWasm "universal_canister.wasm.gz"
                                                                              ic_install ic00 (enum #install) cid universal_wasm (run noop)
                                                                              query cid (replyData getCertificate) >>= extractCertData cid >>= is "",
                                                                            simpleTestCase "uninstalled rejects calls" ecid $ \cid -> do
@@ -1642,7 +1645,7 @@ icTests my_sub other_sub =
                                                                              ic_uninstall ic00 cid
                                                                              -- should be http error, due to inspection
                                                                              call'' cid (replyData "Hi") >>= isNoErrReject [3]
-                                                                             query' cid (replyData "Hi") >>= isReject [3],
+                                                                             query' cid (replyData "Hi") >>= isQueryReject ecid [3],
                                                                            testCaseSteps "open call contexts are rejected" $ \step -> do
                                                                              cid <- install ecid noop
 
@@ -1731,7 +1734,7 @@ icTests my_sub other_sub =
                                                                              awaitStatus grs1 >>= isReject [4]
 
                                                                              step "Reinstall"
-                                                                             universal_wasm <- getTestWasm "universal_canister"
+                                                                             universal_wasm <- getTestWasm "universal_canister.wasm.gz"
                                                                              ic_install ic00 (enum #install) cid universal_wasm (run (setGlobal "BAR"))
 
                                                                              step "Create second long-running call"
@@ -1769,7 +1772,7 @@ icTests my_sub other_sub =
                                                                            simpleTestCase "Explicit trap" ecid $ \cid ->
                                                                              call' cid (trap "trapping") >>= isReject [5],
                                                                            simpleTestCase "Explicit trap (query)" ecid $ \cid -> do
-                                                                             query' cid (trap "trapping") >>= isReject [5]
+                                                                             query' cid (trap "trapping") >>= isQueryReject ecid [5]
                                                                          ],
                                                                        testCase "caller (in init)" $ do
                                                                          cid <- install ecid $ setGlobal caller
@@ -1782,7 +1785,7 @@ icTests my_sub other_sub =
                                                                                cid <- create ecid
                                                                                install' cid pgm >>= isReject [5]
                                                                                -- canister does not exist
-                                                                               query' cid noop >>= isReject [3]
+                                                                               query' cid noop >>= isQueryReject ecid [3]
                                                                           in [ testCase "explicit trap" $ failInInit $ trap "trapping in install",
                                                                                testCase "call" $ failInInit $ inter_query "dummy" defArgs,
                                                                                testCase "reply" $ failInInit reply,
@@ -1793,13 +1796,13 @@ icTests my_sub other_sub =
                                                                          [ testGroup "required fields" $ do
                                                                              -- TODO: Begin with a succeeding request to a real canister, to rule
                                                                              -- out other causes of failure than missing fields
-                                                                             omitFields queryToNonExistant $ \req -> do
+                                                                             omitFields queryToNonExistent $ \req -> do
                                                                                cid <- create ecid
                                                                                addExpiry req >>= envelope defaultSK >>= postQueryCBOR cid >>= code4xx,
                                                                            simpleTestCase "non-existing (deleted) canister" ecid $ \cid -> do
                                                                              ic_stop_canister ic00 cid
                                                                              ic_delete_canister ic00 cid
-                                                                             query' cid reply >>= isReject [3],
+                                                                             query' cid reply >>= isQueryReject ecid [3],
                                                                            simpleTestCase "does not commit" ecid $ \cid -> do
                                                                              call_ cid (setGlobal "FOO" >>> reply)
                                                                              query cid (setGlobal "BAR" >>> replyData getGlobal) >>= is "BAR"
@@ -1867,6 +1870,16 @@ icTests my_sub other_sub =
                                                                                  cid <- create ecid
                                                                                  cert <- getStateCert defaultUser cid [["time"]]
                                                                                  void $ certValue @Natural cert ["time"],
+                                                                               testCase "can ask for /subnet" $ do
+                                                                                 cert <- getStateCert defaultUser ecid [["subnet"]]
+                                                                                 void $ certValue @Blob cert ["subnet", my_subnet_id, "public_key"]
+                                                                                 void $ certValue @Blob cert ["subnet", my_subnet_id, "canister_ranges"]
+                                                                                 void $ certValue @Blob cert ["subnet", other_subnet_id, "public_key"]
+                                                                                 void $ certValue @Blob cert ["subnet", other_subnet_id, "canister_ranges"]
+                                                                                 void $ forM my_nodes $ \nid -> do
+                                                                                   void $ certValue @Blob cert ["subnet", my_subnet_id, "node", rawEntityId nid, "public_key"]
+                                                                                 void $ forM other_nodes $ \nid -> do
+                                                                                   certValueAbsent cert ["subnet", other_subnet_id, "node", rawEntityId nid, "public_key"],
                                                                                testCase "controller of empty canister" $ do
                                                                                  cid <- create ecid
                                                                                  cert <- getStateCert defaultUser cid [["canister", cid, "controllers"]]
@@ -1890,7 +1903,7 @@ icTests my_sub other_sub =
                                                                                  certValue @Blob cert ["canister", cid, "controllers"] >>= asCBORBlobList >>= isSet [],
                                                                                testCase "module_hash of universal canister" $ do
                                                                                  cid <- install ecid noop
-                                                                                 universal_wasm <- getTestWasm "universal_canister"
+                                                                                 universal_wasm <- getTestWasm "universal_canister.wasm.gz"
                                                                                  cert <- getStateCert anonymousUser cid [["canister", cid, "module_hash"]]
                                                                                  certValue @Blob cert ["canister", cid, "module_hash"] >>= is (sha256 universal_wasm),
                                                                                testGroup
@@ -2088,7 +2101,7 @@ icTests my_sub other_sub =
                                                                              -- The system burns cycles at unspecified rates. To cater for such behaviour,
                                                                              -- we make the assumption that no test burns more than the following epsilon.
                                                                              --
-                                                                             -- The biggest fee we currenlty deal with is the system deducing 1T
+                                                                             -- The biggest fee we currently deal with is the system deducing 1T
                                                                              -- upon canister creation. So our epsilon needs to allow that and then
                                                                              -- some more.
                                                                              eps = 3_000_000_000_000 :: Integer
@@ -2105,7 +2118,7 @@ icTests my_sub other_sub =
                                                                                return cid
                                                                              create_via cid initial_cycles = do
                                                                                cid2 <- ic_create (ic00viaWithCycles cid initial_cycles) ecid empty
-                                                                               universal_wasm <- getTestWasm "universal_canister"
+                                                                               universal_wasm <- getTestWasm "universal_canister.wasm.gz"
                                                                                ic_install (ic00via cid) (enum #install) cid2 universal_wasm (run noop)
                                                                                return cid2
                                                                           in [ testGroup "cycles API - backward compatibility" $
@@ -2116,7 +2129,7 @@ icTests my_sub other_sub =
                                                                                      cid <- create noop
                                                                                      let large = 2 ^ (65 :: Int)
                                                                                      ic_top_up ic00 cid large
-                                                                                     query' cid replyBalance >>= isReject [5]
+                                                                                     query' cid replyBalance >>= isQueryReject ecid [5]
                                                                                      queryBalance128 cid >>= isRoughly (large + fromIntegral def_cycles)
                                                                                  ],
                                                                                testGroup "can use balance API" $
@@ -2631,17 +2644,17 @@ icTests my_sub other_sub =
                                                                                ]
                                                                                $ \(name, user, env) ->
                                                                                  [ simpleTestCase (name ++ " in query") ecid $ \cid -> do
-                                                                                     req <-
-                                                                                       addExpiry $
-                                                                                         rec
-                                                                                           [ "request_type" =: GText "query",
-                                                                                             "sender" =: GBlob user,
-                                                                                             "canister_id" =: GBlob cid,
-                                                                                             "method_name" =: GText "query",
-                                                                                             "arg" =: GBlob (run reply)
-                                                                                           ]
+                                                                                     let cbor =
+                                                                                           rec
+                                                                                             [ "request_type" =: GText "query",
+                                                                                               "sender" =: GBlob user,
+                                                                                               "canister_id" =: GBlob cid,
+                                                                                               "method_name" =: GText "query",
+                                                                                               "arg" =: GBlob (run reply)
+                                                                                             ]
+                                                                                     req <- addExpiry cbor
                                                                                      signed_req <- env req
-                                                                                     postQueryCBOR cid signed_req >>= okCBOR >>= queryResponse >>= isReply >>= is "",
+                                                                                     postQueryCBOR cid signed_req >>= okCBOR >>= queryResponse >>= \res -> isQueryReply ecid (requestId req, res) >>= is "",
                                                                                    simpleTestCase (name ++ " in update") ecid $ \cid -> do
                                                                                      req <-
                                                                                        addExpiry $
@@ -2669,25 +2682,27 @@ icTests my_sub other_sub =
                                                                              testGroup
                                                                                name
                                                                                [ simpleTestCase "in query" ecid $ \cid -> do
-                                                                                   good_req <-
-                                                                                     addNonce >=> addExpiry $
-                                                                                       rec
-                                                                                         [ "request_type" =: GText "query",
-                                                                                           "sender" =: GBlob defaultUser,
-                                                                                           "canister_id" =: GBlob cid,
-                                                                                           "method_name" =: GText "query",
-                                                                                           "arg" =: GBlob (run ((debugPrint $ i2b $ int 0) >>> reply))
-                                                                                         ]
-                                                                                   bad_req <-
-                                                                                     addNonce >=> addExpiry $
-                                                                                       rec
-                                                                                         [ "request_type" =: GText "query",
-                                                                                           "sender" =: GBlob defaultUser,
-                                                                                           "canister_id" =: GBlob cid,
-                                                                                           "method_name" =: GText "query",
-                                                                                           "arg" =: GBlob (run ((debugPrint $ i2b $ int 1) >>> reply))
-                                                                                         ]
-                                                                                   queryCBOR cid good_req >>= queryResponse >>= isReply >>= is ""
+                                                                                   let good_cbor =
+                                                                                         rec
+                                                                                           [ "request_type" =: GText "query",
+                                                                                             "sender" =: GBlob defaultUser,
+                                                                                             "canister_id" =: GBlob cid,
+                                                                                             "method_name" =: GText "query",
+                                                                                             "arg" =: GBlob (run ((debugPrint $ i2b $ int 0) >>> reply))
+                                                                                           ]
+                                                                                   let bad_cbor =
+                                                                                         rec
+                                                                                           [ "request_type" =: GText "query",
+                                                                                             "sender" =: GBlob defaultUser,
+                                                                                             "canister_id" =: GBlob cid,
+                                                                                             "method_name" =: GText "query",
+                                                                                             "arg" =: GBlob (run ((debugPrint $ i2b $ int 1) >>> reply))
+                                                                                           ]
+                                                                                   good_req <- addNonce >=> addExpiry $ good_cbor
+                                                                                   bad_req <- addNonce >=> addExpiry $ bad_cbor
+                                                                                   (rid, res) <- queryCBOR cid good_req
+                                                                                   res <- queryResponse res
+                                                                                   isQueryReply ecid (rid, res) >>= is ""
                                                                                    env (mod_req bad_req) >>= postQueryCBOR cid >>= code4xx,
                                                                                  simpleTestCase "in empty read state request" ecid $ \cid -> do
                                                                                    good_req <- addNonce >=> addExpiry $ readStateEmpty
@@ -2759,13 +2774,13 @@ icTests my_sub other_sub =
                                                                                  req <- exampleQuery cid userKey
                                                                                  sig <- genSig cid "Hello!" $ "\x0Aic-request" <> requestId req
                                                                                  let env = simpleEnv userKey sig req []
-                                                                                 postQueryCBOR cid env >>= okCBOR >>= queryResponse >>= isReply >>= is "It works!",
+                                                                                 postQueryCBOR cid env >>= okCBOR >>= queryResponse >>= \res -> isQueryReply ecid (requestId req, res) >>= is "It works!",
                                                                                simpleTestCase "direct signature (empty seed)" ecid $ \cid -> do
                                                                                  let userKey = genId cid ""
                                                                                  req <- exampleQuery cid userKey
                                                                                  sig <- genSig cid "" $ "\x0Aic-request" <> requestId req
                                                                                  let env = simpleEnv userKey sig req []
-                                                                                 postQueryCBOR cid env >>= okCBOR >>= queryResponse >>= isReply >>= is "It works!",
+                                                                                 postQueryCBOR cid env >>= okCBOR >>= queryResponse >>= \res -> isQueryReply ecid (requestId req, res) >>= is "It works!",
                                                                                simpleTestCase "direct signature (wrong seed)" ecid $ \cid -> do
                                                                                  let userKey = genId cid "Hello"
                                                                                  req <- exampleQuery cid userKey
@@ -2825,7 +2840,7 @@ icTests my_sub other_sub =
                                                                                  req <- exampleQuery cid userKey
                                                                                  sig <- sign "ic-request" otherSK (requestId req)
                                                                                  let env = simpleEnv userKey sig req [signed_delegation]
-                                                                                 postQueryCBOR cid env >>= okCBOR >>= queryResponse >>= isReply >>= is "It works!",
+                                                                                 postQueryCBOR cid env >>= okCBOR >>= queryResponse >>= \res -> isQueryReply ecid (requestId req, res) >>= is "It works!",
                                                                                simpleTestCase "delegation from Ed25519" ecid $ \cid -> do
                                                                                  let userKey = genId cid "Hello!"
 
@@ -2850,7 +2865,7 @@ icTests my_sub other_sub =
                                                                                        ]
                                                                                  sig <- genSig cid "Hello!" $ "\x0Aic-request" <> requestId req
                                                                                  let env = simpleEnv (toPublicKey otherSK) sig req [signed_delegation]
-                                                                                 postQueryCBOR cid env >>= okCBOR >>= queryResponse >>= isReply >>= is "It works!"
+                                                                                 postQueryCBOR cid env >>= okCBOR >>= queryResponse >>= \res -> isQueryReply ecid (requestId req, res) >>= is "It works!"
                                                                              ]
                                                                      ]
                                                                ]

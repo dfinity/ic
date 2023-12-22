@@ -2,6 +2,8 @@
 
 members = [
   "packages/icrc-ledger-agent",
+  "packages/icrc-ledger-client",
+  "packages/icrc-ledger-client-cdk",
   "packages/icrc-ledger-types",
   "packages/ic-ledger-hash-of",
   "packages/ic-starter-tests",
@@ -21,15 +23,18 @@ members = [
   "rs/bitcoin/consensus",
   "rs/bitcoin/mock",
   "rs/bitcoin/types/internal",
+  "rs/boundary_node/canary_proxy",
   "rs/boundary_node/certificate_issuance/certificate_issuer",
   "rs/boundary_node/certificate_issuance/certificate_orchestrator",
   "rs/boundary_node/certificate_issuance/certificate_syncer",
   "rs/boundary_node/control_plane",
   "rs/boundary_node/denylist_updater",
+  "rs/boundary_node/discower_bowndary",
   "rs/boundary_node/ic_balance_exporter",
   "rs/boundary_node/ic_boundary",
   "rs/boundary_node/icx_proxy",
   "rs/boundary_node/prober",
+  "rs/boundary_node/systemd_journal_gatewayd_shim",
   "rs/canister_client",
   "rs/canister_client/sender",
   "rs/ethereum/cketh/minter",
@@ -97,11 +102,13 @@ members = [
   "rs/crypto/test_utils/canister_threshold_sigs",
   "rs/crypto/test_utils/metrics",
   "rs/crypto/test_utils/ni-dkg",
+  "rs/crypto/test_utils/tls",
   "rs/crypto/tls_interfaces",
   "rs/crypto/tls_interfaces/mocks",
   "rs/crypto/tree_hash",
   "rs/crypto/tree_hash/test_utils",
   "rs/crypto/utils/basic_sig",
+  "rs/crypto/utils/ni_dkg",
   "rs/crypto/utils/threshold_sig",
   "rs/crypto/utils/threshold_sig_der",
   "rs/crypto/utils/tls",
@@ -115,14 +122,23 @@ members = [
   "rs/embedders",
   "rs/execution_environment",
   "rs/execution_environment/benches/lib",
+  "rs/execution_environment/tools",
   "rs/http_endpoints/public",
   "rs/http_endpoints/metrics",
   "rs/http_utils",
-  "rs/ic_os/launch-single-vm",
   "rs/ic_os/deterministic_ips",
+  "rs/ic_os/config",
+  "rs/ic_os/guestos_tool",
+  "rs/ic_os/hostos_tool",
+  "rs/ic_os/launch-single-vm",
+  "rs/ic_os/network",
+  "rs/ic_os/setupos-inject-configuration",
+  "rs/ic_os/partition_tools",
+  "rs/ic_os/setupos-disable-checks",
+  "rs/ic_os/setupos_tool",
   "rs/ic_os/sev",
-  "rs/ic_os/sev_interfaces",
-  "rs/ic_os/sevctl",
+  "rs/ic_os/utils",
+  "rs/ic_os/snptool",
   "rs/ic_os/vsock/guest",
   "rs/ic_os/vsock/host",
   "rs/ic_os/vsock/vsock_lib",
@@ -132,10 +148,13 @@ members = [
   "rs/ingress_manager",
   "rs/interfaces",
   "rs/interfaces/adapter_client",
-  "rs/interfaces/state_manager",
-  "rs/interfaces/state_manager/mocks",
+  "rs/interfaces/certified_stream_store",
+  "rs/interfaces/certified_stream_store/mocks",
+  "rs/interfaces/mocks",
   "rs/interfaces/registry",
   "rs/interfaces/registry/mocks",
+  "rs/interfaces/state_manager",
+  "rs/interfaces/state_manager/mocks",
   "rs/interfaces/transport",
   "rs/interfaces/transport/mocks",
   "rs/memory_tracker",
@@ -154,6 +173,8 @@ members = [
   "rs/nervous_system/common/test_keys",
   "rs/nervous_system/common/test_utils",
   "rs/nervous_system/humanize",
+  "rs/nervous_system/neurons_fund",
+  "rs/nervous_system/neurons_fund/nfplot",
   "rs/nervous_system/proto",
   "rs/nervous_system/proto/protobuf_generator",
   "rs/nervous_system/proxied_canister_calls_tracker",
@@ -184,26 +205,30 @@ members = [
   "rs/nns/sns-wasm/protobuf_generator",
   "rs/determinism_test",
   "rs/observability/log_vector_config_generator",
+  "rs/observability/node_status_updater",
   "rs/observability/service_discovery",
   "rs/observability/config_writer_common",
   "rs/observability/vector_config_generator",
   "rs/observability/prometheus_config_updater",
+  "rs/observability/multiservice_discovery",
+  "rs/observability/multiservice_discovery_downloader",
+  "rs/observability/multiservice_discovery_shared",
   "rs/orchestrator",
   "rs/orchestrator/dashboard",
   "rs/orchestrator/registry_replicator",
   "rs/p2p",
+  "rs/p2p/consensus_manager",
   "rs/p2p/peer_manager",
   "rs/p2p/memory_transport",
   "rs/p2p/quic_transport",
   "rs/p2p/state_sync_manager",
   "rs/p2p/test_utils",
-  "rs/p2p/experimental/prototype",
   "rs/replica/setup_ic_network",
   "rs/phantom_newtype",
   "rs/prep",
   "rs/protobuf",
   "rs/protobuf/generator",
-  "rs/pocket_ic_backend",
+  "rs/pocket_ic_server",
   "rs/registry/admin",
   "rs/registry/admin-derive",
   "rs/registry/canister",
@@ -231,6 +256,7 @@ members = [
   "rs/replica_tests",
   "rs/replicated_state",
   "rs/rosetta-api",
+  "rs/rosetta-api/rosetta_core",
   "rs/rosetta-api/icp_ledger",
   "rs/rosetta-api/icp_ledger/archive",
   "rs/rosetta-api/icp_ledger/ledger",
@@ -243,8 +269,6 @@ members = [
   "rs/rosetta-api/icrc1",
   "rs/rosetta-api/icrc1/benchmark/generator",
   "rs/rosetta-api/icrc1/benchmark/worker",
-  "rs/rosetta-api/icrc1/client",
-  "rs/rosetta-api/icrc1/client/cdk",
   "rs/rosetta-api/icrc1/index",
   "rs/rosetta-api/icrc1/index-ng",
   "rs/rosetta-api/icrc1/ledger",
@@ -285,6 +309,7 @@ members = [
   "rs/rust_canisters/tests",
   "rs/rust_canisters/xnet_test",
   "rs/scenario_tests",
+  "rs/sns/audit",
   "rs/sns/cli",
   "rs/sns/governance",
   "rs/sns/governance/protobuf_generator",
@@ -332,10 +357,12 @@ members = [
   "rs/types/wasm_types",
   "rs/universal_canister/lib",
   "rs/utils",
+  "rs/utils/ensure",
   "rs/utils/lru_cache",
   "rs/utils/rustfmt",
   "rs/validator",
   "rs/validator/ingress_message",
+  "rs/validator/ingress_message/test_canister",
   "rs/workload_generator",
   "rs/xnet/endpoint",
   "rs/xnet/hyper",
@@ -346,6 +373,13 @@ members = [
 resolver = "2"
 
 exclude = ["universal_canister/impl", "typescript/service-worker/test_utils"]
+
+[workspace.package]
+version = "0.9.0"
+authors = ["The Internet Computer Project Developers"]
+description = "Autonomous serverless cloud functionality for the public Internet."
+documentation = "https://internetcomputer.org/docs/"
+edition = "2021"
 
 [profile.release]
 # Add debug information to the release build (does NOT reduce the level of optimization!)
@@ -373,32 +407,108 @@ opt-level = 'z'
 [profile.dev.package.ic_bls12_381]
 opt-level = 3
 
+[profile.dev.package.k256]
+opt-level = 3
+
+[profile.dev.package.p256]
+opt-level = 3
+
 [patch.crates-io]
 # Current jsonrpc version (0.12.1) does not support ipv6 addressing. When new version is
 # released this can be removed.
 jsonrpc = { git = "https://github.com/apoelstra/rust-jsonrpc", rev = "e42044d" }
-# This version pins prost 0.11. Please remove after the next pprof release.
-pprof = { git = "https://github.com/tikv/pprof-rs", rev = "059d3c80395c74e9f82ca1f9cbb3c013acfffb75" }
 
 [workspace.dependencies]
-candid = "0.8.4"
-ethnum = { version = "1.3.2", features = ["serde"] }
+arrayvec = "0.7.4"
+askama = { version = "0.12.1", features = ["serde-json"] }
+async-recursion = "1.0.5"
+async-scoped = { version = "0.8", features = ["use-tokio"] }
+backoff = "0.4"
+base64 = { version = "0.13.1" }
+# build-info and build-info-build MUST be kept in sync!
+build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7" }
+build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7", default_features = false }
+bytes = "1.5.0"
+candid = { version = "0.9.10", features = ["parser"] }
+chrono = { version = "0.4.19", features = ["serde"] }
 ciborium = "0.2.1"
-ic-cdk = "0.7.4"
-ic-cdk-macros = "0.6.10"
-ic-cdk-timers = "0.1.2"
-ic-agent = "0.24.1"
-ic-btc-interface = { git = "https://github.com/dfinity/bitcoin-canister", rev = "b1693619e3d4dbc00d8c79e9b6886e1db48b21f7" }
-ic-utils = "0.24.1"
-k256 = { version = "0.13", default_features = false, features = [
+clap = { version = "3.2.25", features = ["derive"] }
+cloudflare = { version = "0.9.1", default_features = false, features = [
+  "rustls-tls",
+] }
+ethnum = { version = "1.3.2", features = ["serde"] }
+flate2 = "1.0.28"
+futures = "0.3.28"
+hyper-socks2 = { version = "0.8.0", default_features = false, features = [
+  "rustls",
+] }
+ic-agent = { version = "0.30.2", features = ["hyper"] }
+ic-cdk = "0.10.0"
+ic-cdk-macros = "0.7.0"
+ic-cdk-timers = "0.4.0"
+ic-stable-structures = "0.5.4"
+ic-utils = { version = "0.30.2", features = ["raw"] }
+ic-btc-interface = { git = "https://github.com/dfinity/bitcoin-canister", rev = "be0143a014ad4bccbc2eec5e2bcbe30317c5a84c" }
+indexmap = "2.1.0"
+itertools = "0.12.0"
+k256 = { version = "0.13.2", default_features = false, features = [
   "arithmetic",
   "ecdsa",
+  "pem",
   "pkcs8",
+  "precomputed-tables",
+  "std",
 ] }
+mockall = "0.11.4"
+mockito = "1.2.0"
+minicbor = { version = "0.19.1", features = ["alloc", "derive"] }
+minicbor-derive = "0.13.0"
+nix = "0.24.3"
 p256 = { version = "0.13", default_features = false, features = [
   "arithmetic",
   "ecdsa",
   "pem",
   "pkcs8",
 ] }
-ic-stable-structures = "0.5.4"
+ping = "0.5.0"
+pkcs8 = "0.10.2"
+pretty_assertions = "1.4.0"
+prometheus = { version = "0.13.3", features = ["process"] }
+prometheus-http-query = { version = "0.6.6", default_features = false, features = [
+  "rustls-tls-webpki-roots",
+] }
+prost = "0.12.3"
+prost-build = "0.12.3"
+rcgen = { version = "0.11.1", features = ["zeroize"] }
+reqwest = { version = "0.11.22", default-features = false, features = [
+  "blocking",
+  "json",
+  "multipart",
+  "rustls-tls-webpki-roots",
+  "stream",
+] }
+serde = { version = "1.0", features = ["derive"] }
+serde_bytes = "0.11"
+serde_bytes_repr = "0.1.5"
+serde_cbor = "0.11.2"
+serde_derive = "1.0"
+serde_json = { version = "1.0.107", features = ["std"] }
+serde_with = "1.14.0"
+serde_yaml = "0.8.24"
+signature = "2.1.0"
+simple_asn1 = "0.6.2"
+slog = { version = "2.7.0", features = [
+  "max_level_trace",
+  "nested-values",
+  "release_max_level_debug",
+  "release_max_level_trace",
+] }
+strum = { version = "0.25.0", features = ["derive"] }
+strum_macros = "0.25.3"
+syn = { version = "1.0.109", features = ["fold", "full"] }
+time = { version = "0.3.20", features = ["formatting"] }
+tokio = { version = "1.32.0", features = ["full"] }
+tonic = "0.10.2"
+tonic-build = "0.10.2"
+tower = { version = "0.4.13", features = ["full"] }
+x509-cert = { version = "0.2.4", features = ["builder", "hazmat"] }

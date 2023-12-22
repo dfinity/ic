@@ -13,8 +13,9 @@ use ic_replicated_state::{
     canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES},
     CallOrigin,
 };
-use ic_state_machine_tests::{Cycles, WasmResult};
+use ic_state_machine_tests::{Cycles, IngressStatus, WasmResult};
 use ic_sys::PAGE_SIZE;
+use ic_types::messages::CallbackId;
 use ic_types::{NumInstructions, NumPages};
 use ic_universal_canister::{call_args, wasm};
 
@@ -88,7 +89,7 @@ fn dts_update_concurrent_cycles_change_succeeds() {
     let a = wasm()
         .instruction_counter_is_at_least(1_000_000)
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args().other_side(b.clone()),
             transferred_cycles,
@@ -193,7 +194,7 @@ fn dts_update_concurrent_cycles_change_fails() {
     let a = wasm()
         .instruction_counter_is_at_least(1_000_000)
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args().other_side(b.clone()),
             transferred_cycles,
@@ -261,12 +262,10 @@ fn dts_update_concurrent_cycles_change_fails() {
         err.description(),
         format!(
             "Canister {} is out of cycles: \
-             requested {} cycles but the available balance \
-             is {} cycles and the freezing threshold {} cycles",
+             please top up the canister with at least {} additional cycles",
             a_id,
-            call_charge,
-            initial_cycles - max_execution_cost - cycles_debit,
-            freezing_threshold
+            (freezing_threshold + call_charge)
+                - (initial_cycles - max_execution_cost - cycles_debit)
         )
     );
 
@@ -315,6 +314,23 @@ fn dirty_pages_are_free_on_system_subnet() {
 fn hitting_page_delta_limit_fails_message() {
     let mut test = ExecutionTestBuilder::new()
         .with_stable_memory_dirty_page_limit(NumPages::from(10))
+        .build();
+    let wat = wat_writing_to_each_stable_memory_page(10 * PAGE_SIZE as u64 + 1);
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "go", vec![]).unwrap_err();
+    assert_eq!(result.code(), ErrorCode::CanisterMemoryAccessLimitExceeded);
+    assert_eq!(
+        result.description(),
+        "Canister exceeded memory access limits: Exceeded the limit for the \
+    number of modified pages in the stable memory in a single message execution: limit: 40 KB."
+    );
+}
+
+#[test]
+fn hitting_page_delta_limit_fails_message_non_native_stable() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_stable_memory_dirty_page_limit(NumPages::from(10))
+        .with_non_native_stable()
         .build();
     let wat = wat_writing_to_each_stable_memory_page(10 * PAGE_SIZE as u64 + 1);
     let canister_id = test.canister_from_wat(wat).unwrap();
@@ -544,7 +560,7 @@ fn dts_abort_of_call_works() {
 
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b.clone())
@@ -798,4 +814,61 @@ fn stable_grow_returns_allocated_memory_on_error() {
         test.canister_state(canister_id).memory_usage(),
         initial_canister_memory
     );
+}
+
+#[test]
+fn test_call_context_instructions_executed_is_updated_on_ok_update() {
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+
+    // Create canisters A and B.
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    // Canister A calls canister B.
+    let wasm_payload = wasm().inter_update(b_id, call_args()).build();
+
+    // Enqueue ingress message to canister A.
+    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
+    assert_matches!(ingress_status, IngressStatus::Unknown);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
+
+    // Execute canister A ingress.
+    test.execute_message(a_id);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version, 2);
+
+    // Make sure the execution was ok.
+    let call_context = test.get_call_context(a_id, CallbackId::from(1));
+
+    // Make sure the `instructions_executed` is updated.
+    let instructions_executed_a_1 = call_context.instructions_executed();
+    assert!(instructions_executed_a_1 > 0.into());
+}
+
+#[test]
+fn test_call_context_instructions_executed_is_updated_on_err_update() {
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+
+    // Create canisters A and B.
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    // Canister A calls canister B and then traps.
+    let wasm_payload = wasm().inter_update(b_id, call_args()).trap().build();
+
+    // Enqueue ingress message to canister A.
+    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
+    assert_matches!(ingress_status, IngressStatus::Unknown);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
+
+    // Execute canister A ingress.
+    test.execute_message(a_id);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
+
+    // Make sure the execution was not ok.
+    let call_context_manager = test
+        .canister_state(a_id)
+        .system_state
+        .call_context_manager()
+        .unwrap();
+    assert!(call_context_manager.call_contexts().is_empty());
 }

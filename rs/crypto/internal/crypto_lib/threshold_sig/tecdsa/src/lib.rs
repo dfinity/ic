@@ -278,8 +278,8 @@ pub use sign::{ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSigShareInternal
 
 /// Create MEGa encryption keypair
 pub fn gen_keypair(curve_type: EccCurveType, seed: Seed) -> (MEGaPublicKey, MEGaPrivateKey) {
-    let mut rng = seed.into_rng();
-    let private_key = MEGaPrivateKey::generate(curve_type, &mut rng);
+    let rng = &mut seed.into_rng();
+    let private_key = MEGaPrivateKey::generate(curve_type, rng);
 
     let public_key = private_key.public_key();
 
@@ -317,14 +317,12 @@ pub fn create_dealing(
     shares: &SecretShares,
     seed: Seed,
 ) -> Result<IDkgDealingInternal, IdkgCreateDealingInternalError> {
-    let curve = match algorithm_id {
-        AlgorithmId::ThresholdEcdsaSecp256k1 => Ok(EccCurveType::K256),
-        _ => Err(IdkgCreateDealingInternalError::UnsupportedAlgorithm),
-    }?;
+    let signature_curve = EccCurveType::from_algorithm(algorithm_id)
+        .ok_or(IdkgCreateDealingInternalError::UnsupportedAlgorithm)?;
 
     IDkgDealingInternal::new(
         shares,
-        curve,
+        signature_curve,
         seed,
         threshold.get() as usize,
         recipients,
@@ -368,10 +366,8 @@ pub fn create_transcript(
     verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
     operation_mode: &IDkgTranscriptOperationInternal,
 ) -> Result<IDkgTranscriptInternal, IDkgCreateTranscriptInternalError> {
-    let curve = match algorithm_id {
-        AlgorithmId::ThresholdEcdsaSecp256k1 => Ok(EccCurveType::K256),
-        _ => Err(IDkgCreateTranscriptInternalError::UnsupportedAlgorithm),
-    }?;
+    let curve = EccCurveType::from_algorithm(algorithm_id)
+        .ok_or(IDkgCreateTranscriptInternalError::UnsupportedAlgorithm)?;
 
     IDkgTranscriptInternal::new(
         curve,
@@ -565,14 +561,15 @@ pub fn publicly_verify_dealing(
     number_of_receivers: NumberOfNodes,
     associated_data: &[u8],
 ) -> Result<(), IDkgVerifyDealingInternalError> {
-    let curve = match algorithm_id {
-        AlgorithmId::ThresholdEcdsaSecp256k1 => Ok(EccCurveType::K256),
-        _ => Err(IDkgVerifyDealingInternalError::UnsupportedAlgorithm),
-    }?;
+    let key_curve = EccCurveType::K256;
+
+    let signature_curve = EccCurveType::from_algorithm(algorithm_id)
+        .ok_or(IDkgVerifyDealingInternalError::UnsupportedAlgorithm)?;
 
     dealing
         .publicly_verify(
-            curve,
+            key_curve,
+            signature_curve,
             transcript_type,
             reconstruction_threshold,
             dealer_index,
@@ -584,7 +581,7 @@ pub fn publicly_verify_dealing(
 
 /// Verify a dealing using private information
 ///
-/// This private verification must be done after the dealing has been publically
+/// This private verification must be done after the dealing has been publicly
 /// verified. This operation decrypts the dealing and verifies that the
 /// decrypted value is consistent with the commitment in the dealing.
 #[allow(clippy::too_many_arguments)]
@@ -597,14 +594,15 @@ pub fn privately_verify_dealing(
     dealer_index: NodeIndex,
     recipient_index: NodeIndex,
 ) -> Result<(), IDkgVerifyDealingInternalError> {
-    let curve = match algorithm_id {
-        AlgorithmId::ThresholdEcdsaSecp256k1 => Ok(EccCurveType::K256),
-        _ => Err(IDkgVerifyDealingInternalError::UnsupportedAlgorithm),
-    }?;
+    let signature_curve = EccCurveType::from_algorithm(algorithm_id)
+        .ok_or(IDkgVerifyDealingInternalError::UnsupportedAlgorithm)?;
+
+    let key_curve = private_key.curve_type();
 
     dealing
         .privately_verify(
-            curve,
+            key_curve,
+            signature_curve,
             private_key,
             public_key,
             associated_data,
@@ -621,7 +619,7 @@ impl From<&ExtendedDerivationPath> for DerivationPath {
         // less than 2^31 are compatible with BIP-32 non-hardened derivation path.
         Self::new(
             std::iter::once(extended_derivation_path.caller.to_vec())
-                .chain(extended_derivation_path.derivation_path.clone().into_iter())
+                .chain(extended_derivation_path.derivation_path.clone())
                 .map(key_derivation::DerivationIndex)
                 .collect::<Vec<_>>(),
         )
@@ -656,13 +654,9 @@ impl From<ThresholdEcdsaError> for ThresholdEcdsaGenerateSigShareInternalError {
     }
 }
 
+// Returns None if the AlgorithmId does not map to threshold ECDSA
 fn signature_parameters(algorithm_id: AlgorithmId) -> Option<(EccCurveType, usize)> {
-    match algorithm_id {
-        AlgorithmId::ThresholdEcdsaSecp256k1 => {
-            Some((EccCurveType::K256, EccCurveType::K256.scalar_bytes()))
-        }
-        _ => None,
-    }
+    EccCurveType::from_algorithm(algorithm_id).map(|curve| (curve, curve.scalar_bytes()))
 }
 
 /// Create a new threshold ECDSA signature share
@@ -807,10 +801,8 @@ pub fn combine_sig_shares(
     sig_shares: &BTreeMap<NodeIndex, ThresholdEcdsaSigShareInternal>,
     algorithm_id: AlgorithmId,
 ) -> Result<ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaCombineSigSharesInternalError> {
-    let curve_type = match algorithm_id {
-        AlgorithmId::ThresholdEcdsaSecp256k1 => EccCurveType::K256,
-        _ => return Err(ThresholdEcdsaCombineSigSharesInternalError::UnsupportedAlgorithm),
-    };
+    let curve = EccCurveType::from_algorithm(algorithm_id)
+        .ok_or(ThresholdEcdsaCombineSigSharesInternalError::UnsupportedAlgorithm)?;
 
     sign::ThresholdEcdsaCombinedSigInternal::new(
         derivation_path,
@@ -820,7 +812,7 @@ pub fn combine_sig_shares(
         presig_transcript,
         reconstruction_threshold,
         sig_shares,
-        curve_type,
+        curve,
     )
     .map_err(|e| e.into())
 }
@@ -1049,7 +1041,7 @@ impl From<ThresholdEcdsaError> for ThresholdOpenDealingInternalError {
 /// opening for the dealing commitment.
 ///
 /// # Preconditions
-/// * The dealing has already been publically verified
+/// * The dealing has already been publicly verified
 /// * The complaint which caused us to provide an opening for this dealing has
 ///   already been verified to be valid.
 pub fn open_dealing(
@@ -1093,7 +1085,7 @@ impl From<ThresholdEcdsaError> for ThresholdVerifyOpeningInternalError {
 /// complaint is a valid opening for the dealing.
 ///
 /// # Preconditions
-/// * The dealing has already been publically verified
+/// * The dealing has already been publicly verified
 /// # Errors
 /// * `ThresholdVerifyOpeningInternalError::InvalidOpening` if the opening does
 /// not match with the polynomial commitment.
@@ -1106,9 +1098,10 @@ pub fn verify_dealing_opening(
     opener_index: NodeIndex,
     opening: &CommitmentOpening,
 ) -> Result<(), ThresholdVerifyOpeningInternalError> {
-    let is_invalid = !verified_dealing
+    let is_invalid = verified_dealing
         .commitment
-        .check_opening(opener_index, opening)?;
+        .check_opening(opener_index, opening)
+        .is_err();
     if is_invalid {
         return Err(ThresholdVerifyOpeningInternalError::InvalidOpening);
     }

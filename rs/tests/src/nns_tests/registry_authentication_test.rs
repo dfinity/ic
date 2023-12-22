@@ -25,7 +25,7 @@ use hyper::{
     service::{make_service_fn, service_fn},
     Body, Request, Response,
 };
-use ic_crypto::threshold_sig_public_key_from_der;
+use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_from_der;
 use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::itest_helpers::{
     forward_call_via_universal_canister, set_up_universal_canister,
@@ -168,7 +168,7 @@ pub fn test(env: TestEnv) {
                 &canister,
                 "atomic_mutate",
                 encode_or_panic(&RegistryAtomicMutateRequest {
-                    mutations: vec![upsert("Proprietory Clouds", "Less Good")],
+                    mutations: vec![upsert("Proprietary Clouds", "Less Good")],
                     preconditions: vec![]
                 })
             )

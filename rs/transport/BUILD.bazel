@@ -11,7 +11,7 @@ DEPENDENCIES = [
     "//rs/async_utils",
     "//rs/config",
     "//rs/crypto/tls_interfaces",
-    "//rs/ic_os/sev_interfaces",
+    "//rs/ic_os/sev",
     "//rs/interfaces/transport",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
@@ -31,7 +31,6 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     "//rs/crypto/tls_interfaces/mocks",
-    "//rs/ic_os/sev",
     "//rs/test_utilities/logger",
     "//rs/transport/test_utils",
     "@crate_index//:criterion",
@@ -45,7 +44,7 @@ rust_library(
     proc_macro_deps = [
         "@crate_index//:async-trait",
     ],
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
@@ -66,6 +65,7 @@ rust_test_suite_with_extra_srcs(
         exclude = ["tests/common/**"],
     ),
     extra_srcs = glob(["tests/common/**"]),
+    flaky = True,
     deps = [":transport"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 

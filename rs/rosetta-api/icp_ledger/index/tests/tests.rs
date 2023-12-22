@@ -4,6 +4,7 @@ use ic_icp_index::{
     GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse,
     GetAccountIdentifierTransactionsResult, Status, TransactionWithId,
 };
+use ic_icrc1_index_ng::GetAccountTransactionsArgs;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::timestamp::TimeStamp;
@@ -18,6 +19,7 @@ use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError}
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
 use num_traits::cast::ToPrimitive;
+use serde_bytes::ByteBuf;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
@@ -31,6 +33,43 @@ const MINTER_PRINCIPAL: PrincipalId = PrincipalId::new(0, [0u8; 29]);
 // Metadata-related constants
 const TOKEN_NAME: &str = "Test Token";
 const TOKEN_SYMBOL: &str = "XTST";
+
+#[derive(Clone, Debug)]
+struct ApproveTestArgs(pub ApproveArgs);
+impl ApproveTestArgs {
+    fn new(from: Account, spender: Account, amount: u64) -> Self {
+        Self(ApproveArgs {
+            from_subaccount: from.subaccount,
+            spender,
+            amount: amount.into(),
+            created_at_time: None,
+            fee: None,
+            memo: None,
+            expected_allowance: None,
+            expires_at: None,
+        })
+    }
+    fn created_at_time(&mut self, created_at_time: Option<u64>) -> Self {
+        self.0.created_at_time = created_at_time;
+        self.clone()
+    }
+    fn fee(&mut self, fee: Option<Nat>) -> Self {
+        self.0.fee = fee;
+        self.clone()
+    }
+    fn memo(&mut self, memo: Option<Vec<u8>>) -> Self {
+        self.0.memo = memo.map(|b| icrc_ledger_types::icrc1::transfer::Memo(ByteBuf::from(b)));
+        self.clone()
+    }
+    fn expected_allowance(&mut self, expected_allowance: Option<Nat>) -> Self {
+        self.0.expected_allowance = expected_allowance;
+        self.clone()
+    }
+    fn expires_at(&mut self, expires_at: Option<u64>) -> Self {
+        self.0.expires_at = expires_at;
+        self.clone()
+    }
+}
 
 fn index_wasm() -> Vec<u8> {
     println!("Getting Index Wasm");
@@ -112,20 +151,25 @@ fn icrc1_balance_of(env: &StateMachine, canister_id: CanisterId, account: Accoun
         .expect("Balance must be a u64!")
 }
 
-fn index_balance_of(
-    env: &StateMachine,
-    canister_id: CanisterId,
-    account_identifier: AccountIdentifier,
-) -> u64 {
+fn index_balance_of(env: &StateMachine, canister_id: CanisterId, account: Account) -> u64 {
+    let res = env
+        .execute_ingress(canister_id, "icrc1_balance_of", Encode!(&account).unwrap())
+        .expect("Failed to send icrc1_balance_of")
+        .bytes();
+    let account_balance =
+        Decode!(&res, u64).expect("Failed to decode get_account_balance response");
     let res = env
         .execute_ingress(
             canister_id,
             "get_account_identifier_balance",
-            Encode!(&account_identifier).unwrap(),
+            Encode!(&AccountIdentifier::from(account)).unwrap(),
         )
         .expect("Failed to send get_account_identifier_balance")
         .bytes();
-    Decode!(&res, u64).expect("Failed to decode get_account_identifier_balance response")
+    let accountidentifier_balance =
+        Decode!(&res, u64).expect("Failed to decode get_account_identifier_balance response");
+    assert_eq!(account_balance, accountidentifier_balance);
+    accountidentifier_balance
 }
 
 fn status(env: &StateMachine, index_id: CanisterId) -> Status {
@@ -158,7 +202,7 @@ fn icp_get_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_ledger::
         let canister_id = archived.callback.canister_id;
         let res = env
             .execute_ingress(
-                CanisterId::new(PrincipalId(canister_id)).unwrap(),
+                CanisterId::unchecked_from_principal(PrincipalId(canister_id)),
                 archived.callback.method,
                 req,
             )
@@ -225,25 +269,12 @@ fn transfer(
 fn approve(
     env: &StateMachine,
     ledger_id: CanisterId,
-    from: Account,
-    spender: Account,
-    amount: u64,
-    expires_at: Option<u64>,
+    sender: Account,
+    args: ApproveTestArgs,
 ) -> BlockIndex {
-    let Account { owner, subaccount } = from;
-    let req = ApproveArgs {
-        from_subaccount: subaccount,
-        spender,
-        amount: amount.into(),
-        created_at_time: None,
-        fee: None,
-        memo: None,
-        expected_allowance: None,
-        expires_at,
-    };
-    let req = Encode!(&req).expect("Failed to encode ApproveArgs");
+    let req = Encode!(&args.0).expect("Failed to encode ApproveArgs");
     let res = env
-        .execute_ingress_as(owner.into(), ledger_id, "icrc2_approve", req)
+        .execute_ingress_as(sender.owner.into(), ledger_id, "icrc2_approve", req)
         .expect("Failed to create an approval")
         .bytes();
     Decode!(&res, Result<BlockIndex, ApproveError>)
@@ -254,23 +285,41 @@ fn approve(
 fn get_account_identifier_transactions(
     env: &StateMachine,
     index_id: CanisterId,
-    accountidentifier: AccountIdentifier,
+    account: Account,
     start: Option<u64>,
     max_results: u64,
 ) -> GetAccountIdentifierTransactionsResponse {
+    let req = GetAccountTransactionsArgs {
+        start: start.map(Nat::from),
+        max_results: Nat::from(max_results),
+        account,
+    };
+    let req = Encode!(&req).expect("Failed to encode GetAccountTransactionsArgs");
+    let res = env
+        .execute_ingress(index_id, "get_account_transactions", req)
+        .expect("Failed to get_account_transactions")
+        .bytes();
+    let account_txs = Decode!(&res, GetAccountIdentifierTransactionsResult)
+        .expect("Failed to decode GetAccountIdentifierTransactionsArgs")
+        .expect("Failed to perform GetAccountIdentifierTransactionsArgs");
+
     let req = GetAccountIdentifierTransactionsArgs {
         start,
         max_results,
-        account_identifier: accountidentifier,
+        account_identifier: account.into(),
     };
     let req = Encode!(&req).expect("Failed to encode GetAccountIdentifierTransactionsArgs");
     let res = env
         .execute_ingress(index_id, "get_account_identifier_transactions", req)
         .expect("Failed to get_account_identifier_transactions")
         .bytes();
-    Decode!(&res, GetAccountIdentifierTransactionsResult)
+    let accountidentifier_txs = Decode!(&res, GetAccountIdentifierTransactionsResult)
         .expect("Failed to decode GetAccountIdentifierTransactionsArgs")
-        .expect("Failed to perform GetAccountIdentifierTransactionsArgs")
+        .expect("Failed to perform GetAccountIdentifierTransactionsArgs");
+    assert_eq!(accountidentifier_txs.balance, account_txs.balance);
+    assert_eq!(accountidentifier_txs.oldest_tx_id, account_txs.oldest_tx_id);
+    assert_eq!(accountidentifier_txs.transactions, account_txs.transactions);
+    accountidentifier_txs
 }
 
 // Helper function that calls tick on env until either
@@ -491,13 +540,13 @@ fn test_get_account_identifier_transactions() {
 
     // account (1, 0) has one mint
     let actual_txs =
-        get_account_identifier_transactions(env, index_id, account(1, 0).into(), None, u64::MAX)
+        get_account_identifier_transactions(env, index_id, account(1, 0), None, u64::MAX)
             .transactions;
     assert_txs_with_id_eq(actual_txs, vec![tx0.clone()]);
 
     // account (2, 0) has no transactions
     let actual_txs =
-        get_account_identifier_transactions(env, index_id, account(2, 0).into(), None, u64::MAX)
+        get_account_identifier_transactions(env, index_id, account(2, 0), None, u64::MAX)
             .transactions;
     assert_txs_with_id_eq(actual_txs, vec![]);
 
@@ -508,24 +557,20 @@ fn test_get_account_identifier_transactions() {
 
     // account (1, 0) has one transfer and one mint
     let actual_txs =
-        get_account_identifier_transactions(env, index_id, account(1, 0).into(), None, u64::MAX)
+        get_account_identifier_transactions(env, index_id, account(1, 0), None, u64::MAX)
             .transactions;
     assert_txs_with_id_eq(actual_txs, vec![tx1.clone(), tx0.clone()]);
 
     // account (2, 0) has one transfer only
     let actual_txs =
-        get_account_identifier_transactions(env, index_id, account(2, 0).into(), None, u64::MAX)
+        get_account_identifier_transactions(env, index_id, account(2, 0), None, u64::MAX)
             .transactions;
     assert_txs_with_id_eq(actual_txs, vec![tx1.clone()]);
 
     // account (3, 0), (1, 1) and (2, 1) have no transactions
-    for account_identifier in [
-        account(3, 0).into(),
-        account(1, 1).into(),
-        account(2, 1).into(),
-    ] {
+    for account in [account(3, 0), account(1, 1), account(2, 1)] {
         let actual_txs =
-            get_account_identifier_transactions(env, index_id, account_identifier, None, u64::MAX)
+            get_account_identifier_transactions(env, index_id, account, None, u64::MAX)
                 .transactions;
         assert_txs_with_id_eq(actual_txs, vec![]);
     }
@@ -539,20 +584,20 @@ fn test_get_account_identifier_transactions() {
 
     // account (1, 0) has two transfers and one mint
     let actual_txs =
-        get_account_identifier_transactions(env, index_id, account(1, 0).into(), None, u64::MAX)
+        get_account_identifier_transactions(env, index_id, account(1, 0), None, u64::MAX)
             .transactions;
     let expected_txs = vec![tx2.clone(), tx1.clone(), tx0];
     assert_txs_with_id_eq(actual_txs, expected_txs);
 
     // account (2, 0) has three transfers
     let actual_txs =
-        get_account_identifier_transactions(env, index_id, account(2, 0).into(), None, u64::MAX)
+        get_account_identifier_transactions(env, index_id, account(2, 0), None, u64::MAX)
             .transactions;
     assert_txs_with_id_eq(actual_txs, vec![tx3.clone(), tx2, tx1]);
 
     // account (1, 1) has one transfer
     let actual_txs =
-        get_account_identifier_transactions(env, index_id, account(1, 1).into(), None, u64::MAX)
+        get_account_identifier_transactions(env, index_id, account(1, 1), None, u64::MAX)
             .transactions;
     assert_txs_with_id_eq(actual_txs, vec![tx3]);
 
@@ -562,19 +607,16 @@ fn test_get_account_identifier_transactions() {
         env,
         ledger_id,
         account(1, 0),
-        account(4, 4),
-        1_000_000,
-        Some(expires_at),
+        ApproveTestArgs::new(account(1, 0), account(4, 4), 1_000_000).expires_at(Some(expires_at)),
     );
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
     let actual_txs =
-        get_account_identifier_transactions(env, index_id, account(1, 0).into(), None, 1)
-            .transactions;
+        get_account_identifier_transactions(env, index_id, account(1, 0), None, 1).transactions;
     assert_txs_with_id_eq(actual_txs, vec![tx4.clone()]);
 
     let actual_txs =
-        get_account_identifier_transactions(env, index_id, account(4, 4).into(), None, u64::MAX)
+        get_account_identifier_transactions(env, index_id, account(4, 4), None, u64::MAX)
             .transactions;
     assert_txs_with_id_eq(actual_txs, vec![tx4]);
 }
@@ -619,8 +661,7 @@ fn test_get_account_transactions_start_length() {
     // get the most n recent transaction with start set to none
     for n in 1..10 {
         let actual_txs =
-            get_account_identifier_transactions(env, index_id, account(1, 0).into(), None, n)
-                .transactions;
+            get_account_identifier_transactions(env, index_id, account(1, 0), None, n).transactions;
         let expected_txs: Vec<_> = (0..10)
             .rev()
             .take(n as usize)
@@ -637,14 +678,9 @@ fn test_get_account_transactions_start_length() {
                 .take(n as usize)
                 .map(|i| expected_txs[i as usize].clone())
                 .collect();
-            let actual_txs = get_account_identifier_transactions(
-                env,
-                index_id,
-                account(1, 0).into(),
-                Some(start),
-                n,
-            )
-            .transactions;
+            let actual_txs =
+                get_account_identifier_transactions(env, index_id, account(1, 0), Some(start), n)
+                    .transactions;
             assert_txs_with_id_eq(actual_txs, expected_txs);
         }
     }
@@ -681,13 +717,8 @@ fn test_get_account_identifier_transactions_pagination() {
     // if start == Some(0) then we can stop as there is no index that is smaller
     // than 0.
     while start != Some(0) {
-        let res = get_account_identifier_transactions(
-            env,
-            index_id,
-            account(1, 0).into(),
-            start,
-            u64::MAX,
-        );
+        let res =
+            get_account_identifier_transactions(env, index_id, account(1, 0), start, u64::MAX);
 
         // if the batch is empty then get_account_transactions
         // didn't return the expected batch for the given start
@@ -761,11 +792,11 @@ fn test_icp_balance_of() {
     // Test Mint operations
     assert_eq!(
         icrc1_balance_of(env, ledger_id, account(1, 0)),
-        index_balance_of(env, index_id, account(1, 0).into())
+        index_balance_of(env, index_id, account(1, 0))
     );
     assert_eq!(
         icrc1_balance_of(env, ledger_id, account(2, 0)),
-        index_balance_of(env, index_id, account(2, 0).into())
+        index_balance_of(env, index_id, account(2, 0))
     );
 
     // Test burn operations
@@ -783,7 +814,7 @@ fn test_icp_balance_of() {
 
     assert_eq!(
         icrc1_balance_of(env, ledger_id, account(1, 0)),
-        index_balance_of(env, index_id, account(1, 0).into())
+        index_balance_of(env, index_id, account(1, 0))
     );
 
     // Test transfer operations
@@ -792,34 +823,193 @@ fn test_icp_balance_of() {
 
     assert_eq!(
         icrc1_balance_of(env, ledger_id, account(1, 0)),
-        index_balance_of(env, index_id, account(1, 0).into())
+        index_balance_of(env, index_id, account(1, 0))
     );
     assert_eq!(
         icrc1_balance_of(env, ledger_id, account(2, 0)),
-        index_balance_of(env, index_id, account(2, 0).into())
+        index_balance_of(env, index_id, account(2, 0))
     );
     transfer(env, ledger_id, account(2, 0), account(3, 0), 10_000);
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
     assert_eq!(
         icrc1_balance_of(env, ledger_id, account(3, 0)),
-        index_balance_of(env, index_id, account(3, 0).into())
+        index_balance_of(env, index_id, account(3, 0))
     );
     assert_eq!(
         icrc1_balance_of(env, ledger_id, account(2, 0)),
-        index_balance_of(env, index_id, account(2, 0).into())
+        index_balance_of(env, index_id, account(2, 0))
     );
 
     // Test approve operations
-    approve(env, ledger_id, account(1, 0), account(2, 0), 100_000, None);
+    approve(
+        env,
+        ledger_id,
+        account(1, 0),
+        ApproveTestArgs::new(account(1, 0), account(2, 0), 100_000),
+    );
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
     assert_eq!(
         icrc1_balance_of(env, ledger_id, account(1, 0)),
-        index_balance_of(env, index_id, account(1, 0).into())
+        index_balance_of(env, index_id, account(1, 0))
     );
     assert_eq!(
         icrc1_balance_of(env, ledger_id, account(2, 0)),
-        index_balance_of(env, index_id, account(2, 0).into())
+        index_balance_of(env, index_id, account(2, 0))
     );
+}
+
+#[test]
+fn test_approve_args() {
+    let initial_balances = HashMap::new();
+    let env = &StateMachine::new();
+    let ledger_id = install_ledger(env, initial_balances, default_archive_options());
+    let index_id = install_index(env, ledger_id);
+    for i in 0..10 {
+        transfer(
+            env,
+            ledger_id,
+            Account {
+                owner: MINTER_PRINCIPAL.into(),
+                subaccount: None,
+            },
+            account(1, 0),
+            i * 10_000,
+        );
+
+        transfer(
+            env,
+            ledger_id,
+            Account {
+                owner: MINTER_PRINCIPAL.into(),
+                subaccount: None,
+            },
+            account(2, 0),
+            i * 10_000,
+        );
+    }
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    // Test approve operations with default args
+    approve(
+        env,
+        ledger_id,
+        account(1, 0),
+        ApproveTestArgs::new(account(1, 0), account(2, 0), 100_000),
+    );
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, account(1, 0)),
+        index_balance_of(env, index_id, account(1, 0))
+    );
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, account(2, 0)),
+        index_balance_of(env, index_id, account(2, 0))
+    );
+
+    // Test approve operations with expected_allowance set
+    approve(
+        env,
+        ledger_id,
+        account(1, 0),
+        ApproveTestArgs::new(account(1, 0), account(2, 0), 100_000)
+            .expected_allowance(Some(100_000.into())),
+    );
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, account(1, 0)),
+        index_balance_of(env, index_id, account(1, 0))
+    );
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, account(2, 0)),
+        index_balance_of(env, index_id, account(2, 0))
+    );
+
+    // Test approve operations with memo set
+    approve(
+        env,
+        ledger_id,
+        account(1, 0),
+        ApproveTestArgs::new(account(1, 0), account(2, 0), 100_000).memo(Some(b"memo".to_vec())),
+    );
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, account(1, 0)),
+        index_balance_of(env, index_id, account(1, 0))
+    );
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, account(2, 0)),
+        index_balance_of(env, index_id, account(2, 0))
+    );
+
+    // Test approve operations with fee set
+    approve(
+        env,
+        ledger_id,
+        account(1, 0),
+        ApproveTestArgs::new(account(1, 0), account(2, 0), 100_000).fee(Some(FEE.into())),
+    );
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, account(1, 0)),
+        index_balance_of(env, index_id, account(1, 0))
+    );
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, account(2, 0)),
+        index_balance_of(env, index_id, account(2, 0))
+    );
+
+    // Test approve operations with fee created_at_time set
+    approve(
+        env,
+        ledger_id,
+        account(1, 0),
+        ApproveTestArgs::new(account(1, 0), account(2, 0), 100_000).created_at_time(Some(
+            env.time()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos() as u64,
+        )),
+    );
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, account(1, 0)),
+        index_balance_of(env, index_id, account(1, 0))
+    );
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, account(2, 0)),
+        index_balance_of(env, index_id, account(2, 0))
+    );
+}
+
+#[test]
+fn test_post_upgrade_start_timer() {
+    let env = &StateMachine::new();
+    let ledger_id = install_ledger(
+        env,
+        vec![(
+            AccountIdentifier::from(account(1, 0)),
+            Tokens::from_e8s(10_000_000),
+        )]
+        .into_iter()
+        .collect(),
+        default_archive_options(),
+    );
+    let index_id = install_index(env, ledger_id);
+
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    env.upgrade_canister(index_id, index_wasm(), Encode!(&()).unwrap())
+        .unwrap();
+
+    // Check that the index syncs the new block (wait_until_sync_is_completed fails
+    // if the new block is not synced).
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 2_000_000);
+    wait_until_sync_is_completed(env, index_id, ledger_id);
 }

@@ -1,72 +1,25 @@
 use super::*;
 
-fn check_response_normalization(transform: ResponseTransform, left: &str, right: &str) {
+fn check_response_normalization<O: HttpResponsePayload>(left: &str, right: &str) {
     fn add_envelope(reply: &str) -> Vec<u8> {
         format!("{{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {}}}", reply).into_bytes()
     }
 
     let mut left = add_envelope(left);
     let mut right = add_envelope(right);
-    transform.apply(&mut left);
-    transform.apply(&mut right);
+    let maybe_transform = O::response_transform();
+    if let Some(transform) = maybe_transform {
+        transform.apply(&mut left);
+        transform.apply(&mut right);
+    }
     let left_string = String::from_utf8(left).unwrap();
     let right_string = String::from_utf8(right).unwrap();
     assert_eq!(left_string, right_string);
 }
 
 #[test]
-fn tx_normalization() {
-    check_response_normalization(
-        ResponseTransform::Transaction,
-        r#"{
-        "blockHash": "0x8436209a391f7bc076123616ecb229602124eb6c1007f5eae84df8e098885d3c",
-        "blockNumber": "0x3ca487",
-        "hash": "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3",
-        "accessList": [],
-        "chainId": "0xaa36a7",
-        "from": "0xdd2851cdd40ae6536831558dd46db62fac7a844d",
-        "gas": "0xdafd",
-        "gasPrice": "0x59682f0e",
-        "input": "0xb214faa509efcdab00000000000100000000000000000000000000000000000000000000",
-        "maxFeePerGas": "0x59682f15",
-        "maxPriorityFeePerGas": "0x59682f00",
-        "nonce": "0x5",
-        "r": "0x83ca84982e3290257249525ee24b4e729fd4f4bbda73688841c88be33af12b13",
-        "s": "0x32fbc38e3c63e5ee4ac7d7ec7553e22ea959396304e60f0c630b572d4207f8c6",
-        "to": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
-        "transactionIndex": "0x22",
-        "type": "0x2",
-        "v": "0x0",
-        "value": "0x2386f26fc10000"
-        }"#,
-        r#"{
-        "blockNumber": "0x3ca487",
-        "blockHash": "0x8436209a391f7bc076123616ecb229602124eb6c1007f5eae84df8e098885d3c",
-        "accessList": [],
-        "hash": "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3",
-        "from": "0xdd2851cdd40ae6536831558dd46db62fac7a844d",
-        "chainId": "0xaa36a7",
-        "gasPrice": "0x59682f0e",
-        "gas": "0xdafd",
-        "maxFeePerGas": "0x59682f15",
-        "input": "0xb214faa509efcdab00000000000100000000000000000000000000000000000000000000",
-        "nonce": "0x5",
-        "maxPriorityFeePerGas": "0x59682f00",
-        "s": "0x32fbc38e3c63e5ee4ac7d7ec7553e22ea959396304e60f0c630b572d4207f8c6",
-        "to": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
-        "value": "0x2386f26fc10000",
-        "transactionIndex": "0x22",
-        "r": "0x83ca84982e3290257249525ee24b4e729fd4f4bbda73688841c88be33af12b13",
-        "type": "0x2",
-        "v": "0x0"
-        }"#,
-    )
-}
-
-#[test]
 fn fee_history_normalization() {
-    check_response_normalization(
-        ResponseTransform::FeeHistory,
+    check_response_normalization::<FeeHistory>(
         r#"{
         "baseFeePerGas": [
             "0x729d3f3b3",
@@ -162,8 +115,7 @@ fn fee_history_normalization() {
 
 #[test]
 fn block_normalization() {
-    check_response_normalization(
-        ResponseTransform::Block,
+    check_response_normalization::<Block>(
         r#"{
         "number": "0x10eb3c6",
         "hash": "0x85db6d6ad071d127795df4c5f1b04863629d7c2832c89550aa2771bf81c40c85",
@@ -233,4 +185,318 @@ fn block_normalization() {
         "withdrawalsRoot": "0xedaa8043cdce8101ef827863eb0d808277d200a7a0ee77961934bd235dcb82c6"
     }"#,
     )
+}
+
+#[test]
+fn eth_get_logs_normalization() {
+    check_response_normalization::<Vec<LogEntry>>(
+        r#"[
+        {
+            "removed": false,
+            "blockHash": "0x8436209a391f7bc076123616ecb229602124eb6c1007f5eae84df8e098885d3c",
+            "blockNumber": "0x3ca487",
+            "data": "0x000000000000000000000000000000000000000000000000002386f26fc10000",
+            "logIndex": "0x27",
+            "address": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
+            "topics": [
+                "0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435",
+                "0x000000000000000000000000dd2851cdd40ae6536831558dd46db62fac7a844d",
+                "0x09efcdab00000000000100000000000000000000000000000000000000000000"
+            ],
+            "transactionHash": "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3",
+            "transactionIndex": "0x22"
+        },
+        {
+            "transactionHash": "0xf1ac37d920fa57d9caeebc7136fea591191250309ffca95ae0e8a7739de89cc2",
+            "logIndex": "0x1d",
+            "blockHash": "0x4205f2436ee7a90aa87a88ae6914ec6860971360995f463602a40803bff98f4d",
+            "blockNumber": "0x3c6f2f",
+            "data": "0x000000000000000000000000000000000000000000000000002386f26fc10000",
+            "address": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
+            "removed": false,
+            "topics": [
+                "0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435",
+                "0x000000000000000000000000dd2851cdd40ae6536831558dd46db62fac7a844d",
+                "0x0000000000000000000000000000000000000000000000000000000000000000"
+            ],
+            "transactionIndex": "0x1f"
+        }
+    ]"#,
+        r#"[
+        {
+            "address": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
+            "blockHash": "0x4205f2436ee7a90aa87a88ae6914ec6860971360995f463602a40803bff98f4d",
+            "blockNumber": "0x3c6f2f",
+            "data": "0x000000000000000000000000000000000000000000000000002386f26fc10000",
+            "logIndex": "0x1d",
+            "removed": false,
+            "topics": [
+                "0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435",
+                "0x000000000000000000000000dd2851cdd40ae6536831558dd46db62fac7a844d",
+                "0x0000000000000000000000000000000000000000000000000000000000000000"
+            ],
+            "transactionHash": "0xf1ac37d920fa57d9caeebc7136fea591191250309ffca95ae0e8a7739de89cc2",
+            "transactionIndex": "0x1f"
+        },
+        {
+            "address": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
+            "blockHash": "0x8436209a391f7bc076123616ecb229602124eb6c1007f5eae84df8e098885d3c",
+            "blockNumber": "0x3ca487",
+            "data": "0x000000000000000000000000000000000000000000000000002386f26fc10000",
+            "logIndex": "0x27",
+            "removed": false,
+            "topics": [
+                "0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435",
+                "0x000000000000000000000000dd2851cdd40ae6536831558dd46db62fac7a844d",
+                "0x09efcdab00000000000100000000000000000000000000000000000000000000"
+            ],
+            "transactionHash": "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3",
+            "transactionIndex": "0x22"
+        }
+    ]"#,
+    );
+}
+
+#[test]
+fn eth_get_logs_order_normalization() {
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+    use rand::prelude::SliceRandom;
+    const LOGS: &str = r#"[
+        {
+            "address": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
+            "topics": [
+                "0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435",
+                "0x000000000000000000000000dd4f158536c7f8c07736d04b7cc805f8d59b241a",
+                "0x1d5ad0eae83b042ac243598bde6c4eea3e5dff125e2e2057476a3010e4020000"
+            ],
+            "data": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "blockNumber": "0x3f50c8",
+            "transactionHash": "0xcf36dcf9e4b42954b35e9b7deb20f3c1c481c3ec9d66b538a58b6838d5fdc0cc",
+            "transactionIndex": "0x5",
+            "blockHash": "0x9ee5966f424dcae471daa0d669354a5fc1b7387303b5a623e615d1bf1540e6ad",
+            "logIndex": "0x10",
+            "removed": false
+        },
+        {
+            "address": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
+            "topics": [
+                "0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435",
+                "0x000000000000000000000000dd4f158536c7f8c07736d04b7cc805f8d59b241a",
+                "0x1d882d15b09f8e81e29606305f5fefc5eff3e2309620a3557ecae39d62020000"
+            ],
+            "data": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "blockNumber": "0x3f50c8",
+            "transactionHash": "0xcf36dcf9e4b42954b35e9b7deb20f3c1c481c3ec9d66b538a58b6838d5fdc0cc",
+            "transactionIndex": "0x5",
+            "blockHash": "0x9ee5966f424dcae471daa0d669354a5fc1b7387303b5a623e615d1bf1540e6ad",
+            "logIndex": "0x11",
+            "removed": false
+        },
+        {
+            "address": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
+            "topics": [
+                "0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435",
+                "0x000000000000000000000000dd4f158536c7f8c07736d04b7cc805f8d59b241a",
+                "0x1d5ad0eae83b042ac243598bde6c4eea3e5dff125e2e2057476a3010e4020000"
+            ],
+            "data": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "blockNumber": "0x3f50f5",
+            "transactionHash": "0x17a1b0272352607d36cddf6ad8e5883ddef5ba8235a4cf6ed2b4924b8d702756",
+            "transactionIndex": "0xa",
+            "blockHash": "0xd9daa1bea7a56809fd88a6d14bdd21820a5e9565bf75f307c413bf47b86e649f",
+            "logIndex": "0x10",
+            "removed": false
+        },
+        {
+            "address": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
+            "topics": [
+                "0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435",
+                "0x000000000000000000000000dd4f158536c7f8c07736d04b7cc805f8d59b241a",
+                "0x1d882d15b09f8e81e29606305f5fefc5eff3e2309620a3557ecae39d62020000"
+            ],
+            "data": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "blockNumber": "0x3f50f5",
+            "transactionHash": "0x17a1b0272352607d36cddf6ad8e5883ddef5ba8235a4cf6ed2b4924b8d702756",
+            "transactionIndex": "0xa",
+            "blockHash": "0xd9daa1bea7a56809fd88a6d14bdd21820a5e9565bf75f307c413bf47b86e649f",
+            "logIndex": "0x11",
+            "removed": false
+        },
+        {
+            "address": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
+            "topics": [
+                "0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435",
+                "0x000000000000000000000000dd4f158536c7f8c07736d04b7cc805f8d59b241a",
+                "0x1d5ad0eae83b042ac243598bde6c4eea3e5dff125e2e2057476a3010e4020000"
+            ],
+            "data": "0x000000000000000000000000000000000000000000000000002386f26fc10000",
+            "blockNumber": "0x3f50f5",
+            "transactionHash": "0x19a258899d3943d114f62d749521d1a3d3d88f0c9b3e2b45b9cd0c4c66fcda68",
+            "transactionIndex": "0xc",
+            "blockHash": "0xd9daa1bea7a56809fd88a6d14bdd21820a5e9565bf75f307c413bf47b86e649f",
+            "logIndex": "0x13",
+            "removed": false
+        },
+        {
+            "address": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
+            "topics": [
+                "0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435",
+                "0x000000000000000000000000dd4f158536c7f8c07736d04b7cc805f8d59b241a",
+                "0x1d882d15b09f8e81e29606305f5fefc5eff3e2309620a3557ecae39d62020000"
+            ],
+            "data": "0x000000000000000000000000000000000000000000000000002386f26fc10000",
+            "blockNumber": "0x3f50f5",
+            "transactionHash": "0x19a258899d3943d114f62d749521d1a3d3d88f0c9b3e2b45b9cd0c4c66fcda68",
+            "transactionIndex": "0xc",
+            "blockHash": "0xd9daa1bea7a56809fd88a6d14bdd21820a5e9565bf75f307c413bf47b86e649f",
+            "logIndex": "0x14",
+            "removed": false
+        }
+    ]"#;
+    let rng = &mut reproducible_rng();
+    let original_logs: Vec<LogEntry> = serde_json::from_str(LOGS).unwrap();
+    assert!(original_logs.len() > 1);
+    let suffled_logs = {
+        let mut logs = original_logs.clone();
+        logs.shuffle(rng);
+        logs
+    };
+
+    check_response_normalization::<Vec<LogEntry>>(
+        &serde_json::to_string(&original_logs).unwrap(),
+        &serde_json::to_string(&suffled_logs).unwrap(),
+    )
+}
+
+#[test]
+fn transaction_receipt_normalization() {
+    check_response_normalization::<TransactionReceipt>(
+        r#"{
+        "type": "0x2",
+        "blockHash": "0x82005d2f17b251900968f01b0ed482cb49b7e1d797342bc504904d442b64dbe4",
+        "transactionHash": "0x0e59bd032b9b22aca5e2784e4cf114783512db00988c716cf17a1cc755a0a93d",
+        "logs": [],
+        "contractAddress": null,
+        "effectiveGasPrice": "0xfefbee3e",
+        "cumulativeGasUsed": "0x8b2e10",
+        "from": "0x1789f79e95324a47c5fd6693071188e82e9a3558",
+        "gasUsed": "0x5208",
+        "logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "status": "0x1",
+        "to": "0xdd2851cdd40ae6536831558dd46db62fac7a844d",
+        "transactionIndex": "0x32",
+        "blockNumber": "0x4132ec"
+    }"#,
+        r#"{
+        "transactionHash": "0x0e59bd032b9b22aca5e2784e4cf114783512db00988c716cf17a1cc755a0a93d",
+        "blockHash": "0x82005d2f17b251900968f01b0ed482cb49b7e1d797342bc504904d442b64dbe4",
+        "blockNumber": "0x4132ec",
+        "logs": [],
+        "contractAddress": null,
+        "effectiveGasPrice": "0xfefbee3e",
+        "cumulativeGasUsed": "0x8b2e10",
+        "from": "0x1789f79e95324a47c5fd6693071188e82e9a3558",
+        "gasUsed": "0x5208",
+        "logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "status": "0x1",
+        "to": "0xdd2851cdd40ae6536831558dd46db62fac7a844d",
+        "transactionIndex": "0x32",
+        "type": "0x2"
+    }"#,
+    );
+}
+
+#[test]
+fn http_metrics_should_aggregate_retry_counts() {
+    use super::metrics::HttpMetrics;
+
+    let mut metrics = HttpMetrics::default();
+
+    for count in [0, 1, 2, 3, 0, 0, 2, 5, 100, 200, 300] {
+        metrics.observe_retry_count("eth_test".to_string(), count);
+    }
+
+    for count in [0, 1, 2, 3] {
+        metrics.observe_retry_count("eth_test2".to_string(), count);
+    }
+
+    assert_eq!(3, metrics.count_retries_in_bucket("eth_test", 0));
+    assert_eq!(1, metrics.count_retries_in_bucket("eth_test", 1));
+    assert_eq!(2, metrics.count_retries_in_bucket("eth_test", 2));
+    assert_eq!(1, metrics.count_retries_in_bucket("eth_test", 3));
+    assert_eq!(0, metrics.count_retries_in_bucket("eth_test", 4));
+    assert_eq!(1, metrics.count_retries_in_bucket("eth_test", 5));
+    assert_eq!(1, metrics.count_retries_in_bucket("eth_test", 5));
+    assert_eq!(3, metrics.count_retries_in_bucket("eth_test", 100));
+    assert_eq!(3, metrics.count_retries_in_bucket("eth_test", 200));
+    assert_eq!(3, metrics.count_retries_in_bucket("eth_test", 300));
+    assert_eq!(3, metrics.count_retries_in_bucket("eth_test", usize::MAX));
+
+    assert_eq!(1, metrics.count_retries_in_bucket("eth_test2", 0));
+    assert_eq!(1, metrics.count_retries_in_bucket("eth_test2", 1));
+    assert_eq!(1, metrics.count_retries_in_bucket("eth_test2", 2));
+    assert_eq!(1, metrics.count_retries_in_bucket("eth_test2", 3));
+    assert_eq!(0, metrics.count_retries_in_bucket("eth_test2", 100));
+
+    assert_eq!(0, metrics.count_retries_in_bucket("eth_unknown", 0));
+
+    let mut encoder = ic_metrics_encoder::MetricsEncoder::new(Vec::new(), 12346789);
+    metrics.encode(&mut encoder).unwrap();
+    let bytes = encoder.into_inner();
+    let metrics_text = String::from_utf8(bytes).unwrap();
+
+    assert_eq!(
+        metrics_text.trim(),
+        r#"
+# HELP cketh_eth_rpc_call_retry_count The number of ETH RPC call retries by method.
+# TYPE cketh_eth_rpc_call_retry_count histogram
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test",le="0"} 3 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test",le="1"} 4 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test",le="2"} 6 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test",le="3"} 7 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test",le="4"} 7 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test",le="5"} 8 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test",le="6"} 8 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test",le="7"} 8 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test",le="8"} 8 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test",le="9"} 8 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test",le="10"} 8 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test",le="11"} 8 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test",le="12"} 8 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test",le="13"} 8 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test",le="14"} 8 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test",le="15"} 8 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test",le="16"} 8 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test",le="17"} 8 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test",le="18"} 8 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test",le="19"} 8 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test",le="+Inf"} 11 12346789
+cketh_eth_rpc_call_retry_count_sum{method="eth_test"} 613 12346789
+cketh_eth_rpc_call_retry_count_count{method="eth_test"} 11 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test2",le="0"} 1 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test2",le="1"} 2 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test2",le="2"} 3 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test2",le="3"} 4 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test2",le="4"} 4 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test2",le="5"} 4 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test2",le="6"} 4 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test2",le="7"} 4 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test2",le="8"} 4 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test2",le="9"} 4 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test2",le="10"} 4 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test2",le="11"} 4 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test2",le="12"} 4 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test2",le="13"} 4 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test2",le="14"} 4 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test2",le="15"} 4 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test2",le="16"} 4 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test2",le="17"} 4 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test2",le="18"} 4 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test2",le="19"} 4 12346789
+cketh_eth_rpc_call_retry_count_bucket{method="eth_test2",le="+Inf"} 4 12346789
+cketh_eth_rpc_call_retry_count_sum{method="eth_test2"} 6 12346789
+cketh_eth_rpc_call_retry_count_count{method="eth_test2"} 4 12346789
+"#
+        .trim()
+    );
 }

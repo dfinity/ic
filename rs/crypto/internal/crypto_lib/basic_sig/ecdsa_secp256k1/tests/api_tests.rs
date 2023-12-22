@@ -313,9 +313,9 @@ mod verify {
 
     #[test]
     fn should_fail_to_verify_wrong_key() {
-        let mut rng = reproducible_rng();
-        let (sk, _) = crate::new_keypair(&mut rng);
-        let (_, another_pk) = crate::new_keypair(&mut rng);
+        let rng = &mut reproducible_rng();
+        let (sk, _) = crate::new_keypair(rng);
+        let (_, another_pk) = crate::new_keypair(rng);
         let msg = b"some message to sign";
         let signature = sign(msg, &sk).unwrap();
         let result = verify(&signature, msg, &another_pk);

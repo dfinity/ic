@@ -70,7 +70,7 @@ fn parse_threshold_sig_key<P: AsRef<Path> + fmt::Debug>(pem_file: P) -> Result<V
         bail!("PEM file doesn't end with END PK block: {:?}", &pem_file);
     }
 
-    let decoded = base64::decode(&lines[1..n - 1].join(""))
+    let decoded = base64::decode(lines[1..n - 1].join(""))
         .with_context(|| format!("failed to decode base64 from: {:?}", &pem_file))?;
 
     Ok(decoded)
@@ -82,8 +82,9 @@ mod tests {
     use crate::internet_computer::{IcConfig, TopologyConfig};
     use crate::node::{NodeConfiguration, NodeIndex};
     use crate::subnet_configuration::{SubnetConfig, SubnetRunningState};
-    use ic_crypto::threshold_sig_public_key_from_der;
+    use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_from_der;
     use ic_registry_subnet_type::SubnetType;
+    use ic_types::ReplicaVersion;
     use std::collections::BTreeMap;
     use std::net::SocketAddr;
     use std::str::FromStr;
@@ -125,10 +126,9 @@ mod tests {
             NodeConfiguration {
                 xnet_api: SocketAddr::from_str("1.2.3.4:8080").unwrap(),
                 public_api: SocketAddr::from_str("1.2.3.4:8081").unwrap(),
-                p2p_addr: SocketAddr::from_str("1.2.3.4:1234").unwrap(),
                 node_operator_principal_id: None,
                 secret_key_store: None,
-                chip_id: vec![],
+                chip_id: None,
             },
         );
 
@@ -138,8 +138,7 @@ mod tests {
             SubnetConfig::new(
                 0,
                 subnet_nodes,
-                None,
-                None,
+                ReplicaVersion::default(),
                 None,
                 None,
                 None,
@@ -163,7 +162,7 @@ mod tests {
         let ic_config = IcConfig::new(
             /* target_dir= */ tmp.path(),
             topology_config,
-            /* replica_version_id= */ None,
+            ReplicaVersion::default(),
             /* generate_subnet_records= */ true, // see note above
             /* nns_subnet_index= */ Some(0),
             /* release_package_download_url= */ None,

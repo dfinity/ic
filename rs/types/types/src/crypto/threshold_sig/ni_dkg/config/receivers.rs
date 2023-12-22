@@ -24,7 +24,7 @@ impl NiDkgReceivers {
     /// * The number of receivers fits into `NodeIndex` (error`:
     ///   TooManyReceivers`)
     ///
-    /// If an invariant is not satisifed, the `Err` as indicated above is
+    /// If an invariant is not satisfied, the `Err` as indicated above is
     /// returned.
     pub fn new(receivers: BTreeSet<NodeId>) -> Result<Self, NiDkgConfigValidationError> {
         Self::ensure_receivers_not_empty(&receivers)?;

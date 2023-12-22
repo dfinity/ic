@@ -89,8 +89,8 @@ impl TryFrom<&PublicKeyProto> for CspPublicKey {
                     })?;
                 Ok(CspPublicKey::MultiBls12_381(public_key_bytes))
             }
-            _ => Err(CryptoError::AlgorithmNotSupported {
-                algorithm: AlgorithmId::from(pk_proto.algorithm),
+            algorithm => Err(CryptoError::AlgorithmNotSupported {
+                algorithm,
                 reason: "Could not convert to CspPublicKey".to_string(),
             }),
         }

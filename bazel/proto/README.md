@@ -1,5 +1,5 @@
 To update the protos
-1. Copy the relavant protos from https://github.com/buildbuddy-io/buildbuddy/tree/master/proto
+1. Copy the relevant protos from https://github.com/buildbuddy-io/buildbuddy/tree/master/proto
 1. Edit the import fields to prefix the import paths with `bazel/` e.g. `proto/foo.proto` -> `bazel/proto/foo.proto`
 
 The source of truth for these protobufs files lives in the Bazel repo: https://github.com/bazelbuild/bazel

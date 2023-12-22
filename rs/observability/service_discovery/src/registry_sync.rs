@@ -20,7 +20,7 @@ use ic_registry_local_store::{
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_types::{PrincipalId, RegistryVersion, SubnetId};
 use registry_canister::mutations::common::decode_registry_value;
-use slog::{error, info, Logger};
+use slog::{debug, error, info, warn, Logger};
 use url::Url;
 
 pub async fn sync_local_registry(
@@ -41,16 +41,16 @@ pub async fn sync_local_registry(
         registry_cache.update_to_latest_version();
         registry_cache.get_latest_version()
     };
-    info!(
+    debug!(
         log,
         "Syncing registry version from version : {}", latest_version
     );
 
     if use_current_version && latest_version != ZERO_REGISTRY_VERSION {
-        info!(log, "Skipping syncing with registry, using local version");
+        debug!(log, "Skipping syncing with registry, using local version");
         return;
     } else if use_current_version {
-        info!(
+        warn!(
             log,
             "Unable to use current version of registry since its a zero registry version"
         );
@@ -60,7 +60,7 @@ pub async fn sync_local_registry(
     let mut updates = vec![];
     let nns_public_key = match public_key {
         Some(pk) => Ok(pk),
-        _ => nns_public_key(&registry_canister)
+        _ => get_nns_public_key(&registry_canister)
             .await
             .map_err(|e| anyhow::format_err!("Failed to get nns_public_key: {}", e)),
     };
@@ -68,7 +68,7 @@ pub async fn sync_local_registry(
     loop {
         if match registry_canister.get_latest_version().await {
             Ok(v) => {
-                info!(log, "Latest registry version: {}", v);
+                debug!(log, "Latest registry version: {}", v);
                 v == latest_version.get()
             }
             Err(e) => {
@@ -147,7 +147,7 @@ pub async fn sync_local_registry(
             latest_version = latest_version.add(RegistryVersion::new(versions_count as u64));
 
             latest_certified_time = t.as_nanos_since_unix_epoch();
-            info!(log, "Initial sync reached version {}", latest_version);
+            debug!(log, "Initial sync reached version {}", latest_version);
         }
     }
 
@@ -162,7 +162,7 @@ pub async fn sync_local_registry(
     )
 }
 
-async fn nns_public_key(
+async fn get_nns_public_key(
     registry_canister: &RegistryCanister,
 ) -> anyhow::Result<ThresholdSigPublicKey> {
     let (nns_subnet_id_vec, _) = registry_canister

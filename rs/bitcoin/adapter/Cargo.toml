@@ -1,13 +1,15 @@
 [package]
 name = "ic-btc-adapter"
-version = "0.1.0"
-edition = "2021"
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 bitcoin = { version = "0.28.1", features = ["default", "use-serde", "rand"] }
-clap = { version = "3.1.6", features = ["derive"] }
-futures = "0.3.17"
+clap = { workspace = true }
+futures = { workspace = true }
 hashlink = "0.8.0"
 hex = "0.4.2"
 http = "0.2"
@@ -19,18 +21,18 @@ ic-config = { path = "../../config" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 parking_lot = "0.12.1"
-prometheus = { version = "0.12.0", features = [ "process" ] }
-prost = "0.11.0"
+prometheus = { workspace = true }
+prost = { workspace = true }
 rand = "0.8.3"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-slog = "2.7.0"
+serde = { workspace = true }
+serde_json = { workspace = true }
+slog = { workspace = true }
 slog-async = "2.7.0"
 thiserror = "1.0.26"
-tokio = { version = "1.15.0", features = ["full", "macros"] }
+tokio = { workspace = true }
 tokio-socks = "0.5.1"
-tonic = "0.8.2"
-tower = { version = "0.4.11", features = ["util"], optional = true }
+tonic = { workspace = true }
+tower = { workspace = true, optional = true }
 
 [dev-dependencies]
 bitcoind = "0.32.0"

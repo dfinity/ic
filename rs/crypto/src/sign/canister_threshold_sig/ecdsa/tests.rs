@@ -22,46 +22,50 @@ mod get_tecdsa_master_public_key {
 
     #[test]
     fn should_return_error_if_transcript_type_is_masked() {
-        let transcript = dummy_transcript(
-            IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
-            AlgorithmId::ThresholdEcdsaSecp256k1,
-            vec![],
-        );
+        for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
+            let transcript = dummy_transcript(
+                IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
+                alg,
+                vec![],
+            );
 
-        assert_matches!(
-            get_tecdsa_master_public_key(&transcript),
-            Err(MasterPublicKeyExtractionError::CannotExtractFromMasked)
-        );
+            assert_matches!(
+                get_tecdsa_master_public_key(&transcript),
+                Err(MasterPublicKeyExtractionError::CannotExtractFromMasked)
+            );
+        }
     }
 
     #[test]
     fn should_return_error_if_internal_transcript_cannot_be_deserialized() {
-        let transcript = dummy_transcript(
-            IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareUnmasked(
-                dummy_transcript_id(),
-            )),
-            AlgorithmId::ThresholdEcdsaSecp256k1,
-            vec![],
-        );
+        for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
+            let transcript = dummy_transcript(
+                IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareUnmasked(
+                    dummy_transcript_id(),
+                )),
+                alg,
+                vec![],
+            );
 
-        assert_matches!(
-            get_tecdsa_master_public_key(&transcript),
-            Err(MasterPublicKeyExtractionError::SerializationError( error ))
-            if error.contains("SerializationError")
-        );
+            assert_matches!(
+                get_tecdsa_master_public_key(&transcript),
+                Err(MasterPublicKeyExtractionError::SerializationError( error ))
+                    if error.contains("SerializationError")
+            );
+        }
     }
 
     #[test]
     fn should_return_error_if_algorithm_id_is_invalid() {
         AlgorithmId::iter()
-            .filter(|algorithm_id| *algorithm_id != AlgorithmId::ThresholdEcdsaSecp256k1)
+            .filter(|algorithm_id| !algorithm_id.is_threshold_ecdsa())
             .for_each(|wrong_algorithm_id| {
                 let transcript = dummy_transcript(
                     IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareUnmasked(
                         dummy_transcript_id(),
                     )),
                     wrong_algorithm_id,
-                    valid_internal_transcript_raw()
+                    valid_internal_transcript_raw(AlgorithmId::ThresholdEcdsaSecp256k1)
                         .serialize()
                         .expect("serialization of internal transcript raw should succeed"),
                 );
@@ -75,47 +79,77 @@ mod get_tecdsa_master_public_key {
 
     #[test]
     fn should_return_master_ecdsa_public_key() {
-        let transcript = dummy_transcript(
-            IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareUnmasked(
-                dummy_transcript_id(),
-            )),
-            AlgorithmId::ThresholdEcdsaSecp256k1,
-            valid_internal_transcript_raw()
-                .serialize()
-                .expect("serialization of internal transcript raw should succeed"),
-        );
-        let expected_valid_master_ecdsa_public_key = valid_master_ecdsa_public_key();
+        for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
+            let transcript = dummy_transcript(
+                IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareUnmasked(
+                    dummy_transcript_id(),
+                )),
+                alg,
+                valid_internal_transcript_raw(alg)
+                    .serialize()
+                    .expect("serialization of internal transcript raw should succeed"),
+            );
+            let expected_valid_master_ecdsa_public_key = valid_master_ecdsa_public_key(alg);
 
-        assert_matches!(
-            get_tecdsa_master_public_key(&transcript),
-            Ok(tecdsa_master_public_key)
-            if tecdsa_master_public_key == expected_valid_master_ecdsa_public_key
-        );
+            assert_matches!(
+                get_tecdsa_master_public_key(&transcript),
+                Ok(tecdsa_master_public_key)
+                    if tecdsa_master_public_key == expected_valid_master_ecdsa_public_key
+            );
+        }
     }
 
     /// Retrieved from a successful execution of
     /// `ic_crypto_internal_threshold_sig_ecdsa::transcript::new`.
-    const VALID_INTERNAL_TRANSCRIPT_RAW: &str =
+    const VALID_SECP256K1_INTERNAL_TRANSCRIPT_RAW: &str =
         "a173636f6d62696e65645f636f6d6d69746d656e74a16b427953756d6d6174696f\
         6ea168506564657273656ea166706f696e7473825822010252a937b4c129d822412\
         d79f39d3626f32e7a1cf85ba1dfb01c9671d7d434003f582201025b168f9f47284b\
         ed02b26197840033de1668d53ef8f4d6928b61cc7efec2a838";
 
-    fn valid_internal_transcript_raw() -> IDkgTranscriptInternal {
-        IDkgTranscriptInternal::deserialize(
-            &hex::decode(VALID_INTERNAL_TRANSCRIPT_RAW)
-                .expect("hex decoding of valid internal transcript raw should succeed"),
-        )
-        .expect("deserialization of valid internal transcript raw bytes should succeed")
+    const VALID_SECP256R1_INTERNAL_TRANSCRIPT_RAW: &str =
+        "a173636f6d62696e65645f636f6d6d69746d656e74a16b427953756d6d6174696f\
+         6ea168506564657273656ea166706f696e7473825822020279474d9bb87dce85dc\
+         fc0786c9b4a4ddcb662e36fd716c42a0781fa05d208afb58220203915ca5584abf\
+         0abd9e71fb68561d607a96c61bf621c8092d7ea00677f5324829";
+
+    fn valid_internal_transcript_raw(alg: AlgorithmId) -> IDkgTranscriptInternal {
+        match alg {
+            AlgorithmId::ThresholdEcdsaSecp256k1 => IDkgTranscriptInternal::deserialize(
+                &hex::decode(VALID_SECP256K1_INTERNAL_TRANSCRIPT_RAW)
+                    .expect("hex decoding of valid internal transcript raw should succeed"),
+            )
+            .expect("deserialization of valid internal transcript raw bytes should succeed"),
+            AlgorithmId::ThresholdEcdsaSecp256r1 => IDkgTranscriptInternal::deserialize(
+                &hex::decode(VALID_SECP256R1_INTERNAL_TRANSCRIPT_RAW)
+                    .expect("hex decoding of valid internal transcript raw should succeed"),
+            )
+            .expect("deserialization of valid internal transcript raw bytes should succeed"),
+            unexpected => {
+                panic!("Unexpected threshold ECDSA algorithm {}", unexpected);
+            }
+        }
     }
 
-    fn valid_master_ecdsa_public_key() -> MasterEcdsaPublicKey {
-        MasterEcdsaPublicKey {
-            algorithm_id: AlgorithmId::EcdsaSecp256k1,
-            public_key: hex::decode(
-                "0252a937b4c129d822412d79f39d3626f32e7a1cf85ba1dfb01c9671d7d434003f",
-            )
-            .expect("hex decoding of public key bytes should succeed"),
+    fn valid_master_ecdsa_public_key(alg: AlgorithmId) -> MasterEcdsaPublicKey {
+        match alg {
+            AlgorithmId::ThresholdEcdsaSecp256k1 => MasterEcdsaPublicKey {
+                algorithm_id: AlgorithmId::EcdsaSecp256k1,
+                public_key: hex::decode(
+                    "0252a937b4c129d822412d79f39d3626f32e7a1cf85ba1dfb01c9671d7d434003f",
+                )
+                .expect("hex decoding of public key bytes should succeed"),
+            },
+            AlgorithmId::ThresholdEcdsaSecp256r1 => MasterEcdsaPublicKey {
+                algorithm_id: AlgorithmId::EcdsaP256,
+                public_key: hex::decode(
+                    "0279474d9bb87dce85dcfc0786c9b4a4ddcb662e36fd716c42a0781fa05d208afb",
+                )
+                .expect("hex decoding of public key bytes should succeed"),
+            },
+            unexpected => {
+                panic!("Unexpected threshold ECDSA algorithm {}", unexpected);
+            }
         }
     }
 

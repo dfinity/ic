@@ -1,5 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "gzip_compress")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -29,7 +30,7 @@ rust_library(
     name = "lib",
     srcs = glob(["src/*.rs"]),
     crate_name = "universal_canister",
-    version = "0.8.0",
+    version = "0.9.0",
     deps = LIB_DEPENDENCIES,
 )
 
@@ -40,6 +41,11 @@ rust_canister(
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":interface.did",
     deps = LIB_DEPENDENCIES + DEPENDENCIES,
+)
+
+gzip_compress(
+    name = "universal_canister.wasm.gz",
+    srcs = [":universal_canister"],
 )
 
 rust_test(

@@ -1,0 +1,29 @@
+[package]
+name = "node_status_updater"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+service-discovery ={ path = "../service_discovery" }
+clap = { version = "4.3.0", features = ["derive"] }
+tokio = { workspace = true }
+anyhow = "1.0.75"
+slog = { workspace = true }
+slog-async = { version = "2.5", features = ["nested-values"] }
+slog-term = "2.6.0"
+humantime = "2.0"
+url = "2.2.2"
+ic-async-utils = { path = "../../async_utils" }
+futures-util = "0.3.5"
+ic-metrics = { path = "../../monitoring/metrics" }
+crossbeam = "0.8.0"
+crossbeam-channel = "0.5.5"
+ic-agent = { workspace = true }
+obs-canister-clients = { path = "../obs_canister_clients" }
+prometheus-http-query = { workspace = true }
+
+[[bin]]
+name = "node_status_updater"
+path = "src/main.rs"

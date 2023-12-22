@@ -36,7 +36,6 @@ pub struct UpdateNodeRewardsTableProposalPayload {
 }
 /// Some nodes will have different properties (e.g. upgraded storage capacity)
 /// that require a unique reward rate.
-#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum NodeRewardType {
@@ -55,6 +54,15 @@ impl NodeRewardType {
             NodeRewardType::Unspecified => "NODE_REWARD_TYPE_UNSPECIFIED",
             NodeRewardType::Small => "NODE_REWARD_TYPE_SMALL",
             NodeRewardType::StorageUpgrade => "NODE_REWARD_TYPE_STORAGE_UPGRADE",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "NODE_REWARD_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+            "NODE_REWARD_TYPE_SMALL" => Some(Self::Small),
+            "NODE_REWARD_TYPE_STORAGE_UPGRADE" => Some(Self::StorageUpgrade),
+            _ => None,
         }
     }
 }

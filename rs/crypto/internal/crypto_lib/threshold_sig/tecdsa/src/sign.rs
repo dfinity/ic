@@ -223,13 +223,12 @@ impl ThresholdEcdsaCombinedSigInternal {
         algorithm_id: AlgorithmId,
         bytes: &[u8],
     ) -> ThresholdEcdsaSerializationResult<Self> {
-        let curve_type = match algorithm_id {
-            AlgorithmId::ThresholdEcdsaSecp256k1 => Ok(EccCurveType::K256),
-            x => Err(ThresholdEcdsaSerializationError(format!(
+        let curve_type = EccCurveType::from_algorithm(algorithm_id).ok_or_else(|| {
+            ThresholdEcdsaSerializationError(format!(
                 "Invalid algorithm {:?} for threshold ECDSA",
-                x
-            ))),
-        }?;
+                algorithm_id
+            ))
+        })?;
 
         let slen = curve_type.scalar_bytes();
 
@@ -422,7 +421,15 @@ pub fn derive_public_key(
         AlgorithmId::EcdsaSecp256k1 => {
             EccPoint::deserialize(EccCurveType::K256, &master_public_key.public_key)?
         }
-        _ => return Err(ThresholdEcdsaError::CurveMismatch),
+        AlgorithmId::EcdsaP256 => {
+            EccPoint::deserialize(EccCurveType::P256, &master_public_key.public_key)?
+        }
+        unsupported => {
+            return Err(ThresholdEcdsaError::InvalidArguments(format!(
+                "derive_public_key does not support alg {}",
+                unsupported
+            )));
+        }
     };
     // Compute tweak
     let (key_tweak, chain_key) = derivation_path.derive_tweak(&raw_master_pk)?;

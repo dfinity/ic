@@ -6,18 +6,20 @@ use ic_ledger_core::block::BlockType;
 use ic_ledger_core::tokens::CheckedAdd;
 use ic_rosetta_api::convert::{block_id, from_hash, to_hash};
 use ic_rosetta_api::ledger_client::LedgerAccess;
-use ic_rosetta_api::models::amount::{tokens_to_amount, Amount};
+use ic_rosetta_api::models::amount::tokens_to_amount;
+use ic_rosetta_api::models::Amount;
 use ic_rosetta_api::models::{
     AccountBalanceResponse, BlockIdentifier, BlockRequest, BlockTransaction,
     BlockTransactionRequest, ConstructionDeriveRequest, ConstructionDeriveResponse,
     ConstructionMetadataRequest, ConstructionMetadataResponse, Currency, CurveType,
-    MempoolResponse, MempoolTransactionRequest, MetadataRequest, NetworkListResponse,
-    NetworkRequest, NetworkStatusResponse, SearchTransactionsRequest, SearchTransactionsResponse,
-    SyncStatus,
+    MempoolTransactionRequest, NetworkRequest, NetworkStatusResponse, SearchTransactionsRequest,
+    SearchTransactionsResponse, SyncStatus,
 };
 use ic_rosetta_api::request_handler::RosettaRequestHandler;
 use ic_rosetta_api::transaction_id::TransactionIdentifier;
 use ic_rosetta_api::{models, API_VERSION, NODE_VERSION};
+use rosetta_core::request_types::MetadataRequest;
+use rosetta_core::response_types::{MempoolResponse, NetworkListResponse};
 use std::sync::Arc;
 
 #[actix_rt::test]
@@ -62,7 +64,7 @@ async fn smoke_test() {
         );
     }
 
-    let msg = NetworkRequest::new(req_handler.network_id());
+    let msg = NetworkRequest::new(req_handler.network_id().into());
     let res = req_handler.network_status(msg).await;
     assert_eq!(
         res,
@@ -74,6 +76,9 @@ async fn smoke_test() {
                     .timestamp()
                     .into()
             )
+            .unwrap()
+            .0
+            .try_into()
             .unwrap(),
             block_id(scribe.blockchain.front().unwrap()).unwrap(),
             None,
@@ -113,7 +118,7 @@ async fn smoke_test() {
         .index;
     assert_eq!(b - a, 10);
 
-    let msg = NetworkRequest::new(req_handler.network_id());
+    let msg = NetworkRequest::new(req_handler.network_id().into());
     let res = req_handler.network_status(msg).await;
     assert_eq!(
         res.unwrap().oldest_block_identifier,
@@ -124,10 +129,10 @@ async fn smoke_test() {
     let res = req_handler.network_list(msg).await;
     assert_eq!(
         res,
-        Ok(NetworkListResponse::new(vec![req_handler.network_id()]))
+        Ok(NetworkListResponse::new(vec![req_handler.network_id().0]))
     );
 
-    let msg = NetworkRequest::new(req_handler.network_id());
+    let msg = NetworkRequest::new(req_handler.network_id().into());
     let network_options = req_handler
         .network_options(msg)
         .await
@@ -147,15 +152,13 @@ async fn smoke_test() {
     assert!(!network_options.allow.errors.is_empty());
     assert!(network_options.allow.historical_balance_lookup);
 
-    let msg = NetworkRequest::new(req_handler.network_id());
+    let msg = NetworkRequest::new(req_handler.network_id().into());
     let res = req_handler.mempool(msg).await;
     assert_eq!(res, Ok(MempoolResponse::new(vec![])));
 
     let msg = MempoolTransactionRequest::new(
         req_handler.network_id(),
-        TransactionIdentifier {
-            hash: "hello there".to_string(),
-        },
+        TransactionIdentifier::from("hello there".to_string()).into(),
     );
     let res = req_handler.mempool_transaction(msg).await;
     assert_eq!(
@@ -184,7 +187,7 @@ async fn smoke_test() {
     );
 
     let (acc_id, _ed_kp, pk, _pid) = ic_rosetta_test_utils::make_user_ed25519(4);
-    let msg = ConstructionDeriveRequest::new(req_handler.network_id(), pk);
+    let msg = ConstructionDeriveRequest::new(req_handler.network_id().into(), pk);
     let res = req_handler.construction_derive(msg);
     assert_eq!(
         res,
@@ -197,7 +200,7 @@ async fn smoke_test() {
 
     let (_acc_id, _ed_kp, mut pk, _pid) = ic_rosetta_test_utils::make_user_ed25519(4);
     pk.curve_type = CurveType::Secp256K1;
-    let msg = ConstructionDeriveRequest::new(req_handler.network_id(), pk);
+    let msg = ConstructionDeriveRequest::new(req_handler.network_id().into(), pk);
     let res = req_handler.construction_derive(msg);
     assert!(res.is_err(), "This pk should not have been accepted");
 
@@ -250,10 +253,10 @@ async fn blocks_test() {
 
     // fetch by index
     let block_id = PartialBlockIdentifier {
-        index: Some(h as i64),
+        index: Some(h.try_into().unwrap()),
         hash: None,
     };
-    let msg = BlockRequest::new(req_handler.network_id(), block_id);
+    let msg = BlockRequest::new(req_handler.network_id().into(), block_id);
     let resp = req_handler.block(msg).await.unwrap();
 
     let block = resp.block.unwrap();
@@ -267,12 +270,12 @@ async fn blocks_test() {
         index: None,
         hash: Some(from_hash(&scribe.blockchain[h].hash)),
     };
-    let msg = BlockRequest::new(req_handler.network_id(), block_id);
+    let msg = BlockRequest::new(req_handler.network_id().into(), block_id);
     let resp = req_handler.block(msg).await.unwrap();
     let block = resp.block.unwrap();
 
-    assert_eq!(block.block_identifier.index, h as i64);
-    assert_eq!(block.parent_block_identifier.index, h as i64 - 1);
+    assert_eq!(block.block_identifier.index as usize, h);
+    assert_eq!(block.parent_block_identifier.index as usize, h - 1);
     assert_eq!(
         to_hash(&block.parent_block_identifier.hash).unwrap(),
         scribe.blockchain[h - 1].hash
@@ -282,11 +285,11 @@ async fn blocks_test() {
     let trans = block.transactions[0].clone();
 
     let block_id = BlockIdentifier {
-        index: h as i64,
+        index: h.try_into().unwrap(),
         hash: from_hash(&scribe.blockchain[h].hash),
     };
     let msg = BlockTransactionRequest::new(
-        req_handler.network_id(),
+        req_handler.network_id().into(),
         block_id.clone(),
         trans.transaction_identifier.clone(),
     );
@@ -355,10 +358,10 @@ async fn blocks_test() {
 
     for block in scribe.blockchain.clone() {
         let partial_block_id = PartialBlockIdentifier {
-            index: Some(block.index as i64),
+            index: Some(block.index),
             hash: None,
         };
-        let msg = BlockRequest::new(req_handler.network_id(), partial_block_id);
+        let msg = BlockRequest::new(req_handler.network_id().into(), partial_block_id);
         let resp = req_handler.block(msg).await.unwrap();
         let transactions = vec![ic_rosetta_api::convert::block_to_transaction(
             &block,
@@ -368,11 +371,11 @@ async fn blocks_test() {
         assert_eq!(resp.clone().block.unwrap().transactions, transactions);
         let transaction = resp.block.unwrap().transactions[0].clone();
         let block_id = BlockIdentifier {
-            index: block.index as i64,
+            index: block.index,
             hash: from_hash(&block.hash),
         };
         let msg = BlockTransactionRequest::new(
-            req_handler.network_id(),
+            req_handler.network_id().into(),
             block_id.clone(),
             transaction.transaction_identifier.clone(),
         );
@@ -556,6 +559,8 @@ async fn verify_account_search(
                 if from != to {
                     index(to, hb.index);
                 }
+                // https://github.com/rust-lang/rust-clippy/issues/4530
+                #[allow(clippy::unnecessary_unwrap)]
                 if spender.is_some() && spender.unwrap() != from && spender.unwrap() != to {
                     index(spender.unwrap(), hb.index);
                 }
@@ -737,7 +742,7 @@ async fn load_from_store_test() {
     assert_eq!(resp.transactions.len() as u64, last_verified - 10 + 1);
     assert_eq!(resp.next_offset, None);
     assert_eq!(
-        resp.transactions.first().unwrap().block_identifier.index as u64,
+        resp.transactions.first().unwrap().block_identifier.index,
         last_verified
     );
     assert_eq!(resp.transactions.last().unwrap().block_identifier.index, 10);

@@ -66,10 +66,9 @@ impl ProofOfEqualOpeningsInstance {
     }
 
     fn recover_commitment(&self, proof: &ProofOfEqualOpenings) -> ThresholdEcdsaResult<EccPoint> {
+        let neg_c = proof.challenge.negate();
         let amb = self.a.sub_points(&self.b)?;
-        let c_amb = amb.scalar_mul(&proof.challenge)?;
-        let h_c = self.h.scalar_mul(&proof.response)?;
-        h_c.sub_points(&c_amb)
+        EccPoint::mul_2_points(&self.h, &proof.response, &amb, &neg_c)
     }
 
     fn hash_to_challenge(
@@ -98,8 +97,8 @@ impl ProofOfEqualOpenings {
         let instance = ProofOfEqualOpeningsInstance::from_witness(secret, masking)?;
 
         // Create the blinding commitment
-        let mut rng = seed.into_rng();
-        let r = EccScalar::random(instance.curve_type, &mut rng);
+        let rng = &mut seed.into_rng();
+        let r = EccScalar::random(instance.curve_type, rng);
         let r_com = instance.h.scalar_mul(&r)?;
 
         // Create challenge
@@ -178,9 +177,9 @@ impl ProofOfProductInstance {
         let g = EccPoint::generator_g(curve_type);
         let h = EccPoint::generator_h(curve_type);
 
-        let lhs_com = g.scalar_mul(lhs)?;
-        let rhs_com = EccPoint::mul_2_points(&g, rhs, &h, rhs_masking)?;
-        let product_com = EccPoint::mul_2_points(&g, product, &h, product_masking)?;
+        let lhs_com = EccPoint::mul_by_g(lhs);
+        let rhs_com = EccPoint::pedersen(rhs, rhs_masking)?;
+        let product_com = EccPoint::pedersen(product, product_masking)?;
 
         Ok(Self {
             curve_type,
@@ -214,12 +213,14 @@ impl ProofOfProductInstance {
         &self,
         proof: &ProofOfProduct,
     ) -> ThresholdEcdsaResult<(EccPoint, EccPoint)> {
-        let r1_com = EccPoint::mul_by_g(&proof.response1)
-            .sub_points(&self.lhs_com.scalar_mul(&proof.challenge)?)?;
+        let neg_c = proof.challenge.negate();
 
+        let r1_com = EccPoint::mul_2_points(&self.g, &proof.response1, &self.lhs_com, &neg_c)?;
+
+        // We could consider using something like NAF here:
         let r2_com =
             EccPoint::mul_2_points(&self.rhs_com, &proof.response1, &self.h, &proof.response2)?
-                .sub_points(&self.product_com.scalar_mul(&proof.challenge)?)?;
+                .add_points(&self.product_com.scalar_mul(&neg_c)?)?;
 
         Ok((r1_com, r2_com))
     }
@@ -257,12 +258,12 @@ impl ProofOfProduct {
             ProofOfProductInstance::from_witness(lhs, rhs, rhs_masking, product, product_masking)?;
 
         // Compute blinding commitments:
-        let mut rng = seed.into_rng();
+        let rng = &mut seed.into_rng();
 
-        let r1 = EccScalar::random(instance.curve_type, &mut rng);
+        let r1 = EccScalar::random(instance.curve_type, rng);
         let r1_com = instance.g.scalar_mul(&r1)?;
 
-        let r2 = EccScalar::random(instance.curve_type, &mut rng);
+        let r2 = EccScalar::random(instance.curve_type, rng);
         let r2_com = EccPoint::mul_2_points(&instance.rhs_com, &r1, &instance.h, &r2)?;
 
         // Compute the challenge:
@@ -395,8 +396,8 @@ impl ProofOfDLogEquivalence {
         let instance = ProofOfDLogEquivalenceInstance::from_witness(g, h, x)?;
 
         // Compute blinding commitments:
-        let mut rng = seed.into_rng();
-        let r = EccScalar::random(instance.curve_type, &mut rng);
+        let rng = &mut seed.into_rng();
+        let r = EccScalar::random(instance.curve_type, rng);
         let r_com_g = g.scalar_mul(&r)?;
         let r_com_h = h.scalar_mul(&r)?;
 

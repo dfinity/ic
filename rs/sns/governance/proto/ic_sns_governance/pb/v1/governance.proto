@@ -4,6 +4,7 @@ package ic_sns_governance.pb.v1;
 
 import "ic_base_types/pb/v1/types.proto";
 import "ic_ledger/pb/v1/types.proto";
+import "ic_nervous_system/pb/v1/nervous_system.proto";
 import "types/v1/ic00_types.proto";
 
 // The different types of neuron permissions, i.e., privileges to modify a neuron,
@@ -73,6 +74,8 @@ message ProposalId {
 }
 
 message DisburseMaturityInProgress {
+  // This field is the quantity of maturity in e8s that has been decremented from a Neuron to
+  // be modulated and disbursed as SNS tokens.
   uint64 amount_e8s = 1;
   uint64 timestamp_of_disbursement_seconds = 2;
   Account account_to_disburse_to = 3;
@@ -342,6 +345,22 @@ message TransferSnsTreasuryFunds {
   optional Subaccount to_subaccount = 5;
 }
 
+// A proposal to mint SNS tokens to (optionally a Subaccount of) the
+// target principal.
+message MintSnsTokens {
+  // The amount to transfer, in e8s.
+  optional uint64 amount_e8s = 1;
+
+  // An optional memo to use for the transfer.
+  optional uint64 memo = 2;
+
+  // The principal to transfer the funds to.
+  optional ic_base_types.pb.v1.PrincipalId to_principal = 3;
+
+  // An (optional) Subaccount of the principal to transfer the funds to.
+  optional Subaccount to_subaccount = 4;
+}
+
 // A proposal function to change the values of SNS metadata.
 // Fields with None values will remain unchanged.
 message ManageSnsMetadata {
@@ -471,6 +490,11 @@ message Proposal {
     //
     // Id = 11.
     DeregisterDappCanisters deregister_dapp_canisters = 15;
+
+    // Mint SNS tokens to an account.
+    //
+    // Id = 12.
+    MintSnsTokens mint_sns_tokens = 16;
   }
 }
 
@@ -703,7 +727,11 @@ message ProposalData {
   // If not specified, the proposal has not (yet) failed to execute.
   GovernanceError failure_reason = 12;
 
-  // OBSOLETE: Superseded by reward_event_end_timestamp_seconds
+  // OBSOLETE: Superseded by reward_event_end_timestamp_seconds. However, old
+  // proposals use this (old) field, not the new one, since they predate the new
+  // field. Therefore, to correctly detect whether a proposal has been rewarded,
+  // both fields must be consulted. That is what the has_been_rewarded method
+  // does, so use that.
   //
   // The reward event round at which rewards for votes on this proposal
   // were distributed.
@@ -712,8 +740,6 @@ message ProposalData {
   // no reward event taking this proposal into consideration happened yet.
   //
   // This field matches field round in RewardEvent.
-  //
-  // This field is invalid when .is_eligible_for_rewards is false.
   uint64 reward_event_round = 13;
 
   // The proposal's wait-for-quiet state. This needs to be saved in stable memory.
@@ -730,11 +756,12 @@ message ProposalData {
   // GenericNervousSystemFunction validator_canister.
   optional string payload_text_rendering = 15;
 
-  // False if both (initial|final)_reward_rate_basis_points are zero when the
-  // proposal was made.
-  // This field is not very useful and will be removed in the future. The plan
-  // is to treat all proposals as eligible for rewards, and not distribute
-  // anything if the reward rate is zero.
+  // OBSOLETE. This is almost ready for deletion (see NNS1-2731). This cannot be
+  // done right away because this is a required field in Candid. Thus, deletion
+  // must be handled in the usual way: all clients must upgrade (to stop reading
+  // this field during deserialization) before we publish a new SNS governance
+  // WASM that stops emitting this.
+  //
   // The original purpose of this field is to make sure that proposals that are
   // not eligible for rewards are not be blocked from garbage collection,
   // which normally only happens after rewards are distributed.
@@ -754,6 +781,17 @@ message ProposalData {
   // rewards. Prior to distribution of rewards, but after votes are no longer
   // accepted, it is considered "ready to settle".
   optional uint64 reward_event_end_timestamp_seconds = 19;
+
+  // Minimum "yes" votes needed for proposal adoption, as a fraction of the
+  // total voting power. Example: 300 basis points represents a requirement that
+  // 3% of the total voting power votes to adopt the proposal.
+  optional ic_nervous_system.pb.v1.Percentage minimum_yes_proportion_of_total = 20;
+
+  // Minimum "yes" votes needed for proposal adoption, as a fraction of the
+  // exercised voting power. Example: 50_000 basis points represents a
+  // requirement that 50% of the exercised voting power votes to adopt the
+  // proposal.
+  optional ic_nervous_system.pb.v1.Percentage minimum_yes_proportion_of_exercised = 21;
 }
 
 // The nervous system's parameters, which are parameters that can be changed, via proposals,
@@ -855,7 +893,7 @@ message NervousSystemParameters {
   // The max number of proposals for which ballots are still stored, i.e.,
   // unsettled proposals. If this number of proposals is reached, new proposals
   // can only be added in exceptional cases (for few proposals it is defined
-  // that they are allowed even if resoures are low to guarantee that the relevant
+  // that they are allowed even if resources are low to guarantee that the relevant
   // canisters can be upgraded).
   //
   // This number must be larger than zero and at most as large as the defined
@@ -921,7 +959,7 @@ message VotingRewardsParameters {
   // periodic, but actual inter-reward periods are generally expected to be
   // within a few seconds of this.
   //
-  // This supercedes super.reward_distribution_period_seconds.
+  // This supersedes super.reward_distribution_period_seconds.
   optional uint64 round_duration_seconds = 1;
 
   // No longer needed because we assume the start time is the SNS genesis.
@@ -960,6 +998,13 @@ message NeuronPermissionList {
 
 // A record of when voting rewards were determined, and neuron maturity
 // increased for participation in voting on proposals.
+//
+// This has diverged from NNS: this uses the same tag for different fields.
+// Therefore, we cannot simply move one of the definitions to a shared library.
+//
+// To make it a little easier to eventually deduplicate NNS and SNS governance
+// code, tags should be chosen so that it is new to BOTH this and the NNS
+// RewardEvent. (This also applies to other message definitions.)
 message RewardEvent {
   // DEPRECATED: Use end_timestamp_seconds instead.
   //
@@ -1015,7 +1060,7 @@ message RewardEvent {
   // rounds have passed since the last time rewards were distributed (rather
   // than being rolled over).
   //
-  // For the genesis reward event, this field will be zero.
+  // For the genesis pseudo-reward event, this field will be zero.
   //
   // In normal operation, this field will almost always be 1. There are two
   // reasons that rewards might not be distributed in a given round.
@@ -1029,9 +1074,21 @@ message RewardEvent {
   //
   // In both of these cases, the rewards purse rolls over into the next round.
   optional uint64 rounds_since_last_distribution = 6;
+
+  // The total amount of rewards that was available during the reward event.
+  //
+  // The e8s_equivalent_to_be_rolled_over method returns this when
+  // there are no proposals (per the settled_proposals field).
+  //
+  // This is mostly copied from NNS.
+  //
+  // Warning: There is a field with the same name in NNS, but different tags are
+  // used. Also, this uses the `optional` keyword (whereas, the NNS analog does
+  // not).
+  optional uint64 total_available_e8s_equivalent = 8;
 }
 
-// The representation of the whole governance system, containting all
+// The representation of the whole governance system, containing all
 // information about the governance system that must be kept
 // across upgrades of the governance system, i.e. kept in stable memory.
 message Governance {
@@ -1058,8 +1115,8 @@ message Governance {
     uint64 timestamp = 1;
 
     // A general place holder for sync commands. The neuron lock is
-    // never left holding a sync command (as it either suceeds to
-    // aquire the lock and releases it in the same call, or never
+    // never left holding a sync command (as it either succeeds to
+    // acquire the lock and releases it in the same call, or never
     // acquires it in the first place), but it still must be acquired
     // to prevent interleaving with another async command. Thus there's
     // no value in actually storing the command itself, and this placeholder
@@ -1603,8 +1660,17 @@ message ManageNeuronResponse {
     reserved 1;
     reserved "transfer_block_height";
 
-    // The amount disbursed in e8s of the governance token.
+    // The amount of maturity in e8s of the governance token deducted from the Neuron.
+    // This amount will undergo maturity modulation if enabled, and may be increased or
+    // decreased at the time of disbursement.
+    // This field is being sunset in favor of `amount_deducted_e8s` but will be populated
+    // with the same values until NNS1-2576 is done.
     uint64 amount_disbursed_e8s = 2;
+
+    // The amount of maturity in e8s of the governance token deducted from the Neuron.
+    // This amount will undergo maturity modulation if enabled, and may be increased or
+    // decreased at the time of disbursement.
+    optional uint64 amount_deducted_e8s = 3;
   }
 
   message StakeMaturityResponse {
@@ -1944,6 +2010,19 @@ message AddMaturityRequest {
 message AddMaturityResponse {
   optional uint64 new_maturity_e8s = 1;
 }
+
+// A request to mint tokens for a particular principal. The associated endpoint
+// is only available on SNS governance, and only then when SNS governance is
+// compiled with the `test` feature enabled.
+message MintTokensRequest {
+  optional Account recipient = 1;
+  optional uint64 amount_e8s = 2;
+}
+
+// The response to a request to mint tokens for a particular principal. The
+// associated endpoint is only available on SNS governance, and only then when
+// SNS governance is compiled with the `test` feature enabled.
+message MintTokensResponse {}
 
 // A Ledger subaccount.
 message Subaccount {

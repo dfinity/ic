@@ -7,17 +7,15 @@ use ic_test_utilities::state::arb_stream_slice;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{metric_vec, HistogramStats};
 use ic_types::{
+    messages::MAX_XNET_PAYLOAD_SIZE_ERROR_MARGIN_PERCENT,
     xnet::{CertifiedStreamSlice, StreamIndex},
     CountBytes, SubnetId,
 };
-use ic_xnet_payload_builder::{
-    certified_slice_pool::{
-        certified_slice_count_bytes, testing, CertifiedSliceError, CertifiedSlicePool,
-        InvalidAppend, InvalidSlice, UnpackedStreamSlice, LABEL_STATUS, STATUS_NONE,
-        STATUS_SUCCESS,
-    },
-    ExpectedIndices,
+use ic_xnet_payload_builder::certified_slice_pool::{
+    certified_slice_count_bytes, testing, CertifiedSliceError, CertifiedSlicePool, InvalidAppend,
+    InvalidSlice, UnpackedStreamSlice, LABEL_STATUS, STATUS_NONE, STATUS_SUCCESS,
 };
+use ic_xnet_payload_builder::ExpectedIndices;
 use maplit::btreemap;
 use proptest::prelude::*;
 use std::convert::TryFrom;
@@ -242,7 +240,7 @@ proptest! {
             let mut adjusted = slice.clone();
             let mut tree = v1::LabeledTree::proxy_decode(slice.payload.as_slice()).unwrap();
             f(&mut tree);
-            adjusted.payload = v1::LabeledTree::proxy_encode(tree).unwrap();
+            adjusted.payload = v1::LabeledTree::proxy_encode(tree);
             adjusted
         }
 
@@ -419,7 +417,7 @@ proptest! {
             let packed_bytes =
                 slice.payload.len() + slice.merkle_proof.len() + slice.certification.count_bytes();
             let unpacked_bytes = unpacked.count_bytes();
-            assert_almost_equal(packed_bytes, unpacked_bytes, 5, 0);
+            assert_almost_equal(packed_bytes, unpacked_bytes, MAX_XNET_PAYLOAD_SIZE_ERROR_MARGIN_PERCENT as usize, 0);
         }
 
         with_test_replica_logger(|log| {

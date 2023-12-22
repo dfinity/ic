@@ -1,11 +1,14 @@
 use ic_certification_version::{CertificationVersion::V11, CURRENT_CERTIFICATION_VERSION};
-use ic_config::state_manager::Config;
+use ic_config::{
+    flag_status::FlagStatus,
+    state_manager::{lsmt_storage_default, Config},
+};
 use ic_crypto_tree_hash::{
     flatmap, sparse_labeled_tree_from_paths, Label, LabeledTree, MixedHashTree, Path as LabelPath,
 };
 use ic_ic00_types::{CanisterChangeDetails, CanisterChangeOrigin};
-use ic_interfaces::artifact_manager::{ArtifactClient, ArtifactProcessor};
-use ic_interfaces::{artifact_pool::UnvalidatedArtifact, certification::Verifier};
+use ic_interfaces::certification::Verifier;
+use ic_interfaces::p2p::state_sync::StateSyncClient;
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_state_manager::*;
 use ic_logger::replica_logger::no_op_logger;
@@ -16,13 +19,14 @@ use ic_replicated_state::{
     page_map::PageIndex, testing::ReplicatedStateTesting, Memory, NetworkTopology, NumWasmPages,
     PageMap, ReplicatedState, Stream, SubnetTopology,
 };
-use ic_state_layout::{CheckpointLayout, ReadOnly, SYSTEM_METADATA_FILE};
+use ic_state_layout::{CheckpointLayout, ReadOnly, StateLayout, SYSTEM_METADATA_FILE};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_state_manager::manifest::{build_meta_manifest, manifest_from_path, validate_manifest};
-use ic_state_manager::{DirtyPageMap, FileType, PageMapType, StateManagerImpl};
+use ic_state_manager::{DirtyPageMap, PageMapType, StateManagerImpl};
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::{
     consensus::fake::FakeVerifier,
+    io::{make_mutable, make_readonly, write_all_at},
     mock_time,
     state::{arb_stream, arb_stream_slice, canister_ids},
     types::{
@@ -33,9 +37,12 @@ use ic_test_utilities::{
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge, Labels};
 use ic_test_utilities_tmpdir::tmpdir;
+use ic_types::batch::{
+    CanisterQueryStats, QueryStats, QueryStatsPayload, RawQueryStats, TotalQueryStats,
+};
 use ic_types::{
     artifact::{Priority, StateSyncArtifactId},
-    chunkable::{ChunkId, ChunkableArtifact},
+    chunkable::ChunkId,
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::CallbackId,
@@ -44,6 +51,7 @@ use ic_types::{
     xnet::{StreamIndex, StreamIndexedQueue},
     CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, NumBytes, PrincipalId,
 };
+use ic_types::{epoch_from_height, QUERY_STATS_EPOCH_LENGTH};
 use nix::sys::time::TimeValLike;
 use nix::sys::{
     stat::{utimensat, UtimensatFlags},
@@ -64,25 +72,6 @@ use common::*;
 
 const NUM_THREADS: u32 = 3;
 
-fn make_mutable(path: &Path) -> std::io::Result<()> {
-    let mut perms = std::fs::metadata(path)?.permissions();
-    #[allow(clippy::permissions_set_readonly_false)]
-    perms.set_readonly(false);
-    std::fs::set_permissions(path, perms)?;
-    Ok(())
-}
-
-fn write_all_at(path: &Path, buf: &[u8], offset: u64) -> std::io::Result<()> {
-    use std::os::unix::fs::FileExt;
-
-    let f = std::fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .open(path)?;
-    f.write_all_at(buf, offset)?;
-    Ok(())
-}
-
 fn tree_payload(t: MixedHashTree) -> LabeledTree<Vec<u8>> {
     t.try_into().unwrap()
 }
@@ -91,8 +80,46 @@ fn label<T: Into<Label>>(t: T) -> Label {
     t.into()
 }
 
+/// Combined size of wasm memory including overlays.
+fn vmemory_size(canister_layout: &ic_state_layout::CanisterLayout<ReadOnly>) -> u64 {
+    if lsmt_storage_default() == FlagStatus::Enabled {
+        canister_layout
+            .vmemory_0_overlays()
+            .unwrap()
+            .into_iter()
+            .map(|p| std::fs::metadata(p).unwrap().len())
+            .sum::<u64>()
+            + std::fs::metadata(canister_layout.vmemory_0())
+                .map(|metadata| metadata.len())
+                .unwrap_or(0)
+    } else {
+        std::fs::metadata(canister_layout.vmemory_0())
+            .unwrap()
+            .len()
+    }
+}
+
+/// Combined size of stable memory including overlays.
+fn stable_memory_size(canister_layout: &ic_state_layout::CanisterLayout<ReadOnly>) -> u64 {
+    if lsmt_storage_default() == FlagStatus::Enabled {
+        canister_layout
+            .stable_memory_overlays()
+            .unwrap()
+            .into_iter()
+            .map(|p| std::fs::metadata(p).unwrap().len())
+            .sum::<u64>()
+            + std::fs::metadata(canister_layout.stable_memory_blob())
+                .map(|metadata| metadata.len())
+                .unwrap_or(0)
+    } else {
+        std::fs::metadata(canister_layout.stable_memory_blob())
+            .unwrap()
+            .len()
+    }
+}
+
 /// This is a canister that keeps a counter on the heap and allows to increment it.
-/// The counter can also be read and persisted to and loaded from stable memory
+/// The counter can also be read and persisted to and loaded from stable memory.
 const TEST_CANISTER: &str = r#"
 (module
     (import "ic0" "msg_reply" (func $msg_reply))
@@ -215,13 +242,33 @@ fn skipping_flushing_is_invisible_for_state() {
             recv_wait.recv().unwrap();
             recv_nop.recv().unwrap();
         }
+
+        let wait = || {
+            let (send_wait, recv_wait) = crossbeam_channel::bounded::<()>(0);
+            env.state_manager
+                .test_only_send_wait_to_tip_channel(send_wait);
+            recv_wait.recv().unwrap();
+        };
+
         let skips_before = skips(&env);
         env.execute_ingress(canister_id0, "inc", vec![]).unwrap();
+        if !block_tip {
+            wait();
+        }
         env.execute_ingress(canister_id1, "inc", vec![]).unwrap();
+        if !block_tip {
+            wait();
+        }
         env.execute_ingress(canister_id2, "inc", vec![]).unwrap();
+        if !block_tip {
+            wait();
+        }
 
         // Second inc on canister_id0 to trigger overwriting a previously written page.
         env.execute_ingress(canister_id0, "inc", vec![]).unwrap();
+        if !block_tip {
+            wait();
+        }
 
         let skips_after = skips(&env);
         if block_tip {
@@ -249,7 +296,11 @@ fn skipping_flushing_is_invisible_for_state() {
         env.await_state_hash()
     }
 
-    assert_eq!(execute(false), execute(true));
+    // We only skip flushes nondetermistically when `lsmt_storage` is disabled, so this test
+    // makes no sense otherwise.
+    if lsmt_storage_default() == FlagStatus::Disabled {
+        assert_eq!(execute(false), execute(true));
+    }
 }
 
 #[test]
@@ -260,7 +311,6 @@ fn rejoining_node_doesnt_accumulate_states() {
                 let mut state = src_state_manager.take_tip().1;
                 insert_dummy_canister(&mut state, canister_test_id(100 + i));
                 src_state_manager.commit_and_certify(state, height(i), CertificationScope::Full);
-                let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
                 let hash = wait_for_checkpoint(&*src_state_manager, height(i));
                 let id = StateSyncArtifactId {
@@ -273,22 +323,14 @@ fn rejoining_node_doesnt_accumulate_states() {
 
                 let chunkable = dst_state_sync.create_chunkable_state(&id);
                 let dst_msg = pipe_state_sync(msg.clone(), chunkable);
-                dst_state_sync.process_changes(
-                    time_source.as_ref(),
-                    vec![UnvalidatedArtifact {
-                        message: dst_msg,
-                        peer_id: node_test_id(0),
-                        timestamp: mock_time(),
-                    }],
-                );
-
+                dst_state_sync.deliver_state_sync(dst_msg);
                 assert_eq!(
                     src_state_manager.get_latest_state().take(),
                     dst_state_manager.get_latest_state().take()
                 );
                 assert_eq!(
                     dst_state_manager.checkpoint_heights(),
-                    (1..=i).map(|i| height(i)).collect::<Vec<_>>()
+                    (1..=i).map(height).collect::<Vec<_>>()
                 );
             }
 
@@ -337,6 +379,39 @@ fn temporary_directory_gets_cleaned() {
                 .is_none(),
             "tmp directory is not empty"
         );
+    });
+}
+
+#[test]
+fn checkpoint_marked_ro_at_restart() {
+    state_manager_restart_test(|state_manager, restart_fn| {
+        let canister_id: CanisterId = canister_test_id(100);
+        let (_height, mut state) = state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_id);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        let canister_100_layout = state_manager
+            .state_layout()
+            .checkpoint(height(1))
+            .unwrap()
+            .canister(&canister_test_id(100))
+            .unwrap();
+
+        // Make sure we don't do asynchronous operations with checkpoint.
+        state_manager.flush_tip_channel();
+        let canister_100_wasm = canister_100_layout.wasm().raw_path().to_path_buf();
+        make_mutable(&canister_100_wasm).unwrap();
+
+        // Check that there are mutable files before the restart...
+        let checkpoints_path = state_manager.state_layout().checkpoints();
+
+        assert!(std::panic::catch_unwind(|| {
+            assert_all_files_are_readonly(&checkpoints_path);
+        })
+        .is_err());
+
+        // ...but not after.
+        restart_fn(state_manager, None);
+        assert_all_files_are_readonly(&checkpoints_path);
     });
 }
 
@@ -485,6 +560,53 @@ fn starting_height_independent_of_remove_states_below() {
 }
 
 #[test]
+fn query_stats_are_persisted() {
+    state_manager_restart_test(|state_manager, restart_fn| {
+        let canister_id: CanisterId = canister_test_id(100);
+        let proposer_id: NodeId = node_test_id(42);
+
+        let (curr_height, mut state) = state_manager.take_tip();
+
+        let epoch = epoch_from_height(curr_height);
+        let test_query_stats: QueryStats = QueryStats {
+            num_calls: 1337,
+            num_instructions: 100000,
+            ingress_payload_size: 100001,
+            egress_payload_size: 100002,
+        };
+
+        let mut inner = BTreeMap::new();
+        inner.insert(proposer_id, test_query_stats.clone());
+
+        let mut stats = BTreeMap::new();
+        stats.insert(canister_id, inner);
+
+        state.epoch_query_stats = RawQueryStats {
+            epoch: Some(epoch),
+            stats,
+        };
+
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        let state_manager = restart_fn(state_manager, None);
+
+        let (_height, recovered_tip) = state_manager.take_tip();
+
+        let recovered_stats = recovered_tip.epoch_query_stats;
+        assert_eq!(recovered_stats.epoch, Some(epoch));
+        assert_eq!(recovered_stats.stats.len(), 1);
+        assert_eq!(
+            recovered_stats
+                .stats
+                .get(&canister_id)
+                .unwrap()
+                .get(&proposer_id)
+                .unwrap(),
+            &test_query_stats
+        );
+    });
+}
+
+#[test]
 fn stable_memory_is_persisted() {
     state_manager_restart_test(|state_manager, restart_fn| {
         let (_height, mut state) = state_manager.take_tip();
@@ -586,6 +708,49 @@ fn missing_stable_memory_file_is_handled() {
         let state = recovered.take();
         let canister_state = state.canister_state(&canister_test_id(100)).unwrap();
         assert!(canister_state.execution_state.is_none());
+    });
+}
+
+#[test]
+/// When the chunk store is first deployed, the replicated state won't have
+/// checkpoint files for the Wasm chunk store.
+fn missing_wasm_chunk_store_is_handled() {
+    use ic_state_layout::{CheckpointLayout, RwPolicy};
+    state_manager_restart_test(|state_manager, restart_fn| {
+        let (_height, mut state) = state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(100));
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        // Make sure Tip Thread isn't doing anything while we hack into the Checkpoint files.
+        state_manager.flush_tip_channel();
+
+        // Since the canister has no execution state, there should be no stable memory
+        // file.
+        let state_layout = state_manager.state_layout();
+        let mutable_cp_layout = CheckpointLayout::<RwPolicy<()>>::new_untracked(
+            state_layout
+                .checkpoint(height(1))
+                .unwrap()
+                .raw_path()
+                .to_path_buf(),
+            height(1),
+        )
+        .unwrap();
+
+        let canister_layout = mutable_cp_layout.canister(&canister_test_id(100)).unwrap();
+        let canister_wasm_chunk_store = canister_layout.wasm_chunk_store();
+        if canister_wasm_chunk_store.exists() {
+            std::fs::remove_file(&canister_wasm_chunk_store).unwrap();
+        }
+        for overlay in canister_layout.wasm_chunk_store_overlays().unwrap() {
+            std::fs::remove_file(&overlay).unwrap();
+        }
+
+        let state_manager = restart_fn(state_manager, None);
+        let (recovered_height, recovered) = state_manager.take_tip();
+        assert_eq!(height(1), recovered_height);
+
+        assert!(!canister_wasm_chunk_store.exists());
+        state_manager.commit_and_certify(recovered, height(2), CertificationScope::Full);
     });
 }
 
@@ -1665,7 +1830,6 @@ fn encode_stream_index_is_checked() {
 fn delivers_state_adverts_once() {
     state_manager_test_with_state_sync(|_metrics, state_manager, state_sync| {
         let (_height, state) = state_manager.take_tip();
-        let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
         let hash = wait_for_checkpoint(&*state_manager, height(1));
@@ -1674,14 +1838,8 @@ fn delivers_state_adverts_once() {
             hash,
         };
 
-        let (adverts, _) = state_sync.process_changes(time_source.as_ref(), Default::default());
-        assert_eq!(adverts.len(), 1);
-        assert_eq!(adverts[0].id, id);
-        assert!(state_sync.has_artifact(&id));
-
-        let (adverts, _) = state_sync.process_changes(time_source.as_ref(), Default::default());
-        assert_eq!(adverts.len(), 0);
-        assert!(state_sync.has_artifact(&id));
+        assert!(state_sync.get_validated_by_identifier(&id).is_some());
+        assert!(state_sync.get_validated_by_identifier(&id).is_some());
     });
 }
 
@@ -1841,7 +1999,6 @@ fn can_do_simple_state_sync_transfer() {
     state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
-        let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
         let hash = wait_for_checkpoint(&*src_state_manager, height(1));
@@ -1862,14 +2019,7 @@ fn can_do_simple_state_sync_transfer() {
             let chunkable = dst_state_sync.create_chunkable_state(&id);
 
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_sync.process_changes(
-                time_source.as_ref(),
-                vec![UnvalidatedArtifact {
-                    message: dst_msg,
-                    peer_id: node_test_id(0),
-                    timestamp: mock_time(),
-                }],
-            );
+            dst_state_sync.deliver_state_sync(dst_msg);
 
             let recovered_state = dst_state_manager
                 .get_state_at(height(1))
@@ -1973,8 +2123,6 @@ fn can_state_sync_from_cache() {
             .page_map
             .update(&[(PageIndex::new(0), &[2u8; PAGE_SIZE])]);
 
-        let time_source = ic_test_utilities::FastForwardTimeSource::new();
-
         src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
         let hash = wait_for_checkpoint(&*src_state_manager, height(1));
         let id = StateSyncArtifactId {
@@ -2067,14 +2215,7 @@ fn can_state_sync_from_cache() {
 
                 // Download chunk 1
                 let dst_msg = pipe_state_sync(msg.clone(), chunkable);
-                dst_state_sync.process_changes(
-                    time_source.as_ref(),
-                    vec![UnvalidatedArtifact {
-                        message: dst_msg,
-                        peer_id: node_test_id(0),
-                        timestamp: mock_time(),
-                    }],
-                );
+                dst_state_sync.deliver_state_sync(dst_msg);
 
                 let recovered_state = dst_state_manager
                     .get_state_at(height(2))
@@ -2104,14 +2245,7 @@ fn can_state_sync_from_cache() {
                 let _res = pipe_meta_manifest(&msg, &mut *chunkable, false);
                 let dst_msg = pipe_manifest(&msg, &mut *chunkable, false).unwrap();
 
-                dst_state_sync.process_changes(
-                    time_source.as_ref(),
-                    vec![UnvalidatedArtifact {
-                        message: dst_msg,
-                        peer_id: node_test_id(0),
-                        timestamp: mock_time(),
-                    }],
-                );
+                dst_state_sync.deliver_state_sync(dst_msg);
 
                 let recovered_state = dst_state_manager
                     .get_state_at(height(3))
@@ -2146,8 +2280,6 @@ fn can_state_sync_after_aborting_in_prep_phase() {
         for id in 100..(100 + num_canisters) {
             insert_dummy_canister(&mut state, canister_test_id(id));
         }
-
-        let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
         let hash = wait_for_checkpoint(&*src_state_manager, height(1));
@@ -2211,14 +2343,7 @@ fn can_state_sync_after_aborting_in_prep_phase() {
                 assert!(matches!(result, Err(StateSyncErrorCode::ChunksMoreNeeded)));
 
                 let dst_msg = pipe_state_sync(msg.clone(), chunkable);
-                dst_state_sync.process_changes(
-                    time_source.as_ref(),
-                    vec![UnvalidatedArtifact {
-                        message: dst_msg,
-                        peer_id: node_test_id(0),
-                        timestamp: mock_time(),
-                    }],
-                );
+                dst_state_sync.deliver_state_sync(dst_msg);
 
                 let recovered_state = dst_state_manager
                     .get_state_at(height(2))
@@ -2249,8 +2374,6 @@ fn state_sync_can_reject_invalid_chunks() {
         for id in 100..(100 + num_canisters) {
             insert_dummy_canister(&mut state, canister_test_id(id));
         }
-
-        let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
         let hash = wait_for_checkpoint(&*src_state_manager, height(1));
@@ -2329,14 +2452,7 @@ fn state_sync_can_reject_invalid_chunks() {
 
             // Provide correct chunks to dst
             let dst_msg = pipe_state_sync(msg.clone(), chunkable);
-            dst_state_sync.process_changes(
-                time_source.as_ref(),
-                vec![UnvalidatedArtifact {
-                    message: dst_msg,
-                    peer_id: node_test_id(0),
-                    timestamp: mock_time(),
-                }],
-            );
+            dst_state_sync.deliver_state_sync(dst_msg);
 
             let recovered_state = dst_state_manager
                 .get_state_at(height(1))
@@ -2362,7 +2478,6 @@ fn can_state_sync_into_existing_checkpoint() {
     state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
-        let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         src_state_manager.commit_and_certify(state.clone(), height(1), CertificationScope::Full);
         let hash = wait_for_checkpoint(&*src_state_manager, height(1));
@@ -2388,14 +2503,7 @@ fn can_state_sync_into_existing_checkpoint() {
             );
 
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_sync.process_changes(
-                time_source.as_ref(),
-                vec![UnvalidatedArtifact {
-                    message: dst_msg,
-                    peer_id: node_test_id(0),
-                    timestamp: mock_time(),
-                }],
-            );
+            dst_state_sync.deliver_state_sync(dst_msg);
 
             assert_no_remaining_chunks(dst_metrics);
             assert_error_counters(dst_metrics);
@@ -2408,7 +2516,6 @@ fn can_group_small_files_in_state_sync() {
     state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         let (_height, mut state) = src_state_manager.take_tip();
         let num_canisters = 200;
-        let time_source = ic_test_utilities::FastForwardTimeSource::new();
         for id in 100..(100 + num_canisters) {
             insert_canister_with_many_controllers(&mut state, canister_test_id(id), 400);
         }
@@ -2468,14 +2575,7 @@ fn can_group_small_files_in_state_sync() {
 
             let dst_msg = pipe_state_sync(msg, chunkable);
 
-            dst_state_sync.process_changes(
-                time_source.as_ref(),
-                vec![UnvalidatedArtifact {
-                    message: dst_msg,
-                    peer_id: node_test_id(0),
-                    timestamp: mock_time(),
-                }],
-            );
+            dst_state_sync.deliver_state_sync(dst_msg);
 
             let recovered_state = dst_state_manager
                 .get_state_at(height(1))
@@ -2497,7 +2597,6 @@ fn can_commit_after_prev_state_is_gone() {
         let (_height, mut tip) = src_state_manager.take_tip();
         insert_dummy_canister(&mut tip, canister_test_id(100));
         src_state_manager.commit_and_certify(tip, height(1), CertificationScope::Metadata);
-        let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         let (_height, tip) = src_state_manager.take_tip();
         src_state_manager.commit_and_certify(tip, height(2), CertificationScope::Metadata);
@@ -2526,14 +2625,7 @@ fn can_commit_after_prev_state_is_gone() {
 
             let chunkable = dst_state_sync.create_chunkable_state(&id);
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_sync.process_changes(
-                time_source.as_ref(),
-                vec![UnvalidatedArtifact {
-                    message: dst_msg,
-                    peer_id: node_test_id(0),
-                    timestamp: mock_time(),
-                }],
-            );
+            dst_state_sync.deliver_state_sync(dst_msg);
 
             dst_state_manager.remove_states_below(height(2));
 
@@ -2562,7 +2654,6 @@ fn can_commit_without_prev_hash_mismatch_after_taking_tip_at_the_synced_height()
         let (_height, mut tip) = src_state_manager.take_tip();
         insert_dummy_canister(&mut tip, canister_test_id(100));
         src_state_manager.commit_and_certify(tip, height(1), CertificationScope::Metadata);
-        let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         let (_height, tip) = src_state_manager.take_tip();
         src_state_manager.commit_and_certify(tip, height(2), CertificationScope::Metadata);
@@ -2589,14 +2680,7 @@ fn can_commit_without_prev_hash_mismatch_after_taking_tip_at_the_synced_height()
 
             let chunkable = dst_state_sync.create_chunkable_state(&id);
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_sync.process_changes(
-                time_source.as_ref(),
-                vec![UnvalidatedArtifact {
-                    message: dst_msg,
-                    peer_id: node_test_id(0),
-                    timestamp: mock_time(),
-                }],
-            );
+            dst_state_sync.deliver_state_sync(dst_msg);
 
             assert_eq!(height(3), dst_state_manager.latest_state_height());
             let (tip_height, tip) = dst_state_manager.take_tip();
@@ -2615,7 +2699,6 @@ fn can_state_sync_based_on_old_checkpoint() {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
         src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
-        let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(200));
@@ -2642,14 +2725,7 @@ fn can_state_sync_based_on_old_checkpoint() {
             let chunkable = dst_state_sync.create_chunkable_state(&id);
 
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_sync.process_changes(
-                time_source.as_ref(),
-                vec![UnvalidatedArtifact {
-                    message: dst_msg,
-                    peer_id: node_test_id(0),
-                    timestamp: mock_time(),
-                }],
-            );
+            dst_state_sync.deliver_state_sync(dst_msg);
 
             let expected_state = src_state_manager.get_latest_state();
 
@@ -2716,7 +2792,6 @@ fn can_recover_from_corruption_on_state_sync() {
         let (_height, mut state) = src_state_manager.take_tip();
         populate_original_state(&mut state);
         src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
-        let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         let hash_1 = wait_for_checkpoint(&*src_state_manager, height(1));
 
@@ -2782,6 +2857,7 @@ fn can_recover_from_corruption_on_state_sync() {
                 height(1),
             )
             .unwrap();
+            dst_state_manager.flush_tip_channel();
 
             // There are 5 types of ways to trigger corruption recovery:
             //
@@ -2802,21 +2878,39 @@ fn can_recover_from_corruption_on_state_sync() {
             // The code below prepares all 5 types of corruption.
 
             let canister_90_layout = mutable_cp_layout.canister(&canister_test_id(90)).unwrap();
-            let canister_90_memory = canister_90_layout.vmemory_0();
+            let canister_90_memory = if lsmt_storage_default() == FlagStatus::Enabled {
+                canister_90_layout.vmemory_0_overlays().unwrap().remove(0)
+            } else {
+                canister_90_layout.vmemory_0()
+            };
             make_mutable(&canister_90_memory).unwrap();
             std::fs::write(&canister_90_memory, b"Garbage").unwrap();
+            make_readonly(&canister_90_memory).unwrap();
 
             let canister_90_raw_pb = canister_90_layout.canister().raw_path().to_path_buf();
             make_mutable(&canister_90_raw_pb).unwrap();
             write_all_at(&canister_90_raw_pb, b"Garbage", 0).unwrap();
+            make_readonly(&canister_90_raw_pb).unwrap();
 
             let canister_100_layout = mutable_cp_layout.canister(&canister_test_id(100)).unwrap();
 
-            let canister_100_memory = canister_100_layout.vmemory_0();
+            let canister_100_memory = if lsmt_storage_default() == FlagStatus::Enabled {
+                canister_100_layout.vmemory_0_overlays().unwrap().remove(0)
+            } else {
+                canister_100_layout.vmemory_0()
+            };
             make_mutable(&canister_100_memory).unwrap();
             write_all_at(&canister_100_memory, &[3u8; PAGE_SIZE], 4).unwrap();
+            make_readonly(&canister_100_memory).unwrap();
 
-            let canister_100_stable_memory = canister_100_layout.stable_memory_blob();
+            let canister_100_stable_memory = if lsmt_storage_default() == FlagStatus::Enabled {
+                canister_100_layout
+                    .stable_memory_overlays()
+                    .unwrap()
+                    .remove(0)
+            } else {
+                canister_100_layout.stable_memory_blob()
+            };
             make_mutable(&canister_100_stable_memory).unwrap();
             write_all_at(
                 &canister_100_stable_memory,
@@ -2824,21 +2918,16 @@ fn can_recover_from_corruption_on_state_sync() {
                 PAGE_SIZE as u64,
             )
             .unwrap();
+            make_readonly(&canister_100_stable_memory).unwrap();
 
             let canister_100_raw_pb = canister_100_layout.canister().raw_path().to_path_buf();
             make_mutable(&canister_100_raw_pb).unwrap();
             std::fs::write(&canister_100_raw_pb, b"Garbage").unwrap();
+            make_readonly(&canister_100_raw_pb).unwrap();
 
             let chunkable = dst_state_sync.create_chunkable_state(&id);
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_sync.process_changes(
-                time_source.as_ref(),
-                vec![UnvalidatedArtifact {
-                    message: dst_msg,
-                    peer_id: node_test_id(0),
-                    timestamp: mock_time(),
-                }],
-            );
+            dst_state_sync.deliver_state_sync(dst_msg);
 
             let expected_state = src_state_manager.get_latest_state();
 
@@ -2861,7 +2950,6 @@ fn can_commit_below_state_sync() {
     state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
-        let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
         let (_height, state) = src_state_manager.take_tip();
@@ -2884,14 +2972,7 @@ fn can_commit_below_state_sync() {
             assert_eq!(tip_height, height(0));
             let chunkable = dst_state_sync.create_chunkable_state(&id);
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_sync.process_changes(
-                time_source.as_ref(),
-                vec![UnvalidatedArtifact {
-                    message: dst_msg,
-                    peer_id: node_test_id(0),
-                    timestamp: mock_time(),
-                }],
-            );
+            dst_state_sync.deliver_state_sync(dst_msg);
             // Check committing an old state doesn't panic
             dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
             dst_state_manager.flush_tip_channel();
@@ -2900,7 +2981,7 @@ fn can_commit_below_state_sync() {
             let (tip_height, _state) = dst_state_manager.take_tip();
             assert_eq!(tip_height, height(2));
             assert_eq!(dst_state_manager.latest_state_height(), height(2));
-            // state 1 should be removeable
+            // state 1 should be removable
             dst_state_manager.remove_states_below(height(2));
             assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(2)]);
             assert_error_counters(dst_metrics);
@@ -2913,7 +2994,6 @@ fn can_state_sync_below_commit() {
     state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
-        let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         src_state_manager.commit_and_certify(state.clone(), height(1), CertificationScope::Full);
         let hash = wait_for_checkpoint(&*src_state_manager, height(1));
@@ -2943,14 +3023,7 @@ fn can_state_sync_below_commit() {
             assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(2)]);
             let chunkable = dst_state_sync.create_chunkable_state(&id);
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_sync.process_changes(
-                time_source.as_ref(),
-                vec![UnvalidatedArtifact {
-                    message: dst_msg,
-                    peer_id: node_test_id(0),
-                    timestamp: mock_time(),
-                }],
-            );
+            dst_state_sync.deliver_state_sync(dst_msg);
             assert_eq!(
                 dst_state_manager.checkpoint_heights(),
                 vec![height(1), height(2)]
@@ -2960,7 +3033,7 @@ fn can_state_sync_below_commit() {
             let (tip_height, _state) = dst_state_manager.take_tip();
             assert_eq!(tip_height, height(3));
             assert_eq!(dst_state_manager.latest_state_height(), height(3));
-            // state 1 should be removeable
+            // state 1 should be removable
             dst_state_manager.flush_tip_channel();
             dst_state_manager.remove_states_below(height(3));
             assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(3)]);
@@ -2994,10 +3067,17 @@ fn can_short_circuit_state_sync() {
 fn can_get_dirty_pages() {
     use ic_replicated_state::page_map::PageIndex;
     use ic_state_manager::get_dirty_pages;
-    use ic_state_manager::Snapshot;
 
     fn update_state(state: &mut ReplicatedState, canister_id: CanisterId) {
         let canister_state = state.canister_state_mut(&canister_id).unwrap();
+        canister_state
+            .system_state
+            .wasm_chunk_store
+            .page_map_mut()
+            .update(&[
+                (PageIndex::new(1), &[99u8; PAGE_SIZE]),
+                (PageIndex::new(300), &[99u8; PAGE_SIZE]),
+            ]);
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory.page_map.update(&[
             (PageIndex::new(1), &[99u8; PAGE_SIZE]),
@@ -3017,16 +3097,12 @@ fn can_get_dirty_pages() {
 
     state_manager_test(|metrics, state_manager| {
         let (_height, mut state) = state_manager.take_tip();
-        let snapshot0 = Snapshot {
-            height: height(0),
-            state: Arc::new(state.clone()),
-        };
         insert_dummy_canister(&mut state, canister_test_id(80));
         insert_dummy_canister(&mut state, canister_test_id(90));
         insert_dummy_canister(&mut state, canister_test_id(100));
 
         update_state(&mut state, canister_test_id(80));
-        let dirty_pages = get_dirty_pages(&state, Some(&snapshot0));
+        let dirty_pages = get_dirty_pages(&state);
         // dirty_pages should be empty because there is no base checkpoint for the page
         // deltas and the canister binaries are new.
         assert!(dirty_pages.is_empty());
@@ -3034,56 +3110,52 @@ fn can_get_dirty_pages() {
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
 
         let (_height, mut state) = state_manager.take_tip();
-        let snapshot1 = Snapshot {
-            height: height(1),
-            state: Arc::new(state.clone()),
-        };
         update_state(&mut state, canister_test_id(90));
-        let mut dirty_pages = get_dirty_pages(&state, Some(&snapshot1));
+        let mut dirty_pages = get_dirty_pages(&state);
         let mut expected_dirty_pages = vec![
             DirtyPageMap {
                 height: height(1),
-                file_type: FileType::PageMap(PageMapType::WasmMemory(canister_test_id(80))),
+                page_type: PageMapType::WasmMemory(canister_test_id(80)),
                 page_delta_indices: vec![],
             },
             DirtyPageMap {
                 height: height(1),
-                file_type: FileType::PageMap(PageMapType::StableMemory(canister_test_id(80))),
+                page_type: PageMapType::StableMemory(canister_test_id(80)),
                 page_delta_indices: vec![],
             },
             DirtyPageMap {
                 height: height(1),
-                file_type: FileType::PageMap(PageMapType::WasmMemory(canister_test_id(90))),
+                page_type: PageMapType::WasmMemory(canister_test_id(90)),
                 page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
             },
             DirtyPageMap {
                 height: height(1),
-                file_type: FileType::PageMap(PageMapType::StableMemory(canister_test_id(90))),
+                page_type: PageMapType::StableMemory(canister_test_id(90)),
                 page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
             },
             DirtyPageMap {
                 height: height(1),
-                file_type: FileType::PageMap(PageMapType::WasmMemory(canister_test_id(100))),
+                page_type: PageMapType::WasmMemory(canister_test_id(100)),
                 page_delta_indices: vec![],
             },
             DirtyPageMap {
                 height: height(1),
-                file_type: FileType::PageMap(PageMapType::StableMemory(canister_test_id(100))),
+                page_type: PageMapType::StableMemory(canister_test_id(100)),
                 page_delta_indices: vec![],
             },
             DirtyPageMap {
                 height: height(1),
-                file_type: FileType::WasmBinary(canister_test_id(80)),
+                page_type: PageMapType::WasmChunkStore(canister_test_id(80)),
                 page_delta_indices: vec![],
             },
             DirtyPageMap {
                 height: height(1),
-                file_type: FileType::WasmBinary(canister_test_id(90)),
-                page_delta_indices: vec![],
+                page_type: PageMapType::WasmChunkStore(canister_test_id(90)),
+                page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
             },
             DirtyPageMap {
                 height: height(1),
-                file_type: FileType::WasmBinary(canister_test_id(100)),
+                page_type: PageMapType::WasmChunkStore(canister_test_id(100)),
                 page_delta_indices: vec![],
             },
         ];
@@ -3095,52 +3167,53 @@ fn can_get_dirty_pages() {
         state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
 
         let (_height, mut state) = state_manager.take_tip();
-        let snapshot2 = Snapshot {
-            height: height(2),
-            state: Arc::new(state.clone()),
-        };
         update_state(&mut state, canister_test_id(100));
         // It could happen during canister upgrade.
         drop_page_map(&mut state, canister_test_id(100));
         update_state(&mut state, canister_test_id(100));
         replace_wasm(&mut state, canister_test_id(100));
-        let mut dirty_pages = get_dirty_pages(&state, Some(&snapshot2));
+        let mut dirty_pages = get_dirty_pages(&state);
         // wasm memory was dropped, but stable memory wasn't
         let mut expected_dirty_pages = vec![
             DirtyPageMap {
                 height: height(2),
-                file_type: FileType::PageMap(PageMapType::WasmMemory(canister_test_id(80))),
+                page_type: PageMapType::WasmMemory(canister_test_id(80)),
                 page_delta_indices: vec![],
             },
             DirtyPageMap {
                 height: height(2),
-                file_type: FileType::PageMap(PageMapType::StableMemory(canister_test_id(80))),
+                page_type: PageMapType::StableMemory(canister_test_id(80)),
                 page_delta_indices: vec![],
             },
             DirtyPageMap {
                 height: height(2),
-                file_type: FileType::PageMap(PageMapType::WasmMemory(canister_test_id(90))),
+                page_type: PageMapType::WasmMemory(canister_test_id(90)),
                 page_delta_indices: vec![],
             },
             DirtyPageMap {
                 height: height(2),
-                file_type: FileType::PageMap(PageMapType::StableMemory(canister_test_id(90))),
+                page_type: PageMapType::StableMemory(canister_test_id(90)),
                 page_delta_indices: vec![],
             },
             DirtyPageMap {
                 height: height(2),
-                file_type: FileType::PageMap(PageMapType::StableMemory(canister_test_id(100))),
+                page_type: PageMapType::StableMemory(canister_test_id(100)),
                 page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
             },
             DirtyPageMap {
                 height: height(2),
-                file_type: FileType::WasmBinary(canister_test_id(80)),
+                page_type: PageMapType::WasmChunkStore(canister_test_id(80)),
                 page_delta_indices: vec![],
             },
             DirtyPageMap {
                 height: height(2),
-                file_type: FileType::WasmBinary(canister_test_id(90)),
+                page_type: PageMapType::WasmChunkStore(canister_test_id(90)),
                 page_delta_indices: vec![],
+            },
+            DirtyPageMap {
+                height: height(2),
+                page_type: PageMapType::WasmChunkStore(canister_test_id(100)),
+                page_delta_indices: vec![PageIndex::new(1), PageIndex::new(300)],
             },
         ];
 
@@ -3165,11 +3238,13 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
         let execution_state = canister_state.execution_state.as_mut().unwrap();
 
         const NEW_WASM_PAGE: u64 = 300;
+        const WASM_PAGES: u64 = 2;
         execution_state.wasm_memory.page_map.update(&[
             (PageIndex::new(1), &[1u8; PAGE_SIZE]),
             (PageIndex::new(NEW_WASM_PAGE), &[2u8; PAGE_SIZE]),
         ]);
         const NEW_STABLE_PAGE: u64 = 500;
+        const STABLE_PAGES: u64 = 2;
         execution_state.stable_memory.page_map.update(&[
             (PageIndex::new(1), &[1u8; PAGE_SIZE]),
             (PageIndex::new(NEW_STABLE_PAGE), &[2u8; PAGE_SIZE]),
@@ -3192,13 +3267,21 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
         state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
         let state_2_hash = wait_for_checkpoint(&state_manager, height(2));
 
-        // Second checkpoint can leverage heap chunks computed previously as well as the wasm binary
+        // Second checkpoint can leverage heap chunks computed previously as well as the wasm binary.
         let chunk_bytes = fetch_int_counter_vec(metrics, "state_manager_manifest_chunk_bytes");
-        assert_eq!(
-            PAGE_SIZE as u64 * ((NEW_WASM_PAGE + 1) + (NEW_STABLE_PAGE + 1))
-                + empty_wasm_size() as u64,
-            chunk_bytes[&reused_label] + chunk_bytes[&compared_label]
-        );
+        if lsmt_storage_default() == FlagStatus::Enabled {
+            let expected_size_estimate =
+                PAGE_SIZE as u64 * (WASM_PAGES + STABLE_PAGES) + empty_wasm_size() as u64;
+            let size = chunk_bytes[&reused_label] + chunk_bytes[&compared_label];
+            assert!(((expected_size_estimate as f64 * 1.1) as u64) > size);
+            assert!(((expected_size_estimate as f64 * 0.9) as u64) < size);
+        } else {
+            assert_eq!(
+                PAGE_SIZE as u64 * ((NEW_WASM_PAGE + 1) + (NEW_STABLE_PAGE + 1))
+                    + empty_wasm_size() as u64,
+                chunk_bytes[&reused_label] + chunk_bytes[&compared_label]
+            );
+        }
 
         let checkpoint = state_manager.state_layout().checkpoint(height(2)).unwrap();
 
@@ -3682,6 +3765,10 @@ fn report_diverged_checkpoint() {
             state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
             wait_for_checkpoint(&state_manager, height(3));
 
+            // If the Tip thread is active while we report diverged checkpoint, it may crash
+            // which is OK in production but confuses debug assertions.
+            state_manager.flush_tip_channel();
+
             // This could only happen if calculating the manifest and certification of height 2
             // completed after reaching height 3
             state_manager.report_diverged_checkpoint(height(2))
@@ -3754,6 +3841,9 @@ fn diverged_checkpoint_is_complete() {
                 None,
                 ic_types::malicious_flags::MaliciousFlags::default(),
             );
+            // If the Tip thread is active while we report diverged checkpoint, it may crash
+            // which is OK in production but confuses debug assertions.
+            state_manager.flush_tip_channel();
 
             state_manager.report_diverged_checkpoint(height(2));
         })
@@ -3842,6 +3932,9 @@ fn remove_too_many_diverged_checkpoints() {
 
         let (_, state) = state_manager.take_tip();
         state_manager.commit_and_certify(state, height(divergence), CertificationScope::Full);
+        // If the Tip thread is active while we report diverged checkpoint, it may crash
+        // which is OK in production but confuses debug assertions.
+        state_manager.flush_tip_channel();
         state_manager.report_diverged_checkpoint(height(divergence));
     }
     state_manager_crash_test(
@@ -3870,6 +3963,9 @@ fn remove_old_diverged_checkpoint() {
                 let (_, state) = state_manager.take_tip();
                 state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
                 wait_for_checkpoint(&state_manager, height(1));
+                // If the Tip thread is active while we report diverged checkpoint, it may crash
+                // which is OK in production but confuses debug assertions.
+                state_manager.flush_tip_channel();
 
                 state_manager.report_diverged_checkpoint(height(1))
             }),
@@ -3955,6 +4051,10 @@ fn dont_remove_diverged_checkpoint_if_there_was_no_progress() {
                 state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
                 wait_for_checkpoint(&state_manager, height(2));
 
+                // If the Tip thread is active while we report diverged checkpoint, it may crash
+                // which is OK in production but confuses debug assertions.
+                state_manager.flush_tip_channel();
+
                 state_manager.report_diverged_checkpoint(height(2))
             }),
             Box::new(|state_manager: StateManagerImpl| {
@@ -4031,6 +4131,23 @@ fn remove_too_many_diverged_state_markers() {
 }
 
 #[test]
+fn can_write_multiple_checkpoints() {
+    state_manager_test(|_metrics, state_manager| {
+        let (_height, mut state) = state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(100));
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+
+        for _ in 1..10 {
+            let (h, mut state) = state_manager.take_tip();
+            insert_dummy_canister(&mut state, canister_test_id(100));
+            state_manager.commit_and_certify(state, height(h.get() + 1), CertificationScope::Full);
+        }
+
+        wait_for_checkpoint(&state_manager, height(10));
+    });
+}
+
+#[test]
 fn can_reset_memory() {
     state_manager_test(|metrics, state_manager| {
         let (_height, mut state) = state_manager.take_tip();
@@ -4040,11 +4157,25 @@ fn can_reset_memory() {
         let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory.page_map.update(&[
+            (PageIndex::new(0), &[99u8; PAGE_SIZE]),
             (PageIndex::new(1), &[99u8; PAGE_SIZE]),
-            (PageIndex::new(300), &[99u8; PAGE_SIZE]),
+            (PageIndex::new(2), &[99u8; PAGE_SIZE]),
+            (PageIndex::new(3), &[99u8; PAGE_SIZE]),
+            (PageIndex::new(4), &[99u8; PAGE_SIZE]),
+            (PageIndex::new(5), &[99u8; PAGE_SIZE]),
+            (PageIndex::new(6), &[99u8; PAGE_SIZE]),
+            (PageIndex::new(7), &[99u8; PAGE_SIZE]),
         ]);
 
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        // Check the data is written to disk.
+        let canister_layout = state_manager
+            .state_layout()
+            .checkpoint(height(1))
+            .unwrap()
+            .canister(&canister_test_id(100))
+            .unwrap();
+        assert!(vmemory_size(&canister_layout) >= 8 * PAGE_SIZE as u64);
 
         let (_height, mut state) = state_manager.take_tip();
 
@@ -4053,11 +4184,11 @@ fn can_reset_memory() {
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory = Memory::new(PageMap::new_for_testing(), NumWasmPages::new(0));
         execution_state.wasm_memory.page_map.update(&[
+            (PageIndex::new(0), &[100u8; PAGE_SIZE]),
             (PageIndex::new(1), &[100u8; PAGE_SIZE]),
-            (PageIndex::new(100), &[100u8; PAGE_SIZE]),
         ]);
 
-        // Check no remnants of the old data remain
+        // Check no remnants of the old data remain.
         assert_eq!(
             execution_state
                 .wasm_memory
@@ -4075,18 +4206,14 @@ fn can_reset_memory() {
 
         state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
 
-        // Check file in checkpoint does not contain old data by checking its size
-        let memory_path = state_manager
+        // Check file in checkpoint does not contain old data by checking its size.
+        let canister_layout = state_manager
             .state_layout()
             .checkpoint(height(2))
             .unwrap()
             .canister(&canister_test_id(100))
-            .unwrap()
-            .vmemory_0();
-        assert_eq!(
-            std::fs::metadata(memory_path).unwrap().len(),
-            101 * PAGE_SIZE as u64
-        );
+            .unwrap();
+        assert!(vmemory_size(&canister_layout) < 8 * PAGE_SIZE as u64);
 
         let (_height, mut state) = state_manager.take_tip();
         let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
@@ -4113,15 +4240,14 @@ fn can_reset_memory() {
 
         state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
 
-        // File should be empty after wiping and checkpoint
-        let memory_path = state_manager
+        // File should be empty after wiping and checkpoint.
+        let canister_layout = state_manager
             .state_layout()
             .checkpoint(height(3))
             .unwrap()
             .canister(&canister_test_id(100))
-            .unwrap()
-            .vmemory_0();
-        assert_eq!(std::fs::metadata(memory_path).unwrap().len(), 0);
+            .unwrap();
+        assert_eq!(vmemory_size(&canister_layout), 0);
 
         assert_error_counters(metrics);
     });
@@ -4253,19 +4379,9 @@ fn can_uninstall_code() {
         let canister_path = canister_layout.raw_path();
         assert!(std::fs::metadata(canister_path).unwrap().is_dir());
 
-        // WASM binary and memory stable memory should all be present
-        assert_ne!(
-            std::fs::metadata(canister_layout.vmemory_0())
-                .unwrap()
-                .len(),
-            0
-        );
-        assert_ne!(
-            std::fs::metadata(canister_layout.stable_memory_blob())
-                .unwrap()
-                .len(),
-            0
-        );
+        // WASM binary, WASM memory and stable memory should all be present.
+        assert_ne!(vmemory_size(&canister_layout), 0);
+        assert_ne!(stable_memory_size(&canister_layout), 0);
         assert!(canister_layout.wasm().raw_path().exists());
 
         let (_height, mut state) = state_manager.take_tip();
@@ -4293,19 +4409,9 @@ fn can_uninstall_code() {
 
         assert!(canister_layout.raw_path().exists());
 
-        // WASM and stable memory should be empty after checkpoint
-        assert_eq!(
-            std::fs::metadata(canister_layout.vmemory_0())
-                .unwrap()
-                .len(),
-            0
-        );
-        assert_eq!(
-            std::fs::metadata(canister_layout.stable_memory_blob())
-                .unwrap()
-                .len(),
-            0
-        );
+        // WASM and stable memory should be empty after checkpoint.
+        assert_eq!(vmemory_size(&canister_layout), 0);
+        assert_eq!(stable_memory_size(&canister_layout), 0);
         // WASM binary should be missing
         assert!(!canister_layout.wasm().raw_path().exists());
 
@@ -4336,19 +4442,9 @@ fn can_uninstall_code_state_machine() {
         .unwrap()
         .canister(&canister_id)
         .unwrap();
-    assert_ne!(
-        std::fs::metadata(canister_layout.vmemory_0())
-            .unwrap()
-            .len(),
-        0
-    );
-    assert_ne!(
-        std::fs::metadata(canister_layout.stable_memory_blob())
-            .unwrap()
-            .len(),
-        0
-    );
     assert!(canister_layout.wasm().raw_path().exists());
+    assert_ne!(vmemory_size(&canister_layout), 0);
+    assert_ne!(stable_memory_size(&canister_layout), 0);
 
     env.uninstall_code(canister_id).unwrap();
 
@@ -4357,19 +4453,9 @@ fn can_uninstall_code_state_machine() {
         .unwrap()
         .canister(&canister_id)
         .unwrap();
-    assert_eq!(
-        std::fs::metadata(canister_layout.vmemory_0())
-            .unwrap()
-            .len(),
-        0
-    );
-    assert_eq!(
-        std::fs::metadata(canister_layout.stable_memory_blob())
-            .unwrap()
-            .len(),
-        0
-    );
     assert!(!canister_layout.wasm().raw_path().exists());
+    assert_eq!(vmemory_size(&canister_layout), 0);
+    assert_eq!(stable_memory_size(&canister_layout), 0);
 }
 
 #[test]
@@ -4408,8 +4494,14 @@ fn tip_is_initialized_correctly() {
             .unwrap();
         assert!(!canister_layout.queues().raw_path().exists());
         assert!(canister_layout.wasm().raw_path().exists());
-        assert!(canister_layout.vmemory_0().exists());
-        assert!(canister_layout.stable_memory_blob().exists());
+        assert!(
+            canister_layout.vmemory_0().exists()
+                || canister_layout.vmemory_0_overlays().unwrap()[0].exists()
+        );
+        assert!(
+            canister_layout.stable_memory_blob().exists()
+                || canister_layout.stable_memory_overlays().unwrap()[0].exists()
+        );
 
         let (_height, state) = state_manager.take_tip();
         state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
@@ -4426,8 +4518,14 @@ fn tip_is_initialized_correctly() {
         assert!(!canister_layout.queues().raw_path().exists()); // empty
         assert!(canister_layout.canister().raw_path().exists());
         assert!(canister_layout.wasm().raw_path().exists());
-        assert!(canister_layout.vmemory_0().exists());
-        assert!(canister_layout.stable_memory_blob().exists());
+        assert!(
+            canister_layout.vmemory_0().exists()
+                || canister_layout.vmemory_0_overlays().unwrap()[0].exists()
+        );
+        assert!(
+            canister_layout.stable_memory_blob().exists()
+                || canister_layout.stable_memory_overlays().unwrap()[0].exists()
+        );
     });
 }
 
@@ -4454,6 +4552,77 @@ fn can_recover_ingress_history() {
         let (_height, state2) = state_manager.take_tip();
         state.metadata.prev_state_hash = state2.metadata.prev_state_hash.clone();
         assert_eq!(state2, state);
+    });
+}
+
+/// Check that all the files (i.e. non-directories) with paths starting with provided path are
+/// readonly.
+fn assert_all_files_are_readonly(path: &Path) {
+    if path.is_dir() {
+        for entry in path.read_dir().unwrap() {
+            assert_all_files_are_readonly(&entry.unwrap().path());
+        }
+    } else {
+        assert!(path.metadata().unwrap().permissions().readonly());
+    }
+}
+
+/// Check that all checkpoints in `layout` are readonly in the sense that all non-directories are marked readonly.
+fn assert_checkpoints_are_readonly(layout: &StateLayout) {
+    assert_all_files_are_readonly(&layout.checkpoints())
+}
+
+#[test]
+fn checkpoints_are_readonly() {
+    state_manager_test(|_metrics, state_manager| {
+        // We flush the tip channel so that asychronous tip initialization cannot hide the issue
+        state_manager.flush_tip_channel();
+        assert_checkpoints_are_readonly(state_manager.state_layout());
+
+        // Add a canister
+        let (_height, mut state) = state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(100));
+        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        execution_state
+            .wasm_memory
+            .page_map
+            .update(&[(PageIndex::new(1), &[1u8; PAGE_SIZE])]);
+
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        state_manager.flush_tip_channel();
+        assert_checkpoints_are_readonly(state_manager.state_layout());
+
+        // Modify the canister
+        let (_height, mut state) = state_manager.take_tip();
+        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        execution_state
+            .wasm_memory
+            .page_map
+            .update(&[(PageIndex::new(1), &[2u8; PAGE_SIZE])]);
+
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Metadata);
+        state_manager.flush_tip_channel();
+        assert_checkpoints_are_readonly(state_manager.state_layout());
+
+        let (_height, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+        state_manager.flush_tip_channel();
+        assert_checkpoints_are_readonly(state_manager.state_layout());
+
+        // Modify the canister again
+        let (_height, mut state) = state_manager.take_tip();
+        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        execution_state
+            .wasm_memory
+            .page_map
+            .update(&[(PageIndex::new(1), &[4u8; PAGE_SIZE])]);
+
+        state_manager.commit_and_certify(state, height(4), CertificationScope::Full);
+        state_manager.flush_tip_channel();
+        assert_checkpoints_are_readonly(state_manager.state_layout());
     });
 }
 
@@ -4543,8 +4712,8 @@ proptest! {
                     };
 
                     let req = RequestBuilder::default()
-                        .sender(CanisterId::new(PrincipalId::try_from(&[2][..]).unwrap()).unwrap())
-                        .receiver(CanisterId::new(PrincipalId::try_from(&[3][..]).unwrap()).unwrap())
+                        .sender(CanisterId::unchecked_from_principal(PrincipalId::try_from(&[2][..]).unwrap()))
+                        .receiver(CanisterId::unchecked_from_principal(PrincipalId::try_from(&[3][..]).unwrap()))
                         .method_name("test".to_string())
                         .sender_reply_callback(CallbackId::from(999))
                         .build();
@@ -4743,4 +4912,154 @@ proptest! {
             byte_limit
         );
     }
+}
+
+/// Test if query stats are correctly aggregated into the canister state.
+///
+/// Delivers QUERY_STATS_EPOCH_LENGTH batches with query stats. This will
+/// trigger exactly one aggregation.
+///
+/// This test also tests that stats for non-existing canisters are simply ignored.
+///
+/// It also assumes NUM_MALICIOUS malicious nodes, which send bogus values, which
+/// do not impact the values added to the canister state.
+#[test]
+fn query_stats_are_collected() {
+    let mut env = StateMachineBuilder::new().build();
+
+    const INITIAL_VALUES: u128 = 42;
+
+    const NUM_NODES: usize = 13;
+    const NUM_MALICIOUS: usize = 4;
+    let proposers: Vec<NodeId> = (0..NUM_NODES)
+        .map(|i| NodeId::from(PrincipalId::new_node_test_id(i as u64)))
+        .collect();
+
+    // Install two canister
+    let test_canister_id = env.install_canister_wat(TEST_CANISTER, vec![1], None);
+
+    // Install a canister for which only malicious nodes will attempt to charge
+    // Send a different payload to ensure the ingress message gets executed.
+    let malicious_overreporting = env.install_canister_wat(TEST_CANISTER, vec![2], None);
+    let malicious_underreporting = env.install_canister_wat(TEST_CANISTER, vec![3], None);
+
+    // Set initial query stats for all canisters
+    for canister in [
+        &test_canister_id,
+        &malicious_overreporting,
+        &malicious_underreporting,
+    ] {
+        env.set_query_stats(
+            canister,
+            TotalQueryStats {
+                num_calls: INITIAL_VALUES,
+                num_instructions: INITIAL_VALUES,
+                ingress_payload_size: INITIAL_VALUES,
+                egress_payload_size: INITIAL_VALUES,
+            },
+        );
+    }
+
+    // Create a fake canister ID. This canister should not be part of the replicated state.
+    // The ID choosen here has to be larger than the number of canister installed above.
+    let uninstalled_canister = canister_test_id(1337);
+
+    // Verify initial state of the query stats
+    fn check_query_stats_unmodified(env: &StateMachine, canister_id: &CanisterId) {
+        let canister_state = env.query_stats(canister_id);
+        assert!(canister_state.num_calls == INITIAL_VALUES);
+        assert!(canister_state.num_instructions == INITIAL_VALUES);
+        assert!(canister_state.ingress_payload_size == INITIAL_VALUES);
+        assert!(canister_state.egress_payload_size == INITIAL_VALUES);
+    }
+
+    // Run for an entire epoch and then deliver one more batch to ensure query stats get copied to the canister state.
+    // In practise, some batches have already been delivered (e.g. ingress messages for canister installation).
+    for i in 0..QUERY_STATS_EPOCH_LENGTH as usize + 1 {
+        let mut stats = vec![];
+
+        // Append query stats the first time each node is a block maker.
+        if i < NUM_NODES {
+            stats.push(CanisterQueryStats {
+                canister_id: test_canister_id,
+                stats: QueryStats {
+                    num_calls: if i < NUM_MALICIOUS {
+                        1337 // "Malicious" nodes send too large values, but that should not affect what is being charged
+                    } else {
+                        1
+                    },
+                    num_instructions: 2,
+                    ingress_payload_size: 3,
+                    egress_payload_size: 4,
+                },
+            });
+
+            // This canister does not exist in the replicated state.
+            // We simply want to make sure nothing crashes in the case where we have stats for a canister
+            // that does not exist (e.g. it got uninstalled).
+            stats.push(CanisterQueryStats {
+                canister_id: uninstalled_canister,
+                stats: QueryStats {
+                    num_calls: 1,
+                    num_instructions: 2,
+                    ingress_payload_size: 3,
+                    egress_payload_size: 4,
+                },
+            });
+
+            if i < NUM_MALICIOUS {
+                // Simulate malicious nodes sending stats for a canister that does not execute any queries
+                stats.push(CanisterQueryStats {
+                    canister_id: malicious_overreporting,
+                    stats: QueryStats {
+                        num_calls: 1,
+                        num_instructions: 2,
+                        ingress_payload_size: 3,
+                        egress_payload_size: 4,
+                    },
+                });
+            } else {
+                // Simulate malicious nodes not sending (under-reporting) stats for a canister that does execute queries
+                stats.push(CanisterQueryStats {
+                    canister_id: malicious_underreporting,
+                    stats: QueryStats {
+                        num_calls: 1,
+                        num_instructions: 2,
+                        ingress_payload_size: 3,
+                        egress_payload_size: 4,
+                    },
+                });
+            }
+        }
+
+        let height = env.deliver_query_stats(QueryStatsPayload {
+            proposer: proposers[i % NUM_NODES],
+            stats,
+            epoch: epoch_from_height(Height::from(i as u64)),
+        });
+
+        if height.get() < QUERY_STATS_EPOCH_LENGTH {
+            // Query stats in the canister state should only be changed after more than QUERY_STATS_EPOCH_LENGTH batches.
+            // have been delivered. Before, they should be unchanged.
+            println!("Checking query stats in round {}", i);
+            check_query_stats_unmodified(&env, &test_canister_id);
+            check_query_stats_unmodified(&env, &malicious_overreporting);
+            check_query_stats_unmodified(&env, &malicious_underreporting);
+        }
+    }
+
+    // As each proposer in that epoch proposed the same value, we should see that value * 13 in the canister state
+    // after one epoch.
+    // The same should be the case even for canister where malicious nodes have not been sending query stats.
+    for canister in [&test_canister_id, &malicious_underreporting] {
+        let canister_state = env.query_stats(canister);
+        assert!(canister_state.num_calls == NUM_NODES as u128 + INITIAL_VALUES);
+        assert!(canister_state.num_instructions == 2 * NUM_NODES as u128 + INITIAL_VALUES);
+        assert!(canister_state.ingress_payload_size == 3 * NUM_NODES as u128 + INITIAL_VALUES);
+        assert!(canister_state.egress_payload_size == 4 * NUM_NODES as u128 + INITIAL_VALUES);
+    }
+
+    // The imbalanced canister should not have been charged, as only malicious nodes
+    // (incorrectly) report query statistics for this canister.
+    check_query_stats_unmodified(&env, &malicious_overreporting);
 }

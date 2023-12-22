@@ -5,20 +5,28 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
     IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaCombinedSigInternal,
     ThresholdEcdsaSigShareInternal,
 };
+use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
-    IDkgOpenTranscriptError, IDkgRetainKeysError, IDkgVerifyComplaintError,
-    IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError, IDkgVerifyOpeningError,
-    IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+    IDkgCreateTranscriptError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
+    IDkgRetainKeysError, IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError,
+    IDkgVerifyDealingPublicError, IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
+    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
     ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
 };
-use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
+use ic_types::crypto::canister_threshold_sig::{
+    idkg::{BatchSignedIDkgDealing, IDkgTranscriptOperation},
+    ExtendedDerivationPath, ThresholdEcdsaSigInputs,
+};
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeIndex, NumberOfNodes, Randomness, RegistryVersion};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub mod errors;
 pub use errors::*;
+
+use crate::vault::api::{
+    IDkgCreateDealingVaultError, IDkgDealingInternalBytes, IDkgTranscriptInternalBytes,
+};
 
 /// Crypto service provider (CSP) client for interactive distributed key
 /// generation (IDkg) for canister threshold signatures.
@@ -27,22 +35,22 @@ pub trait CspIDkgProtocol {
     fn idkg_create_dealing(
         &self,
         algorithm_id: AlgorithmId,
-        context_data: &[u8],
+        context_data: Vec<u8>,
         dealer_index: NodeIndex,
         reconstruction_threshold: NumberOfNodes,
-        receiver_keys: &[MEGaPublicKey],
-        transcript_operation: &IDkgTranscriptOperationInternal,
-    ) -> Result<IDkgDealingInternal, IDkgCreateDealingError>;
+        receiver_keys: Vec<PublicKey>,
+        transcript_operation: IDkgTranscriptOperation,
+    ) -> Result<IDkgDealingInternalBytes, IDkgCreateDealingVaultError>;
 
     /// Performs private verification of a dealing.
     fn idkg_verify_dealing_private(
         &self,
         algorithm_id: AlgorithmId,
-        dealing: &IDkgDealingInternal,
+        dealing: IDkgDealingInternalBytes,
         dealer_index: NodeIndex,
         receiver_index: NodeIndex,
-        receiver_public_key: &MEGaPublicKey,
-        context_data: &[u8],
+        receiver_public_key: MEGaPublicKey,
+        context_data: Vec<u8>,
     ) -> Result<(), IDkgVerifyDealingPrivateError>;
 
     /// Verify the public parts of a dealing
@@ -79,23 +87,23 @@ pub trait CspIDkgProtocol {
     /// if necessary.
     fn idkg_load_transcript(
         &self,
-        dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
-        context_data: &[u8],
+        dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+        context_data: Vec<u8>,
         receiver_index: NodeIndex,
-        public_key: &MEGaPublicKey,
-        transcript: &IDkgTranscriptInternal,
+        public_key: MEGaPublicKey,
+        transcript: IDkgTranscriptInternalBytes,
     ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError>;
 
     /// Computes a secret share from a transcript and openings, and stores it
     /// in the canister secret key store.
     fn idkg_load_transcript_with_openings(
         &self,
-        dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
-        openings: &BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
-        context_data: &[u8],
+        dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+        openings: BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
+        context_data: Vec<u8>,
         receiver_index: NodeIndex,
-        public_key: &MEGaPublicKey,
-        transcript: &IDkgTranscriptInternal,
+        public_key: MEGaPublicKey,
+        transcript: IDkgTranscriptInternalBytes,
     ) -> Result<(), IDkgLoadTranscriptError>;
 
     /// Generate a MEGa public/private key pair for encrypting threshold key shares in transmission
@@ -134,11 +142,11 @@ pub trait CspIDkgProtocol {
     /// Opens `dealing`.
     fn idkg_open_dealing(
         &self,
-        dealing: IDkgDealingInternal,
+        dealing: BatchSignedIDkgDealing,
         dealer_index: NodeIndex,
-        context_data: &[u8],
+        context_data: Vec<u8>,
         opener_index: NodeIndex,
-        opener_public_key: &MEGaPublicKey,
+        opener_public_key: MEGaPublicKey,
     ) -> Result<CommitmentOpening, IDkgOpenTranscriptError>;
 
     /// Verifies an `opening` of `dealing`.
@@ -152,7 +160,7 @@ pub trait CspIDkgProtocol {
     /// Retains IDKG key material for the given transcripts.
     fn idkg_retain_active_keys(
         &self,
-        active_transcripts: &BTreeSet<IDkgTranscriptInternal>,
+        active_transcripts: BTreeSet<IDkgTranscriptInternal>,
         oldest_public_key: MEGaPublicKey,
     ) -> Result<(), IDkgRetainKeysError>;
 
@@ -167,18 +175,9 @@ pub trait CspIDkgProtocol {
 /// generation.
 pub trait CspThresholdEcdsaSigner {
     /// Generate a signature share.
-    #[allow(clippy::too_many_arguments)]
     fn ecdsa_sign_share(
         &self,
-        derivation_path: &ExtendedDerivationPath,
-        hashed_message: &[u8],
-        nonce: &Randomness,
-        key: &IDkgTranscriptInternal,
-        kappa_unmasked: &IDkgTranscriptInternal,
-        lambda_masked: &IDkgTranscriptInternal,
-        kappa_times_lambda: &IDkgTranscriptInternal,
-        key_times_lambda: &IDkgTranscriptInternal,
-        algorithm_id: AlgorithmId,
+        inputs: &ThresholdEcdsaSigInputs,
     ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError>;
 }
 

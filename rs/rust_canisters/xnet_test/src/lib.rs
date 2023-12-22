@@ -29,7 +29,7 @@ pub struct Metrics {
     /// Number of sequence number errors.
     pub seq_errors: usize,
 
-    /// Observed message rountrip latencies.
+    /// Observed message roundtrip latencies.
     pub latency_distribution: LatencyDistribution,
 
     /// Rotating buffer collecting log messages.
@@ -50,7 +50,7 @@ impl Metrics {
 }
 
 /// Latency distribution implements a cumulative histogram used to record
-/// message rountrip latencies.
+/// message roundtrip latencies.
 ///
 /// The latency is measured using IC time, which is not guaranteed to be
 /// particularly accurate.

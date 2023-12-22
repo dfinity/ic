@@ -15,7 +15,7 @@ end::catalog[] */
 
 use super::utils::rw_message::install_nns_and_check_progress;
 use super::utils::ssh_access::execute_bash_command;
-use super::utils::upgrade::{bless_public_replica_version, update_subnet_replica_version};
+use super::utils::upgrade::{bless_replica_version, update_subnet_replica_version};
 use crate::orchestrator::utils::rw_message::{
     can_read_msg_with_retries, cert_state_makes_no_progress_with_retries,
     store_message_with_retries,
@@ -69,12 +69,16 @@ pub fn test(test_env: TestEnv) {
         get_assigned_replica_version(&nns_node).expect("Failed to get assigned replica version");
     info!(logger, "Target version: {}", target_version);
 
-    block_on(bless_public_replica_version(
+    let upgrade_url = test_env.get_ic_os_update_img_url().unwrap();
+    // Note: we're pulling a wrong hash on purpose to simulate a failed upgrade
+    let sha256 = test_env.get_ic_os_update_img_test_sha256().unwrap();
+    block_on(bless_replica_version(
         &nns_node,
         &target_version,
         UpdateImageType::ImageTest,
-        UpdateImageType::Image,
         &logger,
+        &sha256,
+        vec![upgrade_url.to_string()],
     ));
 
     let subnet_id = test_env.topology_snapshot().root_subnet_id();
@@ -86,19 +90,21 @@ pub fn test(test_env: TestEnv) {
     ));
     info!(logger, "Upgrade started");
 
-    let sess = nns_node
-        .block_on_ssh_session()
-        .expect("Failed to establish SSH session");
+    for nns_node in test_env.topology_snapshot().root_subnet().nodes() {
+        let session = nns_node
+            .block_on_ssh_session()
+            .expect("Failed to establish SSH session");
 
-    info!(logger, "Wait for 'hash mismatch' in the replica's log.");
-    retry(test_env.logger(), secs(600), secs(20), || {
-        if have_sha_errors(&sess) {
-            Ok(())
-        } else {
-            bail!("Waiting for hash mismatch!")
-        }
-    })
-    .expect("No hash missmatch in the logs");
+        info!(logger, "Wait for 'hash mismatch' in the replica's log.");
+        retry(test_env.logger(), secs(600), secs(20), || {
+            if have_sha_errors(&session) {
+                Ok(())
+            } else {
+                bail!("Waiting for hash mismatch!")
+            }
+        })
+        .expect("No hash mismatch in the logs");
+    }
 
     info!(logger, "Check that system does not make progress");
     cert_state_makes_no_progress_with_retries(
@@ -122,13 +128,11 @@ pub fn test(test_env: TestEnv) {
         r#"set -e
         sudo chmod 777 /var/lib/ic/data/images
         cd /var/lib/ic/data/images/
-        sudo mv image.bin old-image.bin
-        sudo curl http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img-test.tar.zst -o image.bin --retry 10 --retry-connrefused --retry-delay 10 --retry-max-time 500
-        sudo chmod --reference=old-image.bin image.bin
-        sudo chown --reference=old-image.bin image.bin
-        sudo rm old-image.bin
+        sudo curl {} -o image.bin --retry 10 --retry-connrefused --retry-delay 10 --retry-max-time 500 --fail
+        sudo chmod --reference=. image.bin
+        sudo chown --reference=. image.bin
         "#,
-        target_version,
+        test_env.get_ic_os_update_img_test_url().unwrap(),
     );
     for n in &nodes {
         let s = n
@@ -191,7 +195,7 @@ pub fn test(test_env: TestEnv) {
     info!(logger, "Could store and read message!");
 }
 
-fn have_sha_errors(sess: &Session) -> bool {
+fn have_sha_errors(session: &Session) -> bool {
     let cmd = "journalctl | grep -c 'FileHashMismatchError'".to_string();
-    execute_bash_command(sess, cmd).map_or(false, |res| res.trim().parse::<i32>().unwrap() > 0)
+    execute_bash_command(session, cmd).map_or(false, |res| res.trim().parse::<i32>().unwrap() > 0)
 }

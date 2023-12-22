@@ -1,14 +1,13 @@
 use ic_config::embedders::{Config as EmbeddersConfig, MeteringType};
+use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_embedders::{
-    wasm_utils::{
-        validate_and_instrument_for_testing, validation::RESERVED_SYMBOLS, wasm_transform::Module,
-        Segments,
-    },
+    wasm_utils::{validate_and_instrument_for_testing, validation::RESERVED_SYMBOLS, Segments},
     WasmtimeEmbedder,
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_sys::{PageIndex, PAGE_SIZE};
+use ic_wasm_transform::Module;
 use ic_wasm_types::BinaryEncodedWasm;
 use insta::assert_snapshot;
 use pretty_assertions::assert_eq;
@@ -220,19 +219,36 @@ fn test_exports_only_reserved_symbols() {
     }
 }
 
-fn instr_used(instance: &mut WasmtimeInstance<impl SystemApi>) -> u64 {
+fn instr_used(instance: &mut WasmtimeInstance) -> u64 {
     let instruction_counter = instance.instruction_counter();
-    let system_api = &instance.store_data().system_api;
+    let system_api = instance.store_data().system_api().unwrap();
     system_api
         .slice_instructions_executed(instruction_counter)
         .get()
 }
 
 #[allow(clippy::field_reassign_with_default)]
-fn new_instance(wat: &str, instruction_limit: u64) -> WasmtimeInstance<impl SystemApi> {
-    let mut config = ic_config::embedders::Config::default();
+fn new_instance(wat: &str, instruction_limit: u64) -> WasmtimeInstance {
+    let mut config = EmbeddersConfig::default();
     config.metering_type = MeteringType::New;
     config.dirty_page_overhead = SchedulerConfig::application_subnet().dirty_page_overhead;
+    WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_wat(wat)
+        .with_num_instructions(NumInstructions::new(instruction_limit))
+        .build()
+}
+
+#[allow(clippy::field_reassign_with_default)]
+fn new_instance_for_stable_write(
+    wat: &str,
+    instruction_limit: u64,
+    native_stable: FlagStatus,
+) -> WasmtimeInstance {
+    let mut config = EmbeddersConfig::default();
+    config.metering_type = MeteringType::New;
+    config.dirty_page_overhead = SchedulerConfig::application_subnet().dirty_page_overhead;
+    config.feature_flags.wasm_native_stable_memory = native_stable;
     WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -280,7 +296,8 @@ fn metering_plain() {
     assert_eq!(g[0], Global::I64(10));
 
     let instructions_used = instr_used(&mut instance);
-    assert_eq!(instructions_used, cost_a(10));
+    // Function is 1 instruction.
+    assert_eq!(instructions_used, 1 + cost_a(10));
 
     // Now run the same with insufficient instructions
     let mut instance = new_instance(&wat, instructions_used - 1);
@@ -313,7 +330,8 @@ fn metering_plain() {
 
     let instructions_used = instr_used(&mut instance);
     let cret = instruction_to_cost_new(&wasmparser::Operator::Return);
-    assert_eq!(instructions_used, cost_a(10) + cret);
+    // Function is 1 instruction.
+    assert_eq!(instructions_used, 1 + cost_a(10) + cret);
 
     // Now run the same with insufficient instructions
     let mut instance = new_instance(&wat, instructions_used - 1);
@@ -343,7 +361,8 @@ fn metering_plain() {
 
     let instructions_used = instr_used(&mut instance);
     let ctrap = instruction_to_cost_new(&wasmparser::Operator::Unreachable);
-    assert_eq!(instructions_used, cost_a(10) + ctrap);
+    // Function is 1 instruction.
+    assert_eq!(instructions_used, 1 + cost_a(10) + ctrap);
 }
 
 #[test]
@@ -370,7 +389,8 @@ fn metering_block() {
     assert_eq!(g[0], Global::I64(10));
 
     let instructions_used = instr_used(&mut instance);
-    assert_eq!(instructions_used, cost_a(10));
+    // Function is 1 instruction.
+    assert_eq!(instructions_used, 1 + cost_a(10));
 
     // another one, more complex
     let wat = format!(
@@ -413,7 +433,8 @@ fn metering_block() {
 
     let instructions_used = instr_used(&mut instance);
     let cbr = instruction_to_cost_new(&wasmparser::Operator::Br { relative_depth: 1 });
-    assert_eq!(instructions_used, cost_a(100) + cost_a(10) * 2 + cbr);
+    // Function is 1 instruction.
+    assert_eq!(instructions_used, 1 + cost_a(100) + cost_a(10) * 2 + cbr);
 
     // another one, with return
     let wat = format!(
@@ -456,7 +477,8 @@ fn metering_block() {
 
     let instructions_used = instr_used(&mut instance);
     let cret = instruction_to_cost_new(&wasmparser::Operator::Return);
-    assert_eq!(instructions_used, cost_a(100) + cost_a(10) + cret);
+    // Function is 1 instruction.
+    assert_eq!(instructions_used, 1 + cost_a(100) + cost_a(10) + cret);
 }
 
 #[test]
@@ -507,7 +529,8 @@ fn metering_if() {
     let instructions_used = instr_used(&mut instance);
     assert_eq!(
         instructions_used,
-        cost_a(5) + cost_a(20) + cost_a(30) + cc + cif
+        // Function is 1 instruction.
+        1 + cost_a(5) + cost_a(20) + cost_a(30) + cc + cif
     );
 
     let wat = format!(
@@ -552,7 +575,11 @@ fn metering_if() {
     let cret = instruction_to_cost_new(&wasmparser::Operator::Return);
 
     let instructions_used = instr_used(&mut instance);
-    assert_eq!(instructions_used, cost_a(5) + cost_a(10) + cc + cif + cret);
+    // Function is 1 instruction.
+    assert_eq!(
+        instructions_used,
+        1 + cost_a(5) + cost_a(10) + cc + cif + cret
+    );
 }
 
 #[test]
@@ -615,7 +642,8 @@ fn metering_loop() {
     let instructions_used = instr_used(&mut instance);
     assert_eq!(
         instructions_used,
-        cost_a(5) + (c_loop) * 5 + cost_a(20) + cost_a(30)
+        // Function is 1 instruction.
+        1 + cost_a(5) + (c_loop) * 5 + cost_a(20) + cost_a(30)
     );
 }
 
@@ -661,7 +689,8 @@ fn charge_for_dirty_heap() {
         .get();
 
     let instructions_used = instr_used(&mut instance);
-    assert_eq!(instructions_used, 5 * cc + cg + 2 * cs + cl + 2 * cd);
+    // Function is 1 instruction.
+    assert_eq!(instructions_used, 1 + 5 * cc + cg + 2 * cs + cl + 2 * cd);
 
     // Now run the same with insufficient instructions
     // We should still succeed (to avoid potentially failing pre-upgrades
@@ -670,19 +699,18 @@ fn charge_for_dirty_heap() {
     instance.run(func_ref("test")).unwrap();
 }
 
-#[test]
-fn charge_for_dirty_stable() {
+fn run_charge_for_dirty_stable64_test(native_stable: FlagStatus) {
     let wat = r#"
         (module
-            (import "ic0" "stable_grow"
-                (func $ic0_stable_grow (param $pages i32) (result i32)))
+            (import "ic0" "stable64_grow"
+                (func $ic0_stable64_grow (param $pages i64) (result i64)))
             (import "ic0" "stable64_read"
                 (func $ic0_stable64_read (param $dst i64) (param $offset i64) (param $size i64)))
             (import "ic0" "stable64_write"
                 (func $ic0_stable64_write (param $offset i64) (param $src i64) (param $size i64)))
             (global $g1 (export "g1") (mut i64) (i64.const 0))
             (func $test (export "canister_update test")
-                (drop (call $ic0_stable_grow (i32.const 1)))
+                (drop (call $ic0_stable64_grow (i64.const 1)))
                 (i64.store (i32.const 0) (i64.const 117))
                 (i64.store (i32.const 1) (i64.const 17))
                 (call $ic0_stable64_write (i64.const 0) (i64.const 0) (i64.const 1))
@@ -694,7 +722,7 @@ fn charge_for_dirty_stable() {
             (memory (export "memory") 10)
         )"#;
 
-    let mut instance = new_instance(wat, 10000);
+    let mut instance = new_instance_for_stable_write(wat, 10000, native_stable);
     let res = instance.run(func_ref("test")).unwrap();
 
     let g = &res.exported_globals;
@@ -722,33 +750,175 @@ fn charge_for_dirty_stable() {
         },
     });
 
-    let system_api = &instance.store_data().system_api;
+    let system_api = instance.store_data().system_api().unwrap();
 
     let cd = SchedulerConfig::application_subnet()
         .dirty_page_overhead
         .get();
-    let csg = system_api_complexity::overhead_native::new::STABLE_GROW.get();
-    let csw = system_api_complexity::overhead_native::new::STABLE64_WRITE.get()
-        + system_api
-            .get_num_instructions_from_bytes(NumBytes::from(1))
-            .get();
-    let csr = system_api_complexity::overhead_native::new::STABLE64_READ.get()
-        + system_api
-            .get_num_instructions_from_bytes(NumBytes::from(1))
-            .get();
+    let csg;
+    let csw;
+    let csr;
+
+    match native_stable {
+        FlagStatus::Enabled => {
+            csg = system_api_complexity::overhead_native::new::STABLE_GROW.get();
+            csw = system_api_complexity::overhead_native::new::STABLE64_WRITE.get()
+                + system_api
+                    .get_num_instructions_from_bytes(NumBytes::from(1))
+                    .get();
+            csr = system_api_complexity::overhead_native::new::STABLE64_READ.get()
+                + system_api
+                    .get_num_instructions_from_bytes(NumBytes::from(1))
+                    .get();
+        }
+        FlagStatus::Disabled => {
+            csg = system_api_complexity::overhead::new::STABLE_GROW.get();
+            csw = system_api_complexity::overhead::new::STABLE64_WRITE.get()
+                + system_api
+                    .get_num_instructions_from_bytes(NumBytes::from(1))
+                    .get();
+            csr = system_api_complexity::overhead::new::STABLE64_READ.get()
+                + system_api
+                    .get_num_instructions_from_bytes(NumBytes::from(1))
+                    .get();
+        }
+    }
 
     let instructions_used = instr_used(&mut instance);
     // 2 dirty stable pages and one heap
     assert_eq!(
         instructions_used,
-        cdrop + ccall * 4 + csg + cc * 15 + cs * 2 + cd * 3 + csw * 2 + csr + cl + cg
+        // Function is 1 instruction.
+        1 + cdrop + ccall * 4 + csg + cc * 15 + cs * 2 + cd * 3 + csw * 2 + csr + cl + cg
     );
 
     // Now run the same with insufficient instructions
     // We should still succeed (to avoid potentially failing pre-upgrades
     // of canisters that did not adjust their code to new metering)
-    let mut instance = new_instance(wat, instructions_used - 1);
+    let mut instance = new_instance_for_stable_write(wat, instructions_used - 1, native_stable);
+
     instance.run(func_ref("test")).unwrap();
+}
+
+#[test]
+fn charge_for_dirty_stable64_native() {
+    run_charge_for_dirty_stable64_test(FlagStatus::Enabled);
+}
+
+#[test]
+fn charge_for_dirty_stable64() {
+    run_charge_for_dirty_stable64_test(FlagStatus::Disabled);
+}
+
+fn run_charge_for_dirty_stable_test(native_stable: FlagStatus) {
+    let wat = r#"
+        (module
+            (import "ic0" "stable_grow"
+                (func $ic0_stable_grow (param $pages i32) (result i32)))
+            (import "ic0" "stable_read"
+                (func $ic0_stable_read (param $dst i32) (param $offset i32) (param $size i32)))
+            (import "ic0" "stable_write"
+                (func $ic0_stable_write (param $offset i32) (param $src i32) (param $size i32)))
+            (global $g1 (export "g1") (mut i32) (i32.const 0))
+            (func $test (export "canister_update test")
+                (drop (call $ic0_stable_grow (i32.const 1)))
+                (i32.store (i32.const 0) (i32.const 117))
+                (i32.store (i32.const 1) (i32.const 17))
+                (call $ic0_stable_write (i32.const 0) (i32.const 0) (i32.const 1))
+                (call $ic0_stable_write (i32.const 4096) (i32.const 1) (i32.const 1))
+                (call $ic0_stable_read (i32.const 7) (i32.const 4096) (i32.const 1))
+                (i32.load (i32.const 7))
+                global.set $g1
+            )
+            (memory (export "memory") 10)
+        )"#;
+
+    let mut instance = new_instance_for_stable_write(wat, 10000, native_stable);
+    let res = instance.run(func_ref("test")).unwrap();
+
+    let g = &res.exported_globals;
+    assert_eq!(g[0], Global::I32(17));
+
+    let cc = instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 1 });
+    let cg = instruction_to_cost_new(&wasmparser::Operator::GlobalSet { global_index: 0 });
+    let ccall = instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 });
+    let cdrop = instruction_to_cost_new(&wasmparser::Operator::Drop);
+
+    let cs = instruction_to_cost_new(&wasmparser::Operator::I32Store {
+        memarg: wasmparser::MemArg {
+            align: 0,
+            max_align: 0,
+            offset: 0,
+            memory: 0,
+        },
+    });
+    let cl = instruction_to_cost_new(&wasmparser::Operator::I32Load {
+        memarg: wasmparser::MemArg {
+            align: 0,
+            max_align: 0,
+            offset: 0,
+            memory: 0,
+        },
+    });
+
+    let system_api = instance.store_data().system_api().unwrap();
+
+    let cd = SchedulerConfig::application_subnet()
+        .dirty_page_overhead
+        .get();
+    let csg;
+    let csw;
+    let csr;
+
+    match native_stable {
+        FlagStatus::Enabled => {
+            csg = system_api_complexity::overhead_native::new::STABLE_GROW.get();
+            csw = system_api_complexity::overhead_native::new::STABLE_WRITE.get()
+                + system_api
+                    .get_num_instructions_from_bytes(NumBytes::from(1))
+                    .get();
+            csr = system_api_complexity::overhead_native::new::STABLE_READ.get()
+                + system_api
+                    .get_num_instructions_from_bytes(NumBytes::from(1))
+                    .get();
+        }
+        FlagStatus::Disabled => {
+            csg = system_api_complexity::overhead::new::STABLE_GROW.get();
+            csw = system_api_complexity::overhead::new::STABLE_WRITE.get()
+                + system_api
+                    .get_num_instructions_from_bytes(NumBytes::from(1))
+                    .get();
+            csr = system_api_complexity::overhead::new::STABLE_READ.get()
+                + system_api
+                    .get_num_instructions_from_bytes(NumBytes::from(1))
+                    .get();
+        }
+    }
+
+    let instructions_used = instr_used(&mut instance);
+    // 2 dirty stable pages and one heap
+    assert_eq!(
+        instructions_used,
+        // Function is 1 instruction.
+        1 + cdrop + ccall * 4 + csg + cc * 15 + cs * 2 + cd * 3 + csw * 2 + csr + cl + cg
+    );
+
+    // Now run the same with insufficient instructions
+    // We should still succeed (to avoid potentially failing pre-upgrades
+    // of canisters that did not adjust their code to new metering)
+    let mut instance = new_instance_for_stable_write(wat, instructions_used - 1, native_stable);
+
+    instance.run(func_ref("test")).unwrap();
+}
+
+#[test]
+fn charge_for_dirty_stable_native() {
+    run_charge_for_dirty_stable_test(FlagStatus::Enabled);
+}
+
+#[test]
+fn charge_for_dirty_stable() {
+    run_charge_for_dirty_stable_test(FlagStatus::Disabled);
 }
 
 #[test]
@@ -776,7 +946,8 @@ fn test_metering_for_table_fill() {
     let instructions_used = instr_used(&mut instance);
     assert_eq!(
         instructions_used,
-        param1 + param2 + param3 + table_fill + dynamic_cost_table_fill
+        // Function is 1 instruction.
+        1 + param1 + param2 + param3 + table_fill + dynamic_cost_table_fill
     );
 
     let mut instance = new_instance(wat, instructions_used);

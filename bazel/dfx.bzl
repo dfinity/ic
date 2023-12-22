@@ -7,10 +7,10 @@ package(default_visibility = ["//visibility:public"])
 exports_files(["dfx"])
 """
 
-VERSION = "0.12.0"
+VERSION = "0.15.1"
 SHA256 = {
-    "linux": "40da56ad27774d5e1b2cbc35f94c17368be8c8da557aca19878940264bd82a0a",
-    "darwin": "47da79ba4b8aeccc3b1a9c9eede038572fbd291be3fc924394d3234d7e2fc6f3",
+    "linux": "ee770bf47debb2b01f875fd5bbc4d759f8dbdd3f4bbeabaa1b1eb6a821a1a337",
+    "darwin": "c8698d4bf77d1a21809f0427158014a72a6f22602e0d5251a1f1d662c8d06833",
 }
 
 URL = "https://github.com/dfinity/sdk/releases/download/{version}/dfx-{version}-{arch}-{platform}.tar.gz"
@@ -28,6 +28,8 @@ def _dfx_impl(repository_ctx):
     os_name = repository_ctx.os.name
     if os_name == "linux":
         platform = "linux"
+    elif os_name == "mac os x":
+        platform = "darwin"
     else:
         fail("Unsupported operating system: " + os_name)
 

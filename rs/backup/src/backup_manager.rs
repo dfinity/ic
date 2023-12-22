@@ -44,7 +44,6 @@ struct SubnetBackup {
 }
 
 pub struct BackupManager {
-    pub version: u32,
     pub root_dir: PathBuf,
     pub local_store: Arc<LocalStoreImpl>,
     pub registry_client: Arc<RegistryClientImpl>,
@@ -111,7 +110,6 @@ impl BackupManager {
         let mut backups = Vec::new();
 
         let downloads = Arc::new(Mutex::new(true));
-        let disk_threshold_warn = config.disk_threshold_warn;
         let blacklisted = Arc::new(config.blacklisted_nodes.unwrap_or_default());
 
         for s in config.subnets {
@@ -137,7 +135,10 @@ impl BackupManager {
                 registry_client: registry_client.clone(),
                 notification_client,
                 downloads_guard: downloads.clone(),
-                disk_threshold_warn,
+                hot_disk_resource_threshold_percentage: config
+                    .hot_disk_resource_threshold_percentage,
+                cold_disk_resource_threshold_percentage: config
+                    .cold_disk_resource_threshold_percentage,
                 cold_storage_dir: cold_storage_dir.clone(),
                 versions_hot,
                 artifacts_guard: Mutex::new(true),
@@ -149,6 +150,9 @@ impl BackupManager {
             };
             let sync_period = std::time::Duration::from_secs(s.sync_period_secs);
             let replay_period = std::time::Duration::from_secs(s.replay_period_secs);
+
+            backup_helper.notification_client.push_metrics_version();
+
             backups.push(SubnetBackup {
                 nodes_syncing: s.nodes_syncing,
                 sync_period,
@@ -157,7 +161,6 @@ impl BackupManager {
             });
         }
         BackupManager {
-            version: config.version,
             root_dir: config.root_dir,
             local_store,
             registry_client,
@@ -458,11 +461,6 @@ fn cold_store(m: Arc<BackupManager>) {
         for i in 0..size {
             let b = &m.subnet_backups[i];
 
-            // announce the current version of the ic-backup on each cold storage check
-            b.backup_helper
-                .notification_client
-                .push_metrics_version(m.version);
-
             let subnet_id = &b.backup_helper.subnet_id;
             match b.backup_helper.need_cold_storage_move() {
                 Ok(need) => {
@@ -537,7 +535,7 @@ mod tests {
         let fake_state_path_str = fake_state_path.to_string_lossy();
 
         let mut cursor = std::io::Cursor::new(
-            (vec![
+            ([
                 FAKE_SUBNET_ID,
                 FAKE_INITIAL_REPLICA_VERSION,
                 &FAKE_NODES_SYNCING.to_string(),

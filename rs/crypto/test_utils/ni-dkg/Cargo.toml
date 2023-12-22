@@ -1,11 +1,16 @@
 [package]
 name = "ic-crypto-test-utils-ni-dkg"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+hex = "0.4.2"
+ic-crypto-internal-bls12-381-type = { path = "../../internal/crypto_lib/bls12_381/type" }
 ic-crypto-internal-types = { path = "../../internal/crypto_lib/types" }
 ic-crypto-internal-csp = { path = "../../internal/crypto_service_provider" }
 ic-crypto-temp-crypto = { path = "../../temp_crypto" }
@@ -20,9 +25,8 @@ ic-registry-proto-data-provider = { path = "../../../registry/proto_data_provide
 ic-types = { path = "../../../types/types" }
 rand = "0.8"
 rand_chacha = "0.3"
-serde = { version = "1.0.99", features = [ "derive" ] }
+serde = { workspace = true }
 
 [dev-dependencies]
-hex = "0.4.2"
 ic-crypto-test-utils = { path = "../../test_utils" }
 ic-types-test-utils = { path = "../../../types/types_test_utils" }

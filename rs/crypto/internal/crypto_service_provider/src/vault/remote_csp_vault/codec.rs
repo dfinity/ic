@@ -1,12 +1,93 @@
 use crate::vault::remote_csp_vault::TarpcCspVaultRequest;
 use crate::vault::remote_csp_vault::TarpcCspVaultResponse;
+use bincode::config::Options;
+use bytes::{Bytes, BytesMut};
+use core::marker::PhantomData;
+use educe::Educe;
 use ic_crypto_internal_logmon::metrics::{CryptoMetrics, MessageType, MetricsDomain, ServiceType};
 use ic_logger::{debug, ReplicaLogger};
-use prost::bytes::{Bytes, BytesMut};
+use serde::{Deserialize, Serialize};
+use std::io;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::time::Instant;
 use tarpc::{ClientMessage, Response};
 use tokio_serde::{Deserializer, Serializer};
+
+/// An instantiation of the `bincode` codec use in a transport.
+///
+/// The implementation is mostly copied from `tokio-serde` of version 0.8 (see
+/// https://github.com/carllerche/tokio-serde/blob/v0.8.0/src/lib.rs#L336).
+/// The difference is that our implementation serializes objects using
+/// `bincode::serialize_into()` and the original implementation uses
+/// `bincode::serialize()`. The difference between the aforementioned functions
+/// is that `bincode::serialize()` calls `Object::serialize()` twice, once to
+/// determine the size of the object to be serialized and the second time to
+/// copy the bytes. This is very efficient to do for types that already hold
+/// values. However, for types like [`EccPoint`] that first invoke costly
+/// conversions on the inner value that yield something that will actually be
+/// serialized, calling `Object::serialize()` twice is expensive.
+#[derive(Educe)]
+#[educe(Debug)]
+pub struct Bincode<Item, SinkItem, O = bincode::DefaultOptions> {
+    #[educe(Debug(ignore))]
+    pub options: O,
+    #[educe(Debug(ignore))]
+    ghost: PhantomData<(Item, SinkItem)>,
+}
+
+impl<Item, SinkItem> Default for Bincode<Item, SinkItem> {
+    fn default() -> Self {
+        Bincode {
+            options: Default::default(),
+            ghost: PhantomData,
+        }
+    }
+}
+
+impl<Item, SinkItem, O> From<O> for Bincode<Item, SinkItem, O>
+where
+    O: Options,
+{
+    fn from(options: O) -> Self {
+        Self {
+            options,
+            ghost: PhantomData,
+        }
+    }
+}
+
+impl<Item, SinkItem, O> Deserializer<Item> for Bincode<Item, SinkItem, O>
+where
+    for<'a> Item: Deserialize<'a>,
+    O: Options + Clone,
+{
+    type Error = io::Error;
+
+    fn deserialize(self: Pin<&mut Self>, src: &BytesMut) -> Result<Item, Self::Error> {
+        self.options
+            .clone()
+            .deserialize(src)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+    }
+}
+
+impl<Item, SinkItem, O> Serializer<SinkItem> for Bincode<Item, SinkItem, O>
+where
+    SinkItem: Serialize,
+    O: Options + Clone,
+{
+    type Error = io::Error;
+
+    fn serialize(self: Pin<&mut Self>, item: &SinkItem) -> Result<Bytes, Self::Error> {
+        let mut buf = Vec::with_capacity(1024);
+        self.options
+            .clone()
+            .serialize_into(&mut buf, item)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        Ok(buf.into())
+    }
+}
 
 /// Wrap a codec (something that implements the traits [`Serializer`] and [`Deserializer`])
 /// to observe the result of serialization and deserialization.
@@ -32,10 +113,11 @@ where
     type Error = Codec::Error;
 
     fn serialize(mut self: Pin<&mut Self>, item: &S) -> Result<Bytes, Self::Error> {
+        let start = Instant::now();
         let result = Pin::new(&mut self.inner_codec).serialize(item);
         if let Ok(serialized_bytes) = &result {
             self.observer
-                .observe_serialization_result(item, serialized_bytes);
+                .observe_serialization_result(item, serialized_bytes, Some(start));
         }
         result
     }
@@ -49,39 +131,47 @@ where
     type Error = Codec::Error;
 
     fn deserialize(mut self: Pin<&mut Self>, src: &BytesMut) -> Result<D, Self::Error> {
+        let start = Instant::now();
         let result = Pin::new(&mut self.inner_codec).deserialize(src);
         if let Ok(deserialized) = &result {
             self.observer
-                .observe_deserialization_result(src, deserialized);
+                .observe_deserialization_result(src, deserialized, Some(start));
         }
+
         result
     }
 }
 
 trait SerializationObserver<S> {
-    fn observe_serialization_result(&self, src: &S, result: &Bytes);
+    fn observe_serialization_result(&self, src: &S, result: &Bytes, start_time: Option<Instant>);
 }
 
 trait DeserializationObserver<D> {
-    fn observe_deserialization_result(&self, src: &BytesMut, result: &D);
+    fn observe_deserialization_result(
+        &self,
+        src: &BytesMut,
+        result: &D,
+        start_time: Option<Instant>,
+    );
 }
 
-pub struct CspVaultClientObserver {
+pub struct CspVaultObserver {
     logger: ReplicaLogger,
     metrics: Arc<CryptoMetrics>,
 }
 
-impl CspVaultClientObserver {
+impl CspVaultObserver {
     pub fn new(logger: ReplicaLogger, metrics: Arc<CryptoMetrics>) -> Self {
         Self { logger, metrics }
     }
 }
 
-impl SerializationObserver<ClientMessage<TarpcCspVaultRequest>> for CspVaultClientObserver {
+impl SerializationObserver<ClientMessage<TarpcCspVaultRequest>> for CspVaultObserver {
     fn observe_serialization_result(
         &self,
         src: &ClientMessage<TarpcCspVaultRequest>,
         result: &Bytes,
+        start_time: Option<Instant>,
     ) {
         if let ClientMessage::Request(request) = src {
             let vault_method = CspVaultMethod::from(&request.message);
@@ -91,22 +181,24 @@ impl SerializationObserver<ClientMessage<TarpcCspVaultRequest>> for CspVaultClie
                 self.logger,
                 "CSP vault client sent {} bytes (request to '{}')", number_of_bytes, method_name
             );
-            self.metrics.observe_vault_message_size(
+            self.metrics.observe_vault_message_serialization(
                 ServiceType::Client,
                 MessageType::Request,
                 domain,
                 method_name,
                 number_of_bytes,
+                start_time,
             );
         }
     }
 }
 
-impl DeserializationObserver<Response<TarpcCspVaultResponse>> for CspVaultClientObserver {
+impl DeserializationObserver<Response<TarpcCspVaultResponse>> for CspVaultObserver {
     fn observe_deserialization_result(
         &self,
         src: &BytesMut,
         result: &Response<TarpcCspVaultResponse>,
+        start_time: Option<Instant>,
     ) {
         if let Response {
             message: Ok(response),
@@ -122,12 +214,73 @@ impl DeserializationObserver<Response<TarpcCspVaultResponse>> for CspVaultClient
                 number_of_bytes,
                 method_name,
             );
-            self.metrics.observe_vault_message_size(
+            self.metrics.observe_vault_message_serialization(
                 ServiceType::Client,
                 MessageType::Response,
                 domain,
                 method_name,
                 number_of_bytes,
+                start_time,
+            );
+        }
+    }
+}
+
+impl SerializationObserver<Response<TarpcCspVaultResponse>> for CspVaultObserver {
+    fn observe_serialization_result(
+        &self,
+        src: &Response<TarpcCspVaultResponse>,
+        result: &Bytes,
+        start_time: Option<Instant>,
+    ) {
+        if let Response {
+            message: Ok(response),
+            ..
+        } = src
+        {
+            let vault_method = CspVaultMethod::from(response);
+            let (domain, method_name) = vault_method.detail();
+            let number_of_bytes = result.len();
+            debug!(
+                self.logger,
+                "CSP vault server sent {} bytes (request to '{}')", number_of_bytes, method_name
+            );
+            self.metrics.observe_vault_message_serialization(
+                ServiceType::Server,
+                MessageType::Response,
+                domain,
+                method_name,
+                number_of_bytes,
+                start_time,
+            );
+        }
+    }
+}
+
+impl DeserializationObserver<ClientMessage<TarpcCspVaultRequest>> for CspVaultObserver {
+    fn observe_deserialization_result(
+        &self,
+        src: &BytesMut,
+        result: &ClientMessage<TarpcCspVaultRequest>,
+        start_time: Option<Instant>,
+    ) {
+        if let ClientMessage::Request(request) = result {
+            let vault_method = CspVaultMethod::from(&request.message);
+            let (domain, method_name) = vault_method.detail();
+            let number_of_bytes = src.len();
+            debug!(
+                self.logger,
+                "CSP vault server received {} bytes (response of '{}')",
+                number_of_bytes,
+                method_name,
+            );
+            self.metrics.observe_vault_message_serialization(
+                ServiceType::Server,
+                MessageType::Request,
+                domain,
+                method_name,
+                number_of_bytes,
+                start_time,
             );
         }
     }

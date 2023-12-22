@@ -1,6 +1,6 @@
 use std::{cell::RefCell, cmp::Reverse, collections::BTreeMap, thread::LocalKey, time::Duration};
 
-use candid::candid_method;
+use candid::{candid_method, Principal};
 use certificate_orchestrator_interface::{
     BoundedString, CreateRegistrationError, CreateRegistrationResponse, DispenseTaskError,
     DispenseTaskResponse, EncryptedPair, ExportCertificatesCertifiedResponse,
@@ -14,9 +14,7 @@ use certificate_orchestrator_interface::{
 };
 use ic_cdk::{
     api::{id, time},
-    caller,
-    export::Principal,
-    post_upgrade, pre_upgrade, trap,
+    caller, post_upgrade, pre_upgrade, trap,
 };
 use ic_cdk_macros::{init, query, update};
 use ic_cdk_timers::set_timer_interval;
@@ -67,11 +65,12 @@ type StableValue<T> = StableMap<(), T>;
 type StorablePrincipal = BoundedString<63>;
 type StorableId = BoundedString<64>;
 
-const REGISTRATION_EXPIRATION_TTL: Duration = Duration::from_secs(60 * 60 * 24 * 3); // 3 days
-const IN_PROGRESS_TTL: Duration = Duration::from_secs(10 * 60); // 10 minutes
+const MINUTE: u64 = 60;
+const HOUR: u64 = 60 * MINUTE;
+const DAY: u64 = 24 * HOUR;
 
 const REGISTRATION_RATE_LIMIT_RATE: u32 = 5; // 5 subdomain registrations per hour
-const REGISTRATION_RATE_LIMIT_PERIOD: Duration = Duration::from_secs(60 * 60); // 1 hour
+const REGISTRATION_RATE_LIMIT_PERIOD: Duration = Duration::from_secs(HOUR); // 1 hour
 
 // Memory
 thread_local! {
@@ -89,6 +88,9 @@ const MEMORY_ID_ENCRYPTED_CERTIFICATES: u8 = 6;
 const MEMORY_ID_TASKS: u8 = 7;
 const MEMORY_ID_EXPIRATIONS: u8 = 8;
 const MEMORY_ID_RETRIES: u8 = 9;
+const MEMORY_ID_REGISTRATION_EXPIRATION_TTL: u8 = 10;
+const MEMORY_ID_IN_PROGRESS_TTL: u8 = 11;
+const MEMORY_ID_MANAGEMENT_TASK_INTERVAL: u8 = 12;
 
 const SUFFIX_LIST_STR: &str = include_str!("../public_suffix_list.dat");
 
@@ -395,6 +397,18 @@ thread_local! {
 // Expirations and retries
 
 thread_local! {
+    static REGISTRATION_EXPIRATION_TTL: RefCell<StableValue<u64>> = RefCell::new(
+        StableValue::init(
+            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(MEMORY_ID_REGISTRATION_EXPIRATION_TTL))),
+        )
+    );
+
+    static IN_PROGRESS_TTL: RefCell<StableValue<u64>> = RefCell::new(
+        StableValue::init(
+            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(MEMORY_ID_IN_PROGRESS_TTL))),
+        )
+    );
+
     static EXPIRER: RefCell<Box<dyn Expire>> = RefCell::new({
         let e = Expirer::new(&REMOVER, &EXPIRATIONS);
         Box::new(e)
@@ -406,6 +420,16 @@ thread_local! {
     });
 }
 
+// Management task interval
+
+thread_local! {
+    static MANAGEMENT_TASK_INTERVAL: RefCell<StableValue<u64>> = RefCell::new(
+        StableValue::init(
+            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(MEMORY_ID_MANAGEMENT_TASK_INTERVAL))),
+        )
+    );
+}
+
 // main() is empty and present because our Bazel build setup requires
 // canisters to be in a main.rs file. Otherwise we would default to a lib.rs
 // as is usually done for canister projects.
@@ -414,23 +438,20 @@ fn main() {}
 // Timers
 
 fn init_timers_fn() {
-    set_timer_interval(
-        Duration::from_secs(60), // 1 Minute
-        || {
-            if let Err(err) = EXPIRER.with(|e| e.borrow().expire(time())) {
-                trap(&format!("failed to run expire: {err}"));
-            }
-        },
-    );
+    let interval =
+        Duration::from_secs(MANAGEMENT_TASK_INTERVAL.with(|s| s.borrow().get(&()).unwrap()));
 
-    set_timer_interval(
-        Duration::from_secs(60), // 1 Minute
-        || {
-            if let Err(err) = RETRIER.with(|r| r.borrow().retry(time())) {
-                trap(&format!("failed to run retry: {err}"));
-            }
-        },
-    );
+    set_timer_interval(interval, || {
+        if let Err(err) = EXPIRER.with(|e| e.borrow().expire(time())) {
+            trap(&format!("failed to run expire: {err}"));
+        }
+    });
+
+    set_timer_interval(interval, || {
+        if let Err(err) = RETRIER.with(|r| r.borrow().retry(time())) {
+            trap(&format!("failed to run retry: {err}"));
+        }
+    });
 
     // update the available tokens for rate limiting
     set_timer_interval(
@@ -458,6 +479,9 @@ fn init_fn(
     InitArg {
         root_principals,
         id_seed,
+        registration_expiration_ttl,
+        in_progress_ttl,
+        management_task_interval,
     }: InitArg,
 ) {
     ROOT_PRINCIPALS.with(|m| {
@@ -472,8 +496,29 @@ fn init_fn(
         s.insert((), id_seed);
     });
 
+    let registration_expiration_ttl = registration_expiration_ttl.unwrap_or(3 * DAY);
+
+    REGISTRATION_EXPIRATION_TTL.with(|s| {
+        let mut s = s.borrow_mut();
+        s.insert((), registration_expiration_ttl);
+    });
+
+    let in_progress_ttl = in_progress_ttl.unwrap_or(10 * MINUTE);
+
+    IN_PROGRESS_TTL.with(|s| {
+        let mut s = s.borrow_mut();
+        s.insert((), in_progress_ttl);
+    });
+
     // authorize the canister ID so that timer functions are authorized
     ALLOWED_PRINCIPALS.with(|m| m.borrow_mut().insert(id().to_text().into(), ()));
+
+    let management_task_interval = management_task_interval.unwrap_or(MINUTE);
+
+    MANAGEMENT_TASK_INTERVAL.with(|s| {
+        let mut s = s.borrow_mut();
+        s.insert((), management_task_interval);
+    });
 
     init_timers_fn();
     init_cert_tree();

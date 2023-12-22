@@ -1,6 +1,6 @@
-load(":json.bzl", "jq_dep")
-load("@rules_python//python:defs.bzl", "py_binary")
 load("@python_deps//:requirements.bzl", "requirement")
+load("@rules_python//python:defs.bzl", "py_binary")
+load(":json.bzl", "jq_dep")
 
 package(default_visibility = ["//visibility:public"])
 

@@ -43,6 +43,7 @@ pub async fn start_rosetta(
 
     let state = tempfile::TempDir::new().expect("failed to create a temporary directory");
     let port_file = state.path().join("port");
+    let store_location = state.path().join("data");
 
     let _proc = KillOnDrop(
         Command::new(rosetta_bin)
@@ -54,6 +55,8 @@ pub async fn start_rosetta(
             .arg(ledger_canister_id.to_string())
             .arg("--port-file")
             .arg(port_file.clone())
+            .arg("--store-location")
+            .arg(store_location.clone())
             .stdout(std::process::Stdio::inherit())
             .stderr(std::process::Stdio::inherit())
             .spawn()

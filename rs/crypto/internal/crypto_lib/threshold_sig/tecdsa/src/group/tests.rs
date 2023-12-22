@@ -6,7 +6,7 @@ fn to_i8_at_pos(naf: &Naf, i: usize) -> i8 {
     let get_bit = |bytes: &[u8]| {
         if i > (naf.positive_bits.len() * 8) {
             panic!(
-                "Out of bounds: accesing bit {i} in a buffer containing {} bits",
+                "Out of bounds: accessing bit {i} in a buffer containing {} bits",
                 naf.positive_bits.len() * 8
             )
         }
@@ -30,15 +30,12 @@ fn to_i8_at_pos(naf: &Naf, i: usize) -> i8 {
 
 #[test]
 fn test_range_to_i8_is_correct() -> ThresholdEcdsaResult<()> {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     for curve_type in EccCurveType::all() {
         let scalars: Vec<EccScalar> = (0..10)
-            .map(|_| EccScalar::random(curve_type, &mut rng))
+            .map(|_| EccScalar::random(curve_type, rng))
             .collect();
-        let nafs: Vec<Naf> = scalars
-            .iter()
-            .map(|x| Naf::from_scalar_vartime(x))
-            .collect();
+        let nafs: Vec<Naf> = scalars.iter().map(Naf::from_scalar_vartime).collect();
         for naf in nafs {
             // tests 1000 ranges for each scalar
             for _iteration in 0..1000 {
@@ -105,7 +102,7 @@ non_adjacent_form_transformation_is_correct_full_domain_test_factory!(u16, i32);
 
 #[test]
 fn non_adjacent_form_transformation_is_correct_u64_random_samples() -> ThresholdEcdsaResult<()> {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     let scalars: Vec<u64> = (0..10000).map(|_| rng.next_u64()).collect();
     let naf: Vec<Naf> = scalars
         .iter()
@@ -121,15 +118,12 @@ fn non_adjacent_form_transformation_is_correct_u64_random_samples() -> Threshold
 #[test]
 fn non_adjacent_form_transformation_is_correct_ecc_scalar_random_samples(
 ) -> ThresholdEcdsaResult<()> {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     for curve_type in EccCurveType::all() {
         let scalars: Vec<EccScalar> = (0..1000)
-            .map(|_| EccScalar::random(curve_type, &mut rng))
+            .map(|_| EccScalar::random(curve_type, rng))
             .collect();
-        let naf: Vec<Naf> = scalars
-            .iter()
-            .map(|x| Naf::from_scalar_vartime(x))
-            .collect();
+        let naf: Vec<Naf> = scalars.iter().map(Naf::from_scalar_vartime).collect();
         let two = EccScalar::from_u64(curve_type, 2);
         for i in 0..scalars.len() {
             let mut term = EccScalar::one(curve_type);

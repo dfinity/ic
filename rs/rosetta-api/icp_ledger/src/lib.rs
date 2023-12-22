@@ -16,11 +16,11 @@ use icrc_ledger_types::icrc1::account::Account;
 use on_wire::{FromWire, IntoWire};
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
-use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::fmt;
 use std::time::Duration;
+use std::{borrow::Cow, collections::BTreeMap};
 use strum_macros::IntoStaticStr;
 
 pub use ic_ledger_core::{
@@ -46,7 +46,7 @@ pub const MAX_BLOCKS_PER_REQUEST: usize = 2000;
 
 pub const MEMO_SIZE_BYTES: usize = 32;
 
-pub type LedgerBalances = Balances<HashMap<AccountIdentifier, Tokens>>;
+pub type LedgerBalances = Balances<BTreeMap<AccountIdentifier, Tokens>>;
 
 #[derive(
     Serialize,
@@ -84,6 +84,7 @@ pub enum Operation {
     Burn {
         from: AccountIdentifier,
         amount: Tokens,
+        #[serde(skip_serializing_if = "Option::is_none")]
         spender: Option<AccountIdentifier>,
     },
     Mint {
@@ -93,9 +94,10 @@ pub enum Operation {
     Transfer {
         from: AccountIdentifier,
         to: AccountIdentifier,
-        spender: Option<AccountIdentifier>,
         amount: Tokens,
         fee: Tokens,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        spender: Option<AccountIdentifier>,
     },
     Approve {
         from: AccountIdentifier,
@@ -1240,12 +1242,179 @@ pub struct FeatureFlags {
 
 impl FeatureFlags {
     const fn const_default() -> Self {
-        Self { icrc2: false }
+        Self { icrc2: true }
     }
 }
 
 impl Default for FeatureFlags {
     fn default() -> Self {
         Self::const_default()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::str::FromStr;
+
+    use proptest::{arbitrary::any, prop_assert_eq, prop_oneof, proptest, strategy::Strategy};
+
+    use super::*;
+
+    #[test]
+    fn transaction_hash() {
+        let expected_hash = "be31664ef154456aec5df2e4acc7f23a715ad8ea33ad9dbcbb7e6e90bc5a8b8f";
+
+        let transaction = Transaction {
+            operation: Operation::Transfer {
+                from: AccountIdentifier::from_str(
+                    "e7a879ea563d273c46dd28c1584eaa132fad6f3e316615b3eb657d067f3519b5",
+                )
+                .unwrap(),
+                to: AccountIdentifier::from_str(
+                    "207ec07185bedd0f2176ec2760057b8b7bc619a94d60e70fbc91af322a9f7e93",
+                )
+                .unwrap(),
+                amount: Tokens::from_e8s(11541900000),
+                fee: Tokens::from_e8s(10_000),
+                spender: None,
+            },
+            memo: Memo(5432845643782906771),
+            created_at_time: Some(TimeStamp::from_nanos_since_unix_epoch(1621901572293430780)),
+            icrc1_memo: None,
+        };
+
+        assert_eq!(expected_hash, transaction.hash().to_string());
+    }
+
+    fn arb_principal_id() -> impl Strategy<Value = PrincipalId> {
+        // PrincipalId::try_from won't panic for any byte array with len <= 29
+        proptest::collection::vec(any::<u8>(), 0..30)
+            .prop_map(|v| PrincipalId::try_from(v).unwrap())
+    }
+
+    fn arb_opt_subaccount() -> impl Strategy<Value = Option<Subaccount>> {
+        proptest::option::of(any::<[u8; 32]>().prop_map(Subaccount))
+    }
+
+    fn arb_account() -> impl Strategy<Value = AccountIdentifier> {
+        (arb_principal_id(), arb_opt_subaccount())
+            .prop_map(|(owner, subaccount)| AccountIdentifier::new(owner, subaccount))
+    }
+
+    fn arb_tokens() -> impl Strategy<Value = Tokens> {
+        any::<u64>().prop_map(Tokens::from_e8s)
+    }
+
+    fn arb_burn() -> impl Strategy<Value = Operation> {
+        (
+            arb_account(),
+            arb_tokens(),
+            proptest::option::of(arb_account()),
+        )
+            .prop_map(|(from, amount, spender)| Operation::Burn {
+                from,
+                amount,
+                spender,
+            })
+    }
+
+    fn arb_mint() -> impl Strategy<Value = Operation> {
+        (arb_account(), arb_tokens()).prop_map(|(to, amount)| Operation::Mint { to, amount })
+    }
+
+    fn arb_tranfer() -> impl Strategy<Value = Operation> {
+        (
+            arb_account(),
+            arb_account(),
+            arb_tokens(),
+            arb_tokens(),
+            proptest::option::of(arb_account()),
+        )
+            .prop_map(|(from, to, amount, fee, spender)| Operation::Transfer {
+                from,
+                to,
+                amount,
+                fee,
+                spender,
+            })
+    }
+
+    fn arb_approve() -> impl Strategy<Value = Operation> {
+        (
+            arb_account(),
+            arb_account(),
+            arb_tokens(),
+            proptest::option::of(arb_tokens()),
+            proptest::option::of(arb_timestamp()),
+            arb_tokens(),
+        )
+            .prop_map(
+                |(from, spender, allowance, expected_allowance, expires_at, fee)| {
+                    Operation::Approve {
+                        from,
+                        spender,
+                        allowance,
+                        expected_allowance,
+                        expires_at,
+                        fee,
+                    }
+                },
+            )
+    }
+
+    fn arb_operation() -> impl Strategy<Value = Operation> {
+        prop_oneof![arb_burn(), arb_mint(), arb_tranfer(), arb_approve(),]
+    }
+
+    fn arb_memo() -> impl Strategy<Value = Memo> {
+        any::<u64>().prop_map(Memo)
+    }
+
+    fn arb_icrc1_memo() -> impl Strategy<Value = Option<ByteBuf>> {
+        proptest::option::of(any::<[u8; 32]>().prop_map(ByteBuf::from))
+    }
+
+    fn arb_transaction() -> impl Strategy<Value = Transaction> {
+        (
+            arb_operation(),
+            arb_memo(),
+            proptest::option::of(arb_timestamp()),
+            arb_icrc1_memo(),
+        )
+            .prop_map(
+                |(operation, memo, created_at_time, icrc1_memo)| Transaction {
+                    operation,
+                    memo,
+                    created_at_time,
+                    icrc1_memo,
+                },
+            )
+    }
+
+    fn arb_parent_hash() -> impl Strategy<Value = Option<HashOf<EncodedBlock>>> {
+        proptest::option::of(any::<[u8; 32]>().prop_map(HashOf::new))
+    }
+
+    fn arb_timestamp() -> impl Strategy<Value = TimeStamp> {
+        any::<u64>().prop_map(TimeStamp::from_nanos_since_unix_epoch)
+    }
+
+    fn arb_block() -> impl Strategy<Value = Block> {
+        (arb_parent_hash(), arb_transaction(), arb_timestamp()).prop_map(
+            |(parent_hash, transaction, timestamp)| Block {
+                parent_hash,
+                transaction,
+                timestamp,
+            },
+        )
+    }
+
+    #[test]
+    fn test_encode_decode() {
+        proptest!(|(block in arb_block())| {
+            let encoded = block.clone().encode();
+            let decoded = Block::decode(encoded).expect("Unable to decode block!");
+            prop_assert_eq!(block, decoded)
+        })
     }
 }

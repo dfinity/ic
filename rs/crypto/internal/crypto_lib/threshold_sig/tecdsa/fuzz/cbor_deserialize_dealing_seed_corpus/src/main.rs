@@ -44,7 +44,7 @@ fn generate_dealings() -> Result<Vec<IDkgDealingInternal>, IdkgCreateDealingInte
 }
 
 fn generate_dealing() -> Result<IDkgDealingInternal, IdkgCreateDealingInternalError> {
-    let mut rng = chacha_20_rng();
+    let rng = &mut chacha_20_rng();
     let mut associated_data: Vec<u8> = vec![0u8; rng.gen_range(10..200)];
     rng.fill_bytes(&mut associated_data);
     let num_parties: u32 = rng.gen_range(3..40);
@@ -55,9 +55,9 @@ fn generate_dealing() -> Result<IDkgDealingInternal, IdkgCreateDealingInternalEr
     let shares_type = rng.gen_range(0..4);
     let shares = match shares_type {
         0 => SecretShares::Random,
-        1 => reshare_of_unmasked_shares(&mut rng, curve),
-        2 => reshare_of_masked_shares(&mut rng, curve),
-        _ => unmasked_times_masked_shares(&mut rng, curve),
+        1 => reshare_of_unmasked_shares(rng, curve),
+        2 => reshare_of_masked_shares(rng, curve),
+        _ => unmasked_times_masked_shares(rng, curve),
     };
     create_dealing(
         AlgorithmId::ThresholdEcdsaSecp256k1,
@@ -66,7 +66,7 @@ fn generate_dealing() -> Result<IDkgDealingInternal, IdkgCreateDealingInternalEr
         NumberOfNodes::from(threshold),
         &public_keys,
         &shares,
-        Seed::from_rng(&mut rng),
+        Seed::from_rng(rng),
     )
 }
 
@@ -93,12 +93,12 @@ fn reshare_of_unmasked_shares(rng: &mut ChaCha20Rng, curve: EccCurveType) -> Sec
 }
 
 fn gen_private_keys(curve: EccCurveType, cnt: usize) -> (Vec<MEGaPrivateKey>, Vec<MEGaPublicKey>) {
-    let mut rng = chacha_20_rng();
+    let rng = &mut chacha_20_rng();
     let mut public_keys = Vec::with_capacity(cnt);
     let mut private_keys = Vec::with_capacity(cnt);
 
     for _i in 0..cnt {
-        let sk = MEGaPrivateKey::generate(curve, &mut rng);
+        let sk = MEGaPrivateKey::generate(curve, rng);
         public_keys.push(sk.public_key());
         private_keys.push(sk);
     }

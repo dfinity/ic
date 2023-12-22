@@ -1,3 +1,4 @@
+pub mod api_boundary_node;
 pub mod crypto;
 pub mod dc;
 pub mod firewall;

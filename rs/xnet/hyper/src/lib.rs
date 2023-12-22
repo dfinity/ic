@@ -9,8 +9,7 @@ use hyper::{
     Uri,
 };
 use ic_crypto_tls_interfaces::{
-    AllowedClients, AuthenticatedPeer, SomeOrAllNodes, TlsHandshake, TlsServerHandshakeError,
-    TlsStream,
+    AuthenticatedPeer, SomeOrAllNodes, TlsHandshake, TlsServerHandshakeError, TlsStream,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_xnet_uri::XNetAuthority;
@@ -216,7 +215,7 @@ impl Accept for TlsAccept {
                         let future = async move {
                             tls.perform_tls_server_handshake(
                                 conn.into_inner(),
-                                AllowedClients::new(SomeOrAllNodes::All).unwrap(),
+                                SomeOrAllNodes::All,
                                 registry_version,
                             )
                             .await

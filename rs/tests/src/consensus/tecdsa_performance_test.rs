@@ -1,7 +1,7 @@
 use crate::canister_agent::HasCanisterAgentCapability;
 use crate::canister_api::{CallMode, Request};
 use crate::canister_requests;
-use crate::driver::test_env_api::HasPublicApiUrl;
+use crate::driver::test_env_api::{HasPublicApiUrl, SshSession};
 use crate::driver::{
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
@@ -37,16 +37,23 @@ use tokio::runtime::{Builder, Runtime};
 const NODES_COUNT: usize = 25;
 const SUCCESS_THRESHOLD: f64 = 0.33; // If more than 33% of the expected calls are successful the test passes
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
-const TESTING_PERIOD: Duration = Duration::from_secs(900);
+const TESTING_PERIOD: Duration = Duration::from_secs(900); // testing time under load
+const COOLDOWN_PERIOD: Duration = Duration::from_secs(300); // sleep time before downloading p8s data
 const DKG_INTERVAL: u64 = 499;
 const MAX_RUNTIME_THREADS: usize = 64;
 const MAX_RUNTIME_BLOCKING_THREADS: usize = MAX_RUNTIME_THREADS;
+
+// Network parameters
+const DEVICE_NAME: &str = "enp1s0"; // network interface name
+const BANDWIDTH_MBITS: u32 = 80; // artificial cap on bandwidth
+const LATENCY: Duration = Duration::from_millis(120); // artificial added latency
+const LATENCY_JITTER: Duration = Duration::from_millis(20);
 
 // ECDSA parameters
 const QUADRUPLES_TO_CREATE: u32 = 20;
 const MAX_QUEUE_SIZE: u32 = 40;
 const CANISTER_COUNT: usize = 4;
-const SIGNATURE_REQUESTS_PER_SECOND: f64 = 1.9;
+const SIGNATURE_REQUESTS_PER_SECOND: f64 = 1.5;
 
 pub fn setup(env: TestEnv) {
     PrometheusVm::default()
@@ -89,7 +96,7 @@ pub fn setup(env: TestEnv) {
         NnsCustomizations::default(),
     );
     set_authorized_subnets(&env);
-    env.sync_prometheus_config_with_topology();
+    env.sync_with_prometheus();
 }
 
 #[derive(Clone)]
@@ -139,6 +146,14 @@ impl Request<SignWithECDSAReply> for EcdsaSignatureRequest {
 }
 
 pub fn test(env: TestEnv) {
+    tecdsa_performance_test(env, false, false);
+}
+
+pub fn tecdsa_performance_test(
+    env: TestEnv,
+    apply_network_settings: bool,
+    download_p8s_data: bool,
+) {
     let log = env.logger();
 
     let duration: Duration = TESTING_PERIOD;
@@ -159,6 +174,7 @@ pub fn test(env: TestEnv) {
     let key = enable_ecdsa_signing_on_subnet(&nns_node, &nns_canister, app_subnet.subnet_id, &log);
     run_ecdsa_signature_test(&nns_canister, &log, key);
 
+    info!(log, "Step 2: Installing Message canisters");
     let requests = (0..CANISTER_COUNT)
         .map(|_| {
             let principal = block_on(MessageCanister::new_with_cycles(
@@ -171,10 +187,22 @@ pub fn test(env: TestEnv) {
         })
         .collect::<Vec<_>>();
 
+    if apply_network_settings {
+        info!(log, "Optional Step: Modify all nodes' traffic using tc");
+        app_subnet.nodes().for_each(|node| {
+            info!(log, "Modifying node {}", node.get_ip_addr());
+            let session = node
+                .block_on_ssh_session()
+                .expect("Failed to ssh into node");
+            node.block_on_bash_script_from_session(&session, &limit_tc_ssh_command())
+                .expect("Failed to execute bash script from session");
+        });
+    }
+
     // create the runtime that lives until this variable is dropped.
     info!(
         env.logger(),
-        "Step 2: Start tokio runtime: worker_threads={}, blocking_threads={}",
+        "Step 3: Start tokio runtime: worker_threads={}, blocking_threads={}",
         MAX_RUNTIME_THREADS,
         MAX_RUNTIME_BLOCKING_THREADS
     );
@@ -193,7 +221,7 @@ pub fn test(env: TestEnv) {
         )
         .await;
 
-        info!(log, "Step 3: Instantiate and start the workload generator");
+        info!(log, "Step 4: Instantiate and start the workload generator");
         let generator = move |idx: usize| {
             let request = requests[idx % requests.len()].clone();
             let agent = agents[idx % agents.len()].clone();
@@ -213,7 +241,7 @@ pub fn test(env: TestEnv) {
 
         info!(log, "Reporting workload execution results");
         env.emit_report(format!("{}", metrics));
-        info!(log, "Step 4: Assert expected number of successful requests");
+        info!(log, "Step 5: Assert expected number of successful requests");
         let requests_count = rps * duration.as_secs_f64();
         let min_expected_success_calls = (SUCCESS_THRESHOLD * requests_count) as usize;
         info!(
@@ -226,6 +254,42 @@ pub fn test(env: TestEnv) {
             metrics.success_calls(),
             metrics.failure_calls()
         );
-        assert!(metrics.success_calls() >= min_expected_success_calls);
+
+        if download_p8s_data {
+            info!(log, "Sleeping for {} seconds", COOLDOWN_PERIOD.as_secs());
+            std::thread::sleep(COOLDOWN_PERIOD);
+            info!(log, "Downloading prometheus data");
+            env.download_prometheus_data_dir_if_exists();
+        } else {
+            assert!(metrics.success_calls() >= min_expected_success_calls);
+        }
     });
+}
+
+/**
+ * 1. Delete existing tc rules (if present).
+ * 2. Add a root qdisc (queueing discipline) for an htb (hierarchical token bucket).
+ * 3. Add a class with bandwidth limit.
+ * 4. Add a qdisc to introduce latency with jitter.
+ * 5. Add a filter to associate IPv6 traffic with the class and specific port.
+ * 6. Read the active tc rules.
+ */
+fn limit_tc_ssh_command() -> String {
+    let cfg = crate::util::get_config();
+    let p2p_listen_port = cfg.transport.unwrap().listening_port;
+    format!(
+        r#"set -euo pipefail
+sudo tc qdisc del dev {device} root 2> /dev/null || true
+sudo tc qdisc add dev {device} root handle 1: htb default 10
+sudo tc class add dev {device} parent 1: classid 1:10 htb rate {bandwidth_mbit}mbit ceil {bandwidth_mbit}mbit
+sudo tc qdisc add dev {device} parent 1:10 handle 10: netem delay {latency_ms}ms {jitter_ms}ms
+sudo tc filter add dev {device} parent 1: protocol ipv6 prio 1 u32 match ip6 dport {p2p_listen_port} 0xFFFF flowid 1:10
+sudo tc qdisc show dev {device}
+"#,
+        device = DEVICE_NAME,
+        bandwidth_mbit = BANDWIDTH_MBITS,
+        latency_ms = LATENCY.as_millis(),
+        jitter_ms = LATENCY_JITTER.as_millis(),
+        p2p_listen_port = p2p_listen_port
+    )
 }

@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.31"
-clap = { version = "3.1.6", features = ["derive"] }
+clap = { workspace = true }
 crossbeam = "0.8.0"
 crossbeam-channel = "0.5.5"
 futures-util = "0.3.5"
@@ -14,15 +14,15 @@ ic-async-utils = { path = "../../async_utils" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-types = { path = "../../types/types" }
 ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
-base64 = "0.11.0"
+base64 = { workspace = true }
 regex = "1.7.0"
-serde = { version = "1.0.115", features = ["derive"] }
-serde_json = "1.0.54"
+serde = { workspace = true }
+serde_json = { workspace = true }
 service-discovery = { path = "../service_discovery" }
-slog = { version = "2.5.2", features = ["nested-values"] }
+slog = { workspace = true }
 slog-async = { version = "2.5", features = ["nested-values"] }
 slog-term = "2.6.0"
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { workspace = true }
 url = { version = "2.1.1", features = ["serde"] }
 config_writer_common = { path = "../config_writer_common" }
 ic-config = { path = "../../config" }

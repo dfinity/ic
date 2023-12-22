@@ -1,13 +1,16 @@
 [package]
 name = "ic-crypto-internal-bls12-381-vetkd"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-crypto-internal-bls12-381-type = { path = "../type" }
 zeroize = { version = "1", features = ["zeroize_derive"] }
 rand = "0.8"
-sha3 = "0.9"
+ic-crypto-sha3 = { path = "../../../../sha3" }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

@@ -2,7 +2,8 @@ use crate::driver::{
     config::NODES_INFO,
     driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
     farm::{Farm, FarmResult, FileId},
-    ic::{InternetComputer, Node},
+    ic::{InternetComputer, Ipv4Config, Node},
+    nested::{NestedNode, NestedVms, NESTED_CONFIGURED_IMAGE_PATH},
     node_software_version::NodeSoftwareVersion,
     port_allocator::AddrType,
     resource::AllocatedVm,
@@ -127,8 +128,7 @@ pub fn init_ic(
             SubnetConfig::new(
                 subnet_index,
                 nodes,
-                Some(initial_replica.replica_version.clone()),
-                subnet.ingress_bytes_per_block_soft_cap,
+                initial_replica.replica_version.clone(),
                 subnet.max_ingress_bytes_per_message,
                 subnet.max_ingress_messages_per_block,
                 subnet.max_block_payload_size,
@@ -140,7 +140,7 @@ pub fn init_ic(
                 subnet.max_instructions_per_message,
                 subnet.max_instructions_per_round,
                 subnet.max_instructions_per_install_code,
-                subnet.features.map(|f| f.into()),
+                subnet.features,
                 subnet.ecdsa_config.clone().map(|c| c.into()),
                 subnet.max_number_of_canisters,
                 subnet.ssh_readonly_access.clone(),
@@ -167,6 +167,11 @@ pub fn init_ic(
                 test_env.get_malicious_ic_os_update_img_sha256()?,
                 test_env.get_malicious_ic_os_update_img_url()?,
             )
+        } else if ic.with_mainnet_config {
+            (
+                test_env.get_mainnet_ic_os_update_img_sha256()?,
+                test_env.get_mainnet_ic_os_update_img_url()?,
+            )
         } else {
             (
                 test_env.get_ic_os_update_img_sha256()?,
@@ -177,7 +182,7 @@ pub fn init_ic(
     let mut ic_config = IcConfig::new(
         working_dir.path(),
         ic_topology,
-        Some(initial_replica.replica_version),
+        initial_replica.replica_version,
         // To maintain backwards compatibility, pass true here.
         // False is used only when nodes need to be deployed without
         // them joining any subnet initially
@@ -227,10 +232,18 @@ pub fn setup_and_start_vms(
         let t_env = env.clone();
         let ic_name = ic.name();
         let malicious_behaviour = ic.get_malicious_behavior_of_node(node.node_id);
+        let ipv4_config = ic.get_ipv4_config_of_node(node.node_id);
         nodes_info.insert(node.node_id, malicious_behaviour.clone());
         join_handles.push(thread::spawn(move || {
-            create_config_disk_image(&ic_name, &node, malicious_behaviour, &t_env, &group_name)?;
-            let image_id = upload_config_disk_image(&node, &t_farm)?;
+            create_config_disk_image(
+                &ic_name,
+                &node,
+                malicious_behaviour,
+                ipv4_config,
+                &t_env,
+                &group_name,
+            )?;
+            let image_id = upload_config_disk_image(&group_name, &node, &t_farm)?;
             // delete uncompressed file
             let conf_img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
             std::fs::remove_file(conf_img_path)?;
@@ -257,10 +270,65 @@ pub fn setup_and_start_vms(
     result
 }
 
-pub fn upload_config_disk_image(node: &InitializedNode, farm: &Farm) -> FarmResult<FileId> {
+// Startup nested VMs. NOTE: This is different from `setup_and_start_vms` in
+// that we need to configure and push a SetupOS image for each node.
+pub fn setup_and_start_nested_vms(
+    nodes: &[NestedNode],
+    env: &TestEnv,
+    farm: &Farm,
+    group_name: &str,
+    nns_url: &Url,
+    nns_public_key: &str,
+) -> anyhow::Result<()> {
+    let mut join_handles: Vec<JoinHandle<anyhow::Result<()>>> = vec![];
+    for node in nodes {
+        let t_farm = farm.to_owned();
+        let t_env = env.to_owned();
+        let t_group_name = group_name.to_owned();
+        let t_vm_name = node.name.to_owned();
+        let t_nns_url = nns_url.to_owned();
+        let t_nns_public_key = nns_public_key.to_owned();
+        join_handles.push(thread::spawn(move || {
+            let configured_image =
+                configure_setupos_image(&t_env, &t_vm_name, &t_nns_url, &t_nns_public_key)?;
+
+            let configured_image_id = t_farm.upload_file(
+                &t_group_name,
+                configured_image,
+                NESTED_CONFIGURED_IMAGE_PATH,
+            )?;
+            t_farm.attach_disk_images(
+                &t_group_name,
+                &t_vm_name,
+                "usb-storage",
+                vec![configured_image_id],
+            )?;
+            t_farm.start_vm(&t_group_name, &t_vm_name)?;
+
+            Ok(())
+        }));
+    }
+
+    let mut result = Ok(());
+    // Wait for all threads to finish and return an error if any of them fails.
+    for jh in join_handles {
+        if let Err(e) = jh.join().expect("waiting for a thread failed") {
+            warn!(farm.logger, "starting VM failed with: {:?}", e);
+            result = Err(anyhow::anyhow!("failed to set up and start a VM pool"));
+        }
+    }
+
+    result
+}
+
+pub fn upload_config_disk_image(
+    group_name: &str,
+    node: &InitializedNode,
+    farm: &Farm,
+) -> FarmResult<FileId> {
     let compressed_img_path = mk_compressed_img_path();
     let target_file = PathBuf::from(&node.node_path).join(compressed_img_path.clone());
-    let image_id = farm.upload_file(target_file, &compressed_img_path)?;
+    let image_id = farm.upload_file(group_name, target_file, &compressed_img_path)?;
     info!(farm.logger, "Uploaded image: {}", image_id);
     Ok(image_id)
 }
@@ -271,6 +339,7 @@ pub fn create_config_disk_image(
     ic_name: &str,
     node: &InitializedNode,
     malicious_behavior: Option<MaliciousBehaviour>,
+    ipv4_config: Option<Ipv4Config>,
     test_env: &TestEnv,
     group_name: &str,
 ) -> anyhow::Result<()> {
@@ -288,7 +357,7 @@ pub fn create_config_disk_image(
         .arg(local_store_path)
         .arg("--ic_crypto")
         .arg(node.crypto_path())
-        .arg("--journalbeat_tags")
+        .arg("--elasticsearch_tags")
         .arg(format!("system_test {}", group_name));
 
     // If we have a root subnet, specify the correct NNS url.
@@ -311,20 +380,37 @@ pub fn create_config_disk_image(
             .arg(serde_json::to_string(&malicious_behavior)?);
     }
 
+    if let Some(ipv4_config) = ipv4_config {
+        info!(
+            test_env.logger(),
+            "Node with id={} is IPv4-enabled: IP address {:?}/{:?}, IP gateway {:?}",
+            node.node_id,
+            ipv4_config.ip_addr,
+            ipv4_config.prefix_length,
+            ipv4_config.gateway_ip_addr
+        );
+        cmd.arg("--ipv4_address").arg(format!(
+            "{:?}/{:?}",
+            ipv4_config.ip_addr, ipv4_config.prefix_length
+        ));
+        cmd.arg("--ipv4_gateway")
+            .arg(ipv4_config.gateway_ip_addr.to_string());
+    }
+
     let ssh_authorized_pub_keys_dir: PathBuf = test_env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
     if ssh_authorized_pub_keys_dir.exists() {
         cmd.arg("--accounts_ssh_authorized_keys")
             .arg(ssh_authorized_pub_keys_dir);
     }
 
-    let journalbeat_hosts: Vec<String> = test_env.get_journalbeat_hosts()?;
+    let elasticsearch_hosts: Vec<String> = test_env.get_elasticsearch_hosts()?;
     info!(
         test_env.logger(),
-        "journal beat hosts are {:?}", journalbeat_hosts
+        "ElasticSearch hosts are {:?}", elasticsearch_hosts
     );
-    if !journalbeat_hosts.is_empty() {
-        cmd.arg("--journalbeat_hosts")
-            .arg(journalbeat_hosts.join(" "));
+    if !elasticsearch_hosts.is_empty() {
+        cmd.arg("--elasticsearch_hosts")
+            .arg(elasticsearch_hosts.join(" "));
     }
 
     let replica_log_debug_overrides: Vec<String> = test_env.get_replica_log_debug_overrides()?;
@@ -382,11 +468,11 @@ pub fn create_config_disk_image(
     let mut cmd = Command::new("sha256sum");
     cmd.arg(compressed_img_path);
     let output = cmd.output()?;
+    std::io::stdout().write_all(&output.stdout)?;
+    std::io::stderr().write_all(&output.stderr)?;
     if !output.status.success() {
         bail!("could not create sha256 of image");
     }
-    std::io::stdout().write_all(&output.stdout)?;
-    std::io::stderr().write_all(&output.stderr)?;
     Ok(())
 }
 
@@ -394,14 +480,122 @@ fn node_to_config(node: &Node) -> NodeConfiguration {
     let ipv6_addr = IpAddr::V6(node.ipv6.expect("missing ip_addr"));
     let public_api = SocketAddr::new(ipv6_addr, AddrType::PublicApi.into());
     let xnet_api = SocketAddr::new(ipv6_addr, AddrType::Xnet.into());
-    let p2p_addr = SocketAddr::new(ipv6_addr, AddrType::P2P.into());
     NodeConfiguration {
         xnet_api,
         public_api,
-        p2p_addr,
         // this value will be overridden by IcConfig::with_node_operator()
         node_operator_principal_id: None,
         secret_key_store: node.secret_key_store.clone(),
-        chip_id: vec![],
+        chip_id: None,
     }
+}
+
+fn configure_setupos_image(
+    env: &TestEnv,
+    name: &str,
+    nns_url: &Url,
+    nns_public_key: &str,
+) -> anyhow::Result<PathBuf> {
+    let setupos_image = env.get_dependency_path("ic-os/setupos/envs/dev/disk-img.tar.zst");
+    let setupos_inject_configs = env
+        .get_dependency_path("rs/ic_os/setupos-inject-configuration/setupos-inject-configuration");
+    let setupos_disable_checks =
+        env.get_dependency_path("rs/ic_os/setupos-disable-checks/setupos-disable-checks");
+
+    let nested_vm = env.get_nested_vm(name)?;
+
+    let mac = nested_vm.get_vm()?.mac6;
+    let memory = "16";
+    let cpu_mode = "qemu";
+
+    let ssh_authorized_pub_keys_dir = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
+    let admin_keys: Vec<_> = std::fs::read_to_string(ssh_authorized_pub_keys_dir.join("admin"))
+        .map(|v| v.lines().map(|v| v.to_owned()).collect())
+        .unwrap_or_default();
+
+    // TODO: We transform the IPv6 to get this information, but it could be
+    // passed natively.
+    let old_ip = nested_vm.get_vm()?.ipv6;
+    let segments = old_ip.segments();
+    let prefix = format!(
+        "{:04x}:{:04x}:{:04x}:{:04x}::/64",
+        segments[0], segments[1], segments[2], segments[3]
+    );
+    let gateway = format!(
+        "{:04x}:{:04x}:{:04x}:{:04x}::1/64",
+        segments[0], segments[1], segments[2], segments[3]
+    );
+
+    let tmp_dir = tempfile::tempdir().unwrap();
+    let uncompressed_image = tmp_dir.path().join("disk.img");
+
+    let output = Command::new("tar")
+        .arg("xaf")
+        .arg(&setupos_image)
+        .arg("-C")
+        .arg(tmp_dir.path())
+        .output()?;
+    std::io::stdout().write_all(&output.stdout)?;
+    std::io::stderr().write_all(&output.stderr)?;
+    if !output.status.success() {
+        bail!("could not extract image");
+    }
+
+    let path_key = "PATH";
+    let new_path = format!("{}:{}", "/usr/sbin", std::env::var(path_key)?);
+
+    let output = Command::new(setupos_disable_checks)
+        .arg("--image-path")
+        .arg(&uncompressed_image)
+        .env(path_key, &new_path)
+        .output()?;
+    std::io::stdout().write_all(&output.stdout)?;
+    std::io::stderr().write_all(&output.stderr)?;
+    if !output.status.success() {
+        bail!("could not disable checks on image");
+    }
+
+    let mut cmd = Command::new(setupos_inject_configs);
+    cmd.arg("--image-path")
+        .arg(&uncompressed_image)
+        .arg("--mgmt-mac")
+        .arg(&mac)
+        .arg("--ipv6-prefix")
+        .arg(&prefix)
+        .arg("--ipv6-gateway")
+        .arg(&gateway)
+        .arg("--memory-gb")
+        .arg(memory)
+        .arg("--cpu-mode")
+        .arg(cpu_mode)
+        .arg("--nns-url")
+        .arg(&nns_url.to_string())
+        .arg("--nns-public-key")
+        .arg(nns_public_key)
+        .env(path_key, &new_path);
+
+    if !admin_keys.is_empty() {
+        cmd.arg("--public-keys");
+        for key in admin_keys {
+            cmd.arg(key);
+        }
+    }
+
+    let output = cmd.output()?;
+    std::io::stdout().write_all(&output.stdout)?;
+    std::io::stderr().write_all(&output.stderr)?;
+    if !output.status.success() {
+        bail!("could not inject configs into image");
+    }
+
+    let configured_image = nested_vm.get_configured_setupos_image_path().unwrap();
+
+    let mut img_file = File::open(&uncompressed_image)?;
+    let configured_image_file = File::create(configured_image.clone())?;
+    let mut encoder = GzEncoder::new(configured_image_file, Compression::default());
+    let _ = io::copy(&mut img_file, &mut encoder)?;
+    let mut write_stream = encoder.finish()?;
+    write_stream.flush()?;
+
+    Ok(configured_image)
 }

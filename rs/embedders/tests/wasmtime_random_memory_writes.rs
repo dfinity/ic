@@ -28,6 +28,7 @@ use lazy_static::lazy_static;
 use proptest::prelude::*;
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
+use std::rc::Rc;
 use std::sync::Arc;
 
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
@@ -71,6 +72,7 @@ fn test_api_for_update(
     );
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);
+    let canister_current_message_memory_usage = NumBytes::from(0);
 
     SystemApiImpl::new(
         ApiType::update(
@@ -82,6 +84,7 @@ fn test_api_for_update(
         ),
         static_system_state,
         canister_current_memory_usage,
+        canister_current_message_memory_usage,
         ExecutionParameters {
             instruction_limits: InstructionLimits::new(
                 FlagStatus::Disabled,
@@ -101,7 +104,7 @@ fn test_api_for_update(
             .wasm_native_stable_memory,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
-        Arc::new(DefaultOutOfInstructionsHandler {}),
+        Rc::new(DefaultOutOfInstructionsHandler {}),
         log,
     )
 }
@@ -418,7 +421,10 @@ fn wat2wasm(wat: &str) -> Result<BinaryEncodedWasm, wat::Error> {
 mod tests {
     use super::*;
 
-    use ic_embedders::{wasm_executor::compute_page_delta, wasmtime_embedder::CanisterMemoryType};
+    use ic_embedders::{
+        wasm_executor::compute_page_delta, wasm_utils::instrumentation::instruction_to_cost_new,
+        wasmtime_embedder::CanisterMemoryType,
+    };
     // Get .current() trait method
     use ic_interfaces::execution_environment::{HypervisorError, SystemApi};
     use ic_logger::ReplicaLogger;
@@ -466,7 +472,7 @@ mod tests {
                         &Memory::new(page_map.clone(), NumWasmPages::from(0)),
                         &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
                         modification_tracking,
-                        api,
+                        Some(api),
                     )
                     .map_err(|r| r.0)
                     .expect("Failed to create instance");
@@ -646,7 +652,7 @@ mod tests {
                     &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
                     &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
                     ModificationTracking::Ignore,
-                    api,
+                    Some(api),
                 )
                 .map_err(|r| r.0)
                 .expect("Failed to create instance");
@@ -659,11 +665,18 @@ mod tests {
             let instruction_counter = inst.instruction_counter();
             let instructions_executed = inst
                 .store_data()
-                .system_api
+                .system_api()
+                .unwrap()
                 .slice_instructions_executed(instruction_counter);
+
+            // (call $trap (i32.const 0) (i32.const 2147483648)) ;; equivalent to 2 ^ 31
+            let expected_instructions = 1 // Function is 1 instruction.
+                + instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 })
+                + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::new::TRAP.get()
+                + 2 * instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 1 });
             assert_eq!(
                 instructions_executed.get(),
-                23 + (num_bytes / BYTES_PER_INSTRUCTION) as u64
+                expected_instructions + (num_bytes / BYTES_PER_INSTRUCTION) as u64
             )
         });
     }
@@ -679,7 +692,7 @@ mod tests {
 
             // Set maximum number of instructions to some low value to trap
             // Note: system API calls get charged per call, see system_api::charges
-            let max_num_instructions = NumInstructions::new(1000);
+            let max_num_instructions = NumInstructions::new(10_000);
 
             // Consumes less than max_num_instructions.
             let instructions_consumed_without_data = get_num_instructions_consumed(
@@ -715,9 +728,20 @@ mod tests {
             get_num_instructions_consumed, SubnetType, MAX_NUM_INSTRUCTIONS, STABLE_OP_BYTES,
         };
         use ic_config::subnet_config::SchedulerConfig;
+        use ic_embedders::wasm_utils::instrumentation::instruction_to_cost_new;
         use ic_logger::replica_logger::no_op_logger;
 
-        const SETUP_INSTRUCTION_OVERHEAD: u64 = 7;
+        // (drop (call $ic0_stable_grow (i32.const 1)))
+        // (call $ic0_stable64_read (i64.const 0) (i64.const 0) (i64.const {STABLE_OP_BYTES}))
+        fn setup_instruction_overhead() -> u64 {
+            instruction_to_cost_new(&wasmparser::Operator::Drop)
+                + instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 })
+                + ic_embedders::wasmtime_embedder::system_api_complexity::overhead_native::new::STABLE_GROW.get()
+                + instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 1 })
+                + instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 })
+                + 3 * instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 1 })
+                + 1 // Function is 1 instruction.
+        }
 
         #[test]
         fn empty_stable_read_charge() {
@@ -730,12 +754,10 @@ mod tests {
             )
             .unwrap();
             // Additional charge for an empty read should just be the overhead.
-            assert_eq!(
-                instructions_consumed.get(),
-                SETUP_INSTRUCTION_OVERHEAD
-                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_READ
-                        .get()
-            );
+            assert_eq!(instructions_consumed.get(),                 setup_instruction_overhead()
+            + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_READ
+                .get()
+);
         }
 
         #[test]
@@ -752,7 +774,7 @@ mod tests {
             // for each byte.
             assert_eq!(
                 instructions_consumed.get(),
-                SETUP_INSTRUCTION_OVERHEAD
+                setup_instruction_overhead()
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_READ
                         .get()
                     + STABLE_OP_BYTES
@@ -773,8 +795,8 @@ mod tests {
             // for each byte.
             assert_eq!(
                 instructions_consumed.get(),
-                SETUP_INSTRUCTION_OVERHEAD
-                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE64_READ
+                setup_instruction_overhead()
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::new::STABLE64_READ
                         .get()
                     + STABLE_OP_BYTES
             );
@@ -793,7 +815,7 @@ mod tests {
             // Only the fixed cost is charged on system subnets.
             assert_eq!(
                 instructions_consumed.get(),
-                SETUP_INSTRUCTION_OVERHEAD
+                setup_instruction_overhead()
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_READ
                         .get()
             );
@@ -813,7 +835,7 @@ mod tests {
             // for each byte and an extra charge for one dirty page.
             assert_eq!(
                 instructions_consumed.get(),
-                SETUP_INSTRUCTION_OVERHEAD
+                setup_instruction_overhead()
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_WRITE
                         .get()
                     + STABLE_OP_BYTES
@@ -836,7 +858,7 @@ mod tests {
             // Only the extra charge for the dirty page.
             assert_eq!(
                 instructions_consumed.get(),
-                SETUP_INSTRUCTION_OVERHEAD
+                setup_instruction_overhead()
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_WRITE
                         .get()
                     + SchedulerConfig::system_subnet().dirty_page_overhead.get()
@@ -857,7 +879,7 @@ mod tests {
             // for each byte and an extra charge for one dirty page.
             assert_eq!(
                 instructions_consumed.get(),
-                SETUP_INSTRUCTION_OVERHEAD
+                setup_instruction_overhead()
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_WRITE
                         .get()
                     + STABLE_OP_BYTES
@@ -880,7 +902,7 @@ mod tests {
             // Only the extra charge for the dirty page.
             assert_eq!(
                 instructions_consumed.get(),
-                SETUP_INSTRUCTION_OVERHEAD
+                setup_instruction_overhead()
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_WRITE
                         .get()
                     + SchedulerConfig::system_subnet().dirty_page_overhead.get()
@@ -1045,7 +1067,7 @@ mod tests {
                 &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
                 &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
                 ModificationTracking::Track,
-                api,
+                Some(api),
             )
             .map_err(|r| r.0)
             .expect("Failed to create instance");
@@ -1056,7 +1078,8 @@ mod tests {
         let instruction_counter = inst.instruction_counter();
         let instructions_executed = inst
             .store_data()
-            .system_api
+            .system_api()
+            .unwrap()
             .slice_instructions_executed(instruction_counter);
 
         Ok((instructions_executed, res))
@@ -1329,7 +1352,7 @@ mod tests {
                     &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
                     &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
                     ModificationTracking::Track,
-                    api,
+                    Some(api),
                 )
                 .map_err(|r| r.0)
                 .expect("Failed to create instance");

@@ -88,9 +88,30 @@ impl Percentage {
         }
     }
 
-    pub fn from_basis_points(basis_points: u64) -> Percentage {
+    pub const fn from_basis_points(basis_points: u64) -> Percentage {
         Percentage {
             basis_points: Some(basis_points),
         }
+    }
+}
+
+impl std::fmt::Display for Percentage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.basis_points {
+            None => write!(f, "[unspecified]"),
+            Some(basis_points) => write!(f, "{}.{:02}%", basis_points / 100, basis_points % 100),
+        }
+    }
+}
+
+impl Tokens {
+    pub fn checked_add(&self, rhs: &Tokens) -> Option<Tokens> {
+        let e8s = self.e8s?.checked_add(rhs.e8s?)?;
+        Some(Tokens { e8s: Some(e8s) })
+    }
+
+    pub fn checked_sub(&self, rhs: &Tokens) -> Option<Tokens> {
+        let e8s = self.e8s?.checked_sub(rhs.e8s?)?;
+        Some(Tokens { e8s: Some(e8s) })
     }
 }

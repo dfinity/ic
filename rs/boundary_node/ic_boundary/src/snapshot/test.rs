@@ -1,39 +1,46 @@
 use super::*;
 
-use std::{
-    collections::HashMap,
-    net::{IpAddr, Ipv4Addr},
-    time::SystemTime,
-};
+use std::net::{IpAddr, Ipv4Addr};
 
+use ic_certification_test_utils::CertificateData::*;
+use ic_certification_test_utils::*;
 use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate_and_validation_time;
+use ic_crypto_tree_hash::Digest;
 use ic_protobuf::registry::{
+    crypto::v1::PublicKey as PublicKeyProto,
     node::v1::{ConnectionEndpoint, NodeRecord},
     routing_table::v1::RoutingTable as PbRoutingTable,
-    subnet::v1::{SubnetListRecord, SubnetRecord},
+    subnet::v1::SubnetListRecord,
 };
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{
-    make_crypto_tls_cert_key, make_node_record_key, make_routing_table_record_key,
-    make_subnet_list_record_key, make_subnet_record_key, ROOT_SUBNET_ID_KEY,
+    make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key, make_node_record_key,
+    make_routing_table_record_key, make_subnet_list_record_key, make_subnet_record_key,
+    ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable as RoutingTableIC};
 use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
 use ic_test_utilities_registry::test_subnet_record;
-use ic_types::{CanisterId, RegistryVersion, ReplicaVersion, SubnetId};
-use rustls::{server::DnsName, Certificate, ServerName};
+use ic_types::{
+    crypto::threshold_sig::ThresholdSigPublicKey, CanisterId, NodeId, PrincipalId, RegistryVersion,
+};
+use rand::Rng;
 
-// CN = s52il-lowsg-eip4y-pt5lv-sbdpb-vg4gg-4iasu-egajp-yluji-znfz3-2qe
-const TEST_CERTIFICATE: &str = "3082015530820107a00302010202136abf05c1260364e09ad5f4ad0e9cb90a6e0edb300506032b6570304a3148304606035504030c3f733532696c2d6c6f7773672d\
-                                65697034792d7074356c762d73626470622d76673467672d34696173752d6567616a702d796c756a692d7a6e667a332d3271653020170d3232313131343135303230\
-                                345a180f39393939313233313233353935395a304a3148304606035504030c3f733532696c2d6c6f7773672d65697034792d7074356c762d73626470622d76673467\
-                                672d34696173752d6567616a702d796c756a692d7a6e667a332d327165302a300506032b65700321002b5c5af2776114a400d71995cf9cdb72ca1a26b59b875a3d70\
-                                c79bf48b5f210b300506032b6570034100f3ded920aa535295c69fd97c8da2d73ce525370456cdaacc4863b25e19b0d2af1961454ac5ff9a9e182ea54034ceed0dd0\
-                                2a7bd9421ae1f844c894544bca9602";
+fn new_random_certified_data() -> Digest {
+    let mut random_certified_data: [u8; 32] = [0; 32];
+    rand::thread_rng().fill(&mut random_certified_data);
+    Digest(random_certified_data)
+}
 
-fn test_certificate() -> Vec<u8> {
-    hex::decode(TEST_CERTIFICATE).unwrap()
+pub fn new_threshold_key() -> ThresholdSigPublicKey {
+    let (_, pk, _) = CertificateBuilder::new(CanisterData {
+        canister_id: CanisterId::from_u64(1),
+        certified_data: new_random_certified_data(),
+    })
+    .build();
+
+    pk
 }
 
 // Generate a fake registry client with some data
@@ -42,12 +49,22 @@ pub fn create_fake_registry_client(subnet_count: u8) -> FakeRegistryClient {
     let data_provider = ProtoRegistryDataProvider::new();
     let reg_ver = RegistryVersion::new(1);
 
+    let nns_subnet_id = subnet_test_id(0);
+
     // Add NNS subnet
     data_provider
         .add(
             ROOT_SUBNET_ID_KEY,
             reg_ver,
-            Some(ic_types::subnet_id_into_protobuf(subnet_test_id(0))),
+            Some(ic_types::subnet_id_into_protobuf(nns_subnet_id)),
+        )
+        .unwrap();
+
+    data_provider
+        .add(
+            &make_crypto_threshold_signing_pubkey_key(nns_subnet_id),
+            reg_ver,
+            Some(PublicKeyProto::from(new_threshold_key())),
         )
         .unwrap();
 
@@ -115,7 +132,7 @@ pub fn create_fake_registry_client(subnet_count: u8) -> FakeRegistryClient {
             reg_ver,
             Some(SubnetListRecord { subnets }),
         )
-        .expect("Coult not add subnet list record.");
+        .expect("Could not add subnet list record.");
 
     // Add routing table
     data_provider
@@ -132,7 +149,114 @@ pub fn create_fake_registry_client(subnet_count: u8) -> FakeRegistryClient {
     registry_client
 }
 
-fn create_nodes() -> Vec<(&'static str, IpAddr, u16)> {
+pub fn create_fake_registry_client_single_node() -> FakeRegistryClient {
+    let mut subnets: Vec<Vec<u8>> = vec![];
+    let data_provider = ProtoRegistryDataProvider::new();
+    let reg_ver = RegistryVersion::new(1);
+
+    let nns_subnet_id = subnet_test_id(0);
+
+    // Add NNS subnet
+    data_provider
+        .add(
+            ROOT_SUBNET_ID_KEY,
+            reg_ver,
+            Some(ic_types::subnet_id_into_protobuf(nns_subnet_id)),
+        )
+        .unwrap();
+
+    data_provider
+        .add(
+            &make_crypto_threshold_signing_pubkey_key(nns_subnet_id),
+            reg_ver,
+            Some(PublicKeyProto::from(new_threshold_key())),
+        )
+        .unwrap();
+
+    // Routing table
+    let mut routing_table = RoutingTableIC::default();
+
+    let subnet_id = subnet_test_id(1);
+    // Same node_id that valid_tls_certificate_and_validation_time() is valid for
+    let node_id = NodeId::from(
+        PrincipalId::from_str("4inqb-2zcvk-f6yql-sowol-vg3es-z24jd-jrkow-mhnsd-ukvfp-fak5p-aae")
+            .unwrap(),
+    );
+    let node_ip = "192.168.0.1".into();
+
+    subnets.push(subnet_id.get().into_vec());
+
+    let mut subnet_record = test_subnet_record();
+    subnet_record.membership = vec![node_id.get().into_vec()];
+
+    // Add subnet with node
+    data_provider
+        .add(
+            &make_subnet_record_key(subnet_id),
+            reg_ver,
+            Some(subnet_record),
+        )
+        .unwrap();
+
+    // Set connection information
+    let http_endpoint = ConnectionEndpoint {
+        ip_addr: node_ip,
+        port: 8080,
+    };
+
+    data_provider
+        .add(
+            &make_node_record_key(node_id),
+            reg_ver,
+            Some(NodeRecord {
+                http: Some(http_endpoint),
+                ..Default::default()
+            }),
+        )
+        .unwrap();
+
+    // Add some TLS certificate
+    data_provider
+        .add(
+            &make_crypto_tls_cert_key(node_id),
+            reg_ver,
+            Some(valid_tls_certificate_and_validation_time().0),
+        )
+        .expect("failed to add TLS certificate to registry");
+
+    // Add subnet to routing table
+    let canister_range = CanisterIdRange {
+        start: CanisterId::from(0),
+        end: CanisterId::from(999_999),
+    };
+
+    routing_table.insert(canister_range, subnet_id).unwrap();
+
+    // Add list of subnets
+    data_provider
+        .add(
+            make_subnet_list_record_key().as_str(),
+            reg_ver,
+            Some(SubnetListRecord { subnets }),
+        )
+        .expect("Could not add subnet list record.");
+
+    // Add routing table
+    data_provider
+        .add(
+            &make_routing_table_record_key(),
+            reg_ver,
+            Some(PbRoutingTable::from(routing_table)),
+        )
+        .unwrap();
+
+    let registry_client = FakeRegistryClient::new(Arc::new(data_provider));
+    registry_client.update_to_latest_version();
+
+    registry_client
+}
+
+pub fn create_nodes() -> Vec<(&'static str, IpAddr, u16)> {
     vec![
         (
             "y7s52-3xjam-aaaaa-aaaap-2ai",
@@ -159,17 +283,16 @@ fn create_nodes() -> Vec<(&'static str, IpAddr, u16)> {
 
 #[tokio::test]
 async fn test_routing_table() -> Result<(), Error> {
-    let rt = Arc::new(ArcSwapOption::empty());
+    let snapshot = Arc::new(ArcSwapOption::empty());
     let reg = Arc::new(create_fake_registry_client(4));
-    let mut runner = Runner::new(Arc::clone(&rt), reg);
-    runner.run().await?;
-    let rt = rt.load_full().unwrap();
+    let mut snapshotter = Snapshotter::new(Arc::clone(&snapshot), reg, Duration::ZERO);
+    snapshotter.snapshot().await?;
+    let snapshot = snapshot.load_full().unwrap();
 
-    assert_eq!(rt.registry_version, 1);
-    assert_eq!(rt.nns_subnet_id.to_string(), "fscpm-uiaaa-aaaaa-aaaap-yai");
-    assert_eq!(rt.subnets.len(), 4);
+    assert_eq!(snapshot.version, 1);
+    assert_eq!(snapshot.subnets.len(), 4);
 
-    let subnets = vec![
+    let subnets = [
         (
             "yndj2-3ybaa-aaaaa-aaaap-yai",
             ("rwlgt-iiaaa-aaaaa-aaaaa-cai", "chwmy-2yaaa-aaaaa-pii7q-cai"),
@@ -190,8 +313,8 @@ async fn test_routing_table() -> Result<(), Error> {
 
     let nodes = create_nodes();
 
-    for i in 0..rt.subnets.len() {
-        let sn = &rt.subnets[i];
+    for i in 0..snapshot.subnets.len() {
+        let sn = &snapshot.subnets[i];
         assert_eq!(sn.id.to_string(), subnets[i].0);
 
         assert_eq!(sn.ranges.len(), 1);
@@ -210,93 +333,6 @@ async fn test_routing_table() -> Result<(), Error> {
                 .certificate_der,
         );
     }
-
-    Ok(())
-}
-
-fn check_certificate_verification(
-    tls_verifier: &TlsVerifier,
-    name: &str,
-    der: Vec<u8>,
-) -> Result<(), Error> {
-    let crt = Certificate(der);
-    let intermediates: Vec<Certificate> = vec![];
-    let server_name = ServerName::try_from(name).unwrap();
-    let scts: Vec<&[u8]> = vec![];
-    let ocsp_response: Vec<u8> = vec![];
-
-    tls_verifier.verify_server_cert(
-        &crt,
-        intermediates.as_slice(),
-        &server_name,
-        &mut scts.into_iter(),
-        ocsp_response.as_slice(),
-        SystemTime::now(),
-    )?;
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_verify_tls_certificate() -> Result<(), Error> {
-    let rt = Arc::new(ArcSwapOption::empty());
-    let reg = Arc::new(create_fake_registry_client(4));
-    let mut runner = Runner::new(Arc::clone(&rt), reg);
-    let helper = TlsVerifier::new(Arc::clone(&rt));
-    runner.run().await?;
-
-    let rt = rt.load_full().unwrap();
-
-    for sn in rt.subnets.iter() {
-        let node_name = sn.nodes[0].id.to_string();
-
-        check_certificate_verification(
-            &helper,
-            node_name.as_str(),
-            valid_tls_certificate_and_validation_time()
-                .0
-                .certificate_der,
-        )?;
-
-        // Check with different cert -> should fail
-        let r = check_certificate_verification(&helper, node_name.as_str(), test_certificate());
-        assert!(matches!(r, Err(_)));
-    }
-
-    Ok(())
-}
-
-// Check that resolver yields correct IPs
-#[tokio::test]
-async fn test_resolve() -> Result<(), Error> {
-    use hyper::client::connect::dns::Name;
-
-    let reg = Arc::new(create_fake_registry_client(4));
-    let rt = Arc::new(ArcSwapOption::empty());
-    let helper = DnsResolver::new(Arc::clone(&rt));
-    let mut runner = Runner::new(Arc::clone(&rt), reg);
-    runner.run().await?;
-
-    // Check that resolved node's IPs match expected ones
-    let nodes = create_nodes();
-
-    for node in nodes.into_iter() {
-        let res = helper.resolve(Name::from_str(node.0).unwrap()).await;
-
-        match res {
-            Ok(mut r) => {
-                assert_eq!(r.next().unwrap().clone().ip(), node.1);
-            }
-
-            Err(_) => {
-                panic!("should not error out")
-            }
-        }
-    }
-
-    // Check the lookup failure for unknown node name
-    let res = helper.resolve(Name::from_str("foo-bar-baz").unwrap()).await;
-    assert!(matches!(res, Result::Err(_)));
 
     Ok(())
 }

@@ -690,21 +690,19 @@ impl HashTree {
     /// the actual number of buckets in the current tree.
     fn splice_subtree(&mut self, subtree: HashTree) {
         // Leafs
-        self.leaf_digests.extend(subtree.leaf_digests.into_iter());
+        self.leaf_digests.extend(subtree.leaf_digests);
 
         // Forks
-        self.fork_digests.extend(subtree.fork_digests.into_iter());
-        self.fork_left_children
-            .extend(subtree.fork_left_children.into_iter());
-        self.fork_right_children
-            .extend(subtree.fork_right_children.into_iter());
+        self.fork_digests.extend(subtree.fork_digests);
+        self.fork_left_children.extend(subtree.fork_left_children);
+        self.fork_right_children.extend(subtree.fork_right_children);
 
         // Nodes
-        self.node_digests.extend(subtree.node_digests.into_iter());
-        self.node_labels.extend(subtree.node_labels.into_iter());
-        self.node_children.extend(subtree.node_children.into_iter());
+        self.node_digests.extend(subtree.node_digests);
+        self.node_labels.extend(subtree.node_labels);
+        self.node_children.extend(subtree.node_children);
         self.node_children_labels_ranges
-            .extend(subtree.node_children_labels_ranges.into_iter());
+            .extend(subtree.node_children_labels_ranges);
     }
 }
 
@@ -783,7 +781,7 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
         root: NodeId,
     }
 
-    // We only initalize thread pools lazily the first time we need them
+    // We only initialize thread pools lazily the first time we need them
     enum ParStrategy {
         Sequential,
         Concurrent,

@@ -12,6 +12,7 @@ DEPENDENCIES = [
     "//rs/rosetta-api/icrc1",
     "//rs/test_utilities/load_wasm",
     "//rs/types/ic00_types",
+    "//rs/rosetta-api/rosetta_core:rosetta-core",
     "@crate_index//:candid",
     "@crate_index//:ic-agent",
     "@crate_index//:reqwest",

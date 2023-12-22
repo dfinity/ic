@@ -1,11 +1,13 @@
-load("//publish:defs.bzl", "malicious_binary")
 load("//bazel:defs.bzl", "gzip_compress")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
+load("//publish:defs.bzl", "malicious_binary")
 
 malicious_binary(
     name = "replica",
     binary = "//rs/replica",
-    visibility = ["//ic-os/guestos/envs/dev-malicious:__pkg__"],
+    visibility = [
+        "//ic-os/guestos/envs/dev-malicious:__pkg__",
+    ],
 )
 
 gzip_compress(

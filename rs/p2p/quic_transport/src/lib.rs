@@ -40,14 +40,16 @@ use axum::Router;
 use bytes::Bytes;
 use either::Either;
 use http::{Request, Response};
+use ic_base_types::NodeId;
 use ic_crypto_tls_interfaces::{TlsConfig, TlsStream};
-use ic_icos_sev_interfaces::ValidateAttestedStream;
+use ic_icos_sev::ValidateAttestedStream;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_peer_manager::SubnetTopology;
-use ic_types::NodeId;
+use phantom_newtype::AmountOf;
 use quinn::AsyncUdpSocket;
+use thiserror::Error;
 
 use crate::connection_handle::ConnectionHandle;
 use crate::connection_manager::start_connection_manager;
@@ -62,10 +64,21 @@ mod utils;
 pub struct QuicTransport(Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>);
 
 impl QuicTransport {
-    pub fn build(
+    /// This is the entry point for creating and starting the quic transport.
+    ///
+    /// Instead of the common `connect` and `disconnect`` methods the implementation
+    /// listens for changes of the topology using a watcher.
+    ///
+    /// This allows is to have complete separation between peer discovery and the core P2P
+    /// protocols that use `QuicTransport`.
+    /// For example, "P2P for consensus" implements a generic replication protocol which is
+    /// agnostic to the subnet membership logic required by the consensus algorithm.
+    /// This makes "P2P for consensus" a generic implementation that potentially can be used
+    /// not only by the consensus protocol of the IC.
+    pub fn start(
         log: &ReplicaLogger,
         metrics_registry: &MetricsRegistry,
-        rt: tokio::runtime::Handle,
+        rt: &tokio::runtime::Handle,
         tls_config: Arc<dyn TlsConfig + Send + Sync>,
         registry_client: Arc<dyn RegistryClient>,
         sev_handshake: Arc<dyn ValidateAttestedStream<Box<dyn TlsStream>> + Send + Sync>,
@@ -73,7 +86,7 @@ impl QuicTransport {
         topology_watcher: tokio::sync::watch::Receiver<SubnetTopology>,
         udp_socket: Either<SocketAddr, impl AsyncUdpSocket>,
         // Make sure this is respected https://docs.rs/axum/latest/axum/struct.Router.html#a-note-about-performance
-        router: Option<Router>,
+        router: Router,
     ) -> QuicTransport {
         info!(log, "Starting Quic transport.");
 
@@ -90,23 +103,20 @@ impl QuicTransport {
             peer_map.clone(),
             topology_watcher,
             udp_socket,
-            router.unwrap_or_default(),
+            router,
         );
 
         QuicTransport(peer_map)
     }
 
-    pub(crate) fn get_conn_handle(
-        &self,
-        peer_id: &NodeId,
-    ) -> Result<ConnectionHandle, TransportError> {
+    pub(crate) fn get_conn_handle(&self, peer_id: &NodeId) -> Result<ConnectionHandle, SendError> {
         let conn = self
             .0
             .read()
             .unwrap()
             .get(peer_id)
-            .ok_or(TransportError::Disconnected {
-                connection_error: String::from("Currently not connected to this peer"),
+            .ok_or(SendError::ConnectionNotFound {
+                reason: "Currently not connected to this peer".to_string(),
             })?
             .clone();
         Ok(conn)
@@ -119,45 +129,34 @@ impl Transport for QuicTransport {
         &self,
         peer_id: &NodeId,
         request: Request<Bytes>,
-    ) -> Result<Response<Bytes>, TransportError> {
+    ) -> Result<Response<Bytes>, SendError> {
         let peer = self.get_conn_handle(peer_id)?;
         peer.rpc(request).await
     }
 
-    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), TransportError> {
+    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), SendError> {
         let peer = self.get_conn_handle(peer_id)?;
         peer.push(request).await
     }
 
-    fn peers(&self) -> Vec<NodeId> {
-        self.0.read().unwrap().keys().cloned().collect()
+    fn peers(&self) -> Vec<(NodeId, ConnId)> {
+        self.0
+            .read()
+            .unwrap()
+            .iter()
+            .map(|(n, c)| (*n, c.conn_id()))
+            .collect()
     }
 }
 
-#[derive(Debug)]
-pub enum TransportError {
-    Disconnected {
-        // Potential reason for not being connected
-        connection_error: String,
-    },
-    Io {
-        error: std::io::Error,
-    },
-}
-
-impl std::fmt::Display for TransportError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Disconnected {
-                connection_error: e,
-            } => {
-                write!(f, "Disconnected/No connection to peer: {}", e)
-            }
-            Self::Io { error } => {
-                write!(f, "Io error: {}", error)
-            }
-        }
-    }
+#[derive(Debug, Error)]
+pub enum SendError {
+    #[error("No connection to peer: {reason:?}")]
+    ConnectionNotFound { reason: String },
+    #[error("Sending a request failed: `{reason:?}")]
+    SendRequestFailed { reason: String },
+    #[error("Receiving a response failed: {reason:?}")]
+    RecvResponseFailed { reason: String },
 }
 
 #[async_trait]
@@ -166,14 +165,17 @@ pub trait Transport: Send + Sync {
         &self,
         peer_id: &NodeId,
         request: Request<Bytes>,
-    ) -> Result<Response<Bytes>, TransportError>;
+    ) -> Result<Response<Bytes>, SendError>;
 
-    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), TransportError>;
+    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), SendError>;
 
-    fn peers(&self) -> Vec<NodeId>;
+    fn peers(&self) -> Vec<(NodeId, ConnId)>;
 }
 
-/// This is a workaround for being able to iniate quic transport
+pub struct ConnIdTag {}
+pub type ConnId = AmountOf<ConnIdTag, u64>;
+
+/// This is a workaround for being able to initiate quic transport
 /// with both a real and virtual udp socket. This is needed due
 /// to an inconsistency with the quinn API. This is fixed upstream
 /// and can be removed with quinn 0.11.0.

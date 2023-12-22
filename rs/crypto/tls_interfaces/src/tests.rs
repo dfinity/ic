@@ -3,26 +3,15 @@
 mod tls_public_key_cert {
     use crate::{TlsPublicKeyCert, TlsPublicKeyCertCreationError};
     use assert_matches::assert_matches;
-    use ic_crypto_test_utils::tls::x509_certificates::generate_ed25519_cert;
-
-    #[test]
-    fn should_create_certificate_from_valid_x509() {
-        let cert_x509 = generate_ed25519_cert().1;
-
-        let cert = TlsPublicKeyCert::new_from_x509(cert_x509.clone()).unwrap();
-
-        assert_eq!(
-            cert_x509.to_der().expect("failed to convert X509 to DER"),
-            *cert.as_der()
-        );
-    }
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+    use ic_crypto_test_utils_tls::x509_certificates::generate_ed25519_cert;
+    use x509_parser::certificate::X509Certificate;
+    use x509_parser::prelude::FromDer;
 
     #[test]
     fn should_create_certificate_from_valid_der() {
-        let cert_der = generate_ed25519_cert()
-            .1
-            .to_der()
-            .expect("Failed to convert X509 to DER");
+        let rng = &mut reproducible_rng();
+        let cert_der = generate_ed25519_cert(rng).cert_der();
 
         let cert = TlsPublicKeyCert::new_from_der(cert_der.clone()).unwrap();
 
@@ -30,23 +19,9 @@ mod tls_public_key_cert {
     }
 
     #[test]
-    fn should_create_equal_from_der_and_x509() {
-        let cert_x509 = generate_ed25519_cert().1;
-        let cert_der = cert_x509.to_der().expect("failed to convert X509 to DER");
-
-        let cert1 = TlsPublicKeyCert::new_from_x509(cert_x509).unwrap();
-
-        let cert2 = TlsPublicKeyCert::new_from_der(cert_der).unwrap();
-
-        assert_eq!(cert1, cert2);
-    }
-
-    #[test]
     fn should_return_proto_with_correct_der() {
-        let cert_der = generate_ed25519_cert()
-            .1
-            .to_der()
-            .expect("Failed to convert X509 to DER");
+        let rng = &mut reproducible_rng();
+        let cert_der = generate_ed25519_cert(rng).cert_der();
 
         let cert = TlsPublicKeyCert::new_from_der(cert_der.clone()).unwrap();
 
@@ -55,10 +30,8 @@ mod tls_public_key_cert {
 
     #[test]
     fn should_equal_with_same_der() {
-        let cert_der = generate_ed25519_cert()
-            .1
-            .to_der()
-            .expect("Failed to convert X509 to DER");
+        let rng = &mut reproducible_rng();
+        let cert_der = generate_ed25519_cert(rng).cert_der();
 
         let cert1 = TlsPublicKeyCert::new_from_der(cert_der.clone()).unwrap();
         let cert2 = TlsPublicKeyCert::new_from_der(cert_der).unwrap();
@@ -69,18 +42,11 @@ mod tls_public_key_cert {
 
     #[test]
     fn should_not_equal_to_other() {
-        let cert_der1 = generate_ed25519_cert()
-            .1
-            .to_der()
-            .expect("Failed to convert X509 to DER");
-
+        let rng = &mut reproducible_rng();
+        let cert_der1 = generate_ed25519_cert(rng).cert_der();
         let cert1 = TlsPublicKeyCert::new_from_der(cert_der1).unwrap();
 
-        let cert_der2 = generate_ed25519_cert()
-            .1
-            .to_der()
-            .expect("Failed to convert X509 to DER");
-
+        let cert_der2 = generate_ed25519_cert(rng).cert_der();
         let cert2 = TlsPublicKeyCert::new_from_der(cert_der2).unwrap();
 
         assert_ne!(cert1, cert2);
@@ -110,7 +76,8 @@ mod tls_public_key_cert {
 
     #[test]
     fn should_deserialize_from_serialized() {
-        let cert = TlsPublicKeyCert::new_from_x509(generate_ed25519_cert().1).unwrap();
+        let rng = &mut reproducible_rng();
+        let cert = TlsPublicKeyCert::new_from_der(generate_ed25519_cert(rng).cert_der()).unwrap();
 
         let serialized = json5::to_string(&cert).unwrap();
 
@@ -136,9 +103,13 @@ mod tls_public_key_cert {
         assert!(result.is_ok());
 
         let deserialized = result.unwrap();
-        let subj_name = deserialized.as_x509().subject_name();
-        let subj_name = format!("{:?}", subj_name);
-        assert_eq!(subj_name, "[commonName = \"Spock\"]");
+        let (remainder, x509_cert) =
+            X509Certificate::from_der(deserialized.as_der()).expect("Error parsing DER");
+        assert!(remainder.is_empty(), "DER not fully consumed when parsing");
+        assert_eq!(x509_cert.subject().iter_common_name().count(), 1);
+        let subj_name = x509_cert.subject();
+        let subj_name = format!("{}", subj_name);
+        assert_eq!(subj_name, "CN=Spock");
     }
 
     #[test]
@@ -157,8 +128,9 @@ mod tls_public_key_cert {
         // rather than TlsPublicKeyCert.
         // Also, config uses JSON5.
         use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
+        let rng = &mut reproducible_rng();
 
-        let cert = TlsPublicKeyCert::new_from_x509(generate_ed25519_cert().1).unwrap();
+        let cert = TlsPublicKeyCert::new_from_der(generate_ed25519_cert(rng).cert_der()).unwrap();
 
         let proto_cert = X509PublicKeyCert {
             certificate_der: cert.as_der().clone(),
@@ -172,29 +144,10 @@ mod tls_public_key_cert {
 }
 
 mod allowed_clients {
-    use crate::{AllowedClients, AllowedClientsError, SomeOrAllNodes};
+    use crate::SomeOrAllNodes;
     use assert_matches::assert_matches;
     use ic_types::{NodeId, PrincipalId};
     use maplit::btreeset;
-    use std::collections::BTreeSet;
-
-    #[test]
-    fn should_correctly_construct_with_new() {
-        let nodes = SomeOrAllNodes::Some(btreeset! {node_id(1)});
-
-        let allowed_clients = AllowedClients::new(nodes.clone()).unwrap();
-
-        assert_eq!(allowed_clients.nodes(), &nodes);
-    }
-
-    #[test]
-    fn should_correctly_construct_with_new_with_nodes() {
-        let nodes = btreeset! {node_id(1)};
-
-        let allowed_clients = AllowedClients::new_with_nodes(nodes.clone()).unwrap();
-
-        assert_eq!(allowed_clients.nodes(), &SomeOrAllNodes::Some(nodes));
-    }
 
     #[test]
     fn should_contain_any_node_in_all_nodes() {
@@ -211,24 +164,6 @@ mod allowed_clients {
         assert!(some_nodes.contains(node_id(1)));
         assert!(some_nodes.contains(node_id(2)));
         assert!(!some_nodes.contains(node_id(3)));
-    }
-
-    #[test]
-    fn should_fail_on_new_if_nodes_empty() {
-        let allowed_clients = AllowedClients::new(SomeOrAllNodes::Some(BTreeSet::new()));
-        assert_eq!(
-            allowed_clients.unwrap_err(),
-            AllowedClientsError::ClientsEmpty {}
-        );
-    }
-
-    #[test]
-    fn should_fail_on_new_with_nodes_if_nodes_empty() {
-        let allowed_clients = AllowedClients::new_with_nodes(BTreeSet::new());
-        assert_eq!(
-            allowed_clients.unwrap_err(),
-            AllowedClientsError::ClientsEmpty {}
-        );
     }
 
     #[test]

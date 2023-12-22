@@ -6,6 +6,7 @@ use crate::sign::tests::*;
 use assert_matches::assert_matches;
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::crypto::{AlgorithmId, SignableMock};
 use ic_types::messages::MessageId;
 use ic_types::registry::RegistryClientError;
@@ -195,6 +196,7 @@ mod verify_basic_sig {
         let crypto_component = TempCryptoComponent::builder()
             .with_keys_in_registry_version(NodeKeysToGenerate::only_node_signing_key(), REG_V2)
             .with_node_id(NODE_1)
+            .with_rng(reproducible_rng())
             .build();
         let msg = SignableMock::new(b"message".to_vec());
 
@@ -292,6 +294,7 @@ mod verify_sig_batch {
         let crypto = TempCryptoComponent::builder()
             .with_keys_in_registry_version(NodeKeysToGenerate::only_node_signing_key(), REG_V2)
             .with_node_id(NODE_1)
+            .with_rng(reproducible_rng())
             .build();
 
         let msg = SignableMock::new(b"Hello World!".to_vec());
@@ -310,6 +313,7 @@ mod verify_sig_batch {
 
     #[test]
     fn should_correctly_verify_batch_with_multiple_signatures() {
+        let mut rng = reproducible_rng();
         let registry_data = Arc::new(ProtoRegistryDataProvider::new());
         let registry_client =
             Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
@@ -321,6 +325,7 @@ mod verify_sig_batch {
                 Arc::clone(&registry_data) as Arc<_>,
             )
             .with_node_id(NODE_1)
+            .with_rng(rng.fork())
             .build();
         let crypto_2 = TempCryptoComponent::builder()
             .with_keys_in_registry_version(NodeKeysToGenerate::only_node_signing_key(), REG_V2)
@@ -329,6 +334,7 @@ mod verify_sig_batch {
                 Arc::clone(&registry_data) as Arc<_>,
             )
             .with_node_id(NODE_2)
+            .with_rng(rng)
             .build();
         registry_client.reload();
         let msg = SignableMock::new(b"message".to_vec());
@@ -349,6 +355,7 @@ mod verify_sig_batch {
 
     #[test]
     fn should_not_verify_batch_on_different_messages() {
+        let mut rng = reproducible_rng();
         let registry_data = Arc::new(ProtoRegistryDataProvider::new());
         let registry_client =
             Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
@@ -360,6 +367,7 @@ mod verify_sig_batch {
                 Arc::clone(&registry_data) as Arc<_>,
             )
             .with_node_id(NODE_1)
+            .with_rng(rng.fork())
             .build();
         let crypto_2 = TempCryptoComponent::builder()
             .with_keys_in_registry_version(NodeKeysToGenerate::only_node_signing_key(), REG_V2)
@@ -368,6 +376,7 @@ mod verify_sig_batch {
                 Arc::clone(&registry_data) as Arc<_>,
             )
             .with_node_id(NODE_2)
+            .with_rng(rng)
             .build();
         registry_client.reload();
 

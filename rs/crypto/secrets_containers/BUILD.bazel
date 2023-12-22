@@ -6,7 +6,7 @@ rust_library(
     name = "secrets_containers",
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_secrets_containers",
-    version = "0.8.0",
+    version = "0.9.0",
     deps = [
         "@crate_index//:serde",
         "@crate_index//:zeroize",

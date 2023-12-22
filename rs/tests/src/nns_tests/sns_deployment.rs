@@ -4,7 +4,6 @@ use std::time::Duration;
 use std::time::Instant;
 
 use crate::canister_agent::{CanisterAgent, HasCanisterAgentCapability};
-use crate::canister_api::NnsRequestProvider;
 use crate::canister_api::{
     CallMode, CanisterHttpRequestProvider, Icrc1RequestProvider, Icrc1TransferRequest,
     NnsDappRequestProvider, Request, Response, SnsRequestProvider,
@@ -28,7 +27,7 @@ use crate::util::UniversalCanister;
 use candid::Decode;
 use candid::{Nat, Principal};
 use ic_agent::Agent;
-use ic_agent::{Identity, Signature};
+use ic_agent::{agent::EnvelopeContent, Identity, Signature};
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::ed25519_public_key_to_der;
 use ic_ledger_core::Tokens;
@@ -291,25 +290,23 @@ pub fn setup_with_oc_parameters_legacy(
     );
 }
 
-/// Sets up the IC, the NNS, and sets up an SNS using the legacy, non-one-proposal flow.
+/// Sets up the IC, the NNS, and sets up an SNS using the one-proposal flow.
 pub fn setup(
-    env: TestEnv,
+    env: &TestEnv,
     sale_participants: Vec<SaleParticipant>,
     nf_neurons: Vec<NnsNfNeuron>,
     create_service_nervous_system_proposal: CreateServiceNervousSystem,
     canister_wasm_strategy: NnsCanisterWasmStrategy,
     fast_test_setup: bool,
 ) {
-    setup_ic(&env, fast_test_setup);
+    setup_ic(env, fast_test_setup);
 
     install_nns(
-        &env,
+        env,
         canister_wasm_strategy,
         sale_participants,
         nf_neurons.clone(),
     );
-    let nns_request_provider = NnsRequestProvider::default();
-    let nns_node = env.get_first_healthy_system_node_snapshot();
 
     // get the first application node from the second subnet, which should be the dapp subnet
     let dapp_node = env.get_first_healthy_node_snapshot_from_nth_subnet_where(
@@ -319,7 +316,7 @@ pub fn setup(
     let dapp_agent = dapp_node.build_default_agent();
 
     // Create a canister and give it to NNS root
-    let dapp_canister = block_on(DappCanister::new(&env, dapp_node, &dapp_agent));
+    let dapp_canister = block_on(DappCanister::new(env, dapp_node, &dapp_agent));
     let create_service_nervous_system_proposal = CreateServiceNervousSystem {
         dapp_canisters: vec![Canister {
             id: Some(PrincipalId::from(dapp_canister.canister_id)),
@@ -327,54 +324,14 @@ pub fn setup(
         ..create_service_nervous_system_proposal
     };
 
-    let starting_nf_neuron_maturity = {
-        let mut neurons = Vec::new();
-        for neuron in nf_neurons.iter() {
-            let updated_neuron =
-                block_on(neuron.get_current_info(&nns_node, &nns_request_provider)).unwrap();
-            neurons.push(updated_neuron);
-        }
-        neurons
-            .iter()
-            .map(|n| n.maturity_e8s_equivalent)
-            .sum::<u64>()
-    };
-
     // Install the SNS with an "OC-ish" CreateServiceNervousSystem proposal
     install_sns(
-        &env,
+        env,
         canister_wasm_strategy,
         create_service_nervous_system_proposal.clone(),
     );
 
-    // Assert that the NF NNS neuron's maturity has decreased by the same amount
-    // as the neurons' fund's investment in the SNS.
-    let neurons_fund_investment_icp = create_service_nervous_system_proposal
-        .swap_parameters
-        .unwrap()
-        .neurons_fund_investment_icp
-        .unwrap()
-        .e8s
-        .unwrap();
-    let final_nf_neuron_maturity = {
-        let mut neurons = Vec::new();
-        for neuron in nf_neurons.iter() {
-            let updated_neuron =
-                block_on(neuron.get_current_info(&nns_node, &nns_request_provider)).unwrap();
-            neurons.push(updated_neuron);
-        }
-        neurons
-            .iter()
-            .map(|n| n.maturity_e8s_equivalent)
-            .sum::<u64>()
-    };
-    assert_eq!(
-        starting_nf_neuron_maturity - final_nf_neuron_maturity,
-        neurons_fund_investment_icp,
-        "NF maturity did not decrease after SNS creation"
-    );
-
-    block_on(dapp_canister.check_exclusively_owned_by_sns_root(&env));
+    block_on(dapp_canister.check_exclusively_owned_by_sns_root(env));
 }
 
 /// Sets up the IC, the NNS, and sets up an SNS using the legacy, non-one-proposal flow.
@@ -441,7 +398,7 @@ fn setup_ic(env: &TestEnv, fast_test_setup: bool) {
         .expect("failed to setup IC under test");
 
     if !fast_test_setup {
-        env.sync_prometheus_config_with_topology();
+        env.sync_with_prometheus();
     }
 }
 
@@ -912,14 +869,19 @@ impl Identity for SaleParticipant {
         let principal = Principal::try_from(self.principal_id).unwrap();
         Ok(principal)
     }
-
-    fn sign(&self, msg: &[u8]) -> Result<Signature, String> {
-        let signature = self.key_pair().sign(msg.as_ref());
+    fn public_key(&self) -> Option<Vec<u8>> {
         let pk = self.key_pair().get_pb_key();
-        let pk_der = ed25519_public_key_to_der(pk);
+        Some(ed25519_public_key_to_der(pk))
+    }
+    fn sign(&self, msg: &EnvelopeContent) -> Result<Signature, String> {
+        self.sign_arbitrary(&msg.to_request_id().signable())
+    }
+    fn sign_arbitrary(&self, msg: &[u8]) -> Result<Signature, String> {
+        let signature = self.key_pair().sign(msg.as_ref());
         Ok(Signature {
             signature: Some(signature.as_ref().to_vec()),
-            public_key: Some(pk_der),
+            public_key: self.public_key(),
+            delegations: None,
         })
     }
 }
@@ -1180,7 +1142,7 @@ async fn mint_tokens(
 }
 
 pub fn generate_ticket_participants_workload(
-    env: TestEnv,
+    env: &TestEnv,
     rps: usize,
     duration: Duration,
     contribution_per_user: u64,
@@ -1191,7 +1153,7 @@ pub fn generate_ticket_participants_workload(
     let future_generator = {
         let nns_node = env.get_first_healthy_nns_node_snapshot();
         let sns_node = env.get_first_healthy_application_node_snapshot();
-        let sns_client = SnsClient::read_attribute(&env);
+        let sns_client = SnsClient::read_attribute(env);
         let sns_request_provider = SnsRequestProvider::from_sns_client(&sns_client);
         let ledger_canister_id = Principal::try_from(LEDGER_CANISTER_ID.get()).unwrap();
 
@@ -1200,6 +1162,9 @@ pub fn generate_ticket_participants_workload(
             async move {
                 let (nns_node, app_node) = (nns_node.clone(), app_node.clone());
                 let overall_start_time = Instant::now();
+                // The seed should depend on all inputs of `generate_ticket_participants_workload` and this closure to avoid
+                // re-creating the same participants in subsequent calls to `generate_ticket_participants_workload`, all of which
+                // are assumed to have different values for `duration` and `rps`).
                 let seed = ((idx as u64) << 32) + (duration.as_secs() << 16) + (rps as u64);
 
                 let mut sale_outcome = LoadTestOutcome::<(), String>::default();
@@ -1274,9 +1239,6 @@ async fn create_one_sale_participant(
         let starting_icp_balance = Tokens::ZERO;
         // Tokens for this user will be minted later.
         let starting_sns_balance = Tokens::ZERO;
-        // The seed should depend on all inputs of `generate_ticket_participants_workload` and this closure to avoid
-        // re-creating the same participants in subsequent calls to `generate_ticket_participants_workload`, all of which
-        // are assumed to have different values for `duration` and `rps`).
         let p = SaleParticipant::random(
             participant_name,
             starting_icp_balance,
@@ -1367,19 +1329,19 @@ async fn create_one_sale_participant(
                 SNS_ENDPOINT_RETRY_BACKOFF,
                 None,
             )
+    }
+    .await
+    .check_response(|response| {
+        let response_amount = response.buyer_state.unwrap().icp.unwrap().amount_e8s;
+        if response_amount >= contribution {
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("get_buyer_state: response ICP amount {response_amount:?} below the minimum amount {contribution:?}"))
         }
-        .await
-        .check_response(|response| {
-            let response_amount = response.buyer_state.unwrap().icp.unwrap().amount_e8s;
-            if response_amount >= contribution {
-                Ok(())
-            } else {
-                Err(anyhow::anyhow!("get_buyer_state: response ICP amount {response_amount:?} below the minimum amount {contribution:?}"))
-            }
-        })
-        .with_workflow_position(4)
-        .push_outcome_display_error(outcome)
-        .result()?;
+    })
+    .with_workflow_position(4)
+    .push_outcome_display_error(outcome)
+    .result()?;
 
     // 5. Check that the ticket has been deleted via swap.get_open_ticket
     {
@@ -1397,8 +1359,8 @@ async fn create_one_sale_participant(
             .ticket()
             .map_err(|err| {
                 // Convert the error code to a string for easier debugging
-                new_sale_ticket_response::err::Type::from_i32(err)
-                    .unwrap_or_else(|| panic!("{err} could not be converted to error type"))
+                new_sale_ticket_response::err::Type::try_from(err)
+                    .unwrap_or_else(|_| panic!("{err} could not be converted to error type"))
             })
             .map_err(|err| anyhow::anyhow!("get_open_ticket failed: {err:?}"))?;
         if response.is_some() {

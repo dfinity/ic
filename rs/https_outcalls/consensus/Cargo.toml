@@ -1,7 +1,10 @@
 [package]
 name = "ic-https-outcalls-consensus"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-config = { path = "../../config" }
@@ -17,16 +20,17 @@ ic-protobuf = { path = "../../protobuf" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-types = { path = "../../types/types" }
-prometheus = { version = "0.12.0", features = [ "process" ] }
-prost = "0.11.0"
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
+prometheus = { workspace = true }
+prost = { workspace = true }
+slog = { workspace = true }
 
 [dev-dependencies]
 ic-artifact-pool = { path = "../../artifact_pool" }
 ic-error-types = { path = "../../types/error_types" }
 ic-consensus-mocks = { path = "../../consensus/mocks" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-test-utilities-registry = { path = "../../test_utilities/registry" }
-mockall = "0.7.2"
+mockall = { workspace = true }

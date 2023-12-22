@@ -2,26 +2,28 @@ use crate::error::LayoutError;
 use crate::utils::do_copy;
 
 use ic_base_types::{NumBytes, NumSeconds};
-use ic_logger::{error, info, ReplicaLogger};
+use ic_config::flag_status::FlagStatus;
+use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::{
         canister_state_bits::v1 as pb_canister_state_bits, ingress::v1 as pb_ingress,
-        queues::v1 as pb_queues, system_metadata::v1 as pb_metadata,
+        queues::v1 as pb_queues, stats::v1 as pb_stats, system_metadata::v1 as pb_metadata,
     },
 };
 use ic_replicated_state::{
     canister_state::{
         execution_state::{NextScheduledMethod, WasmMetadata},
-        system_state::{CanisterHistory, CyclesUseCase},
+        system_state::{wasm_chunk_store::WasmChunkStoreMetadata, CanisterHistory, CyclesUseCase},
     },
     CallContextManager, CanisterStatus, ExecutionTask, ExportedFunctions, Global, NumWasmPages,
 };
 use ic_sys::mmap::ScopedMmap;
 use ic_types::{
-    nominal_cycles::NominalCycles, AccumulatedPriority, CanisterId, ComputeAllocation, Cycles,
-    ExecutionRound, Height, MemoryAllocation, NumInstructions, PrincipalId,
+    batch::TotalQueryStats, nominal_cycles::NominalCycles, AccumulatedPriority, CanisterId,
+    ComputeAllocation, Cycles, ExecutionRound, Height, MemoryAllocation, NumInstructions,
+    PrincipalId,
 };
 use ic_utils::fs::sync_path;
 use ic_utils::thread::parallel_map;
@@ -50,6 +52,7 @@ pub const INGRESS_HISTORY_FILE: &str = "ingress_history.pbuf";
 pub const SPLIT_MARKER_FILE: &str = "split_from.pbuf";
 pub const SUBNET_QUEUES_FILE: &str = "subnet_queues.pbuf";
 pub const SYSTEM_METADATA_FILE: &str = "system_metadata.pbuf";
+pub const STATS_FILE: &str = "stats.pbuf";
 
 /// `ReadOnly` is the access policy used for reading checkpoints. We
 /// don't want to ever modify persisted states.
@@ -139,11 +142,12 @@ pub struct CanisterStateBits {
     pub cycles_balance: Cycles,
     pub cycles_debit: Cycles,
     pub reserved_balance: Cycles,
+    pub reserved_balance_limit: Option<Cycles>,
     pub status: CanisterStatus,
     pub scheduled_as_first: u64,
     pub skipped_round_due_to_no_messages: u64,
     pub executed: u64,
-    pub interruped_during_execution: u64,
+    pub interrupted_during_execution: u64,
     pub certified_data: Vec<u8>,
     pub consumed_cycles_since_replica_started: NominalCycles,
     pub stable_memory_size: NumWasmPages,
@@ -155,6 +159,8 @@ pub struct CanisterStateBits {
     pub canister_version: u64,
     pub consumed_cycles_since_replica_started_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
     pub canister_history: CanisterHistory,
+    pub wasm_chunk_store_metadata: WasmChunkStoreMetadata,
+    pub total_query_stats: TotalQueryStats,
 }
 
 #[derive(Clone)]
@@ -224,7 +230,8 @@ struct CheckpointRefData {
 /// │      │       ├── queues.pbuf
 /// │      │       ├── software.wasm
 /// │      │       ├── stable_memory.bin
-/// │      │       └── vmemory_0.bin
+/// │      │       ├── vmemory_0.bin
+/// │      │       └── wasm_chunk_store.bin
 /// │      ├── ingress_history.pbuf
 /// │      ├── split_from.pbuf
 /// │      ├── subnet_queues.pbuf
@@ -310,6 +317,7 @@ impl TipHandler {
         &mut self,
         state_layout: &StateLayout,
         cp: &CheckpointLayout<ReadOnly>,
+        lsmt_storage: FlagStatus,
         thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> Result<(), LayoutError> {
         let tip = self.tip_path();
@@ -323,13 +331,30 @@ impl TipHandler {
 
         debug_assert!(cp.root.exists());
 
+        let file_copy_instruction = |path: &Path| {
+            if path.extension() == Some(OsStr::new("pbuf")) {
+                // Do not copy protobufs.
+                CopyInstruction::Skip
+            } else if path.extension() == Some(OsStr::new("bin"))
+                && lsmt_storage == FlagStatus::Disabled
+            {
+                // PageMap files need to be modified in the tip,
+                // but only with non-LSMT storage layer that modifies these files.
+                // With LSMT we always write additional overlay files instead.
+                CopyInstruction::ReadWrite
+            } else {
+                // Everything else should be readonly.
+                CopyInstruction::ReadOnly
+            }
+        };
+
         match copy_recursively(
             &state_layout.log,
+            &state_layout.metrics,
             cp.root.as_path(),
             &tip,
-            FilePermissions::ReadWrite,
             FSync::No,
-            |path| path.extension() != Some(OsStr::new("pbuf")),
+            file_copy_instruction,
             thread_pool,
         ) {
             Ok(()) => Ok(()),
@@ -424,6 +449,23 @@ impl StateLayout {
                 message: "Could not sync StateLayout during init".to_string(),
                 io_err: err,
             })?
+        }
+        Ok(())
+    }
+
+    /// Mark files (but not dirs) in all checkpoints readonly.
+    pub fn mark_checkpoint_files_readonly(
+        &self,
+        thread_pool: &mut Option<scoped_threadpool::Pool>,
+    ) -> Result<(), LayoutError> {
+        for height in self.checkpoint_heights()? {
+            let path = self.checkpoint(height)?.raw_path().to_path_buf();
+            sync_and_mark_files_readonly(&self.log, &path, &self.metrics, thread_pool.as_mut())
+                .map_err(|err| LayoutError::IoError {
+                    path,
+                    message: format!("Could not sync and mark readonly checkpoint {}", height),
+                    io_err: err,
+                })?;
         }
         Ok(())
     }
@@ -996,7 +1038,9 @@ impl StateLayout {
         self.raw_path().join("tip")
     }
 
-    fn checkpoints(&self) -> PathBuf {
+    /// Returns the directory containing checkpoints.
+    /// Pub for testing.
+    pub fn checkpoints(&self) -> PathBuf {
         self.root.join(CHECKPOINTS_DIR)
     }
 
@@ -1038,11 +1082,11 @@ impl StateLayout {
         let copy_atomically = || {
             copy_recursively(
                 &self.log,
+                &self.metrics,
                 src,
                 scratchpad.as_path(),
-                FilePermissions::ReadOnly,
                 FSync::Yes,
-                |_| true,
+                |_| CopyInstruction::ReadOnly,
                 thread_pool,
             )?;
             std::fs::rename(&scratchpad, dst)?;
@@ -1163,11 +1207,10 @@ fn parse_canister_id(hex: &str) -> Result<CanisterId, String> {
         )
     })?;
 
-    CanisterId::new(
+    Ok(CanisterId::unchecked_from_principal(
         PrincipalId::try_from(&blob[..])
             .map_err(|err| format!("failed to parse principal ID: {}", err))?,
-    )
-    .map_err(|err| format!("failed to create canister ID: {}", err))
+    ))
 }
 
 /// Parses the canister ID from a relative path, if it is the path of a canister
@@ -1292,6 +1335,10 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         self.root.join(SPLIT_MARKER_FILE).into()
     }
 
+    pub fn stats(&self) -> ProtoFileWith<pb_stats::Stats, Permissions> {
+        self.root.join(STATS_FILE).into()
+    }
+
     pub fn canister_ids(&self) -> Result<Vec<CanisterId>, LayoutError> {
         let states_dir = self.root.join(CANISTER_STATES_DIR);
         Permissions::check_dir(&states_dir)?;
@@ -1350,12 +1397,81 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
         self.canister_root.join(CANISTER_FILE).into()
     }
 
+    /// List all overlay files with a particular name ending.
+    ///
+    /// All overlay files have the format {number}{name_end}`, where `name_end` distinguises
+    /// between wasm memory, stable memory etc, and the number imposes an ordering of the
+    /// overlay files, with higher number denoting a higher-priority overlay. The number is
+    /// typically the height when the overlay was written.
+    fn overlays_impl(&self, name_end: &str) -> Result<Vec<PathBuf>, LayoutError> {
+        let map_error = |err| LayoutError::IoError {
+            path: self.canister_root.clone(),
+            message: "Failed list overlays".to_string(),
+            io_err: err,
+        };
+
+        let files = std::fs::read_dir(&self.canister_root).map_err(map_error)?;
+        let mut result = Vec::default();
+        for file in files {
+            let path = file.map_err(map_error)?.path();
+            match path.to_str() {
+                Some(p) if p.ends_with(name_end) => {
+                    result.push(path);
+                }
+                _ => (),
+            }
+        }
+        result.sort();
+
+        Ok(result)
+    }
+
+    /// Base file for wasm memory.
     pub fn vmemory_0(&self) -> PathBuf {
         self.canister_root.join("vmemory_0.bin")
     }
 
+    /// List of existing overlay files for wasm memory.
+    pub fn vmemory_0_overlays(&self) -> Result<Vec<PathBuf>, LayoutError> {
+        self.overlays_impl("_vmemory_0.overlay")
+    }
+
+    /// Name of a (potentially new) overlay file for the wasm memory written at `height`.
+    pub fn vmemory_0_overlay(&self, height: Height) -> PathBuf {
+        self.canister_root
+            .join(format!("{:016x}_vmemory_0.overlay", height.get()))
+    }
+
+    /// Base file for stable memory.
     pub fn stable_memory_blob(&self) -> PathBuf {
         self.canister_root.join("stable_memory.bin")
+    }
+
+    /// List of existing overlay files for stable memory.
+    pub fn stable_memory_overlays(&self) -> Result<Vec<PathBuf>, LayoutError> {
+        self.overlays_impl("_stable_memory.overlay")
+    }
+
+    /// Name of a (potentially new) overlay file for the stable memory written at `height`.
+    pub fn stable_memory_overlay(&self, height: Height) -> PathBuf {
+        self.canister_root
+            .join(format!("{:016x}_stable_memory.overlay", height.get()))
+    }
+
+    /// Base file for wasm chunk store.
+    pub fn wasm_chunk_store(&self) -> PathBuf {
+        self.canister_root.join("wasm_chunk_store.bin")
+    }
+
+    /// List of existing overlay files for wasm chunk store.
+    pub fn wasm_chunk_store_overlays(&self) -> Result<Vec<PathBuf>, LayoutError> {
+        self.overlays_impl("_wasm_chunk_store.overlay")
+    }
+
+    /// Name of a (potentially new) overlay file for the wasm chunk store written at `height`.
+    pub fn wasm_chunk_store_overlay(&self, height: Height) -> PathBuf {
+        self.canister_root
+            .join(format!("{:016x}_wasm_chunk_store.overlay", height.get()))
     }
 }
 
@@ -1363,6 +1479,19 @@ fn open_for_write(path: &Path) -> Result<std::fs::File, LayoutError> {
     OpenOptions::new()
         .write(true)
         .create(true)
+        .truncate(true)
+        .open(path)
+        .map_err(|err| LayoutError::IoError {
+            path: path.to_path_buf(),
+            message: "Failed to open file for write".to_string(),
+            io_err: err,
+        })
+}
+
+fn create_for_write(path: &Path) -> Result<std::fs::File, LayoutError> {
+    OpenOptions::new()
+        .write(true)
+        .create_new(true)
         .truncate(true)
         .open(path)
         .map_err(|err| LayoutError::IoError {
@@ -1426,14 +1555,17 @@ where
     P: WritePolicy,
 {
     pub fn serialize(&self, value: T) -> Result<(), LayoutError> {
+        // There should be no existing file, due to how we initialize the tip.
+        // We delete just in case.
+        self.try_remove_file()?;
+
         let serialized = value.encode_to_vec();
 
         if serialized.is_empty() {
-            self.try_remove_file()?;
             return Ok(());
         }
 
-        let file = open_for_write(&self.path)?;
+        let file = create_for_write(&self.path)?;
         let mut writer = std::io::BufWriter::new(file);
         writer
             .write_all(&serialized)
@@ -1519,6 +1651,11 @@ impl<T> WasmFile<T> {
     pub fn raw_path(&self) -> &Path {
         &self.path
     }
+
+    /// Removes the file if it exists, else does nothing.
+    pub fn try_remove_file(&self) -> Result<(), LayoutError> {
+        try_remove_file(&self.path)
+    }
 }
 
 impl<T> WasmFile<T>
@@ -1544,7 +1681,10 @@ where
     T: WritePolicy,
 {
     pub fn serialize(&self, wasm: &CanisterModule) -> Result<(), LayoutError> {
-        let mut file = open_for_write(&self.path)?;
+        // If there already exists a wasm file, delete it first to avoid writing hardlinked/readonly files.
+        self.try_remove_file()?;
+
+        let mut file = create_for_write(&self.path)?;
         file.write_all(wasm.as_slice())
             .map_err(|err| LayoutError::IoError {
                 path: self.path.clone(),
@@ -1598,11 +1738,12 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             cycles_balance: Some(item.cycles_balance.into()),
             cycles_debit: Some(item.cycles_debit.into()),
             reserved_balance: Some(item.reserved_balance.into()),
+            reserved_balance_limit: item.reserved_balance_limit.map(|v| v.into()),
             canister_status: Some((&item.status).into()),
             scheduled_as_first: item.scheduled_as_first,
             skipped_round_due_to_no_messages: item.skipped_round_due_to_no_messages,
             executed: item.executed,
-            interruped_during_execution: item.interruped_during_execution,
+            interrupted_during_execution: item.interrupted_during_execution,
             certified_data: item.certified_data.clone(),
             consumed_cycles_since_replica_started: Some(
                 (&item.consumed_cycles_since_replica_started).into(),
@@ -1623,6 +1764,8 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
                 })
                 .collect(),
             canister_history: Some((&item.canister_history).into()),
+            wasm_chunk_store_metadata: Some((&item.wasm_chunk_store_metadata).into()),
+            total_query_stats: Some((&item.total_query_stats).into()),
         }
     }
 }
@@ -1695,6 +1838,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             cycles_balance,
             cycles_debit,
             reserved_balance,
+            reserved_balance_limit: value.reserved_balance_limit.map(|v| v.into()),
             status: try_from_option_field(
                 value.canister_status,
                 "CanisterStateBits::canister_status",
@@ -1702,7 +1846,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             scheduled_as_first: value.scheduled_as_first,
             skipped_round_due_to_no_messages: value.skipped_round_due_to_no_messages,
             executed: value.executed,
-            interruped_during_execution: value.interruped_during_execution,
+            interrupted_during_execution: value.interrupted_during_execution,
             certified_data: value.certified_data,
             consumed_cycles_since_replica_started,
             stable_memory_size: NumWasmPages::from(value.stable_memory_size64 as usize),
@@ -1731,6 +1875,16 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             canister_history: try_from_option_field(
                 value.canister_history,
                 "CanisterStateBits::canister_history",
+            )
+            .unwrap_or_default(),
+            wasm_chunk_store_metadata: try_from_option_field(
+                value.wasm_chunk_store_metadata,
+                "CanisterStateBits::wasm_chunk_store_metadata",
+            )
+            .unwrap_or_default(),
+            total_query_stats: try_from_option_field(
+                value.total_query_stats,
+                "CanisterStateBits::total_query_stats",
             )
             .unwrap_or_default(),
         })
@@ -1764,6 +1918,7 @@ impl From<&ExecutionStateBits> for pb_canister_state_bits::ExecutionStateBits {
 
 impl TryFrom<pb_canister_state_bits::ExecutionStateBits> for ExecutionStateBits {
     type Error = ProxyDecodeError;
+
     fn try_from(value: pb_canister_state_bits::ExecutionStateBits) -> Result<Self, Self::Error> {
         let mut globals = Vec::with_capacity(value.exported_globals.len());
         for g in value.exported_globals.into_iter() {
@@ -1791,7 +1946,7 @@ impl TryFrom<pb_canister_state_bits::ExecutionStateBits> for ExecutionStateBits 
                 .unwrap_or_default(),
             binary_hash,
             next_scheduled_method: match value.next_scheduled_method {
-                Some(method_id) => pb_canister_state_bits::NextScheduledMethod::from_i32(method_id)
+                Some(method_id) => pb_canister_state_bits::NextScheduledMethod::try_from(method_id)
                     .unwrap_or_default()
                     .into(),
                 None => NextScheduledMethod::default(),
@@ -1817,7 +1972,7 @@ fn dir_file_names(p: &Path) -> std::io::Result<Vec<String>> {
     Ok(result)
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 enum FilePermissions {
     ReadOnly,
     ReadWrite,
@@ -1827,17 +1982,19 @@ fn mark_readonly_if_file(path: &Path) -> std::io::Result<()> {
     let metadata = path.metadata()?;
     if !metadata.is_dir() {
         let mut permissions = metadata.permissions();
-        permissions.set_readonly(true);
-        std::fs::set_permissions(path, permissions).map_err(|e| {
-            Error::new(
-                e.kind(),
-                format!(
-                    "failed to set readonly permissions for file {}: {}",
-                    path.display(),
-                    e
-                ),
-            )
-        })?;
+        if !permissions.readonly() {
+            permissions.set_readonly(true);
+            std::fs::set_permissions(path, permissions).map_err(|e| {
+                Error::new(
+                    e.kind(),
+                    format!(
+                        "failed to set readonly permissions for file {}: {}",
+                        path.display(),
+                        e
+                    ),
+                )
+            })?;
+        }
     }
     Ok(())
 }
@@ -1918,22 +2075,22 @@ enum FSync {
 /// system applied by this function are not undone.
 fn copy_recursively<P>(
     log: &ReplicaLogger,
+    metrics: &StateLayoutMetrics,
     root_src: &Path,
     root_dst: &Path,
-    dst_permissions: FilePermissions,
     fsync: FSync,
-    file_predicate: P,
+    file_copy_instruction: P,
     thread_pool: Option<&mut scoped_threadpool::Pool>,
 ) -> std::io::Result<()>
 where
-    P: Fn(&Path) -> bool,
+    P: Fn(&Path) -> CopyInstruction,
 {
     let mut copy_plan = CopyPlan {
         create_and_sync_dir: vec![],
         copy_and_sync_file: vec![],
     };
 
-    build_copy_plan(root_src, root_dst, &file_predicate, &mut copy_plan)?;
+    build_copy_plan(root_src, root_dst, &file_copy_instruction, &mut copy_plan)?;
 
     // Ensure that the target root directory exists.
     // Note: all the files and directories below the target root (including the
@@ -1955,7 +2112,14 @@ where
             });
             results.into_iter().try_for_each(identity)?;
             let results = parallel_map(thread_pool, copy_plan.copy_and_sync_file.iter(), |op| {
-                copy_file_and_set_permissions(log, &op.src, &op.dst, dst_permissions, fsync)
+                copy_file_and_set_permissions(
+                    log,
+                    metrics,
+                    &op.src,
+                    &op.dst,
+                    op.dst_permissions,
+                    fsync,
+                )
             });
             results.into_iter().try_for_each(identity)?;
             if let FSync::Yes = fsync {
@@ -1971,7 +2135,14 @@ where
                 std::fs::create_dir_all(&op.dst)?;
             }
             for op in copy_plan.copy_and_sync_file.into_iter() {
-                copy_file_and_set_permissions(log, &op.src, &op.dst, dst_permissions, fsync)?;
+                copy_file_and_set_permissions(
+                    log,
+                    metrics,
+                    &op.src,
+                    &op.dst,
+                    op.dst_permissions,
+                    fsync,
+                )?;
             }
             if let FSync::Yes = fsync {
                 for op in copy_plan.create_and_sync_dir.iter() {
@@ -1988,23 +2159,54 @@ where
 /// Syncs the target file if `fsync` is true.
 fn copy_file_and_set_permissions(
     log: &ReplicaLogger,
+    metrics: &StateLayoutMetrics,
     src: &Path,
     dst: &Path,
     dst_permissions: FilePermissions,
     fsync: FSync,
 ) -> std::io::Result<()> {
-    do_copy(log, src, dst)?;
+    // We don't expect to copy anything that isn't readonly, but just in case we handle it correctly below.
+    if !src.metadata()?.permissions().readonly() {
+        warn!(every_n_seconds => 5, log, "Copying writable file {:?}", src);
+        metrics
+            .state_layout_error_count
+            .with_label_values(&["copy_writable_checkpoint"])
+            .inc();
+        debug_assert!(false);
+    }
+
+    if src.metadata()?.permissions().readonly() && dst_permissions == FilePermissions::ReadOnly {
+        std::fs::hard_link(src, dst)?
+    } else {
+        do_copy(log, src, dst)?;
+        let dst_metadata = dst.metadata()?;
+        // We don't want to change the readonly flag of any files that are hardlinked somewhere else
+        #[cfg(target_os = "linux")]
+        {
+            use std::os::unix::fs::MetadataExt;
+            debug_assert_eq!(dst_metadata.nlink(), 1);
+        }
+        let mut permissions = dst_metadata.permissions();
+        match dst_permissions {
+            FilePermissions::ReadOnly => permissions.set_readonly(true),
+            FilePermissions::ReadWrite => {
+                #[cfg(target_os = "linux")]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    permissions.set_mode(0o640); // Read/write for owner and read for group.
+                }
+
+                #[cfg(not(target_os = "linux"))]
+                #[allow(clippy::permissions_set_readonly_false)]
+                permissions.set_readonly(false)
+            }
+        }
+        std::fs::set_permissions(dst, permissions)?;
+    }
 
     // We keep the directory writable though to make sure we can rename
     // them or delete the files.
-    let dst_metadata = dst.metadata()?;
-    let mut permissions = dst_metadata.permissions();
-    match dst_permissions {
-        FilePermissions::ReadOnly => permissions.set_readonly(true),
-        #[allow(clippy::permissions_set_readonly_false)]
-        FilePermissions::ReadWrite => permissions.set_readonly(false),
-    }
-    std::fs::set_permissions(dst, permissions)?;
+
     match fsync {
         FSync::Yes => sync_path(dst),
         FSync::No => Ok(()),
@@ -2012,7 +2214,7 @@ fn copy_file_and_set_permissions(
 }
 
 // Describes how to copy one directory to another.
-// The order of operations is improtant:
+// The order of operations is important:
 // 1. All directories should be created first.
 // 2. After that files can be copied in _any_ order.
 // 3. Finally, directories should be synced.
@@ -2031,6 +2233,16 @@ struct CreateAndSyncDir {
 struct CopyAndSyncFile {
     src: PathBuf,
     dst: PathBuf,
+    dst_permissions: FilePermissions,
+}
+
+enum CopyInstruction {
+    /// The file doesn't need to be copied
+    Skip,
+    /// The file needs to be copied and should be writeable at the destination
+    ReadWrite,
+    /// The file needs to be copied and should be readonly at the destination
+    ReadOnly,
 }
 
 /// Traverse the source file tree and constructs a copy-plan:
@@ -2039,11 +2251,11 @@ struct CopyAndSyncFile {
 fn build_copy_plan<P>(
     src: &Path,
     dst: &Path,
-    file_predicate: &P,
+    file_copy_instruction: &P,
     plan: &mut CopyPlan,
 ) -> std::io::Result<()>
 where
-    P: Fn(&Path) -> bool,
+    P: Fn(&Path) -> CopyInstruction,
 {
     let src_metadata = src.metadata()?;
 
@@ -2058,12 +2270,20 @@ where
         for entry_result in entries {
             let entry = entry_result?;
             let dst_entry = dst.join(entry.file_name());
-            build_copy_plan(&entry.path(), &dst_entry, file_predicate, plan)?;
+            build_copy_plan(&entry.path(), &dst_entry, file_copy_instruction, plan)?;
         }
-    } else if file_predicate(src) {
+    } else {
+        let dst_permissions = match file_copy_instruction(src) {
+            CopyInstruction::Skip => {
+                return Ok(());
+            }
+            CopyInstruction::ReadWrite => FilePermissions::ReadWrite,
+            CopyInstruction::ReadOnly => FilePermissions::ReadOnly,
+        };
         plan.copy_and_sync_file.push(CopyAndSyncFile {
             src: PathBuf::from(src),
             dst: PathBuf::from(dst),
+            dst_permissions,
         });
     }
     Ok(())

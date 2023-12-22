@@ -63,14 +63,14 @@ impl Ic00MethodPermissions {
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
             },
+            Ic00Method::InstallChunkedCode => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+            },
             Ic00Method::RawRand => Self {
                 method,
                 allow_remote_subnet_sender: false,
-                allow_only_nns_subnet_sender: false,
-            },
-            Ic00Method::SetController => Self {
-                method,
-                allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
             },
             Ic00Method::SetupInitialDKG => Self {
@@ -133,12 +133,25 @@ impl Ic00MethodPermissions {
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
             },
+            Ic00Method::NodeMetricsHistory => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+            },
             Ic00Method::ProvisionalCreateCanisterWithCycles => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
             },
             Ic00Method::ProvisionalTopUpCanister => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+            },
+            Ic00Method::UploadChunk
+            | Ic00Method::StoredChunks
+            | Ic00Method::DeleteChunks
+            | Ic00Method::ClearChunkStore => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,

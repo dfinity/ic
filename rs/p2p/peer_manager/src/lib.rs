@@ -4,10 +4,10 @@
 //! and determines the subnet membership according to the latest
 //! registry version and the version currently used by consensus.
 //!
-//! The subnet memebership is made available as shared state via a tokio watcher.
+//! The subnet membership is made available as shared state via a tokio watcher.
 //!
-//! The compoment runs in a background task and should be started only once.
-//! If mutiple components require the shared state (i.e. the subnet membership)
+//! The component runs in a background task and should be started only once.
+//! If multiple components require the shared state (i.e. the subnet membership)
 //! the returned receiver should be cloned.
 //!
 use std::{
@@ -17,12 +17,12 @@ use std::{
     time::Duration,
 };
 
+use ic_base_types::{NodeId, RegistryVersion, SubnetId};
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetTransportRegistry;
-use ic_types::{NodeId, RegistryVersion, SubnetId};
 use metrics::PeerManagerMetrics;
 use tokio::{
     runtime::Handle,
@@ -117,7 +117,7 @@ impl PeerManager {
 
             let transport_info = match self
                 .registry_client
-                .get_subnet_transport_infos(self.subnet_id, version)
+                .get_subnet_node_records(self.subnet_id, version)
             {
                 Ok(Some(transport_info)) => transport_info,
                 Ok(None) => {
@@ -130,34 +130,24 @@ impl PeerManager {
                 Err(e) => {
                     warn!(
                         self.log,
-                        "Failed to get transport information from registry at version {} : {}",
-                        version,
-                        e
+                        "failed to get node record from registry at version {} : {}", version, e
                     );
                     Vec::new()
                 }
             };
 
             for (peer_id, info) in transport_info {
-                let maybe_endpoint = info
-                    .p2p_flow_endpoints
-                    .get(0)
-                    .and_then(|flow_endpoint| flow_endpoint.endpoint.as_ref());
-
-                match maybe_endpoint {
-                    Some(flow_endpoint) => {
-                        if let Ok(ip_addr) = flow_endpoint.ip_addr.parse::<IpAddr>() {
+                match info.http {
+                    Some(endpoint) => {
+                        if let Ok(ip_addr) = endpoint.ip_addr.parse::<IpAddr>() {
                             // Insert even if already present because we prefer to have the value
                             // with the highest registry version.
-                            subnet_nodes.insert(
-                                peer_id,
-                                SocketAddr::new(ip_addr, flow_endpoint.port as u16),
-                            );
+                            subnet_nodes.insert(peer_id, SocketAddr::new(ip_addr, 4100));
                         } else {
                             warn!(
                                 self.log,
                                 "Failed to get parse Ip addr {} for peer {} at registry version {}",
-                                flow_endpoint.ip_addr,
+                                endpoint.ip_addr,
                                 peer_id,
                                 version
                             );

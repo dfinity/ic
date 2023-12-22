@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
+    "//packages/icrc-ledger-client:icrc_ledger_client",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/canister_client/sender",
     "//rs/config",
@@ -16,7 +17,6 @@ BASE_DEPENDENCIES = [
     "//rs/state_machine_tests",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/icrc1",
-    "//rs/rosetta-api/icrc1/client",
     "//rs/rosetta-api/icrc1/index",
     "//rs/rosetta-api/icrc1/ledger",
     "//rs/rosetta-api/ledger_canister_core",
@@ -71,7 +71,7 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_sns_test_utils",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
@@ -82,7 +82,7 @@ rust_library(
     crate_features = ["test"],
     crate_name = "ic_sns_test_utils",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES_WITH_TEST_FEATURES,
 )
 

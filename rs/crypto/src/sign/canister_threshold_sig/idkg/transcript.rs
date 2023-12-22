@@ -2,10 +2,12 @@
 use crate::sign::basic_sig::BasicSigVerifierInternal;
 use crate::sign::canister_threshold_sig::idkg::complaint::verify_complaint;
 use crate::sign::canister_threshold_sig::idkg::utils::{
-    index_and_dealing_of_dealer, retrieve_mega_public_key_from_registry,
+    index_and_batch_signed_dealing_of_dealer, index_and_dealing_of_dealer,
+    retrieve_mega_public_key_from_registry,
 };
 use ic_crypto_internal_csp::api::CspIDkgProtocol;
 use ic_crypto_internal_csp::api::CspSigner;
+use ic_crypto_internal_csp::vault::api::IDkgTranscriptInternalBytes;
 use ic_crypto_internal_threshold_sig_ecdsa::{
     CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
     IDkgTranscriptOperationInternal,
@@ -159,21 +161,12 @@ pub fn load_transcript<C: CspIDkgProtocol>(
         transcript.registry_version,
     )?;
 
-    let internal_dealings = internal_dealings_from_verified_dealings(&transcript.verified_dealings)
-        .map_err(|e| IDkgLoadTranscriptError::SerializationError {
-            internal_error: e.serde_error,
-        })?;
-    let internal_transcript = IDkgTranscriptInternal::try_from(transcript).map_err(|e| {
-        IDkgLoadTranscriptError::SerializationError {
-            internal_error: format!("{:?}", e),
-        }
-    })?;
     let internal_complaints = csp_client.idkg_load_transcript(
-        &internal_dealings,
-        &transcript.context_data(),
+        transcript.verified_dealings.clone(),
+        transcript.context_data(),
         self_index,
-        &self_mega_pubkey,
-        &internal_transcript,
+        self_mega_pubkey,
+        IDkgTranscriptInternalBytes::from(transcript.transcript_to_bytes()),
     )?;
     let complaints = complaints_from_internal_complaints(&internal_complaints, transcript)?;
 
@@ -201,16 +194,6 @@ pub fn load_transcript_with_openings<C: CspIDkgProtocol>(
         registry,
         transcript.registry_version,
     )?;
-
-    let internal_dealings = internal_dealings_from_verified_dealings(&transcript.verified_dealings)
-        .map_err(|e| IDkgLoadTranscriptError::SerializationError {
-            internal_error: e.serde_error,
-        })?;
-    let internal_transcript = IDkgTranscriptInternal::try_from(transcript).map_err(|e| {
-        IDkgLoadTranscriptError::SerializationError {
-            internal_error: format!("{:?}", e),
-        }
-    })?;
 
     let mut internal_openings = BTreeMap::new();
     for (complaint, openings_by_opener_id) in openings {
@@ -243,12 +226,12 @@ pub fn load_transcript_with_openings<C: CspIDkgProtocol>(
     }
 
     csp_client.idkg_load_transcript_with_openings(
-        &internal_dealings,
-        &internal_openings,
-        &transcript.context_data(),
+        transcript.verified_dealings.clone(),
+        internal_openings,
+        transcript.context_data(),
         self_index,
-        &self_mega_pubkey,
-        &internal_transcript,
+        self_mega_pubkey,
+        IDkgTranscriptInternalBytes::from(transcript.transcript_to_bytes()),
     )
 }
 
@@ -280,8 +263,8 @@ pub fn open_transcript<C: CspIDkgProtocol>(
     )?;
 
     // Extract the accused dealing from the transcript.
-    let (dealer_index, internal_dealing) =
-        index_and_dealing_of_dealer(complaint.dealer_id, transcript)?;
+    let (dealer_index, signed_dealing) =
+        index_and_batch_signed_dealing_of_dealer(complaint.dealer_id, transcript)?;
     let context_data = transcript.context_data();
     let opener_index = match transcript.receivers.position(*self_node_id) {
         None => {
@@ -293,11 +276,11 @@ pub fn open_transcript<C: CspIDkgProtocol>(
     };
 
     let internal_opening = csp_idkg_client.idkg_open_dealing(
-        internal_dealing,
+        signed_dealing.clone(),
         dealer_index,
-        &context_data,
+        context_data,
         opener_index,
-        &opener_public_key,
+        opener_public_key,
     )?;
     let internal_opening_raw =
         internal_opening

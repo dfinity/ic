@@ -212,6 +212,7 @@ fn eval(ops_bytes: OpsBytes) {
             Ops::DebugPrint => api::print(&stack.pop_blob()),
             Ops::Trap => api::trap_with_blob(&stack.pop_blob()),
             Ops::SetGlobal => set_global(stack.pop_blob()),
+            Ops::AppendGlobal => append_global(stack.pop_blob()),
             Ops::GetGlobal => stack.push_blob(get_global()),
             Ops::BadPrint => api::bad_print(),
             Ops::SetPreUpgrade => set_pre_upgrade(stack.pop_blob()),
@@ -396,6 +397,22 @@ fn eval(ops_bytes: OpsBytes) {
                 let data = stack.pop_blob();
                 stack.push_int(api::is_controller(&data));
             }
+            Ops::CyclesBurn128 => {
+                let amount_low = stack.pop_int64();
+                let amount_high = stack.pop_int64();
+                stack.push_blob(api::cycles_burn128(amount_high, amount_low))
+            }
+            Ops::BlobLength => {
+                let data = stack.pop_blob();
+                stack.push_int(data.len() as u32);
+            }
+            Ops::PushEqualBytes => {
+                let length = stack.pop_int();
+                let byte = stack.pop_int();
+                let data = vec![byte as u8; length as usize];
+                stack.push_blob(data);
+            }
+            Ops::InReplicatedExecution => stack.push_int(api::in_replicated_execution()),
         }
     }
 }
@@ -465,6 +482,9 @@ lazy_static! {
 }
 fn set_global(data: Vec<u8>) {
     *GLOBAL.lock().unwrap() = data;
+}
+fn append_global(mut data: Vec<u8>) {
+    GLOBAL.lock().unwrap().append(&mut data);
 }
 fn get_global() -> Vec<u8> {
     GLOBAL.lock().unwrap().clone()

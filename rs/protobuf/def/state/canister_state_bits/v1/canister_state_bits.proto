@@ -31,6 +31,7 @@ message CallContext {
   state.queues.v1.Funds available_funds = 6;
   bool deleted = 8;
   optional uint64 time_nanos = 9;
+  uint64 instructions_executed = 10;
 }
 
 message CallContextEntry {
@@ -218,6 +219,7 @@ enum CyclesUseCase {
   CYCLES_USE_CASE_HTTP_OUTCALLS = 9;
   CYCLES_USE_CASE_DELETED_CANISTERS = 10;
   CYCLES_USE_CASE_NON_CONSUMED = 11;
+  CYCLES_USE_CASE_BURNED_CYCLES = 12;
 }
 
 message ConsumedCyclesByUseCase {
@@ -269,6 +271,28 @@ message CanisterHistory {
   uint64 total_num_changes = 2;
 }
 
+message Unsigned128 {
+  bytes raw = 1;
+}
+
+message TotalQueryStats {
+  Unsigned128 num_calls = 1;
+  Unsigned128 num_instructions = 2;
+  Unsigned128 ingress_payload_size = 3;
+  Unsigned128 egress_payload_size = 4;
+}
+
+message WasmChunkData {
+  bytes hash = 1;
+  uint64 index = 2;
+  uint64 length = 3;
+}
+
+message WasmChunkStoreMetadata {
+  repeated WasmChunkData chunks = 1;
+  uint64 size = 2;
+}
+
 message CanisterStateBits {
   reserved 1;
   reserved "controller";
@@ -300,7 +324,7 @@ message CanisterStateBits {
   reserved 19;
   reserved "executed_and_exhausted_its_messages";
   bytes certified_data = 20;
-  uint64 interruped_during_execution = 21;
+  uint64 interrupted_during_execution = 21;
   types.v1.NominalCycles consumed_cycles_since_replica_started = 22;
   uint64 freeze_threshold = 23;
   reserved 24;
@@ -331,4 +355,10 @@ message CanisterStateBits {
   CanisterHistory canister_history = 37;
   // Resource reservation cycles.
   state.queues.v1.Cycles reserved_balance = 38;
+  // The user-specified upper limit on `reserved_balance`.
+  state.queues.v1.Cycles reserved_balance_limit = 39;
+  // Maps tracking chunks in the Wasm chunk store.
+  WasmChunkStoreMetadata wasm_chunk_store_metadata = 40;
+  // Statistics on query execution for entire lifetime of canister.
+  TotalQueryStats total_query_stats = 41;
 }

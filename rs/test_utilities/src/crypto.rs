@@ -1,19 +1,20 @@
 pub mod fake_tls_handshake;
 
 pub use ic_crypto_test_utils::files as temp_dir;
-use ic_crypto_tls_interfaces::{AllowedClients, TlsConfig, TlsConfigError};
+use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig, TlsConfigError};
 use tokio_rustls::rustls::{ClientConfig, PrivateKey, RootCertStore, ServerConfig};
 
 use crate::types::ids::node_test_id;
+use ic_crypto_interfaces_sig_verification::{BasicSigVerifierByPublicKey, CanisterSigVerifier};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgDealing;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils_canister_threshold_sigs::dummy_values;
+use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
 use ic_interfaces::crypto::{
-    BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, CanisterSigVerifier,
-    CheckKeysWithRegistryError, CurrentNodePublicKeysError, IDkgDealingEncryptionKeyRotationError,
-    IDkgKeyRotationResult, IDkgProtocol, KeyManager, LoadTranscriptResult, NiDkgAlgorithm,
-    ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner, ThresholdSigVerifier,
-    ThresholdSigVerifierByPublicKey, ThresholdSigner,
+    BasicSigVerifier, BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
+    IDkgDealingEncryptionKeyRotationError, IDkgKeyRotationResult, IDkgProtocol, KeyManager,
+    LoadTranscriptResult, NiDkgAlgorithm, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
+    ThresholdSigVerifier, ThresholdSigVerifierByPublicKey, ThresholdSigner,
 };
 use ic_interfaces::crypto::{MultiSigVerifier, MultiSigner};
 use ic_interfaces_registry::RegistryClient;
@@ -62,7 +63,7 @@ pub fn temp_crypto_component_with_fake_registry(node_id: NodeId) -> TempCryptoCo
 }
 
 fn empty_ni_dkg_csp_dealing() -> CspNiDkgDealing {
-    ic_crypto_test_utils::dkg::ni_dkg_csp_dealing(0)
+    ic_crypto_test_utils_ni_dkg::ni_dkg_csp_dealing(0)
 }
 
 fn empty_ni_dkg_dealing() -> NiDkgDealing {
@@ -71,7 +72,7 @@ fn empty_ni_dkg_dealing() -> NiDkgDealing {
     }
 }
 
-pub use ic_crypto_test_utils::dkg::empty_ni_dkg_transcripts_with_committee;
+pub use ic_crypto_test_utils_ni_dkg::empty_ni_dkg_transcripts_with_committee;
 use ic_types::crypto::threshold_sig::IcRootOfTrust;
 use ic_types_test_utils::ids::NODE_1;
 
@@ -262,7 +263,7 @@ impl NiDkgAlgorithm for CryptoReturningOk {
         config: &NiDkgConfig,
         _verified_dealings: &BTreeMap<NodeId, NiDkgDealing>,
     ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
-        let mut transcript = NiDkgTranscript::dummy_transcript_for_tests_with_params(
+        let mut transcript = dummy_transcript_for_tests_with_params(
             config.receivers().get().clone().into_iter().collect(),
             config.dkg_id().dkg_tag,
             config.threshold().get().get(),
@@ -491,7 +492,7 @@ impl ThresholdEcdsaSigVerifier for CryptoReturningOk {
 impl TlsConfig for CryptoReturningOk {
     fn server_config(
         &self,
-        _allowed_clients: AllowedClients,
+        _allowed_clients: SomeOrAllNodes,
         _registry_version: RegistryVersion,
     ) -> Result<ServerConfig, TlsConfigError> {
         Ok(ServerConfig::builder()

@@ -1,8 +1,8 @@
 use crate::catch_up_package_provider::CatchUpPackageProvider;
 use crate::error::{OrchestratorError, OrchestratorResult};
 use crate::metrics::OrchestratorMetrics;
+use crate::process_manager::{Process, ProcessManager};
 use crate::registry_helper::RegistryHelper;
-use crate::replica_process::ReplicaProcess;
 use async_trait::async_trait;
 use ic_crypto::get_tecdsa_master_public_key;
 use ic_http_utils::file_downloader::FileDownloader;
@@ -24,6 +24,30 @@ use std::sync::{Arc, Mutex};
 
 const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
 
+pub struct ReplicaProcess {
+    version: ReplicaVersion,
+    binary: String,
+    args: Vec<String>,
+}
+
+impl Process for ReplicaProcess {
+    const NAME: &'static str = "Replica";
+
+    type Version = ReplicaVersion;
+
+    fn get_version(&self) -> &Self::Version {
+        &self.version
+    }
+
+    fn get_binary(&self) -> &str {
+        &self.binary
+    }
+
+    fn get_args(&self) -> &[String] {
+        &self.args
+    }
+}
+
 /// Provides function to continuously check the Registry to determine if this
 /// node should upgrade to a new release package, and if so, downloads and
 /// extracts this release package and exec's the orchestrator binary contained
@@ -31,7 +55,7 @@ const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
 pub(crate) struct Upgrade {
     pub registry: Arc<RegistryHelper>,
     pub metrics: Arc<OrchestratorMetrics>,
-    replica_process: Arc<Mutex<ReplicaProcess>>,
+    replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
     cup_provider: Arc<CatchUpPackageProvider>,
     replica_version: ReplicaVersion,
     replica_config_file: PathBuf,
@@ -50,7 +74,7 @@ impl Upgrade {
     pub(crate) async fn new(
         registry: Arc<RegistryHelper>,
         metrics: Arc<OrchestratorMetrics>,
-        replica_process: Arc<Mutex<ReplicaProcess>>,
+        replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
         cup_provider: Arc<CatchUpPackageProvider>,
         replica_version: ReplicaVersion,
         replica_config_file: PathBuf,
@@ -133,7 +157,7 @@ impl Upgrade {
 
         // Get the latest available CUP from the disk, peers or registry and
         // persist it if necessary.
-        let (_, latest_cup) = self
+        let latest_cup = self
             .cup_provider
             .get_latest_cup(local_cup_proto, subnet_id)
             .await?;
@@ -155,13 +179,15 @@ impl Upgrade {
         // If the CUP is unsigned, it's a registry CUP and we're in a genesis or subnet
         // recovery scenario. Check if we're in an NNS subnet recovery case and download
         // the new registry if needed.
-        if latest_cup.is_unsigned() {
+        if !latest_cup.is_signed() {
             info!(
                 self.logger,
-                "The latest CUP (registry version={}, height={}) is unsigned: a subnet genesis/recovery is in progress",
+                "The latest CUP (registry version={}, height={}) is unsigned: \
+                a subnet genesis/recovery is in progress",
                 latest_cup.content.registry_version(),
                 latest_cup.height(),
             );
+
             self.download_registry_and_restart_if_nns_subnet_recovery(
                 subnet_id,
                 latest_registry_version,
@@ -226,7 +252,7 @@ impl Upgrade {
         Ok(Some(subnet_id))
     }
 
-    // Special case for when we are doing boostrap subnet recovery for
+    // Special case for when we are doing bootstrap subnet recovery for
     // nns and replacing the local registry store. Because we replace the
     // contents of the local registry store in the process of doing this, we
     // will not perpetually hit this case, and thus it is not important to
@@ -250,7 +276,7 @@ impl Upgrade {
                     registry_store_uri.uri,
                     registry_store_uri.hash,
                 );
-                let downloader = FileDownloader::new(Some(self.logger.clone())).follow_redirects();
+                let downloader = FileDownloader::new(Some(self.logger.clone()));
                 let local_store_location = tempfile::tempdir()
                     .expect("temporary location for local store download could not be created")
                     .into_path();
@@ -336,7 +362,7 @@ impl Upgrade {
         old_cup_height: Option<Height>,
     ) {
         let new_height = cup.content.height();
-        if cup.is_unsigned() && old_cup_height.is_some() && Some(new_height) > old_cup_height {
+        if !cup.is_signed() && old_cup_height.is_some() && Some(new_height) > old_cup_height {
             info!(
                 self.logger,
                 "Found higher unsigned CUP, restarting replica for subnet recovery..."
@@ -380,7 +406,11 @@ impl Upgrade {
         self.replica_process
             .lock()
             .unwrap()
-            .start(replica_binary, replica_version, cmd)
+            .start(ReplicaProcess {
+                version: replica_version.clone(),
+                binary: replica_binary,
+                args: cmd,
+            })
             .map_err(|e| {
                 OrchestratorError::IoError("Error when attempting to start new replica".into(), e)
             })

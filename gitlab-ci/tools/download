@@ -15,11 +15,9 @@ USAGE
 }
 
 download_file() {
-    for P in blessed/ic ic; do
-        if curl --fail --retry 5 --retry-delay 10 "${BASE_URL}/${P}/${GIT_COMMIT}/$1"; then
-            return
-        fi
-    done
+    if curl --fail --retry 5 --retry-delay 10 "${BASE_URL}/ic/${GIT_COMMIT}/$1"; then
+        return
+    fi
     echo "Can't download $1" >&2
     exit 1
 }

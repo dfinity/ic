@@ -1,21 +1,23 @@
 //! The module contains implementations of the 'ArtifactClient' trait for all
 //! P2P clients that require consensus over their artifacts.
 
-use ic_interfaces::{
+use ic_interfaces::p2p::{
     artifact_manager::ArtifactClient,
-    artifact_pool::{PriorityFnAndFilterProducer, ValidatedPoolReader},
+    consensus::{PriorityFnAndFilterProducer, ValidatedPoolReader},
 };
 use ic_types::{
     artifact::*,
     artifact_kind::*,
     canister_http::*,
-    chunkable::*,
     consensus::{
-        certification::CertificationMessage, dkg::Message as DkgMessage, ConsensusMessage,
+        certification::CertificationMessage,
+        dkg::DkgMessageId,
+        dkg::Message as DkgMessage,
+        ecdsa::{EcdsaMessage, EcdsaMessageAttribute},
+        ConsensusMessage, ConsensusMessageAttribute,
     },
     malicious_flags::MaliciousFlags,
     messages::SignedIngress,
-    single_chunked::*,
 };
 use std::sync::{Arc, RwLock};
 
@@ -25,12 +27,12 @@ pub struct ConsensusClient<Pool, T> {
     /// reference counting.
     pool: Arc<RwLock<Pool>>,
     /// The `ConsensusGossip` client.
-    priority_fn_and_filter: T,
+    priority_fn_and_filter: Arc<T>,
 }
 
 impl<Pool, T> ConsensusClient<Pool, T> {
     /// The constructor creates a `ConsensusClient` instance.
-    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: T) -> Self {
+    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: Arc<T>) -> Self {
         Self {
             pool,
             priority_fn_and_filter,
@@ -81,12 +83,6 @@ impl<
         let pool = &*self.pool.read().unwrap();
         self.priority_fn_and_filter.get_priority_function(pool)
     }
-
-    /// The method returns the chunk tracker for the given *Consensus* message
-    /// ID.
-    fn get_chunk_tracker(&self, _id: &ConsensusMessageId) -> Box<dyn Chunkable + Send + Sync> {
-        Box::new(SingleChunked::Consensus)
-    }
 }
 
 /// The ingress `ArtifactClient` to be managed by the `ArtifactManager`.
@@ -94,7 +90,7 @@ pub struct IngressClient<Pool, T> {
     /// The ingress pool, protected by a read-write lock and automatic reference
     /// counting.
     pool: Arc<RwLock<Pool>>,
-    priority_fn_and_filter: T,
+    priority_fn_and_filter: Arc<T>,
     #[allow(dead_code)]
     malicious_flags: MaliciousFlags,
 }
@@ -103,7 +99,7 @@ impl<Pool, T> IngressClient<Pool, T> {
     /// The constructor creates an `IngressClient` instance.
     pub fn new(
         pool: Arc<RwLock<Pool>>,
-        priority_fn_and_filter: T,
+        priority_fn_and_filter: Arc<T>,
         malicious_flags: MaliciousFlags,
     ) -> Self {
         Self {
@@ -135,15 +131,9 @@ impl<
     }
 
     /// The method returns the priority function.
-    fn get_priority_function(&self) -> PriorityFn<IngressMessageId, IngressMessageAttribute> {
+    fn get_priority_function(&self) -> PriorityFn<IngressMessageId, ()> {
         let pool = self.pool.read().unwrap();
         self.priority_fn_and_filter.get_priority_function(&pool)
-    }
-
-    /// The method returns a new chunk tracker for (single-chunked) ingress
-    /// messages, ignoring the given ingress message ID.
-    fn get_chunk_tracker(&self, _id: &IngressMessageId) -> Box<dyn Chunkable + Send + Sync> {
-        Box::new(SingleChunked::Ingress)
     }
 }
 
@@ -153,12 +143,12 @@ pub struct CertificationClient<Pool, T> {
     /// reference counting.
     pool: Arc<RwLock<Pool>>,
     /// The `PriorityFnAndFilterProducer` client.
-    priority_fn_and_filter: T,
+    priority_fn_and_filter: Arc<T>,
 }
 
 impl<Pool, T> CertificationClient<Pool, T> {
     /// The constructor creates a `CertificationClient` instance.
-    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: T) -> Self {
+    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: Arc<T>) -> Self {
         Self {
             pool,
             priority_fn_and_filter,
@@ -208,17 +198,9 @@ impl<
     }
 
     /// The method returns the priority function.
-    fn get_priority_function(
-        &self,
-    ) -> PriorityFn<CertificationMessageId, CertificationMessageAttribute> {
+    fn get_priority_function(&self) -> PriorityFn<CertificationMessageId, ()> {
         let pool = &*self.pool.read().unwrap();
         self.priority_fn_and_filter.get_priority_function(pool)
-    }
-
-    /// The method returns a new (single-chunked) certification tracker,
-    /// ignoring the certification message ID.
-    fn get_chunk_tracker(&self, _id: &CertificationMessageId) -> Box<dyn Chunkable + Send + Sync> {
-        Box::new(SingleChunked::Certification)
     }
 }
 
@@ -228,12 +210,12 @@ pub struct DkgClient<Pool, T> {
     /// counting.
     pool: Arc<RwLock<Pool>>,
     /// The `DkgGossip` client.
-    priority_fn_and_filter: T,
+    priority_fn_and_filter: Arc<T>,
 }
 
 impl<Pool, T> DkgClient<Pool, T> {
     /// The constructor creates a `DkgClient` instance.
-    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: T) -> Self {
+    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: Arc<T>) -> Self {
         Self {
             pool,
             priority_fn_and_filter,
@@ -262,25 +244,20 @@ impl<
     }
 
     /// The method returns the priority function.
-    fn get_priority_function(&self) -> PriorityFn<DkgMessageId, DkgMessageAttribute> {
+    fn get_priority_function(&self) -> PriorityFn<DkgMessageId, ()> {
         let pool = &*self.pool.read().unwrap();
         self.priority_fn_and_filter.get_priority_function(pool)
-    }
-
-    /// The method returns a new (single-chunked) DKG message tracker.
-    fn get_chunk_tracker(&self, _id: &DkgMessageId) -> Box<dyn Chunkable + Send + Sync> {
-        Box::new(SingleChunked::Dkg)
     }
 }
 
 /// The ECDSA client.
 pub struct EcdsaClient<Pool, T> {
     pool: Arc<RwLock<Pool>>,
-    priority_fn_and_filter: T,
+    priority_fn_and_filter: Arc<T>,
 }
 
 impl<Pool, T> EcdsaClient<Pool, T> {
-    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: T) -> Self {
+    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: Arc<T>) -> Self {
         Self {
             pool,
             priority_fn_and_filter,
@@ -308,20 +285,16 @@ impl<
         let pool = &*self.pool.read().unwrap();
         self.priority_fn_and_filter.get_priority_function(pool)
     }
-
-    fn get_chunk_tracker(&self, _id: &EcdsaMessageId) -> Box<dyn Chunkable + Send + Sync> {
-        Box::new(SingleChunked::Ecdsa)
-    }
 }
 
 /// The CanisterHttp Client
 pub struct CanisterHttpClient<Pool, T> {
     pool: Arc<RwLock<Pool>>,
-    priority_fn_and_filter: T,
+    priority_fn_and_filter: Arc<T>,
 }
 
 impl<Pool, T> CanisterHttpClient<Pool, T> {
-    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: T) -> Self {
+    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: Arc<T>) -> Self {
         Self {
             pool,
             priority_fn_and_filter,
@@ -348,14 +321,8 @@ impl<
             .get_validated_by_identifier(msg_id)
     }
 
-    fn get_priority_function(
-        &self,
-    ) -> PriorityFn<CanisterHttpResponseId, CanisterHttpResponseAttribute> {
+    fn get_priority_function(&self) -> PriorityFn<CanisterHttpResponseId, ()> {
         let pool = &*self.pool.read().unwrap();
         self.priority_fn_and_filter.get_priority_function(pool)
-    }
-
-    fn get_chunk_tracker(&self, _id: &CanisterHttpResponseId) -> Box<dyn Chunkable + Send + Sync> {
-        Box::new(SingleChunked::CanisterHttp)
     }
 }

@@ -1,25 +1,28 @@
 /// Ingress Pool provides storage for all ingress messages in artifact_pool
 /// Logically it can be viewed as part of the artifact pool
 /// But we keep it separated for code readability
-use crate::metrics::{PoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED};
+use crate::{
+    metrics::{PoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},
+    HasTimestamp,
+};
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_interfaces::{
-    artifact_pool::{
-        ChangeResult, HasTimestamp, MutablePool, PriorityFnAndFilterProducer, UnvalidatedArtifact,
-        ValidatedPoolReader,
-    },
     ingress_pool::{
         ChangeAction, ChangeSet, IngressPool, IngressPoolObject, IngressPoolSelect,
         IngressPoolThrottler, PoolSection, SelectResult, UnvalidatedIngressArtifact,
         ValidatedIngressArtifact,
+    },
+    p2p::consensus::{
+        ChangeResult, MutablePool, PriorityFnAndFilterProducer, UnvalidatedArtifact,
+        ValidatedPoolReader,
     },
     time_source::TimeSource,
 };
 use ic_logger::{debug, trace, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    artifact::{Advert, IngressMessageAttribute, IngressMessageId, Priority, PriorityFn},
+    artifact::{Advert, IngressMessageId, Priority, PriorityFn},
     artifact_kind::IngressArtifact,
     messages::{MessageId, SignedIngress, EXPECTED_MESSAGE_ID_LENGTH},
     CountBytes, NodeId, Time,
@@ -256,7 +259,9 @@ impl IngressPool for IngressPoolImpl {
     }
 }
 
-impl MutablePool<IngressArtifact, ChangeSet> for IngressPoolImpl {
+impl MutablePool<IngressArtifact> for IngressPoolImpl {
+    type ChangeSet = ChangeSet;
+
     /// Insert a new ingress message in the Ingress Pool and update the
     /// peer_index
     fn insert(&mut self, artifact: UnvalidatedArtifact<SignedIngress>) {
@@ -285,13 +290,13 @@ impl MutablePool<IngressArtifact, ChangeSet> for IngressPoolImpl {
         );
     }
 
+    /// Removes an unvalidated ingress message from the unvalidated section.
+    fn remove(&mut self, id: &IngressMessageId) {
+        self.unvalidated.remove(id);
+    }
+
     /// Apply changeset to the Ingress Pool
-    fn apply_changes(
-        &mut self,
-        _time_source: &dyn TimeSource,
-        change_set: ChangeSet,
-    ) -> ChangeResult<IngressArtifact> {
-        let changed = !change_set.is_empty();
+    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<IngressArtifact> {
         let mut adverts = Vec::new();
         let mut purged = Vec::new();
         for change_action in change_set {
@@ -300,14 +305,14 @@ impl MutablePool<IngressArtifact, ChangeSet> for IngressPoolImpl {
                     message_id,
                     source_node_id,
                     size,
-                    attribute,
+                    (),
                     integrity_hash,
                 )) => {
                     if source_node_id == self.node_id {
                         adverts.push(Advert {
                             size,
                             id: message_id.clone(),
-                            attribute: attribute.clone(),
+                            attribute: (),
                             integrity_hash: integrity_hash.clone(),
                         });
                     }
@@ -384,7 +389,7 @@ impl MutablePool<IngressArtifact, ChangeSet> for IngressPoolImpl {
         ChangeResult {
             purged,
             adverts,
-            changed,
+            poll_immediately: false,
         }
     }
 }
@@ -465,10 +470,7 @@ impl IngressPrioritizer {
 }
 
 impl PriorityFnAndFilterProducer<IngressArtifact, IngressPoolImpl> for IngressPrioritizer {
-    fn get_priority_function(
-        &self,
-        pool: &IngressPoolImpl,
-    ) -> PriorityFn<IngressMessageId, IngressMessageAttribute> {
+    fn get_priority_function(&self, pool: &IngressPoolImpl) -> PriorityFn<IngressMessageId, ()> {
         // EXPLANATION: Because ingress messages are included in blocks, consensus
         // does not rely on ingress gossip for correctness. Ingress gossip exists to
         // reduce latency in cases where replicas don't have enough ingress messages
@@ -496,14 +498,13 @@ impl PriorityFnAndFilterProducer<IngressArtifact, IngressPoolImpl> for IngressPr
 mod tests {
     use super::*;
     use ic_constants::MAX_INGRESS_TTL;
-    use ic_interfaces::artifact_pool::MutablePool;
-    use ic_interfaces::time_source::{SysTimeSource, TimeSource};
+    use ic_interfaces::p2p::consensus::MutablePool;
+    use ic_interfaces::time_source::TimeSource;
     use ic_test_utilities::{
         mock_time, types::ids::node_test_id, types::messages::SignedIngressBuilder,
         FastForwardTimeSource,
     };
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_types::artifact::IngressMessageAttribute;
     use rand::Rng;
     use std::time::Duration;
 
@@ -588,6 +589,31 @@ mod tests {
     }
 
     #[test]
+    fn test_insert_remove() {
+        with_test_replica_logger(|log| {
+            ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+                let time_source = FastForwardTimeSource::new();
+                let metrics_registry = MetricsRegistry::new();
+                let mut ingress_pool =
+                    IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
+
+                let ingress_msg = SignedIngressBuilder::new().nonce(1).build();
+                let message_id = IngressMessageId::from(&ingress_msg);
+
+                ingress_pool.insert(UnvalidatedArtifact {
+                    message: ingress_msg,
+                    peer_id: node_test_id(0),
+                    timestamp: time_source.get_relative_time(),
+                });
+                assert!(ingress_pool.contains(&message_id));
+
+                ingress_pool.remove(&message_id);
+                assert!(!ingress_pool.contains(&message_id));
+            })
+        })
+    }
+
+    #[test]
     fn test_get_all_validated_by_filter() {
         with_test_replica_logger(|log| {
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
@@ -638,7 +664,6 @@ mod tests {
                     IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
                 let ingress_msg_0 = SignedIngressBuilder::new().nonce(1).build();
                 let message_id0 = IngressMessageId::from(&ingress_msg_0);
-                let attribute_0 = IngressMessageAttribute::new(&ingress_msg_0);
                 let msg_0_integrity_hash =
                     ic_types::crypto::crypto_hash(ingress_msg_0.binary()).get();
 
@@ -674,18 +699,18 @@ mod tests {
                         message_id0.clone(),
                         node_test_id(0),
                         0,
-                        attribute_0,
+                        (),
                         msg_0_integrity_hash,
                     )),
                     ChangeAction::RemoveFromUnvalidated(message_id1.clone()),
                 ];
-                let result = ingress_pool.apply_changes(&SysTimeSource::new(), changeset);
+                let result = ingress_pool.apply_changes(changeset);
 
                 // Check moved message is returned as an advert
                 assert!(result.purged.is_empty());
                 assert_eq!(result.adverts.len(), 1);
                 assert_eq!(result.adverts[0].id, message_id0);
-                assert!(result.changed);
+                assert!(!result.poll_immediately);
                 // Check timestamp is carried over for msg_0.
                 assert_eq!(ingress_pool.unvalidated.get_timestamp(&message_id0), None);
                 assert_eq!(
@@ -728,7 +753,6 @@ mod tests {
                         .expiry_time(now + expiry)
                         .build();
                     let message_id = IngressMessageId::from(&ingress);
-                    let attribute = IngressMessageAttribute::new(&ingress);
                     let integrity_hash = ic_types::crypto::crypto_hash(ingress.binary()).get();
                     let peer_id = (i % nodes) as u64;
                     ingress_pool.insert(UnvalidatedArtifact {
@@ -740,24 +764,24 @@ mod tests {
                         message_id,
                         node_test_id(peer_id),
                         0,
-                        attribute,
+                        (),
                         integrity_hash,
                     )));
                 }
                 assert_eq!(ingress_pool.unvalidated().size(), initial_count);
-                let result = ingress_pool.apply_changes(&SysTimeSource::new(), changeset);
+                let result = ingress_pool.apply_changes(changeset);
                 assert!(result.purged.is_empty());
                 // adverts are only created for own node id
                 assert_eq!(result.adverts.len(), initial_count / nodes);
-                assert!(result.changed);
+                assert!(!result.poll_immediately);
                 assert_eq!(ingress_pool.unvalidated().size(), 0);
                 assert_eq!(ingress_pool.validated().size(), initial_count);
 
                 let changeset = vec![ChangeAction::PurgeBelowExpiry(cutoff_time)];
-                let result = ingress_pool.apply_changes(&SysTimeSource::new(), changeset);
+                let result = ingress_pool.apply_changes(changeset);
                 assert!(result.adverts.is_empty());
                 assert_eq!(result.purged.len(), initial_count - non_expired_count);
-                assert!(result.changed);
+                assert!(!result.poll_immediately);
                 assert_eq!(ingress_pool.validated().size(), non_expired_count);
             })
         })

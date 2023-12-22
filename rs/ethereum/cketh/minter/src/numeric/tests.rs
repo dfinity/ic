@@ -7,17 +7,16 @@ mod transaction_nonce {
 
     #[test]
     fn should_overflow() {
-        let nonce = TransactionNonce(ethnum::u256::MAX);
+        let nonce = TransactionNonce::MAX;
         assert_eq!(nonce.checked_increment(), None);
     }
 
     #[test]
     fn should_not_overflow() {
-        let nonce = TransactionNonce(ethnum::u256::MAX - 1);
-        assert_eq!(
-            nonce.checked_increment(),
-            Some(TransactionNonce(ethnum::u256::MAX))
-        );
+        let nonce = TransactionNonce::MAX
+            .checked_sub(TransactionNonce::ONE)
+            .unwrap();
+        assert_eq!(nonce.checked_increment(), Some(TransactionNonce::MAX));
     }
 
     proptest! {
@@ -27,17 +26,16 @@ mod transaction_nonce {
 
             assert_eq!(
                 TransactionNonce::try_from(u256),
-                Ok(TransactionNonce(ethnum::u256::from_be_bytes(u256_bytes)))
+                Ok(TransactionNonce::from_be_bytes(u256_bytes))
             );
         }
 
         #[test]
         fn biguint_to_u256_conversion(value in any::<u128>()) {
             use crate::numeric::Wei;
-            use ethnum::U256;
 
             let nat_value: Nat = value.into();
-            let expected_wei_value = Wei(U256::from(value));
+            let expected_wei_value = Wei::from(value);
 
             let converted_wei: Wei = nat_value.try_into().unwrap();
             prop_assert_eq!(converted_wei, expected_wei_value);
@@ -53,7 +51,7 @@ mod transaction_nonce {
             TransactionNonce::try_from(Nat(
                 BigUint::parse_bytes(U256_MAX, 16).expect("Failed to parse u256 max")
             )),
-            Ok(TransactionNonce(ethnum::u256::MAX))
+            Ok(TransactionNonce::MAX)
         );
 
         let u256_max_plus_one: Nat =
@@ -61,6 +59,18 @@ mod transaction_nonce {
         assert_matches!(
             TransactionNonce::try_from(u256_max_plus_one),
             Err(e) if e.contains("Nat does not fit in a U256")
+        );
+    }
+}
+
+mod wei {
+    use crate::numeric::{wei_from_milli_ether, Wei};
+
+    #[test]
+    fn should_not_overflow_when_converting_from_milli_ether() {
+        assert_eq!(
+            wei_from_milli_ether(u128::MAX),
+            Wei::from_str_hex("0xDE0B6B3A763FFFFFFFFFFFFFFFFFFFFF21F494C589C0000").unwrap()
         );
     }
 }

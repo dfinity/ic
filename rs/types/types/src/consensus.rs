@@ -559,6 +559,7 @@ impl TryFrom<pb::FinalizationShare> for FinalizationShare {
 /// which is the previous random beacon, the height, and the replica version
 /// used to create the random beacon.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RandomBeaconContent {
     pub version: ReplicaVersion,
     pub height: Height,
@@ -1042,23 +1043,123 @@ pub enum ConsensusMessageHash {
     CatchUpPackageShare(CryptoHashOf<CatchUpPackageShare>),
 }
 
+impl From<&ConsensusMessageHash> for pb::ConsensusMessageHash {
+    fn from(value: &ConsensusMessageHash) -> Self {
+        use pb::consensus_message_hash::Kind;
+        let kind = match value.clone() {
+            ConsensusMessageHash::RandomBeacon(x) => Kind::RandomBeacon(x.get().0),
+            ConsensusMessageHash::Finalization(x) => Kind::Finalization(x.get().0),
+            ConsensusMessageHash::Notarization(x) => Kind::Notarization(x.get().0),
+            ConsensusMessageHash::BlockProposal(x) => Kind::BlockProposal(x.get().0),
+            ConsensusMessageHash::RandomBeaconShare(x) => Kind::RandomBeaconShare(x.get().0),
+            ConsensusMessageHash::NotarizationShare(x) => Kind::NotarizationShare(x.get().0),
+            ConsensusMessageHash::FinalizationShare(x) => Kind::FinalizationShare(x.get().0),
+            ConsensusMessageHash::RandomTape(x) => Kind::RandomTape(x.get().0),
+            ConsensusMessageHash::RandomTapeShare(x) => Kind::RandomTapeShare(x.get().0),
+            ConsensusMessageHash::CatchUpPackage(x) => Kind::CatchUpPackage(x.get().0),
+            ConsensusMessageHash::CatchUpPackageShare(x) => Kind::CatchUpPackageShare(x.get().0),
+        };
+        Self { kind: Some(kind) }
+    }
+}
+
+impl TryFrom<&pb::ConsensusMessageHash> for ConsensusMessageHash {
+    type Error = ProxyDecodeError;
+    fn try_from(value: &pb::ConsensusMessageHash) -> Result<Self, Self::Error> {
+        use pb::consensus_message_hash::Kind;
+        let kind = value
+            .kind
+            .clone()
+            .ok_or_else(|| ProxyDecodeError::MissingField("ConsensusMessageHash::kind"))?;
+
+        Ok(match kind {
+            Kind::RandomBeacon(x) => {
+                ConsensusMessageHash::RandomBeacon(CryptoHashOf::new(CryptoHash(x)))
+            }
+            Kind::Finalization(x) => {
+                ConsensusMessageHash::Finalization(CryptoHashOf::new(CryptoHash(x)))
+            }
+            Kind::Notarization(x) => {
+                ConsensusMessageHash::Notarization(CryptoHashOf::new(CryptoHash(x)))
+            }
+            Kind::BlockProposal(x) => {
+                ConsensusMessageHash::BlockProposal(CryptoHashOf::new(CryptoHash(x)))
+            }
+            Kind::RandomBeaconShare(x) => {
+                ConsensusMessageHash::RandomBeaconShare(CryptoHashOf::new(CryptoHash(x)))
+            }
+            Kind::NotarizationShare(x) => {
+                ConsensusMessageHash::NotarizationShare(CryptoHashOf::new(CryptoHash(x)))
+            }
+            Kind::FinalizationShare(x) => {
+                ConsensusMessageHash::FinalizationShare(CryptoHashOf::new(CryptoHash(x)))
+            }
+            Kind::RandomTape(x) => {
+                ConsensusMessageHash::RandomTape(CryptoHashOf::new(CryptoHash(x)))
+            }
+            Kind::RandomTapeShare(x) => {
+                ConsensusMessageHash::RandomTapeShare(CryptoHashOf::new(CryptoHash(x)))
+            }
+            Kind::CatchUpPackage(x) => {
+                ConsensusMessageHash::CatchUpPackage(CryptoHashOf::new(CryptoHash(x)))
+            }
+            Kind::CatchUpPackageShare(x) => {
+                ConsensusMessageHash::CatchUpPackageShare(CryptoHashOf::new(CryptoHash(x)))
+            }
+        })
+    }
+}
+
 /// ConsensusMessageAttribute has the same variants as [ConsensusMessage], but
 /// contains only the attributes for each variant. The attributes are the values
 /// that are used in the p2p layer to determine whether an artifact is
 /// interesting to a replica before fetching the full artifact.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ConsensusMessageAttribute {
-    RandomBeacon(Height),
-    Finalization(CryptoHashOf<Block>, Height),
-    Notarization(CryptoHashOf<Block>, Height),
-    BlockProposal(Rank, Height),
-    RandomBeaconShare(Height),
-    NotarizationShare(Height),
-    FinalizationShare(Height),
-    RandomTape(Height),
-    RandomTapeShare(Height),
-    CatchUpPackage(Height),
-    CatchUpPackageShare(Height),
+    Finalization(CryptoHashOf<Block>),
+    Notarization(CryptoHashOf<Block>),
+    Empty(()),
+}
+
+impl From<ConsensusMessageAttribute> for pb::ConsensusMessageAttribute {
+    fn from(value: ConsensusMessageAttribute) -> Self {
+        use pb::consensus_message_attribute::Kind;
+        let kind = match value.clone() {
+            ConsensusMessageAttribute::Finalization(hash) => {
+                Kind::Finalization(pb::FinalizationAttribute {
+                    block_hash: hash.get().0,
+                })
+            }
+            ConsensusMessageAttribute::Notarization(hash) => {
+                Kind::Notarization(pb::NotarizationAttribute {
+                    block_hash: hash.get().0,
+                })
+            }
+            ConsensusMessageAttribute::Empty(_) => Kind::Empty(()),
+        };
+        Self { kind: Some(kind) }
+    }
+}
+
+impl TryFrom<pb::ConsensusMessageAttribute> for ConsensusMessageAttribute {
+    type Error = ProxyDecodeError;
+    fn try_from(value: pb::ConsensusMessageAttribute) -> Result<Self, Self::Error> {
+        use pb::consensus_message_attribute::Kind;
+        let Some(kind) = value.kind.clone() else {
+            return Err(ProxyDecodeError::MissingField(
+                "ConsensusMessageAttribute::kind",
+            ));
+        };
+        Ok(match kind {
+            Kind::Finalization(x) => {
+                Self::Finalization(CryptoHashOf::new(CryptoHash(x.block_hash)))
+            }
+            Kind::Notarization(x) => {
+                Self::Notarization(CryptoHashOf::new(CryptoHash(x.block_hash)))
+            }
+            Kind::Empty(()) => Self::Empty(()),
+        })
+    }
 }
 
 /// Useful to compare equality by content, for example Signed<C,S> can be
@@ -1165,24 +1266,6 @@ impl HasHeight for ConsensusMessage {
     }
 }
 
-impl HasHeight for ConsensusMessageAttribute {
-    fn height(&self) -> Height {
-        match self {
-            ConsensusMessageAttribute::RandomBeacon(h) => *h,
-            ConsensusMessageAttribute::Finalization(_, h) => *h,
-            ConsensusMessageAttribute::Notarization(_, h) => *h,
-            ConsensusMessageAttribute::BlockProposal(_, h) => *h,
-            ConsensusMessageAttribute::RandomBeaconShare(h) => *h,
-            ConsensusMessageAttribute::NotarizationShare(h) => *h,
-            ConsensusMessageAttribute::FinalizationShare(h) => *h,
-            ConsensusMessageAttribute::RandomTape(h) => *h,
-            ConsensusMessageAttribute::RandomTapeShare(h) => *h,
-            ConsensusMessageAttribute::CatchUpPackage(h) => *h,
-            ConsensusMessageAttribute::CatchUpPackageShare(h) => *h,
-        }
-    }
-}
-
 impl IsShare for ConsensusMessage {
     fn is_share(&self) -> bool {
         match self {
@@ -1218,82 +1301,18 @@ impl ConsensusMessageHash {
             ConsensusMessageHash::CatchUpPackageShare(hash) => hash.get_ref(),
         }
     }
-
-    pub fn from_attribute(hash: CryptoHash, attr: &ConsensusMessageAttribute) -> Self {
-        match attr {
-            ConsensusMessageAttribute::RandomBeacon(_) => {
-                ConsensusMessageHash::RandomBeacon(CryptoHashOf::from(hash))
-            }
-            ConsensusMessageAttribute::Finalization(_, _) => {
-                ConsensusMessageHash::Finalization(CryptoHashOf::from(hash))
-            }
-            ConsensusMessageAttribute::Notarization(_, _) => {
-                ConsensusMessageHash::Notarization(CryptoHashOf::from(hash))
-            }
-            ConsensusMessageAttribute::BlockProposal(_, _) => {
-                ConsensusMessageHash::BlockProposal(CryptoHashOf::from(hash))
-            }
-            ConsensusMessageAttribute::RandomBeaconShare(_) => {
-                ConsensusMessageHash::RandomBeaconShare(CryptoHashOf::from(hash))
-            }
-            ConsensusMessageAttribute::NotarizationShare(_) => {
-                ConsensusMessageHash::NotarizationShare(CryptoHashOf::from(hash))
-            }
-            ConsensusMessageAttribute::FinalizationShare(_) => {
-                ConsensusMessageHash::FinalizationShare(CryptoHashOf::from(hash))
-            }
-            ConsensusMessageAttribute::RandomTape(_) => {
-                ConsensusMessageHash::RandomTape(CryptoHashOf::from(hash))
-            }
-            ConsensusMessageAttribute::RandomTapeShare(_) => {
-                ConsensusMessageHash::RandomTapeShare(CryptoHashOf::from(hash))
-            }
-            ConsensusMessageAttribute::CatchUpPackage(_) => {
-                ConsensusMessageHash::CatchUpPackage(CryptoHashOf::from(hash))
-            }
-            ConsensusMessageAttribute::CatchUpPackageShare(_) => {
-                ConsensusMessageHash::CatchUpPackageShare(CryptoHashOf::from(hash))
-            }
-        }
-    }
 }
 
 impl From<&ConsensusMessage> for ConsensusMessageAttribute {
     fn from(msg: &ConsensusMessage) -> ConsensusMessageAttribute {
-        let height = msg.height();
         match msg {
-            ConsensusMessage::RandomBeacon(_) => ConsensusMessageAttribute::RandomBeacon(height),
             ConsensusMessage::Finalization(x) => {
-                ConsensusMessageAttribute::Finalization(x.content.block.clone(), height)
+                ConsensusMessageAttribute::Finalization(x.content.block.clone())
             }
             ConsensusMessage::Notarization(x) => {
-                ConsensusMessageAttribute::Notarization(x.content.block.clone(), height)
+                ConsensusMessageAttribute::Notarization(x.content.block.clone())
             }
-            ConsensusMessage::BlockProposal(x) => {
-                ConsensusMessageAttribute::BlockProposal(x.rank(), height)
-            }
-
-            ConsensusMessage::RandomBeaconShare(_) => {
-                ConsensusMessageAttribute::RandomBeaconShare(height)
-            }
-
-            ConsensusMessage::NotarizationShare(_) => {
-                ConsensusMessageAttribute::NotarizationShare(height)
-            }
-
-            ConsensusMessage::FinalizationShare(_) => {
-                ConsensusMessageAttribute::FinalizationShare(height)
-            }
-            ConsensusMessage::RandomTape(_) => ConsensusMessageAttribute::RandomTape(height),
-            ConsensusMessage::RandomTapeShare(_) => {
-                ConsensusMessageAttribute::RandomTapeShare(height)
-            }
-            ConsensusMessage::CatchUpPackage(_) => {
-                ConsensusMessageAttribute::CatchUpPackage(height)
-            }
-            ConsensusMessage::CatchUpPackageShare(_) => {
-                ConsensusMessageAttribute::CatchUpPackageShare(height)
-            }
+            _ => ConsensusMessageAttribute::Empty(()),
         }
     }
 }

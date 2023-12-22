@@ -149,7 +149,7 @@ impl Ord for Label {
 
 impl PartialOrd for Label {
     fn partial_cmp(&self, rhs: &Self) -> Option<std::cmp::Ordering> {
-        self.as_bytes().partial_cmp(rhs.as_bytes())
+        Some(self.cmp(rhs))
     }
 }
 
@@ -643,7 +643,7 @@ pub enum MixedHashTreeConversionError {
 
 /// The maximum recursion depth of [`serde_cbor`] deserialization is currently 128.
 const MAX_HASH_TREE_DEPTH: u8 = 128;
-// error handlig does not work if `MAX_HASH_TREE_DEPTH == u8::MAX`, since we
+// error handling does not work if `MAX_HASH_TREE_DEPTH == u8::MAX`, since we
 // cannot reach the error bound of `u8::MAX + 1` with `u8`
 #[allow(clippy::assertions_on_constants)]
 const _: () = assert!(MAX_HASH_TREE_DEPTH < u8::MAX);
@@ -991,7 +991,7 @@ pub enum WitnessGenerationError<W: WitnessBuilder> {
 /// `HashTreeBuilder` enables an iterative construction of a [`LabeledTree`],
 /// which can also be accessed in form of a [`HashTree`].
 /// The constructed [`LabeledTree`] is a part of the state of the Builder,
-/// and is build successively by adding leaves and subtrees.
+/// and is built successively by adding leaves and subtrees.
 /// During the construction, the builder maintains an auxiliary state
 /// that describes the current position in the [`LabeledTree`] under
 /// construction. The auxiliary state is a list of nodes that corresponds to the

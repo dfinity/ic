@@ -1,8 +1,6 @@
 //! Utilities for testing crypto code.
 pub mod canister_signatures;
-pub mod dkg;
 pub mod ed25519_utils;
-pub mod tls;
 
 use ic_types::NodeId;
 

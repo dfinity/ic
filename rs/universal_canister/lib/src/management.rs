@@ -62,7 +62,15 @@ pub fn create_canister(cycles: (u64, u64)) -> CandidCallBuilder<CreateCanisterAr
 /// // Upgrade a canister with custom callbacks
 /// wasm().call(
 ///   management::install_code(canister_id, wasm_module)
-///      .with_mode(management::InstallMode::Upgrade)
+///      .with_mode(management::InstallMode::Upgrade(None))
+///      .on_reply(wasm().noop()) // custom on_reply
+///      .on_reject(wasm().noop()) // custom on_reject
+///      .on_cleanup(wasm().noop())); // custom on_cleanup
+///
+/// // Upgrade a canister while skipping pre_upgrade hook with custom callbacks
+/// wasm().call(
+///   management::install_code(canister_id, wasm_module)
+///      .with_mode(management::InstallMode::Upgrade(Some(management::SkipPreUpgrade(Some(true)))))
 ///      .on_reply(wasm().noop()) // custom on_reply
 ///      .on_reject(wasm().noop()) // custom on_reject
 ///      .on_cleanup(wasm().noop())); // custom on_cleanup

@@ -61,7 +61,7 @@ pub async fn main() {
             .expect("gRPC server crashed"),
         IncomingSource::Systemd => server
             // SAFETY: We are manged by systemd that is configured to pass socket as FD(3).
-            // Additionally, this is the only call to connnect with the systemd socket and
+            // Additionally, this is the only call to connect with the systemd socket and
             // therefore we are sole owner.
             .serve(unsafe { incoming_from_first_systemd_socket() })
             .await

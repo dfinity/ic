@@ -55,16 +55,9 @@ function setup_permissions() {
     sudo rm -rf ${HOME}/.local/share/dfx
 }
 
-function setup_networking() {
-    echo "> Setting up networking plugins"
-
-    # add cni plugins
-    sudo apt install podman-machine-cni containernetworking-plugins -y
-}
-
 function setup_nvm() {
     echo "> Setting up nvm"
-    
+
     # permanently adds nvm to the bash profile
     NVM_CONFIG=$(cat <<- EOM
 export NVM_DIR="\$HOME/.nvm"
@@ -146,7 +139,7 @@ function setup_certs() {
     cp $(mkcert -CAROOT)/* ${SERVICE_WORKER_DIR}/certs/
 
     pushd ${SERVICE_WORKER_DIR}
-    
+
     npm run create-ssl-certs
 
     popd # $SERVICE_WORKER_DIR
@@ -194,7 +187,7 @@ function build_current_sw() {
     echo "Building current service worker..."
 
     pushd ${SERVICE_WORKER_DIR}
-    
+
     npm run build-dev
     mkdir -p ${RUN_CURRENT_SW_PATH}
     cp ./dist-dev/* ${RUN_CURRENT_SW_PATH}
@@ -206,7 +199,7 @@ function build_current_sw() {
 
 function prepare() {
     echo "> Prepare environment to run e2e tests"
-    
+
     init_node_environment
 
     # download the service worker files used in the tests
@@ -317,21 +310,13 @@ function stop() {
 function run_tests() {
     echo "> Running e2e tests"
 
-    pushd ${SERVICE_WORKER_E2E_DIR}
-
     init_node_environment
 
-    source .env
+    pushd ${SERVICE_WORKER_DIR}
 
-    echo "Compiling typescript code..."
-    rm -rf ./dist
-    npx tsc -p ./tsconfig.json
+    npm run -w e2e test
 
-    echo "Running e2e tests..."
-    node ./dist/specs/asset-loading.spec.mjs ${BASE_URL} ${SW_PATH} ${CURRENT_SW_PATH} ${LATEST_SW_PATH} ${PREVIOUS_SW_PATH}
-    node ./dist/specs/broken-downgrade.spec.mjs ${BASE_URL} ${SW_PATH} ${BROKEN_UPGRADE_SW_PATH} ${BROKEN_DOWNGRADE_SW_PATH}
-    
-    popd # $SERVICE_WORKER_E2E_DIR
+    popd # $SERVICE_WORKER_DIR
 }
 
 #############################################
@@ -350,7 +335,6 @@ do
         --add-dependencies)
             shift
             setup_permissions; echo
-            setup_networking; echo
             setup_nvm; echo
             setup_dfx; echo
             setup_certs; echo

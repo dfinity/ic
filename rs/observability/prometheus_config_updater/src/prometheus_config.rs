@@ -5,7 +5,8 @@ use config_writer_common::{
     labels_keys,
 };
 use serde::{Serialize, Serializer};
-use service_discovery::{job_types::JobType, jobs::Job, TargetGroup};
+use service_discovery::job_types::JobType;
+use service_discovery::{jobs::Job, TargetGroup};
 
 #[derive(Serialize, Debug, Clone, PartialEq, PartialOrd, Ord, Eq)]
 pub struct PrometheusStaticConfig {
@@ -35,7 +36,7 @@ impl Serialize for PrometheusFileSdConfig {
     where
         S: Serializer,
     {
-        serializer.collect_seq(self.configs.clone().into_iter())
+        serializer.collect_seq(self.configs.clone())
     }
 }
 
@@ -108,14 +109,16 @@ impl ConfigBuilder for PrometheusConfigBuilder {
 
 #[cfg(test)]
 mod prometheus_serialize {
+    use service_discovery::job_types::JobType;
     use std::{collections::BTreeSet, net::SocketAddrV6, str::FromStr};
 
     use ic_types::{NodeId, PrincipalId, SubnetId};
     use serde_json::json;
     use service_discovery::TargetGroup;
 
-    use crate::{jobs, prometheus_config::PrometheusConfigBuilder};
+    use crate::prometheus_config::PrometheusConfigBuilder;
     use config_writer_common::config_builder::ConfigBuilder;
+    use service_discovery::jobs::Job;
 
     use super::get_endpoints;
 
@@ -150,7 +153,7 @@ mod prometheus_serialize {
         let tg2 = create_dummy_target_group("[2a02:800:2:2003:6801:f6ff:fec4:4c87]:9091", false);
         target_groups.insert(tg2.clone());
 
-        let config = cb.build(target_groups, jobs::JOB_REPLICA);
+        let config = cb.build(target_groups, Job::from(JobType::Replica));
 
         let expected_config = json!(
             [
@@ -188,16 +191,16 @@ mod prometheus_serialize {
         let tg1 = create_dummy_target_group("[2a02:800:2:2003:6801:f6ff:fec4:4c86]:9091", true);
         target_groups.insert(tg1);
 
-        let config = cb.build(target_groups.clone(), jobs::JOB_REPLICA);
+        let config = cb.build(target_groups.clone(), Job::from(JobType::Replica));
         assert!(config.updated());
 
-        let config = cb.build(target_groups.clone(), jobs::JOB_REPLICA);
+        let config = cb.build(target_groups.clone(), Job::from(JobType::Replica));
         assert!(!config.updated());
 
         let tg2 = create_dummy_target_group("[2a02:800:2:2003:6801:f6ff:fec4:4c87]:9091", true);
         target_groups.insert(tg2);
 
-        let config = cb.build(target_groups.clone(), jobs::JOB_REPLICA);
+        let config = cb.build(target_groups.clone(), Job::from(JobType::Replica));
         assert!(config.updated());
     }
 
@@ -205,7 +208,7 @@ mod prometheus_serialize {
     fn test_get_endpoints() {
         let target_group =
             create_dummy_target_group("[2a02:800:2:2003:6801:f6ff:fec4:4c87]:9091", true);
-        let endpoints = get_endpoints(target_group, jobs::JOB_REPLICA);
+        let endpoints = get_endpoints(target_group, Job::from(JobType::Replica));
         let mut expected_endpoints = BTreeSet::new();
         expected_endpoints.insert("[2a02:800:2:2003:6801:f6ff:fec4:4c87]:9091".to_string());
 

@@ -20,6 +20,12 @@ pub enum AddKnownNeuronError {
     ExceedsSizeLimit,
 }
 
+#[derive(Debug)]
+pub enum RemoveKnownNeuronError {
+    AlreadyAbsent,
+    NameExistsWithDifferentNeuronId(NeuronId),
+}
+
 impl<M: Memory> KnownNeuronIndex<M> {
     pub fn new(memory: M) -> Self {
         Self {
@@ -27,7 +33,23 @@ impl<M: Memory> KnownNeuronIndex<M> {
         }
     }
 
-    /// Adds a known neuron to the index. Returns whether the known neuron is added.
+    /// Returns the number of entries (known_neuron_name, neuron_id) in the index. This is for
+    /// validation purpose: this should be equal to the known_neuron_data collection in the primary
+    /// storage.
+    pub fn num_entries(&self) -> usize {
+        self.known_neuron_name_to_id.len() as usize
+    }
+
+    /// Returns whether the (known_neuron_name, neuron_id) entry exists in the index. This is for
+    /// validation purpose: each such pair in the primary storage should exist in the index.
+    pub fn contains_entry(&self, neuron_id: NeuronId, known_neuron_name: &str) -> bool {
+        KnownNeuronName::new(known_neuron_name)
+            .and_then(|known_neuron_name| self.known_neuron_name_to_id.get(&known_neuron_name))
+            .map(|value| value == neuron_id.id)
+            .unwrap_or_default()
+    }
+
+    /// Adds a known neuron to the index. Returns error if nothing is added.
     /// The reason the known neuron might not gets added into the index might be that:
     /// (1) the known neuron name already exists (caller should call `contains_known_neuron_name`
     /// first)
@@ -51,12 +73,42 @@ impl<M: Memory> KnownNeuronIndex<M> {
         Ok(())
     }
 
-    /// Removes a known neuron to from index. Returns the neuron id if a neuron is removed.
-    #[must_use]
-    pub fn remove_known_neuron(&mut self, name: &str) -> Option<NeuronId> {
-        KnownNeuronName::new(name)
-            .and_then(|known_neuron_name| self.known_neuron_name_to_id.remove(&known_neuron_name))
-            .map(|id| NeuronId { id })
+    /// Removes a known neuron to from index. Returns error when nothing is removed. Possible
+    /// errors: (1) NameExistsWithDifferentNeuronId if (name, other_neuron_id) exists for another
+    /// neuron (2) AlreadyAbsent if no entry with given known neuron name exists.
+    pub fn remove_known_neuron(
+        &mut self,
+        name: &str,
+        neuron_id: NeuronId,
+    ) -> Result<(), RemoveKnownNeuronError> {
+        let known_neuron_name = KnownNeuronName::new(name);
+        let known_neuron_name = match known_neuron_name {
+            Some(known_neuron_name) => known_neuron_name,
+            // Exceeding limit means it cannot exist in the index.
+            None => return Err(RemoveKnownNeuronError::AlreadyAbsent),
+        };
+
+        let removed_neuron_id = self.known_neuron_name_to_id.remove(&known_neuron_name);
+
+        match removed_neuron_id {
+            None => Err(RemoveKnownNeuronError::AlreadyAbsent),
+            Some(removed_neuron_id) => {
+                if removed_neuron_id == neuron_id.id {
+                    Ok(())
+                } else {
+                    // The removed known neuron id does not match the given neuron id. There is
+                    // probably some inconsistencies between the index and primary data. Insert the
+                    // original value back and return error.
+                    self.known_neuron_name_to_id
+                        .insert(known_neuron_name, removed_neuron_id);
+                    Err(RemoveKnownNeuronError::NameExistsWithDifferentNeuronId(
+                        NeuronId {
+                            id: removed_neuron_id,
+                        },
+                    ))
+                }
+            }
+        }
     }
 
     /// Checks whether the known neuron name already exists in the index.
@@ -146,10 +198,9 @@ mod tests {
         );
 
         // Removes one of them.
-        assert_eq!(
-            index.remove_known_neuron("another known neuron"),
-            Some(NeuronId { id: 2 })
-        );
+        index
+            .remove_known_neuron("another known neuron", NeuronId { id: 2 })
+            .unwrap();
         assert_eq!(index.list_known_neuron_ids(), vec![NeuronId { id: 1 }]);
     }
 
@@ -166,10 +217,10 @@ mod tests {
         assert_eq!(index.list_known_neuron_ids(), vec![NeuronId { id: 1 }]);
 
         // Removes old name and adds new when the neurons' name is changed.
-        assert_eq!(
-            index.remove_known_neuron("known neuron"),
-            Some(NeuronId { id: 1 })
-        );
+        index
+            .remove_known_neuron("known neuron", NeuronId { id: 1 })
+            .unwrap();
+
         index
             .add_known_neuron("known neuron with another name", NeuronId { id: 1 })
             .unwrap();
@@ -201,5 +252,59 @@ mod tests {
             Err(AddKnownNeuronError::ExceedsSizeLimit)
         );
         assert!(!index.contains_known_neuron_name(&very_long_name));
+    }
+
+    #[test]
+    fn remove_known_neuron_fails_different_neuron() {
+        let mut index = KnownNeuronIndex::new(VectorMemory::default());
+        index
+            .add_known_neuron("known neuron", NeuronId { id: 1 })
+            .unwrap();
+        assert!(index.contains_known_neuron_name("known neuron"));
+
+        assert_matches!(
+            index.remove_known_neuron("known neuron", NeuronId { id: 2 }),
+            Err(RemoveKnownNeuronError::NameExistsWithDifferentNeuronId(neuron_id))
+            if neuron_id.id == 1
+        );
+
+        // After attempting to remove known neuron with the wrong id, the original entry still
+        // exists.
+        assert!(index.contains_known_neuron_name("known neuron"));
+        assert_eq!(index.list_known_neuron_ids(), vec![NeuronId { id: 1 }]);
+    }
+
+    #[test]
+    fn remove_known_neuron_fails_name_does_not_exist() {
+        let mut index = KnownNeuronIndex::new(VectorMemory::default());
+
+        assert_matches!(
+            index.remove_known_neuron("known neuron", NeuronId { id: 1 }),
+            Err(RemoveKnownNeuronError::AlreadyAbsent)
+        );
+    }
+
+    #[test]
+    fn index_len() {
+        let mut index = KnownNeuronIndex::new(VectorMemory::default());
+
+        assert_eq!(index.num_entries(), 0);
+
+        index
+            .add_known_neuron("known neuron", NeuronId { id: 1 })
+            .unwrap();
+
+        assert_eq!(index.num_entries(), 1);
+    }
+
+    #[test]
+    fn index_contains_entry() {
+        let mut index = KnownNeuronIndex::new(VectorMemory::default());
+
+        index
+            .add_known_neuron("known neuron", NeuronId { id: 1 })
+            .unwrap();
+
+        assert!(index.contains_entry(NeuronId { id: 1 }, "known neuron"));
     }
 }

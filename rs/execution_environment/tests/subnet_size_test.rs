@@ -6,9 +6,9 @@ use ic_config::{
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
 use ic_ic00_types::{
-    self as ic00, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInstallMode,
-    CanisterSettingsArgsBuilder, DerivationPath, EcdsaCurve, EcdsaKeyId, HttpMethod,
-    TransformContext, TransformFunc,
+    self as ic00, BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterIdRecord,
+    CanisterInstallMode, CanisterSettingsArgsBuilder, DerivationPath, EcdsaCurve, EcdsaKeyId,
+    HttpMethod, TransformContext, TransformFunc,
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -70,9 +70,16 @@ fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
     });
     let ca = instruction_to_cost(&wasmparser::Operator::I32Add);
     let ccall = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
-    let csys =
-        ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::MSG_REPLY_DATA_APPEND
-            .get();
+    let csys = match config.embedders_config.metering_type {
+        MeteringType::New => ic_embedders::wasmtime_embedder::system_api_complexity::overhead::new::MSG_REPLY_DATA_APPEND
+        .get() + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::new::MSG_REPLY
+        .get(),
+        MeteringType::Old => ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::MSG_REPLY_DATA_APPEND
+        .get() + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::MSG_REPLY
+        .get(),
+        MeteringType::None => 0,
+    }
+        ;
 
     let cd = if let MeteringType::New = config.embedders_config.metering_type {
         ic_config::subnet_config::SchedulerConfig::application_subnet()
@@ -194,7 +201,7 @@ const TEST_CANISTER: &str = r#"
     (export "canister_update grow_mem" (func $grow_mem))
 )"#;
 
-const TEST_HEARTBEAT_CANISTER_EXECUTE_HEARBEAT_INSTRUCTIONS: u64 = 0;
+const TEST_HEARTBEAT_CANISTER_EXECUTE_HEARTBEAT_INSTRUCTIONS: u64 = 1;
 
 /// This is an empty canister that only exposes canister_heartbeat method.
 const TEST_HEARTBEAT_CANISTER: &str = r#"
@@ -427,7 +434,7 @@ fn simulate_sign_with_ecdsa_cost(
     let canister_id =
         create_universal_canister_with_cycles(&env, DEFAULT_CYCLES_PER_NODE * subnet_size);
 
-    // SignWithECDSA is payed with cycles attached to the request.
+    // SignWithECDSA is paid with cycles attached to the request.
     let payment_before = Cycles::new((2 * B).into()) * subnet_size;
     let sign_with_ecdsa = wasm()
         .call_with_cycles(
@@ -480,7 +487,7 @@ fn simulate_http_request_cost(subnet_type: SubnetType, subnet_size: usize) -> Cy
     let canister_id =
         create_universal_canister_with_cycles(&env, DEFAULT_CYCLES_PER_NODE * subnet_size);
 
-    // HttpRequest is payed with cycles attached to the request.
+    // HttpRequest is paid with cycles attached to the request.
     let payment_before = Cycles::new((20 * B).into()) * subnet_size;
     let http_request = wasm()
         .call_with_cycles(
@@ -490,7 +497,7 @@ fn simulate_http_request_cost(subnet_type: SubnetType, subnet_size: usize) -> Cy
                 Encode!(&CanisterHttpRequestArgs {
                     url: "https://".to_string(),
                     max_response_bytes: None,
-                    headers: Vec::new(),
+                    headers: BoundedHttpHeaders::new(vec![]),
                     body: None,
                     method: HttpMethod::GET,
                     transform: Some(TransformContext {
@@ -699,16 +706,19 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
             ingress_byte_reception_fee: Cycles::new(0),
             gib_storage_per_second_fee: Cycles::new(0),
             duration_between_allocation_charges: Duration::from_secs(10),
-            /// The ECDSA signature fee is the fee charged when creating a
-            /// signature on this subnet. The request likely came from a
-            /// different subnet which is not a system subnet. There is an
-            /// explicit exception for requests originating from the NNS when the
-            /// charging occurs.
+            // The ECDSA signature fee is the fee charged when creating a
+            // signature on this subnet. The request likely came from a
+            // different subnet which is not a system subnet. There is an
+            // explicit exception for requests originating from the NNS when the
+            // charging occurs.
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
             http_request_linear_baseline_fee: Cycles::new(0),
             http_request_quadratic_baseline_fee: Cycles::new(0),
             http_request_per_byte_fee: Cycles::new(0),
             http_response_per_byte_fee: Cycles::new(0),
+            max_storage_reservation_period: Duration::from_secs(0),
+            default_reserved_balance_limit: CyclesAccountManagerConfig::system_subnet()
+                .default_reserved_balance_limit,
         },
         SubnetType::Application | SubnetType::VerifiedApplication => CyclesAccountManagerConfig {
             reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
@@ -732,6 +742,9 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
             http_request_quadratic_baseline_fee: Cycles::new(60_000),
             http_request_per_byte_fee: Cycles::new(400),
             http_response_per_byte_fee: Cycles::new(800),
+            max_storage_reservation_period: Duration::from_secs(0),
+            default_reserved_balance_limit: CyclesAccountManagerConfig::application_subnet()
+                .default_reserved_balance_limit,
         },
     }
 }
@@ -804,7 +817,7 @@ fn convert_instructions_to_cycles(
     config: &CyclesAccountManagerConfig,
     num_instructions: NumInstructions,
 ) -> Cycles {
-    config.ten_update_instructions_execution_fee * (num_instructions.get() / 10)
+    config.ten_update_instructions_execution_fee * num_instructions.get() / 10_u64
 }
 
 fn prepay_execution_cycles(
@@ -1160,7 +1173,7 @@ fn test_subnet_size_execute_heartbeat_cost() {
     let reference_subnet_size = config.reference_subnet_size;
     let reference_cost = calculate_execution_cost(
         &config,
-        NumInstructions::from(TEST_HEARTBEAT_CANISTER_EXECUTE_HEARBEAT_INSTRUCTIONS),
+        NumInstructions::from(TEST_HEARTBEAT_CANISTER_EXECUTE_HEARTBEAT_INSTRUCTIONS),
         reference_subnet_size,
     );
 
@@ -1212,18 +1225,19 @@ fn test_subnet_size_execute_heartbeat_default_cost() {
 
     // Assert small subnet size costs per single heartbeat and per year.
     let cost = simulate_execute_canister_heartbeat_cost(subnet_type, subnet_size_lo);
-    assert_eq!(cost, Cycles::new(590_000));
-    assert_eq!(cost * per_year, trillion_cycles(20.290_337_770));
+    assert_eq!(cost, Cycles::new(590001));
+    assert_eq!(cost * per_year, Cycles::new(20290372160403));
 
     // Assert big subnet size cost per single heartbeat and per year.
     let cost = simulate_execute_canister_heartbeat_cost(subnet_type, subnet_size_hi);
-    assert_eq!(cost, Cycles::new(1_543_077));
-    assert_eq!(cost * per_year, trillion_cycles(53.067_039_890_031));
+    // Scaled instrumentation + update message cost.
+    assert_eq!(cost, Cycles::new(1543080));
+    assert_eq!(cost * per_year, Cycles::new(53067143061240));
 
     // Assert big subnet size cost scaled to a small size.
     let adjusted_cost = (cost * subnet_size_lo) / subnet_size_hi;
-    assert_eq!(adjusted_cost, Cycles::new(590_000));
-    assert_eq!(adjusted_cost * per_year, trillion_cycles(20.290_337_770));
+    assert_eq!(adjusted_cost, Cycles::new(590001));
+    assert_eq!(adjusted_cost * per_year, Cycles::new(20290372160403));
 }
 
 #[test]

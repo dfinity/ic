@@ -7,20 +7,28 @@ use std::{
 };
 
 use crate::common::{
-    create_node, latency_30ms_throughput_1000mbits, latency_50ms_throughput_300mbits, State,
+    create_node, latency_30ms_throughput_1000mbits, latency_50ms_throughput_300mbits,
+    SharableMockChunkable, State,
 };
+use common::SharableMockStateSync;
+use ic_logger::info;
 use ic_memory_transport::TransportRouter;
 use ic_p2p_test_utils::{
     mocks::MockStateSync,
     turmoil::{
-        add_peer_manager_to_sim, add_transport_to_sim, wait_for, waiter_fut, PeerManagerAction,
+        add_peer_manager_to_sim, add_transport_to_sim, wait_for, wait_for_timeout, waiter_fut,
+        PeerManagerAction,
     },
+    ConnectivityChecker,
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types::{
-    artifact::StateSyncArtifactId, crypto::CryptoHash, CryptoHashOfState, Height, RegistryVersion,
+    artifact::StateSyncArtifactId,
+    chunkable::{ArtifactErrorCode, ChunkId},
+    crypto::CryptoHash,
+    CryptoHashOfState, Height, RegistryVersion,
 };
-use ic_types_test_utils::ids::{NODE_1, NODE_2};
+use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3};
 use tokio::sync::Notify;
 use turmoil::Builder;
 
@@ -314,9 +322,6 @@ fn test_single_advert_between_two_nodes() {
             .build();
         let exit_notify = Arc::new(Notify::new());
 
-        let node_1_port = 8888;
-        let node_2_port = 9999;
-
         // Node 1 advertises height 1
         // Node 2 advertises height 2
         // n1_a1 = node1 advert1
@@ -375,13 +380,13 @@ fn test_single_advert_between_two_nodes() {
             &mut sim,
             log.clone(),
             NODE_1,
-            node_1_port,
             registry_handle.clone(),
             topology_watcher.clone(),
             None,
             None,
             None,
             Some(Arc::new(state_sync_n1)),
+            None,
             waiter_fut(),
         );
 
@@ -389,29 +394,21 @@ fn test_single_advert_between_two_nodes() {
             &mut sim,
             log,
             NODE_2,
-            node_2_port,
             registry_handle.clone(),
             topology_watcher,
             None,
             None,
             None,
             Some(Arc::new(state_sync_n2)),
+            None,
             waiter_fut(),
         );
 
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_1,
-                node_1_port,
-                RegistryVersion::from(2),
-            )))
+            .send(PeerManagerAction::Add((NODE_1, RegistryVersion::from(2))))
             .unwrap();
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_2,
-                node_2_port,
-                RegistryVersion::from(3),
-            )))
+            .send(PeerManagerAction::Add((NODE_2, RegistryVersion::from(3))))
             .unwrap();
         registry_handle.registry_client.reload();
         registry_handle.registry_client.update_to_latest_version();
@@ -438,9 +435,6 @@ fn test_multiple_advert_between_two_nodes() {
             .simulation_duration(Duration::from_secs(20))
             .build();
         let exit_notify = Arc::new(Notify::new());
-
-        let node_1_port = 8888;
-        let node_2_port = 9999;
 
         // Both nodes advertise height 1 and 2.
         // n1_a1 = node1 advert1
@@ -513,13 +507,13 @@ fn test_multiple_advert_between_two_nodes() {
             &mut sim,
             log.clone(),
             NODE_1,
-            node_1_port,
             registry_handle.clone(),
             topology_watcher.clone(),
             None,
             None,
             None,
             Some(Arc::new(state_sync_n1)),
+            None,
             waiter_fut(),
         );
 
@@ -527,29 +521,21 @@ fn test_multiple_advert_between_two_nodes() {
             &mut sim,
             log,
             NODE_2,
-            node_2_port,
             registry_handle.clone(),
             topology_watcher,
             None,
             None,
             None,
             Some(Arc::new(state_sync_n2)),
+            None,
             waiter_fut(),
         );
 
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_1,
-                node_1_port,
-                RegistryVersion::from(2),
-            )))
+            .send(PeerManagerAction::Add((NODE_1, RegistryVersion::from(2))))
             .unwrap();
         peer_manager_cmd_sender
-            .send(PeerManagerAction::Add((
-                NODE_2,
-                node_2_port,
-                RegistryVersion::from(3),
-            )))
+            .send(PeerManagerAction::Add((NODE_2, RegistryVersion::from(3))))
             .unwrap();
         registry_handle.registry_client.reload();
         registry_handle.registry_client.update_to_latest_version();
@@ -564,6 +550,223 @@ fn test_multiple_advert_between_two_nodes() {
         .expect("Node did not receive advert from other peer");
 
         exit_notify.notify_waiters();
+        sim.run().unwrap();
+    });
+}
+
+/// Tests correct abortion of a state sync because of bad peer behaviour.
+/// - Verifies that peers expected number of adverts
+/// - Start state sync and add two peers
+/// - One peer is removed by crashing the node
+/// - Other peer is removed because of failed chunk verification
+/// - Verify that there is no active state sync
+#[test]
+fn test_state_sync_abortion() {
+    with_test_replica_logger(|log| {
+        let mut sim = Builder::new()
+            .tick_duration(Duration::from_millis(100))
+            .simulation_duration(Duration::from_secs(40))
+            .build();
+        let exit_notify = Arc::new(Notify::new());
+
+        let s1 = SharableMockStateSync::new();
+        let s2 = SharableMockStateSync::new();
+        let s3 = SharableMockStateSync::new();
+
+        let (peer_manager_cmd_sender, topology_watcher, registry_handle) =
+            add_peer_manager_to_sim(&mut sim, exit_notify.clone(), log.clone());
+
+        let conn_checker = ConnectivityChecker::new(&[NODE_1, NODE_2, NODE_3]);
+
+        add_transport_to_sim(
+            &mut sim,
+            log.clone(),
+            NODE_1,
+            registry_handle.clone(),
+            topology_watcher.clone(),
+            Some(ConnectivityChecker::router()),
+            None,
+            None,
+            Some(Arc::new(s1.clone())),
+            None,
+            conn_checker.check_fut(),
+        );
+
+        add_transport_to_sim(
+            &mut sim,
+            log.clone(),
+            NODE_2,
+            registry_handle.clone(),
+            topology_watcher.clone(),
+            Some(ConnectivityChecker::router()),
+            None,
+            None,
+            Some(Arc::new(s2.clone())),
+            None,
+            conn_checker.check_fut(),
+        );
+
+        add_transport_to_sim(
+            &mut sim,
+            log.clone(),
+            NODE_3,
+            registry_handle.clone(),
+            topology_watcher,
+            Some(ConnectivityChecker::router()),
+            None,
+            None,
+            Some(Arc::new(s3.clone())),
+            None,
+            conn_checker.check_fut(),
+        );
+
+        peer_manager_cmd_sender
+            .send(PeerManagerAction::Add((NODE_1, RegistryVersion::from(2))))
+            .unwrap();
+        peer_manager_cmd_sender
+            .send(PeerManagerAction::Add((NODE_2, RegistryVersion::from(3))))
+            .unwrap();
+        peer_manager_cmd_sender
+            .send(PeerManagerAction::Add((NODE_3, RegistryVersion::from(4))))
+            .unwrap();
+        registry_handle.registry_client.reload();
+        registry_handle.registry_client.update_to_latest_version();
+
+        // Wait till all nodes connected
+        s1.get_mut().expect_available_states().return_const(vec![]);
+        s2.get_mut().expect_available_states().return_const(vec![]);
+        s3.get_mut().expect_available_states().return_const(vec![]);
+        wait_for(&mut sim, || conn_checker.fully_connected())
+            .expect("The network did not reach a fully connected state after startup");
+
+        // Node 1 advertises 10 states
+        s1.get_mut().checkpoint();
+        s1.get_mut()
+            .expect_available_states()
+            .times(1)
+            .return_once(|| {
+                vec![
+                    StateSyncArtifactId {
+                        height: Height::from(1),
+                        hash: CryptoHashOfState::from(CryptoHash(vec![])),
+                    };
+                    10
+                ]
+            });
+        s1.get_mut().expect_available_states().return_const(vec![]);
+        s1.get_mut().expect_chunk().returning(|_, _| Some(vec![]));
+
+        // Verify that peers got expected number of adverts. The last advert on node 2
+        // is used to start the state sync.
+        s2.get_mut()
+            .expect_start_state_sync()
+            .times(9)
+            .returning(|_| None);
+        s3.get_mut()
+            .expect_start_state_sync()
+            .times(10)
+            .returning(|_| None);
+
+        // Start state sync for Node 2. Initially only Node 1 is part of the state sync.
+        let c2 = SharableMockChunkable::new();
+        c2.get_mut()
+            .expect_chunks_to_download()
+            .returning(|| Box::new(vec![ChunkId::from(1)].into_iter()) as Box<_>);
+        c2.get_mut()
+            .expect_add_chunk()
+            .return_const(Err(ArtifactErrorCode::ChunksMoreNeeded));
+        {
+            let c2 = c2.clone();
+            s2.get_mut()
+                .expect_start_state_sync()
+                .times(1)
+                .return_once(|_| Some(Box::new(c2)));
+        }
+        s2.get_mut().expect_should_cancel().returning(|_| false);
+
+        // Wait until both peers have receive one state advert
+        wait_for(&mut sim, || {
+            s2.start_state_sync_calls() == 10 && s3.start_state_sync_calls() == 10
+        })
+        .expect("Node did not receive advert from other peer");
+
+        info!(
+            log,
+            "Started state sync on Node 2 based on adverts from Node 1"
+        );
+
+        // Add Node 3 to state sync by advertising the state once.
+        s3.get_mut().checkpoint();
+        s3.get_mut().expect_chunk().returning(|_, _| Some(vec![]));
+        s3.get_mut()
+            .expect_available_states()
+            .once()
+            .return_once(|| {
+                vec![StateSyncArtifactId {
+                    height: Height::from(1),
+                    hash: CryptoHashOfState::from(CryptoHash(vec![])),
+                }]
+            });
+        s1.get_mut()
+            .expect_start_state_sync()
+            .once()
+            .returning(|_| None);
+        s2.get_mut()
+            .expect_start_state_sync()
+            .never()
+            .returning(|_| None);
+        s3.get_mut().expect_available_states().return_const(vec![]);
+
+        // Wait until both peers have receive one state advert.
+        s1.clear();
+        s2.clear();
+        s3.clear();
+        wait_for(&mut sim, || {
+            s1.start_state_sync_calls() == 1 && s2.start_state_sync_calls() == 0
+        })
+        .unwrap();
+
+        // Crash Node 1. This removes Node1 from the state sync.
+        sim.crash(NODE_1.to_string());
+        wait_for_timeout(&mut sim, || false, Duration::from_secs(5)).unwrap();
+
+        // Simulate that Node 3 responds with an invalid chunk.
+        c2.get_mut().checkpoint();
+        c2.clear();
+        c2.get_mut()
+            .expect_add_chunk()
+            .returning(|_| Err(ArtifactErrorCode::ChunkVerificationFailed));
+        c2.get_mut()
+            .expect_chunks_to_download()
+            .returning(|| Box::new(vec![ChunkId::from(1)].into_iter()) as Box<_>);
+        wait_for(&mut sim, || c2.add_chunks_calls() >= 1).unwrap();
+
+        // State sync should now be stopped. This means new incoming adverts will invoke `start_state_sync`
+        s2.clear();
+        s3.clear();
+        s3.get_mut().checkpoint();
+        s2.get_mut().checkpoint();
+        s3.get_mut()
+            .expect_available_states()
+            .once()
+            .return_once(|| {
+                vec![StateSyncArtifactId {
+                    height: Height::from(1),
+                    hash: CryptoHashOfState::from(CryptoHash(vec![])),
+                }]
+            });
+        s2.get_mut().expect_available_states().return_const(vec![]);
+        s2.get_mut()
+            .expect_start_state_sync()
+            .once()
+            .returning(|_| None);
+        wait_for(&mut sim, || s2.start_state_sync_calls() == 1).unwrap();
+
+        exit_notify.notify_waiters();
+        // Check that all expectations are met.
+        s1.get_mut().checkpoint();
+        s2.get_mut().checkpoint();
+        s3.get_mut().checkpoint();
         sim.run().unwrap();
     });
 }

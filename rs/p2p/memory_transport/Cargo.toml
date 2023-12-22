@@ -8,12 +8,11 @@ edition = "2021"
 [dependencies]
 async-trait = "0.1.36"
 axum = "0.6.12"
-bytes = "1.0.1"
-futures = "0.3.10"
+bytes = { workspace = true }
+futures ={ workspace = true }
 http = "0.2.9"
 ic-types = { path = "../../types/types" }
 ic-quic-transport = { path = "../quic_transport" }
-prost = "0.11.0"
-tokio = { version = "1.15.0", features = ["full"] }
-tower = "0.4.13"
-
+prost = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }

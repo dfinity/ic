@@ -6,7 +6,7 @@ use ic_nervous_system_common_test_keys::{
 use ic_nns_common::pb::v1::{self as nns_common_pb, ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_governance::{
-    governance::test_data::CREATE_SERVICE_NERVOUS_SYSTEM,
+    governance::test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
     pb::v1::{
         governance_error::ErrorType,
         manage_neuron::{self, RegisterVote},
@@ -54,7 +54,7 @@ fn test_several_proposals() {
     // Step 1.1: Boot up NNS.
     let nns_init_payload = NnsInitPayloadsBuilder::new()
         .with_initial_invariant_compliant_mutations()
-        .with_test_neurons()
+        .with_test_neurons_fund_neurons(100_000_000_000_000)
         .with_sns_dedicated_subnets(state_machine.get_subnet_ids())
         .with_sns_wasm_access_controls(true)
         // TODO: Delete this once the SNS_WASM canister takes any requests
@@ -101,7 +101,7 @@ fn test_several_proposals() {
     match response_2.command {
         Some(manage_neuron_response::Command::Error(err)) => {
             assert_eq!(
-                ErrorType::from_i32(err.error_type),
+                ErrorType::try_from(err.error_type).ok(),
                 Some(ErrorType::PreconditionFailed),
                 "{:#?}",
                 err,
@@ -162,13 +162,13 @@ fn test_several_proposals() {
     let proposal_3 = final_proposals.get(&proposal_id_3).unwrap();
 
     assert_eq!(
-        ProposalStatus::from_i32(proposal_1.status).unwrap(),
+        ProposalStatus::try_from(proposal_1.status).unwrap(),
         ProposalStatus::Executed,
         "{:#?}",
         proposal_1,
     );
     assert_eq!(
-        ProposalStatus::from_i32(proposal_3.status).unwrap(),
+        ProposalStatus::try_from(proposal_3.status).unwrap(),
         ProposalStatus::Open,
         "{:#?}",
         proposal_1,
@@ -195,7 +195,7 @@ fn make_proposal(state_machine: &mut StateMachine, sns_number: u64) -> ManageNeu
             summary: "".to_string(),
             url: "".to_string(),
             action: Some(proposal::Action::CreateServiceNervousSystem(
-                CREATE_SERVICE_NERVOUS_SYSTEM.clone(),
+                CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone(),
             )),
         },
     )

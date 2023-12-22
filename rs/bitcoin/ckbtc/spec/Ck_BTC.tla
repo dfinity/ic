@@ -115,7 +115,7 @@ CONSTANTS
     BTC_TO_WITHDRAWAL(_)
 
 \**********************************************************************************************
-\* Constants used when runing the analysis using the TLC tool
+\* Constants used when running the analysis using the TLC tool
 \**********************************************************************************************
 
 \* The version of BTC_TO_WITHDRAWAL used with TLC for analysis, as TLC doesn't care about types
@@ -147,7 +147,7 @@ Symmetry_Permutations == UNION { Permutations(S) : S \in Symmetry_Sets }
 Sum_Utxos(S) == Sum_F(LAMBDA x: x.amount, S)
 Utxos_Owned_By(utxos, S) == { utxo \in utxos: utxo.owner \in S }
 
-\* Utility definitions to deal with the fields in utxos_states_adresses values
+\* Utility definitions to deal with the fields in utxos_states_addresses values
 New_Address_State == [discovered_utxos |-> {}, processed_utxos |-> {}, spent_utxos |-> {}]
 Discovered_Utxos(addr_to_state, addr) == With_Default(addr_to_state, addr, New_Address_State).discovered_utxos
 Processed_Utxos(addr_to_state, addr) == With_Default(addr_to_state, addr, New_Address_State).processed_utxos

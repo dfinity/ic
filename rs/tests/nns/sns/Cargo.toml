@@ -1,16 +1,19 @@
 [package]
 name = "sns_tests"
-version = "0.8.0"
-authors = ["The Internet Computer Project Developers"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 anyhow = "1.0.31"
 ic-nervous-system-common = { path = "../../../nervous_system/common" }
+ic-nervous-system-proto = { path = "../../../nervous_system/proto" }
 ic-nns-governance = { path = "../../../nns/governance" }
 ic-sns-swap = { path = "../../../sns/swap" }
 rust_decimal = "1.25"
-slog = { version = "2.5.2", features = ["release_max_level_trace"] }
+slog = { workspace = true }
 tests = { path = "../../" }
 
 [lib]
@@ -18,28 +21,12 @@ name = "ic_sns_tests"
 path = "src/lib.rs"
 
 [[bin]]
-name = "ic-systest-sns-sale-mass-participation"
-path = "sale_mass_participation.rs"
-
-[[bin]]
 name = "ic-systest-sns-sale-participation"
 path = "sale_participation.rs"
 
 [[bin]]
-name = "ic-systest-sns-aggregation-canister-test"
-path = "aggregation_canister_test.rs"
-
-[[bin]]
-name = "ic-systest-sns-launchpad-direct-load-test"
-path = "launchpad_direct_load_test.rs"
-
-[[bin]]
-name = "ic-systest-sns-launchpad-direct-auth-load-test"
-path = "launchpad_direct_auth_load_test.rs"
-
-[[bin]]
-name = "ic-systest-sns-launchpad-aggregator-load-test"
-path = "launchpad_aggregator_load_test.rs"
+name = "ic-systest-sns-sale-mass-participation"
+path = "sale_mass_participation.rs"
 
 [[bin]]
 name = "ic-systest-sns-sale-simple-load-test"
@@ -54,6 +41,26 @@ name = "ic-systest-sns-sale-simple-load-test-3"
 path = "sns_sale_load_test_3.rs"
 
 [[bin]]
+name = "ic-systest-sns-aggregation-canister-test"
+path = "aggregation_canister_test.rs"
+
+[[bin]]
+name = "ic-systest-sns-workload-static-testnet"
+path = "workload_static_testnet.rs"
+
+[[bin]]
+name = "ic-systest-sns-launchpad-direct-load-test"
+path = "launchpad_direct_load_test.rs"
+
+[[bin]]
+name = "ic-systest-sns-launchpad-direct-auth-load-test"
+path = "launchpad_direct_auth_load_test.rs"
+
+[[bin]]
+name = "ic-systest-sns-launchpad-aggregator-load-test"
+path = "launchpad_aggregator_load_test.rs"
+
+[[bin]]
 name = "ic-systest-sns-payment-flow-test"
 path = "payment_flow_test.rs"
 
@@ -66,9 +73,14 @@ name = "ic-systest-sns-one-proposal-payment-flow-with-finalization-test"
 path = "one_proposal_payment_flow_with_finalization_test.rs"
 
 [[bin]]
+name = "ic-systest-sns-one-proposal-neurons-fund-swap-participation-test"
+path = "one_proposal_neurons_fund_swap_participation_test.rs"
+
+[[bin]]
+name = "ic-systest-sns-one-proposal-overpayment-fail-test"
+path = "one_proposal_overpayment_fail_test.rs"
+
+[[bin]]
 name = "ic-systest-sns-payment-flow-load-test"
 path = "payment_flow_load_test.rs"
 
-[[bin]]
-name = "ic-systest-sns-workload-static-testnet"
-path = "workload_static_testnet.rs"

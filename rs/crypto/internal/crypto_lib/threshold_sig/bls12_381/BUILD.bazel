@@ -4,7 +4,6 @@ load("//bazel:defs.bzl", "rust_bench")
 package(default_visibility = [
     "//rs/certification/test-utils:__subpackages__",
     "//rs/crypto:__subpackages__",
-    "//rs/rosetta-api:__pkg__",
     "//rs/state_machine_tests:__pkg__",
     "//rs/validator/http_request_test_utils:__subpackages__",
 ])
@@ -22,8 +21,8 @@ DEPENDENCIES = [
     "@crate_index//:hex",
     "@crate_index//:lazy_static",
     "@crate_index//:parking_lot",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:rand_chacha_0_3_1",
+    "@crate_index//:rand",
+    "@crate_index//:rand_chacha",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_cbor",
@@ -51,7 +50,7 @@ rust_library(
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_internal_threshold_sig_bls12381",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
@@ -80,7 +79,7 @@ rust_bench(
         "//rs/crypto/internal/crypto_lib/types",
         "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:criterion",
-        "@crate_index//:rand_0_8_4",
+        "@crate_index//:rand",
     ],
 )
 
@@ -93,7 +92,7 @@ rust_bench(
         "//rs/crypto/internal/crypto_lib/bls12_381/type",
         "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:criterion",
-        "@crate_index//:rand_0_8_4",
+        "@crate_index//:rand",
     ],
 )
 
@@ -118,6 +117,6 @@ rust_bench(
         "//rs/crypto/internal/crypto_lib/bls12_381/type",
         "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:criterion",
-        "@crate_index//:rand_0_8_4",
+        "@crate_index//:rand",
     ],
 )

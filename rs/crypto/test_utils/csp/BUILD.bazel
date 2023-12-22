@@ -11,7 +11,8 @@ DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/types",
     "//rs/crypto/node_key_validation",
     "//rs/crypto/tls_interfaces",
-    "@crate_index//:mockall_0_7_2",
+    "//rs/protobuf",
+    "@crate_index//:mockall",
 ]
 
 MACRO_DEPENDENCIES = []

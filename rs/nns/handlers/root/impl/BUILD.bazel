@@ -1,5 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:prost.bzl", "generated_files_check")
 
@@ -91,7 +91,7 @@ cargo_build_script(
     srcs = ["build.rs"],
     aliases = ALIASES,
     data = [],  # build script data (e.g. template files) goes here
-    version = "0.8.0",
+    version = "0.9.0",
     deps = BUILD_DEPENDENCIES,
 )
 
@@ -104,7 +104,7 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_nns_handler_root",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES + [":build_script"],
 )
 
@@ -118,7 +118,7 @@ rust_library(
     crate_features = ["test"],
     crate_name = "ic_nns_handler_root",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES_WITH_TEST_FEATURES + [":build_script"],
 )
 

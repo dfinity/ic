@@ -422,16 +422,22 @@ pub fn validate_aggregator_data(env: TestEnv) {
             let res = canister_agent.call(&request).await.result().unwrap();
             let res = Decode!(res.as_slice(), GetStateResponse).expect("failed to decode");
             // We've already checked above that the SNS sale params had propagated through the aggregator canister.
-            // Thus, they must also be availabe while querying the SNS directly.
-            let sns_sale_params = res.swap.unwrap().params.unwrap();
+            // Thus, they must also be available while querying the SNS directly.
+            let mut sns_sale_params = res.swap.unwrap().params.unwrap();
             let sns_sale_params_json = serde_json::to_value(sns_sale_params.clone()).unwrap();
             info!(
                 log,
                 "Obtained SNS sale parameters from SNS sale canister: {sns_sale_params_json:#}"
             );
+            // The aggregator canister doesn't yet support `min_direct_participation_icp_e8s` and `max_direct_participation_icp_e8s`
+            sns_sale_params.min_direct_participation_icp_e8s = None;
+            sns_sale_params.max_direct_participation_icp_e8s = None;
             sns_sale_params
         };
-        assert_eq!(sns_sale_params_from_aggregator, sns_sale_params_from_sns);
+        assert_eq!(
+            sns_sale_params_from_aggregator, sns_sale_params_from_sns,
+            "SNS Swap params from aggregator didn't match the params from the SNS Swap canister"
+        );
     });
     info!(
         env.logger(),

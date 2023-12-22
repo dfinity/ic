@@ -2,6 +2,49 @@
 
 set -e
 
+SCRIPT="$(basename "$0")[$$]"
+METRICS_DIR="/run/node_exporter/collector_textfile"
+HOSTOS_VERSION_FILE="/opt/ic/share/version.txt"
+
+write_log() {
+    local message=$1
+
+    if [ -t 1 ]; then
+        echo "${SCRIPT} ${message}" >/dev/stdout
+    fi
+
+    logger -t ${SCRIPT} "${message}"
+}
+
+write_metric_attr() {
+    local name=$1
+    local attr=$2
+    local value=$3
+    local help=$4
+    local type=$5
+
+    echo -e "# HELP ${name} ${help}\n# TYPE ${type}\n${name}${attr} ${value}" >"${METRICS_DIR}/${name}.prom"
+}
+
+write_metric() {
+    local name=$1
+    local value=$2
+    local help=$3
+    local type=$4
+
+    echo -e "# HELP ${name} ${help}\n# TYPE ${type}\n${name} ${value}" >"${METRICS_DIR}/${name}.prom"
+}
+
+function get_hostos_version_noreport() {
+    if [ -r ${HOSTOS_VERSION_FILE} ]; then
+        HOSTOS_VERSION=$(cat ${HOSTOS_VERSION_FILE})
+        HOSTOS_VERSION_OK=1
+    else
+        HOSTOS_VERSION="unknown"
+        HOSTOS_VERSION_OK=0
+    fi
+}
+
 # Reads properties "boot_alternative" and "boot_cycle" from the grubenv
 # file. The properties are stored as global variables.
 #
@@ -98,7 +141,7 @@ Usage:
       boot of newly installed upgrade to prevent bootloader falling back
       to previous installation). This simply does nothing if the system
       has been confirmed previously already (safe to call as many times
-      as you like, will not iniate I/O if nothing to be written).
+      as you like, will not initiate I/O if nothing to be written).
 
     current
       Output currently booted system (A or B) on stdout and exit.
@@ -134,6 +177,8 @@ while getopts ":f" OPT; do
     esac
 done
 
+get_hostos_version_noreport
+
 # Read current state
 read_grubenv "${GRUBENV_FILE}"
 
@@ -145,12 +190,32 @@ if [ "${boot_cycle}" == "first_boot" ]; then
     # booted yet, then we must still be in the other system.
     CURRENT_ALTERNATIVE=$(swap_alternative "${CURRENT_ALTERNATIVE}")
     IS_STABLE=0
+
+    write_metric "hostos_boot_stable" \
+        "0" \
+        "HostOS is boot stable" \
+        "gauge"
 fi
 
 if [ "${boot_cycle}" == "failsafe_check" ]; then
     # If the system booted is marked as "failsafe_check" then bootloader
     # will revert to the other system on next boot.
     NEXT_BOOT=$(swap_alternative "${NEXT_BOOT}")
+    write_log "HostOS sets ${NEXT_BOOT} as failsafe for next boot"
+
+    # TODO should also set IS_STABLE=0 here to prevent manual overwrite
+    # of a backup install slot.
+
+    write_metric "hostos_boot_stable" \
+        "0" \
+        "HostOS is boot stable" \
+        "gauge"
+    write_metric_attr "hostos_boot_action" \
+        "{next_boot=\"${NEXT_BOOT}\",version=\"${HOSTOS_VERSION}\"}" \
+        "2" \
+        "HostOS boot action" \
+        "gauge"
+
 fi
 
 TARGET_ALTERNATIVE=$(swap_alternative "${CURRENT_ALTERNATIVE}")
@@ -168,7 +233,8 @@ shift
 case "${ACTION}" in
     install)
         if [ "${IS_STABLE}" != 1 ]; then
-            echo "Cannot install an upgrade before present system is committed as stable." >2
+            write_log "HostOS attempted to install upgrade in unstable state"
+            echo "Cannot install an upgrade before present system is committed as stable." >&2
             exit 1
         fi
         BOOT_IMG="$1"
@@ -179,21 +245,57 @@ case "${ACTION}" in
             exit 1
         fi
 
+        write_log "HostOS current version ${HOSTOS_VERSION} at slot ${CURRENT_ALTERNATIVE}"
+        write_log "HostOS upgrade started, modifying slot ${TARGET_ALTERNATIVE} at ${TARGET_BOOT} and ${TARGET_ROOT}"
+
         # Write to target partitions, and "wipe" header of var partition
         # (to ensure that new target starts from a pristine state).
 
         dd if="${BOOT_IMG}" of="${TARGET_BOOT}" bs=1M status=progress
+        write_metric_attr "hostos_boot_action" \
+            "{written_boot=\"${TARGET_BOOT}\"}" \
+            "1" \
+            "HostOS boot action" \
+            "gauge"
+
         dd if="${ROOT_IMG}" of="${TARGET_ROOT}" bs=1M status=progress
+        write_metric_attr "hostos_boot_action" \
+            "{written_root=\"${TARGET_ROOT}\"}" \
+            "1" \
+            "HostOS boot action" \
+            "gauge"
+
         dd if=/dev/zero of="${TARGET_VAR}" bs=1M count=16 status=progress
+        write_metric_attr "hostos_boot_action" \
+            "{written_var=\"true\"}" \
+            "1" \
+            "HostOS boot action" \
+            "gauge"
 
         boot_alternative="${TARGET_ALTERNATIVE}"
         boot_cycle=first_boot
         write_grubenv "${GRUBENV_FILE}"
+
+        write_log "HostOS upgrade written to slot ${TARGET_ALTERNATIVE}"
+        write_metric "hostos_boot_stable" \
+            "0" \
+            "HostOS is boot stable" \
+            "gauge"
         ;;
     confirm)
         if [ "$boot_cycle" != "stable" ]; then
             boot_cycle=stable
             write_grubenv "${GRUBENV_FILE}"
+            write_log "HostOS stable boot confirmed at slot ${CURRENT_ALTERNATIVE}"
+            write_metric "hostos_boot_stable" \
+                "1" \
+                "HostOS is boot stable" \
+                "gauge"
+            write_metric_attr "hostos_boot_action" \
+                "{confirm_boot=\"${CURRENT_BOOT}\",version=\"${HOSTOS_VERSION}\"}" \
+                "1" \
+                "HostOS boot action" \
+                "gauge"
         fi
         ;;
     current)

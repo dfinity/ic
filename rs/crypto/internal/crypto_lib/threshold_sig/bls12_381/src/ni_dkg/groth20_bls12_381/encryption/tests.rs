@@ -1,5 +1,6 @@
 #![allow(clippy::unwrap_used)]
 //! Tests for the CLib NiDKG forward secure encryption
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 pub use rand::{Rng, RngCore, SeedableRng};
 pub use rand_chacha::ChaChaRng;
 pub use std::collections::BTreeMap;
@@ -80,6 +81,29 @@ fn single_stepping_a_key_should_increment_current_epoch() {
 }
 
 #[test]
+fn should_not_update_key_on_current_or_past_epoch() {
+    let rng = &mut reproducible_rng();
+    let mut associated_data = [0u8; 4];
+    rng.fill_bytes(&mut associated_data[..]);
+
+    let key_with_pop = create_forward_secure_key_pair(Seed::from_rng(rng), &associated_data);
+    let mut secret_key = SecretKey::deserialize(&key_with_pop.secret_key);
+    let secret_key_epoch = Epoch::from(10);
+    update_key_inplace_to_epoch(&mut secret_key, secret_key_epoch, Seed::from_rng(rng));
+    assert_eq!(secret_key.current_epoch(), Some(secret_key_epoch));
+
+    let past_epoch = Epoch::from(9);
+    let key_before_update = secret_key.serialize();
+
+    // Update key to a previous epoch
+    update_key_inplace_to_epoch(&mut secret_key, past_epoch, Seed::from_rng(rng));
+    assert_eq!(secret_key.serialize(), key_before_update);
+    // Update key to current epoch
+    update_key_inplace_to_epoch(&mut secret_key, secret_key_epoch, Seed::from_rng(rng));
+    assert_eq!(secret_key.serialize(), key_before_update);
+}
+
+#[test]
 fn correct_keys_should_verify() {
     const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[11u8, 2u8, 19u8, 31u8];
     let key_set =
@@ -147,7 +171,7 @@ fn fs_key_message_pairs(
 #[test]
 fn encryption_should_work() {
     const NUM_RECEIVERS: u8 = 3;
-    let mut rng = ChaChaRng::from_seed([17; 32]);
+    let rng = &mut ChaChaRng::from_seed([17; 32]);
     let mut associated_data = [0u8; 22];
     rng.fill_bytes(&mut associated_data[..]);
     let threshold = NumberOfNodes::from(2);
@@ -186,7 +210,7 @@ fn encryption_should_work() {
 #[test]
 fn encrypted_messages_should_decrypt() {
     const NUM_RECEIVERS: u8 = 3;
-    let mut rng = ChaChaRng::from_seed([11; 32]);
+    let rng = &mut ChaChaRng::from_seed([11; 32]);
     let mut associated_data = [0u8; 18];
     rng.fill_bytes(&mut associated_data[..]);
     let threshold = NumberOfNodes::from(2);
@@ -251,7 +275,7 @@ fn encrypted_messages_should_decrypt() {
 fn decryption_should_fail_below_epoch() {
     const NUM_RECEIVERS: u8 = 3;
     let threshold = NumberOfNodes::from(2);
-    let mut rng = ChaChaRng::from_seed([0xbe; 32]);
+    let rng = &mut ChaChaRng::from_seed([0xbe; 32]);
     let mut associated_data = [0u8; 10];
     rng.fill_bytes(&mut associated_data[..]);
 
@@ -279,7 +303,7 @@ fn decryption_should_fail_below_epoch() {
         .iter()
         .map(|epoch| {
             encrypt_and_prove(
-                Seed::from_rng(&mut rng),
+                Seed::from_rng(rng),
                 &key_message_pairs,
                 *epoch,
                 &public_coefficients,
@@ -297,7 +321,7 @@ fn decryption_should_fail_below_epoch() {
     if let Some(((mut secret_key, message), node_index)) = secret_keys.zip(messages).zip(0..).next()
     {
         // Delete keys below epoch
-        update_key_inplace_to_epoch(&mut secret_key, secret_key_epoch, Seed::from_rng(&mut rng));
+        update_key_inplace_to_epoch(&mut secret_key, secret_key_epoch, Seed::from_rng(rng));
 
         // Decrypts should succeed only for ciphertexts with higher epochs
         for (ciphertext_epoch, ciphertext) in encryption_epochs
@@ -337,7 +361,7 @@ fn decryption_should_fail_below_epoch() {
 #[test]
 fn zk_proofs_should_verify() {
     const NUM_RECEIVERS: u8 = 3;
-    let mut rng = ChaChaRng::from_seed([33; 32]);
+    let rng = &mut ChaChaRng::from_seed([33; 32]);
     let mut associated_data = [0u8; 10];
     rng.fill_bytes(&mut associated_data[..]);
     let threshold = NumberOfNodes::from(2);
@@ -389,7 +413,7 @@ fn zk_proofs_should_verify() {
 #[test]
 fn zk_proofs_should_not_verify_with_wrong_epoch() {
     const NUM_RECEIVERS: u8 = 3;
-    let mut rng = ChaChaRng::from_seed([48; 32]);
+    let rng = &mut ChaChaRng::from_seed([48; 32]);
     let mut associated_data = [0u8; 100];
     rng.fill_bytes(&mut associated_data[..]);
     let threshold = NumberOfNodes::from(2);

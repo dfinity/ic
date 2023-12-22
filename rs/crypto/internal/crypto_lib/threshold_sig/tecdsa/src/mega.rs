@@ -124,10 +124,7 @@ impl MEGaPrivateKey {
 
 impl Debug for MEGaPrivateKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.secret {
-            EccScalar::K256(_) => write!(f, "MEGaPrivateKey(EccScalar::K256) - REDACTED"),
-            EccScalar::P256(_) => write!(f, "MEGaPrivateKey(EccScalar::P256) - REDACTED"),
-        }
+        write!(f, "MEGaPrivateKey({}) - REDACTED", self.curve_type())
     }
 }
 
@@ -218,25 +215,25 @@ impl MEGaCiphertext {
     pub fn verify_is(
         &self,
         ctype: MEGaCiphertextType,
-        curve: EccCurveType,
+        key_curve: EccCurveType,
+        plaintext_curve: EccCurveType,
     ) -> ThresholdEcdsaResult<()> {
-        if self.ephemeral_key().curve_type() != curve {
+        if self.ephemeral_key().curve_type() != key_curve {
             return Err(ThresholdEcdsaError::CurveMismatch);
         }
 
-        if self.pop_public_key().curve_type() != curve {
+        if self.pop_public_key().curve_type() != key_curve {
             return Err(ThresholdEcdsaError::CurveMismatch);
         }
-        if self.pop_proof().curve_type()? != curve {
+        if self.pop_proof().curve_type()? != key_curve {
             return Err(ThresholdEcdsaError::CurveMismatch);
         }
 
         let curves_ok = match self {
-            MEGaCiphertext::Single(c) => c.ctexts.iter().all(|x| x.curve_type() == curve),
-            MEGaCiphertext::Pairs(c) => c
-                .ctexts
-                .iter()
-                .all(|(x, y)| x.curve_type() == curve && y.curve_type() == curve),
+            MEGaCiphertext::Single(c) => c.ctexts.iter().all(|x| x.curve_type() == plaintext_curve),
+            MEGaCiphertext::Pairs(c) => c.ctexts.iter().all(|(x, y)| {
+                x.curve_type() == plaintext_curve && y.curve_type() == plaintext_curve
+            }),
         };
 
         if !curves_ok {
@@ -296,11 +293,7 @@ impl MEGaCiphertext {
             }
         };
 
-        if commitment.check_opening(receiver_index, &opening)? {
-            Ok(opening)
-        } else {
-            Err(ThresholdEcdsaError::InvalidCommitment)
-        }
+        commitment.return_opening_if_consistent(receiver_index, &opening)
     }
 }
 
@@ -319,7 +312,7 @@ impl From<MEGaCiphertextPair> for MEGaCiphertext {
 fn check_plaintexts(
     plaintexts: &[EccScalar],
     recipients: &[MEGaPublicKey],
-) -> ThresholdEcdsaResult<EccCurveType> {
+) -> ThresholdEcdsaResult<(EccCurveType, EccCurveType)> {
     if plaintexts.len() != recipients.len() {
         return Err(ThresholdEcdsaError::InvalidArguments(
             "Must be as many plaintexts as recipients".to_string(),
@@ -332,27 +325,29 @@ fn check_plaintexts(
         ));
     }
 
-    let curve_type = plaintexts[0].curve_type();
+    let plaintext_curve = plaintexts[0].curve_type();
 
     for pt in plaintexts {
-        if pt.curve_type() != curve_type {
+        if pt.curve_type() != plaintext_curve {
             return Err(ThresholdEcdsaError::CurveMismatch);
         }
     }
+
+    let key_curve = recipients[0].curve_type();
 
     for recipient in recipients {
-        if recipient.curve_type() != curve_type {
-            return Err(ThresholdEcdsaError::CurveMismatch);
+        if recipient.curve_type() != key_curve {
+            return Err(ThresholdEcdsaError::InvalidRecipients);
         }
     }
 
-    Ok(curve_type)
+    Ok((plaintext_curve, key_curve))
 }
 
 fn check_plaintexts_pair(
     plaintexts: &[(EccScalar, EccScalar)],
     recipients: &[MEGaPublicKey],
-) -> ThresholdEcdsaResult<EccCurveType> {
+) -> ThresholdEcdsaResult<(EccCurveType, EccCurveType)> {
     if plaintexts.len() != recipients.len() {
         return Err(ThresholdEcdsaError::InvalidArguments(
             "Must be as many plaintexts as recipients".to_string(),
@@ -365,24 +360,27 @@ fn check_plaintexts_pair(
         ));
     }
 
-    let curve_type = plaintexts[0].0.curve_type();
+    let plaintext_curve = plaintexts[0].0.curve_type();
 
     for pt in plaintexts {
-        if pt.0.curve_type() != curve_type || pt.1.curve_type() != curve_type {
+        if pt.0.curve_type() != plaintext_curve || pt.1.curve_type() != plaintext_curve {
             return Err(ThresholdEcdsaError::CurveMismatch);
         }
     }
+
+    let key_curve = recipients[0].curve_type();
 
     for recipient in recipients {
-        if recipient.curve_type() != curve_type {
-            return Err(ThresholdEcdsaError::CurveMismatch);
+        if recipient.curve_type() != key_curve {
+            return Err(ThresholdEcdsaError::InvalidRecipients);
         }
     }
 
-    Ok(curve_type)
+    Ok((plaintext_curve, key_curve))
 }
 
 fn mega_hash_to_scalars(
+    plaintext_curve: EccCurveType,
     ctype: MEGaCiphertextType,
     dealer_index: NodeIndex,
     recipient_index: NodeIndex,
@@ -391,8 +389,6 @@ fn mega_hash_to_scalars(
     ephemeral_key: &EccPoint,
     shared_secret: &EccPoint,
 ) -> ThresholdEcdsaResult<Vec<EccScalar>> {
-    let curve_type = public_key.curve_type();
-
     let count = match ctype {
         MEGaCiphertextType::Single => 1,
         MEGaCiphertextType::Pairs => 2,
@@ -405,12 +401,12 @@ fn mega_hash_to_scalars(
     ro.add_point("public_key", public_key)?;
     ro.add_point("ephemeral_key", ephemeral_key)?;
     ro.add_point("shared_secret", shared_secret)?;
-    ro.output_scalars(curve_type, count)
+    ro.output_scalars(plaintext_curve, count)
 }
 
 /// Compute the Proof Of Possession (PoP) base element
 ///
-/// This is used in conjuction with a DLOG equality ZK proof in order
+/// This is used in conjunction with a DLOG equality ZK proof in order
 /// for the sender to prove to recipients that it knew the discrete
 /// log of the ephemeral key.
 fn compute_pop_base(
@@ -497,12 +493,12 @@ impl MEGaCiphertextSingle {
         dealer_index: NodeIndex,
         associated_data: &[u8],
     ) -> ThresholdEcdsaResult<Self> {
-        let curve_type = check_plaintexts(plaintexts, recipients)?;
+        let (plaintext_curve, key_curve) = check_plaintexts(plaintexts, recipients)?;
 
         let ctype = MEGaCiphertextType::Single;
 
         let (beta, v, pop_public_key, pop_proof) =
-            compute_eph_key_and_pop(ctype, curve_type, seed, associated_data, dealer_index)?;
+            compute_eph_key_and_pop(ctype, key_curve, seed, associated_data, dealer_index)?;
 
         let mut ctexts = Vec::with_capacity(recipients.len());
 
@@ -510,6 +506,7 @@ impl MEGaCiphertextSingle {
             let ubeta = pubkey.point.scalar_mul(&beta)?;
 
             let hm = mega_hash_to_scalars(
+                plaintext_curve,
                 ctype,
                 dealer_index,
                 index as NodeIndex,
@@ -561,7 +558,10 @@ impl MEGaCiphertextSingle {
             ));
         }
 
+        let plaintext_curve = self.ctexts[recipient_index as usize].curve_type();
+
         let hm = mega_hash_to_scalars(
+            plaintext_curve,
             MEGaCiphertextType::Single,
             dealer_index,
             recipient_index,
@@ -582,11 +582,10 @@ impl MEGaCiphertextSingle {
         our_private_key: &MEGaPrivateKey,
         recipient_public_key: &MEGaPublicKey,
     ) -> ThresholdEcdsaResult<EccScalar> {
-        // Since we only decrypt verified dealings, and the PoP is already
-        // verified during dealing verification, this check should never
-        // fail. However it is retained as it is not too expensive and more
-        // closely matches the description in the paper.
-        self.verify_pop(associated_data, dealer_index)?;
+        // We could verify the PoP here. However we assume that it was
+        // already checked when the dealing was verified, and we only
+        // decrypt verified dealings.
+        //self.verify_pop(associated_data, dealer_index)?;
 
         let ubeta = self.ephemeral_key.scalar_mul(&our_private_key.secret)?;
 
@@ -608,12 +607,12 @@ impl MEGaCiphertextPair {
         dealer_index: NodeIndex,
         associated_data: &[u8],
     ) -> ThresholdEcdsaResult<Self> {
-        let curve_type = check_plaintexts_pair(plaintexts, recipients)?;
+        let (plaintext_curve, key_curve) = check_plaintexts_pair(plaintexts, recipients)?;
 
         let ctype = MEGaCiphertextType::Pairs;
 
         let (beta, v, pop_public_key, pop_proof) =
-            compute_eph_key_and_pop(ctype, curve_type, seed, associated_data, dealer_index)?;
+            compute_eph_key_and_pop(ctype, key_curve, seed, associated_data, dealer_index)?;
 
         let mut ctexts = Vec::with_capacity(recipients.len());
 
@@ -621,6 +620,7 @@ impl MEGaCiphertextPair {
             let ubeta = pubkey.point.scalar_mul(&beta)?;
 
             let hm = mega_hash_to_scalars(
+                plaintext_curve,
                 ctype,
                 dealer_index,
                 index as NodeIndex,
@@ -673,7 +673,10 @@ impl MEGaCiphertextPair {
             ));
         }
 
+        let plaintext_curve = self.ctexts[recipient_index as usize].0.curve_type();
+
         let hm = mega_hash_to_scalars(
+            plaintext_curve,
             MEGaCiphertextType::Pairs,
             dealer_index,
             recipient_index,
@@ -697,11 +700,10 @@ impl MEGaCiphertextPair {
         our_private_key: &MEGaPrivateKey,
         recipient_public_key: &MEGaPublicKey,
     ) -> ThresholdEcdsaResult<(EccScalar, EccScalar)> {
-        // Since we only decrypt verified dealings, and the PoP is already
-        // verified during dealing verification, this check should never
-        // fail. However it is retained as it is not too expensive and more
-        // closely matches the description in the paper.
-        self.verify_pop(associated_data, dealer_index)?;
+        // We could verify the PoP here. However we assume that it was
+        // already checked when the dealing was verified, and we only
+        // decrypt verified dealings.
+        //self.verify_pop(associated_data, dealer_index)?;
 
         let ubeta = self.ephemeral_key.scalar_mul(&our_private_key.secret)?;
 

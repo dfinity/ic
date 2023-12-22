@@ -6,14 +6,12 @@ rust_library(
     name = "local_store",
     srcs = glob(["src/**"]),
     crate_name = "ic_registry_local_store",
-    version = "0.8.0",
+    version = "0.9.0",
     deps = [
         "//rs/interfaces/registry",
         "//rs/registry/proto",
-        "//rs/registry/transport",
         "//rs/types/types",
         "//rs/utils",
-        "@crate_index//:bytes",
         "@crate_index//:prost",
     ],
 )
@@ -23,7 +21,7 @@ rust_test(
     crate = ":local_store",
     deps = [
         "//rs/registry/local_store/artifacts",
-        "@crate_index//:rand_0_8_4",
+        "@crate_index//:rand",
         "@crate_index//:tempfile",
     ],
 )

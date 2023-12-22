@@ -9,6 +9,8 @@ pub struct CallContext {
     pub deleted: bool,
     #[prost(uint64, optional, tag = "9")]
     pub time_nanos: ::core::option::Option<u64>,
+    #[prost(uint64, tag = "10")]
+    pub instructions_executed: u64,
     #[prost(oneof = "call_context::CallOrigin", tags = "1, 2, 3, 4, 7")]
     pub call_origin: ::core::option::Option<call_context::CallOrigin>,
 }
@@ -144,7 +146,6 @@ pub struct WasmMethod {
 }
 /// Nested message and enum types in `WasmMethod`.
 pub mod wasm_method {
-    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
     #[repr(i32)]
     pub enum SystemMethod {
@@ -174,6 +175,21 @@ pub mod wasm_method {
                 SystemMethod::CanisterHeartbeat => "SYSTEM_METHOD_CANISTER_HEARTBEAT",
                 SystemMethod::Empty => "SYSTEM_METHOD_EMPTY",
                 SystemMethod::CanisterGlobalTimer => "SYSTEM_METHOD_CANISTER_GLOBAL_TIMER",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "SYSTEM_METHOD_UNSPECIFIED" => Some(Self::Unspecified),
+                "SYSTEM_METHOD_CANISTER_START" => Some(Self::CanisterStart),
+                "SYSTEM_METHOD_CANISTER_INIT" => Some(Self::CanisterInit),
+                "SYSTEM_METHOD_CANISTER_PRE_UPGRADE" => Some(Self::CanisterPreUpgrade),
+                "SYSTEM_METHOD_CANISTER_POST_UPGRADE" => Some(Self::CanisterPostUpgrade),
+                "SYSTEM_METHOD_CANISTER_INSPECT_MESSAGE" => Some(Self::CanisterInspectMessage),
+                "SYSTEM_METHOD_CANISTER_HEARTBEAT" => Some(Self::CanisterHeartbeat),
+                "SYSTEM_METHOD_EMPTY" => Some(Self::Empty),
+                "SYSTEM_METHOD_CANISTER_GLOBAL_TIMER" => Some(Self::CanisterGlobalTimer),
+                _ => None,
             }
         }
     }
@@ -341,7 +357,6 @@ pub mod execution_task {
             Ingress(super::super::super::super::ingress::v1::Ingress),
         }
     }
-    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
     #[repr(i32)]
     pub enum CanisterTask {
@@ -359,6 +374,15 @@ pub mod execution_task {
                 CanisterTask::Unspecified => "CANISTER_TASK_UNSPECIFIED",
                 CanisterTask::Heartbeat => "CANISTER_TASK_HEARTBEAT",
                 CanisterTask::Timer => "CANISTER_TASK_TIMER",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "CANISTER_TASK_UNSPECIFIED" => Some(Self::Unspecified),
+                "CANISTER_TASK_HEARTBEAT" => Some(Self::Heartbeat),
+                "CANISTER_TASK_TIMER" => Some(Self::Timer),
+                _ => None,
             }
         }
     }
@@ -464,6 +488,42 @@ pub struct CanisterHistory {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Unsigned128 {
+    #[prost(bytes = "vec", tag = "1")]
+    pub raw: ::prost::alloc::vec::Vec<u8>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TotalQueryStats {
+    #[prost(message, optional, tag = "1")]
+    pub num_calls: ::core::option::Option<Unsigned128>,
+    #[prost(message, optional, tag = "2")]
+    pub num_instructions: ::core::option::Option<Unsigned128>,
+    #[prost(message, optional, tag = "3")]
+    pub ingress_payload_size: ::core::option::Option<Unsigned128>,
+    #[prost(message, optional, tag = "4")]
+    pub egress_payload_size: ::core::option::Option<Unsigned128>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WasmChunkData {
+    #[prost(bytes = "vec", tag = "1")]
+    pub hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(uint64, tag = "2")]
+    pub index: u64,
+    #[prost(uint64, tag = "3")]
+    pub length: u64,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WasmChunkStoreMetadata {
+    #[prost(message, repeated, tag = "1")]
+    pub chunks: ::prost::alloc::vec::Vec<WasmChunkData>,
+    #[prost(uint64, tag = "2")]
+    pub size: u64,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "2")]
     pub last_full_execution_round: u64,
@@ -487,7 +547,7 @@ pub struct CanisterStateBits {
     #[prost(bytes = "vec", tag = "20")]
     pub certified_data: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "21")]
-    pub interruped_during_execution: u64,
+    pub interrupted_during_execution: u64,
     #[prost(message, optional, tag = "22")]
     pub consumed_cycles_since_replica_started:
         ::core::option::Option<super::super::super::types::v1::NominalCycles>,
@@ -532,6 +592,15 @@ pub struct CanisterStateBits {
     /// Resource reservation cycles.
     #[prost(message, optional, tag = "38")]
     pub reserved_balance: ::core::option::Option<super::super::queues::v1::Cycles>,
+    /// The user-specified upper limit on `reserved_balance`.
+    #[prost(message, optional, tag = "39")]
+    pub reserved_balance_limit: ::core::option::Option<super::super::queues::v1::Cycles>,
+    /// Maps tracking chunks in the Wasm chunk store.
+    #[prost(message, optional, tag = "40")]
+    pub wasm_chunk_store_metadata: ::core::option::Option<WasmChunkStoreMetadata>,
+    /// Statistics on query execution for entire lifetime of canister.
+    #[prost(message, optional, tag = "41")]
+    pub total_query_stats: ::core::option::Option<TotalQueryStats>,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }
@@ -548,7 +617,6 @@ pub mod canister_state_bits {
         Stopped(super::CanisterStatusStopped),
     }
 }
-#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum CustomSectionType {
@@ -568,8 +636,16 @@ impl CustomSectionType {
             CustomSectionType::Private => "CUSTOM_SECTION_TYPE_PRIVATE",
         }
     }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "CUSTOM_SECTION_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+            "CUSTOM_SECTION_TYPE_PUBLIC" => Some(Self::Public),
+            "CUSTOM_SECTION_TYPE_PRIVATE" => Some(Self::Private),
+            _ => None,
+        }
+    }
 }
-#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum NextScheduledMethod {
@@ -591,8 +667,17 @@ impl NextScheduledMethod {
             NextScheduledMethod::Message => "NEXT_SCHEDULED_METHOD_MESSAGE",
         }
     }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "NEXT_SCHEDULED_METHOD_UNSPECIFIED" => Some(Self::Unspecified),
+            "NEXT_SCHEDULED_METHOD_GLOBAL_TIMER" => Some(Self::GlobalTimer),
+            "NEXT_SCHEDULED_METHOD_HEARTBEAT" => Some(Self::Heartbeat),
+            "NEXT_SCHEDULED_METHOD_MESSAGE" => Some(Self::Message),
+            _ => None,
+        }
+    }
 }
-#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum CyclesUseCase {
@@ -608,6 +693,7 @@ pub enum CyclesUseCase {
     HttpOutcalls = 9,
     DeletedCanisters = 10,
     NonConsumed = 11,
+    BurnedCycles = 12,
 }
 impl CyclesUseCase {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -630,6 +716,28 @@ impl CyclesUseCase {
             CyclesUseCase::HttpOutcalls => "CYCLES_USE_CASE_HTTP_OUTCALLS",
             CyclesUseCase::DeletedCanisters => "CYCLES_USE_CASE_DELETED_CANISTERS",
             CyclesUseCase::NonConsumed => "CYCLES_USE_CASE_NON_CONSUMED",
+            CyclesUseCase::BurnedCycles => "CYCLES_USE_CASE_BURNED_CYCLES",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "CYCLES_USE_CASE_UNSPECIFIED" => Some(Self::Unspecified),
+            "CYCLES_USE_CASE_MEMORY" => Some(Self::Memory),
+            "CYCLES_USE_CASE_COMPUTE_ALLOCATION" => Some(Self::ComputeAllocation),
+            "CYCLES_USE_CASE_INGRESS_INDUCTION" => Some(Self::IngressInduction),
+            "CYCLES_USE_CASE_INSTRUCTIONS" => Some(Self::Instructions),
+            "CYCLES_USE_CASE_REQUEST_AND_RESPONSE_TRANSMISSION" => {
+                Some(Self::RequestAndResponseTransmission)
+            }
+            "CYCLES_USE_CASE_UNINSTALL" => Some(Self::Uninstall),
+            "CYCLES_USE_CASE_CANISTER_CREATION" => Some(Self::CanisterCreation),
+            "CYCLES_USE_CASE_ECDSA_OUTCALLS" => Some(Self::EcdsaOutcalls),
+            "CYCLES_USE_CASE_HTTP_OUTCALLS" => Some(Self::HttpOutcalls),
+            "CYCLES_USE_CASE_DELETED_CANISTERS" => Some(Self::DeletedCanisters),
+            "CYCLES_USE_CASE_NON_CONSUMED" => Some(Self::NonConsumed),
+            "CYCLES_USE_CASE_BURNED_CYCLES" => Some(Self::BurnedCycles),
+            _ => None,
         }
     }
 }

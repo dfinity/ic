@@ -1,7 +1,10 @@
 [package]
 name = "ic-nns-handler-root"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [[bin]]
 name = "root-canister"
@@ -15,8 +18,7 @@ path = "test_canisters/upgrade_test_canister.rs"
 path = "src/lib.rs"
 
 [dependencies]
-# This MUST be kept in sync with build-info-build in the [build-dependencies] section!
-build-info = { version = "0.0.26", default-features = false, features = [] }
+build-info = { workspace = true }
 
 candid = { workspace = true }
 dfn_candid = { path = "../../../../rust_canisters/dfn_candid" }
@@ -44,9 +46,9 @@ ic-registry-routing-table = { path = "../../../../registry/routing_table" }
 lazy_static = "1.4.0"
 maplit = "1.0.2"
 on_wire = { path = "../../../../rust_canisters/on_wire" }
-prost = "0.11.0"
-serde = { version = "1.0.99", features = ["derive"] }
-serde_bytes = "0.11"
+prost = { workspace = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 canister-test = { path = "../../../../rust_canisters/canister_test" }
@@ -63,11 +65,9 @@ hex = "0.4.2"
 registry-canister = { path = "../../../../registry/canister" }
 
 [build-dependencies]
-# This MUST be kept in sync with build-info in the [dependencies] section!
-build-info-build = { version = "0.0.26", default-features = false, features = [
-] }
+build-info-build = { workspace = true }
 
 [dev-dependencies]
 ic-state-machine-tests = { path = "../../../../state_machine_tests" }
-pretty_assertions = "0.6.1"
-tokio = "1.28.0"
+pretty_assertions = { workspace = true }
+tokio = { workspace = true }

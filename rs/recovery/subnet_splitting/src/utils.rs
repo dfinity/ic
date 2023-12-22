@@ -31,7 +31,7 @@ pub(crate) fn canister_id_range_to_string(canister_id_range: &CanisterIdRange) -
     format!("{}:{}", canister_id_range.start, canister_id_range.end)
 }
 
-pub(crate) fn canister_id_ranges_to_strings(canister_id_ranges: &[CanisterIdRange]) -> Vec<String> {
+pub fn canister_id_ranges_to_strings(canister_id_ranges: &[CanisterIdRange]) -> Vec<String> {
     canister_id_ranges
         .iter()
         .map(canister_id_range_to_string)

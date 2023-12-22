@@ -319,9 +319,9 @@ fn main() {
         add_functions((50000 - 4) + 1), // there are already 4 functions declared in base (excl. imported)
     );
 
-    write_end(root, "many_globals.wasm", add_globals(300));
+    write_end(root, "many_globals.wasm", add_globals(1000));
 
-    write_end(root, "too_many_globals.wasm", add_globals(301));
+    write_end(root, "too_many_globals.wasm", add_globals(1001));
 
     write_bytes(
         root,

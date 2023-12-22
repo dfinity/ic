@@ -17,7 +17,7 @@ use ic_system_api::ExecutionParameters;
 use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType};
 use ic_types::{methods::FuncRef, CanisterId, NumBytes, NumInstructions, SubnetId, Time};
 use ic_wasm_types::CanisterModule;
-use prometheus::{Histogram, IntGauge};
+use prometheus::{Histogram, IntCounter, IntGauge};
 use std::{path::PathBuf, sync::Arc};
 
 use crate::execution::common::{apply_canister_state_changes, update_round_limits};
@@ -310,11 +310,13 @@ impl Hypervisor {
         time: Time,
         mut system_state: SystemState,
         canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
         execution_parameters: ExecutionParameters,
         func_ref: FuncRef,
         mut execution_state: ExecutionState,
         network_topology: &NetworkTopology,
         round_limits: &mut RoundLimits,
+        state_changes_error: &IntCounter,
     ) -> (WasmExecutionOutput, ExecutionState, SystemState) {
         assert_eq!(
             execution_parameters.instruction_limits.message(),
@@ -325,6 +327,7 @@ impl Hypervisor {
             &execution_state,
             &system_state,
             canister_current_memory_usage,
+            canister_current_message_memory_usage,
             execution_parameters,
             func_ref,
             round_limits,
@@ -349,6 +352,7 @@ impl Hypervisor {
             network_topology,
             self.own_subnet_id,
             &self.log,
+            state_changes_error,
         );
         (output, execution_state, system_state)
     }
@@ -361,6 +365,7 @@ impl Hypervisor {
         execution_state: &ExecutionState,
         system_state: &SystemState,
         canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
         execution_parameters: ExecutionParameters,
         func_ref: FuncRef,
         round_limits: &mut RoundLimits,
@@ -388,6 +393,7 @@ impl Hypervisor {
                 api_type,
                 sandbox_safe_system_state: static_system_state,
                 canister_current_memory_usage,
+                canister_current_message_memory_usage,
                 execution_parameters,
                 subnet_available_memory: round_limits.subnet_available_memory,
                 func_ref,

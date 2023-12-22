@@ -11,14 +11,16 @@ use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_utils_basic_sig::conversions as crypto_basicsig_conversions;
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
-    node::v1::{ConnectionEndpoint, FlowEndpoint, NodeRecord},
+    node::v1::{ConnectionEndpoint, IPv4InterfaceConfig, NodeRecord},
 };
 
 use crate::mutations::node_management::common::{
     get_node_operator_record, make_add_node_registry_mutations, make_update_node_operator_mutation,
     scan_for_nodes_by_ip,
 };
-use crate::mutations::node_management::do_remove_node_directly::RemoveNodeDirectlyPayload;
+use crate::mutations::{
+    common::check_ipv4_config, node_management::do_remove_node_directly::RemoveNodeDirectlyPayload,
+};
 use ic_types::crypto::CurrentNodePublicKeys;
 use ic_types::time::Time;
 use prost::Message;
@@ -83,19 +85,19 @@ impl Registry {
         let node_record = NodeRecord {
             xnet: Some(connection_endpoint_from_string(&payload.xnet_endpoint)),
             http: Some(connection_endpoint_from_string(&payload.http_endpoint)),
-            p2p_flow_endpoints: vec![FlowEndpoint {
-                endpoint: Some(p2p_endpoint),
-            }],
             node_operator_id: caller.into_vec(),
-            chip_id: vec![],
             hostos_version_id: None,
+            chip_id: payload.chip_id.clone(),
+            public_ipv4_config: payload
+                .public_ipv4_config
+                .clone()
+                .map(make_valid_node_ivp4_config_or_panic),
         };
 
         // 6. Insert node, public keys, and crypto keys
         let mut mutations = make_add_node_registry_mutations(node_id, node_record, valid_pks);
 
         // Update the Node Operator record
-        let mut node_operator_record = node_operator_record;
         node_operator_record.node_allowance -= 1;
 
         let update_node_operator_record =
@@ -103,7 +105,7 @@ impl Registry {
 
         mutations.push(update_node_operator_record);
 
-        // Check invariants before applying mutations
+        // 8. Check invariants before applying mutations
         self.maybe_apply_mutation_internal(mutations);
 
         println!("{}do_add_node finished: {:?}", LOG_PREFIX, payload);
@@ -127,9 +129,12 @@ pub struct AddNodePayload {
     pub xnet_endpoint: String,
     pub http_endpoint: String,
 
+    pub chip_id: Option<Vec<u8>>,
     // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
     pub p2p_flow_endpoints: Vec<String>,
     pub prometheus_metrics_endpoint: String,
+
+    pub public_ipv4_config: Option<Vec<String>>,
 }
 
 /// Parses the ConnectionEndpoint string
@@ -144,27 +149,6 @@ pub fn connection_endpoint_from_string(endpoint: &str) -> ConnectionEndpoint {
         Ok(sa) => ConnectionEndpoint {
             ip_addr: sa.ip().to_string(),
             port: sa.port() as u32, // because protobufs don't have u16
-        },
-    }
-}
-
-/// Parses a P2P flow encoded in a string
-///
-/// The string is written in form: `flow,ipv4:port` or `flow,[ipv6]:port`.
-pub fn flow_endpoint_from_string(endpoint: &str) -> FlowEndpoint {
-    let parts = endpoint.splitn(2, ',').collect::<Vec<&str>>();
-    parts[0].parse::<u32>().unwrap();
-    println!("Parts are {:?} and {:?}", parts[0], parts[1]);
-    match parts[1].parse::<SocketAddr>() {
-        Err(e) => panic!(
-            "Could not convert {:?} to a connection endpoint: {:?}",
-            endpoint, e
-        ),
-        Ok(sa) => FlowEndpoint {
-            endpoint: Some(ConnectionEndpoint {
-                ip_addr: sa.ip().to_string(),
-                port: sa.port() as u32, // because protobufs don't have u16
-            }),
         },
     }
 }
@@ -261,6 +245,41 @@ fn now() -> Result<Time, String> {
     Ok(Time::from_nanos_since_unix_epoch(nanos))
 }
 
+fn make_valid_node_ivp4_config_or_panic(ip_addresses: Vec<String>) -> IPv4InterfaceConfig {
+    // the config needs to contain at least the node's IP address and one gateway
+    if ip_addresses.len() < 2 {
+        panic!("Node IPv4 config is malformed. It should contain at least two Strings: the node's IP and at least one gateway");
+    }
+
+    // the node's IP address
+    let (node_ip_address, prefix_length) = ip_addresses
+        .get(0)
+        .expect("Failed to get the node's IP config")
+        .split_once('/')
+        .expect("Failed to split the config into IP address and prefix");
+    let prefix_length = prefix_length
+        .parse::<u32>()
+        .expect("Prefix length is malformed. It should be an integer");
+
+    // iterate over all specified gateway addresses (and skip the first entry, which is the node's IP)
+    let mut gateway_addresses: Vec<String> = Vec::new();
+    for gateway_ip in ip_addresses.iter().skip(1) {
+        gateway_addresses.push(gateway_ip.to_string());
+    }
+
+    check_ipv4_config(
+        node_ip_address.to_string(),
+        gateway_addresses.clone(),
+        prefix_length,
+    );
+
+    IPv4InterfaceConfig {
+        ip_addr: node_ip_address.to_string(),
+        gateway_ip_addr: gateway_addresses,
+        prefix_length,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -298,6 +317,8 @@ mod tests {
             http_endpoint: "127.0.0.1:8123".to_string(),
             p2p_flow_endpoints: vec![],
             prometheus_metrics_endpoint: "".to_string(),
+            chip_id: None,
+            public_ipv4_config: None,
         };
     }
 
@@ -412,33 +433,80 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
-    fn no_flow_id_causes_panic() {
-        flow_endpoint_from_string("127.0.0.1:8080");
-    }
-
-    #[test]
-    #[should_panic]
-    fn empty_flow_endpoint_string_causes_panic() {
-        flow_endpoint_from_string("");
-    }
-
-    #[test]
-    #[should_panic]
-    fn non_numeric_flow_id_causes_panic() {
-        flow_endpoint_from_string("abcd,127.0.0.1:8080");
-    }
-
-    #[test]
-    fn good_flow_id_ipv4() {
+    fn should_succeed_if_ipv4_config_is_valid() {
+        let ipv4_config_raw = vec![
+            "204.153.51.58/24".to_string(),
+            "204.153.51.1".to_string(),
+            "204.153.51.2".to_string(),
+        ];
+        let ipv4_config = IPv4InterfaceConfig {
+            ip_addr: "204.153.51.58".to_string(),
+            gateway_ip_addr: vec!["204.153.51.1".to_string(), "204.153.51.2".to_string()],
+            prefix_length: 24,
+        };
         assert_eq!(
-            flow_endpoint_from_string("1337,127.0.0.1:8080"),
-            FlowEndpoint {
-                endpoint: Some(ConnectionEndpoint {
-                    ip_addr: "127.0.0.1".to_string(),
-                    port: 8080u32,
-                })
-            }
+            make_valid_node_ivp4_config_or_panic(ipv4_config_raw),
+            ipv4_config
         );
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Node IPv4 config is malformed. It should contain at least two Strings: the node's IP and at least one gateway"
+    )]
+    fn should_panic_if_ipv4_config_is_empty() {
+        make_valid_node_ivp4_config_or_panic(Vec::new());
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Node IPv4 config is malformed. It should contain at least two Strings: the node's IP and at least one gateway"
+    )]
+    fn should_panic_if_ipv4_config_is_incomplete() {
+        make_valid_node_ivp4_config_or_panic(vec!["204.153.51.58/24".to_string()]);
+    }
+
+    #[test]
+    #[should_panic(expected = "Failed to split the config into IP address and prefix")]
+    fn should_panic_if_prefix_length_is_missing() {
+        let ipv4_config_raw = vec![
+            "204.153.51.58".to_string(),
+            "204.153.51.1/24".to_string(),
+            "204.153.51.2/24".to_string(),
+        ];
+        make_valid_node_ivp4_config_or_panic(ipv4_config_raw);
+    }
+
+    #[test]
+    #[should_panic(expected = "Prefix length is malformed. It should be an integer")]
+    fn should_panic_if_prefix_length_is_invalid() {
+        let ipv4_config_raw = vec![
+            "204.153.51.58/3a2d".to_string(),
+            "204.153.51.1/24".to_string(),
+            "204.153.51.2/24".to_string(),
+        ];
+        make_valid_node_ivp4_config_or_panic(ipv4_config_raw);
+    }
+
+    #[test]
+    #[should_panic]
+    fn should_panic_if_prefix_length_is_specified_on_gateway() {
+        let ipv4_config_raw = vec![
+            "204.153.51.58/24".to_string(),
+            "204.153.51.1/24".to_string(),
+            "204.153.51.2".to_string(),
+        ];
+        make_valid_node_ivp4_config_or_panic(ipv4_config_raw);
+    }
+
+    #[test]
+    #[should_panic]
+    fn should_panic_if_ipv4_config_is_invalid() {
+        let ipv4_config_raw = vec![
+            "204.153.51.58/24".to_string(),
+            "204.153.49.1".to_string(),
+            "204.153.51.2".to_string(),
+        ];
+        make_valid_node_ivp4_config_or_panic(ipv4_config_raw);
     }
 }

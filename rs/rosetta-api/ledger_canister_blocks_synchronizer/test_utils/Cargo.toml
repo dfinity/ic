@@ -1,8 +1,10 @@
 [package]
 name = "ic-ledger-canister-blocks-synchronizer-test-utils"
-version = "0.1.0"
-authors = ["The Internet Computer Project Developers"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-canister-client-sender = { path = "../../../canister_client/sender" }
@@ -16,6 +18,6 @@ log4rs = "1.1.1"
 rand = "0.8"
 rand_distr = "0.4"
 tempfile = "3.1.0"
-tokio = { version = "1.15.0", features = ["full"] }
-serde = "1.0"
-serde_bytes = "0.11"
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true }

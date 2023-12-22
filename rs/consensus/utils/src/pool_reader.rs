@@ -313,23 +313,25 @@ impl<'a> PoolReader<'a> {
         self.get_highest_catch_up_package().height()
     }
 
-    /// Get a valid random beacon at the given height if it exists.
+    /// Get a valid random beacon at the given height if it exists. Note that we would also return
+    /// the random beacons below the CUP height if they still exists. This should help slower
+    /// nodes to deliver batches even if they have already received the new CUP. This helps because
+    /// purging keeps a couple of heights below the latest CUP.
     pub fn get_random_beacon(&self, height: Height) -> Option<RandomBeacon> {
-        match height.cmp(&self.get_catch_up_height()) {
-            Ordering::Less => None,
-            Ordering::Equal => Some(
+        if height == self.get_catch_up_height() {
+            Some(
                 self.get_highest_catch_up_package()
                     .content
                     .random_beacon
                     .as_ref()
                     .clone(),
-            ),
-            Ordering::Greater => self
-                .pool
+            )
+        } else {
+            self.pool
                 .validated()
                 .random_beacon()
                 .get_only_by_height(height)
-                .ok(),
+                .ok()
         }
     }
 
@@ -711,19 +713,7 @@ pub mod test {
             let notarization = pool.validated().notarization().get_highest().unwrap();
             let catch_up_package = pool.make_catch_up_package(notarization.height());
             pool.insert_validated(catch_up_package);
-            // remove the latest notarization
-            pool.remove_validated(notarization);
-            // remove the latest finalization
-            let finalization = pool.validated().finalization().get_highest().unwrap();
-            pool.remove_validated(finalization);
-            // max notarization now only exists at height 2
-            assert_eq!(
-                pool.validated()
-                    .notarization()
-                    .height_range()
-                    .map(|x| x.max),
-                Some(Height::from(4))
-            );
+            pool.purge_validated_below(notarization);
             let pool_reader = PoolReader::new(&pool);
             // notarized/finalized height are still 3, same as catchup height
             assert_eq!(pool_reader.get_notarized_height(), Height::from(5));
@@ -866,7 +856,7 @@ pub mod test {
                 );
             }
 
-            // For the hight from the 4th round there is no version.
+            // For the height from the 4th round there is no version.
             assert!(pool_reader
                 .registry_version(Height::from(4 * total_length + 1))
                 .is_none());

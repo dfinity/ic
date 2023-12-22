@@ -1,5 +1,6 @@
 use candid::{CandidType, Deserialize, Int, Nat};
 use num_traits::ToPrimitive;
+use serde::Serialize;
 use serde_bytes::ByteBuf;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -10,7 +11,7 @@ const INT128_BUF_SIZE: usize = 19;
 pub type Map = BTreeMap<String, Value>;
 pub type Hash = [u8; 32];
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Value {
     Blob(ByteBuf),
     Text(String),
@@ -28,6 +29,14 @@ impl Value {
 
     pub fn blob(t: impl Into<Vec<u8>>) -> Self {
         Self::Blob(ByteBuf::from(t.into()))
+    }
+
+    pub fn map<S, V>(v: V) -> Self
+    where
+        S: ToString,
+        V: IntoIterator<Item = (S, Value)>,
+    {
+        Self::Map(v.into_iter().map(|(s, v)| (s.to_string(), v)).collect())
     }
 
     /// Computes the representation-independent hash of a value.
@@ -50,7 +59,7 @@ impl Value {
                     .expect("BUG: blocks cannot contain integers that do not fit into the 128-bit representation");
                 let mut buf = [0u8; INT128_BUF_SIZE];
                 //TODO: Int should only use sleb128. Due to CiboriumValue only using Integer this is however not possible right now
-                //      Unsinged Integers should be represented through Nat or Nat65: https://dfinity.atlassian.net/browse/FI-764
+                //      Unsigned Integers should be represented through Nat or Nat65: https://dfinity.atlassian.net/browse/FI-764
                 let offset = match v >= 0 {
                     true => leb128(&mut buf, v as u128),
                     false => sleb128(&mut buf, v),
@@ -81,6 +90,44 @@ impl Value {
                     hasher.update(&vhash[..]);
                 }
                 hasher.finalize().into()
+            }
+        }
+    }
+}
+
+impl std::fmt::Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Blob(bytes) => write!(f, "{}", hex::encode(bytes.as_ref())),
+            Value::Text(text) => write!(f, "{}", text),
+            Value::Nat(nat) => write!(f, "{}", nat),
+            Value::Nat64(nat64) => write!(f, "{}", nat64),
+            Value::Int(int) => write!(f, "{}", int),
+            Value::Array(array) => {
+                write!(f, "Array(")?;
+                let mut first = true;
+                for e in array {
+                    if first {
+                        first = false
+                    } else {
+                        write!(f, ", ")?
+                    }
+                    write!(f, "{}", e)?;
+                }
+                write!(f, ")")
+            }
+            Value::Map(map) => {
+                write!(f, "Map(")?;
+                let mut first = true;
+                for (k, v) in map {
+                    if first {
+                        first = false
+                    } else {
+                        write!(f, ", ")?
+                    }
+                    write!(f, "{}: {}", k, v)?;
+                }
+                write!(f, ")")
             }
         }
     }
@@ -173,5 +220,66 @@ fn test_sleb128() {
     for (n, b) in [(0, &[0][..]), (-123456, &[0xc0, 0xbb, 0x78][..])] {
         let i = sleb128(&mut buf, n);
         assert_eq!(&buf[0..=i], b, "invalid encoding of integer {}", n);
+    }
+}
+
+#[test]
+fn test_test_vectors() {
+    let test_vectors = vec![
+        (
+            Value::Nat(42.into()),
+            "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1",
+        ),
+        (
+            Value::Int((-42).into()),
+            "de5a6f78116eca62d7fc5ce159d23ae6b889b365a1739ad2cf36f925a140d0cc",
+        ),
+        (
+            Value::text("Hello, World!"),
+            "dffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f",
+        ),
+        (
+            Value::blob(hex::decode("01020304").unwrap()),
+            "9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a",
+        ),
+        (
+            Value::Array(vec![
+                Value::Nat(3.into()),
+                Value::text("foo"),
+                Value::blob(hex::decode("0506").unwrap()),
+            ]),
+            "514a04011caa503990d446b7dec5d79e19c221ae607fb08b2848c67734d468d6",
+        ),
+        (
+            Value::map(vec![
+                (
+                    "from",
+                    Value::blob(
+                        hex::decode("00abcdef0012340056789a00bcdef000012345678900abcdef01")
+                            .unwrap(),
+                    ),
+                ),
+                (
+                    "to",
+                    Value::blob(
+                        hex::decode("00ab0def0012340056789a00bcdef000012345678900abcdef01")
+                            .unwrap(),
+                    ),
+                ),
+                ("amount", Value::Nat(42.into())),
+                ("created_at", Value::Nat(1699218263.into())),
+                ("memo", Value::Nat(0.into())),
+            ]),
+            "c56ece650e1de4269c5bdeff7875949e3e2033f85b2d193c2ff4f7f78bdcfc75",
+        ),
+    ];
+
+    for (input, expected) in test_vectors {
+        assert_eq!(
+            input.hash().to_vec(),
+            hex::decode(expected).unwrap(),
+            "input: {}",
+            input
+        );
     }
 }

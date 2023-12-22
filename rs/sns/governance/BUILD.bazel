@@ -1,5 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
@@ -12,33 +12,28 @@ filegroup(
 )
 
 DEPENDENCIES = [
+    "//packages/icrc-ledger-client:icrc_ledger_client",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha2",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
+    "//rs/nervous_system/governance",
+    "//rs/nervous_system/proto",
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
     "//rs/nns/constants",
     "//rs/protobuf",
-    "//rs/registry/canister",
-    "//rs/rosetta-api/icrc1",
-    "//rs/rosetta-api/icrc1/index",
-    "//rs/rosetta-api/icrc1/client",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/ledger_core",
     "//rs/rust_canisters/canister_log",
     "//rs/rust_canisters/canister_profiler",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
-    "//rs/rust_canisters/dfn_http_metrics",
-    "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/http_types",
-    "//rs/rust_canisters/on_wire",
     "//rs/types/base_types",
     "//rs/types/ic00_types",
     "@crate_index//:base64",
     "@crate_index//:build-info",
-    "@crate_index//:bytes",
     "@crate_index//:candid",
     "@crate_index//:clap",
     "@crate_index//:comparable",
@@ -46,9 +41,10 @@ DEPENDENCIES = [
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
+    "@crate_index//:num-traits",
     "@crate_index//:prost",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:rand_chacha_0_3_1",
+    "@crate_index//:rand",
+    "@crate_index//:rand_chacha",
     "@crate_index//:rust_decimal",
     "@crate_index//:serde",
     "@crate_index//:strum",
@@ -69,7 +65,6 @@ BUILD_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     "//rs/canister_client/sender",
-    "//rs/config",
     "//rs/nervous_system/common/test_keys",
     "//rs/nervous_system/common/test_utils",
     "//rs/sns/governance/protobuf_generator:lib",
@@ -77,7 +72,6 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities",
     "//rs/test_utilities/compare_dirs",
     "@crate_index//:assert_matches",
-    "@crate_index//:criterion",
     "@crate_index//:futures",
     "@crate_index//:pretty_assertions",
     "@crate_index//:proptest",
@@ -102,7 +96,7 @@ cargo_build_script(
     srcs = ["build.rs"],
     aliases = ALIASES,
     data = [],  # build script data (e.g. template files) goes here
-    version = "0.8.0",
+    version = "0.9.0",
     deps = BUILD_DEPENDENCIES,
 )
 
@@ -112,7 +106,7 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_sns_governance",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES + [":build_script"],
 )
 
@@ -123,7 +117,7 @@ rust_library(
     crate_features = ["test"],
     crate_name = "ic_sns_governance",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES + [
         ":build_script",
     ],
@@ -232,9 +226,10 @@ generated_files_check(
     srcs = ["tests/check_generated_files.rs"],
     data = glob(["src/gen/**"]) + [
         ":protos",
+        "//rs/nervous_system/proto:protos",
         "//rs/protobuf:protos",
-        "//rs/types/base_types:protos",
         "//rs/rosetta-api/icp_ledger:protos",
+        "//rs/types/base_types:protos",
     ],
     manifest_dir = "rs/sns/governance",
     deps = [

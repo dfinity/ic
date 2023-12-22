@@ -8,12 +8,14 @@ use candid::Encode;
 use ic_canister_client::{Agent, Sender};
 use ic_config::{
     http_handler::Config as HttpConfig,
+    ipv4_config::IPv4Config,
     message_routing::Config as MsgRoutingConfig,
     metrics::{Config as MetricsConfig, Exporter},
     transport::TransportConfig,
     Config,
 };
 use ic_crypto::CryptoComponentForNonReplicaProcess;
+use ic_icos_sev::{get_chip_id, SnpError};
 use ic_interfaces::crypto::IDkgKeyRotationResult;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, warn, ReplicaLogger};
@@ -102,6 +104,7 @@ impl NodeRegistration {
         .unwrap()
         {
             warn!(self.log, "Node keys are not setup: {:?}", e);
+            UtilityCommand::notify_host(format!("Node keys are not setup: {:?}", e).as_str(), 1);
             self.retry_register_node().await;
         }
         // postcondition: node keys are registered
@@ -129,11 +132,27 @@ impl NodeRegistration {
                         )
                         .await
                     {
-                        warn!(self.log, "Registration request failed: {:?}", e);
+                        warn!(self.log, "Registration request failed: {}", e);
+                        UtilityCommand::notify_host(
+                            format!(
+                                "node-id {}: Registration request failed: {}",
+                                self.node_id, e
+                            )
+                            .as_str(),
+                            1,
+                        );
                     };
                 }
                 Err(e) => {
-                    warn!(self.log, "Failed to create the message signer: {:?}", e);
+                    warn!(self.log, "Failed to create the message signer: {}", e);
+                    UtilityCommand::notify_host(
+                        format!(
+                            "node-id {}: Failed to create the message signer: {}",
+                            self.node_id, e
+                        )
+                        .as_str(),
+                        1,
+                    );
                 }
             };
             tokio::time::sleep(Duration::from_secs(5)).await;
@@ -141,11 +160,11 @@ impl NodeRegistration {
 
         UtilityCommand::notify_host(
             format!(
-                "Join request successful! The node has successfully joined the Internet Computer, and the node onboarding is now complete.\nNode id: {}\nVerify that the node has successfully onboarded by checking its status on the Internet Computer dashboard.",
+                "node-id {}:\nJoin request successful! The node has successfully joined the Internet Computer, and the node onboarding is now complete.\nVerify that the node has successfully onboarded by checking its status on the Internet Computer dashboard.",
                 self.node_id
             )
             .as_str(),
-            20,
+            10,
         );
     }
 
@@ -177,7 +196,9 @@ impl NodeRegistration {
             http_endpoint: http_config_to_endpoint(&self.log, &self.node_config.http_handler)
                 .expect("Invalid endpoints in http handler config."),
             p2p_flow_endpoints: vec![],
+            chip_id: get_snp_chip_id().expect("Failed to retrieve chip_id from snp firmware"),
             prometheus_metrics_endpoint: "".to_string(),
+            public_ipv4_config: ipv4_config_to_vec(&self.log, &self.node_config.ipv4_config),
         }
     }
 
@@ -208,6 +229,10 @@ impl NodeRegistration {
         {
             self.metrics.observe_key_rotation_error();
             warn!(self.log, "Failed to check keys with registry: {e:?}");
+            UtilityCommand::notify_host(
+                format!("Failed to check keys with registry: {:?}", e).as_str(),
+                1,
+            );
         }
 
         if !self.is_time_to_rotate(registry_version, subnet_id, delta) {
@@ -238,6 +263,7 @@ impl NodeRegistration {
             Err(e) => {
                 self.metrics.observe_key_rotation_error();
                 warn!(self.log, "Key rotation error: {e:?}");
+                UtilityCommand::notify_host(format!("Key rotation error: {:?}", e).as_str(), 1);
             }
         }
     }
@@ -380,13 +406,14 @@ impl NodeRegistration {
             idkg_dealing_encryption_pk: Some(protobuf_to_vec(idkg_pk)),
         };
 
+        let arguments =
+            Encode!(&update_node_payload).expect("Could not encode payload for update_node-call.");
         agent
             .execute_update(
                 &REGISTRY_CANISTER_ID,
                 &REGISTRY_CANISTER_ID,
                 "update_node_directly",
-                Encode!(&update_node_payload)
-                    .expect("Could not encode payload for update_node-call."),
+                arguments,
                 generate_nonce(),
             )
             .await
@@ -430,11 +457,11 @@ impl NodeRegistration {
 
         let t_infos = match self
             .registry_client
-            .get_subnet_transport_infos(root_subnet_id, version)
+            .get_subnet_node_records(root_subnet_id, version)
         {
             Ok(Some(infos)) => infos,
             err => {
-                warn!(self.log, "Failed to get transport infos: {:?}", err);
+                warn!(self.log, "failed to get node records: {:?}", err);
                 return None;
             }
         };
@@ -575,10 +602,10 @@ fn metrics_config_to_endpoint(
 }
 
 fn get_endpoint(log: &ReplicaLogger, ip_addr: String, port: u16) -> OrchestratorResult<String> {
-    let parsed_ip_addr: IpAddr = ip_addr.parse().map_err(|_e| {
+    let parsed_ip_addr: IpAddr = ip_addr.parse().map_err(|err| {
         OrchestratorError::invalid_configuration_error(format!(
-            "Could not parse IP-address: {}",
-            ip_addr
+            "Could not parse IP-address {}: {}",
+            ip_addr, err
         ))
     })?;
     if parsed_ip_addr.is_loopback() {
@@ -594,6 +621,17 @@ fn get_endpoint(log: &ReplicaLogger, ip_addr: String, port: u16) -> Orchestrator
     Ok(format!("{}:{}", ip_addr_str, port))
 }
 
+fn ipv4_config_to_vec(log: &ReplicaLogger, ipv4_config: &IPv4Config) -> Option<Vec<String>> {
+    info!(log, "Reading ipv4 config for registration");
+    if !ipv4_config.public_address.is_empty() {
+        return Some(vec![
+            ipv4_config.public_address.clone(),
+            ipv4_config.public_gateway.clone(),
+        ]);
+    }
+    None
+}
+
 /// Create a nonce to be included with the ingress message sent to the node
 /// handler.
 fn generate_nonce() -> Vec<u8> {
@@ -603,6 +641,27 @@ fn generate_nonce() -> Vec<u8> {
         .as_nanos()
         .to_le_bytes()
         .to_vec()
+}
+
+/// Get a chip_id from SNP guest firmware via SEV library.
+/// If SEV-SNP in not enabled on the guest, return None.
+/// In other cases, return the error and notify the Node Provider.
+fn get_snp_chip_id() -> OrchestratorResult<Option<Vec<u8>>> {
+    match get_chip_id() {
+        // Chip_id returned successfully
+        Ok(chip_id) => Ok(Some(chip_id)),
+        // Snp is not enabled on the Guest, return None
+        Err(SnpError::SnpNotEnabled { .. }) => Ok(None),
+        // Propagate any other error
+        Err(error) => {
+            let snp_error = format!(
+                "Failed to retrieve chip_id from snp firmware, error: {}",
+                error
+            );
+            UtilityCommand::notify_host(&snp_error, 1);
+            Err(OrchestratorError::snp_error(snp_error))
+        }
+    }
 }
 
 fn protobuf_to_vec<M: Message>(entry: M) -> Vec<u8> {
@@ -695,8 +754,8 @@ mod tests {
         use super::*;
         use async_trait::async_trait;
         use ic_crypto_temp_crypto::EcdsaSubnetConfig;
-        use ic_crypto_tls_interfaces::AllowedClients;
         use ic_crypto_tls_interfaces::AuthenticatedPeer;
+        use ic_crypto_tls_interfaces::SomeOrAllNodes;
         use ic_crypto_tls_interfaces::TlsClientHandshakeError;
         use ic_crypto_tls_interfaces::TlsHandshake;
         use ic_crypto_tls_interfaces::TlsServerHandshakeError;
@@ -736,7 +795,7 @@ mod tests {
         mock! {
             pub KeyRotationCryptoComponent{}
 
-            pub trait KeyManager {
+            impl KeyManager for KeyRotationCryptoComponent {
                 fn check_keys_with_registry(
                     &self,
                     registry_version: RegistryVersion,
@@ -752,7 +811,7 @@ mod tests {
                 ) -> Result<IDkgKeyRotationResult, IDkgDealingEncryptionKeyRotationError>;
             }
 
-            pub trait BasicSigner<MessageId> {
+            impl BasicSigner<MessageId> for KeyRotationCryptoComponent {
                 fn sign_basic(
                     &self,
                     message: &MessageId,
@@ -761,7 +820,7 @@ mod tests {
                 ) -> CryptoResult<BasicSigOf<MessageId>>;
             }
 
-            pub trait ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> {
+            impl ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> for KeyRotationCryptoComponent {
                 fn verify_combined_threshold_sig_by_public_key(
                     &self,
                     signature: &CombinedThresholdSigOf<CatchUpContentProtobufBytes>,
@@ -772,11 +831,11 @@ mod tests {
             }
 
             #[async_trait]
-            pub trait TlsHandshake {
+            impl TlsHandshake for KeyRotationCryptoComponent {
                 async fn perform_tls_server_handshake(
                     &self,
                     tcp_stream: TcpStream,
-                    allowed_clients: AllowedClients,
+                    allowed_clients: SomeOrAllNodes,
                     registry_version: RegistryVersion,
                 ) -> Result<(Box<dyn TlsStream>, AuthenticatedPeer), TlsServerHandshakeError>;
 
@@ -931,7 +990,7 @@ mod tests {
                 let node_config = Config::new(temp_dir.into_path());
 
                 let node_registration = NodeRegistration::new(
-                    self.logger.unwrap_or_else(|| no_op_logger()),
+                    self.logger.unwrap_or_else(no_op_logger),
                     node_config,
                     registry_client,
                     orchestrator_metrics,

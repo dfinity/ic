@@ -5,8 +5,8 @@ use ic_types::crypto::{CryptoError, Signable};
 
 #[test]
 fn should_validate_canister_signature_smoke_test() {
-    let mut rng = ReproducibleRng::new();
-    let sig_data = new_valid_sig_and_crypto_component(&mut rng, false);
+    let rng = &mut ReproducibleRng::new();
+    let sig_data = new_valid_sig_and_crypto_component(rng, false);
 
     let result = ic_crypto_standalone_sig_verifier::verify_canister_sig(
         &sig_data.msg.as_signed_bytes(),
@@ -20,8 +20,8 @@ fn should_validate_canister_signature_smoke_test() {
 
 #[test]
 fn should_reject_invalid_canister_signature_smoke_test() {
-    let mut rng = ReproducibleRng::new();
-    let sig_data = new_valid_sig_and_crypto_component(&mut rng, false);
+    let rng = &mut ReproducibleRng::new();
+    let sig_data = new_valid_sig_and_crypto_component(rng, false);
     let invalid_signature = {
         let mut sig_with_bit_flipped = sig_data.canister_sig.get_ref().0.clone();
         let len = sig_with_bit_flipped.len();

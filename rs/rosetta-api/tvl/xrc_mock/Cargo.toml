@@ -1,11 +1,14 @@
 [package]
 name = "xrc-mock"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-cdk = { workspace = true }
-ic-xrc-types = "1.0.0"
-serde = "1.0"
+ic-xrc-types = "1.1.0"
+serde = { workspace = true }

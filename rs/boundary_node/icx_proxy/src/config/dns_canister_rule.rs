@@ -90,7 +90,11 @@ impl DnsCanisterRule {
                 .map_while(|(host, dns)| match dns {
                     Some(dns) if eq(&host, dns) => Some(None),
                     Some(_) => None,
-                    None => Principal::from_text(host.as_ref()).ok().map(Some),
+                    // ignore any prefix before '--' in the host name
+                    // split() is guaranteed to return a non-empty iterator, so last().unwrap() is safe here
+                    None => Principal::from_text(host.as_ref().split("--").last().unwrap())
+                        .ok()
+                        .map(Some),
                 })
                 .find_map(|x| x),
         }
@@ -111,12 +115,12 @@ fn split_hostname_lowercase(hostname: &str) -> Vec<String> {
 fn split_dns_alias(alias: &str) -> Result<(String, Principal), anyhow::Error> {
     match alias.find(':') {
         Some(0) => Err(anyhow!(
-            r#"No domain specifed in DNS alias "{}".  {}"#,
+            r#"No domain specified in DNS alias "{}".  {}"#,
             alias.to_string(),
             DNS_ALIAS_FORMAT_HELP
         )),
         Some(index) if index == alias.len() - 1 => Err(anyhow!(
-            r#"No canister ID specifed in DNS alias "{}".  {}"#,
+            r#"No canister ID specified in DNS alias "{}".  {}"#,
             alias.to_string(),
             DNS_ALIAS_FORMAT_HELP
         )),
@@ -154,7 +158,7 @@ mod tests {
             .expect_err("expected failure due to nothing after colon");
         assert_eq!(
             e.to_string(),
-            r#"No canister ID specifed in DNS alias "happy.little.domain.name:".  Format is dns.alias:principal-id"#
+            r#"No canister ID specified in DNS alias "happy.little.domain.name:".  Format is dns.alias:principal-id"#
         )
     }
 
@@ -164,7 +168,7 @@ mod tests {
             .expect_err("expected failure due to nothing after colon");
         assert_eq!(
             e.to_string(),
-            r#"No domain specifed in DNS alias ":r7inp-6aaaa-aaaaa-aaabq-cai".  Format is dns.alias:principal-id"#
+            r#"No domain specified in DNS alias ":r7inp-6aaaa-aaaaa-aaabq-cai".  Format is dns.alias:principal-id"#
         )
     }
 

@@ -1,3 +1,5 @@
+mod api_boundary_node;
+mod assignment;
 mod checks;
 mod common;
 mod crypto;

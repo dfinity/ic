@@ -2,7 +2,7 @@
 //! consensus updates the consensus pool.
 use ic_interfaces::consensus_pool::{
     ChainIterator, ChangeAction, ConsensusBlockCache, ConsensusBlockChain, ConsensusBlockChainErr,
-    ConsensusPool, ConsensusPoolCache,
+    ConsensusPool, ConsensusPoolCache, ConsensusTime,
 };
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
@@ -131,11 +131,8 @@ impl<'a> Iterator for CachedChainIterator<'a> {
         std::mem::replace(&mut self.cursor, parent)
     }
 }
-impl ConsensusPoolCache for ConsensusCacheImpl {
-    fn finalized_block(&self) -> Block {
-        self.cache.read().unwrap().finalized_block.clone()
-    }
 
+impl ConsensusTime for ConsensusCacheImpl {
     fn consensus_time(&self) -> Option<Time> {
         let cache = &*self.cache.read().unwrap();
         if cache.finalized_block.height() == Height::from(0) {
@@ -143,6 +140,12 @@ impl ConsensusPoolCache for ConsensusCacheImpl {
         } else {
             Some(cache.finalized_block.context.time)
         }
+    }
+}
+
+impl ConsensusPoolCache for ConsensusCacheImpl {
+    fn finalized_block(&self) -> Block {
+        self.cache.read().unwrap().finalized_block.clone()
     }
 
     fn catch_up_package(&self) -> CatchUpPackage {
@@ -207,14 +210,15 @@ impl ConsensusCacheImpl {
         change_set
             .iter()
             .filter_map(|change_action| match change_action {
-                ChangeAction::AddToValidated(ConsensusMessage::Finalization(x)) => {
-                    cache.check_finalization(x)
+                ChangeAction::AddToValidated(validated_consensus_artifact) => {
+                    match &validated_consensus_artifact.msg {
+                        ConsensusMessage::Finalization(x) => cache.check_finalization(x),
+                        ConsensusMessage::CatchUpPackage(x) => cache.check_catch_up_package(x),
+                        _ => None,
+                    }
                 }
                 ChangeAction::MoveToValidated(ConsensusMessage::Finalization(x)) => {
                     cache.check_finalization(x)
-                }
-                ChangeAction::AddToValidated(ConsensusMessage::CatchUpPackage(x)) => {
-                    cache.check_catch_up_package(x)
                 }
                 ChangeAction::MoveToValidated(ConsensusMessage::CatchUpPackage(x)) => {
                     cache.check_catch_up_package(x)
@@ -462,7 +466,7 @@ impl ConsensusBlockChain for ConsensusBlockChainImpl {
 mod test {
     use super::*;
     use crate::test_utils::fake_block_proposal;
-    use ic_interfaces::consensus_pool::HEIGHT_CONSIDERED_BEHIND;
+    use ic_interfaces::consensus_pool::{ValidatedConsensusArtifact, HEIGHT_CONSIDERED_BEHIND};
     use ic_test_artifact_pool::consensus_pool::{Round, TestConsensusPool};
     use ic_test_utilities::{
         consensus::fake::*,
@@ -509,6 +513,7 @@ mod test {
             let state_manager = FakeStateManager::new();
             let state_manager = Arc::new(state_manager);
             let mut pool = TestConsensusPool::new(
+                node_test_id(0),
                 subnet_id,
                 pool_config,
                 time_source,
@@ -540,7 +545,10 @@ mod test {
 
             // 2. Cache can be updated by finalization
             let updates = consensus_cache.prepare(&[ChangeAction::AddToValidated(
-                finalization.clone().into_message(),
+                ValidatedConsensusArtifact {
+                    msg: finalization.clone().into_message(),
+                    timestamp: time,
+                },
             )]);
             assert_eq!(updates, vec![CacheUpdateAction::Finalization]);
             pool.insert_validated(finalization);
@@ -566,7 +574,10 @@ mod test {
             );
             let catch_up_package = pool.make_catch_up_package(Height::from(4));
             let updates = consensus_cache.prepare(&[ChangeAction::AddToValidated(
-                catch_up_package.clone().into_message(),
+                ValidatedConsensusArtifact {
+                    msg: catch_up_package.clone().into_message(),
+                    timestamp: time,
+                },
             )]);
             assert_eq!(updates, vec![CacheUpdateAction::CatchUpPackage]);
             pool.insert_validated(catch_up_package.clone());
@@ -589,6 +600,7 @@ mod test {
             )];
 
             let mut pool = TestConsensusPool::new(
+                node_test_id(0),
                 subnet_test_id(1),
                 pool_config,
                 FastForwardTimeSource::new(),

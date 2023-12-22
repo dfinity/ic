@@ -12,23 +12,27 @@ User=root
 Group=root
 Restart=always
 EnvironmentFile=/run/ic-node/etc/default/certificate-issuer
-ExecStart=/bin/bash -c '                                                     \
-    /opt/ic/bin/certificate-issuer                                           \
-        --api-addr                  "127.0.0.1:3000"                         \
-        --root-key-path             "${NNS_KEY_PATH}"                        \
-        --identity-path             "${IDENTITY_PATH}"                       \
-        --orchestrator-uri          "${ORCHESTRATOR_URI}"                    \
-        --orchestrator-canister-id  "${ORCHESTRATOR_CANISTER_ID}"            \
-        --key-path                  "${KEY_PATH}"                            \
-        --delegation-domain         "${DELEGATION_DOMAIN}"                   \
-        --cloudflare-api-key        "${CLOUDFLARE_API_KEY}"                  \
-        --metrics-addr              "[::]:9321"                              \
-        ${NAME_SERVERS:+       --name-servers       "${NAME_SERVERS}"}       \
-        ${NAME_SERVERS_PORT:+  --name-servers-port  "${NAME_SERVERS_PORT}"}  \
-        ${ACME_PROVIDER_URL:+  --acme-provider-url  "${ACME_PROVIDER_URL}"}  \
-        ${ACME_ACCOUNT_ID:+    --acme-account-id    "${ACME_ACCOUNT_ID}"}    \
-        ${ACME_ACCOUNT_KEY:+   --acme-account-key   "${ACME_ACCOUNT_KEY}"}   \
-        ${CLOUDFLARE_API_URL:+ --cloudflare-api-url "${CLOUDFLARE_API_URL}"} \
+ExecStart=/bin/bash -c '                                                               \
+    /opt/ic/bin/certificate-issuer                                                     \
+        --api-addr                  "127.0.0.1:3000"                                   \
+        --root-key-path             "${NNS_KEY_PATH}"                                  \
+        --identity-path             "${IDENTITY_PATH}"                                 \
+        --orchestrator-uri          "${ORCHESTRATOR_URI}"                              \
+        --orchestrator-canister-id  "${ORCHESTRATOR_CANISTER_ID}"                      \
+        --key-path                  "${KEY_PATH}"                                      \
+        --delegation-domain         "${DELEGATION_DOMAIN}"                             \
+        --cloudflare-api-key-path   "${CLOUDFLARE_API_KEY_PATH}"                       \
+        --metrics-addr              "[::]:9321"                                        \
+        ${NAME_SERVERS:+           --name-servers          "${NAME_SERVERS}"}          \
+        ${NAME_SERVERS_PORT:+      --name-servers-port     "${NAME_SERVERS_PORT}"}     \
+        ${ACME_PROVIDER_URL:+      --acme-provider-url     "${ACME_PROVIDER_URL}"}     \
+        ${ACME_ACCOUNT_ID:+        --acme-account-id       "${ACME_ACCOUNT_ID}"}       \
+        ${ACME_ACCOUNT_KEY_PATH:+  --acme-account-key-path "${ACME_ACCOUNT_KEY_PATH}"} \
+        ${CLOUDFLARE_API_URL:+     --cloudflare-api-url    "${CLOUDFLARE_API_URL}"}    \
+        ${TASK_DELAY_SEC:+         --task-delay-sec        "${TASK_DELAY_SEC}"}        \
+        ${TASK_ERROR_DELAY_SEC:+   --task-error-delay-sec  "${TASK_ERROR_DELAY_SEC}"}  \
+        ${PEEK_SLEEP_SEC:+         --peek-sleep-sec        "${PEEK_SLEEP_SEC}"}        \
+        ${IMPORTANT_DOMAINS:+      --important-domains     "${IMPORTANT_DOMAINS}"}     \
 '
 
 [Install]

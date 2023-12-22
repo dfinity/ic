@@ -36,7 +36,9 @@ type SenderCanisterVersion =
 
 type InstallMode =
   [candidType|
-    variant {install : null; reinstall : null; upgrade : null}
+    variant {install : null; reinstall : null; upgrade : opt record {
+        skip_pre_upgrade : opt bool;
+      }}
   |]
 
 type RunState =

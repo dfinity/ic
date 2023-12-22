@@ -64,7 +64,7 @@ parsePublicKey =
     y <- os2ip <$> getByteString 32
     let p = EC.Point x y
     unless (EC.isPointValid curve p) $ do
-      fail "point not vaild"
+      fail "point not valid"
     return $ EC.PublicKey curve p
 
 parseSig :: BS.ByteString -> Either T.Text EC.Signature

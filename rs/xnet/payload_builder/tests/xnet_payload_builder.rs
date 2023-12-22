@@ -15,7 +15,6 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::Stream;
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::{
-    crypto::fake_tls_handshake::FakeTlsHandshake,
     mock_time,
     state::{arb_stream, arb_stream_slice},
     types::ids::{
@@ -36,7 +35,7 @@ use ic_types::{
 use ic_xnet_payload_builder::{
     certified_slice_pool::{CertifiedSlicePool, UnpackedStreamSlice},
     testing::*,
-    ExpectedIndices, XNetPayloadBuilderImpl,
+    ExpectedIndices, XNetPayloadBuilderImpl, XNetSlicePoolImpl,
 };
 use maplit::btreemap;
 use proptest::prelude::*;
@@ -46,6 +45,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tempfile::TempDir;
+use tokio::sync::mpsc;
 use tokio::time::Duration;
 
 mod common;
@@ -58,6 +58,7 @@ pub const REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(169);
 /// tests.
 struct XNetPayloadBuilderFixture {
     pub xnet_payload_builder: XNetPayloadBuilderImpl,
+    pub certified_slice_pool: Arc<Mutex<CertifiedSlicePool>>,
     pub state_manager: Arc<StateManagerImpl>,
     pub certified_height: Height,
     pub metrics: MetricsRegistry,
@@ -67,26 +68,27 @@ struct XNetPayloadBuilderFixture {
 impl XNetPayloadBuilderFixture {
     fn new(fixture: StateManagerFixture) -> Self {
         let state_manager = Arc::new(fixture.state_manager);
-        let tls_handshake = Arc::new(FakeTlsHandshake::new());
-
-        // Throwaway runtime, we don't need registry polling or pool refill.
-        let runtime_handle = tokio::runtime::Runtime::new().unwrap().handle().clone();
         let registry = get_registry_for_test();
-
-        let xnet_payload_builder = XNetPayloadBuilderImpl::new(
+        let rng = Arc::new(None);
+        let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(&fixture.metrics)));
+        let slice_pool = Box::new(XNetSlicePoolImpl::new(certified_slice_pool.clone()));
+        let (refill_trigger, _refill_receiver) = mpsc::channel(100);
+        let refill_task_handle = RefillTaskHandle(Mutex::new(refill_trigger));
+        let metrics = Arc::new(XNetPayloadBuilderMetrics::new(&fixture.metrics));
+        let xnet_payload_builder = XNetPayloadBuilderImpl::new_from_components(
             Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
-            tls_handshake as Arc<_>,
             registry,
-            runtime_handle,
-            OWN_NODE,
-            OWN_SUBNET,
-            &fixture.metrics,
+            rng,
+            slice_pool,
+            refill_task_handle,
+            metrics,
             fixture.log,
         );
 
         Self {
             xnet_payload_builder,
+            certified_slice_pool,
             state_manager,
             certified_height: fixture.certified_height,
             metrics: fixture.metrics,
@@ -140,7 +142,10 @@ impl XNetPayloadBuilderFixture {
         let slice_size_bytes = UnpackedStreamSlice::try_from(certified_slice.clone())
             .unwrap()
             .count_bytes();
-        pool_slice(&self.xnet_payload_builder, subnet_id, certified_slice);
+        {
+            let mut slice_pool = self.certified_slice_pool.lock().unwrap();
+            slice_pool.put(subnet_id, certified_slice).unwrap();
+        }
         slice_size_bytes
     }
 
@@ -531,11 +536,10 @@ proptest! {
 
             // Populate payload builder pool with the REMOTE_SUBNET -> OWN_SUBNET slice.
             let slice = in_slice(&stream, from, from, msg_count, &log);
-            pool_slice(
-                &xnet_payload_builder.xnet_payload_builder,
-                REMOTE_SUBNET,
-                slice,
-            );
+            {
+              let mut slice_pool = xnet_payload_builder.certified_slice_pool.lock().unwrap();
+              slice_pool.put(REMOTE_SUBNET, slice).unwrap();
+            }
 
             let payload = xnet_payload_builder
                 .get_xnet_payload(std::usize::MAX).0;

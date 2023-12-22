@@ -30,7 +30,7 @@ use ic_types::{
 };
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
-use std::{str::FromStr, time::Duration};
+use std::{cmp::min, str::FromStr, time::Duration};
 
 pub const CRITICAL_ERROR_RESPONSE_CYCLES_REFUND: &str =
     "cycles_account_manager_response_cycles_refund_error";
@@ -40,6 +40,11 @@ pub const CRITICAL_ERROR_EXECUTION_CYCLES_REFUND: &str =
 
 /// [EXC-1168] Flag to turn on cost scaling according to a subnet replication factor.
 const USE_COST_SCALING_FLAG: bool = true;
+const SECONDS_PER_DAY: u128 = 24 * 60 * 60;
+
+/// Maximum payload size of a management call to update_settings
+/// overriding the canister's freezing threshold.
+const MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: usize = 200;
 
 /// Errors returned by the [`CyclesAccountManager`].
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -97,6 +102,17 @@ impl ResourceSaturation {
         }
     }
 
+    /// Creates a new `ResourceSaturation` like the `new()` constructor, but also
+    /// divides `usage`, `threshold`, and `capacity` by the given `scaling` factor.
+    pub fn new_scaled(usage: u64, threshold: u64, capacity: u64, scaling: u64) -> Self {
+        Self::new(usage / scaling, threshold / scaling, capacity / scaling)
+    }
+
+    /// Returns the part of the usage that is above the threshold.
+    pub fn usage_above_threshold(&self) -> u64 {
+        self.usage.saturating_sub(self.threshold)
+    }
+
     /// Scales the given value proportionally to the resource saturation.
     /// More specifically, the value is scaled by `(U - T) / (C - T)`,
     /// where
@@ -120,6 +136,25 @@ impl ResourceSaturation {
             result.try_into().unwrap()
         }
     }
+
+    /// Returns a new `ResourceSaturation` with the additional usage.
+    pub fn add(&self, usage: u64) -> Self {
+        Self {
+            usage: (self.usage + usage).min(self.capacity),
+            threshold: self.threshold,
+            capacity: self.capacity,
+        }
+    }
+}
+
+// The fee for `UpdateSettings` is charged after applying
+// the settings to allow users to unfreeze canisters
+// after accidentally setting the freezing threshold too high.
+// To satisfy this use case, it is sufficient to send
+// a payload of a small size and thus we only delay
+// the ingress induction cost for small payloads.
+pub fn is_delayed_ingress_induction_cost(arg: &[u8]) -> bool {
+    arg.len() <= MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE
 }
 
 /// Handles any operation related to cycles accounting, such as charging (due to
@@ -233,21 +268,57 @@ impl CyclesAccountManager {
         )
     }
 
-    // Returns the idle resource consumption rate in cycles per day.
+    // Returns the total idle resource consumption rate in cycles per day.
     pub fn idle_cycles_burned_rate(
         &self,
         memory_allocation: MemoryAllocation,
         memory_usage: NumBytes,
+        message_memory_usage: NumBytes,
         compute_allocation: ComputeAllocation,
         subnet_size: usize,
     ) -> Cycles {
+        let mut total_rate = Cycles::zero();
+        for (_, rate) in self.idle_cycles_burned_rate_by_resource(
+            memory_allocation,
+            memory_usage,
+            message_memory_usage,
+            compute_allocation,
+            subnet_size,
+        ) {
+            total_rate += rate;
+        }
+        total_rate
+    }
+
+    // Returns a list of the idle resource consumption rate in cycles per day
+    // for each resource.
+    fn idle_cycles_burned_rate_by_resource(
+        &self,
+        memory_allocation: MemoryAllocation,
+        memory_usage: NumBytes,
+        message_memory_usage: NumBytes,
+        compute_allocation: ComputeAllocation,
+        subnet_size: usize,
+    ) -> [(CyclesUseCase, Cycles); 3] {
         let memory = match memory_allocation {
             MemoryAllocation::Reserved(bytes) => bytes,
             MemoryAllocation::BestEffort => memory_usage,
         };
-        let day = Duration::from_secs(24 * 60 * 60);
-        self.memory_cost(memory, day, subnet_size)
-            + self.compute_allocation_cost(compute_allocation, day, subnet_size)
+        let day = Duration::from_secs(SECONDS_PER_DAY as u64);
+        [
+            (
+                CyclesUseCase::Memory,
+                self.memory_cost(memory, day, subnet_size),
+            ),
+            (
+                CyclesUseCase::Memory,
+                self.memory_cost(message_memory_usage, day, subnet_size),
+            ),
+            (
+                CyclesUseCase::ComputeAllocation,
+                self.compute_allocation_cost(compute_allocation, day, subnet_size),
+            ),
+        ]
     }
 
     /// Returns the freezing threshold for this canister in cycles after
@@ -257,6 +328,7 @@ impl CyclesAccountManager {
         freeze_threshold: NumSeconds,
         memory_allocation: MemoryAllocation,
         memory_usage: NumBytes,
+        message_memory_usage: NumBytes,
         compute_allocation: ComputeAllocation,
         subnet_size: usize,
         reserved_balance: Cycles,
@@ -265,14 +337,14 @@ impl CyclesAccountManager {
             .idle_cycles_burned_rate(
                 memory_allocation,
                 memory_usage,
+                message_memory_usage,
                 compute_allocation,
                 subnet_size,
             )
             .get();
-        let seconds_per_day = 24 * 60 * 60;
 
         let threshold = Cycles::from(
-            idle_cycles_burned_rate * freeze_threshold.get() as u128 / seconds_per_day,
+            idle_cycles_burned_rate * freeze_threshold.get() as u128 / SECONDS_PER_DAY,
         );
 
         // Here we rely on the saturating subtraction for Cycles.
@@ -296,6 +368,7 @@ impl CyclesAccountManager {
         freeze_threshold: NumSeconds,
         memory_allocation: MemoryAllocation,
         canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
         canister_compute_allocation: ComputeAllocation,
         cycles_balance: &mut Cycles,
         cycles: Cycles,
@@ -310,6 +383,7 @@ impl CyclesAccountManager {
                 freeze_threshold,
                 memory_allocation,
                 canister_current_memory_usage,
+                canister_current_message_memory_usage,
                 canister_compute_allocation,
                 subnet_size,
                 reserved_balance,
@@ -330,6 +404,7 @@ impl CyclesAccountManager {
         &self,
         canister: &mut CanisterState,
         canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
         canister_compute_allocation: ComputeAllocation,
         cycles: Cycles,
         subnet_size: usize,
@@ -338,6 +413,7 @@ impl CyclesAccountManager {
             canister.system_state.freeze_threshold,
             canister.system_state.memory_allocation,
             canister_current_memory_usage,
+            canister_current_message_memory_usage,
             canister_compute_allocation,
             subnet_size,
             canister.system_state.reserved_balance(),
@@ -379,6 +455,7 @@ impl CyclesAccountManager {
         &self,
         system_state: &mut SystemState,
         canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
         canister_compute_allocation: ComputeAllocation,
         cycles: Cycles,
         subnet_size: usize,
@@ -388,6 +465,7 @@ impl CyclesAccountManager {
             system_state.freeze_threshold,
             system_state.memory_allocation,
             canister_current_memory_usage,
+            canister_current_message_memory_usage,
             canister_compute_allocation,
             subnet_size,
             system_state.reserved_balance(),
@@ -409,6 +487,7 @@ impl CyclesAccountManager {
         &self,
         system_state: &mut SystemState,
         canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
         canister_compute_allocation: ComputeAllocation,
         num_instructions: NumInstructions,
         subnet_size: usize,
@@ -421,6 +500,7 @@ impl CyclesAccountManager {
                 system_state.freeze_threshold,
                 system_state.memory_allocation,
                 canister_current_memory_usage,
+                canister_current_message_memory_usage,
                 canister_compute_allocation,
                 subnet_size,
                 system_state.reserved_balance(),
@@ -442,6 +522,7 @@ impl CyclesAccountManager {
         subnet_size: usize,
         log: &ReplicaLogger,
     ) {
+        debug_assert!(num_instructions <= num_instructions_initially_charged);
         if num_instructions > num_instructions_initially_charged {
             error_counter.inc();
             error!(
@@ -463,31 +544,7 @@ impl CyclesAccountManager {
         system_state.add_cycles(cycles_to_refund, CyclesUseCase::Instructions);
     }
 
-    /// Charges the canister for its compute allocation
-    ///
-    /// # Errors
-    ///
-    /// Returns a `CanisterOutOfCyclesError` if the
-    /// requested amount is greater than the currently available.
-    pub fn charge_for_compute_allocation(
-        &self,
-        system_state: &mut SystemState,
-        compute_allocation: ComputeAllocation,
-        duration: Duration,
-        subnet_size: usize,
-    ) -> Result<(), CanisterOutOfCyclesError> {
-        let cycles = self.compute_allocation_cost(compute_allocation, duration, subnet_size);
-
-        // Can charge all the way to the empty account (zero cycles)
-        self.consume_with_threshold(
-            system_state,
-            cycles,
-            Cycles::zero(),
-            CyclesUseCase::ComputeAllocation,
-        )
-    }
-
-    /// The cost of compute allocation, per round
+    /// Returns the cost of compute allocation for the given duration.
     #[doc(hidden)] // pub for usage in tests
     pub fn compute_allocation_cost(
         &self,
@@ -516,10 +573,14 @@ impl CyclesAccountManager {
             // If a subnet message, get effective canister id who will pay for the message.
             true => {
                 if let Ok(Method::UpdateSettings) = Method::from_str(ingress.method_name()) {
-                    // The fee for `UpdateSettings` is charged after applying the settings
-                    // to allow users to unfreeze canisters after accidentally setting
-                    // the freezing threshold too high.
-                    None
+                    // The fee for `UpdateSettings` with small payload is charged after
+                    // applying the settings to allow users to unfreeze canisters
+                    // after accidentally setting the freezing threshold too high.
+                    if is_delayed_ingress_induction_cost(ingress.arg()) {
+                        None
+                    } else {
+                        effective_canister_id
+                    }
                 } else {
                     effective_canister_id
                 }
@@ -571,35 +632,6 @@ impl CyclesAccountManager {
     //
     ////////////////////////////////////////////////////////////////////////////
 
-    /// Subtracts the cycles cost of using a `bytes` amount of memory.
-    ///
-    /// Note: The following charges for memory taken by the canister. It
-    /// currently takes into account all the pages in the canister's heap and
-    /// stable memory (among other things). This will be revised in the future
-    /// to take into account charging for dirty/read pages by the canister.
-    ///
-    /// # Errors
-    ///
-    /// Returns a `CanisterOutOfCyclesError` if there's
-    /// not enough cycles to charge for memory.
-    pub fn charge_for_memory(
-        &self,
-        system_state: &mut SystemState,
-        bytes: NumBytes,
-        duration: Duration,
-        subnet_size: usize,
-    ) -> Result<(), CanisterOutOfCyclesError> {
-        let cycles_amount = self.memory_cost(bytes, duration, subnet_size);
-
-        // Can charge all the way to the empty account (zero cycles)
-        self.consume_with_threshold(
-            system_state,
-            cycles_amount,
-            Cycles::zero(),
-            CyclesUseCase::Memory,
-        )
-    }
-
     /// The cost of using `bytes` worth of memory.
     #[doc(hidden)] // pub for usage in tests
     pub fn memory_cost(&self, bytes: NumBytes, duration: Duration, subnet_size: usize) -> Cycles {
@@ -611,6 +643,48 @@ impl CyclesAccountManager {
                 / one_gib,
         );
         self.scale_cost(cycles, subnet_size)
+    }
+
+    /// Returns the amount of reserved cycles required for allocating the given
+    /// number of bytes at the given resource saturation level.
+    pub fn storage_reservation_cycles(
+        &self,
+        allocated_bytes: NumBytes,
+        storage_saturation: &ResourceSaturation,
+        subnet_size: usize,
+    ) -> Cycles {
+        // The reservation cycles for `allocated_bytes` can be computed as
+        // the difference between
+        // - the total reservation cycles from 0 to `usage + allocated_bytes` and
+        // - the total reservation cycles from 0 to `usage`.
+        self.total_storage_reservation_cycles(
+            &storage_saturation.add(allocated_bytes.get()),
+            subnet_size,
+        ) - self.total_storage_reservation_cycles(storage_saturation, subnet_size)
+    }
+
+    /// Returns the total amount of reserved cycles for the given resource
+    /// saturation level. In other words, it computes how many cycles would be
+    /// reserved for a resource allocation that goes from 0 to the usage
+    /// specified in the given resource saturation.
+    fn total_storage_reservation_cycles(
+        &self,
+        storage_saturation: &ResourceSaturation,
+        subnet_size: usize,
+    ) -> Cycles {
+        let duration = Duration::from_secs(
+            storage_saturation
+                .reservation_factor(self.config.max_storage_reservation_period.as_secs()),
+        );
+        // We need to compute the area of the triangle with
+        // - base: (U - T) = usage_above_threshold(),
+        // - height: duration * fee.
+        // That is equal to `(base * height) / 2 = base * (height / 2)`.
+        self.memory_cost(
+            NumBytes::new(storage_saturation.usage_above_threshold()),
+            duration / 2,
+            subnet_size,
+        )
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -643,6 +717,7 @@ impl CyclesAccountManager {
         freeze_threshold: NumSeconds,
         memory_allocation: MemoryAllocation,
         canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
         canister_compute_allocation: ComputeAllocation,
         request: &Request,
         prepayment_for_response_execution: Cycles,
@@ -671,6 +746,7 @@ impl CyclesAccountManager {
                 freeze_threshold,
                 memory_allocation,
                 canister_current_memory_usage,
+                canister_current_message_memory_usage,
                 canister_compute_allocation,
                 subnet_size,
                 reserved_balance,
@@ -716,6 +792,7 @@ impl CyclesAccountManager {
     ) -> Cycles {
         let max_expected_bytes = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES.get();
         let transmitted_bytes = response.payload_size_bytes().get();
+        debug_assert!(transmitted_bytes <= max_expected_bytes);
         if max_expected_bytes < transmitted_bytes {
             error_counter.inc();
             error!(
@@ -750,6 +827,7 @@ impl CyclesAccountManager {
         system_state: &SystemState,
         requested: Cycles,
         canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
         canister_compute_allocation: ComputeAllocation,
         subnet_size: usize,
     ) -> Result<(), CanisterOutOfCyclesError> {
@@ -757,6 +835,7 @@ impl CyclesAccountManager {
             system_state.freeze_threshold,
             system_state.memory_allocation,
             canister_current_memory_usage,
+            canister_current_message_memory_usage,
             canister_compute_allocation,
             subnet_size,
             system_state.reserved_balance(),
@@ -796,10 +875,11 @@ impl CyclesAccountManager {
             | CyclesUseCase::ECDSAOutcalls
             | CyclesUseCase::HTTPOutcalls
             | CyclesUseCase::DeletedCanisters
-            | CyclesUseCase::NonConsumed => system_state.balance(),
+            | CyclesUseCase::NonConsumed
+            | CyclesUseCase::BurnedCycles => system_state.balance(),
         };
 
-        self.verify_cycles_balance_with_treshold(
+        self.verify_cycles_balance_with_threshold(
             system_state.canister_id,
             effective_cycles_balance,
             cycles,
@@ -811,7 +891,7 @@ impl CyclesAccountManager {
         Ok(())
     }
 
-    fn verify_cycles_balance_with_treshold(
+    fn verify_cycles_balance_with_threshold(
         &self,
         canister_id: CanisterId,
         cycles_balance: Cycles,
@@ -851,7 +931,7 @@ impl CyclesAccountManager {
         cycles: Cycles,
         threshold: Cycles,
     ) -> Result<(), CanisterOutOfCyclesError> {
-        self.verify_cycles_balance_with_treshold(canister_id, *cycles_balance, cycles, threshold)?;
+        self.verify_cycles_balance_with_threshold(canister_id, *cycles_balance, cycles, threshold)?;
 
         *cycles_balance -= cycles;
         Ok(())
@@ -880,13 +960,59 @@ impl CyclesAccountManager {
         }
     }
 
+    /// Burns as many cycles as possible, up to these constraints:
+    ///
+    /// 1. It burns no more cycles than the `amount_to_burn`.
+    ///
+    /// 2. It burns no more cycles than `balance` - `freezing_limit`, where `freezing_limit`
+    /// is the amount of idle cycles burned by the canister during its `freezing_threshold`.
+    ///
+    /// Returns the number of cycles that were burned.
+    pub fn cycles_burn(
+        &self,
+        cycles_balance: &mut Cycles,
+        amount_to_burn: Cycles,
+        freeze_threshold: NumSeconds,
+        memory_allocation: MemoryAllocation,
+        memory_usage: NumBytes,
+        message_memory_usage: NumBytes,
+        compute_allocation: ComputeAllocation,
+        subnet_size: usize,
+        reserved_balance: Cycles,
+    ) -> Cycles {
+        let threshold = self.freeze_threshold_cycles(
+            freeze_threshold,
+            memory_allocation,
+            memory_usage,
+            message_memory_usage,
+            compute_allocation,
+            subnet_size,
+            reserved_balance,
+        );
+
+        // The subtraction '*cycles_balance - threshold' is saturating
+        // and hence returned value will never be negative.
+        let burning = min(amount_to_burn, *cycles_balance - threshold);
+
+        *cycles_balance -= burning;
+        burning
+    }
+
     /// Converts `num_instructions` in `Cycles`.
     ///
     /// Note that this function is made public to facilitate some logistic in
     /// tests.
     #[doc(hidden)]
     pub fn convert_instructions_to_cycles(&self, num_instructions: NumInstructions) -> Cycles {
-        self.config.ten_update_instructions_execution_fee * (num_instructions.get() / 10)
+        let fee = self.config.ten_update_instructions_execution_fee;
+        match fee.checked_mul(num_instructions.get()) {
+            Some(value) => value / 10_u64,
+            // The multiplication should never overflow, as the maximum number of instructions
+            // is bounded by its type, i.e. `u64::MAX`, which is way lower than `u128::MAX``.
+            None => fee
+                .checked_mul(num_instructions.get() / 10)
+                .expect("Cycle amount should fit into u128"),
+        }
     }
 
     /// Returns the cost of executing a message with the given number of
@@ -903,66 +1029,39 @@ impl CyclesAccountManager {
 
     /// Charges a canister for its resource allocation and usage for the
     /// duration specified. If fees were successfully charged, then returns
-    /// Ok(CanisterState) else returns Err(CanisterState).
+    /// Ok() else returns Err(CanisterOutOfCyclesError).
     pub fn charge_canister_for_resource_allocation_and_usage(
         &self,
         log: &ReplicaLogger,
         canister: &mut CanisterState,
-        duration_between_blocks: Duration,
+        duration_since_last_charge: Duration,
         subnet_size: usize,
     ) -> Result<(), CanisterOutOfCyclesError> {
-        let canister_memory_bytes_to_charge = match canister.memory_allocation() {
-            // The canister has explicitly asked for a memory allocation, so charge
-            // based on it accordingly.
-            MemoryAllocation::Reserved(bytes) => bytes,
-            // The canister uses best-effort memory allocation, so charge based on current usage.
-            MemoryAllocation::BestEffort => canister.memory_usage(),
-        };
-        if let Err(err) = self.charge_for_memory(
-            &mut canister.system_state,
-            canister_memory_bytes_to_charge,
-            duration_between_blocks,
+        for (use_case, rate) in self.idle_cycles_burned_rate_by_resource(
+            canister.memory_allocation(),
+            canister.memory_usage(),
+            canister.message_memory_usage(),
+            canister.compute_allocation(),
             subnet_size,
         ) {
-            info!(
-                log,
-                "Charging canister {} for memory allocation/usage failed with {}",
-                canister.canister_id(),
-                err
-            );
-            return Err(err);
-        }
+            let cycles = rate * duration_since_last_charge.as_secs() / SECONDS_PER_DAY;
 
-        let message_memory_bytes_to_charge = canister.message_memory_usage();
-        if let Err(err) = self.charge_for_memory(
-            &mut canister.system_state,
-            message_memory_bytes_to_charge,
-            duration_between_blocks,
-            subnet_size,
-        ) {
-            info!(
-                log,
-                "Charging canister {} for message memory usage failed with {}",
-                canister.canister_id(),
-                err
-            );
-            return Err(err);
-        }
-
-        let compute_allocation = canister.compute_allocation();
-        if let Err(err) = self.charge_for_compute_allocation(
-            &mut canister.system_state,
-            compute_allocation,
-            duration_between_blocks,
-            subnet_size,
-        ) {
-            info!(
-                log,
-                "Charging canister {} for compute allocation failed with {}",
-                canister.canister_id(),
-                err
-            );
-            return Err(err);
+            // Charging for resources can charge all the way down to zero cycles.
+            if let Err(err) = self.consume_with_threshold(
+                &mut canister.system_state,
+                cycles,
+                Cycles::zero(),
+                use_case,
+            ) {
+                info!(
+                    log,
+                    "Charging canister {} for {} failed with {}",
+                    canister.canister_id(),
+                    use_case.as_str(),
+                    err
+                );
+                return Err(err);
+            }
         }
         Ok(())
     }
@@ -984,6 +1083,12 @@ impl CyclesAccountManager {
             + self.config.http_request_per_byte_fee * request_size.get()
             + self.config.http_response_per_byte_fee * response_size)
             * (subnet_size as u64)
+    }
+
+    /// Returns the default value of the reserved balance limit for the case
+    /// when the canister doesn't have it set in the settings.
+    pub fn default_reserved_balance_limit(&self) -> Cycles {
+        self.config.default_reserved_balance_limit
     }
 }
 
@@ -1021,6 +1126,8 @@ pub enum IngressInductionCostError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use candid::Encode;
+    use ic_ic00_types::{CanisterSettingsArgs, UpdateSettingsArgs};
     use ic_test_utilities::types::ids::subnet_test_id;
 
     fn create_cycles_account_manager(reference_subnet_size: usize) -> CyclesAccountManager {
@@ -1034,6 +1141,23 @@ mod tests {
             config,
             use_cost_scaling_flag: true,
         }
+    }
+
+    #[test]
+    fn max_delayed_ingress_cost_payload_size_test() {
+        let default_freezing_limit = 30 * 24 * 3600; // 30 days
+        let payload = UpdateSettingsArgs {
+            canister_id: CanisterId::from_u64(0).into(),
+            settings: CanisterSettingsArgs::new(
+                None,
+                None,
+                None,
+                Some(default_freezing_limit),
+                None,
+            ),
+            sender_canister_version: None, // ingress messages are not supposed to set this field
+        };
+        assert!(2 * Encode!(&payload).unwrap().len() <= MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE);
     }
 
     #[test]
@@ -1074,7 +1198,7 @@ mod tests {
     }
 
     #[test]
-    fn http_requets_fee_scale() {
+    fn http_requests_fee_scale() {
         let subnet_size: u64 = 34;
         let reference_subnet_size: u64 = 13;
         let request_size = NumBytes::from(17);
@@ -1095,5 +1219,61 @@ mod tests {
             cycles_account_manager.http_request_fee(request_size, None, subnet_size as usize),
             Cycles::from(1_605_046_800u64) * subnet_size
         );
+    }
+
+    #[test]
+    fn test_cycles_burn() {
+        let subnet_size = 13;
+        let cycles_account_manager = create_cycles_account_manager(subnet_size);
+        let initial_balance = Cycles::new(1_000_000_000);
+        let mut balance = initial_balance;
+        let amount_to_burn = Cycles::new(1_000_000);
+
+        assert_eq!(
+            cycles_account_manager.cycles_burn(
+                &mut balance,
+                amount_to_burn,
+                NumSeconds::new(0),
+                MemoryAllocation::default(),
+                0.into(),
+                0.into(),
+                ComputeAllocation::default(),
+                13,
+                Cycles::new(0)
+            ),
+            amount_to_burn
+        );
+
+        // Check that the balance is updated properly.
+        assert_eq!(balance + amount_to_burn, initial_balance)
+    }
+
+    #[test]
+    fn test_convert_instructions_to_cycles() {
+        let subnet_size = 13;
+        let cycles_account_manager = create_cycles_account_manager(subnet_size);
+
+        // Everything up to `u128::MAX / 4` should be converted as normal:
+        // `(ten_update_instructions_execution_fee * num_instructions) / 10`
+
+        // `(4 * 0) / 10 == 0`
+        assert_eq!(
+            cycles_account_manager.convert_instructions_to_cycles(0.into()),
+            0_u64.into()
+        );
+
+        // `(4 * 9) / 10 == 3`
+        assert_eq!(
+            cycles_account_manager.convert_instructions_to_cycles(9.into()),
+            ((4 * 9_u64) / 10).into()
+        );
+
+        // As the maximum number of instructions is bounded by its type, i.e. `u64::MAX`,
+        // the normal conversion is applied for the whole instructions range.
+        // `convert_instructions_to_cycles(u64::MAX) == (4 * u64::MAX) / 10`
+        let u64_max_cycles = cycles_account_manager.convert_instructions_to_cycles(u64::MAX.into());
+        assert_eq!(u64_max_cycles, ((4 * u128::from(u64::MAX)) / 10).into());
+        // `convert_instructions_to_cycles(u64::MAX) != 4 * (u64::MAX / 10)`
+        assert_ne!(u64_max_cycles, (4 * (u128::from(u64::MAX) / 10)).into());
     }
 }

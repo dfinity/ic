@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 NNS_TOOLS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 source "$NNS_TOOLS_DIR/lib/include.sh"
@@ -52,6 +52,9 @@ SNS_CANISTERS=(
     index
     archive
 )
+
+echo SNS
+echo =====
 
 for canister_name in "${SNS_CANISTERS[@]}"; do
     echo

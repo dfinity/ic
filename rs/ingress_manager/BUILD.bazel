@@ -4,6 +4,7 @@ load("//bazel:defs.bzl", "rust_bench")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    "//rs/crypto/interfaces/sig_verification",
     "//rs/constants",
     "//rs/cycles_account_manager",
     "//rs/interfaces",
@@ -15,6 +16,7 @@ DEPENDENCIES = [
     "//rs/registry/keys",
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
+    "//rs/types/ic00_types",
     "//rs/types/types",
     "//rs/validator",
     "@crate_index//:prometheus",
@@ -26,17 +28,17 @@ MACRO_DEPENDENCIES = []
 DEV_DEPENDENCIES = [
     "//rs/artifact_pool",
     "//rs/config",
+    "//rs/interfaces/mocks",
     "//rs/interfaces/state_manager/mocks",
     "//rs/registry/client",
     "//rs/registry/proto_data_provider",
     "//rs/test_utilities",
     "//rs/test_utilities/logger",
     "//rs/test_utilities/registry",
-    "//rs/types/ic00_types",
     "@crate_index//:assert_matches",
     "@crate_index//:criterion",
     "@crate_index//:proptest",
-    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand",
     "@crate_index//:tokio",
 ]
 
@@ -62,7 +64,7 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_ingress_manager",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
@@ -85,6 +87,7 @@ rust_bench(
         "//rs/artifact_pool",
         "//rs/constants",
         "//rs/interfaces",
+        "//rs/interfaces/mocks",
         "//rs/interfaces/registry",
         "//rs/interfaces/state_manager",
         "//rs/interfaces/state_manager/mocks",
@@ -99,7 +102,7 @@ rust_bench(
         "//rs/types/ic00_types",
         "//rs/types/types",
         "@crate_index//:criterion",
-        "@crate_index//:rand_0_8_4",
+        "@crate_index//:rand",
         "@crate_index//:tokio",
     ],
 )
@@ -116,6 +119,7 @@ rust_bench(
         "//rs/config",
         "//rs/constants",
         "//rs/interfaces",
+        "//rs/interfaces/mocks",
         "//rs/interfaces/registry",
         "//rs/interfaces/state_manager",
         "//rs/interfaces/state_manager/mocks",
@@ -131,7 +135,7 @@ rust_bench(
         "//rs/test_utilities/registry",
         "//rs/types/types",
         "@crate_index//:criterion",
-        "@crate_index//:rand_0_8_4",
+        "@crate_index//:rand",
         "@crate_index//:tokio",
     ],
 )

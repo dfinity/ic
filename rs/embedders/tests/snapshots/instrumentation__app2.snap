@@ -1,5 +1,6 @@
 ---
 source: rs/embedders/tests/instrumentation.rs
+assertion_line: 55
 expression: out
 ---
 (module
@@ -18,7 +19,7 @@ expression: out
   (func (;5;) (type 0) (param i64) (result i64)
     (local i64)
     global.get 0
-    i64.const 6
+    i64.const 16
     i64.sub
     global.set 0
     global.get 0
@@ -33,17 +34,13 @@ expression: out
     call 7
     local.set 1
     block ;; label = @1
-      global.get 0
-      i64.const 5
-      i64.sub
-      global.set 0
       local.get 1
       i64.const 1
       i64.and
       i32.wrap_i64
       br_if 0 (;@1;)
       global.get 0
-      i64.const 7
+      i64.const 10
       i64.sub
       global.set 0
       local.get 1
@@ -51,17 +48,13 @@ expression: out
       i64.add
       local.set 1
       block ;; label = @2
-        global.get 0
-        i64.const 5
-        i64.sub
-        global.set 0
         local.get 1
         i64.const 1
         i64.and
         i32.wrap_i64
         br_if 0 (;@2;)
         global.get 0
-        i64.const 4
+        i64.const 5
         i64.sub
         global.set 0
         local.get 1
@@ -69,7 +62,7 @@ expression: out
         i64.gt_s
         br_if 1 (;@1;)
         global.get 0
-        i64.const 6
+        i64.const 7
         i64.sub
         global.set 0
         local.get 1
@@ -95,15 +88,23 @@ expression: out
           local.set 1
         end
       end
+      global.get 0
+      i64.const 7
+      i64.sub
+      global.set 0
       local.get 1
       call 6
       local.set 1
     end
+    global.get 0
+    i64.const 1
+    i64.sub
+    global.set 0
     local.get 1
   )
   (func (;6;) (type 0) (param i64) (result i64)
     global.get 0
-    i64.const 3
+    i64.const 4
     i64.sub
     global.set 0
     global.get 0
@@ -118,7 +119,7 @@ expression: out
   )
   (func (;7;) (type 0) (param i64) (result i64)
     global.get 0
-    i64.const 3
+    i64.const 4
     i64.sub
     global.set 0
     global.get 0
@@ -201,8 +202,8 @@ expression: out
     local.get 5
     i32.sub
   )
-  (memory (;0;) i64 0 1048576)
-  (memory (;1;) 256 256)
+  (memory (;0;) i64 0 1572864)
+  (memory (;1;) 384 384)
   (global (;0;) (mut i64) i64.const 0)
   (global (;1;) (mut i64) i64.const 0)
   (global (;2;) (mut i64) i64.const 0)

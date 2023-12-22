@@ -7,7 +7,7 @@ use ic_types::registry::RegistryClientError;
 pub use ic_types::{NodeId, RegistryVersion, SubnetId};
 
 pub trait NodeRegistry {
-    fn get_transport_info(
+    fn get_node_record(
         &self,
         node_id: NodeId,
         version: RegistryVersion,
@@ -25,7 +25,7 @@ pub trait NodeRegistry {
 }
 
 impl<T: RegistryClient + ?Sized> NodeRegistry for T {
-    fn get_transport_info(
+    fn get_node_record(
         &self,
         node_id: NodeId,
         version: RegistryVersion,

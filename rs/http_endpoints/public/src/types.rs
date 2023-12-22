@@ -27,25 +27,11 @@ pub(crate) enum ApiReqType {
     InvalidArgument,
 }
 
-#[derive(Debug, Copy, Clone, IntoStaticStr)]
-#[strum(serialize_all = "snake_case")]
-pub(crate) enum AppLayer {
-    Http,
-    Https,
-}
-
-#[derive(IntoStaticStr)]
-#[strum(serialize_all = "snake_case")]
-pub(crate) enum ConnectionError {
-    TlsHandshake,
-    Accept,
-    Peek,
-    PeekTimeout,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ConnError;
+
     #[test]
     fn test_label_values_do_not_change() {
         type StaticStr = &'static str;
@@ -75,18 +61,8 @@ mod tests {
         );
         assert_eq!(StaticStr::from(ApiReqType::Threads), "threads");
 
-        assert_eq!(StaticStr::from(AppLayer::Http), "http");
-        assert_eq!(StaticStr::from(AppLayer::Https), "https");
-
-        assert_eq!(
-            StaticStr::from(ConnectionError::TlsHandshake),
-            "tls_handshake"
-        );
-        assert_eq!(StaticStr::from(ConnectionError::Accept), "accept");
-        assert_eq!(StaticStr::from(ConnectionError::Peek), "peek");
-        assert_eq!(
-            StaticStr::from(ConnectionError::PeekTimeout),
-            "peek_timeout"
-        );
+        assert_eq!(StaticStr::from(ConnError::TlsHandshake), "tls_handshake");
+        assert_eq!(StaticStr::from(ConnError::Io), "io");
+        assert_eq!(StaticStr::from(ConnError::Timeout), "timeout");
     }
 }

@@ -4,7 +4,7 @@
 //
 // Create the testnet using:
 //
-//   ict testnet create recovered_mainnet_nns --lifetime-mins 10  --set-required-host-features=dc=zh1 --verbose -- --test_env=SSH_AUTH_SOCK
+//   rm -rf test_tmpdir; ict testnet create recovered_mainnet_nns --lifetime-mins 120 --set-required-host-features=dc=zh1 --verbose -- --test_tmpdir=test_tmpdir
 //
 // Make sure to pick a DC in --set-required-host-features=dc=zh1 which is close to
 // where you are running the test from. Shipping state across the Atlantic can double the

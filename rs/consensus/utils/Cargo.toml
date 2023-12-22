@@ -1,7 +1,10 @@
 [package]
 name = "ic-consensus-utils"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-crypto-prng = { path = "../../crypto/prng" }
@@ -15,7 +18,7 @@ ic-protobuf = { path = "../../protobuf" }
 ic-types = { path = "../../types/types" }
 rand = "0.8"
 hex = "0.4.2"
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
+slog = { workspace = true }
 
 [dev-dependencies]
 ic-consensus = { path = "../" }

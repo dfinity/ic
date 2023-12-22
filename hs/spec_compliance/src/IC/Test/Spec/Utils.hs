@@ -65,8 +65,8 @@ trivialWasmModule = "\0asm\1\0\0\0"
 
 -- * Some test data related to standard requests
 
-queryToNonExistant :: GenR
-queryToNonExistant =
+queryToNonExistent :: GenR
+queryToNonExistent =
   rec
     [ "request_type" =: GText "query",
       "sender" =: GBlob anonymousUser,
@@ -206,12 +206,12 @@ ic00viaWithCyclesRefund amount = ic00viaWithCyclesSubnetImpl (relayReplyRefund a
 
 install' :: (HasCallStack, HasAgentConfig) => Blob -> Prog -> IO ReqResponse
 install' cid prog = do
-  universal_wasm <- getTestWasm "universal_canister"
+  universal_wasm <- getTestWasm "universal_canister.wasm.gz"
   ic_install' ic00 (enum #install) cid universal_wasm (run prog)
 
 installAt :: (HasCallStack, HasAgentConfig) => Blob -> Prog -> IO ()
 installAt cid prog = do
-  universal_wasm <- getTestWasm "universal_canister"
+  universal_wasm <- getTestWasm "universal_canister.wasm.gz"
   ic_install ic00 (enum #install) cid universal_wasm (run prog)
 
 -- Also calls create, used default 'ic00'
@@ -226,22 +226,22 @@ create ecid = ic_provisional_create ic00 ecid Nothing (Just (2 ^ (60 :: Int))) e
 
 upgrade' :: (HasCallStack, HasAgentConfig) => Blob -> Prog -> IO ReqResponse
 upgrade' cid prog = do
-  universal_wasm <- getTestWasm "universal_canister"
-  ic_install' ic00 (enum #upgrade) cid universal_wasm (run prog)
+  universal_wasm <- getTestWasm "universal_canister.wasm.gz"
+  ic_install' ic00 (enumNothing #upgrade) cid universal_wasm (run prog)
 
 upgrade :: (HasCallStack, HasAgentConfig) => Blob -> Prog -> IO ()
 upgrade cid prog = do
-  universal_wasm <- getTestWasm "universal_canister"
-  ic_install ic00 (enum #upgrade) cid universal_wasm (run prog)
+  universal_wasm <- getTestWasm "universal_canister.wasm.gz"
+  ic_install ic00 (enumNothing #upgrade) cid universal_wasm (run prog)
 
 reinstall' :: (HasCallStack, HasAgentConfig) => Blob -> Prog -> IO ReqResponse
 reinstall' cid prog = do
-  universal_wasm <- getTestWasm "universal_canister"
+  universal_wasm <- getTestWasm "universal_canister.wasm.gz"
   ic_install' ic00 (enum #reinstall) cid universal_wasm (run prog)
 
 reinstall :: (HasCallStack, HasAgentConfig) => Blob -> Prog -> IO ()
 reinstall cid prog = do
-  universal_wasm <- getTestWasm "universal_canister"
+  universal_wasm <- getTestWasm "universal_canister.wasm.gz"
   ic_install ic00 (enum #reinstall) cid universal_wasm (run prog)
 
 callRequestAs :: (HasCallStack, HasAgentConfig) => Blob -> Blob -> Prog -> GenR
@@ -311,20 +311,23 @@ incrementCount :: IO Word32
 incrementCount =
   atomicModifyIORef' counterRef (\count -> (count + 1, count + 1))
 
-query' :: (HasCallStack, HasAgentConfig) => Blob -> Prog -> IO ReqResponse
+query' :: (HasCallStack, HasAgentConfig) => Blob -> Prog -> IO (Blob, QueryResponse)
 query' cid prog = do
   ctr <- incrementCount
-  queryCBOR cid >=> queryResponse $
-    rec
-      [ "request_type" =: GText "query",
-        "sender" =: GBlob defaultUser,
-        "canister_id" =: GBlob cid,
-        "method_name" =: GText "query",
-        "arg" =: GBlob (run ((debugPrint $ i2b $ int ctr) >>> prog))
-      ]
+  let cbor =
+        rec
+          [ "request_type" =: GText "query",
+            "sender" =: GBlob defaultUser,
+            "canister_id" =: GBlob cid,
+            "method_name" =: GText "query",
+            "arg" =: GBlob (run ((debugPrint $ i2b $ int ctr) >>> prog))
+          ]
+  (rid, res) <- queryCBOR cid cbor
+  res <- queryResponse res
+  return (rid, res)
 
 query :: (HasCallStack, HasAgentConfig) => Blob -> Prog -> IO Blob
-query cid prog = query' cid prog >>= isReply
+query cid prog = query' cid prog >>= isQueryReply cid
 
 query_ :: (HasCallStack, HasAgentConfig) => Blob -> Prog -> IO ()
 query_ cid prog = query cid prog >>= is ""
@@ -384,7 +387,7 @@ getTestFile file =
 
 getTestWasm :: FilePath -> IO BS.ByteString
 getTestWasm base = do
-  fp <- getTestFile $ base <.> "wasm"
+  fp <- getTestFile base
   BS.readFile fp
 
 -- * Helper patterns

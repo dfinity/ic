@@ -32,7 +32,7 @@ use tokio::{
 use tonic::{transport::Channel, Code};
 use tower::util::Oneshot;
 
-/// This client is returend if we fail to make connection to canister http adapter.
+/// This client is returned if we fail to make connection to canister http adapter.
 pub struct BrokenCanisterHttpClient {}
 
 impl NonBlockingChannel<CanisterHttpRequest> for BrokenCanisterHttpClient {
@@ -497,7 +497,7 @@ mod tests {
     /// Test canister http client send/receive without transform.  
     #[tokio::test]
     async fn test_client_happy_path() {
-        // Define response from adpater. This should also be returned by the client.
+        // Define response from adapter. This should also be returned by the client.
         let adapter_body = "<html>
             <body>
             <h1>Hello, World!</h1>
@@ -1040,7 +1040,7 @@ mod tests {
             ],
         );
         if let CanisterHttpResponseContent::Success(content) = x.content {
-            // Substract 50Kb for consensus overhead (CallbackID, Time, CanisterId, CanisterHttpResponseProof)
+            // Subtract 50Kb for consensus overhead (CallbackID, Time, CanisterId, CanisterHttpResponseProof)
             assert!(content.len() <= MAX_CANISTER_HTTP_PAYLOAD_SIZE - 50 * 1024);
         } else {
             panic!("build_mock_canister_http_response_success should not return this case");

@@ -9,7 +9,10 @@ edition = "2021"
 path = "src/lib.rs"
 
 [dependencies]
+ic-rosetta-api = { path = "../../../" }
 ic-icrc-rosetta = { path = "../" }
 anyhow = { version = "1.0", default-features = false }
-reqwest = { version = "0.11.11", features = ["json"] }
+reqwest = { workspace = true }
+serde = { workspace = true }
 url = "2.2.1"
+rosetta-core = {path = "../../../rosetta_core"}

@@ -1,11 +1,11 @@
 [package]
 name = "ic-crypto-internal-sha2"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-openssl = "0.10.55"
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-sha2 = "0.9.1"
+sha2 = "0.10"
 

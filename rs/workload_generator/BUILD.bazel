@@ -1,5 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+load("@rules_rust//rust:defs.bzl", "rust_binary")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -7,6 +7,7 @@ DEPENDENCIES = [
     "//rs/canister_client",
     "//rs/canister_client/sender",
     "//rs/config",
+    "//rs/crypto/sha2",
     "//rs/monitoring/metrics",
     "//rs/http_endpoints/metrics",
     "//rs/test_utilities/identity",
@@ -24,7 +25,7 @@ DEPENDENCIES = [
     "@crate_index//:itertools",
     "@crate_index//:lazy_static",
     "@crate_index//:prometheus",
-    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:slog",
@@ -46,7 +47,7 @@ cargo_build_script(
     srcs = ["build.rs"],
     aliases = ALIASES,
     data = [],  # build script data (e.g. template files) goes here
-    version = "0.8.0",
+    version = "0.9.0",
     deps = BUILD_DEPENDENCIES,
 )
 

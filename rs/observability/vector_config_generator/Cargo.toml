@@ -18,13 +18,13 @@ ic-registry-local-registry = { path = "../../registry/local_registry" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-registry-nns-data-provider = { path = "../../registry/nns_data_provider" }
 regex = "1.7.0"
-serde = { version = "1.0.115", features = ["derive"] }
-serde_json = "1.0.54"
+serde = { workspace = true }
+serde_json = { workspace = true }
 service-discovery = { path = "../service_discovery" }
-slog = { version = "2.5.2", features = ["nested-values"] }
+slog = { workspace = true }
 slog-async = { version = "2.5", features = ["nested-values"] }
 slog-term = "2.6.0"
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { workspace = true }
 url = { version = "2.1.1", features = ["serde"] }
 config_writer_common = { path = "../config_writer_common" }
 ic-http-endpoints-metrics = { path = "../../http_endpoints/metrics" }

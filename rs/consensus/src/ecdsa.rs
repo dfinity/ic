@@ -168,8 +168,6 @@
 //!   signing request" is present) and available 4-tuples is not empty, remove
 //!   the first 4-tuple from the available 4 tuples and make an entry in ongoing
 //!   signatures with the signing request and the 4-tuple.
-// TODO: Remove after implementing functionality
-#![allow(dead_code)]
 
 use crate::consensus::metrics::{
     timed_call, EcdsaClientMetrics, EcdsaGossipMetrics,
@@ -183,17 +181,17 @@ use crate::ecdsa::utils::EcdsaBlockReaderImpl;
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::RoundRobin;
 use ic_interfaces::{
-    artifact_pool::{ChangeSetProducer, PriorityFnAndFilterProducer},
     consensus_pool::ConsensusBlockCache,
     crypto::IDkgProtocol,
     ecdsa::{EcdsaChangeSet, EcdsaPool},
+    p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
 };
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    artifact::{EcdsaMessageAttribute, EcdsaMessageId, Priority, PriorityFn},
+    artifact::{EcdsaMessageId, Priority, PriorityFn},
     artifact_kind::EcdsaArtifact,
-    consensus::ecdsa::{EcdsaBlockReader, RequestId},
+    consensus::ecdsa::{EcdsaBlockReader, EcdsaMessageAttribute, RequestId},
     crypto::canister_threshold_sig::idkg::IDkgTranscriptId,
     malicious_flags::MaliciousFlags,
     Height, NodeId, SubnetId,
@@ -210,6 +208,8 @@ pub(crate) mod payload_verifier;
 pub(crate) mod pre_signer;
 pub(crate) mod signer;
 pub mod stats;
+#[cfg(test)]
+pub(crate) mod test_utils;
 pub(crate) mod utils;
 
 pub use payload_builder::make_bootstrap_summary;
@@ -226,7 +226,6 @@ pub const INACTIVE_TRANSCRIPT_PURGE_SECS: Duration = Duration::from_secs(60);
 /// `EcdsaImpl` is the consensus component responsible for processing threshold
 /// ECDSA payloads.
 pub struct EcdsaImpl {
-    subnet_id: SubnetId,
     pre_signer: Box<dyn EcdsaPreSigner>,
     signer: Box<dyn EcdsaSigner>,
     complaint_handler: Box<dyn EcdsaComplaintHandler>,
@@ -242,7 +241,6 @@ impl EcdsaImpl {
     /// Builds a new threshold ECDSA component
     pub fn new(
         node_id: NodeId,
-        subnet_id: SubnetId,
         consensus_block_cache: Arc<dyn ConsensusBlockCache>,
         crypto: Arc<dyn ConsensusCrypto>,
         metrics_registry: MetricsRegistry,
@@ -251,7 +249,6 @@ impl EcdsaImpl {
     ) -> Self {
         let pre_signer = Box::new(EcdsaPreSignerImpl::new(
             node_id,
-            subnet_id,
             consensus_block_cache.clone(),
             crypto.clone(),
             metrics_registry.clone(),
@@ -273,7 +270,6 @@ impl EcdsaImpl {
             logger.clone(),
         ));
         Self {
-            subnet_id,
             pre_signer,
             signer,
             complaint_handler,

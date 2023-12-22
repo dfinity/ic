@@ -18,12 +18,12 @@ use ic_test_utilities::{
     types::ids::node_test_id,
 };
 use ic_types::{
-    artifact::{ConsensusMessage, ConsensusMessageId},
+    artifact::ConsensusMessageId,
     consensus::{
-        dkg::Summary, Block, BlockPayload, BlockProposal, ConsensusMessageHashable, Finalization,
-        FinalizationContent, FinalizationShare, Notarization, NotarizationContent,
-        NotarizationShare, RandomBeacon, RandomBeaconContent, RandomBeaconShare, RandomTape,
-        RandomTapeContent, RandomTapeShare,
+        dkg::Summary, Block, BlockPayload, BlockProposal, ConsensusMessage,
+        ConsensusMessageHashable, Finalization, FinalizationContent, FinalizationShare,
+        Notarization, NotarizationContent, NotarizationShare, RandomBeacon, RandomBeaconContent,
+        RandomBeaconShare, RandomTape, RandomTapeContent, RandomTapeShare,
     },
     crypto::{ThresholdSigShare, ThresholdSigShareOf},
     signature::*,
@@ -200,7 +200,7 @@ where
             let range_to_delete = HeightRange::new(Height::from(0), finalized_height.decrement());
 
             // Only notarization shares and finalization shares should be deleted
-            let expected_count = vec![
+            let expected_count = [
                 count_total(pool.random_beacon_share()),
                 count_total(pool.notarization_share())
                     - count(pool.notarization_share(), &range_to_delete),

@@ -1,10 +1,10 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
-load("@io_bazel_rules_docker//docker/package_managers:download_pkgs.bzl", "download_pkgs")
-load("@io_bazel_rules_docker//docker/package_managers:install_pkgs.bzl", "install_pkgs")
-load(":system_tests.bzl", "uvm_config_image")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@bazel_skylib//rules:run_binary.bzl", "run_binary")
+load("@io_bazel_rules_docker//docker/package_managers:download_pkgs.bzl", "download_pkgs")
+load("@io_bazel_rules_docker//docker/package_managers:install_pkgs.bzl", "install_pkgs")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//rs/tests:common.bzl", "DEPENDENCIES", "MACRO_DEPENDENCIES", "mainnet_nns_canisters", "mainnet_sns_canisters", "qualifying_nns_canisters", "qualifying_sns_canisters", "symlink_dir", "symlink_dirs", "tip_nns_canisters", "tip_sns_canisters")
+load(":system_tests.bzl", "uvm_config_image")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -70,12 +70,8 @@ uvm_config_image(
         "//rs/tests:activate-systest-uvm-config",
         "@ubuntu_test_runtime//image",
     ],
-    mode = "664",
-    modes = {
-        "activate": "775",
-    },
     remap_paths = {
-        "/activate-systest-uvm-config": "/activate",
+        "activate-systest-uvm-config": "activate",
     },
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
@@ -96,16 +92,6 @@ exports_files([
 filegroup(
     name = "grafana_dashboards",
     srcs = glob(["dashboards/**/*"]),
-)
-
-sh_binary(
-    name = "create_universal_vm_config_image_sh",
-    srcs = ["create-universal-vm-config-image.sh"],
-)
-
-sh_binary(
-    name = "create_universal_vm_config_image_from_tar_sh",
-    srcs = ["create-universal-vm-config-image-from-tar.sh"],
 )
 
 tip_nns_canisters(
@@ -174,12 +160,8 @@ uvm_config_image(
         ":src/btc_integration/btc_activate.sh",
         "@bitcoind//image",
     ],
-    mode = "664",
-    modes = {
-        "activate": "775",
-    },
     remap_paths = {
-        "/btc_activate.sh": "/activate",
+        "btc_activate.sh": "activate",
     },
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
@@ -208,14 +190,10 @@ uvm_config_image(
         "//ic-os/guestos:rootfs/dev-certs/canister_http_test_ca.key",
         "//rs/tests/httpbin-rs:httpbin_image.tar",
     ],
-    mode = "664",
-    modes = {
-        "activate": "775",
-    },
     remap_paths = {
-        "/universal_vm_activation.sh": "/activate",
-        "/canister_http_test_ca.cert": "/cert.pem",
-        "/canister_http_test_ca.key": "/key.pem",
+        "universal_vm_activation.sh": "activate",
+        "canister_http_test_ca.cert": "cert.pem",
+        "canister_http_test_ca.key": "key.pem",
     },
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
@@ -280,25 +258,9 @@ symlink_dirs(
     target_compatible_with = ["@platforms//os:linux"],
     targets = {
         "//hs/spec_compliance:ic-ref-test": "bin",
-        "//rs/universal_canister/impl:universal_canister": "test-data",
+        "//rs/universal_canister/impl:universal_canister.wasm.gz": "test-data",
         "//rs/tests:wabt-tests": "test-data",
     },
-)
-
-uvm_config_image(
-    name = "nns_dapp_specs_uvm_config_image",
-    srcs = [
-        ":activate-systest-uvm-config",
-        "//rs/tests/replicated_tests:nns_dapp_specs_image.tar",
-    ],
-    mode = "664",
-    modes = {
-        "activate": "775",
-    },
-    remap_paths = {
-        "/activate-systest-uvm-config": "/activate",
-    },
-    tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
 
 copy_file(
@@ -339,8 +301,6 @@ uvm_config_image(
         ":src/custom_domains_integration/pebble_cache.py",
         ":src/custom_domains_integration/cloudflare_api.py",
     ],
-    mode = "664",
-    modes = {"activate": "775"},
-    remap_paths = {"/activate.sh": "/activate"},
+    remap_paths = {"activate.sh": "activate"},
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )

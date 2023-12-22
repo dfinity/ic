@@ -1,4 +1,5 @@
 load("@rules_haskell//haskell:defs.bzl", "haskell_binary", "haskell_library")
+load("//bazel:candid.bzl", "did_git_test")
 
 STACK_DEPS = [
     "@stackage//:aeson",
@@ -134,6 +135,11 @@ haskell_binary(
     ],
 )
 
+did_git_test(
+    name = "ic_did_git_test",
+    did = "ic.did",
+)
+
 haskell_library(
     name = "IC-Crypto-BLS",
     srcs = ["src/IC/Crypto/BLS.hsc"],
@@ -141,10 +147,10 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
-        ":IC-Types",
         ":IC-Id-Forms",
+        ":IC-Types",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -155,10 +161,10 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
-        ":IC-Types",
         ":IC-Id-Forms",
+        ":IC-Types",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -169,9 +175,9 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
         ":IC-Hash",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -182,11 +188,11 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
         ":IC-Constants",
         ":IC-Management",
         ":IC-Types",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -197,9 +203,9 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
         ":IC-HashTree",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -210,9 +216,9 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
         ":IC-Types",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -223,8 +229,8 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
         "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -235,15 +241,15 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
-        ":IC-Crypto-Ed25519",
-        ":IC-Crypto-DER",
-        ":IC-Crypto-WebAuthn",
-        ":IC-Crypto-ECDSA",
-        ":IC-Crypto-Secp256k1",
         ":IC-Crypto-BLS",
         ":IC-Crypto-CanisterSig",
+        ":IC-Crypto-DER",
+        ":IC-Crypto-ECDSA",
+        ":IC-Crypto-Ed25519",
+        ":IC-Crypto-Secp256k1",
+        ":IC-Crypto-WebAuthn",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -254,11 +260,11 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
         ":IC-HTTP-GenR",
         ":IC-Hash",
         ":IC-Utils",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -269,9 +275,9 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
         ":IC-HTTP-GenR",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -282,8 +288,8 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
         "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -294,9 +300,9 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
         ":IC-HTTP-GenR",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -307,8 +313,8 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
         "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -319,10 +325,10 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
         ":IC-CBOR-Patterns",
         ":IC-HashTree",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -333,8 +339,8 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
         "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -345,9 +351,9 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
         ":IC-Types",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -358,10 +364,10 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
         ":IC-Types",
         ":IC-Utils",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -372,13 +378,13 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
-        ":IC-Crypto-DER_BLS",
-        ":IC-Types",
         ":IC-Certificate",
         ":IC-Certificate-CBOR",
+        ":IC-Crypto-DER_BLS",
         ":IC-HashTree",
+        ":IC-Types",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -389,13 +395,13 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
-        ":IC-Certificate",
         ":IC-CBOR-Parser",
         ":IC-CBOR-Patterns",
+        ":IC-Certificate",
         ":IC-HashTree",
         ":IC-HashTree-CBOR",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -406,8 +412,8 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
         "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -418,8 +424,8 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
         "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -430,8 +436,8 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
         "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -442,9 +448,9 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
         ":IC-Crypto-DER-Decode",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -455,10 +461,10 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
-        ":IC-Crypto-DER-Decode",
         ":IC-Crypto-BLS",
+        ":IC-Crypto-DER-Decode",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -469,14 +475,14 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
-        ":IC-HTTP-CBOR",
         ":IC-CBOR-Parser",
+        ":IC-Crypto-DER-Decode",
+        ":IC-HTTP-CBOR",
         ":IC-HTTP-GenR-Parse",
         ":IC-Hash",
-        ":IC-Crypto-DER-Decode",
         ":IC-Utils",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -487,17 +493,17 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
-        ":IC-CBOR-Patterns",
         ":IC-CBOR-Parser",
-        ":IC-Types",
+        ":IC-CBOR-Patterns",
         ":IC-Certificate",
         ":IC-Certificate-CBOR",
         ":IC-Certificate-Validate",
         ":IC-Hash",
         ":IC-HashTree",
         ":IC-HashTree-CBOR",
+        ":IC-Types",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -508,8 +514,8 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
         "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -520,9 +526,9 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
         ":SourceId",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -533,8 +539,8 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
         "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -545,11 +551,11 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
         ":IC-HTTP-CBOR",
         ":IC-HTTP-GenR",
         ":IC-Types",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -560,9 +566,9 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
         ":IC-CBOR-Patterns",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -573,8 +579,8 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
         "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -585,8 +591,8 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
         "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -597,9 +603,9 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
         ":IC-Crypto-Secp256k1",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -610,30 +616,30 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
-        ":IC-Management",
-        ":IC-Types",
-        ":IC-HTTP-GenR",
-        ":IC-HTTP-RequestId",
+        ":IC-Certificate",
         ":IC-Crypto",
         ":IC-Crypto-CanisterSig",
         ":IC-Crypto-DER",
+        ":IC-HTTP-GenR",
+        ":IC-HTTP-RequestId",
+        ":IC-Hash",
+        ":IC-HashTree",
         ":IC-Id-Forms",
         ":IC-Id-Fresh",
-        ":IC-Test-Universal",
-        ":IC-HashTree",
-        ":IC-Certificate",
-        ":IC-Hash",
+        ":IC-Management",
         ":IC-Test-Agent",
-        ":IC-Test-Agent-UnsafeCalls",
         ":IC-Test-Agent-SafeCalls",
+        ":IC-Test-Agent-UnsafeCalls",
         ":IC-Test-Agent-UserCalls",
-        ":IC-Test-Spec-Utils",
+        ":IC-Test-Spec-CanisterHistory",
+        ":IC-Test-Spec-CanisterVersion",
         ":IC-Test-Spec-HTTP",
         ":IC-Test-Spec-Timer",
-        ":IC-Test-Spec-CanisterVersion",
-        ":IC-Test-Spec-CanisterHistory",
+        ":IC-Test-Spec-Utils",
+        ":IC-Test-Universal",
+        ":IC-Types",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -644,9 +650,9 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
         ":IC-Crypto-WebAuthn",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -657,18 +663,18 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
+        ":IC-Crypto",
+        ":IC-HTTP-CBOR",
         ":IC-HTTP-GenR",
         ":IC-HTTP-RequestId",
-        ":IC-HTTP-CBOR",
-        ":IC-Crypto",
+        ":IC-Management",
+        ":IC-Test-Agent",
+        ":IC-Test-Agent-SafeCalls",
+        ":IC-Test-Agent-UnsafeCalls",
         ":IC-Test-Universal",
         ":IC-Utils",
-        ":IC-Test-Agent",
-        ":IC-Test-Agent-UnsafeCalls",
-        ":IC-Test-Agent-SafeCalls",
-        ":IC-Management",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -679,17 +685,17 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
-        ":IC-Types",
         ":IC-Hash",
         ":IC-Management",
-        ":IC-Test-Universal",
         ":IC-Test-Agent",
-        ":IC-Test-Agent-UnsafeCalls",
         ":IC-Test-Agent-SafeCalls",
+        ":IC-Test-Agent-UnsafeCalls",
         ":IC-Test-Agent-UserCalls",
         ":IC-Test-Spec-Utils",
+        ":IC-Test-Universal",
+        ":IC-Types",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -700,18 +706,18 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
-        ":IC-Management",
-        ":IC-Types",
         ":IC-Constants",
         ":IC-Id-Fresh",
-        ":IC-Test-Universal",
+        ":IC-Management",
         ":IC-Test-Agent",
-        ":IC-Test-Agent-UnsafeCalls",
         ":IC-Test-Agent-SafeCalls",
+        ":IC-Test-Agent-UnsafeCalls",
         ":IC-Test-Spec-Utils",
+        ":IC-Test-Universal",
+        ":IC-Types",
         ":IC-Utils",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -722,14 +728,14 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
-        ":IC-Test-Universal",
         ":IC-Test-Agent",
-        ":IC-Test-Agent-UnsafeCalls",
         ":IC-Test-Agent-SafeCalls",
+        ":IC-Test-Agent-UnsafeCalls",
         ":IC-Test-Agent-UserCalls",
         ":IC-Test-Spec-Utils",
+        ":IC-Test-Universal",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -740,13 +746,13 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
         ":IC-Management",
-        ":IC-Test-Universal",
         ":IC-Test-Agent",
         ":IC-Test-Agent-UnsafeCalls",
         ":IC-Test-Spec-Utils",
+        ":IC-Test-Universal",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -757,9 +763,9 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
         ":IC-Crypto-BLS",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -770,9 +776,9 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
         ":IC-Crypto-ECDSA",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -783,24 +789,26 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
-        ":IC-Version",
-        ":IC-HTTP-GenR",
-        ":IC-HTTP-GenR-Parse",
-        ":IC-HTTP-CBOR",
-        ":IC-HTTP-RequestId",
-        ":IC-Management",
+        ":IC-Certificate",
+        ":IC-Certificate-CBOR",
+        ":IC-Certificate-Value",
         ":IC-Crypto",
         ":IC-Crypto-DER",
         ":IC-Crypto-DER_BLS",
+        ":IC-Crypto-Ed25519",
+        ":IC-HTTP-CBOR",
+        ":IC-HTTP-GenR",
+        ":IC-HTTP-GenR-Parse",
+        ":IC-HTTP-RequestId",
+        ":IC-HashTree",
         ":IC-Id-Forms",
         ":IC-Id-Fresh",
+        ":IC-Management",
         ":IC-Test-Options",
-        ":IC-HashTree",
-        ":IC-Certificate",
-        ":IC-Certificate-Value",
-        ":IC-Certificate-CBOR",
+        ":IC-Types",
+        ":IC-Version",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -811,10 +819,10 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
         ":IC-HashTree",
         ":IC-HashTree-CBOR",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -825,8 +833,8 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
         "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -837,12 +845,12 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
         ":IC-Constants",
         ":IC-Crypto",
         ":IC-Id-Forms",
         ":IC-Types",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -853,14 +861,14 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
-        ":IC-Management",
         ":IC-Id-Forms",
+        ":IC-Management",
         ":IC-Test-Agent",
+        ":IC-Test-Agent-Calls",
         ":IC-Types",
         ":IC-Utils",
-        ":IC-Test-Agent-Calls",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -871,14 +879,14 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
-        ":IC-Management",
         ":IC-Id-Forms",
+        ":IC-Management",
         ":IC-Test-Agent",
+        ":IC-Test-Agent-Calls",
         ":IC-Types",
         ":IC-Utils",
-        ":IC-Test-Agent-Calls",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -889,11 +897,11 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
-        ":IC-Management",
         ":IC-Id-Forms",
+        ":IC-Management",
         ":IC-Test-Agent",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -904,12 +912,12 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
-        "@haskell-candid//:candid",
-        ":IC-Management",
         ":IC-Id-Forms",
+        ":IC-Management",
         ":IC-Test-Agent",
         ":IC-Test-Agent-Calls",
+        "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )
 
@@ -920,7 +928,7 @@ haskell_library(
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [
-        "@miracl-core//:lib",
         "@haskell-candid//:candid",
+        "@miracl-core//:lib",
     ],
 )

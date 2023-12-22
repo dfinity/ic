@@ -1,0 +1,17 @@
+[package]
+name = "rosetta-core"
+description = "Build Once. Integrate Your Blockchain Everywhere. Core Package "
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+serde = { workspace = true }
+serde_cbor = { workspace = true }
+serde_derive = "1.0"
+serde_json = { workspace = true }
+serde_with = { workspace = true }

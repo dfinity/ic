@@ -1,12 +1,16 @@
 [package]
 name = "ic-interfaces"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 async-trait = "0.1.36"
-derive_more = { git = "https://github.com/dfinity-lab/derive_more", branch = "master" }
+derive_more = { git = "https://github.com/dfinity-lab/derive_more", rev = "9f1b894e6fde640da4e9ea71a8fc0e4dd98d01da" }
 ic-base-types = { path = "../types/base_types" }
+ic-crypto-interfaces-sig-verification = { path = "../crypto/interfaces/sig_verification" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-error-types = { path = "../types/error_types" }
 ic-ic00-types = { path = "../types/ic00_types" }
@@ -18,13 +22,13 @@ ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
-prost = "0.11.0"
+prost = { workspace = true }
 rand = "0.8"
-serde = { version = "1.0.99", features = ["derive"] }
-serde_bytes = "0.11"
-tower = { version = "0.4.11", features = ["util", "limit"] }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+tower = { workspace = true }
 thiserror = "1.0"
 
 [dev-dependencies]
-ic-crypto-internal-csp-proptest-utils = {path = "../crypto/internal/crypto_service_provider/csp_proptest_utils"}
+ic-crypto-internal-csp-proptest-utils = { path = "../crypto/internal/crypto_service_provider/csp_proptest_utils" }
 proptest = "1.0"

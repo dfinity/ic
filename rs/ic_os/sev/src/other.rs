@@ -1,15 +1,23 @@
+use crate::{SnpError, ValidateAttestationError, ValidateAttestedStream};
 use async_trait::async_trait;
-use ic_icos_sev_interfaces::{ValidateAttestationError, ValidateAttestedStream};
+use ic_base_types::{NodeId, RegistryVersion, SubnetId};
 use ic_interfaces_registry::RegistryClient;
-use ic_types::{NodeId, RegistryVersion};
+use ic_logger::{info, ReplicaLogger};
 use std::sync::Arc;
 use tokio::io::{AsyncRead, AsyncWrite};
 
-pub struct Sev {}
+pub struct Sev {
+    log: ReplicaLogger,
+}
 
 impl Sev {
-    pub fn new(_node_id: NodeId, _registry: Arc<dyn RegistryClient>) -> Self {
-        Sev {}
+    pub fn new(
+        _node_id: NodeId,
+        _subnet_id: SubnetId,
+        _registry: Arc<dyn RegistryClient>,
+        log: ReplicaLogger,
+    ) -> Self {
+        Sev { log }
     }
 }
 
@@ -22,9 +30,19 @@ where
         &self,
         stream: S,
         _peer: NodeId,
-        _latest_registry_version: RegistryVersion,
-        _earliest_registry_version: RegistryVersion,
+        _registry_version: RegistryVersion,
     ) -> Result<S, ValidateAttestationError> {
+        info!(
+            self.log,
+            "SEV only works on linux. No SEV attestation is performed."
+        );
         Ok(stream)
     }
+}
+
+/// For non linux version of guest, return None
+pub fn get_chip_id() -> Result<Vec<u8>, SnpError> {
+    Err(SnpError::SnpNotEnabled {
+        description: "Sev-snp is only available on linux".into(),
+    })
 }

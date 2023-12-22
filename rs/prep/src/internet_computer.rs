@@ -8,17 +8,17 @@
 use std::{
     collections::BTreeMap,
     convert::TryInto,
-    fmt,
     fs::{self, File},
     io,
     path::{Path, PathBuf},
     str::FromStr,
 };
 
-use openssl::pkey;
 use serde_json::Value;
 use thiserror::Error;
 use url::Url;
+use x509_cert::der; // re-export of der crate
+use x509_cert::spki; // re-export of spki crate
 
 use ic_interfaces_registry::{
     RegistryDataProvider, RegistryTransportRecord, ZERO_REGISTRY_VERSION,
@@ -76,7 +76,7 @@ pub const IC_ROOT_PUB_KEY_PATH: &str = "nns_public_key.pem";
 ///
 /// For testing purposes, the bootstrapped nodes can be configured to have a
 /// node operator. The corresponding allowance is the number of configured
-/// initial nodes mulitplied by this value.
+/// initial nodes multiplied by this value.
 pub const INITIAL_NODE_ALLOWANCE_MULTIPLIER: usize = 2;
 
 pub const INITIAL_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
@@ -173,21 +173,6 @@ impl TopologyConfig {
     }
 }
 
-#[derive(Clone)]
-pub struct NodeOperatorPublicKey {
-    pkey_wrapper: pkey::PKey<pkey::Public>,
-}
-
-// We need to implement a wrapper and the debug trait since PKey does not
-// implement Debug
-impl fmt::Debug for NodeOperatorPublicKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("NodeOperatorPublicKey")
-            .field("pkey_wrapper", &self.pkey_wrapper.public_key_to_der())
-            .finish()
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct NodeOperatorEntry {
     _name: String,
@@ -209,7 +194,7 @@ impl From<NodeOperatorEntry> for NodeOperatorRecord {
             node_provider_principal_id: item
                 .node_provider_principal_id
                 .map(|x| x.to_vec())
-                .unwrap_or_else(Vec::new),
+                .unwrap_or_default(),
             dc_id: item.dc_id.to_lowercase(),
             rewardable_nodes: item.rewardable_nodes,
             ipv6: item.ipv6,
@@ -294,12 +279,6 @@ pub enum InitializeError {
         source: serde_json::Error,
     },
 
-    #[error("OpenSSL error: {source}")]
-    OpenSslError {
-        #[from]
-        source: openssl::error::ErrorStack,
-    },
-
     #[error("principal did not parse: {source}")]
     PrincipalParse {
         #[from]
@@ -352,7 +331,7 @@ impl IcConfig {
     pub fn new<P: AsRef<Path>>(
         target_dir: P,
         topology_config: TopologyConfig,
-        replica_version_id: Option<ReplicaVersion>,
+        replica_version_id: ReplicaVersion,
         generate_subnet_records: bool,
         nns_subnet_index: Option<u64>,
         release_package_url: Option<Url>,
@@ -366,7 +345,7 @@ impl IcConfig {
         Self {
             target_dir: PathBuf::from(target_dir.as_ref()),
             topology_config,
-            initial_replica_version_id: replica_version_id.unwrap_or_default(),
+            initial_replica_version_id: replica_version_id,
             generate_subnet_records,
             nns_subnet_index,
             initial_release_package_url: release_package_url,
@@ -788,7 +767,18 @@ impl IcConfig {
                     }),
                 }?;
                 let provider_buf: Vec<u8> = fs::read(provider_path.as_path())?;
-                let _ = pkey::PKey::public_key_from_der(&provider_buf)?;
+
+                // Sanity check that public key is in DER format.
+                use der::Decode;
+                spki::SubjectPublicKeyInfoOwned::from_der(&provider_buf).map_err(|e| {
+                    InitializeError::IoError {
+                        source: io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            format!("input is not a DER-encoded X.509 SubjectPublicKeyInfo (SPKI): {e}."),
+                        ),
+                    }
+                })?;
+
                 Some(PrincipalId::new_self_authenticating(&provider_buf))
             } else {
                 None

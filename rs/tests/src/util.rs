@@ -13,7 +13,10 @@ use futures::FutureExt;
 use ic_agent::export::Principal;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::{
-    agent::{http_transport::ReqwestHttpReplicaV2Transport, RejectCode, RejectResponse},
+    agent::{
+        http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport, RejectCode,
+        RejectResponse,
+    },
     Agent, AgentError, Identity, RequestId,
 };
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
@@ -467,6 +470,17 @@ impl<'a> UniversalCanister<'a> {
             .await
     }
 
+    pub async fn replicated_query<P: Into<Vec<u8>>>(
+        &self,
+        payload: P,
+    ) -> Result<Vec<u8>, AgentError> {
+        self.agent
+            .update(&self.canister_id, "query")
+            .with_arg(payload.into())
+            .call_and_wait()
+            .await
+    }
+
     pub async fn composite_query<P: Into<Vec<u8>>>(
         &self,
         payload: P,
@@ -603,9 +617,10 @@ impl<'a> MessageCanister<'a> {
             cycles: cycles.get(),
             payload,
         };
+        let arg = Encode!(&params).unwrap();
         self.agent
             .update(&self.canister_id, "forward")
-            .with_arg(&Encode!(&params).unwrap())
+            .with_arg(arg)
             .call_and_wait()
             .await
             .map(|bytes| Decode!(&bytes, Vec<u8>).unwrap())
@@ -631,7 +646,7 @@ impl<'a> MessageCanister<'a> {
     pub async fn try_store_msg<P: Into<String>>(&self, msg: P) -> Result<(), AgentError> {
         self.agent
             .update(&self.canister_id, "store")
-            .with_arg(&Encode!(&msg.into()).unwrap())
+            .with_arg(Encode!(&msg.into()).unwrap())
             .call_and_wait()
             .await
             .map(|_| ())
@@ -646,7 +661,7 @@ impl<'a> MessageCanister<'a> {
     pub async fn try_read_msg(&self) -> Result<Option<String>, String> {
         self.agent
             .query(&self.canister_id, "read")
-            .with_arg(&Encode!(&()).unwrap())
+            .with_arg(Encode!(&()).unwrap())
             .call()
             .await
             .map_err(|e| e.to_string())
@@ -716,7 +731,6 @@ pub async fn agent_with_identity_mapping(
 ) -> Result<Agent, AgentError> {
     let builder = reqwest::Client::builder()
         .timeout(AGENT_REQUEST_TIMEOUT)
-        .danger_accept_invalid_hostnames(true)
         .danger_accept_invalid_certs(true);
 
     let builder = match (
@@ -822,6 +836,38 @@ pub(crate) fn assert_reject<T: std::fmt::Debug>(res: Result<T, AgentError>, code
                 "Expect code {:?} did not match {:?}. Reject message: {}",
                 code, reject_code, reject_message
             ),
+            others => panic!(
+                "Expected call to fail with a replica error but got {:?} instead",
+                others
+            ),
+        },
+    }
+}
+
+pub(crate) fn assert_reject_msg<T: std::fmt::Debug>(
+    res: Result<T, AgentError>,
+    code: RejectCode,
+    partial_message: &str,
+) {
+    match res {
+        Ok(val) => panic!("Expected call to fail but it succeeded with {:?}", val),
+        Err(agent_error) => match agent_error {
+            AgentError::ReplicaError(RejectResponse {
+                reject_code,
+                reject_message,
+                ..
+            }) => {
+                assert_eq!(
+                    code, reject_code,
+                    "Expect code {:?} did not match {:?}. Reject message: {}",
+                    code, reject_code, reject_message
+                );
+                assert!(
+                    reject_message.contains(partial_message),
+                    "Actual reject message: {}",
+                    reject_message
+                );
+            }
             others => panic!(
                 "Expected call to fail with a replica error but got {:?} instead",
                 others
@@ -1187,7 +1233,7 @@ pub(crate) async fn assert_canister_counter_with_retries(
         );
         let res = agent
             .query(canister_id, "read")
-            .with_arg(&payload)
+            .with_arg(payload.clone())
             .call()
             .await
             .unwrap();
@@ -1433,11 +1479,11 @@ pub fn assert_malicious(
         )
         .await
         .expect("Timed out while waiting for malicious logs")
-        .expect("Not all malicious nodes produced logs containting the malicious signal.");
+        .expect("Not all malicious nodes produced logs containing the malicious signal.");
     })
 }
 
-/// Malicous node logs have to be checked individually, because all nodes have to signal malice.
+/// Malicious node logs have to be checked individually, because all nodes have to signal malice.
 async fn assert_nodes_malicious_parallel(
     nodes: impl Iterator<Item = IcNodeSnapshot>,
     signals: Vec<&str>,
@@ -1456,7 +1502,7 @@ async fn assert_nodes_malicious_parallel(
     let result = join_all(futures).await.iter().all(|x| x.is_ok());
     match result {
         true => Ok(()),
-        false => Err("Not all malicious nodes produced logs containting the malicious signal."),
+        false => Err("Not all malicious nodes produced logs containing the malicious signal."),
     }
 }
 
@@ -1573,6 +1619,8 @@ pub(crate) fn create_service_nervous_system_into_params(
         minimum_participants,
         minimum_icp,
         maximum_icp,
+        minimum_direct_participation_icp,
+        maximum_direct_participation_icp,
         minimum_participant_icp,
         maximum_participant_icp,
         neuron_basket_construction_parameters,
@@ -1581,6 +1629,7 @@ pub(crate) fn create_service_nervous_system_into_params(
         start_time,
         duration,
         neurons_fund_investment_icp: _,
+        neurons_fund_participation: _,
     } = create_service_nervous_system
         .swap_parameters
         .clone()
@@ -1611,6 +1660,10 @@ pub(crate) fn create_service_nervous_system_into_params(
             .ok_or("`maximum_icp` should not be None")?
             .e8s
             .ok_or("`e8`s should not be None")?,
+        min_direct_participation_icp_e8s: minimum_direct_participation_icp
+            .and_then(|minimum_direct_participation_icp| minimum_direct_participation_icp.e8s),
+        max_direct_participation_icp_e8s: maximum_direct_participation_icp
+            .and_then(|maximum_direct_participation_icp| maximum_direct_participation_icp.e8s),
         min_participant_icp_e8s: minimum_participant_icp
             .ok_or("`minimum_participant_icp` should not be None")?
             .e8s

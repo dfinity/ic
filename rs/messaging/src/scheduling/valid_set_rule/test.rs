@@ -767,7 +767,7 @@ fn management_message_with_invalid_payload_is_not_inducted() {
     let mut state = ReplicatedStateBuilder::new().build();
     let ingress = SignedIngressBuilder::new()
         .canister_id(IC_00)
-        .method_name("set_controller")
+        .method_name("update_settings")
         .method_payload(vec![1, 2, 3]) // invalid
         .build()
         .into();
@@ -938,7 +938,7 @@ fn ingress_history_max_messages_impl(subnet_type: SubnetType) {
                 assert_inducted_ingress_messages_eq(
                     metric_vec(&[
                         (&[(LABEL_STATUS, LABEL_VALUE_SUCCESS)], 3),
-                        (&[(LABEL_STATUS, LABEL_VALUE_QUEUE_FULL)], 1),
+                        (&[(LABEL_STATUS, LABEL_VALUE_INGRESS_HISTORY_FULL)], 1),
                     ]),
                     &metrics_registry,
                 );

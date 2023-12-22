@@ -15,8 +15,15 @@ from common import metrics  # noqa
 FLAGS = gflags.FLAGS
 gflags.DEFINE_boolean("no_prometheus", False, "Set true to disable querying Prometheus.")
 gflags.DEFINE_string(
-    "prometheus_url", "https://ic-metrics-prometheus-staging.ch1-obsstage1.dfinity.network", "The URL to the prometheus service."
+    "prometheus_url", "https://victoria.staging.dfinity.network/select/0/prometheus", "The URL to the prometheus service."
 )
+
+def __json_loads_wrapper(str):
+    try:
+        return json.loads(str)
+    except json.JSONDecodeError:
+        print(colored("Failed to parse JSON received from Prometheus: " + str, "red"))
+        raise
 
 
 class Prometheus(metrics.Metric):
@@ -129,7 +136,7 @@ def get_http_request_rate_for_timestamp(testnet, load_hosts, timestamp):
     )
 
     payload = {"time": timestamp, "query": query}
-    return json.loads(get_prometheus(payload).text)
+    return __json_loads_wrapper(get_prometheus(payload).text)
 
 
 def get_http_request_rate(testnet, load_hosts, t_start, t_end, request_type="query"):
@@ -144,7 +151,7 @@ def get_http_request_rate(testnet, load_hosts, t_start, t_end, request_type="que
     payload = {"start": t_start, "end": t_end, "step": "10s", "query": query}
 
     r = get_prometheus_range(payload)
-    j = json.loads(r.text)
+    j = __json_loads_wrapper(r.text)
 
     return j
 
@@ -153,7 +160,7 @@ def get_execution_query_latency(testnet, load_hosts, t_start, t_end):
     RESOLUTION = "60s"
     assert (
         len(load_hosts) == 1
-        )  # Otherwise we need to SUM things up, as in https://grafana.testnet.dfinity.network/d/GWlsOrn7z/execution-metrics-2-0?editPanel=89&orgId=1&from=now-5m&to=now&var-ic=benchmarksmall01&var-ic_subnet=nmql4-wbx55-wqzep-orbrv-bfvdn-q7qgm-mwquu-zlmc7-xtgvg-olns7-vqe&var-instance=All&var-node_instance=All&var-heatmap_period=$__auto_interval_heatmap_period&refresh=10s
+        )  # Otherwise we need to SUM things up, as in https://grafana.testnet.dfinity.network/d/GWlsOrn7z/execution-metrics-2-0?editPanel=89&orgId=1&from=now-5m&to=now&var-ic=cdslo&var-ic_subnet=nmql4-wbx55-wqzep-orbrv-bfvdn-q7qgm-mwquu-zlmc7-xtgvg-olns7-vqe&var-instance=All&var-node_instance=All&var-heatmap_period=$__auto_interval_heatmap_period&refresh=10s
     q1 = "rate(execution_query_duration_seconds_sum{{{}}}[{}])".format(get_common(load_hosts, testnet), RESOLUTION)
     q2 = "rate(execution_wasm_compile_sum{{{}}}[{}])".format(get_common(load_hosts, testnet), RESOLUTION)
     q3 = "rate(execution_query_duration_seconds_count{{{}}}[{}])".format(get_common(load_hosts, testnet), RESOLUTION)
@@ -163,7 +170,7 @@ def get_execution_query_latency(testnet, load_hosts, t_start, t_end):
     print("Prometheus: {}".format(json.dumps(payload, indent=2)))
 
     r = get_prometheus_range(payload)
-    j = json.loads(r.text)
+    j = __json_loads_wrapper(r.text)
 
     return j
 
@@ -175,7 +182,7 @@ def get_canister_install_rate(testnet, hosts, timestamp):
     q = f'rate(execution_subnet_message_duration_seconds_count{{{common},method_name="ic00_install_code"}}[60s])'
 
     payload = {"time": timestamp, "query": q}
-    return json.loads(get_prometheus(payload).text)
+    return __json_loads_wrapper(get_prometheus(payload).text)
 
 
 def get_num_canisters_installed(testnet, hosts, timestamp):
@@ -185,7 +192,7 @@ def get_num_canisters_installed(testnet, hosts, timestamp):
 
     q = f'replicated_state_registered_canisters{{{common},status="running"}}'
     payload = {"time": timestamp, "query": q}
-    return json.loads(get_prometheus(payload).text)
+    return __json_loads_wrapper(get_prometheus(payload).text)
 
 
 def get_xnet_stream_size(testnet, t_start, t_end):
@@ -194,7 +201,7 @@ def get_xnet_stream_size(testnet, t_start, t_end):
     q = f"mr_stream_messages{{{common}}}"
     payload = {"start": t_start, "end": t_end, "step": "10s", "query": q}
     r = get_prometheus_range(payload)
-    return json.loads(r.text)
+    return __json_loads_wrapper(r.text)
 
 
 def get_http_request_duration(testnet, hosts: List[str], t_start, t_end, request_type="query", step=60):
@@ -215,7 +222,7 @@ def get_http_request_duration(testnet, hosts: List[str], t_start, t_end, request
     }
 
     r = get_prometheus_range(payload)
-    data = json.loads(r.text)
+    data = __json_loads_wrapper(r.text)
 
     print(data)
     r = parse(data)
@@ -242,7 +249,7 @@ def get_finalization_rate(testnet, hosts, t_start, t_end):
     }
     r = get_prometheus(payload)
     print(f"Prometheus response is: {r.text}")
-    return json.loads(r.text)
+    return __json_loads_wrapper(r.text)
 
 
 def get_state_sync_duration(testnet, load_hosts, timestamp):
@@ -257,7 +264,7 @@ def get_state_sync_duration(testnet, load_hosts, timestamp):
     payload = {"time": timestamp, "query": query}
 
     r = get_prometheus(payload)
-    j = json.loads(r.text)
+    j = __json_loads_wrapper(r.text)
 
     return j
 

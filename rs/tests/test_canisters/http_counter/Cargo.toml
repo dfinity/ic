@@ -1,9 +1,10 @@
 [package]
 name = "http_counter"
-version = "0.1.0"
-edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [lib]
 crate-type = ["cdylib"]
@@ -13,4 +14,4 @@ candid = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-certified-map = "0.3.1"
-serde = "1"
+serde = { workspace = true }

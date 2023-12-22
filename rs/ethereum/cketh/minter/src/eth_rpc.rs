@@ -2,10 +2,14 @@
 //! interface.
 
 use crate::address::Address;
+use crate::endpoints::CandidBlockTag;
+use crate::eth_rpc_client::responses::TransactionReceipt;
+use crate::eth_rpc_error::{sanitize_send_raw_transaction_result, Parser};
 use crate::logs::{DEBUG, TRACE_HTTP};
-use crate::numeric::{TransactionNonce, Wei};
+use crate::numeric::{BlockNumber, LogIndex, TransactionCount, Wei, WeiPerGas};
+use crate::state::{mutate_state, State};
 use candid::{candid_method, CandidType, Principal};
-use ethnum::u256;
+use ethnum;
 use ic_canister_log::log;
 use ic_cdk::api::call::{call_with_payment128, RejectionCode};
 use ic_cdk::api::management_canister::http_request::{
@@ -13,10 +17,11 @@ use ic_cdk::api::management_canister::http_request::{
     TransformContext,
 };
 use ic_cdk_macros::query;
+pub use metrics::encode as encode_metrics;
+use minicbor::{Decode, Encode};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};
-use std::ops::Add;
 
 #[cfg(test)]
 mod tests;
@@ -34,7 +39,7 @@ const HTTP_MAX_SIZE: u64 = 2_000_000;
 
 pub const MAX_PAYLOAD_SIZE: u64 = HTTP_MAX_SIZE - HEADER_SIZE_LIMIT;
 
-pub type Quantity = u256;
+pub type Quantity = ethnum::u256;
 
 pub fn into_nat(quantity: Quantity) -> candid::Nat {
     use num_bigint::BigUint;
@@ -99,9 +104,30 @@ impl UpperHex for FixedSizeData {
     }
 }
 
-#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub enum SendRawTransactionResult {
+    Ok,
+    InsufficientFunds,
+    NonceTooLow,
+    NonceTooHigh,
+}
+
+impl HttpResponsePayload for SendRawTransactionResult {
+    fn response_transform() -> Option<ResponseTransform> {
+        Some(ResponseTransform::SendRawTransaction)
+    }
+}
+
+#[derive(
+    Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash, Ord, PartialOrd, Encode, Decode,
+)]
 #[serde(transparent)]
-pub struct Hash(#[serde(with = "crate::serde_data")] pub [u8; 32]);
+#[cbor(transparent)]
+pub struct Hash(
+    #[serde(with = "crate::serde_data")]
+    #[cbor(n(0), with = "minicbor::bytes")]
+    pub [u8; 32],
+);
 
 impl Debug for Hash {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -143,85 +169,42 @@ impl std::str::FromStr for Hash {
 
 impl HttpResponsePayload for Hash {}
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct BlockResponse {
-    pub number: Quantity,
-    pub hash: Data,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct Transaction {
-    /// The hash of the block containing the transaction.
-    /// None if the transaction is pending.
-    pub block_hash: Option<Hash>,
-
-    /// The number of the block containing the transaction.
-    /// None if the transaction is pending.
-    pub block_number: Option<BlockNumber>,
-
-    /// Gas provided by the sender.
-    pub gas: Quantity,
-
-    /// Gas price provided by the sender in Wei.
-    pub gas_price: Wei,
-
-    /// The sender address.
-    pub from: Address,
-
-    /// The transaction hash.
-    pub hash: Hash,
-
-    /// The data send along with the transaction.
-    pub input: Data,
-
-    /// The number of transactions made by the sender prior to this one.
-    pub nonce: TransactionNonce,
-
-    /// The receiver address.
-    /// None if it's a contract creation transaction.
-    pub to: Option<Address>,
-
-    /// Integer of the transactions index position in the block.
-    /// None if the transaction is pending.
-    pub transaction_index: Option<Quantity>,
-
-    /// Value transferred in Wei.
-    pub value: Wei,
-}
-
-impl Transaction {
-    pub fn is_confirmed(&self) -> bool {
-        self.block_hash.is_some() && self.block_number.is_some() && self.transaction_index.is_some()
-    }
-}
-
-impl HttpResponsePayload for Transaction {
-    fn response_transform() -> Option<ResponseTransform> {
-        Some(ResponseTransform::Transaction)
-    }
-}
-
 /// Block tags.
-/// See https://ethereum.org/en/developers/docs/apis/json-rpc/#default-block
-#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Eq)]
+/// See <https://ethereum.org/en/developers/docs/apis/json-rpc/#default-block>
+#[derive(Debug, Default, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum BlockTag {
-    /// The earliest/genesis block.
-    Earliest,
     /// The latest mined block.
     #[default]
     Latest,
     /// The latest safe head block.
     /// See
-    /// https://www.alchemy.com/overviews/ethereum-commitment-levels#what-are-ethereum-commitment-levels.
+    /// <https://www.alchemy.com/overviews/ethereum-commitment-levels#what-are-ethereum-commitment-levels>
     Safe,
     /// The latest finalized block.
     /// See
-    /// https://www.alchemy.com/overviews/ethereum-commitment-levels#what-are-ethereum-commitment-levels.
+    /// <https://www.alchemy.com/overviews/ethereum-commitment-levels#what-are-ethereum-commitment-levels>
     Finalized,
-    /// The pending state.
-    Pending,
+}
+
+impl From<CandidBlockTag> for BlockTag {
+    fn from(block_tag: CandidBlockTag) -> BlockTag {
+        match block_tag {
+            CandidBlockTag::Latest => BlockTag::Latest,
+            CandidBlockTag::Safe => BlockTag::Safe,
+            CandidBlockTag::Finalized => BlockTag::Finalized,
+        }
+    }
+}
+
+impl Display for BlockTag {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Latest => write!(f, "latest"),
+            Self::Safe => write!(f, "safe"),
+            Self::Finalized => write!(f, "finalized"),
+        }
+    }
 }
 
 /// The block specification indicating which block to query.
@@ -229,7 +212,7 @@ pub enum BlockTag {
 #[serde(untagged)]
 pub enum BlockSpec {
     /// Query the block with the specified index.
-    Number(Quantity),
+    Number(BlockNumber),
     /// Query the block with the specified tag.
     Tag(BlockTag),
 }
@@ -245,23 +228,21 @@ impl std::str::FromStr for BlockSpec {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.starts_with("0x") {
-            let quantity = Quantity::from_str_hex(s)
+            let block_number = BlockNumber::from_str_hex(s)
                 .map_err(|e| format!("failed to parse block number '{s}': {e}"))?;
-            return Ok(BlockSpec::Number(quantity));
+            return Ok(BlockSpec::Number(block_number));
         }
         Ok(BlockSpec::Tag(match s {
-            "earliest" => BlockTag::Earliest,
             "latest" => BlockTag::Latest,
             "safe" => BlockTag::Safe,
             "finalized" => BlockTag::Finalized,
-            "pending" => BlockTag::Pending,
             _ => return Err(format!("unknown block tag '{s}'")),
         }))
     }
 }
 
 /// Parameters of the [`eth_getLogs`](https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_getlogs) call.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetLogsParam {
     /// Integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.
@@ -294,7 +275,7 @@ pub struct GetLogsParam {
 //    "removed": false
 //  }
 // ```
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct LogEntry {
     /// The address from which this log originated.
@@ -311,7 +292,7 @@ pub struct LogEntry {
     // 32 Bytes - hash of the transactions from which this log was created.
     // None when its pending log.
     pub transaction_hash: Option<Hash>,
-    // Integer of the transactions position withing the block the log was created from.
+    // Integer of the transactions position within the block the log was created from.
     // None if the log is pending.
     pub transaction_index: Option<Quantity>,
     /// 32 Bytes - hash of the block in which this log appeared.
@@ -319,14 +300,18 @@ pub struct LogEntry {
     pub block_hash: Option<Hash>,
     /// Integer of the log index position in the block.
     /// None if the log is pending.
-    pub log_index: Option<Quantity>,
+    pub log_index: Option<LogIndex>,
     /// "true" when the log was removed due to a chain reorganization.
     /// "false" if it's a valid log.
     #[serde(default)]
     pub removed: bool,
 }
 
-impl HttpResponsePayload for Vec<LogEntry> {}
+impl HttpResponsePayload for Vec<LogEntry> {
+    fn response_transform() -> Option<ResponseTransform> {
+        Some(ResponseTransform::LogEntries)
+    }
+}
 
 /// Parameters of the [`eth_getBlockByNumber`](https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_getblockbynumber) call.
 #[derive(Debug, Serialize, Clone)]
@@ -380,9 +365,9 @@ pub struct FeeHistory {
     /// This includes the next block after the newest of the returned range,
     /// because this value can be derived from the newest block.
     /// Zeroes are returned for pre-EIP-1559 blocks.
-    pub base_fee_per_gas: Vec<Wei>,
+    pub base_fee_per_gas: Vec<WeiPerGas>,
     /// A two-dimensional array of effective priority fees per gas at the requested block percentiles.
-    pub reward: Vec<Vec<Wei>>,
+    pub reward: Vec<Vec<WeiPerGas>>,
 }
 
 impl HttpResponsePayload for FeeHistory {
@@ -393,37 +378,9 @@ impl HttpResponsePayload for FeeHistory {
 
 impl HttpResponsePayload for Wei {}
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Ord, PartialOrd)]
-#[serde(transparent)]
-pub struct BlockNumber(pub Quantity);
-
 impl From<BlockNumber> for BlockSpec {
     fn from(value: BlockNumber) -> Self {
-        BlockSpec::Number(value.0)
-    }
-}
-
-impl BlockNumber {
-    pub fn new(value: u128) -> Self {
-        Self(Quantity::from(value))
-    }
-
-    pub fn as_f64(&self) -> f64 {
-        self.0.as_f64()
-    }
-}
-
-impl Add<u128> for BlockNumber {
-    type Output = BlockNumber;
-
-    fn add(self, rhs: u128) -> Self::Output {
-        BlockNumber(self.0 + rhs)
-    }
-}
-
-impl From<BlockNumber> for candid::Nat {
-    fn from(value: BlockNumber) -> Self {
-        into_nat(value.0)
+        BlockSpec::Number(value)
     }
 }
 
@@ -436,21 +393,25 @@ pub struct Block {
     pub base_fee_per_gas: Wei,
 }
 
-impl HttpResponsePayload for Block {}
+impl HttpResponsePayload for Block {
+    fn response_transform() -> Option<ResponseTransform> {
+        Some(ResponseTransform::Block)
+    }
+}
 
 /// An envelope for all JSON-RPC requests.
-#[derive(Serialize)]
-struct JsonRpcRequest<T> {
-    jsonrpc: &'static str,
+#[derive(Clone, Serialize, Deserialize)]
+pub struct JsonRpcRequest<T> {
+    jsonrpc: String,
     method: String,
-    id: u32,
-    params: T,
+    id: u64,
+    pub params: T,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JsonRpcReply<T> {
-    pub id: u32,
+    pub id: u64,
     pub jsonrpc: String,
     #[serde(flatten)]
     pub result: JsonRpcResult<T>,
@@ -464,25 +425,21 @@ pub enum JsonRpcResult<T> {
     Error { code: i64, message: String },
 }
 
-impl<T> JsonRpcResult<T> {
-    pub fn unwrap(self) -> T {
-        match self {
-            Self::Result(t) => t,
-            Self::Error { code, message } => panic!(
-                "expected JSON RPC call to succeed, got an error: error_code = {code}, message = {message}"
-            ),
-        }
-    }
-}
-
 /// Describes a payload transformation to execute before passing the HTTP response to consensus.
 /// The purpose of these transformations is to ensure that the response encoding is deterministic
 /// (the field order is the same).
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Encode, Decode, Debug)]
 pub enum ResponseTransform {
+    #[n(0)]
     Block,
-    Transaction,
+    #[n(1)]
+    LogEntries,
+    #[n(2)]
+    TransactionReceipt,
+    #[n(3)]
     FeeHistory,
+    #[n(4)]
+    SendRawTransaction,
 }
 
 impl ResponseTransform {
@@ -500,10 +457,32 @@ impl ResponseTransform {
                 .into_bytes();
         }
 
+        fn redact_collection_response<T>(body: &mut Vec<u8>)
+        where
+            T: Serialize + DeserializeOwned,
+        {
+            let mut response: JsonRpcReply<Vec<T>> = match serde_json::from_slice(body) {
+                Ok(response) => response,
+                Err(_) => return,
+            };
+
+            if let JsonRpcResult::Result(ref mut result) = response.result {
+                sort_by_hash(result);
+            }
+
+            *body = serde_json::to_string(&response)
+                .expect("BUG: failed to serialize response")
+                .into_bytes();
+        }
+
         match self {
             Self::Block => redact_response::<Block>(body_bytes),
-            Self::Transaction => redact_response::<Transaction>(body_bytes),
+            Self::LogEntries => redact_collection_response::<LogEntry>(body_bytes),
+            Self::TransactionReceipt => redact_response::<TransactionReceipt>(body_bytes),
             Self::FeeHistory => redact_response::<FeeHistory>(body_bytes),
+            Self::SendRawTransaction => {
+                sanitize_send_raw_transaction_result(body_bytes, Parser::new())
+            }
         }
     }
 }
@@ -513,18 +492,22 @@ impl ResponseTransform {
 fn cleanup_response(mut args: TransformArgs) -> HttpResponse {
     args.response.headers.clear();
     ic_cdk::println!(
-        "RAW RESPONSE:\nstatus: {:?}\nbody:{:?}",
+        "RAW RESPONSE BEFORE TRANSFORM:\nstatus: {:?}\nbody:{:?}",
         args.response.status,
         String::from_utf8_lossy(&args.response.body).to_string()
     );
     let status_ok = args.response.status >= 200u16 && args.response.status < 300u16;
     if status_ok && !args.context.is_empty() {
-        let maybe_transform: Result<ResponseTransform, _> =
-            ciborium::de::from_reader(&args.context[..]);
+        let maybe_transform: Result<ResponseTransform, _> = minicbor::decode(&args.context[..]);
         if let Ok(transform) = maybe_transform {
             transform.apply(&mut args.response.body);
         }
     }
+    ic_cdk::println!(
+        "RAW RESPONSE AFTER TRANSFORM:\nstatus: {:?}\nbody:{:?}",
+        args.response.status,
+        String::from_utf8_lossy(&args.response.body).to_string()
+    );
     args.response
 }
 
@@ -545,7 +528,30 @@ pub enum HttpOutcallError {
     },
 }
 
+impl HttpOutcallError {
+    pub fn is_response_too_large(&self) -> bool {
+        match self {
+            Self::IcError { code, message } => is_response_too_large(code, message),
+            _ => false,
+        }
+    }
+}
+
+pub fn is_response_too_large(code: &RejectionCode, message: &str) -> bool {
+    code == &RejectionCode::SysFatal && message.contains("size limit")
+}
+
 pub type HttpOutcallResult<T> = Result<T, HttpOutcallError>;
+
+pub fn are_errors_consistent<T: PartialEq>(
+    left: &HttpOutcallResult<JsonRpcResult<T>>,
+    right: &HttpOutcallResult<JsonRpcResult<T>>,
+) -> bool {
+    match (left, right) {
+        (Ok(JsonRpcResult::Result(_)), _) | (_, Ok(JsonRpcResult::Result(_))) => true,
+        _ => left == right,
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ResponseSizeEstimate(u64);
@@ -583,6 +589,8 @@ pub trait HttpResponsePayload {
 
 impl<T: HttpResponsePayload> HttpResponsePayload for Option<T> {}
 
+impl HttpResponsePayload for TransactionCount {}
+
 /// Calls a JSON-RPC method on an Ethereum node at the specified URL.
 pub async fn call<I, O>(
     url: impl Into<String>,
@@ -595,16 +603,18 @@ where
     O: DeserializeOwned + HttpResponsePayload,
 {
     let eth_method = method.into();
-    let payload = serde_json::to_string(&JsonRpcRequest {
-        jsonrpc: "2.0",
+    let mut rpc_request = JsonRpcRequest {
+        jsonrpc: "2.0".to_string(),
         params,
         method: eth_method.clone(),
         id: 1,
-    })
-    .unwrap();
+    };
     let url = url.into();
+    let mut retries = 0;
 
     loop {
+        rpc_request.id = mutate_state(State::next_request_id);
+        let payload = serde_json::to_string(&rpc_request).unwrap();
         log!(
             TRACE_HTTP,
             "Calling url: {}, with payload: {payload}",
@@ -616,7 +626,7 @@ where
             .as_ref()
             .map(|t| {
                 let mut buf = vec![];
-                ciborium::ser::into_writer(t, &mut buf).unwrap();
+                minicbor::encode(t, &mut buf).unwrap();
                 buf
             })
             .unwrap_or_default();
@@ -630,7 +640,10 @@ where
                 value: "application/json".to_string(),
             }],
             body: Some(payload.as_bytes().to_vec()),
-            transform: Some(TransformContext::new(cleanup_response, transform_op)),
+            transform: Some(TransformContext::from_name(
+                "cleanup_response".to_owned(),
+                transform_op,
+            )),
         };
 
         // Details of the values used in the following lines can be found here:
@@ -650,15 +663,14 @@ where
         .await
         {
             Ok((response,)) => response,
-            Err((code, message))
-                if code == RejectionCode::SysFatal && message.contains("body size limit") =>
-            {
+            Err((code, message)) if is_response_too_large(&code, &message) => {
                 let new_estimate = response_size_estimate.adjust();
                 if response_size_estimate == new_estimate {
                     return Err(HttpOutcallError::IcError { code, message });
                 }
                 log!(DEBUG, "The {eth_method} response didn't fit into {response_size_estimate} bytes, retrying with {new_estimate}");
                 response_size_estimate = new_estimate;
+                retries += 1;
                 continue;
             }
             Err((code, message)) => return Err(HttpOutcallError::IcError { code, message }),
@@ -666,11 +678,14 @@ where
 
         log!(
             TRACE_HTTP,
-            "Got response: {} from url: {} with status: {}",
+            "Got response (with {} bytes): {} from url: {} with status: {}",
+            response.body.len(),
             String::from_utf8_lossy(&response.body),
             url,
             response.status
         );
+
+        metrics::observe_retry_count(eth_method.clone(), retries);
 
         // JSON-RPC responses over HTTP should have a 2xx status code,
         // even if the contained JsonRpcResult is an error.
@@ -707,4 +722,111 @@ fn is_successful_http_code(status: &u16) -> bool {
     const OK: u16 = 200;
     const REDIRECTION: u16 = 300;
     (OK..REDIRECTION).contains(status)
+}
+
+fn sort_by_hash<T: Serialize + DeserializeOwned>(to_sort: &mut [T]) {
+    use ic_crypto_sha3::Keccak256;
+    to_sort.sort_by(|a, b| {
+        let a_hash = Keccak256::hash(serde_json::to_vec(a).expect("BUG: failed to serialize"));
+        let b_hash = Keccak256::hash(serde_json::to_vec(b).expect("BUG: failed to serialize"));
+        a_hash.cmp(&b_hash)
+    });
+}
+
+pub(super) mod metrics {
+    use ic_metrics_encoder::MetricsEncoder;
+    use std::cell::RefCell;
+    use std::collections::BTreeMap;
+
+    /// The max number of RPC call retries we expect to see (plus one).
+    const MAX_EXPECTED_RETRIES: usize = 20;
+
+    #[derive(Default)]
+    struct RetryHistogram {
+        /// The histogram of HTTP call retry counts.
+        /// The last bucket corresponds to the "infinite" value that exceeds the maximum number we
+        /// expect to see in practice.
+        retry_buckets: [u64; MAX_EXPECTED_RETRIES + 1],
+        retry_count: u64,
+    }
+
+    impl RetryHistogram {
+        fn observe_retry_count(&mut self, count: usize) {
+            self.retry_buckets[count.min(MAX_EXPECTED_RETRIES)] += 1;
+            self.retry_count += count as u64;
+        }
+
+        /// Returns a iterator over the histrogram buckets in the format that ic-metrics-encoder
+        /// expects.
+        fn iter(&self) -> impl Iterator<Item = (f64, f64)> + '_ {
+            (0..MAX_EXPECTED_RETRIES)
+                .zip(self.retry_buckets[0..MAX_EXPECTED_RETRIES].iter().cloned())
+                .map(|(k, v)| (k as f64, v as f64))
+                .chain(std::iter::once((
+                    f64::INFINITY,
+                    self.retry_buckets[MAX_EXPECTED_RETRIES] as f64,
+                )))
+        }
+    }
+
+    #[derive(Default)]
+    pub struct HttpMetrics {
+        /// Retry counts histograms indexed by the ETH RCP method name.
+        retry_histogram_per_method: BTreeMap<String, RetryHistogram>,
+    }
+
+    impl HttpMetrics {
+        pub fn observe_retry_count(&mut self, method: String, count: usize) {
+            self.retry_histogram_per_method
+                .entry(method)
+                .or_default()
+                .observe_retry_count(count);
+        }
+
+        #[cfg(test)]
+        pub fn count_retries_in_bucket(&self, method: &str, count: usize) -> u64 {
+            match self.retry_histogram_per_method.get(method) {
+                Some(histogram) => histogram.retry_buckets[count.min(MAX_EXPECTED_RETRIES)],
+                None => 0,
+            }
+        }
+
+        pub fn encode<W: std::io::Write>(
+            &self,
+            encoder: &mut MetricsEncoder<W>,
+        ) -> std::io::Result<()> {
+            if self.retry_histogram_per_method.is_empty() {
+                return Ok(());
+            }
+
+            let mut histogram_vec = encoder.histogram_vec(
+                "cketh_eth_rpc_call_retry_count",
+                "The number of ETH RPC call retries by method.",
+            )?;
+
+            for (method, histogram) in &self.retry_histogram_per_method {
+                histogram_vec = histogram_vec.histogram(
+                    &[("method", method.as_str())],
+                    histogram.iter(),
+                    histogram.retry_count as f64,
+                )?;
+            }
+
+            Ok(())
+        }
+    }
+
+    thread_local! {
+        static METRICS: RefCell<HttpMetrics> = RefCell::default();
+    }
+
+    /// Record the retry count for the specified ETH RPC method.
+    pub fn observe_retry_count(method: String, count: usize) {
+        METRICS.with(|metrics| metrics.borrow_mut().observe_retry_count(method, count));
+    }
+
+    /// Encodes the metrics related to ETH RPC method calls.
+    pub fn encode<W: std::io::Write>(encoder: &mut MetricsEncoder<W>) -> std::io::Result<()> {
+        METRICS.with(|metrics| metrics.borrow().encode(encoder))
+    }
 }

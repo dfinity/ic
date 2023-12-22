@@ -117,7 +117,11 @@ fn verify_certified_data(
         CertificateValidationError::InvalidSignature(_)
         | CertificateValidationError::CertifiedDataMismatch { .. }
         | CertificateValidationError::MultipleSubnetDelegationsNotAllowed
-        | CertificateValidationError::CanisterIdOutOfRange => CryptoError::SignatureVerification {
+        | CertificateValidationError::CanisterIdOutOfRange
+        | CertificateValidationError::SubnetIdMismatch {
+            provided_subnet_id: _,
+            delegation_subnet_id: _,
+        } => CryptoError::SignatureVerification {
             algorithm: AlgorithmId::IcCanisterSignature,
             public_key_bytes: pk.0.clone(),
             sig_bytes: sig.0.clone(),

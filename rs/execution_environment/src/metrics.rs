@@ -5,10 +5,42 @@ use ic_metrics::{
 use ic_types::{
     NumInstructions, NumMessages, NumSlices, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES,
 };
-use prometheus::{Histogram, IntCounter};
+use prometheus::{Histogram, IntCounter, IntCounterVec};
 use std::{cell::RefCell, rc::Rc, time::Instant};
 
 pub(crate) const QUERY_HANDLER_CRITICAL_ERROR: &str = "query_handler_critical_error";
+pub(crate) const SYSTEM_API_CALL_PERFORM: &str = "call_perform";
+pub(crate) const SYSTEM_API_CANISTER_CYCLE_BALANCE: &str = "canister_cycle_balance";
+pub(crate) const SYSTEM_API_CANISTER_CYCLE_BALANCE128: &str = "canister_cycle_balance128";
+pub(crate) const SYSTEM_API_TIME: &str = "time";
+
+#[derive(Clone)]
+pub struct IngressFilterMetrics {
+    pub inspect_message_duration_seconds: Histogram,
+    pub inspect_message_instructions: Histogram,
+    pub inspect_message_count: IntCounter,
+}
+
+impl IngressFilterMetrics {
+    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+        Self {
+            inspect_message_duration_seconds: duration_histogram(
+                "execution_inspect_message_duration_seconds",
+                "The duration of executing a canister_inspect_message.",
+                metrics_registry,
+            ),
+            inspect_message_instructions: instructions_histogram(
+                "execution_inspect_message_instructions",
+                "The number of instructions executed in a canister_inspect_message.",
+                metrics_registry,
+            ),
+            inspect_message_count: metrics_registry.int_counter(
+                "execution_inspect_message_count",
+                "The total number of executed canister_inspect_messages.",
+            ),
+        }
+    }
+}
 
 pub(crate) struct QueryHandlerMetrics {
     pub query: ScopedMetrics,
@@ -16,6 +48,8 @@ pub(crate) struct QueryHandlerMetrics {
     pub query_retry_call: ScopedMetrics,
     pub query_spawned_calls: ScopedMetrics,
     pub query_critical_error: IntCounter,
+    /// The total number of tracked System API calls invoked during the query execution.
+    pub query_system_api_calls: IntCounterVec,
 }
 
 impl QueryHandlerMetrics {
@@ -120,6 +154,12 @@ impl QueryHandlerMetrics {
                 ),
             },
             query_critical_error: metrics_registry.error_counter(QUERY_HANDLER_CRITICAL_ERROR),
+            query_system_api_calls: metrics_registry.int_counter_vec(
+                "execution_query_system_api_calls_total",
+                "The total number of tracked System API calls invoked \
+                        during the query execution",
+                &["system_api_call_counter"],
+            ),
         }
     }
 }
@@ -212,6 +252,11 @@ impl<'a> MeasurementScope<'a> {
         core.instructions += instructions;
         core.slices += slices;
         core.messages += messages;
+    }
+
+    /// Returns the number of messages associated with this measurement scope.
+    pub fn messages(&self) -> NumMessages {
+        self.core.borrow().messages
     }
 }
 

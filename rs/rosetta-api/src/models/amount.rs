@@ -1,38 +1,8 @@
 use crate::errors::ApiError;
-use crate::models::{Currency, Object};
+use crate::models::{Amount, Currency};
 use ic_ledger_core::tokens::DECIMAL_PLACES;
 use icp_ledger::Tokens;
-use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
-
-/// Amount is some Value of a Currency. It is considered invalid to specify a
-/// Value without a Currency.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct Amount {
-    /// Value of the transaction in atomic units represented as an
-    /// arbitrary-sized signed integer.  For example, 1 BTC would be represented
-    /// by a value of 100000000.
-    #[serde(rename = "value")]
-    pub value: String,
-
-    #[serde(rename = "currency")]
-    pub currency: Currency,
-
-    #[serde(rename = "metadata")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Object>,
-}
-
-impl Amount {
-    pub fn new(value: String, currency: Currency) -> Self {
-        Self {
-            value,
-            currency,
-            metadata: None,
-        }
-    }
-}
 
 pub fn tokens_to_amount(tokens: Tokens, token_name: &str) -> Result<Amount, ApiError> {
     let amount = tokens.get_e8s();

@@ -15,7 +15,8 @@ use dashmap::DashMap;
 use futures::{future::TryFutureExt, stream::FuturesUnordered};
 use hyper::{Body, Request, Response, StatusCode};
 use ic_agent::{
-    agent::http_transport::ReqwestHttpReplicaV2Transport, identity::BasicIdentity, Agent,
+    agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport,
+    identity::BasicIdentity, Agent,
 };
 use mockall::automock;
 use opentelemetry::{metrics::MeterProvider as _, sdk::metrics::MeterProvider, KeyValue};
@@ -223,10 +224,10 @@ impl Scraper {
 impl Scrape for Scraper {
     async fn scrape(&self, wallet: &Principal) -> Result<u64, Error> {
         let agent = Arc::clone(&self.0);
-
+        let arg = candid::Encode!()?;
         let result = agent
             .query(wallet, "wallet_balance")
-            .with_arg(candid::Encode!()?)
+            .with_arg(arg)
             .call()
             .await
             .context("failed to query canister")?;

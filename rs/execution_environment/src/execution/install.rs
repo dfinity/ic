@@ -1,6 +1,9 @@
-// This module defines how the `install_code` IC method in mode
-// `install`/`reinstall` is executed.
-// See https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-install_code
+//! This module defines how the `install_code` IC method in mode
+//! `install`/`reinstall` is executed.
+//! See https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-install_code
+
+use std::sync::Arc;
+
 use crate::canister_manager::{
     DtsInstallCodeResult, InstallCodeContext, PausedInstallCodeExecution,
 };
@@ -14,6 +17,7 @@ use ic_base_types::PrincipalId;
 use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
 use ic_interfaces::execution_environment::WasmExecutionOutput;
 use ic_logger::{info, warn, ReplicaLogger};
+use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::InstallCodeCallId, CanisterState, SystemState,
 };
@@ -74,11 +78,11 @@ pub(crate) fn execute_install(
     original: OriginalContext,
     round: RoundContext,
     round_limits: &mut RoundLimits,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> DtsInstallCodeResult {
     let mut helper = InstallCodeHelper::new(&clean_canister, &original);
 
     // Stage 0: validate input.
-
     if let Err(err) = helper.validate_input(&original, &round, round_limits) {
         let instructions_left = helper.instructions_left();
         return finish_err(clean_canister, instructions_left, original, round, err);
@@ -131,8 +135,9 @@ pub(crate) fn execute_install(
         let wasm_execution_result = round.hypervisor.execute_dts(
             ApiType::start(original.time),
             execution_state,
-            &SystemState::new_for_start(canister_id),
+            &SystemState::new_for_start(canister_id, fd_factory),
             helper.canister_memory_usage(),
+            helper.canister_message_memory_usage(),
             helper.execution_parameters().clone(),
             FuncRef::Method(method),
             round_limits,
@@ -245,6 +250,7 @@ fn install_stage_2b_continue_install_after_start(
         execution_state,
         &helper.canister().system_state,
         helper.canister_memory_usage(),
+        helper.canister_message_memory_usage(),
         helper.execution_parameters().clone(),
         FuncRef::Method(method),
         round_limits,
@@ -393,10 +399,7 @@ impl PausedInstallCodeExecution for PausedInitExecution {
         }
     }
 
-    fn abort(
-        self: Box<Self>,
-        log: &ReplicaLogger,
-    ) -> (CanisterCall, Option<InstallCodeCallId>, Cycles) {
+    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, InstallCodeCallId, Cycles) {
         info!(
             log,
             "[DTS] Aborting (canister_init) execution of canister {}.", self.original.canister_id
@@ -493,10 +496,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
         }
     }
 
-    fn abort(
-        self: Box<Self>,
-        log: &ReplicaLogger,
-    ) -> (CanisterCall, Option<InstallCodeCallId>, Cycles) {
+    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, InstallCodeCallId, Cycles) {
         info!(
             log,
             "[DTS] Aborting (start) execution of canister {}.", self.original.canister_id,

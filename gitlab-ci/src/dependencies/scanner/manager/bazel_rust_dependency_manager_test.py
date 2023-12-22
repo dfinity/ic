@@ -52,10 +52,10 @@ def test_transitive_bazel_string_to_dependency(bazel_test):
     assert dependency.version == "0.4.19"
 
 
-def test_transitive_bazel_string_to_dependency_hypenated(bazel_test):
-    bazel_string_hypenated_crate = "@crate_index__build-info-common-0.4.19//"
+def test_transitive_bazel_string_to_dependency_hyphenated(bazel_test):
+    bazel_string_hyphenated_crate = "@crate_index__build-info-common-0.4.19//"
     dependency = bazel_test._BazelRustDependencyManager__transitive_bazel_string_to_dependency(
-        bazel_string_hypenated_crate
+        bazel_string_hyphenated_crate
     )
     assert dependency.name == "build-info-common"
     assert dependency.version == "0.4.19"

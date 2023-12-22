@@ -1,4 +1,9 @@
-use ic_config::{embedders::Config, flag_status::FlagStatus, subnet_config::SchedulerConfig};
+#![no_main]
+use ic_config::{
+    embedders::{Config, FeatureFlags},
+    flag_status::FlagStatus,
+    subnet_config::SchedulerConfig,
+};
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
     wasm_executor::{WasmExecutor, WasmExecutorImpl},
@@ -26,40 +31,71 @@ use ic_types::{
     ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
 };
 use ic_wasm_types::CanisterModule;
+use libfuzzer_sys::fuzz_target;
 use std::{collections::BTreeSet, path::PathBuf, sync::Arc};
-
+mod ic_wasm;
+use ic_wasm::ICWasmConfig;
+mod transform;
+use transform::{transform_exported_globals, transform_exports};
+use wasm_smith::ConfiguredModule;
 // The fuzzer creates valid wasms and tries to execute a query method via WasmExecutor.
 // The fuzzing success rate directly depends upon the IC valid wasm corpus provided.
 // The fuzz test is only compiled but not executed by CI.
 //
 // To execute the fuzzer run
-// bazel run --config=fuzzing //rs/embedders/fuzz:execute_with_wasm_executor_libfuzzer -- corpus/
+// libfuzzer: bazel run --config=fuzzing //rs/embedders/fuzz:execute_with_wasm_executor_libfuzzer -- corpus/
+// afl:  bazel run --config=afl //rs/embedders/fuzz:execute_with_wasm_executor_afl -- corpus/
 
-pub fn do_fuzz_task(data: Vec<u8>) {
-    let canister_module = CanisterModule::new(data);
+fuzz_target!(|module: ConfiguredModule<ICWasmConfig>| {
+    let wasm = module.module.to_bytes();
+
+    let exported_globals = module.module.exported_globals();
+    let persisted_globals: Vec<Global> = transform_exported_globals(exported_globals);
+
+    let canister_module = CanisterModule::new(wasm);
     let wasm_binary = WasmBinary::new(canister_module);
 
-    let wasm_method = WasmMethod::Query("test".to_string());
-    let func_ref = FuncRef::Method(wasm_method.clone());
-    let wasm_methods = BTreeSet::from([wasm_method]);
+    let exports = module.module.exports();
+    let wasm_methods: BTreeSet<WasmMethod> = transform_exports(exports);
 
-    let embedder_config = Config::default();
     let log = no_op_logger();
+    let embedder_config = Config {
+        feature_flags: FeatureFlags {
+            rate_limiting_of_debug_prints: FlagStatus::Enabled,
+            wasm_native_stable_memory: FlagStatus::Enabled,
+            write_barrier: FlagStatus::Enabled,
+        },
+        ..Default::default()
+    };
     let metrics_registry = MetricsRegistry::new();
     let fd_factory = Arc::new(TestPageAllocatorFileDescriptorImpl::new());
 
-    let wasm_executor = WasmExecutorImpl::new(
+    let wasm_executor = Arc::new(WasmExecutorImpl::new(
         WasmtimeEmbedder::new(embedder_config, log.clone()),
         &metrics_registry,
         log,
         fd_factory,
-    );
+    ));
+    let execution_state =
+        setup_execution_state(wasm_binary, wasm_methods.clone(), persisted_globals);
 
-    let execution_state = setup_execution_state(wasm_binary, wasm_methods);
-    let wasm_execution_input = setup_wasm_execution_input(func_ref);
-    let (_compilation_result, _execution_result) =
-        Arc::new(wasm_executor).execute(wasm_execution_input, &execution_state);
-}
+    // return early if
+    // 1. There are no exproted functions available to execute
+    // 2. The total length of exports names is greater than 20_000
+
+    if wasm_methods.is_empty() || module.module.export_length_total() > 20_000 {
+        return;
+    }
+
+    // For determinism, all methods are executed
+    for wasm_method in wasm_methods.iter() {
+        let func_ref = FuncRef::Method(wasm_method.clone());
+        let wasm_execution_input = setup_wasm_execution_input(func_ref);
+        let (_compilation_result, _execution_result) = &wasm_executor
+            .clone()
+            .execute(wasm_execution_input, &execution_state);
+    }
+});
 
 fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
     const DEFAULT_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000_000_000);
@@ -81,6 +117,7 @@ fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
     );
 
     let canister_current_memory_usage = NumBytes::new(0);
+    let canister_current_message_memory_usage = NumBytes::new(0);
 
     let subnet_memory_capacity = i64::MAX / 2;
 
@@ -110,6 +147,7 @@ fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
         api_type,
         sandbox_safe_system_state,
         canister_current_memory_usage,
+        canister_current_message_memory_usage,
         execution_parameters,
         subnet_available_memory,
         func_ref,
@@ -120,17 +158,15 @@ fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
 fn setup_execution_state(
     wasm_binary: Arc<WasmBinary>,
     wasm_methods: BTreeSet<WasmMethod>,
+    persisted_globals: Vec<Global>,
 ) -> ExecutionState {
-    // TODO (PSEC-1204)
-    // Get the globals and exported functions from the wasm module before initializing
-    // the execution state
     ExecutionState::new(
         PathBuf::new(),
         wasm_binary,
         ExportedFunctions::new(wasm_methods),
         Memory::new_for_testing(),
         Memory::new_for_testing(),
-        vec![Global::I64(0)],
+        persisted_globals,
         WasmMetadata::default(),
     )
 }

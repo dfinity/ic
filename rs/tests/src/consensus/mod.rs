@@ -1,3 +1,4 @@
+pub mod adding_nodes_to_subnet_test;
 pub mod catch_up_test;
 pub mod consensus_performance_test;
 pub mod cow_safety_test;

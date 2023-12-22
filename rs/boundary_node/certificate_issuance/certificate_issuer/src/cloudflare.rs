@@ -73,7 +73,7 @@ impl Create for Cloudflare {
             None => return Err(anyhow!("missing zone")),
         };
 
-        // Check for existance
+        // Check for existence
         let resp = self
             .client
             .request(&ListDnsRecords {
@@ -173,7 +173,7 @@ impl Delete for Cloudflare {
             None => return Err(anyhow!("missing zone")),
         };
 
-        // Check for existance
+        // Check for existence
         let resp = self
             .client
             .request(&ListDnsRecords {

@@ -1,5 +1,5 @@
 use dfn_protobuf::{ProtoBuf, ToProto};
-use ic_agent::agent::http_transport::ReqwestHttpReplicaV2Transport;
+use ic_agent::agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport;
 use ic_agent::identity::AnonymousIdentity;
 use ic_agent::{Agent, AgentError, NonceGenerator};
 use ic_ledger_core::block::EncodedBlock;
@@ -42,6 +42,18 @@ pub struct CanisterAccess {
     >,
 }
 
+fn make_agent(url: Url) -> Result<Agent, AgentError> {
+    let is_exchanges_testnet = url.host_str() == Some("exchanges.testnet.dfinity.network");
+    Agent::builder()
+        .with_identity(AnonymousIdentity)
+        .with_transport(ReqwestHttpReplicaV2Transport::create(url)?)
+        .with_nonce_generator(TimestampBlob::default())
+        // The testnet has an old replica version and the query
+        // verification wouldn't work so we disable it
+        .with_verify_query_signatures(!is_exchanges_testnet)
+        .build()
+}
+
 impl CanisterAccess {
     const BLOCKS_BATCH_LEN: u64 = 2000;
     const MAX_BLOCK_QUERIES: usize = 5;
@@ -51,12 +63,7 @@ impl CanisterAccess {
         canister_id: CanisterId,
         root_key: Option<Vec<u8>>,
     ) -> Result<Self, AgentError> {
-        let agent = Agent::builder()
-            .with_identity(AnonymousIdentity)
-            .with_transport(ReqwestHttpReplicaV2Transport::create(url)?)
-            .with_nonce_generator(TimestampBlob::default())
-            .build()
-            .unwrap();
+        let agent = make_agent(url)?;
 
         match root_key {
             Some(root_key) => agent.set_root_key(root_key),

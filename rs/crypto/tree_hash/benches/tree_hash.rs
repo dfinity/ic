@@ -59,7 +59,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             g.bench_function(BenchmarkId::new("labeled_tree", num_subtrees), |b| {
                 b.iter_batched(
                     || labeled_tree.clone(),
-                    |t| std::mem::drop(t),
+                    std::mem::drop,
                     BatchSize::SmallInput,
                 )
             });
@@ -138,7 +138,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             let mut g = c.benchmark_group("protobuf_serialization");
 
             g.bench_function(BenchmarkId::new("mixed_hash_tree", num_subtrees), |b| {
-                b.iter(|| black_box(PbTree::proxy_encode(mixed_hash_tree.clone()).unwrap()))
+                b.iter(|| black_box(PbTree::proxy_encode(mixed_hash_tree.clone())))
             });
 
             g.finish();
@@ -150,7 +150,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
             let mut g = c.benchmark_group("protobuf_deserialization");
 
-            let serialized_hash_tree = PbTree::proxy_encode(mixed_hash_tree.clone()).unwrap();
+            let serialized_hash_tree = PbTree::proxy_encode(mixed_hash_tree.clone());
             g.bench_function(BenchmarkId::new("mixed_hash_tree", num_subtrees), |b| {
                 b.iter(|| {
                     black_box(|| {

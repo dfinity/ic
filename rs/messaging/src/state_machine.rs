@@ -8,8 +8,10 @@ use ic_metrics::Timer;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_replicated_state::{NetworkTopology, ReplicatedState};
 use ic_types::{batch::Batch, ExecutionRound};
-use std::sync::Arc;
 
+use self::query_stats::deliver_query_stats;
+
+mod query_stats;
 #[cfg(test)]
 mod tests;
 
@@ -34,7 +36,7 @@ pub(crate) struct StateMachineImpl {
     demux: Box<dyn Demux>,
     stream_builder: Box<dyn StreamBuilder>,
     log: ReplicaLogger,
-    metrics: Arc<MessageRoutingMetrics>,
+    metrics: MessageRoutingMetrics,
 }
 
 impl StateMachineImpl {
@@ -43,7 +45,7 @@ impl StateMachineImpl {
         demux: Box<dyn Demux>,
         stream_builder: Box<dyn StreamBuilder>,
         log: ReplicaLogger,
-        metrics: Arc<MessageRoutingMetrics>,
+        metrics: MessageRoutingMetrics,
     ) -> Self {
         Self {
             scheduler,
@@ -75,6 +77,11 @@ impl StateMachine for StateMachineImpl {
         node_public_keys: NodePublicKeys,
     ) -> ReplicatedState {
         let phase_timer = Timer::start();
+
+        // Get query stats from blocks and add them to the state, so that they can be aggregated later.
+        if let Some(query_stats) = &batch.messages.query_stats {
+            deliver_query_stats(query_stats, &mut state, batch.batch_number, &self.log);
+        }
 
         if batch.time >= state.metadata.batch_time {
             state.metadata.batch_time = batch.time;

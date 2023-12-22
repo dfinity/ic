@@ -6,8 +6,6 @@ use dfn_core::{
 };
 use ic_base_types::NodeId;
 use ic_certified_map::{AsHashTree, HashTree};
-use ic_nervous_system_common::MethodAuthzChange;
-use ic_nns_common::{access_control::check_caller_is_root, pb::v1::CanisterAuthzInfo};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_protobuf::registry::{
     dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
@@ -33,7 +31,7 @@ use registry_canister::{
     init::RegistryCanisterInitPayload,
     mutations::{
         complete_canister_migration::CompleteCanisterMigrationPayload,
-        do_add_hostos_version::AddHostOsVersionPayload,
+        do_add_api_boundary_node::AddApiBoundaryNodePayload,
         do_add_node_operator::AddNodeOperatorPayload,
         do_add_nodes_to_subnet::AddNodesToSubnetPayload,
         do_bless_replica_version::BlessReplicaVersionPayload,
@@ -41,14 +39,18 @@ use registry_canister::{
         do_create_subnet::CreateSubnetPayload,
         do_delete_subnet::DeleteSubnetPayload,
         do_recover_subnet::RecoverSubnetPayload,
+        do_remove_api_boundary_nodes::RemoveApiBoundaryNodesPayload,
         do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
         do_retire_replica_version::RetireReplicaVersionPayload,
         do_set_firewall_config::SetFirewallConfigPayload,
+        do_update_api_boundary_node_domain::UpdateApiBoundaryNodeDomainPayload,
+        do_update_api_boundary_nodes_version::UpdateApiBoundaryNodesVersionPayload,
+        do_update_elected_hostos_versions::UpdateElectedHostosVersionsPayload,
         do_update_elected_replica_versions::UpdateElectedReplicaVersionsPayload,
         do_update_node_directly::UpdateNodeDirectlyPayload,
         do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
         do_update_node_operator_config_directly::UpdateNodeOperatorConfigDirectlyPayload,
-        do_update_nodes_hostos_version::UpdateNodesHostOsVersionPayload,
+        do_update_nodes_hostos_version::UpdateNodesHostosVersionPayload,
         do_update_subnet::UpdateSubnetPayload,
         do_update_subnet_replica::UpdateSubnetReplicaVersionPayload,
         do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
@@ -58,6 +60,7 @@ use registry_canister::{
         node_management::{
             do_add_node::AddNodePayload, do_remove_node_directly::RemoveNodeDirectlyPayload,
             do_remove_nodes::RemoveNodesPayload,
+            do_update_node_ipv4_config_directly::UpdateNodeIPv4ConfigDirectlyPayload,
         },
         prepare_canister_migration::PrepareCanisterMigrationPayload,
         reroute_canister_ranges::RerouteCanisterRangesPayload,
@@ -116,9 +119,7 @@ fn check_caller_is_governance_and_log(method_name: &str) {
 ///
 /// The contract is simply that those `RegistryAtomicMutateRequest` are
 /// processed one at a time, in order, and if any fail, the canister
-/// initialization traps. The caller is always authorized to make these
-/// mutations, even if the `RegistryCanisterInitPayload::authz_info` field state
-/// otherwise.
+/// initialization traps.
 ///
 /// In other words, there is no difference in the result between using an init
 /// payload or starting with an empty content and having an authorized user
@@ -175,34 +176,6 @@ fn canister_post_upgrade() {
 }
 
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {}
-
-#[export_name = "canister_update update_authz"]
-fn update_authz() {
-    check_caller_is_root();
-    over(candid_one, |_: Vec<MethodAuthzChange>| {
-        println!(
-            "{}update_authz was called. \
-                 This does not do anything, since the registry canister no longer has any \
-                 function whose access is controlled using this mechanism. \
-                 TODO(NNS1-413): Remove this once we are sure that there are no callers.",
-            LOG_PREFIX,
-        );
-    })
-}
-
-#[export_name = "canister_query current_authz"]
-fn current_authz() {
-    over(candid, |_: ()| {
-        println!(
-            "{}current_authz was called. \
-                 This always returns the default value, since the registry canister's state no \
-                 longer contains a CanisterAuthzInfo. \
-                 TODO(NNS1-413): Remove this once we are sure that there are no callers.",
-            LOG_PREFIX,
-        );
-        CanisterAuthzInfo::default()
-    })
-}
 
 #[export_name = "canister_query get_changes_since"]
 fn get_changes_since() {
@@ -435,30 +408,30 @@ fn update_subnet_replica_version_(payload: UpdateSubnetReplicaVersionPayload) {
     recertify_registry();
 }
 
-#[export_name = "canister_update add_hostos_version"]
-fn add_hostos_version() {
-    check_caller_is_governance_and_log("add_hostos_version");
-    over(candid_one, |payload: AddHostOsVersionPayload| {
-        add_hostos_version_(payload)
+#[export_name = "canister_update update_elected_hostos_versions"]
+fn update_elected_hostos_versions() {
+    check_caller_is_governance_and_log("update_elected_hostos_versions");
+    over(candid_one, |payload: UpdateElectedHostosVersionsPayload| {
+        update_elected_hostos_versions_(payload)
     });
 }
 
-#[candid_method(update, rename = "add_hostos_version")]
-fn add_hostos_version_(payload: AddHostOsVersionPayload) {
-    registry_mut().do_add_hostos_version(payload);
+#[candid_method(update, rename = "update_elected_hostos_versions")]
+fn update_elected_hostos_versions_(payload: UpdateElectedHostosVersionsPayload) {
+    registry_mut().do_update_elected_hostos_versions(payload);
     recertify_registry();
 }
 
 #[export_name = "canister_update update_nodes_hostos_version"]
 fn update_nodes_hostos_version() {
     check_caller_is_governance_and_log("update_nodes_hostos_version");
-    over(candid_one, |payload: UpdateNodesHostOsVersionPayload| {
+    over(candid_one, |payload: UpdateNodesHostosVersionPayload| {
         update_nodes_hostos_version_(payload)
     });
 }
 
 #[candid_method(update, rename = "update_nodes_hostos_version")]
-fn update_nodes_hostos_version_(payload: UpdateNodesHostOsVersionPayload) {
+fn update_nodes_hostos_version_(payload: UpdateNodesHostosVersionPayload) {
     registry_mut().do_update_nodes_hostos_version(payload);
     recertify_registry();
 }
@@ -558,6 +531,60 @@ fn change_subnet_membership() {
 #[candid_method(update, rename = "change_subnet_membership")]
 fn change_subnet_membership_(payload: ChangeSubnetMembershipPayload) {
     registry_mut().do_change_subnet_membership(payload);
+    recertify_registry();
+}
+
+#[export_name = "canister_update add_api_boundary_node"]
+fn add_api_boundary_node() {
+    check_caller_is_governance_and_log("add_api_boundary_node");
+    over(candid_one, |payload: AddApiBoundaryNodePayload| {
+        add_api_boundary_node_(payload)
+    });
+}
+
+#[candid_method(update, rename = "add_api_boundary_node")]
+fn add_api_boundary_node_(payload: AddApiBoundaryNodePayload) {
+    registry_mut().do_add_api_boundary_node(payload);
+    recertify_registry();
+}
+
+#[export_name = "canister_update remove_api_boundary_nodes"]
+fn remove_api_boundary_nodes() {
+    check_caller_is_governance_and_log("remove_api_boundary_nodes");
+    over(candid_one, |payload: RemoveApiBoundaryNodesPayload| {
+        remove_api_boundary_nodes_(payload)
+    });
+}
+
+#[candid_method(update, rename = "remove_api_boundary_nodes")]
+fn remove_api_boundary_nodes_(payload: RemoveApiBoundaryNodesPayload) {
+    registry_mut().do_remove_api_boundary_nodes(payload);
+    recertify_registry();
+}
+
+#[export_name = "canister_update update_api_boundary_node_domain"]
+fn update_api_boundary_node_domain() {
+    check_caller_is_governance_and_log("update_api_boundary_node_domain");
+    over(candid_one, |payload: UpdateApiBoundaryNodeDomainPayload| {
+        update_api_boundary_node_domain_(payload)
+    });
+}
+
+#[candid_method(update, rename = "update_api_boundary_node_domain")]
+fn update_api_boundary_node_domain_(payload: UpdateApiBoundaryNodeDomainPayload) {
+    registry_mut().do_update_api_boundary_node_domain(payload);
+    recertify_registry();
+}
+
+#[export_name = "canister_update update_api_boundary_nodes_version"]
+fn update_api_boundary_nodes_version() {
+    check_caller_is_governance_and_log("update_api_boundary_nodes_version");
+    over(candid_one, update_api_boundary_nodes_version_);
+}
+
+#[candid_method(update, rename = "update_api_boundary_nodes_version")]
+fn update_api_boundary_nodes_version_(payload: UpdateApiBoundaryNodesVersionPayload) {
+    registry_mut().do_update_api_boundary_nodes_version(payload);
     recertify_registry();
 }
 
@@ -757,7 +784,7 @@ fn prepare_canister_migration() {
 fn prepare_canister_migration_(payload: PrepareCanisterMigrationPayload) -> Result<(), String> {
     if let Err(msg) = registry_mut().prepare_canister_migration(payload) {
         println!("{} Reject: {}", LOG_PREFIX, msg);
-        return Err(msg);
+        return Err(msg.to_string());
     }
     recertify_registry();
     Ok(())
@@ -893,6 +920,26 @@ fn update_node_directly_(payload: UpdateNodeDirectlyPayload) -> Result<(), Strin
     result
 }
 
+#[export_name = "canister_update update_node_ipv4_config_directly"]
+fn update_node_ipv4_config_directly() {
+    // This method can be called by anyone
+    println!(
+        "{}call: update_node_ipv4_config_directly from: {}",
+        LOG_PREFIX,
+        dfn_core::api::caller()
+    );
+    over_may_reject(candid_one, update_node_ipv4_config_directly_);
+}
+
+#[candid_method(update, rename = "update_node_ipv4_config_directly")]
+fn update_node_ipv4_config_directly_(
+    payload: UpdateNodeIPv4ConfigDirectlyPayload,
+) -> Result<(), String> {
+    registry_mut().do_update_node_ipv4_config_directly(payload);
+    recertify_registry();
+    Ok(())
+}
+
 #[export_name = "canister_update remove_node_directly"]
 fn remove_node_directly() {
     // This method can be called by anyone
@@ -949,7 +996,7 @@ fn http_request() {
 // works.
 //
 // We include the .did file as committed, as means it is included verbatim in
-// the .wasm; using `candid::export_service` here would involve unecessary
+// the .wasm; using `candid::export_service` here would involve unnecessary
 // runtime computation
 
 #[export_name = "canister_query __get_candid_interface_tmp_hack"]

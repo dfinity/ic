@@ -36,13 +36,6 @@ use std::{
     time::Duration,
 };
 
-// Wait for VALIDATED_DEALING_AGE_THRESHOLD_MSECS (from the time an entry was
-// added to the validated pool) before selecting it for inclusion in a block.
-// This (opportunistically) gives enough time for the entries to be
-// gossiped/validated/included in the DKG pools of the peers. And so that
-// the block validation path can skip the expensive crypto validation.
-const VALIDATED_DEALING_AGE_THRESHOLD_MSECS: u64 = 10;
-
 pub(crate) fn subnet_records_for_registry_version(
     block_maker: &BlockMaker,
     membership_record: RegistryVersion,
@@ -295,7 +288,6 @@ impl BlockMaker {
             &context,
             self.log.clone(),
             max_dealings_per_block,
-            VALIDATED_DEALING_AGE_THRESHOLD_MSECS,
         )
         .map_err(|err| warn!(self.log, "Payload construction has failed: {:?}", err))
         .ok()?;
@@ -313,7 +305,7 @@ impl BlockMaker {
                         &context,
                         &parent,
                         Some(&self.ecdsa_payload_metrics),
-                        self.log.clone(),
+                        &self.log,
                     )
                     .map_err(|err| warn!(self.log, "Payload construction has failed: {:?}", err))
                     .ok()
@@ -358,7 +350,7 @@ impl BlockMaker {
                                 &context,
                                 &parent,
                                 &self.ecdsa_payload_metrics,
-                                self.log.clone(),
+                                &self.log,
                             )
                             .map_err(|err| {
                                 warn!(self.log, "Payload construction has failed: {:?}", err)

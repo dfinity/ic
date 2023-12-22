@@ -39,12 +39,12 @@ fn invalid_bls_12_381_signature<R: RngCore + CryptoRng>(
 fn bls_verification(c: &mut Criterion) {
     let mut group = c.benchmark_group("crypto_bls12_381_signature_verification");
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     // Benchmark uncached verification
     group.bench_function("verify_combined_signature_nocache", |b| {
         b.iter_batched(
-            || valid_bls_12_381_signature(&mut rng),
+            || valid_bls_12_381_signature(rng),
             |(msg, sig, pk)| assert!(verify_combined_signature(&msg, sig, pk).is_ok()),
             BatchSize::SmallInput,
         )
@@ -56,7 +56,7 @@ fn bls_verification(c: &mut Criterion) {
     // the result of verify_combined_signature_nocache from this result.
     group.bench_function("verify_combined_signature_miss", |b| {
         b.iter_batched(
-            || valid_bls_12_381_signature(&mut rng),
+            || valid_bls_12_381_signature(rng),
             |(msg, sig, pk)| assert!(verify_combined_signature_with_cache(&msg, sig, pk).is_ok()),
             BatchSize::SmallInput,
         )
@@ -67,7 +67,7 @@ fn bls_verification(c: &mut Criterion) {
     group.bench_function("verify_combined_signature_hit", |b| {
         b.iter_batched(
             || {
-                let (msg, sig, pk) = valid_bls_12_381_signature(&mut rng);
+                let (msg, sig, pk) = valid_bls_12_381_signature(rng);
                 assert!(verify_combined_signature_with_cache(&msg, sig, pk).is_ok());
                 (msg, sig, pk)
             },
@@ -81,7 +81,7 @@ fn bls_verification(c: &mut Criterion) {
     // These are always slow because invalid signatures are not cached
     group.bench_function("verify_combined_signature_invalid", |b| {
         b.iter_batched_ref(
-            || invalid_bls_12_381_signature(&mut rng),
+            || invalid_bls_12_381_signature(rng),
             |(msg, sig, pk)| assert!(verify_combined_signature(msg, *sig, *pk).is_err()),
             BatchSize::SmallInput,
         )

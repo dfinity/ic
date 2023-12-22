@@ -81,7 +81,9 @@ pub(crate) enum RegistryInvariantError {
         registry_version: RegistryVersion,
     },
 
-    #[error("failed to get transport info for node {node_id} from registry {registry_version}: {source}")]
+    #[error(
+        "failed to get node record for node {node_id} from registry {registry_version}: {source}"
+    )]
     GetTransportInfoFailed {
         node_id: NodeId,
         registry_version: RegistryVersion,
@@ -127,7 +129,7 @@ fn get_ic_topology(
 ) -> Result<Vec<PrometheusNodeRecord>, RegistryInvariantError> {
     let mut prometheus_service_discovery: Vec<PrometheusNodeRecord> = Vec::new();
 
-    // Fetch all subnet IDs, propogate errors
+    // Fetch all subnet IDs, propagate errors
     let subnet_ids = registry_client
         .get_subnet_ids(registry_version)
         .map_err(|source| RegistryInvariantError::GetSubnetsFailed {
@@ -161,7 +163,7 @@ fn get_ic_topology(
 
         for node_id in node_ids {
             let node_record = registry_client
-                .get_transport_info(node_id, registry_version)
+                .get_node_record(node_id, registry_version)
                 .map_err(|source| RegistryInvariantError::GetTransportInfoFailed {
                     node_id,
                     registry_version,

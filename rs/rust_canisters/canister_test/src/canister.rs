@@ -6,7 +6,7 @@ use ic_config::Config;
 use ic_ic00_types::CanisterStatusType::Stopped;
 pub use ic_ic00_types::{
     self as ic00, CanisterIdRecord, CanisterInstallMode, CanisterStatusResult, InstallCodeArgs,
-    ProvisionalCreateCanisterWithCyclesArgs, SetControllerArgs, IC_00,
+    ProvisionalCreateCanisterWithCyclesArgs, IC_00,
 };
 use ic_registry_transport::pb::v1::RegistryMutation;
 use ic_replica_tests::*;
@@ -14,11 +14,14 @@ pub use ic_types::{ingress::WasmResult, CanisterId, Cycles, PrincipalId};
 use on_wire::{FromWire, IntoWire, NewType};
 
 use ic_ic00_types::{CanisterSettingsArgsBuilder, CanisterStatusResultV2, UpdateSettingsArgs};
-use std::convert::TryFrom;
-use std::env;
-use std::fmt;
-use std::time::Duration;
-use std::{convert::AsRef, fs::File, io::Read, path::Path};
+use std::{
+    convert::{AsRef, TryFrom},
+    env, fmt,
+    fs::File,
+    io::Read,
+    path::Path,
+    time::Duration,
+};
 
 const MIN_BACKOFF_INTERVAL: Duration = Duration::from_millis(250);
 // The value must be smaller than `ic_http_handler::MAX_TCP_PEEK_TIMEOUT_SECS`.
@@ -67,28 +70,33 @@ impl Wasm {
         eprintln!("looking up {} at {}", bin_name, var_name);
         match env::var(&var_name) {
             Ok(path) => {
-                let wasm = Wasm::from_file(path);
+                let wasm = Wasm::from_file(path.clone());
                 eprintln!(
-                    "Using pre-built binary for {} (size = {})",
+                    "Using pre-built binary for {} with features: {:?} (size = {}, path = {})",
                     bin_name,
-                    wasm.0.len()
+                    features,
+                    wasm.0.len(),
+                    path,
                 );
                 Some(wasm)
             }
             Err(env::VarError::NotPresent) => {
-                if env::var("CI").is_ok() {
-                    println!("Environment variables with name containing \"CANISTER\":");
-                    for (k, v) in env::vars() {
-                        if k.contains("CANISTER") {
-                            println!("  {}: {}", k, v);
-                        }
+                println!(
+                    "Environment variable {} is not present; variables with name \
+                    containing \"CANISTER\":",
+                    var_name
+                );
+                for (k, v) in env::vars() {
+                    if k.contains("CANISTER") {
+                        println!("  {}: {}", k, v);
                     }
-
+                }
+                if env::var("CI").is_ok() {
                     panic!(
                         "Running on CI and expected canister env var {0}\n\
                         Please add {1} as a data dependency in the test's BUILD.bazel target:\n",
                         var_name, bin_name
-                    )
+                    );
                 }
                 None
             }
@@ -334,17 +342,32 @@ impl<'a> Runtime {
         num_cycles: Option<u128>,
         specified_id: Option<PrincipalId>,
     ) -> Result<Canister<'a>, String> {
-        let canister_id_record: Result<CanisterIdRecord, String> = self
-            .get_management_canister()
-            .update_(
-                ic00::Method::ProvisionalCreateCanisterWithCycles.to_string(),
-                candid,
-                (ProvisionalCreateCanisterWithCyclesArgs::new(
-                    num_cycles,
-                    specified_id,
-                ),),
-            )
-            .await;
+        let canister_id_record: Result<CanisterIdRecord, String> = match specified_id {
+            Some(canister_id) => {
+                self.get_management_canister_with_effective_canister_id(canister_id)
+                    .update_(
+                        ic00::Method::ProvisionalCreateCanisterWithCycles.to_string(),
+                        candid,
+                        (ProvisionalCreateCanisterWithCyclesArgs::new(
+                            num_cycles,
+                            specified_id,
+                        ),),
+                    )
+                    .await
+            }
+            None => {
+                self.get_management_canister()
+                    .update_(
+                        ic00::Method::ProvisionalCreateCanisterWithCycles.to_string(),
+                        candid,
+                        (ProvisionalCreateCanisterWithCyclesArgs::new(
+                            num_cycles,
+                            specified_id,
+                        ),),
+                    )
+                    .await
+            }
+        };
         let canister_id = canister_id_record?.get_canister_id();
         Ok(Canister {
             runtime: self,
@@ -371,26 +394,8 @@ impl<'a> Runtime {
         &'a self,
         specified_id: PrincipalId,
     ) -> Result<Canister<'a>, String> {
-        let canister_id_record: CanisterIdRecord = self
-            .get_management_canister()
-            .update_(
-                ic_ic00_types::Method::ProvisionalCreateCanisterWithCycles.to_string(),
-                candid,
-                (ProvisionalCreateCanisterWithCyclesArgs::new(
-                    None,
-                    Some(specified_id),
-                ),),
-            )
+        self.create_canister_with_specified_id(None, Some(specified_id))
             .await
-            .expect("Failed to create canister at specific id.");
-        let canister_id = canister_id_record.get_canister_id();
-        assert_eq!(canister_id.get(), specified_id);
-        Ok(Canister {
-            runtime: self,
-            effective_canister_id: canister_id.into(),
-            canister_id,
-            wasm: None,
-        })
     }
 
     pub async fn create_canister_at_id_max_cycles_with_retries(
@@ -533,10 +538,9 @@ impl<'a> Canister<'a> {
     }
 
     pub fn from_vec8(runtime: &'a Runtime, canister_id_vec8: Vec<u8>) -> Canister<'a> {
-        let canister_id = CanisterId::new(
+        let canister_id = CanisterId::unchecked_from_principal(
             PrincipalId::try_from(&canister_id_vec8[..]).expect("failed to decode principal id"),
-        )
-        .unwrap();
+        );
         Self {
             runtime,
             effective_canister_id: canister_id.into(),
@@ -758,6 +762,7 @@ impl<'a> Canister<'a> {
     }
 
     /// Tries to stop this canister, waits for it to reach the Stopped state.
+    /// This is expected to work only when the canister's controller is an anonymous user
     pub async fn stop(&self) -> Result<(), String> {
         let stop_res: Result<(), String> = self
             .runtime
@@ -798,6 +803,13 @@ impl<'a> Canister<'a> {
     /// replace this in tests.
     pub async fn stop_then_restart(&self) -> Result<(), String> {
         self.stop().await?;
+        self.start().await
+    }
+    /// Tries to start the canister.
+    ///
+    /// This is expected to work only when the canister's controller is the
+    /// anonymous user.
+    pub async fn start(&self) -> Result<(), String> {
         let start_res: Result<(), String> = self
             .runtime
             .get_management_canister_with_effective_canister_id(self.canister_id().into())

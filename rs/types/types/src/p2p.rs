@@ -1,10 +1,9 @@
 //! Defines types used by the P2P component.
 use crate::artifact::{ArtifactAttribute, ArtifactId};
 use crate::crypto::CryptoHash;
-use bincode::{deserialize, serialize};
-use ic_protobuf::p2p::v1 as pb;
-use ic_protobuf::proxy::ProxyDecodeError;
+use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::registry::subnet::v1::GossipConfig;
+use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::time::Duration;
@@ -13,7 +12,7 @@ use std::time::Duration;
 /// in its artifact pool. The adverts of different artifact types may differ
 /// in their attributes. Upon the reception of an advert, a node can decide
 /// if and when to request the corresponding artifact from the sender.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GossipAdvert {
     pub attribute: ArtifactAttribute,
     pub size: usize,
@@ -29,7 +28,7 @@ pub struct GossipAdvert {
 // Gossip subnet constants //
 /////////////////////////////
 
-/// Maximumim timout for fetching an artifact. 10_000s.
+/// Maximum timeout for fetching an artifact. 10_000s.
 /// Reasoning: Block rate can be as low as 0.1 and we want to allow state sync
 /// to last for 1000 blocks (two checkopint intervals) -> 1000b/0.1b/s = 10000s
 pub const MAX_ARTIFACT_TIMEOUT: Duration = Duration::from_secs(10_000);
@@ -83,22 +82,21 @@ pub fn build_default_gossip_config() -> GossipConfig {
 impl From<GossipAdvert> for pb::GossipAdvert {
     fn from(advert: GossipAdvert) -> Self {
         Self {
-            attribute: serialize(&advert.attribute).unwrap(),
+            attribute: Some(advert.attribute.into()),
             size: advert.size as u64,
-            artifact_id: serialize(&advert.artifact_id).unwrap(),
+            artifact_id: Some(advert.artifact_id.into()),
             integrity_hash: advert.integrity_hash.0,
         }
     }
 }
 
-// TODO(P2P-480)
 impl TryFrom<pb::GossipAdvert> for GossipAdvert {
     type Error = ProxyDecodeError;
     fn try_from(advert: pb::GossipAdvert) -> Result<Self, Self::Error> {
         Ok(Self {
-            attribute: deserialize(&advert.attribute)?,
+            attribute: try_from_option_field(advert.attribute, "GossipAdvert::attribute")?,
             size: advert.size as usize,
-            artifact_id: deserialize(&advert.artifact_id)?,
+            artifact_id: try_from_option_field(advert.artifact_id, "GossipAdvert::artifact_id")?,
             integrity_hash: CryptoHash(advert.integrity_hash),
         })
     }

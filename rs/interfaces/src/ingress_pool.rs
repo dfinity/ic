@@ -1,7 +1,7 @@
 //! The ingress pool public interface.
-use crate::artifact_pool::{UnvalidatedArtifact, ValidatedArtifact};
+use crate::{consensus_pool::ValidatedArtifact, p2p::consensus::UnvalidatedArtifact};
 use ic_types::{
-    artifact::{IngressMessageAttribute, IngressMessageId},
+    artifact::IngressMessageId,
     crypto::CryptoHash,
     messages::{MessageId, SignedIngress},
     CountBytes, NodeId, Time,
@@ -56,13 +56,7 @@ pub type UnvalidatedIngressArtifact = UnvalidatedArtifact<IngressPoolObject>;
 /// Change set for processing unvalidated ingress messages
 pub type ChangeSet = Vec<ChangeAction>;
 
-pub type IngressChangeArtifact = (
-    IngressMessageId,
-    NodeId,
-    usize,
-    IngressMessageAttribute,
-    CryptoHash,
-);
+pub type IngressChangeArtifact = (IngressMessageId, NodeId, usize, (), CryptoHash);
 
 /// Change actions applicable to the ingress pool.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

@@ -1,11 +1,14 @@
 [package]
 name = "ic-replay"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
-clap = { version = "3.1.6", features = ["derive"] }
+clap = { workspace = true }
 hex = "0.4.2"
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-canister-client = { path = "../canister_client" }
@@ -41,13 +44,13 @@ ic-replicated-state = { path = "../replicated_state" }
 ic-state-manager = { path = "../state_manager" }
 ic-types = { path = "../types/types" }
 icp-ledger = { path = "../rosetta-api/icp_ledger" }
-prost = "0.11.0"
-serde = { version = "1.0.115", features = ["derive"] }
-serde_json = "1.0.40"
-slog = "2.5.2"
+prost = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+slog = { workspace = true }
 slog-async = { version = "2.5", features = ["nested-values"] }
 tempfile = "3.1.0"
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { workspace = true }
 url = { version = "2.1.1", features = ["serde"] }
 
 [dev-dependencies]

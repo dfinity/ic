@@ -1,5 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_bench", "rust_test_suite_with_extra_srcs")
+load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 
 package(default_visibility = ["//rs/crypto:__subpackages__"])
 
@@ -16,8 +17,8 @@ DEPENDENCIES = [
     "@crate_index//:k256",
     "@crate_index//:lazy_static",
     "@crate_index//:p256",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:rand_chacha_0_3_1",
+    "@crate_index//:rand",
+    "@crate_index//:rand_chacha",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_cbor",
@@ -49,6 +50,10 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_crypto_internal_threshold_sig_ecdsa",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    rustc_flags = select({
+        "//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
+        "//conditions:default": [],
+    }),
     version = "0.1.0",
     deps = DEPENDENCIES,
 )
@@ -84,7 +89,7 @@ rust_bench(
         "//rs/rust_canisters/canister_test",
         "//rs/types/types",
         "@crate_index//:criterion",
-        "@crate_index//:rand_0_8_4",
+        "@crate_index//:rand",
     ],
 )
 
@@ -106,7 +111,7 @@ rust_bench(
         ":tecdsa",
         "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:criterion",
-        "@crate_index//:rand_0_8_4",
+        "@crate_index//:rand",
     ],
 )
 
@@ -121,6 +126,19 @@ rust_bench(
 )
 
 rust_bench(
+    name = "key_derivation_bench",
+    testonly = True,
+    srcs = ["benches/key_derivation.rs"],
+    deps = [
+        ":tecdsa",
+        "//rs/crypto/test_utils/reproducible_rng",
+        "//rs/types/types",
+        "@crate_index//:criterion",
+        "@crate_index//:rand",
+    ],
+)
+
+rust_bench(
     name = "poly_bench",
     testonly = True,
     srcs = ["benches/poly.rs"],
@@ -128,7 +146,7 @@ rust_bench(
         ":tecdsa",
         "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:criterion",
-        "@crate_index//:rand_0_8_4",
+        "@crate_index//:rand",
     ],
 )
 
@@ -140,6 +158,6 @@ rust_bench(
         ":tecdsa",
         "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:criterion",
-        "@crate_index//:rand_0_8_4",
+        "@crate_index//:rand",
     ],
 )

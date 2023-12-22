@@ -1,9 +1,10 @@
 [package]
 name = "kv_store"
-version = "0.1.0"
-edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [[bin]]
 name = "kv_store"
@@ -12,9 +13,10 @@ path = "src/main.rs"
 [dependencies]
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
+candid = { workspace = true }
 ic-certified-map = "0.3"
-base64 = "0.11.0"
+base64 = { workspace = true }
 flate2 = "1"
-serde = "1"
-serde_cbor = "0.11.2"
+serde = { workspace = true }
+serde_cbor = { workspace = true }
 sha2 = "0.10.6"

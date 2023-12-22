@@ -93,6 +93,7 @@ pub fn test(env: TestEnv) {
         &upload_node.get_public_url(),
         upload_node.effective_canister_id(),
         msg,
+        &logger,
     );
     assert!(can_read_msg(
         &logger,
@@ -110,6 +111,7 @@ pub fn test(env: TestEnv) {
         replica_version: Some(ic_version),
         key_file: Some(ssh_authorized_priv_keys_dir.join(SSH_USERNAME)),
         test_mode: true,
+        skip_prompts: true,
     };
 
     // unlike during a production recovery using the CLI, here we already know all of parameters
@@ -117,17 +119,14 @@ pub fn test(env: TestEnv) {
     let subnet_args = NNSRecoverySameNodesArgs {
         subnet_id: topo_snapshot.root_subnet_id(),
         upgrade_version: Some(working_version),
+        upgrade_image_url: env.get_ic_os_update_img_test_url().ok(),
+        upgrade_image_hash: env.get_ic_os_update_img_test_sha256().ok(),
         download_node: Some(download_node.get_ip_addr()),
         upload_node: Some(upload_node.get_ip_addr()),
         next_step: None,
     };
 
-    let mut subnet_recovery = NNSRecoverySameNodes::new(
-        logger.clone(),
-        recovery_args,
-        subnet_args,
-        /*interactive=*/ false,
-    );
+    let mut subnet_recovery = NNSRecoverySameNodes::new(logger.clone(), recovery_args, subnet_args);
 
     // let's take f+1 nodes and break them.
     let f = (SUBNET_SIZE - 1) / 3;
@@ -230,6 +229,7 @@ pub fn test(env: TestEnv) {
         &upload_node.get_public_url(),
         upload_node.effective_canister_id(),
         new_msg,
+        &logger,
     );
     assert!(can_read_msg(
         &logger,

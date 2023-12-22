@@ -75,7 +75,7 @@ struct SystemStateFixture {
 impl SystemStateFixture {
     fn running() -> SystemStateFixture {
         SystemStateFixture {
-            system_state: SystemState::new_running(
+            system_state: SystemState::new_running_for_testing(
                 CANISTER_ID,
                 user_test_id(1).get(),
                 Cycles::new(5_000_000_000_000),
@@ -86,7 +86,7 @@ impl SystemStateFixture {
 
     fn stopping() -> SystemStateFixture {
         SystemStateFixture {
-            system_state: SystemState::new_stopping(
+            system_state: SystemState::new_stopping_for_testing(
                 CANISTER_ID,
                 user_test_id(1).get(),
                 Cycles::new(5_000_000_000_000),
@@ -97,7 +97,7 @@ impl SystemStateFixture {
 
     fn stopped() -> SystemStateFixture {
         SystemStateFixture {
-            system_state: SystemState::new_stopped(
+            system_state: SystemState::new_stopped_for_testing(
                 CANISTER_ID,
                 user_test_id(1).get(),
                 Cycles::new(5_000_000_000_000),
@@ -155,7 +155,7 @@ fn correct_charging_target_canister_for_a_response() {
         NumBytes::from(4 << 30),
     ) + Cycles::new(5_000_000_000_000);
     let mut fixture = SystemStateFixture {
-        system_state: SystemState::new_running(
+        system_state: SystemState::new_running_for_testing(
             canister_test_id(0),
             user_test_id(1).get(),
             initial_cycles,
@@ -256,7 +256,7 @@ fn induct_messages_to_self_memory_limit_test_impl(
 
     // A system state with a reservation for an outgoing response.
     let mut fixture = SystemStateFixture {
-        system_state: SystemState::new_running(
+        system_state: SystemState::new_running_for_testing(
             CANISTER_ID,
             user_test_id(1).get(),
             Cycles::new(5_000_000_000_000),

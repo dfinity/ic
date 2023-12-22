@@ -9,7 +9,7 @@ use crate::common::{
 use async_trait::async_trait;
 use hyper::{Body, Client, Method, Request, StatusCode};
 use ic_agent::{
-    agent::{http_transport::ReqwestHttpReplicaV2Transport, QueryBuilder},
+    agent::{http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport, QueryBuilder},
     agent_error::HttpErrorPayload,
     export::Principal,
     hash_tree::Label,
@@ -18,7 +18,10 @@ use ic_agent::{
 use ic_config::http_handler::Config;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_pprof::{Error, Pprof, PprofCollector};
-use ic_types::messages::{Blob, HttpQueryResponse, HttpQueryResponseReply};
+use ic_types::{
+    messages::{Blob, HttpQueryResponse, HttpQueryResponseReply},
+    time::current_time,
+};
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -53,6 +56,7 @@ fn test_load_shedding_query() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
+        None,
         Arc::new(Pprof),
     );
 
@@ -61,6 +65,7 @@ fn test_load_shedding_query() {
 
     let ok_agent = Agent::builder()
         .with_transport(ReqwestHttpReplicaV2Transport::create(format!("http://{}", addr)).unwrap())
+        .with_verify_query_signatures(false)
         .build()
         .unwrap();
 
@@ -74,7 +79,7 @@ fn test_load_shedding_query() {
     let load_shedder_returned_clone = load_shedder_returned.clone();
     let query_exec_running_clone = query_exec_running.clone();
 
-    // This agent's request wil be load shedded.
+    // This agent's request will be load shedded.
     let load_shedded_agent = rt.spawn(async move {
         query_exec_running_clone.notified().await;
 
@@ -96,11 +101,14 @@ fn test_load_shedding_query() {
         query_exec_running.notify_one();
         load_shedder_returned.notified().await;
 
-        resp.send_response(Ok(HttpQueryResponse::Replied {
-            reply: HttpQueryResponseReply {
-                arg: Blob("success".into()),
+        resp.send_response(Ok((
+            HttpQueryResponse::Replied {
+                reply: HttpQueryResponseReply {
+                    arg: Blob("success".into()),
+                },
             },
-        }))
+            current_time(),
+        )))
     });
 
     rt.block_on(async {
@@ -182,7 +190,7 @@ fn test_load_shedding_read_state() {
     let load_shedder_returned_clone = load_shedder_returned.clone();
     let rt_clone: tokio::runtime::Handle = rt.handle().clone();
     mock_state_manager
-        .expect_get_certified_state_reader()
+        .expect_get_certified_state_snapshot()
         .returning(move || {
             // Need this check, otherwise wait_for_status_healthy() will be stuck.
             // This is due to status endpoint also relying on state_reader_executor.
@@ -206,6 +214,7 @@ fn test_load_shedding_read_state() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
+        None,
         Arc::new(Pprof),
     );
 
@@ -218,7 +227,7 @@ fn test_load_shedding_read_state() {
     let paths: Vec<Vec<Label<Vec<u8>>>> = vec![vec!["time".into()]];
     let paths_clone = paths.clone();
 
-    // This agent's request wil be load shedded
+    // This agent's request will be load shedded
     let load_shedded_agent_resp = rt.spawn(async move {
         read_state_running.notified().await;
 
@@ -323,6 +332,7 @@ fn test_load_shedding_pprof() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
+        None,
         Arc::new(mock_pprof),
     );
 
@@ -350,7 +360,7 @@ fn test_load_shedding_pprof() {
             .expect("request builder")
     };
 
-    // This request wil fill the load shedder.
+    // This request will fill the load shedder.
     let ok_request = rt.spawn(async move {
         let client = Client::new();
         let response = client.request(flame_graph_req()).await.unwrap();
@@ -409,6 +419,7 @@ fn test_load_shedding_update_call() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
+        None,
         Arc::new(Pprof),
     );
 

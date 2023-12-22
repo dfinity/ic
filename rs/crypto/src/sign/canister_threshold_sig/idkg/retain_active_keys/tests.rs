@@ -7,6 +7,7 @@ use ic_crypto_internal_csp::keygen::utils::idkg_dealing_encryption_pk_to_proto;
 use ic_crypto_internal_threshold_sig_ecdsa::MEGaPublicKey;
 use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, EccPoint, EccScalar};
 use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
@@ -25,7 +26,7 @@ use ic_types::crypto::KeyPurpose;
 use ic_types::registry::RegistryClientError;
 use ic_types::Height;
 use mockall::predicate;
-use rand::Rng;
+use rand::{CryptoRng, Rng};
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::{BTreeSet, HashSet};
@@ -40,6 +41,7 @@ mod retain_keys_for_transcripts {
 
     #[test]
     fn should_succeed_when_key_in_registry_and_node_in_receivers() {
+        let rng = &mut reproducible_rng();
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
         let registry_client = FakeRegistryClient::new(data_provider.clone());
         let registry_version = RegistryVersion::new(2);
@@ -47,18 +49,21 @@ mod retain_keys_for_transcripts {
         let transcript = idkg_transcript_with_internal_transcript_and_registry_version(
             node_id(),
             registry_version,
+            rng,
         );
         let mut transcripts = HashSet::new();
         transcripts.insert(
             idkg_transcript_with_internal_transcript_and_registry_version(
                 another_node_id(),
                 RegistryVersion::new(1),
+                rng,
             ),
         );
         transcripts.insert(
             idkg_transcript_with_internal_transcript_and_registry_version(
                 node_id(),
                 RegistryVersion::new(3),
+                rng,
             ),
         );
         transcripts.insert(transcript.clone());
@@ -66,6 +71,7 @@ mod retain_keys_for_transcripts {
             idkg_transcript_with_internal_transcript_and_registry_version(
                 node_id(),
                 RegistryVersion::new(4),
+                rng,
             ),
         );
         let idkg_public_key = idkg_unique_public_key_per_registry_version(&registry_version);
@@ -100,12 +106,14 @@ mod retain_keys_for_transcripts {
 
     #[test]
     fn should_be_noop_when_node_not_in_receivers() {
+        let rng = &mut reproducible_rng();
         let registry_client = MockRegistryClient::new();
         let registry_version = RegistryVersion::new(1);
         let mut transcripts = HashSet::new();
         let transcript = idkg_transcript_with_internal_transcript_and_registry_version(
             another_node_id(),
             registry_version,
+            rng,
         );
         transcripts.insert(transcript);
         let mock_csp = MockAllCryptoServiceProvider::new();
@@ -118,6 +126,7 @@ mod retain_keys_for_transcripts {
 
     #[test]
     fn should_fail_with_public_key_not_found_when_node_in_receivers_but_key_not_in_registry() {
+        let rng = &mut reproducible_rng();
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
         let registry_client = FakeRegistryClient::new(data_provider.clone());
         let registry_version = RegistryVersion::new(1);
@@ -125,6 +134,7 @@ mod retain_keys_for_transcripts {
         let transcript = idkg_transcript_with_internal_transcript_and_registry_version(
             node_id(),
             registry_version,
+            rng,
         );
         transcripts.insert(transcript);
         let idkg_public_key = idkg_unique_public_key_per_registry_version(&registry_version);
@@ -147,14 +157,15 @@ mod retain_keys_for_transcripts {
         );
     }
 
-    fn idkg_transcript_with_internal_transcript_and_registry_version(
+    fn idkg_transcript_with_internal_transcript_and_registry_version<R: Rng + CryptoRng>(
         receiver: NodeId,
         version: RegistryVersion,
+        rng: &mut R,
     ) -> IDkgTranscript {
         let mut receivers = BTreeSet::new();
         receivers.insert(receiver);
         IDkgTranscript {
-            transcript_id: random_transcript_id(),
+            transcript_id: random_transcript_id(rng),
             receivers: IDkgReceivers::new(receivers).expect("error creating IDKG receivers"),
             registry_version: version,
             verified_dealings: BTreeMap::new(),
@@ -171,6 +182,7 @@ mod oldest_public_key {
 
     #[test]
     fn should_return_public_key_not_found_when_node_a_receiver_but_no_key_in_registry() {
+        let rng = &mut reproducible_rng();
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
         let registry_client = FakeRegistryClient::new(data_provider.clone());
         let mut transcripts = HashSet::new();
@@ -178,6 +190,7 @@ mod oldest_public_key {
         transcripts.insert(idkg_transcript_with_registry_version(
             node_id(),
             registry_version,
+            rng,
         ));
         let idkg_public_key = idkg_unique_public_key_per_registry_version(&registry_version);
         register_idkg_public_key(
@@ -201,6 +214,7 @@ mod oldest_public_key {
 
     #[test]
     fn should_return_none_when_node_not_receiver_in_any_transcript() {
+        let rng = &mut reproducible_rng();
         let registry_client = registry_returning_transient_error();
         let registry_versions = vec![1, 2, 3];
         let mut transcripts = HashSet::new();
@@ -208,6 +222,7 @@ mod oldest_public_key {
             transcripts.insert(idkg_transcript_with_registry_version(
                 another_node_id(),
                 RegistryVersion::new(registry_version),
+                rng,
             ));
         }
         let mock_csp = MockAllCryptoServiceProvider::new();
@@ -219,12 +234,14 @@ mod oldest_public_key {
 
     #[test]
     fn should_return_oldest_public_key_where_node_in_receivers() {
+        let rng = &mut reproducible_rng();
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
         let registry_client = FakeRegistryClient::new(data_provider.clone());
         let mut transcripts = HashSet::new();
         transcripts.insert(idkg_transcript_with_registry_version(
             another_node_id(),
             RegistryVersion::new(1),
+            rng,
         ));
         let old_registry_version = RegistryVersion::new(2);
         let old_idkg_public_key = generate_and_register_idkg_public_key(
@@ -232,6 +249,7 @@ mod oldest_public_key {
             old_registry_version,
             data_provider.clone(),
             &mut transcripts,
+            rng,
         );
         let new_registry_version = RegistryVersion::new(3);
         let _new_idkg_public_key = generate_and_register_idkg_public_key(
@@ -239,6 +257,7 @@ mod oldest_public_key {
             new_registry_version,
             data_provider,
             &mut transcripts,
+            rng,
         );
         registry_client.update_to_latest_version();
         let mut mock_csp = MockAllCryptoServiceProvider::new();
@@ -262,10 +281,12 @@ mod oldest_public_key {
 
     #[test]
     fn should_return_transient_error_when_registry_transient_error() {
+        let rng = &mut reproducible_rng();
         let mut transcripts = HashSet::new();
         transcripts.insert(idkg_transcript_with_registry_version(
             node_id(),
             RegistryVersion::new(2),
+            rng,
         ));
         let registry = registry_returning_transient_error();
         let mock_csp = MockAllCryptoServiceProvider::new();
@@ -281,10 +302,12 @@ mod oldest_public_key {
     }
     #[test]
     fn should_return_internal_error_when_registry_reproducible_error() {
+        let rng = &mut reproducible_rng();
         let mut transcripts = HashSet::new();
         transcripts.insert(idkg_transcript_with_registry_version(
             node_id(),
             RegistryVersion::new(2),
+            rng,
         ));
         let registry = registry_returning_reproducible_error();
         let mock_csp = MockAllCryptoServiceProvider::new();
@@ -301,6 +324,7 @@ mod oldest_public_key {
 
     #[test]
     fn should_return_internal_error_when_public_key_malformed() {
+        let rng = &mut reproducible_rng();
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
         let registry_client = FakeRegistryClient::new(data_provider.clone());
         let registry_version = RegistryVersion::new(1);
@@ -308,6 +332,7 @@ mod oldest_public_key {
         transcripts.insert(idkg_transcript_with_registry_version(
             node_id(),
             registry_version,
+            rng,
         ));
         register_idkg_public_key(
             node_id(),
@@ -330,6 +355,7 @@ mod oldest_public_key {
 
     #[test]
     fn should_return_oldest_public_key_with_transcript_versions_out_of_order() {
+        let rng = &mut reproducible_rng();
         let registry_versions = vec![2, 4, 1, 10];
         let oldest_registry_version =
             RegistryVersion::new(*registry_versions.iter().min().expect("empty versions"));
@@ -338,7 +364,11 @@ mod oldest_public_key {
         let registry_client = FakeRegistryClient::new(data_provider.clone());
         let mut transcripts = HashSet::new();
         for (version, idkg_public_key) in &idkg_public_keys {
-            transcripts.insert(idkg_transcript_with_registry_version(node_id(), *version));
+            transcripts.insert(idkg_transcript_with_registry_version(
+                node_id(),
+                *version,
+                rng,
+            ));
             register_idkg_public_key(
                 node_id(),
                 idkg_dealing_encryption_pk_to_proto(idkg_public_key.clone()),
@@ -367,6 +397,7 @@ mod oldest_public_key {
 
     #[test]
     fn should_observe_metrics_when_computing_oldest_idkg_dealing_encryption_key() {
+        let rng = &mut reproducible_rng();
         let registry_versions = vec![2, 4, 1, 10];
         let oldest_registry_version =
             RegistryVersion::new(*registry_versions.iter().min().expect("empty versions"));
@@ -375,7 +406,11 @@ mod oldest_public_key {
         let registry_client = FakeRegistryClient::new(data_provider.clone());
         let mut transcripts = HashSet::new();
         for (version, idkg_public_key) in &idkg_public_keys {
-            transcripts.insert(idkg_transcript_with_registry_version(node_id(), *version));
+            transcripts.insert(idkg_transcript_with_registry_version(
+                node_id(),
+                *version,
+                rng,
+            ));
             register_idkg_public_key(
                 node_id(),
                 idkg_dealing_encryption_pk_to_proto(idkg_public_key.clone()),
@@ -413,12 +448,14 @@ mod minimum_registry_version {
 
     #[test]
     fn should_return_minimum_registry_version_for_single_transcript() {
+        let rng = &mut reproducible_rng();
         let registry_versions: Vec<u64> = vec![2];
         let mut transcripts = HashSet::new();
         for version in registry_versions {
             transcripts.insert(idkg_transcript_with_registry_version(
                 node_id(),
                 RegistryVersion::new(version),
+                rng,
             ));
         }
 
@@ -430,12 +467,14 @@ mod minimum_registry_version {
 
     #[test]
     fn should_return_minimum_registry_version_for_multiple_transcripts() {
+        let rng = &mut reproducible_rng();
         let registry_versions: Vec<u64> = vec![2, 4, 1, 10];
         let mut transcripts = HashSet::new();
         for version in registry_versions {
             transcripts.insert(idkg_transcript_with_registry_version(
                 node_id(),
                 RegistryVersion::new(version),
+                rng,
             ));
         }
 
@@ -447,18 +486,22 @@ mod minimum_registry_version {
 
     #[test]
     fn should_return_minimum_registry_version_for_multiple_transcripts_and_different_receivers() {
+        let rng = &mut reproducible_rng();
         let mut transcripts = HashSet::new();
         transcripts.insert(idkg_transcript_with_registry_version(
             another_node_id(),
             RegistryVersion::new(1),
+            rng,
         ));
         transcripts.insert(idkg_transcript_with_registry_version(
             node_id(),
             RegistryVersion::new(2),
+            rng,
         ));
         transcripts.insert(idkg_transcript_with_registry_version(
             node_id(),
             RegistryVersion::new(3),
+            rng,
         ));
 
         assert_eq!(
@@ -468,14 +511,15 @@ mod minimum_registry_version {
     }
 }
 
-fn idkg_transcript_with_registry_version(
+fn idkg_transcript_with_registry_version<R: Rng + CryptoRng>(
     receiver: NodeId,
     version: RegistryVersion,
+    rng: &mut R,
 ) -> IDkgTranscript {
     let mut receivers = BTreeSet::new();
     receivers.insert(receiver);
     IDkgTranscript {
-        transcript_id: random_transcript_id(),
+        transcript_id: random_transcript_id(rng),
         receivers: IDkgReceivers::new(receivers).expect("error creating IDKG receivers"),
         registry_version: version,
         verified_dealings: BTreeMap::new(),
@@ -485,9 +529,7 @@ fn idkg_transcript_with_registry_version(
     }
 }
 
-fn random_transcript_id() -> IDkgTranscriptId {
-    let rng = &mut rand::thread_rng();
-
+fn random_transcript_id<R: Rng + CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
     let id = rng.gen();
     let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.gen::<u64>()));
     let height = Height::from(rng.gen::<u64>());
@@ -503,15 +545,17 @@ fn another_node_id() -> NodeId {
     NodeId::from(PrincipalId::new_node_test_id(187))
 }
 
-fn generate_and_register_idkg_public_key(
+fn generate_and_register_idkg_public_key<R: Rng + CryptoRng>(
     node_id: NodeId,
     registry_version: RegistryVersion,
     data_provider: Arc<ProtoRegistryDataProvider>,
     transcripts: &mut HashSet<IDkgTranscript>,
+    rng: &mut R,
 ) -> MEGaPublicKey {
     transcripts.insert(idkg_transcript_with_registry_version(
         node_id,
         registry_version,
+        rng,
     ));
     let idkg_public_key = idkg_unique_public_key_per_registry_version(&registry_version);
     register_idkg_public_key(

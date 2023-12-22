@@ -1,10 +1,13 @@
 [package]
 name = "ic-error-types"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-utils = { path = "../../utils" }
-serde = { version = "1.0.99", features = ["derive"] }
-strum = "0.23.0"
-strum_macros = "0.23.0"
+serde = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }

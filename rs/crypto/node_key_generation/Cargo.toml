@@ -16,7 +16,7 @@ ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-protobuf = { path = "../../protobuf" }
 ic-types = { path = "../../types/types" }
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { workspace = true }
 
 [dev-dependencies]
 assert_matches = "1.5.0"
@@ -34,5 +34,4 @@ ic-registry-client-fake = { path = "../../registry/fake" }
 ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
-openssl = "0.10.55"
 tempfile = "3.1.0"

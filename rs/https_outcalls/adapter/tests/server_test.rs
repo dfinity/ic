@@ -1,13 +1,6 @@
 // These tests rely on being able to set SSL_CERT_FILE environment variable to trust
 // a self signed certificate.
-// At the moment we use `hyper-tls` which uses OpenSSL. OpenSSL correctly respects the
-// SSL_CERT_FILE variable but on MacOS OpenSSL is symlinked to LibreSSL which ignores
-// the enviroment variables.
-// In the future we want to use rustls (also respects the variables) to stop relying on
-// external libraries for tls. But rustls does not currently support certificates for
-// IP addresses and this is needed for our e2e system tests.
-// https://github.com/rustls/rustls/issues/184.
-#[cfg(not(target_os = "macos"))]
+// We use `hyper-rustls` which uses Rustls, which supports the SSL_CERT_FILE variable.
 mod test {
     use futures::TryFutureExt;
     use http::{header::HeaderValue, StatusCode};
@@ -69,7 +62,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let mut key_file = std::fs::File::create(key_file_path).unwrap();
         writeln!(key_file, "{}", KEY).unwrap();
 
-        // The Nix environmet with OpenSSL set NIX_SSL_CERT_FILE which seems to take presedence over SSL_CERT_FILE.
+        // The Nix environment with OpenSSL set NIX_SSL_CERT_FILE which seems to take presedence over SSL_CERT_FILE.
         // https://github.com/NixOS/nixpkgs/blob/master/pkgs/development/libraries/openssl/1.1/nix-ssl-cert-file.patch
         // SSL_CERT_FILE is respected by OpenSSL and Rustls.
         // Rustlts: https://github.com/rustls/rustls/issues/540
@@ -111,9 +104,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
                 Ok::<_, warp::Rejection>(warp::reply::reply())
             });
 
-        let basic_head = warp::head()
-            .and(warp::path("head"))
-            .map(|| warp::reply::reply());
+        let basic_head = warp::head().and(warp::path("head")).map(warp::reply::reply);
 
         let routes = basic_post
             .or(basic_get)
@@ -320,7 +311,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         // Test that adapter hits connect timeout when connecting to unreachable host.
         let server_config = Config {
             http_connect_timeout_secs: 1,
-            // Set to high value to make sure connnect timeout kicks in.
+            // Set to high value to make sure connect timeout kicks in.
             http_request_timeout_secs: 6000,
             ..Default::default()
         };

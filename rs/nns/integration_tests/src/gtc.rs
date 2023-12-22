@@ -1,5 +1,5 @@
-use dfn_candid::{candid, candid_one};
-use dfn_protobuf::protobuf;
+use candid::{Decode, Encode};
+use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
 use ic_ledger_core::tokens::CheckedAdd;
 use ic_nervous_system_common_test_keys::{
@@ -7,8 +7,11 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance::pb::v1::{GovernanceError, Neuron, NeuronInfo};
+use ic_nns_constants::{GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
+use ic_nns_governance::pb::v1::{
+    governance::{seed_accounts::SeedAccount, SeedAccounts},
+    GovernanceError, Neuron, NeuronInfo, NeuronType,
+};
 use ic_nns_gtc::{
     der_encode,
     pb::v1::AccountState,
@@ -17,19 +20,23 @@ use ic_nns_gtc::{
     },
 };
 use ic_nns_test_utils::{
-    common::NnsInitPayloadsBuilder,
-    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
+    common::{NnsInitPayloads, NnsInitPayloadsBuilder},
+    state_test_helpers::{
+        get_neuron_ids, ledger_account_balance, nns_governance_get_full_neuron,
+        nns_governance_get_neuron_info, setup_nns_canisters,
+    },
 };
+use ic_state_machine_tests::StateMachine;
+use ic_types::ingress::WasmResult;
 use icp_ledger::{
-    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Subaccount, Tokens,
-    DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, BinaryAccountBalanceArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
 };
 use std::{collections::HashSet, convert::TryFrom, sync::Arc, time::SystemTime};
 
 /// Seed Round (SR) neurons are released over 48 months in the following tests
 pub const SR_MONTHS_TO_RELEASE: u8 = 48;
 
-/// Early Contributor Tokenholder (ECT) neurons are released over 12 months in
+/// Early Contributor Token holder (ECT) neurons are released over 12 months in
 /// the following tests
 pub const ECT_MONTHS_TO_RELEASE: u8 = 12;
 
@@ -47,81 +54,74 @@ const TEST_ECT_ACCOUNTS: &[(&str, u32); 2] = &[
 /// `account_has_claimed_neurons` and `permanently_lock_account`)
 #[test]
 pub fn test_claim_neurons() {
-    local_test_on_nns_subnet(|runtime| async move {
-        let mut nns_init_payload_builder = NnsInitPayloadsBuilder::new();
-        add_test_gtc_neurons(&mut nns_init_payload_builder);
+    let mut state_machine = StateMachine::new();
 
-        let donate_account_recipient_neuron_id =
-            get_donate_account_recipient_neuron_id(&nns_init_payload_builder);
+    let mut nns_init_payload_builder = NnsInitPayloadsBuilder::new();
+    add_test_gtc_neurons(&mut nns_init_payload_builder);
 
-        nns_init_payload_builder
-            .genesis_token
-            .donate_account_recipient_neuron_id = Some(donate_account_recipient_neuron_id);
+    let donate_account_recipient_neuron_id =
+        get_donate_account_recipient_neuron_id(&nns_init_payload_builder);
 
-        let forward_all_unclaimed_accounts_recipient_neuron_id =
-            get_forward_whitelisted_unclaimed_accounts_recipient_neuron_id(
-                &nns_init_payload_builder,
-            );
+    nns_init_payload_builder
+        .genesis_token
+        .donate_account_recipient_neuron_id = Some(donate_account_recipient_neuron_id);
 
-        nns_init_payload_builder
-            .genesis_token
-            .forward_whitelisted_unclaimed_accounts_recipient_neuron_id =
-            Some(forward_all_unclaimed_accounts_recipient_neuron_id);
+    let forward_all_unclaimed_accounts_recipient_neuron_id =
+        get_forward_whitelisted_unclaimed_accounts_recipient_neuron_id(&nns_init_payload_builder);
 
-        let nns_init_payload = nns_init_payload_builder.build();
+    nns_init_payload_builder
+        .genesis_token
+        .forward_whitelisted_unclaimed_accounts_recipient_neuron_id =
+        Some(forward_all_unclaimed_accounts_recipient_neuron_id);
 
-        let identity_1_neuron_ids = nns_init_payload
-            .genesis_token
-            .accounts
-            .get(TEST_IDENTITY_1.gtc_address)
-            .unwrap()
-            .neuron_ids
-            .clone();
-        assert_eq!(identity_1_neuron_ids.len(), SR_MONTHS_TO_RELEASE as usize);
+    let nns_init_payload = nns_init_payload_builder.build();
 
-        let identity_2_neuron_ids = nns_init_payload
-            .genesis_token
-            .accounts
-            .get(TEST_IDENTITY_2.gtc_address)
-            .unwrap()
-            .neuron_ids
-            .clone();
-        assert_eq!(identity_2_neuron_ids.len(), ECT_MONTHS_TO_RELEASE as usize);
+    let identity_1_neuron_ids = nns_init_payload
+        .genesis_token
+        .accounts
+        .get(TEST_IDENTITY_1.gtc_address)
+        .unwrap()
+        .neuron_ids
+        .clone();
+    assert_eq!(identity_1_neuron_ids.len(), SR_MONTHS_TO_RELEASE as usize);
 
-        let nns_canisters = NnsCanisters::set_up(&runtime, nns_init_payload).await;
+    let identity_2_neuron_ids = nns_init_payload
+        .genesis_token
+        .accounts
+        .get(TEST_IDENTITY_2.gtc_address)
+        .unwrap()
+        .neuron_ids
+        .clone();
+    assert_eq!(identity_2_neuron_ids.len(), ECT_MONTHS_TO_RELEASE as usize);
 
-        assert_neurons_can_only_be_claimed_by_account_owner(&nns_canisters).await;
-        assert_neurons_can_only_be_donated_by_account_owner(&nns_canisters).await;
+    setup_nns_canisters(&state_machine, nns_init_payload);
+    state_machine.set_time(SystemTime::now());
 
-        assert_neurons_can_be_donated(
-            &nns_canisters,
-            donate_account_recipient_neuron_id,
-            &TEST_NEURON_1_OWNER_KEYPAIR,
-            &TEST_IDENTITY_3,
-        )
-        .await;
+    assert_neurons_can_only_be_claimed_by_account_owner(&mut state_machine);
+    assert_neurons_can_only_be_donated_by_account_owner(&mut state_machine);
 
-        // Assert that a Seed Round (SR) investor can claim their tokens
-        assert_neurons_can_be_claimed(&nns_canisters, identity_1_neuron_ids, &TEST_IDENTITY_1)
-            .await;
+    assert_neurons_can_be_donated(
+        &mut state_machine,
+        donate_account_recipient_neuron_id,
+        &TEST_NEURON_1_OWNER_KEYPAIR,
+        &TEST_IDENTITY_3,
+    );
 
-        // Try to forward the whitelisted account. Note that this should only forward
-        // the whitelisted account so a non-whitelisted account should still be
-        // able to claim afterwards.
-        assert_unclaimed_neurons_can_be_forwarded(
-            &nns_canisters,
-            forward_all_unclaimed_accounts_recipient_neuron_id,
-            &TEST_NEURON_2_OWNER_KEYPAIR,
-        )
-        .await;
+    // Assert that a Seed Round (SR) investor can claim their tokens
+    assert_neurons_can_be_claimed(&mut state_machine, identity_1_neuron_ids, &TEST_IDENTITY_1);
 
-        // Assert that an Early Contributor Tokenholder (ECT) investor can claim their
-        // tokens
-        assert_neurons_can_be_claimed(&nns_canisters, identity_2_neuron_ids, &TEST_IDENTITY_2)
-            .await;
+    // Try to forward the whitelisted account. Note that this should only forward
+    // the whitelisted account so a non-whitelisted account should still be
+    // able to claim afterwards.
+    assert_unclaimed_neurons_can_be_forwarded(
+        &mut state_machine,
+        forward_all_unclaimed_accounts_recipient_neuron_id,
+        &TEST_NEURON_2_OWNER_KEYPAIR,
+    );
 
-        Ok(())
-    })
+    // Assert that an Early Contributor Token holder (ECT) investor can claim their
+    // tokens
+    assert_neurons_can_be_claimed(&mut state_machine, identity_2_neuron_ids, &TEST_IDENTITY_2);
 }
 
 /// At Genesis, calls to `claim_neurons` and `forward_all_unclaimed_accounts`
@@ -129,151 +129,93 @@ pub fn test_claim_neurons() {
 /// they are able to be called.
 #[test]
 pub fn test_gtc_at_genesis() {
-    local_test_on_nns_subnet(|runtime| async move {
-        let mut nns_init_payload_builder = NnsInitPayloadsBuilder::new();
-        add_test_gtc_neurons(&mut nns_init_payload_builder);
+    let mut state_machine = StateMachine::new();
 
-        // Set the Genesis Moratorium to start now
-        nns_init_payload_builder
-            .genesis_token
-            .genesis_timestamp_seconds = SystemTime::now().elapsed().unwrap().as_secs();
+    let mut nns_init_payload_builder = NnsInitPayloadsBuilder::new();
+    add_test_gtc_neurons(&mut nns_init_payload_builder);
 
-        let nns_init_payload = nns_init_payload_builder.build();
+    // Set the Genesis Moratorium to start now
+    nns_init_payload_builder
+        .genesis_token
+        .genesis_timestamp_seconds = SystemTime::now().elapsed().unwrap().as_secs();
 
-        let nns_canisters = NnsCanisters::set_up(&runtime, nns_init_payload).await;
+    let nns_init_payload = nns_init_payload_builder.build();
 
-        let gtc = nns_canisters.genesis_token;
+    setup_nns_canisters(&state_machine, nns_init_payload);
 
-        let sign_cmd = move |msg: &[u8]| Ok(TEST_IDENTITY_1.sign(msg));
+    let sign_cmd = move |msg: &[u8]| Ok(TEST_IDENTITY_1.sign(msg));
+    let sender = Sender::ExternalHsm {
+        pub_key: der_encode(&TEST_IDENTITY_1.public_key()),
+        sign: Arc::new(sign_cmd),
+    };
 
-        let sender = Sender::ExternalHsm {
-            pub_key: der_encode(&TEST_IDENTITY_1.public_key()),
-            sign: Arc::new(sign_cmd),
-        };
+    // Assert `claim_neurons` fails during the moratorium
+    let claim_neurons_response: Result<Vec<NeuronId>, String> = claim_neurons(
+        &mut state_machine,
+        sender.get_principal_id(),
+        &TEST_IDENTITY_1,
+    );
+    assert!(claim_neurons_response.is_err());
 
-        // Assert `claim_neurons` fails during the moratorium
-        let claim_neurons_response: Result<Result<Vec<NeuronId>, String>, String> = gtc
-            .update_from_sender(
-                "claim_neurons",
-                candid,
-                (TEST_IDENTITY_1.public_key_hex,),
-                &sender,
-            )
-            .await;
-        assert!(claim_neurons_response.unwrap().is_err());
+    // Assert that `TEST_IDENTITY_1` did not claim their neurons
+    let account_has_claimed_neurons_response: Result<AccountState, String> =
+        get_gtc_account(&mut state_machine, &TEST_IDENTITY_1);
+    assert!(!account_has_claimed_neurons_response.unwrap().has_claimed);
 
-        // Assert that `TEST_IDENTITY_1` did not claim their neurons
-        let account_has_claimed_neurons_response: Result<Result<AccountState, String>, String> =
-            gtc.update_from_sender(
-                "get_account",
-                candid_one,
-                TEST_IDENTITY_1.gtc_address.to_string(),
-                &sender,
-            )
-            .await;
-
-        assert!(
-            !account_has_claimed_neurons_response
-                .unwrap()
-                .unwrap()
-                .has_claimed
-        );
-
-        // Assert that `forward_all_unclaimed_accounts` fails
-        let forward_all_unclaimed_accounts_response: Result<Result<(), String>, String> = gtc
-            .update_from_sender(
-                "forward_whitelisted_unclaimed_accounts",
-                candid_one,
-                (),
-                &sender,
-            )
-            .await;
-        assert!(forward_all_unclaimed_accounts_response.unwrap().is_err());
-
-        Ok(())
-    })
+    // Assert that `forward_all_unclaimed_accounts` fails
+    let forward_all_unclaimed_accounts_response: Result<(), String> =
+        forward_whitelisted_unclaimed_accounts(&mut state_machine, &sender);
+    assert!(forward_all_unclaimed_accounts_response.is_err());
 }
 
 /// Assert that users can't claim other users' neurons
 ///
 /// Identity 3 tries to claim Identity 1's neurons, but fails to do so
-async fn assert_neurons_can_only_be_claimed_by_account_owner(nns_canisters: &NnsCanisters<'_>) {
-    let gtc = &nns_canisters.genesis_token;
-
-    let sign_cmd = move |msg: &[u8]| Ok(TEST_IDENTITY_3.sign(msg));
-
-    let sender = Sender::ExternalHsm {
-        pub_key: der_encode(&TEST_IDENTITY_3.public_key()),
-        sign: Arc::new(sign_cmd),
-    };
-
+fn assert_neurons_can_only_be_claimed_by_account_owner(state_machine: &mut StateMachine) {
     // Assert that one user can't claim another user's neurons
-    let claim_neurons_response: Result<Result<Vec<NeuronId>, String>, String> = gtc
-        .update_from_sender(
-            "claim_neurons",
-            candid,
-            (TEST_IDENTITY_1.public_key_hex,),
-            &sender,
-        )
-        .await;
-    assert!(claim_neurons_response.unwrap().is_err());
+    let claim_neurons_response = claim_neurons(
+        state_machine,
+        TEST_IDENTITY_3.principal_id(),
+        &TEST_IDENTITY_1,
+    );
+
+    assert!(claim_neurons_response.is_err());
 }
 
 /// Assert that users can't donate other users' neurons
 ///
 /// Identity 3 tries to donate Identity 1's neurons, but fails to do so
-async fn assert_neurons_can_only_be_donated_by_account_owner(nns_canisters: &NnsCanisters<'_>) {
-    let gtc = &nns_canisters.genesis_token;
-
-    let sign_cmd = move |msg: &[u8]| Ok(TEST_IDENTITY_3.sign(msg));
-
-    let sender = Sender::ExternalHsm {
-        pub_key: der_encode(&TEST_IDENTITY_3.public_key()),
-        sign: Arc::new(sign_cmd),
-    };
-
-    // Assert that one user can't claim another user's neurons
-    let donate_account_response: Result<Result<(), String>, String> = gtc
-        .update_from_sender(
-            "donate_account",
-            candid,
-            (TEST_IDENTITY_1.public_key_hex,),
-            &sender,
-        )
-        .await;
-    assert!(donate_account_response.unwrap().is_err());
+fn assert_neurons_can_only_be_donated_by_account_owner(state_machine: &mut StateMachine) {
+    // Assert that one user can't donate another user's neurons
+    let donate_account_response = donate_accounts(
+        state_machine,
+        TEST_IDENTITY_3.principal_id(),
+        &TEST_IDENTITY_1,
+    );
+    assert!(donate_account_response.is_err());
 }
 
 /// Assert that any user can forward an unclaimed GTC account.
 ///
 /// This assumes the window after Genesis, during which the forwarding of
 /// unclaimed accounts is forbidden, has expired.
-async fn assert_unclaimed_neurons_can_be_forwarded(
-    nns_canisters: &NnsCanisters<'_>,
+fn assert_unclaimed_neurons_can_be_forwarded(
+    state_machine: &mut StateMachine,
     custodian_neuron_id: NeuronId,
     custodian_key_pair: &ic_canister_client_sender::Ed25519KeyPair,
 ) {
-    let gtc = &nns_canisters.genesis_token;
-    let governance = &nns_canisters.governance;
-    let ledger = &nns_canisters.ledger;
-
     let sign_cmd = move |msg: &[u8]| Ok(TEST_IDENTITY_1.sign(msg));
-
     let sender = Sender::ExternalHsm {
         pub_key: der_encode(&TEST_IDENTITY_1.public_key()),
         sign: Arc::new(sign_cmd),
     };
 
+    let custodian_principal_id = Sender::from_keypair(custodian_key_pair).get_principal_id();
+
     // Assert that `TEST_IDENTITY_4` has not yet claimed or donated their neurons
-    let get_account_response: Result<Result<AccountState, String>, String> = gtc
-        .update_from_sender(
-            "get_account",
-            candid_one,
-            TEST_IDENTITY_4.gtc_address.to_string(),
-            &sender,
-        )
-        .await;
-    let account_before_forward = get_account_response.unwrap().unwrap();
+    let get_account_response: Result<AccountState, String> =
+        get_gtc_account(state_machine, &TEST_IDENTITY_4);
+    let account_before_forward = get_account_response.unwrap();
     assert!(!account_before_forward.has_claimed);
     assert!(!account_before_forward.has_donated);
     assert!(!account_before_forward.has_forwarded);
@@ -290,62 +232,37 @@ async fn assert_unclaimed_neurons_can_be_forwarded(
     // Get the custodian neuron and its ledger account, so that we can later
     // assert that the account value has increased (as the result of
     // forwarding).
-    let get_full_neuron_response: Result<Result<Neuron, GovernanceError>, String> = governance
-        .update_from_sender(
-            "get_full_neuron",
-            candid_one,
-            custodian_neuron_id.id,
-            &Sender::from_keypair(custodian_key_pair),
-        )
-        .await;
-
-    let custodian_neuron = get_full_neuron_response.unwrap().unwrap();
+    let custodian_neuron = nns_governance_get_full_neuron(
+        state_machine,
+        custodian_principal_id,
+        custodian_neuron_id.id,
+    )
+    .unwrap();
     let custodian_subaccount = Subaccount::try_from(&custodian_neuron.account[..]).unwrap();
     let custodian_account =
         AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(custodian_subaccount));
 
-    let account_balance_response: Result<Tokens, String> = ledger
-        .query_from_sender(
-            "account_balance_pb",
-            protobuf,
-            AccountBalanceArgs {
-                account: custodian_account,
-            },
-            &Sender::from_keypair(custodian_key_pair),
-        )
-        .await
-        .map(tokens_from_proto);
-
-    let custodian_account_balance = account_balance_response.unwrap();
-
+    let custodian_account_balance = ledger_account_balance(
+        state_machine,
+        LEDGER_CANISTER_ID,
+        &BinaryAccountBalanceArgs {
+            account: custodian_account.to_address(),
+        },
+    );
     let expected_custodian_account_balance_after_forward = custodian_account_balance
         .checked_add(&expected_custodian_account_balance_increase)
         .unwrap();
 
     // Have `TEST_IDENTITY_1` forward `TEST_IDENTITY_2`'s and `TEST_IDENTITY_4`'s
     // neurons
-    let forward_whitelisted_unclaimed_accounts_response: Result<Result<(), String>, String> = gtc
-        .update_from_sender(
-            "forward_whitelisted_unclaimed_accounts",
-            candid_one,
-            (),
-            &sender,
-        )
-        .await;
-    assert!(forward_whitelisted_unclaimed_accounts_response
-        .unwrap()
-        .is_ok());
+    let forward_whitelisted_unclaimed_accounts_response: Result<(), String> =
+        forward_whitelisted_unclaimed_accounts(state_machine, &sender);
+    assert!(forward_whitelisted_unclaimed_accounts_response.is_ok());
 
     // Assert that the forward updated the account state as expected
-    let get_account_response: Result<Result<AccountState, String>, String> = gtc
-        .update_from_sender(
-            "get_account",
-            candid_one,
-            TEST_IDENTITY_4.gtc_address.to_string(),
-            &sender,
-        )
-        .await;
-    let account_after_forward = get_account_response.unwrap().unwrap();
+    let get_account_response: Result<AccountState, String> =
+        get_gtc_account(state_machine, &TEST_IDENTITY_4);
+    let account_after_forward = get_account_response.unwrap();
     assert!(!account_after_forward.has_claimed);
     assert!(!account_after_forward.has_donated);
     assert!(account_after_forward.has_forwarded);
@@ -359,19 +276,13 @@ async fn assert_unclaimed_neurons_can_be_forwarded(
 
     // Assert that the custodian neuron's ledger account has received the
     // forwarded funds
-    let account_balance_response: Result<Tokens, String> = ledger
-        .query_from_sender(
-            "account_balance_pb",
-            protobuf,
-            AccountBalanceArgs {
-                account: custodian_account,
-            },
-            &Sender::from_keypair(custodian_key_pair),
-        )
-        .await
-        .map(tokens_from_proto);
-
-    let actual_custodian_account_balance_after_forward = account_balance_response.unwrap();
+    let actual_custodian_account_balance_after_forward = ledger_account_balance(
+        state_machine,
+        LEDGER_CANISTER_ID,
+        &BinaryAccountBalanceArgs {
+            account: custodian_account.to_address(),
+        },
+    );
 
     assert_eq!(
         expected_custodian_account_balance_after_forward,
@@ -380,16 +291,12 @@ async fn assert_unclaimed_neurons_can_be_forwarded(
 
     // Assert that the custodian neuron's stake matches its ledger account
     // balance
-    let get_full_neuron_response: Result<Result<Neuron, GovernanceError>, String> = governance
-        .update_from_sender(
-            "get_full_neuron",
-            candid_one,
-            custodian_neuron_id.id,
-            &Sender::from_keypair(custodian_key_pair),
-        )
-        .await;
-
-    let custodian_neuron = get_full_neuron_response.unwrap().unwrap();
+    let custodian_neuron = nns_governance_get_full_neuron(
+        state_machine,
+        custodian_principal_id,
+        custodian_neuron_id.id,
+    )
+    .unwrap();
     let custodian_neuron_stake = Tokens::from_e8s(custodian_neuron.cached_neuron_stake_e8s);
 
     assert_eq!(
@@ -399,33 +306,24 @@ async fn assert_unclaimed_neurons_can_be_forwarded(
 }
 
 /// Assert that GTC neurons can be donated by the owner of the GTC account
-async fn assert_neurons_can_be_donated(
-    nns_canisters: &NnsCanisters<'_>,
+fn assert_neurons_can_be_donated(
+    state_machine: &mut StateMachine,
     custodian_neuron_id: NeuronId,
     custodian_key_pair: &ic_canister_client_sender::Ed25519KeyPair,
     test_identity: &'static TestIdentity,
 ) {
-    let gtc = &nns_canisters.genesis_token;
-    let governance = &nns_canisters.governance;
-    let ledger = &nns_canisters.ledger;
-
     let sign_cmd = move |msg: &[u8]| Ok(test_identity.sign(msg));
-
     let sender = Sender::ExternalHsm {
         pub_key: der_encode(&test_identity.public_key()),
         sign: Arc::new(sign_cmd),
     };
 
+    let custodian_principal_id = Sender::from_keypair(custodian_key_pair).get_principal_id();
+
     // Assert that `test_identity` has not yet claimed or donated their neurons
-    let get_account_response: Result<Result<AccountState, String>, String> = gtc
-        .update_from_sender(
-            "get_account",
-            candid_one,
-            test_identity.gtc_address.to_string(),
-            &sender,
-        )
-        .await;
-    let account_before_donation = get_account_response.unwrap().unwrap();
+    let get_account_response: Result<AccountState, String> =
+        get_gtc_account(state_machine, test_identity);
+    let account_before_donation = get_account_response.unwrap();
     assert!(!account_before_donation.has_claimed);
     assert!(!account_before_donation.has_donated);
     assert!(!account_before_donation.has_forwarded);
@@ -442,59 +340,36 @@ async fn assert_neurons_can_be_donated(
     // Get the custodian neuron and its ledger account, so that we can later
     // assert that the account value has increased (as the result of a
     // donation).
-    let get_full_neuron_response: Result<Result<Neuron, GovernanceError>, String> = governance
-        .update_from_sender(
-            "get_full_neuron",
-            candid_one,
-            custodian_neuron_id.id,
-            &Sender::from_keypair(custodian_key_pair),
-        )
-        .await;
-
-    let custodian_neuron = get_full_neuron_response.unwrap().unwrap();
+    let custodian_neuron = nns_governance_get_full_neuron(
+        state_machine,
+        custodian_principal_id,
+        custodian_neuron_id.id,
+    )
+    .unwrap();
     let custodian_subaccount = Subaccount::try_from(&custodian_neuron.account[..]).unwrap();
     let custodian_account =
         AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(custodian_subaccount));
-
-    let account_balance_response: Result<Tokens, String> = ledger
-        .query_from_sender(
-            "account_balance_pb",
-            protobuf,
-            AccountBalanceArgs {
-                account: custodian_account,
-            },
-            &Sender::from_keypair(custodian_key_pair),
-        )
-        .await
-        .map(tokens_from_proto);
-
-    let custodian_account_balance = account_balance_response.unwrap();
+    let custodian_account_balance = ledger_account_balance(
+        state_machine,
+        LEDGER_CANISTER_ID,
+        &BinaryAccountBalanceArgs {
+            account: custodian_account.to_address(),
+        },
+    );
 
     let expected_custodian_account_balance_after_donation = custodian_account_balance
         .checked_add(&expected_custodian_account_balance_increase)
         .unwrap();
 
     // Have `test_identity` donate their neurons
-    let donate_account_response: Result<Result<(), String>, String> = gtc
-        .update_from_sender(
-            "donate_account",
-            candid_one,
-            test_identity.public_key_hex.to_string(),
-            &sender,
-        )
-        .await;
-    assert!(donate_account_response.unwrap().is_ok());
+    let donate_account_response: Result<(), String> =
+        donate_accounts(state_machine, sender.get_principal_id(), test_identity);
+    assert!(donate_account_response.is_ok());
 
     // Assert that `test_identity` has donated their neurons
-    let get_account_response: Result<Result<AccountState, String>, String> = gtc
-        .update_from_sender(
-            "get_account",
-            candid_one,
-            test_identity.gtc_address.to_string(),
-            &sender,
-        )
-        .await;
-    let account_after_donation = get_account_response.unwrap().unwrap();
+    let get_account_response: Result<AccountState, String> =
+        get_gtc_account(state_machine, test_identity);
+    let account_after_donation = get_account_response.unwrap();
     assert!(account_after_donation.has_donated);
     assert_eq!(
         account_after_donation.authenticated_principal_id,
@@ -508,42 +383,24 @@ async fn assert_neurons_can_be_donated(
     );
 
     // Assert that donated neurons can't be claimed
-    let claim_neurons_response: Result<Result<Vec<NeuronId>, String>, String> = gtc
-        .update_from_sender(
-            "claim_neurons",
-            candid,
-            (test_identity.public_key_hex,),
-            &sender,
-        )
-        .await;
-    assert!(claim_neurons_response.unwrap().is_err());
+    let claim_neurons_response: Result<Vec<NeuronId>, String> =
+        claim_neurons(state_machine, sender.get_principal_id(), test_identity);
+    assert!(claim_neurons_response.is_err());
 
     // Assert calling donate a second time fails
-    let donate_account_response: Result<Result<(), String>, String> = gtc
-        .update_from_sender(
-            "donate_account",
-            candid_one,
-            test_identity.public_key_hex.to_string(),
-            &sender,
-        )
-        .await;
-    assert!(donate_account_response.unwrap().is_err());
+    let donate_account_response: Result<(), String> =
+        donate_accounts(state_machine, sender.get_principal_id(), test_identity);
+    assert!(donate_account_response.is_err());
 
     // Assert that the custodian neuron's ledger account has received the
     // donated funds
-    let account_balance_response: Result<Tokens, String> = ledger
-        .query_from_sender(
-            "account_balance_pb",
-            protobuf,
-            AccountBalanceArgs {
-                account: custodian_account,
-            },
-            &Sender::from_keypair(custodian_key_pair),
-        )
-        .await
-        .map(tokens_from_proto);
-
-    let actual_custodian_account_balance_after_donation = account_balance_response.unwrap();
+    let actual_custodian_account_balance_after_donation = ledger_account_balance(
+        state_machine,
+        LEDGER_CANISTER_ID,
+        &BinaryAccountBalanceArgs {
+            account: custodian_account.to_address(),
+        },
+    );
 
     assert_eq!(
         expected_custodian_account_balance_after_donation,
@@ -552,16 +409,13 @@ async fn assert_neurons_can_be_donated(
 
     // Assert that the custodian neuron's stake matches its ledger account
     // balance
-    let get_full_neuron_response: Result<Result<Neuron, GovernanceError>, String> = governance
-        .update_from_sender(
-            "get_full_neuron",
-            candid_one,
-            custodian_neuron_id.id,
-            &Sender::from_keypair(custodian_key_pair),
-        )
-        .await;
+    let custodian_neuron = nns_governance_get_full_neuron(
+        state_machine,
+        custodian_principal_id,
+        custodian_neuron_id.id,
+    )
+    .unwrap();
 
-    let custodian_neuron = get_full_neuron_response.unwrap().unwrap();
     let custodian_neuron_stake = Tokens::from_e8s(custodian_neuron.cached_neuron_stake_e8s);
 
     assert_eq!(
@@ -572,72 +426,48 @@ async fn assert_neurons_can_be_donated(
 
 /// Test that the given `test_identity` can claim their neurons, expected to
 /// be `expected_neuron_ids`.
-async fn assert_neurons_can_be_claimed(
-    nns_canisters: &NnsCanisters<'_>,
+fn assert_neurons_can_be_claimed(
+    state_machine: &mut StateMachine,
     expected_neuron_ids: Vec<NeuronId>,
     test_identity: &'static TestIdentity,
 ) {
-    let gtc = &nns_canisters.genesis_token;
-    let governance = &nns_canisters.governance;
-
     let sign_cmd = move |msg: &[u8]| Ok(test_identity.sign(msg));
-
     let sender = Sender::ExternalHsm {
         pub_key: der_encode(&test_identity.public_key()),
         sign: Arc::new(sign_cmd),
     };
-
     // Assert that `test_identity` has not yet claimed their neurons
-    let get_account_response: Result<Result<AccountState, String>, String> = gtc
-        .update_from_sender(
-            "get_account",
-            candid_one,
-            test_identity.gtc_address.to_string(),
-            &sender,
-        )
-        .await;
-    assert!(!get_account_response.unwrap().unwrap().has_claimed);
+    let get_account_response: Result<AccountState, String> =
+        get_gtc_account(state_machine, test_identity);
+    assert!(!get_account_response.unwrap().has_claimed);
 
     // Assert that `test_identity` does not control any neurons in the Governance
     // canister
-    let get_neuron_ids_response: Result<Vec<u64>, String> = governance
-        .update_from_sender("get_neuron_ids", candid, (), &sender)
-        .await;
-    assert!(get_neuron_ids_response.unwrap().is_empty());
+    let get_neuron_ids_response: Vec<u64> =
+        get_neuron_ids(state_machine, sender.get_principal_id());
+    assert!(get_neuron_ids_response.is_empty());
 
     // Given a sample neuron ID from `expected_neuron_ids`, assert that we can
     // can get this neuron's info via the `get_neuron_info` Governance method,
     // but `get_full_neuron` returns an error (as `test_identity` does not
-    // controll the neuron yet)
+    // control the neuron yet)
     let sample_neuron_id = expected_neuron_ids.get(0).unwrap().id;
-    let get_neuron_info_response: Result<Result<NeuronInfo, GovernanceError>, String> = governance
-        .update_from_sender("get_neuron_info", candid_one, sample_neuron_id, &sender)
-        .await;
-    assert!(get_neuron_info_response.unwrap().is_ok());
+    let get_neuron_info_response: Result<NeuronInfo, GovernanceError> =
+        nns_governance_get_neuron_info(state_machine, sender.get_principal_id(), sample_neuron_id);
+    assert!(get_neuron_info_response.is_ok());
 
-    let get_full_neuron_response: Result<Result<Neuron, GovernanceError>, String> = governance
-        .update_from_sender("get_full_neuron", candid_one, sample_neuron_id, &sender)
-        .await;
-    assert!(get_full_neuron_response.unwrap().is_err());
+    let get_full_neuron_response =
+        nns_governance_get_full_neuron(state_machine, sender.get_principal_id(), sample_neuron_id);
+    assert!(get_full_neuron_response.is_err());
 
     // Call the GTC to claim neurons for `test_identity`
-    let gtc_response: Result<Result<Vec<NeuronId>, String>, String> = gtc
-        .update_from_sender(
-            "claim_neurons",
-            candid,
-            (test_identity.public_key_hex,),
-            &sender,
-        )
-        .await;
+    let gtc_response: Result<Vec<NeuronId>, String> =
+        claim_neurons(state_machine, sender.get_principal_id(), test_identity);
+    let returned_neuron_ids = gtc_response.unwrap();
 
-    let returned_neuron_ids = gtc_response.unwrap().unwrap();
-
-    let get_neuron_ids_response: Result<Vec<u64>, String> = governance
-        .update_from_sender("get_neuron_ids", candid, (), &sender)
-        .await;
-
+    let get_neuron_ids_response: Vec<u64> =
+        get_neuron_ids(state_machine, sender.get_principal_id());
     let controlled_neuron_ids: Vec<NeuronId> = get_neuron_ids_response
-        .unwrap()
         .into_iter()
         .map(|id| NeuronId { id })
         .collect();
@@ -655,63 +485,39 @@ async fn assert_neurons_can_be_claimed(
     assert_eq!(controlled_neuron_ids_set, expected_neuron_ids_set);
 
     // Assert that `test_identity` has now claimed their neurons
-    let get_account_response: Result<Result<AccountState, String>, String> = gtc
-        .update_from_sender(
-            "get_account",
-            candid_one,
-            test_identity.gtc_address.to_string(),
-            &sender,
-        )
-        .await;
-    assert!(get_account_response.unwrap().unwrap().has_claimed);
+    let get_account_response: Result<AccountState, String> =
+        get_gtc_account(state_machine, test_identity);
+    assert!(get_account_response.unwrap().has_claimed);
 
     // Assert that calling `get_full_neuron` with `sample_neuron_id` now
     // returns successfully, as `test_identity` now controls this neuron
-    let governance_response: Result<Result<Neuron, GovernanceError>, String> = governance
-        .update_from_sender("get_full_neuron", candid_one, sample_neuron_id, &sender)
-        .await;
-
-    let neuron = governance_response.unwrap().unwrap();
+    let governance_response: Result<Neuron, GovernanceError> =
+        nns_governance_get_full_neuron(state_machine, sender.get_principal_id(), sample_neuron_id);
+    let neuron = governance_response.unwrap();
     assert_eq!(neuron.controller, Some(test_identity.principal_id()));
 
     // Assert that calling `claim_neurons` a second time returns the same set
     // of neuron IDs
-    let gtc_response_2: Result<Result<Vec<NeuronId>, String>, String> = gtc
-        .update_from_sender(
-            "claim_neurons",
-            candid,
-            (test_identity.public_key_hex,),
-            &sender,
-        )
-        .await;
+    let gtc_response_2: Result<Vec<NeuronId>, String> =
+        claim_neurons(state_machine, sender.get_principal_id(), test_identity);
 
-    let returned_neuron_ids_2 = gtc_response_2.unwrap().unwrap();
+    let returned_neuron_ids_2 = gtc_response_2.unwrap();
     let returned_neuron_ids_2_set: HashSet<NeuronId> =
         returned_neuron_ids_2.iter().cloned().collect();
     assert_eq!(returned_neuron_ids_2_set, expected_neuron_ids_set);
 
     // Assert that `test_identity`'s principal has been set in their GTC account
-    let get_account_response: Result<Result<AccountState, String>, String> = gtc
-        .update_from_sender(
-            "get_account",
-            candid_one,
-            test_identity.gtc_address.to_string(),
-            &sender,
-        )
-        .await;
+    let get_account_response: Result<AccountState, String> =
+        get_gtc_account(state_machine, test_identity);
     assert_eq!(
-        get_account_response
-            .unwrap()
-            .unwrap()
-            .authenticated_principal_id,
+        get_account_response.unwrap().authenticated_principal_id,
         Some(test_identity.principal_id())
     );
 
     // Assert that a claimed neuron is pre-aged
-    let get_neuron_info_response: Result<Result<NeuronInfo, GovernanceError>, String> = governance
-        .update_from_sender("get_neuron_info", candid_one, sample_neuron_id, &sender)
-        .await;
-    let neuron_info = get_neuron_info_response.unwrap().unwrap();
+    let get_neuron_info_response: Result<NeuronInfo, GovernanceError> =
+        nns_governance_get_neuron_info(state_machine, sender.get_principal_id(), sample_neuron_id);
+    let neuron_info = get_neuron_info_response.unwrap();
     assert!(neuron_info.age_seconds >= 86400 * 18 * 30);
 }
 
@@ -765,4 +571,177 @@ fn get_forward_whitelisted_unclaimed_accounts_recipient_neuron_id(
         .0;
 
     NeuronId { id }
+}
+
+fn get_gtc_account(
+    state_machine: &mut StateMachine,
+    test_identity: &TestIdentity,
+) -> Result<AccountState, String> {
+    let result = state_machine
+        .execute_ingress(
+            GENESIS_TOKEN_CANISTER_ID,
+            "get_account",
+            Encode!(&test_identity.gtc_address.to_string()).unwrap(),
+        )
+        .unwrap();
+    let result = match result {
+        WasmResult::Reply(result) => result,
+        WasmResult::Reject(s) => panic!("Call to get_account failed: {:#?}", s),
+    };
+
+    Decode!(&result, Result<AccountState, String>).unwrap()
+}
+
+fn forward_whitelisted_unclaimed_accounts(
+    state_machine: &mut StateMachine,
+    sender: &Sender,
+) -> Result<(), String> {
+    let result = state_machine
+        .execute_ingress_as(
+            sender.get_principal_id(),
+            GENESIS_TOKEN_CANISTER_ID,
+            "forward_whitelisted_unclaimed_accounts",
+            Encode!(&()).unwrap(),
+        )
+        .unwrap();
+    let result = match result {
+        WasmResult::Reply(result) => result,
+        WasmResult::Reject(s) => panic!(
+            "Call to forward_whitelisted_unclaimed_accounts failed: {:#?}",
+            s
+        ),
+    };
+
+    Decode!(&result, Result<(), String>).unwrap()
+}
+
+fn donate_accounts(
+    state_machine: &mut StateMachine,
+    sender: PrincipalId,
+    test_identity: &TestIdentity,
+) -> Result<(), String> {
+    let result = state_machine
+        .execute_ingress_as(
+            sender,
+            GENESIS_TOKEN_CANISTER_ID,
+            "donate_account",
+            Encode!(&test_identity.public_key_hex.to_string()).unwrap(),
+        )
+        .unwrap();
+    let result = match result {
+        WasmResult::Reply(result) => result,
+        WasmResult::Reject(s) => panic!("Call to donate_account failed: {:#?}", s),
+    };
+
+    Decode!(&result,Result<(), String>).unwrap()
+}
+
+fn claim_neurons(
+    state_machine: &mut StateMachine,
+    sender: PrincipalId,
+    test_identity: &TestIdentity,
+) -> Result<Vec<NeuronId>, String> {
+    let result = state_machine
+        .execute_ingress_as(
+            sender,
+            GENESIS_TOKEN_CANISTER_ID,
+            "claim_neurons",
+            Encode!(&test_identity.public_key_hex.to_string()).unwrap(),
+        )
+        .unwrap();
+    let result = match result {
+        WasmResult::Reply(result) => result,
+        WasmResult::Reject(s) => panic!("Call to claim_neurons failed: {:#?}", s),
+    };
+
+    Decode!(&result, Result<Vec<NeuronId>, String>).unwrap()
+}
+
+fn are_neurons_marked_seed(state_machine: &mut StateMachine, neuron_ids: &[NeuronId]) -> bool {
+    for neuron_id in neuron_ids {
+        let neuron = nns_governance_get_neuron_info(
+            state_machine,
+            PrincipalId::new_anonymous(),
+            neuron_id.id,
+        )
+        .unwrap();
+
+        if !neuron.is_seed_neuron() {
+            return false;
+        }
+    }
+    true
+}
+
+fn are_neurons_marked_ect(state_machine: &mut StateMachine, neuron_ids: &[NeuronId]) -> bool {
+    for neuron_id in neuron_ids {
+        let neuron = nns_governance_get_neuron_info(
+            state_machine,
+            PrincipalId::new_anonymous(),
+            neuron_id.id,
+        )
+        .unwrap();
+
+        if !neuron.is_ect_neuron() {
+            return false;
+        }
+    }
+    true
+}
+
+// Helper function to get neuron IDs for a specific identity
+fn get_gtc_neuron_ids(nns_init_payload: &NnsInitPayloads, identity_address: &str) -> Vec<NeuronId> {
+    nns_init_payload
+        .genesis_token
+        .accounts
+        .get(identity_address)
+        .unwrap()
+        .neuron_ids
+        .clone()
+}
+
+#[test]
+pub fn test_tag_seed_neurons() {
+    let mut state_machine = StateMachine::new();
+    let mut nns_init_payload_builder = NnsInitPayloadsBuilder::new();
+    add_test_gtc_neurons(&mut nns_init_payload_builder);
+
+    let mut nns_init_payload = nns_init_payload_builder.build();
+    nns_init_payload.governance.seed_accounts = Some(SeedAccounts {
+        accounts: vec![
+            SeedAccount {
+                account_id: TEST_IDENTITY_1.gtc_address.to_string(),
+                neuron_type: NeuronType::Seed as i32,
+                ..Default::default()
+            },
+            SeedAccount {
+                account_id: TEST_IDENTITY_3.gtc_address.to_string(),
+                neuron_type: NeuronType::Ect as i32,
+                ..Default::default()
+            },
+        ],
+    });
+
+    let identity_1_neuron_ids = get_gtc_neuron_ids(&nns_init_payload, TEST_IDENTITY_1.gtc_address);
+    let identity_3_neuron_ids = get_gtc_neuron_ids(&nns_init_payload, TEST_IDENTITY_3.gtc_address);
+
+    setup_nns_canisters(&state_machine, nns_init_payload);
+    state_machine.set_time(SystemTime::now());
+
+    for _ in 0..100 {
+        let (ident_1_is_seed, ident_3_is_seed) = (
+            are_neurons_marked_seed(&mut state_machine, &identity_1_neuron_ids),
+            are_neurons_marked_ect(&mut state_machine, &identity_3_neuron_ids),
+        );
+
+        if ident_1_is_seed && ident_3_is_seed {
+            break;
+        }
+
+        state_machine.tick();
+    }
+
+    let ident_1_is_seed = are_neurons_marked_seed(&mut state_machine, &identity_1_neuron_ids);
+    let ident_3_is_seed = are_neurons_marked_ect(&mut state_machine, &identity_3_neuron_ids);
+    assert!(ident_1_is_seed && ident_3_is_seed);
 }

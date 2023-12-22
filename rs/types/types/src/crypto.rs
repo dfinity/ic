@@ -50,7 +50,7 @@ impl fmt::Debug for CryptoHash {
 pub type CryptoHashOf<T> = Id<T, CryptoHash>;
 
 /// Signed contains the signed content and its signature.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Ord, PartialOrd)]
 pub struct Signed<T, S> {
     pub content: T,
     pub signature: S,
@@ -145,11 +145,22 @@ pub enum AlgorithmId {
     RsaSha256 = 14,
     ThresholdEcdsaSecp256k1 = 15,
     MegaSecp256k1 = 16,
+    ThresholdEcdsaSecp256r1 = 17,
 }
 
 impl AlgorithmId {
-    pub fn as_u8(&self) -> u8 {
-        u8::try_from(*self as isize).expect("could not convert AlgorithmId to u8")
+    pub const fn all_threshold_ecdsa_algorithms() -> [AlgorithmId; 2] {
+        [Self::ThresholdEcdsaSecp256r1, Self::ThresholdEcdsaSecp256k1]
+    }
+
+    pub fn is_threshold_ecdsa(&self) -> bool {
+        Self::all_threshold_ecdsa_algorithms().contains(self)
+    }
+}
+
+impl From<AlgorithmId> for u8 {
+    fn from(value: AlgorithmId) -> Self {
+        u8::try_from(value as isize).expect("could not convert AlgorithmId to u8")
     }
 }
 
@@ -201,6 +212,7 @@ impl From<i32> for AlgorithmId {
             14 => AlgorithmId::RsaSha256,
             15 => AlgorithmId::ThresholdEcdsaSecp256k1,
             16 => AlgorithmId::MegaSecp256k1,
+            17 => AlgorithmId::ThresholdEcdsaSecp256r1,
             _ => AlgorithmId::Placeholder,
         }
     }

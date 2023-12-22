@@ -12,17 +12,12 @@ filegroup(
 BASE_DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/crypto/sha2",
     "//rs/nervous_system/common",
     "//rs/nervous_system/proto",
-    "//rs/nns/constants",
-    "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/icrc1/index",
     "//rs/rosetta-api/icrc1/ledger",
     "//rs/rosetta-api/ledger_canister_core",
     "//rs/rosetta-api/ledger_core",
-    "//rs/rust_canisters/dfn_candid",
-    "//rs/rust_canisters/dfn_core",
     "//rs/sns/root",
     "//rs/types/base_types",
     "@crate_index//:base64",
@@ -30,22 +25,21 @@ BASE_DEPENDENCIES = [
     "@crate_index//:isocountry",
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
-    "@crate_index//:num",
     "@crate_index//:prost",
-    "@crate_index//:regex",
     "@crate_index//:serde",
-    "@crate_index//:serde_json",
     "@crate_index//:serde_yaml",
 ]
 
 # Each target declared in this file may choose either these (release-ready)
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
 DEPENDENCIES = BASE_DEPENDENCIES + [
+    "//rs/nns/constants",
     "//rs/sns/governance",
     "//rs/sns/swap",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
+    "//rs/nns/constants:constants--test_feature",
     "//rs/sns/governance:governance--test_feature",
     "//rs/sns/swap:swap--test_feature",
 ]
@@ -59,7 +53,6 @@ DEV_DEPENDENCIES = [
     "//rs/nervous_system/common/test_keys",
     "//rs/sns/init/protobuf_generator:lib",
     "//rs/test_utilities/compare_dirs",
-    "@crate_index//:assert_approx_eq",
     "@crate_index//:num-traits",
     "@crate_index//:tempfile",
 ]
@@ -98,18 +91,31 @@ generated_files_check(
     srcs = ["tests/check_generated_files.rs"],
     data = glob(["src/gen/**"]) + [
         ":protos",
-        "//rs/types/base_types:protos",
         "//rs/nervous_system/proto:protos",
         "//rs/sns/swap:protos",
+        "//rs/types/base_types:protos",
     ],
     manifest_dir = "rs/sns/init",
     deps = DEV_DEPENDENCIES,
 )
 
+# These tests will run with the testing-only CFG, i.e.:
+# - the code under `#[cfg(feature = "test")]`
+# - the code *not* under `#[cfg(not(feature = "test"))]`
+rust_test(
+    name = "init_test--test_feature",
+    crate = ":init--test_feature",
+    crate_features = ["test"],
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
+    deps = DEV_DEPENDENCIES,
+)
+
+# These tests will run with the mainnet CFG, i.e.:
+# - the code under `#[cfg(not(feature = "test"))]`
+# - the code *not* under `#[cfg(feature = "test")]`
 rust_test(
     name = "init_test",
-    crate = ":init",
-    crate_features = ["test"],
+    crate = "init",
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = DEV_DEPENDENCIES,
 )

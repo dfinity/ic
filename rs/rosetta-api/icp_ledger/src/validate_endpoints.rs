@@ -15,7 +15,7 @@ use std::convert::{TryFrom, TryInto};
 
 /// The point of this file is to validate protobufs as they're received and turn
 /// them into a validated data type
-/// ENDPOINTS
+/// ENDPOINTS.
 impl ToProto for TotalSupplyArgs {
     type Proto = protobuf::TotalSupplyRequest;
     fn from_proto(_: Self::Proto) -> Result<Self, String> {
@@ -150,7 +150,7 @@ impl ToProto for GetBlocksArgs {
         let length = pb
             .length
             .try_into()
-            .map_err(|_| format!("{} count not be convered to a usize", pb.length))?;
+            .map_err(|_| format!("{} count not be converted to a usize", pb.length))?;
         Ok(GetBlocksArgs {
             start: pb.start,
             length,
@@ -171,7 +171,7 @@ impl ToProto for GetBlocksRes {
     fn from_proto(pb: Self::Proto) -> Result<Self, String> {
         match pb
             .get_blocks_content
-            .expect("get_blocks() reponse with no content")
+            .expect("get_blocks() response with no content")
         {
             protobuf::get_blocks_response::GetBlocksContent::Blocks(protobuf::EncodedBlocks {
                 blocks,
@@ -221,11 +221,11 @@ impl ToProto for IterBlocksArgs {
         let start = pb
             .start
             .try_into()
-            .map_err(|_| format!("{} count not be convered to a usize", pb.start))?;
+            .map_err(|_| format!("{} count not be converted to a usize", pb.start))?;
         let length = pb
             .length
             .try_into()
-            .map_err(|_| format!("{} count not be convered to a usize", pb.length))?;
+            .map_err(|_| format!("{} count not be converted to a usize", pb.length))?;
         Ok(IterBlocksArgs { start, length })
     }
 
@@ -284,9 +284,9 @@ impl ToProto for BlockRes {
             Some(protobuf::block_response::BlockContent::Block(protobuf::EncodedBlock {
                 block,
             })) => Ok(BlockRes(Some(Ok(EncodedBlock::from(block))))),
-            Some(protobuf::block_response::BlockContent::CanisterId(canister_id)) => {
-                Ok(BlockRes(Some(Err(CanisterId::new(canister_id).unwrap()))))
-            }
+            Some(protobuf::block_response::BlockContent::CanisterId(canister_id)) => Ok(BlockRes(
+                Some(Err(CanisterId::unchecked_from_principal(canister_id))),
+            )),
             None => Ok(BlockRes(None)),
         }
     }

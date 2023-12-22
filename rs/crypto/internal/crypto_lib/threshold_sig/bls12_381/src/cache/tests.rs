@@ -1,4 +1,5 @@
 use crate::cache::*;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::RngCore;
 
 fn random_signature_cache_entry<R: RngCore>(rng: &mut R) -> SignatureCacheEntry {
@@ -18,7 +19,7 @@ fn should_have_signature_cache_behave_like_a_lru_cache() {
     let cache_size = 1000;
     let cache = SignatureCache::new(cache_size);
 
-    let mut rng = ic_crypto_test_utils_reproducible_rng::reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     let mut entries = Vec::with_capacity(cache_size);
 
@@ -28,7 +29,7 @@ fn should_have_signature_cache_behave_like_a_lru_cache() {
 
         assert_eq!(cache.cache_statistics(), expected_stats);
 
-        let entry = random_signature_cache_entry(&mut rng);
+        let entry = random_signature_cache_entry(rng);
 
         // the entry is randomly generated so has not been seen before
         assert!(!cache.contains(&entry));
@@ -57,7 +58,7 @@ fn should_have_signature_cache_behave_like_a_lru_cache() {
     assert_eq!(cache.cache_statistics(), expected_stats);
 
     for i in 0..cache_size {
-        let entry = random_signature_cache_entry(&mut rng);
+        let entry = random_signature_cache_entry(rng);
 
         assert_eq!(cache.cache_statistics().size, cache_size);
         assert!(!cache.contains(&entry));
@@ -84,12 +85,12 @@ fn should_have_signature_cache_update_lru_status_after_cache_hit() {
     let cache_size = 3;
     let cache = SignatureCache::new(cache_size);
 
-    let mut rng = ic_crypto_test_utils_reproducible_rng::reproducible_rng();
+    let rng = &mut reproducible_rng();
 
-    let entry1 = random_signature_cache_entry(&mut rng);
-    let entry2 = random_signature_cache_entry(&mut rng);
-    let entry3 = random_signature_cache_entry(&mut rng);
-    let entry4 = random_signature_cache_entry(&mut rng);
+    let entry1 = random_signature_cache_entry(rng);
+    let entry2 = random_signature_cache_entry(rng);
+    let entry3 = random_signature_cache_entry(rng);
+    let entry4 = random_signature_cache_entry(rng);
 
     cache.insert(&entry1);
     cache.insert(&entry2);

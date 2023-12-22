@@ -2,7 +2,7 @@ use crate::message_routing::LatencyMetrics;
 use ic_base_types::NumBytes;
 use ic_certification_version::CertificationVersion;
 use ic_config::execution_environment::Config as HypervisorConfig;
-use ic_error_types::RejectCode;
+use ic_error_types::{ErrorCode, RejectCode};
 use ic_logger::{debug, error, fatal, trace, ReplicaLogger};
 use ic_metrics::{
     buckets::{add_bucket, decimal_buckets},
@@ -231,15 +231,27 @@ impl StreamHandler for StreamHandlerImpl {
                 });
         }
 
+        // A lower bound running estimate of the subnet's available message memory. It
+        // accurately reflects all memory allocated by inducted and rejected messages
+        // and released by inducting responses; but not the changes to
+        //`Streams::responses_size_bytes` (the size of responses already routed to
+        // streams), as some of its entries may refer to deleted or migrated canisters.
+        let mut subnet_available_memory = self.subnet_available_memory(&state);
+
         // Induct our own loopback stream first, if one exists and has any messages.
-        state = self.induct_loopback_stream(state);
+        state = self.induct_loopback_stream(state, &mut subnet_available_memory);
+        debug_assert!(self.subnet_available_memory(&state) >= subnet_available_memory);
 
         // Garbage collect our stream state based on the contents of the slices.
         state = self.garbage_collect_local_state(state, &stream_slices);
+        debug_assert!(self.subnet_available_memory(&state) >= subnet_available_memory);
         self.observe_backlog_durations(&stream_slices);
 
         // Induct the messages in `stream_slices`, updating signals as appropriate.
-        self.induct_stream_slices(state, stream_slices)
+        let state = self.induct_stream_slices(state, stream_slices, &mut subnet_available_memory);
+        debug_assert!(self.subnet_available_memory(&state) >= subnet_available_memory);
+
+        state
     }
 }
 
@@ -249,6 +261,9 @@ impl StreamHandlerImpl {
     /// After the call completes, the loopback stream may only contain reject
     /// responses or rerouted responses and no signals. All initial messages and
     /// corresponding signals will have been garbage collected.
+    ///
+    /// Updates `subnet_available_memory` to reflect change in memory usage, in such
+    /// a way that it remains a lower-bound estimate of the actual available memory.
     ///
     /// The sequence of steps is as follows:
     ///
@@ -262,7 +277,11 @@ impl StreamHandlerImpl {
     ///    loopback stream.
     /// 4. Any rejected `Responses` collected at step (2) are rerouted into the
     ///    appropriate streams as per the routing table.
-    fn induct_loopback_stream(&self, mut state: ReplicatedState) -> ReplicatedState {
+    fn induct_loopback_stream(
+        &self,
+        mut state: ReplicatedState,
+        subnet_available_memory: &mut i64,
+    ) -> ReplicatedState {
         let loopback_stream = state.get_stream(&self.subnet_id);
 
         // All done if the loopback stream does not exist or is empty.
@@ -285,7 +304,7 @@ impl StreamHandlerImpl {
         // 1. Induct all messages. This will add signals to the loopback stream.
         let mut stream_slices = BTreeMap::new();
         stream_slices.insert(self.subnet_id, loopback_stream_slice);
-        state = self.induct_stream_slices(state, stream_slices);
+        state = self.induct_stream_slices(state, stream_slices, subnet_available_memory);
 
         let mut streams = state.take_streams();
         // We know for sure that the loopback stream exists, so it is safe to unwrap.
@@ -515,15 +534,15 @@ impl StreamHandlerImpl {
     ///
     /// See [`Self::induct_message`] for the possible outcomes of inducting a
     /// message.
+    ///
+    /// Updates `subnet_available_memory` to reflect change in memory usage, in such
+    /// a way that it remains a lower-bound estimate of the actual available memory.
     fn induct_stream_slices(
         &self,
         mut state: ReplicatedState,
         stream_slices: BTreeMap<SubnetId, StreamSlice>,
+        subnet_available_memory: &mut i64,
     ) -> ReplicatedState {
-        let memory_taken = state.memory_taken();
-        let message_memory_taken = memory_taken.messages();
-        let mut subnet_available_memory =
-            self.subnet_message_memory_capacity.get() as i64 - message_memory_taken.get() as i64;
         let mut streams = state.take_streams();
 
         for (remote_subnet_id, mut stream_slice) in stream_slices {
@@ -538,7 +557,7 @@ impl StreamHandlerImpl {
                     stream_index,
                     &mut state,
                     &mut stream,
-                    &mut subnet_available_memory,
+                    subnet_available_memory,
                 );
             }
         }
@@ -596,43 +615,46 @@ impl StreamHandlerImpl {
             let payload_size = msg.payload_size_bytes().get();
             match receiver_host_subnet {
                 // Matching receiver subnet, try inducting message.
-                Some(host_subnet) if host_subnet == self.subnet_id => match state
-                    .push_input(msg, subnet_available_memory)
-                {
-                    // Message successfully inducted, all done.
-                    Ok(()) => {
-                        self.observe_inducted_message_status(msg_type, LABEL_VALUE_SUCCESS);
-                        self.observe_inducted_payload_size(payload_size);
-                    }
+                Some(host_subnet) if host_subnet == self.subnet_id => {
+                    match state.push_input(msg, subnet_available_memory) {
+                        // Message successfully inducted, all done.
+                        Ok(()) => {
+                            self.observe_inducted_message_status(msg_type, LABEL_VALUE_SUCCESS);
+                            self.observe_inducted_payload_size(payload_size);
+                        }
 
-                    // Message not inducted.
-                    Err((err, msg)) => {
-                        self.observe_inducted_message_status(msg_type, err.to_label_value());
+                        // Message not inducted.
+                        Err((err, msg)) => {
+                            self.observe_inducted_message_status(msg_type, err.to_label_value());
 
-                        match msg {
-                            RequestOrResponse::Request(_) => {
-                                debug!(
+                            match msg {
+                                RequestOrResponse::Request(_) => {
+                                    debug!(
                                     self.log,
                                     "Induction failed with error '{}', generating reject Response for {:?}",
                                     &err,
                                     &msg
                                 );
-                                let code = reject_code_for_state_error(&err);
-                                stream.push(generate_reject_response(msg, code, err.to_string()))
-                            }
-                            RequestOrResponse::Response(response) => {
-                                // Critical error, responses should always be inducted successfully.
-                                error!(
-                                    self.log,
-                                    "{}: Inducting response failed: {:?}",
-                                    CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
-                                    response
-                                );
-                                self.metrics.critical_error_induct_response_failed.inc()
+                                    let code = reject_code_for_state_error(&err);
+                                    *subnet_available_memory -= stream
+                                        .push(generate_reject_response(msg, code, err.to_string()))
+                                        as i64;
+                                }
+                                RequestOrResponse::Response(response) => {
+                                    // Critical error, responses should always be inducted successfully.
+                                    error!(
+                                        self.log,
+                                        "{}: Inducting response failed: {} {:?}",
+                                        CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
+                                        err,
+                                        response
+                                    );
+                                    self.metrics.critical_error_induct_response_failed.inc()
+                                }
                             }
                         }
                     }
-                },
+                }
 
                 // Receiver canister is migrating to/from this subnet.
                 Some(host_subnet) if self.should_reroute_message_to(&msg, host_subnet, state) => {
@@ -646,11 +668,11 @@ impl StreamHandlerImpl {
                                 host_subnet
                             );
                             debug!(self.log, "Canister {} is being migrated, generating reject response for {:?}", msg.receiver(), msg);
-                            stream.push(generate_reject_response(
+                            *subnet_available_memory -= stream.push(generate_reject_response(
                                 msg,
                                 RejectCode::SysTransient,
                                 reject_message,
-                            ));
+                            )) as i64;
                         }
 
                         RequestOrResponse::Response(_) => {
@@ -787,6 +809,14 @@ impl StreamHandlerImpl {
             .unwrap_or(false)
     }
 
+    /// Computes the subnet's available message memory, as the difference
+    /// between the subnet's message memory capacity and its current usage.
+    fn subnet_available_memory(&self, state: &ReplicatedState) -> i64 {
+        let memory_taken = state.memory_taken();
+        let message_memory_taken = memory_taken.messages();
+        self.subnet_message_memory_capacity.get() as i64 - message_memory_taken.get() as i64
+    }
+
     /// Observes "time in backlog" (since learning about their existence from
     /// the stream header) for each of the given inducted messages.
     fn observe_backlog_durations(&self, stream_slices: &BTreeMap<SubnetId, StreamSlice>) {
@@ -856,22 +886,10 @@ fn generate_reject_response(
 
 /// Maps a `StateError` resulting from a failed induction to a `RejectCode`.
 fn reject_code_for_state_error(err: &StateError) -> RejectCode {
-    match err {
-        StateError::QueueFull { .. } => RejectCode::SysTransient,
-        StateError::CanisterOutOfCycles(_) => RejectCode::SysTransient,
-        StateError::CanisterNotFound(_) => RejectCode::DestinationInvalid,
-        StateError::CanisterStopped(_) => RejectCode::CanisterReject,
-        StateError::CanisterStopping(_) => RejectCode::CanisterReject,
-        StateError::InvariantBroken(_) => RejectCode::SysTransient,
-        StateError::UnknownSubnetMethod(_) => RejectCode::CanisterReject,
-        StateError::NonMatchingResponse { .. } => RejectCode::SysFatal,
-        StateError::InvalidSubnetPayload => RejectCode::CanisterReject,
-        StateError::OutOfMemory { .. } => RejectCode::SysTransient,
-        StateError::BitcoinNonMatchingResponse { .. } => RejectCode::SysTransient,
-    }
+    ErrorCode::from(err).into()
 }
 
-/// Ensures that the given signals are vaild (strictly increasing, before
+/// Ensures that the given signals are valid (strictly increasing, before
 /// `signals_end`).
 fn assert_valid_signals(
     signals_end: StreamIndex,
@@ -881,7 +899,7 @@ fn assert_valid_signals(
     use std::iter::once;
     let shifted = reject_signals.iter().skip(1).chain(once(&signals_end));
     assert!(
-        // Check that signals are stricly monotonic and below signals_end.
+        // Check that signals are strictly monotonic and below signals_end.
         reject_signals.iter().zip(shifted).all(|(x, y)| x < y),
         "Invalid {}: signals_end {}, signals {:?}",
         stream_component,

@@ -310,7 +310,7 @@ pub(crate) fn get_registry_and_urls_for_test(
             REGISTRY_VERSION,
             Some(SubnetListRecord { subnets }),
         )
-        .expect("Coult not add subnet list record.");
+        .expect("Could not add subnet list record.");
 
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::new(data_provider)));
     registry_client.update_to_latest_version();

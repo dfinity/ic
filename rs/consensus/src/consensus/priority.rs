@@ -6,7 +6,7 @@ use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::consensus_pool::{ConsensusPool, HeightIndexedPool, HeightRange};
 use ic_types::{
     artifact::{ConsensusMessageId, Priority, Priority::*, PriorityFn},
-    consensus::{Block, ConsensusMessageAttribute, HasBlockHash, HasHeight},
+    consensus::{Block, ConsensusMessageAttribute, ConsensusMessageHash, HasBlockHash, HasHeight},
     crypto::CryptoHashOf,
     Height,
 };
@@ -68,17 +68,20 @@ pub fn get_priority_function(
         &histograms.with_label_values(&["notarized_unvalidated"]),
     );
 
-    Box::new(move |_, attr: &'_ ConsensusMessageAttribute| {
-        compute_priority(
-            catch_up_height,
-            expected_batch_height,
-            finalized_height,
-            notarized_height,
-            beacon_height,
-            &block_sets,
-            attr,
-        )
-    })
+    Box::new(
+        move |id: &'_ ConsensusMessageId, attr: &'_ ConsensusMessageAttribute| {
+            compute_priority(
+                catch_up_height,
+                expected_batch_height,
+                finalized_height,
+                notarized_height,
+                beacon_height,
+                &block_sets,
+                id,
+                attr,
+            )
+        },
+    )
 }
 
 /// Update the given BlockSet with blocks that are references by artifacts
@@ -115,17 +118,17 @@ fn compute_priority(
     notarized_height: Height,
     beacon_height: Height,
     block_sets: &BlockSets,
+    id: &ConsensusMessageId,
     attr: &ConsensusMessageAttribute,
 ) -> Priority {
-    let height = attr.height();
+    let height = id.height;
     // Ignore older than the min of catch-up height and expected_batch_height
     if height < expected_batch_height.min(catch_up_height) {
         return Drop;
     }
     // Other decisions depend on type, default is to FetchNow.
-    match attr {
-        ConsensusMessageAttribute::RandomBeacon(_)
-        | ConsensusMessageAttribute::RandomBeaconShare(_) => {
+    match id.hash {
+        ConsensusMessageHash::RandomBeacon(_) | ConsensusMessageHash::RandomBeaconShare(_) => {
             // Ignore old beacon or beacon shares
             if height <= beacon_height {
                 Drop
@@ -135,7 +138,7 @@ fn compute_priority(
                 Stash
             }
         }
-        ConsensusMessageAttribute::NotarizationShare(_) => {
+        ConsensusMessageHash::NotarizationShare(_) => {
             // Ignore old notarization shares
             if height <= notarized_height {
                 Drop
@@ -145,11 +148,11 @@ fn compute_priority(
                 Stash
             }
         }
-        ConsensusMessageAttribute::Notarization(block_hash, _) => {
+        ConsensusMessageHash::Notarization(_) => {
             // Ignore older than finalized
             if height <= finalized_height {
                 Drop
-            } else {
+            } else if let ConsensusMessageAttribute::Notarization(block_hash) = attr {
                 // Drop notarization we already have
                 if block_sets.notarized_validated.contains(block_hash) {
                     Drop
@@ -162,13 +165,18 @@ fn compute_priority(
                 } else {
                     Stash
                 }
+            } else {
+                // This case should never happen because ideally the correct attributes comes together with the id.
+                // This can happen only in the case of a malicious peer. But in this case let's just stash so nothing
+                // that we send from other peers can be dropped prematurely.
+                Stash
             }
         }
-        ConsensusMessageAttribute::Finalization(block_hash, _) => {
+        ConsensusMessageHash::Finalization(_) => {
             // Ignore older than finalized
             if height <= finalized_height {
                 Drop
-            } else {
+            } else if let ConsensusMessageAttribute::Finalization(block_hash) = attr {
                 // Postpone finalization we might already have
                 if !block_sets.finalized_unvalidated.contains(block_hash)
                     && height <= notarized_height + Height::from(LOOK_AHEAD)
@@ -177,10 +185,14 @@ fn compute_priority(
                 } else {
                     Stash
                 }
+            } else {
+                // This case should never happen because ideally the correct attributes comes together with the id.
+                // This can happen only in the case of a malicious peer. But in this case let's just stash so nothing
+                // that we send from other peers can be dropped prematurely.
+                Stash
             }
         }
-        ConsensusMessageAttribute::FinalizationShare(_)
-        | ConsensusMessageAttribute::BlockProposal(_, _) => {
+        ConsensusMessageHash::FinalizationShare(_) | ConsensusMessageHash::BlockProposal(_) => {
             // Ignore finalized
             if height <= finalized_height {
                 Drop
@@ -190,8 +202,7 @@ fn compute_priority(
                 Stash
             }
         }
-        ConsensusMessageAttribute::RandomTape(_)
-        | ConsensusMessageAttribute::RandomTapeShare(_) => {
+        ConsensusMessageHash::RandomTape(_) | ConsensusMessageHash::RandomTapeShare(_) => {
             if height < expected_batch_height {
                 Drop
             } else if height <= finalized_height + Height::from(LOOK_AHEAD) {
@@ -200,8 +211,8 @@ fn compute_priority(
                 Stash
             }
         }
-        ConsensusMessageAttribute::CatchUpPackage(_) => FetchNow,
-        ConsensusMessageAttribute::CatchUpPackageShare(_) => {
+        ConsensusMessageHash::CatchUpPackage(_) => FetchNow,
+        ConsensusMessageHash::CatchUpPackageShare(_) => {
             if height <= catch_up_height {
                 Drop
             } else if height <= finalized_height {
@@ -277,7 +288,7 @@ mod tests {
             let dup_msg = dup_notarization.into_message();
             let attr = ConsensusMessageAttribute::from(&dup_msg);
             // Move block back to unvalidated after attribute is computed
-            pool.remove_validated(block.clone());
+            pool.purge_validated_below(block.clone());
             pool.insert_unvalidated(block.clone());
             let priority = get_priority_function(&pool, expected_batch_height, &test_metrics());
             assert_eq!(priority(&dup_notarization_id, &attr), Stash);

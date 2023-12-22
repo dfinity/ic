@@ -250,28 +250,7 @@ mod tests {
     }
 
     fn jobs() -> Vec<Job> {
-        vec![
-            Job {
-                _type: JobType::NodeExporter(NodeOS::Guest),
-                port: 9100,
-                endpoint: "/metrics".into(),
-            },
-            Job {
-                _type: JobType::NodeExporter(NodeOS::Host),
-                port: 9100,
-                endpoint: "/metrics".into(),
-            },
-            Job {
-                _type: JobType::Orchestrator,
-                port: 9091,
-                endpoint: "/".into(),
-            },
-            Job {
-                _type: JobType::Replica,
-                port: 9090,
-                endpoint: "/".into(),
-            },
-        ]
+        jobs_list()
     }
 
     fn get_jobs_parameters() -> HashMap<JobType, JobParameters> {

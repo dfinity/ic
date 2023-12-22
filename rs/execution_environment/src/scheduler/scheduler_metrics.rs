@@ -38,6 +38,15 @@ pub(super) struct SchedulerMetrics {
     pub(super) msg_execution_duration: Histogram,
     pub(super) registered_canisters: IntGaugeVec,
     pub(super) available_canister_ids: IntGauge,
+    /// Metric `consumed_cycles_since_replica_started` is not
+    /// monotonically increasing. Cycles consumed are increasing the
+    /// value of the metric while refunding cycles are decreasing it.
+    ///
+    /// `f64` gauge because cycles values are `u128`: converting them
+    /// into `u64` would result in truncation when the value overflows
+    /// 64 bits (which would be indistinguishable from a huge refund);
+    /// whereas conversion to `f64` merely results in loss of precision
+    /// when dealing with values > 2^53.
     pub(super) consumed_cycles_since_replica_started: Gauge,
     pub(super) consumed_cycles_since_replica_started_by_use_case: GaugeVec,
     pub(super) input_queue_messages: IntGaugeVec,
@@ -57,6 +66,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) round_preparation_duration: Histogram,
     pub(super) round_preparation_ingress: Histogram,
     pub(super) round_consensus_queue: ScopedMetrics,
+    pub(super) round_postponed_raw_rand_queue: ScopedMetrics,
     pub(super) round_subnet_queue: ScopedMetrics,
     pub(super) round_scheduling_duration: Histogram,
     pub(super) round_inner: ScopedMetrics,
@@ -84,12 +94,15 @@ pub(super) struct SchedulerMetrics {
     pub(super) scheduler_accumulated_priority_deviation: Gauge,
     pub(super) subnet_memory_usage_invariant: IntCounter,
     pub(super) total_canister_balance: Gauge,
+    pub(super) total_canister_reserved_balance: Gauge,
     pub(super) canister_paused_execution: Histogram,
     pub(super) canister_aborted_execution: Histogram,
     pub(super) canister_paused_install_code: Histogram,
     pub(super) canister_aborted_install_code: Histogram,
     pub(super) inducted_messages: IntCounterVec,
     pub(super) ecdsa_signature_agreements: IntGauge,
+    // TODO(EXC-1466): Remove metric once all calls have `call_id` present.
+    pub(super) stop_canister_calls_without_call_id: IntGauge,
 }
 
 const LABEL_MESSAGE_KIND: &str = "kind";
@@ -189,15 +202,6 @@ impl SchedulerMetrics {
                 "replicated_state_available_canister_ids",
                 "Number of allocated canister IDs that can still be generated.",
             ),
-            /// Metric `consumed_cycles_since_replica_started` is not
-            /// monotonically increasing. Cycles consumed are increasing the
-            /// value of the metric while refunding cycles are decreasing it.
-            ///
-            /// `f64` gauge because cycles values are `u128`: converting them
-            /// into `u64` would result in truncation when the value overflows
-            /// 64 bits (which would be indistinguishable from a huge refund);
-            /// whereas conversion to `f64` merely results in loss of precision
-            /// when dealing with values > 2^53.
             consumed_cycles_since_replica_started: metrics_registry.gauge(
                 "replicated_state_consumed_cycles_since_replica_started",
                 "Number of cycles consumed since replica started",
@@ -328,6 +332,32 @@ impl SchedulerMetrics {
                     "execution_round_consensus_queue_messages",
                     "The number of messages executed during consensus \
                           queue processing in an execution round",
+                    metrics_registry,
+                ),
+            },
+            round_postponed_raw_rand_queue: ScopedMetrics {
+                duration: duration_histogram(
+                    "execution_round_postponed_raw_rand_queue_duration_seconds",
+                    "The duration of postponed raw rand queue processing in \
+                          an execution round",
+                    metrics_registry,
+                ),
+                instructions: instructions_histogram(
+                    "execution_round_postponed_raw_rand_queue_instructions",
+                    "The number of instructions executed during postponed \
+                          raw rand queue processing in an execution round",
+                    metrics_registry,
+                ),
+                slices: slices_histogram(
+                    "execution_round_postponed_raw_rand_queue_slices",
+                    "The number of slices executed during postponed \
+                          raw rand queue processing in an execution round",
+                    metrics_registry,
+                ),
+                messages: messages_histogram(
+                    "execution_round_postponed_raw_rand_queue_messages",
+                    "The number of messages executed during postponed \
+                          raw rand queue processing in an execution round",
                     metrics_registry,
                 ),
             },
@@ -551,6 +581,10 @@ impl SchedulerMetrics {
                 "scheduler_canister_balance_cycles_total",
                 "Total canister balance in Cycles.",
             ),
+            total_canister_reserved_balance: metrics_registry.gauge(
+                "scheduler_canister_reserved_balance_cycles_total",
+                "Total canister reserved balance in Cycles.",
+            ),
             canister_paused_execution: dts_pause_or_abort_histogram(
                 "scheduler_canister_paused_execution",
                 "Number of canisters that have a paused execution.",
@@ -575,6 +609,10 @@ impl SchedulerMetrics {
                 "scheduler_inducted_messages_total",
                 "Number of messages inducted, by destination.",
                 &["destination"],
+            ),
+            stop_canister_calls_without_call_id:  metrics_registry.int_gauge(
+                "scheduler_stop_canister_calls_without_call_id",
+                "Number of stop canister calls with missing call ID.",
             ),
         }
     }

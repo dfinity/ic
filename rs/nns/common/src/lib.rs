@@ -22,6 +22,16 @@ impl NeuronId {
             },
         }
     }
+
+    pub fn next(&self) -> Option<NeuronId> {
+        self.id.checked_add(1).map(|id| NeuronId { id })
+    }
+}
+
+impl From<NeuronId> for u64 {
+    fn from(id: NeuronId) -> Self {
+        id.id
+    }
 }
 
 impl Storable for NeuronId {

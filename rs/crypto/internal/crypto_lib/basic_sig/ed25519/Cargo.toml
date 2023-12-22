@@ -1,10 +1,13 @@
 [package]
 name = "ic-crypto-internal-basic-sig-ed25519"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-base64 = "0.11.0"
+base64 = { workspace = true }
 curve25519-dalek = "3.0.2"
 ed25519-consensus = "2.0.1"
 hex = "0.4.2"
@@ -16,8 +19,8 @@ ic-protobuf = { path = "../../../../../protobuf" }
 ic-types = { path = "../../../../../types/types" }
 rand = "0.8.5"
 rand_chacha = "0.3.1"
-serde = { version = "1.0.99", features = [ "derive" ] }
-simple_asn1 = "0.6.1"
+serde = { workspace = true }
+simple_asn1 = { workspace = true }
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 
 [dev-dependencies]
@@ -27,6 +30,6 @@ ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reprodu
 num-bigint = "0.4.3"
 proptest = "1.0"
 proptest-derive = "0.3.0"
-serde_cbor = "0.11.1"
-strum = "0.23.0"
+serde_cbor = { workspace = true }
+strum = { workspace = true }
 wycheproof = "0.5"

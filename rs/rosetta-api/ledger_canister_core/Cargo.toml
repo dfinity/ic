@@ -1,8 +1,10 @@
 [package]
 name = "ic-ledger-canister-core"
-version = "0.1.0"
-authors = ["The Internet Computer Project Developers"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 async-trait = "0.1.53"
@@ -15,4 +17,4 @@ ic-ledger-core = { path = "../ledger_core" }
 ic-utils = { path = "../../utils" }
 ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
 num-traits = "0.2.12"
-serde = "1.0"
+serde = { workspace = true }

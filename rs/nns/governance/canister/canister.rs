@@ -15,21 +15,18 @@ use dfn_candid::{candid, candid_one};
 use dfn_core::{
     api::{arg_data, call_with_callbacks, caller, now, reject_message},
     over, over_async, println,
-    stable::stable64_read,
 };
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::{
     cmc::CMCCanister,
-    dfn_core_stable_mem_utils::BufferedStableMemReader,
     ledger::IcpLedgerCanister,
     memory_manager_upgrade_storage::{load_protobuf, store_protobuf},
-    MethodAuthzChange,
 };
 use ic_nervous_system_runtime::DfnRuntime;
 use ic_nns_common::{
-    access_control::{check_caller_is_gtc, check_caller_is_ledger, check_caller_is_root},
-    pb::v1::{CanisterAuthzInfo, NeuronId as NeuronIdProto, ProposalId as ProposalIdProto},
+    access_control::{check_caller_is_gtc, check_caller_is_ledger},
+    pb::v1::{NeuronId as NeuronIdProto, ProposalId as ProposalIdProto},
     types::{CallCanisterProposal, NeuronId, ProposalId},
 };
 use ic_nns_constants::LEDGER_CANISTER_ID;
@@ -39,36 +36,38 @@ use ic_nns_governance::{
         BitcoinNetwork, BitcoinSetConfigProposal, Environment, Governance, HeapGrowthPotential,
         TimeWarp,
     },
+    neuron_data_validation::NeuronDataValidationSummary,
     pb::v1::{
         claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
-        governance::GovernanceCachedMetrics,
+        governance::{GovernanceCachedMetrics, Migrations},
         governance_error::ErrorType,
         manage_neuron::{
             claim_or_refresh::{By, MemoAndController},
             ClaimOrRefresh, Command, NeuronIdOrSubaccount, RegisterVote,
         },
         manage_neuron_response, ClaimOrRefreshNeuronFromAccount,
-        ClaimOrRefreshNeuronFromAccountResponse, ExecuteNnsFunction, Governance as GovernanceProto,
-        GovernanceError, ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse,
-        ListNodeProvidersResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
-        ManageNeuronResponse, MostRecentMonthlyNodeProviderRewards, NetworkEconomics, Neuron,
-        NeuronInfo, NnsFunction, NodeProvider, Proposal, ProposalInfo, RewardEvent,
-        RewardNodeProviders, SettleCommunityFundParticipation, UpdateNodeProvider, Vote,
+        ClaimOrRefreshNeuronFromAccountResponse, ExecuteNnsFunction,
+        GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
+        Governance as GovernanceProto, GovernanceError, ListKnownNeuronsResponse, ListNeurons,
+        ListNeuronsResponse, ListNodeProvidersResponse, ListProposalInfo, ListProposalInfoResponse,
+        ManageNeuron, ManageNeuronResponse, MostRecentMonthlyNodeProviderRewards, NetworkEconomics,
+        Neuron, NeuronInfo, NnsFunction, NodeProvider, Proposal, ProposalInfo, RewardEvent,
+        RewardNodeProviders, SettleCommunityFundParticipation,
+        SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
+        UpdateNodeProvider, Vote,
     },
-    storage::UPGRADES_MEMORY,
+    storage::{grow_upgrades_memory_to, with_upgrades_memory},
 };
 use prost::Message;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use std::{borrow::Cow, boxed::Box, ops::Deref, str::FromStr, time::SystemTime};
+use std::{borrow::Cow, boxed::Box, str::FromStr, time::SystemTime};
 
-/// Size of the buffer for stable memory reads and writes.
-///
-/// Smaller buffer size means more stable_write and stable_read calls. With
-/// 100MiB buffer size, when the heap is near full, we need ~40 system calls.
-/// Larger buffer size means we may not be able to serialize the heap fully in
-/// some cases.
-const STABLE_MEM_BUFFER_SIZE: u32 = 100 * 1024 * 1024; // 100MiB
+/// WASM memory equivalent to 4GiB, which we want to reserve for upgrades memory. The heap memory
+/// limit is 4GiB but its serialized form with prost should be smaller, so we reserve for 4GiB. This
+/// is to make sure that even if we have a bug causing stable memory getting full, we do not trap in
+/// pre_upgrade by trying to grow UPGRADES_MEMORY.
+const WASM_PAGES_RESERVED_FOR_UPGRADES_MEMORY: u64 = 65_536;
 
 pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 
@@ -137,6 +136,22 @@ fn governance_mut() -> &'static mut Governance {
     unsafe { GOVERNANCE.as_mut().expect("Canister not initialized!") }
 }
 
+// Sets governance global state to the given object.
+fn set_governance(gov: Governance) {
+    unsafe {
+        assert!(
+            GOVERNANCE.is_none(),
+            "{}Trying to initialize an already-initialized governance canister!",
+            LOG_PREFIX
+        );
+        GOVERNANCE = Some(gov);
+    }
+
+    governance()
+        .validate()
+        .expect("Error initializing the governance canister.");
+}
+
 struct CanisterEnv {
     rng: ChaCha20Rng,
     time_warp: TimeWarp,
@@ -200,7 +215,7 @@ impl Environment for CanisterEnv {
         proposal_id: u64,
         update: &ExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
-        let mt = NnsFunction::from_i32(update.nns_function).ok_or_else(||
+        let mt = NnsFunction::try_from(update.nns_function).map_err(|_|
             // No update type specified.
             GovernanceError::new(ErrorType::PreconditionFailed))?;
 
@@ -272,6 +287,12 @@ impl Environment for CanisterEnv {
     }
 }
 
+fn debug_log(s: &str) {
+    if cfg!(feature = "test") {
+        println!("{}{}", LOG_PREFIX, s);
+    }
+}
+
 #[export_name = "canister_init"]
 fn canister_init() {
     dfn_core::printer::hook();
@@ -296,41 +317,28 @@ fn canister_init() {
 fn canister_init_(init_payload: GovernanceProto) {
     println!(
         "{}canister_init: Initializing with: economics: \
-              {:?}, genesis_timestamp_seconds: {}, neuron count: {}",
+          {:?}, genesis_timestamp_seconds: {}, neuron count: {}",
         LOG_PREFIX,
         init_payload.economics,
         init_payload.genesis_timestamp_seconds,
         init_payload.neurons.len()
     );
 
-    unsafe {
-        assert!(
-            GOVERNANCE.is_none(),
-            "{}Trying to initialize an already-initialized governance canister!",
-            LOG_PREFIX
-        );
-        GOVERNANCE = Some(Governance::new(
-            init_payload,
-            Box::new(CanisterEnv::new()),
-            Box::new(IcpLedgerCanister::new(LEDGER_CANISTER_ID)),
-            Box::new(CMCCanister::<DfnRuntime>::new()),
-        ));
-    }
-    governance()
-        .validate()
-        .expect("Error initializing the governance canister.");
+    set_governance(Governance::new(
+        init_payload,
+        Box::new(CanisterEnv::new()),
+        Box::new(IcpLedgerCanister::new(LEDGER_CANISTER_ID)),
+        Box::new(CMCCanister::<DfnRuntime>::new()),
+    ));
 }
 
 #[export_name = "canister_pre_upgrade"]
 fn canister_pre_upgrade() {
     println!("{}Executing pre upgrade", LOG_PREFIX);
 
-    UPGRADES_MEMORY.with(|um| {
-        let memory = um.borrow();
-
+    with_upgrades_memory(|memory| {
         let governance_proto = governance_mut().take_heap_proto();
-        store_protobuf(memory.deref(), &governance_proto)
-            .expect("Failed to encode protobuf pre_upgrade");
+        store_protobuf(memory, &governance_proto).expect("Failed to encode protobuf pre_upgrade");
     });
 }
 
@@ -339,38 +347,31 @@ fn canister_post_upgrade() {
     dfn_core::printer::hook();
     println!("{}Executing post upgrade", LOG_PREFIX);
 
-    // Look for MemoryManager magic bytes
-    let mut magic_bytes = [0u8; 3];
-    stable64_read(&mut magic_bytes, 0, 3);
-    let mut mgr_version_byte = [0u8; 1];
-    stable64_read(&mut mgr_version_byte, 3, 1);
-
-    // For the version of MemoryManager we are using, the version byte will be 1
-    // We use the magic bytes, along with this, to identify if we are before or after the migration
-    // to MemoryManager.  Previously, the first 4 bytes contained a size.  b"MBR\1" evaluates to
-    // 22169421 bytes (which is ~22MB, and is much smaller than governance in mainnet (about 500MB))
-    // Meaning there is no real possibility of these bytes being misinterpreted
-    // TODO NNS1-2357 Remove conditional after deploying the updated version to production
-    let proto = if &magic_bytes == b"MGR" && mgr_version_byte[0] == 1 {
-        UPGRADES_MEMORY
-            .with(|um| {
-                let result: Result<GovernanceProto, _> =
-                    load_protobuf(um.borrow().deref());
-                result
-            })
-            .expect(
-                "Error deserializing canister state post-upgrade with MemoryManager memory segment. \
+    let restored_state = with_upgrades_memory(|memory| {
+        let result: Result<GovernanceProto, _> = load_protobuf(memory);
+        result
+    })
+    .expect(
+        "Error deserializing canister state post-upgrade with MemoryManager memory segment. \
              CANISTER MIGHT HAVE BROKEN STATE!!!!.",
-            )
-    } else {
-        let reader = BufferedStableMemReader::new(STABLE_MEM_BUFFER_SIZE);
-        GovernanceProto::decode(reader).expect(
-            "Error deserializing canister state post-upgrade. \
-             CANISTER MIGHT HAVE BROKEN STATE!!!!.",
-        )
-    };
+    );
 
-    canister_init_(proto);
+    grow_upgrades_memory_to(WASM_PAGES_RESERVED_FOR_UPGRADES_MEMORY);
+
+    println!(
+        "{}canister_post_upgrade: Initializing with: economics: \
+          {:?}, genesis_timestamp_seconds: {}, neuron count: {}",
+        LOG_PREFIX,
+        restored_state.economics,
+        restored_state.genesis_timestamp_seconds,
+        restored_state.neurons.len()
+    );
+    set_governance(Governance::new_restored(
+        restored_state,
+        Box::new(CanisterEnv::new()),
+        Box::new(IcpLedgerCanister::new(LEDGER_CANISTER_ID)),
+        Box::new(CMCCanister::<DfnRuntime>::new()),
+    ));
 }
 
 #[cfg(feature = "test")]
@@ -381,41 +382,13 @@ fn set_time_warp() {
 
 #[cfg(feature = "test")]
 fn set_time_warp_(new_time_warp: TimeWarp) {
-    governance_mut().env.set_time_warp(new_time_warp);
-}
-
-#[export_name = "canister_update update_authz"]
-fn update_authz() {
-    check_caller_is_root();
-    over(candid_one, |_: Vec<MethodAuthzChange>| {
-        println!(
-            "{}update_authz was called. \
-                 This does not do anything, since the governance canister no longer has any \
-                 function whose access is controlled using this mechanism. \
-                 TODO(NNS1-413): Remove this once we are sure that there are no callers.",
-            LOG_PREFIX,
-        );
-    })
-}
-
-#[export_name = "canister_query current_authz"]
-fn current_authz() {
-    over(candid, |_: ()| {
-        println!(
-            "{}current_authz was called. \
-                 This always returns the default value, since the governance canister's state no \
-                 longer contains a CanisterAuthzInfo. \
-                 TODO(NNS1-413): Remove this once we are sure that there are no callers.",
-            LOG_PREFIX,
-        );
-        CanisterAuthzInfo::default()
-    })
+    governance_mut().set_time_warp(new_time_warp);
 }
 
 /// DEPRECATED: Use manage_neuron directly instead.
 #[export_name = "canister_update forward_vote"]
 fn vote() {
-    println!("{}forward_vote", LOG_PREFIX);
+    debug_log("forward_vote");
     over_async(
         candid,
         |(neuron_id, proposal_id, vote): (NeuronId, ProposalId, Vote)| async move {
@@ -434,14 +407,14 @@ fn vote() {
 
 #[export_name = "canister_update transaction_notification"]
 fn neuron_stake_transfer_notification() {
-    println!("{}neuron_stake_transfer_notification", LOG_PREFIX);
+    debug_log("neuron_stake_transfer_notification");
     check_caller_is_ledger();
     panic!("Method removed. Please use ManageNeuron::ClaimOrRefresh.",)
 }
 
 #[export_name = "canister_update transaction_notification_pb"]
 fn neuron_stake_transfer_notification_pb() {
-    println!("{}neuron_stake_transfer_notification_pb", LOG_PREFIX);
+    debug_log("neuron_stake_transfer_notification_pb");
     check_caller_is_ledger();
     panic!("Method removed. Please use ManageNeuron::ClaimOrRefresh.",)
 }
@@ -449,7 +422,7 @@ fn neuron_stake_transfer_notification_pb() {
 // DEPRECATED: Please use ManageNeuron::ClaimOrRefresh.
 #[export_name = "canister_update claim_or_refresh_neuron_from_account"]
 fn claim_or_refresh_neuron_from_account() {
-    println!("{}claim_or_refresh_neuron_from_account", LOG_PREFIX);
+    debug_log("claim_or_refresh_neuron_from_account");
     over_async(candid_one, claim_or_refresh_neuron_from_account_)
 }
 
@@ -491,7 +464,7 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 
 #[export_name = "canister_update claim_gtc_neurons"]
 fn claim_gtc_neurons() {
-    println!("{}claim_gtc_neurons", LOG_PREFIX);
+    debug_log("claim_gtc_neurons");
     check_caller_is_gtc();
     over(
         candid,
@@ -510,7 +483,7 @@ fn claim_gtc_neurons_(
 
 #[export_name = "canister_update transfer_gtc_neuron"]
 fn transfer_gtc_neuron() {
-    println!("{}transfer_gtc_neuron", LOG_PREFIX);
+    debug_log("transfer_gtc_neuron");
     check_caller_is_gtc();
     over_async(
         candid,
@@ -532,7 +505,7 @@ async fn transfer_gtc_neuron_(
 
 #[export_name = "canister_update manage_neuron"]
 fn manage_neuron() {
-    println!("{}manage_neuron", LOG_PREFIX);
+    debug_log("manage_neuron");
     over_async(candid_one, manage_neuron_)
 }
 
@@ -560,7 +533,7 @@ fn update_neuron_(neuron: Neuron) -> Option<GovernanceError> {
 
 #[export_name = "canister_update simulate_manage_neuron"]
 fn simulate_manage_neuron() {
-    println!("{}simulate_manage_neuron", LOG_PREFIX);
+    debug_log("simulate_manage_neuron");
     over_async(candid_one, simulate_manage_neuron_)
 }
 
@@ -574,7 +547,7 @@ async fn simulate_manage_neuron_(manage_neuron: ManageNeuron) -> ManageNeuronRes
 /// Returns the full neuron corresponding to the neuron id or subaccount.
 #[export_name = "canister_query get_full_neuron_by_id_or_subaccount"]
 fn get_full_neuron_by_id_or_subaccount() {
-    println!("{}get_full_neuron_by_id_or_subaccount", LOG_PREFIX);
+    debug_log("get_full_neuron_by_id_or_subaccount");
     over(candid_one, get_full_neuron_by_id_or_subaccount_)
 }
 
@@ -588,7 +561,7 @@ fn get_full_neuron_by_id_or_subaccount_(
 /// Returns the full neuron corresponding to the neuron id.
 #[export_name = "canister_query get_full_neuron"]
 fn get_full_neuron() {
-    println!("{}get_full_neuron", LOG_PREFIX);
+    debug_log("get_full_neuron");
     over(candid_one, get_full_neuron_)
 }
 
@@ -600,7 +573,7 @@ fn get_full_neuron_(neuron_id: NeuronId) -> Result<Neuron, GovernanceError> {
 /// Returns the public neuron info corresponding to the neuron id.
 #[export_name = "canister_query get_neuron_info"]
 fn get_neuron_info() {
-    println!("{}get_neuron_info", LOG_PREFIX);
+    debug_log("get_neuron_info");
     over(candid_one, get_neuron_info_)
 }
 
@@ -612,7 +585,7 @@ fn get_neuron_info_(neuron_id: NeuronId) -> Result<NeuronInfo, GovernanceError> 
 /// Returns the public neuron info corresponding to the neuron id or subaccount.
 #[export_name = "canister_query get_neuron_info_by_id_or_subaccount"]
 fn get_neuron_info_by_id_or_subaccount() {
-    println!("{}get_neuron_info_by_subaccount", LOG_PREFIX);
+    debug_log("get_neuron_info_by_subaccount");
     over(candid_one, get_neuron_info_by_id_or_subaccount_)
 }
 
@@ -625,7 +598,7 @@ fn get_neuron_info_by_id_or_subaccount_(
 
 #[export_name = "canister_query get_proposal_info"]
 fn get_proposal_info() {
-    println!("{}get_proposal_info", LOG_PREFIX);
+    debug_log("get_proposal_info");
     over(candid_one, get_proposal_info_)
 }
 
@@ -634,9 +607,22 @@ fn get_proposal_info_(id: ProposalId) -> Option<ProposalInfo> {
     governance().get_proposal_info(&caller(), id)
 }
 
+#[export_name = "canister_query get_neurons_fund_audit_info"]
+fn get_neurons_fund_audit_info() {
+    debug_log("get_neurons_fund_audit_info");
+    over(candid_one, get_neurons_fund_audit_info_)
+}
+
+#[candid_method(query, rename = "get_neurons_fund_audit_info")]
+fn get_neurons_fund_audit_info_(
+    request: GetNeuronsFundAuditInfoRequest,
+) -> GetNeuronsFundAuditInfoResponse {
+    governance().get_neurons_fund_audit_info(request).into()
+}
+
 #[export_name = "canister_query get_pending_proposals"]
 fn get_pending_proposals() {
-    println!("{}get_pending_proposals", LOG_PREFIX);
+    debug_log("get_pending_proposals");
     over(candid, |()| -> Vec<ProposalInfo> {
         get_pending_proposals_()
     })
@@ -649,7 +635,7 @@ fn get_pending_proposals_() -> Vec<ProposalInfo> {
 
 #[export_name = "canister_query list_proposals"]
 fn list_proposals() {
-    println!("{}list_proposals", LOG_PREFIX);
+    debug_log("list_proposals");
     over(candid_one, list_proposals_)
 }
 
@@ -660,7 +646,7 @@ fn list_proposals_(req: ListProposalInfo) -> ListProposalInfoResponse {
 
 #[export_name = "canister_query list_neurons"]
 fn list_neurons() {
-    println!("{}list_neurons", LOG_PREFIX);
+    debug_log("list_neurons");
     over(candid_one, list_neurons_)
 }
 
@@ -671,7 +657,7 @@ fn list_neurons_(req: ListNeurons) -> ListNeuronsResponse {
 
 #[export_name = "canister_query get_metrics"]
 fn get_metrics() {
-    println!("{}get_metrics", LOG_PREFIX);
+    debug_log("get_metrics");
     over(candid, |()| get_metrics_())
 }
 
@@ -682,7 +668,7 @@ fn get_metrics_() -> Result<GovernanceCachedMetrics, GovernanceError> {
 
 #[export_name = "canister_update get_monthly_node_provider_rewards"]
 fn get_monthly_node_provider_rewards() {
-    println!("{}get_monthly_node_provider_rewards", LOG_PREFIX);
+    debug_log("get_monthly_node_provider_rewards");
     over_async(candid, |()| async move {
         get_monthly_node_provider_rewards_().await
     })
@@ -690,12 +676,12 @@ fn get_monthly_node_provider_rewards() {
 
 #[candid_method(update, rename = "get_monthly_node_provider_rewards")]
 async fn get_monthly_node_provider_rewards_() -> Result<RewardNodeProviders, GovernanceError> {
-    governance().get_monthly_node_provider_rewards().await
+    governance_mut().get_monthly_node_provider_rewards().await
 }
 
 #[export_name = "canister_query list_known_neurons"]
 fn list_known_neurons() {
-    println!("{}list_known_neurons", LOG_PREFIX);
+    debug_log("list_known_neurons");
     over(candid_one, |()| -> ListKnownNeuronsResponse {
         list_known_neurons_()
     })
@@ -736,7 +722,7 @@ fn execute_eligible_proposals() {
 /// Returns the latest reward event.
 #[export_name = "canister_query get_latest_reward_event"]
 fn get_latest_reward_event() {
-    println!("{}get_latest_reward_event", LOG_PREFIX);
+    debug_log("get_latest_reward_event");
     over(candid, |()| get_latest_reward_event_());
 }
 
@@ -752,7 +738,7 @@ fn get_latest_reward_event_() -> RewardEvent {
 /// by `get_full_neuron` without getting an authorization error.
 #[export_name = "canister_query get_neuron_ids"]
 fn get_neuron_ids() {
-    println!("{}get_neuron_ids", LOG_PREFIX);
+    debug_log("get_neuron_ids");
     over(candid, |()| -> Vec<NeuronId> { get_neuron_ids_() })
 }
 
@@ -763,13 +749,13 @@ fn get_neuron_ids_() -> Vec<NeuronId> {
     governance()
         .get_managed_neuron_ids_for(votable)
         .into_iter()
-        .map(NeuronId)
+        .map(NeuronId::from)
         .collect()
 }
 
 #[export_name = "canister_query get_network_economics_parameters"]
 fn get_network_economics_parameters() {
-    println!("{}get_network_economics_parameters", LOG_PREFIX);
+    debug_log("get_network_economics_parameters");
     over(candid, |()| -> NetworkEconomics {
         get_network_economics_parameters_()
     })
@@ -797,31 +783,31 @@ fn canister_heartbeat() {
 
 #[export_name = "canister_update manage_neuron_pb"]
 fn manage_neuron_pb() {
-    println!("{}manage_neuron_pb", LOG_PREFIX);
+    debug_log("manage_neuron_pb");
     over_async(protobuf, manage_neuron_)
 }
 
 #[export_name = "canister_update claim_or_refresh_neuron_from_account_pb"]
 fn claim_or_refresh_neuron_from_account_pb() {
-    println!("{}claim_or_refresh_neuron_from_account_pb", LOG_PREFIX);
+    debug_log("claim_or_refresh_neuron_from_account_pb");
     over_async(protobuf, claim_or_refresh_neuron_from_account_)
 }
 
 #[export_name = "canister_query list_proposals_pb"]
 fn list_proposals_pb() {
-    println!("{}list_proposals_pb", LOG_PREFIX);
+    debug_log("list_proposals_pb");
     over(protobuf, list_proposals_)
 }
 
 #[export_name = "canister_query list_neurons_pb"]
 fn list_neurons_pb() {
-    println!("{}list_neurons_pb", LOG_PREFIX);
+    debug_log("list_neurons_pb");
     over(protobuf, list_neurons_)
 }
 
 #[export_name = "canister_update update_node_provider"]
 fn update_node_provider() {
-    println!("{}update_node_provider", LOG_PREFIX);
+    debug_log("update_node_provider");
     over(candid_one, update_node_provider_)
 }
 
@@ -830,12 +816,14 @@ fn update_node_provider_(req: UpdateNodeProvider) -> Result<(), GovernanceError>
     governance_mut().update_node_provider(&caller(), req)
 }
 
+/// TODO[NNS1-2617]: Deprecate this function.
 #[export_name = "canister_update settle_community_fund_participation"]
 fn settle_community_fund_participation() {
-    println!("{}settle_community_fund_participation", LOG_PREFIX);
+    debug_log("settle_community_fund_participation");
     over_async(candid_one, settle_community_fund_participation_)
 }
 
+/// TODO[NNS1-2617]: Deprecate this function.
 #[candid_method(update, rename = "settle_community_fund_participation")]
 async fn settle_community_fund_participation_(
     request: SettleCommunityFundParticipation,
@@ -845,11 +833,27 @@ async fn settle_community_fund_participation_(
         .await
 }
 
+#[export_name = "canister_update settle_neurons_fund_participation"]
+fn settle_neurons_fund_participation() {
+    debug_log("settle_neurons_fund_participation");
+    over_async(candid_one, settle_neurons_fund_participation_)
+}
+
+#[candid_method(update, rename = "settle_neurons_fund_participation")]
+async fn settle_neurons_fund_participation_(
+    request: SettleNeuronsFundParticipationRequest,
+) -> SettleNeuronsFundParticipationResponse {
+    governance_mut()
+        .settle_neurons_fund_participation(caller(), request)
+        .await
+        .into()
+}
+
 /// Return the NodeProvider record where NodeProvider.id == caller(), if such a
 /// NodeProvider record exists.
 #[export_name = "canister_query get_node_provider_by_caller"]
 fn get_node_provider_by_caller() {
-    println!("{}get_node_provider_by_caller", LOG_PREFIX);
+    debug_log("get_node_provider_by_caller");
     over(candid_one, get_node_provider_by_caller_)
 }
 
@@ -860,7 +864,7 @@ fn get_node_provider_by_caller_(_: ()) -> Result<NodeProvider, GovernanceError> 
 
 #[export_name = "canister_query list_node_providers"]
 fn list_node_providers() {
-    println!("{}list_node_providers", LOG_PREFIX);
+    debug_log("list_node_providers");
     over(candid, |()| list_node_providers_());
 }
 
@@ -887,6 +891,31 @@ fn get_most_recent_monthly_node_provider_rewards_() -> Option<MostRecentMonthlyN
         .heap_data
         .most_recent_monthly_node_provider_rewards
         .clone()
+}
+
+#[export_name = "canister_query get_neuron_data_validation_summary"]
+fn get_neuron_data_validation_summary() {
+    over(candid, |()| -> NeuronDataValidationSummary {
+        governance().neuron_data_validation_summary()
+    })
+}
+
+#[export_name = "canister_query get_migrations"]
+fn get_migrations() {
+    over(candid, |()| get_migrations_());
+}
+
+// Normally, we would do #[candid_method(query, rename = "get_migrations")] here, but we want to
+// take this method away later. Therefore, this is done in order to avoid corresponding changes
+// being made to our .did file. By doing things this way, we can "have our cake and eat it
+// too". That is, we can have the functionality, but without promising to support it in the long
+// term.
+fn get_migrations_() -> Migrations {
+    governance()
+        .heap_data
+        .migrations
+        .clone()
+        .unwrap_or_default()
 }
 
 #[export_name = "canister_query http_request"]
@@ -929,8 +958,8 @@ fn get_effective_payload(mt: NnsFunction, payload: &[u8]) -> Cow<[u8]> {
         // that adding a new function causes a compile error here, ensuring that the developer
         // makes an explicit decision on how the payload is handled.
         NnsFunction::Unspecified
-        | NnsFunction::AddHostOsVersion
-        | NnsFunction::UpdateNodesHostOsVersion
+        | NnsFunction::UpdateElectedHostosVersions
+        | NnsFunction::UpdateNodesHostosVersion
         | NnsFunction::AssignNoid
         | NnsFunction::CreateSubnet
         | NnsFunction::AddNodeToSubnet
@@ -969,7 +998,11 @@ fn get_effective_payload(mt: NnsFunction, payload: &[u8]) -> Cow<[u8]> {
         | NnsFunction::ChangeSubnetTypeAssignment
         | NnsFunction::UpdateAllowedPrincipals
         | NnsFunction::UpdateSnsWasmSnsSubnetIds
-        | NnsFunction::InsertSnsWasmUpgradePathEntries => Cow::Borrowed(payload),
+        | NnsFunction::InsertSnsWasmUpgradePathEntries
+        | NnsFunction::AddApiBoundaryNode
+        | NnsFunction::RemoveApiBoundaryNodes
+        | NnsFunction::UpdateApiBoundaryNodeDomain
+        | NnsFunction::UpdateApiBoundaryNodesVersion => Cow::Borrowed(payload),
     }
 }
 
@@ -979,7 +1012,7 @@ fn get_effective_payload(mt: NnsFunction, payload: &[u8]) -> Cow<[u8]> {
 // works.
 //
 // We include the .did file as committed, as means it is included verbatim in
-// the .wasm; using `candid::export_service` here would involve unecessary
+// the .wasm; using `candid::export_service` here would involve unnecessary
 // runtime computation
 
 #[cfg(not(feature = "test"))]

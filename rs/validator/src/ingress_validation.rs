@@ -1,8 +1,8 @@
 use crate::webauthn::validate_webauthn_sig;
 use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_VALIDATOR};
+use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_standalone_sig_verifier::{user_public_key_from_bytes, KeyBytesContentType};
 use ic_crypto_tree_hash::Path;
-use ic_interfaces::crypto::IngressSigVerifier;
 use ic_types::crypto::threshold_sig::RootOfTrustProvider;
 use ic_types::crypto::{CanisterSig, CanisterSigOf};
 use ic_types::messages::{ReadState, SignedIngressContent, UserQuery};
@@ -27,29 +27,32 @@ mod tests;
 /// Maximum number of delegations allowed in an `HttpRequest`.
 /// Requests having more delegations will be declared invalid without further verifying whether
 /// the delegation chain is correctly signed.
-/// **Note**: this limit is currently more generous than the one in the [IC specification](https://internetcomputer.org/docs/current/references/ic-interface-spec#authentication),
-/// which specifies a maximum of 4 delegations, in order to prevent potentially breaking already deployed applications
-/// since this limit was before (wrongly) not enforced.
-/// This limit will be tightened up once the number of delegations can be observed (via metrics or logs),
-/// see CRP-1961.
+/// **Note**: this limit is part of the [IC specification](https://internetcomputer.org/docs/current/references/ic-interface-spec#authentication)
+/// and so changing this value might be breaking or result in a deviation from the specification.
 const MAXIMUM_NUMBER_OF_DELEGATIONS: usize = 20;
 
 /// Maximum number of targets (collection of `CanisterId`s) that can be specified in a
 /// single delegation. Requests having a single delegation with more targets will be declared
 /// invalid without any further verification.
-/// **Note**: this limit part of the [IC specification](https://internetcomputer.org/docs/current/references/ic-interface-spec#authentication)
+/// **Note**: this limit is part of the [IC specification](https://internetcomputer.org/docs/current/references/ic-interface-spec#authentication)
 /// and so changing this value might be breaking or result in a deviation from the specification.
 const MAXIMUM_NUMBER_OF_TARGETS_PER_DELEGATION: usize = 1_000;
 
+/// Maximum number of bytes allowed for the nonce in an `HttpRequest`.
+/// Requests having a bigger nonce will be declared invalid without any further validation.
+/// **Note**: this limit is part of the [IC specification](https://internetcomputer.org/docs/current/references/ic-interface-spec#authentication)
+/// and so changing this value might be breaking or result in a deviation from the specification.
+const MAXIMUM_NUMBER_OF_BYTES_IN_NONCE: usize = 32;
+
 /// Maximum number of paths that can be specified in a read state request. Requests having more paths
 /// will be declared invalid without any further verification.
-/// **Note**: this limit part of the [IC specification](https://internetcomputer.org/docs/current/references/ic-interface-spec#http-read-state)
+/// **Note**: this limit is part of the [IC specification](https://internetcomputer.org/docs/current/references/ic-interface-spec#http-read-state)
 /// and so changing this value might be breaking or result in a deviation from the specification.
 const MAXIMUM_NUMBER_OF_PATHS: usize = 1_000;
 
 /// Maximum number of labels than can be specified in a single path inside a read state request.
 /// Requests having a single path with more labels will be declared invalid without any further verification.
-/// **Note**: this limit part of the [IC specification](https://internetcomputer.org/docs/current/references/ic-interface-spec#http-read-state)
+/// **Note**: this limit is part of the [IC specification](https://internetcomputer.org/docs/current/references/ic-interface-spec#http-read-state)
 /// and so changing this value might be breaking or result in a deviation from the specification.
 const MAXIMUM_NUMBER_OF_LABELS_PER_PATH: usize = 127;
 
@@ -188,6 +191,7 @@ fn validate_request_content<C: HttpRequestContent, R: RootOfTrustProvider>(
 where
     R::Error: std::error::Error,
 {
+    validate_nonce(request)?;
     validate_ingress_expiry(request, current_time)?;
     validate_user_id_and_signature(
         ingress_signature_verifier,
@@ -228,6 +232,7 @@ pub enum RequestValidationError {
     CanisterNotInDelegationTargets(CanisterId),
     TooManyPathsError { length: usize, maximum: usize },
     PathTooLongError { length: usize, maximum: usize },
+    NonceTooBigError { num_bytes: usize, maximum: usize },
 }
 
 impl fmt::Display for RequestValidationError {
@@ -261,7 +266,12 @@ impl fmt::Display for RequestValidationError {
                 f,
                 "At least one path in read state request is too deep: got {} labels, but at most {} are allowed",
                 length, maximum
-            )
+            ),
+            NonceTooBigError { num_bytes: length, maximum } => write!(
+                f,
+                "Nonce in request is too big: got {} bytes, but at most {} are allowed",
+                length, maximum
+            ),
         }
     }
 }
@@ -302,7 +312,7 @@ impl fmt::Display for AuthenticationError {
 
 /// Set of canister IDs.
 ///
-/// It is guaranteed that the set contains at most [`MAXIMUM_NUMBER_OF_TARGETS_PER_DELEGATION`]
+/// It is guaranteed that the set contains at most `MAXIMUM_NUMBER_OF_TARGETS_PER_DELEGATION`
 /// elements.
 /// Use [`CanisterIdSet::all`] to instantiate a set containing the entire domain of canister IDs
 /// or [`CanisterIdSet::try_from_iter`] to instantiate a specific subset.
@@ -432,6 +442,18 @@ pub enum CanisterIdSetInstantiationError {
     TooManyElements(usize),
 }
 
+fn validate_nonce<C: HttpRequestContent>(
+    request: &HttpRequest<C>,
+) -> Result<(), RequestValidationError> {
+    match request.nonce() {
+        Some(nonce) if nonce.len() > MAXIMUM_NUMBER_OF_BYTES_IN_NONCE => Err(NonceTooBigError {
+            num_bytes: nonce.len(),
+            maximum: MAXIMUM_NUMBER_OF_BYTES_IN_NONCE,
+        }),
+        _ => Ok(()),
+    }
+}
+
 // Check if ingress_expiry is within a proper range with respect to the given
 // time, i.e., it is not expired yet and is not too far in the future.
 fn validate_ingress_expiry<C: HttpRequestContent>(
@@ -461,15 +483,11 @@ fn validate_ingress_expiry<C: HttpRequestContent>(
         })?;
     if !(min_allowed_expiry <= provided_expiry && provided_expiry <= max_allowed_expiry) {
         let msg = format!(
-            "Specified ingress_expiry not within expected range:\n\
-             Minimum allowed expiry: {}\n\
-             Maximum allowed expiry: {}\n\
-             Provided expiry:        {}\n\
-             Local replica time:     {}",
-            min_allowed_expiry,
-            max_allowed_expiry,
-            provided_expiry,
-            chrono::Utc::now(),
+            "Specified ingress_expiry not within expected range: \
+             Minimum allowed expiry: {}, \
+             Maximum allowed expiry: {}, \
+             Provided expiry:        {}",
+            min_allowed_expiry, max_allowed_expiry, provided_expiry
         );
         return Err(InvalidIngressExpiry(msg));
     }

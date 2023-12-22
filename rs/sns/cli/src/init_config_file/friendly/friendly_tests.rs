@@ -152,8 +152,11 @@ fn test_parse() {
         swap: Swap {
             minimum_participants: 50,
 
-            minimum_icp: nervous_system_pb::Tokens::from_e8s(12_300_000_000),
-            maximum_icp: nervous_system_pb::Tokens::from_tokens(65000),
+            minimum_icp: None,
+            maximum_icp: None,
+
+            minimum_direct_participation_icp: Some(nervous_system_pb::Tokens::from_tokens(113)),
+            maximum_direct_participation_icp: Some(nervous_system_pb::Tokens::from_tokens(64990)),
 
             minimum_participant_icp: nervous_system_pb::Tokens::from_tokens(650),
             maximum_participant_icp: nervous_system_pb::Tokens::from_tokens(6500),
@@ -171,9 +174,8 @@ fn test_parse() {
             duration: nervous_system_pb::Duration {
                 seconds: Some(7 * 24 * 60 * 60),
             },
-            neurons_fund_investment_icp: nervous_system_pb::Tokens {
-                e8s: Some(1000 * E8),
-            },
+            neurons_fund_investment_icp: None,
+            neurons_fund_participation: Some(true),
         },
         nns_proposal: NnsProposal {
             title: "Proposal to Create an SNS named Daniel".to_string(),
@@ -432,8 +434,11 @@ fn test_convert_to_create_service_nervous_system() {
         nns_governance_pb::SwapParameters {
             minimum_participants: Some(50),
 
-            minimum_icp: Some(parse_tokens("123 tokens").unwrap()),
-            maximum_icp: Some(parse_tokens("65000 tokens").unwrap()),
+            minimum_icp: None,
+            maximum_icp: None,
+
+            minimum_direct_participation_icp: Some(parse_tokens("113 tokens").unwrap()),
+            maximum_direct_participation_icp: Some(parse_tokens("64990 tokens").unwrap()),
 
             minimum_participant_icp: Some(parse_tokens("650 tokens").unwrap()),
             maximum_participant_icp: Some(parse_tokens("6500 tokens").unwrap()),
@@ -455,9 +460,9 @@ fn test_convert_to_create_service_nervous_system() {
             duration: Some(nervous_system_pb::Duration {
                 seconds: Some(7 * 24 * 60 * 60),
             }),
-            neurons_fund_investment_icp: Some(nervous_system_pb::Tokens {
-                e8s: Some(1000 * E8)
-            }),
+            neurons_fund_investment_icp: None,
+
+            neurons_fund_participation: Some(true),
         }
     );
 }

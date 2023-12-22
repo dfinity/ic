@@ -9,7 +9,7 @@ use ic_nervous_system_clients::{
 };
 use ic_nervous_system_proxied_canister_calls_tracker::ProxiedCanisterCallsTracker;
 use ic_nervous_system_root::change_canister::{
-    start_canister, stop_canister, AddCanisterProposal, CanisterAction, StopOrStartCanisterProposal,
+    start_canister, stop_canister, AddCanisterRequest, CanisterAction, StopOrStartCanisterRequest,
 };
 use ic_nervous_system_runtime::DfnRuntime;
 use ic_nns_common::{
@@ -27,15 +27,9 @@ use ic_protobuf::{
 use ic_registry_keys::make_nns_canister_records_key;
 use ic_registry_transport::pb::v1::{registry_mutation::Type, Precondition, RegistryMutation};
 
-pub async fn do_add_nns_canister(proposal: AddCanisterProposal) {
-    assert!(
-        proposal.authz_changes.is_empty(),
-        "authz_changes is obsolete and must be empty. proposal: {:?}",
-        proposal
-    );
-
+pub async fn do_add_nns_canister(request: AddCanisterRequest) {
     let key = make_nns_canister_records_key().into_bytes();
-    let name = proposal.name.clone();
+    let name = request.name.clone();
 
     // We first need to claim the name of this new canister. Indeed, even though we
     // don't yet know its ID, if we create it first and then find out the name
@@ -66,7 +60,7 @@ pub async fn do_add_nns_canister(proposal: AddCanisterProposal) {
         old_record.is_none(),
         "Trying to add an NNS canister called '{}', but we already have \
              a record for that name: '{:?}'",
-        proposal.name,
+        request.name,
         old_record
     );
 
@@ -85,7 +79,7 @@ pub async fn do_add_nns_canister(proposal: AddCanisterProposal) {
     .await
     .unwrap();
 
-    let id_or_error = try_to_create_and_install_canister(proposal).await;
+    let id_or_error = try_to_create_and_install_canister(request).await;
     let id = id_or_error.unwrap();
     // TODO(NNS-81): If it did not work, remove the name from the registry
 
@@ -113,18 +107,18 @@ pub async fn do_add_nns_canister(proposal: AddCanisterProposal) {
     // into the registry
 }
 
-/// Tries to create and install the canister specified in the proposal. Does not
+/// Tries to create and install the canister specified in the request. Does not
 /// care about the name service. This function is supposed never to panic, so
 /// that cleanup can be done if the install does not go through.
 async fn try_to_create_and_install_canister(
-    proposal: AddCanisterProposal,
+    request: AddCanisterRequest,
 ) -> Result<CanisterId, String> {
     let (id,): (CanisterIdRecord,) = call_with_funds(
         CanisterId::ic_00(),
         "create_canister",
         dfn_candid::candid_multi_arity,
         (),
-        Funds::new(proposal.initial_cycles),
+        Funds::new(request.initial_cycles),
     )
     .await
     .map_err(|(code, msg)| {
@@ -138,11 +132,11 @@ async fn try_to_create_and_install_canister(
     let install_args = InstallCodeArgs {
         mode: Install,
         canister_id: id.get_canister_id().get(),
-        wasm_module: proposal.wasm_module,
-        arg: proposal.arg,
-        compute_allocation: proposal.compute_allocation,
-        memory_allocation: proposal.memory_allocation,
-        query_allocation: proposal.query_allocation,
+        wasm_module: request.wasm_module,
+        arg: request.arg,
+        compute_allocation: request.compute_allocation,
+        memory_allocation: request.memory_allocation,
+        query_allocation: request.query_allocation,
         sender_canister_version: Some(dfn_core::api::canister_version()),
     };
     let install_res: Result<(), (Option<i32>, String)> = call(
@@ -164,10 +158,12 @@ async fn try_to_create_and_install_canister(
 }
 
 // Stops or starts any NNS canister.
-pub async fn stop_or_start_nns_canister(proposal: StopOrStartCanisterProposal) {
-    match proposal.action {
-        CanisterAction::Start => start_canister::<DfnRuntime>(proposal.canister_id).await,
-        CanisterAction::Stop => stop_canister::<DfnRuntime>(proposal.canister_id).await,
+pub async fn stop_or_start_nns_canister(
+    request: StopOrStartCanisterRequest,
+) -> Result<(), (i32, String)> {
+    match request.action {
+        CanisterAction::Start => start_canister::<DfnRuntime>(request.canister_id).await,
+        CanisterAction::Stop => stop_canister::<DfnRuntime>(request.canister_id).await,
     }
 }
 

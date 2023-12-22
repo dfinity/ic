@@ -7,7 +7,7 @@ rust_library(
     proc_macro_deps = [
         "@crate_index//:strum_macros",
     ],
-    version = "0.8.0",
+    version = "0.9.0",
     visibility = [
         "//rs/canister_client/sender:__pkg__",
         "//rs/certification:__pkg__",
@@ -27,7 +27,6 @@ rust_library(
         "//rs/phantom_newtype",
         "//rs/protobuf",
         "@crate_index//:arrayvec",
-        "@crate_index//:base64",
         "@crate_index//:hex",
         "@crate_index//:serde",
         "@crate_index//:serde_cbor",

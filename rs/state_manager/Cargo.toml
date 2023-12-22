@@ -1,7 +1,10 @@
 [package]
 name = "ic-state-manager"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 bit-vec = "0.6.3"
@@ -27,20 +30,16 @@ ic-state-layout = { path = "../state_layout" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
-libc = "0.2.91"
-nix = "0.23.0"
+nix = { workspace = true }
 parking_lot = "0.12.1"
-prometheus = { version = "0.12.0", features = ["process"] }
-prost = "0.11.0"
+prometheus = { workspace = true }
+prost = { workspace = true }
 rand = "0.8"
 rand_chacha = "0.3"
 scoped_threadpool = "0.1.*"
-serde = { version = "1.0.99", features = ["derive"] }
-serde_bytes = "0.11"
-slog = { version = "2.5.2", features = [
-    "nested-values",
-    "release_max_level_debug",
-] }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+slog = { workspace = true }
 tempfile = "3.1.0"
 tree-deserializer = { path = "../tree_deserializer" }
 uuid = { version = "1.2.1", features = ["v4", "serde"] }
@@ -68,8 +67,7 @@ ic-test-utilities-tmpdir = { path = "../test_utilities/tmpdir" }
 ic-wasm-types = { path = "../types/wasm_types" }
 maplit = "1.0.2"
 proptest = "1.0"
-proptest-derive = "0.3.0"
-strum = "0.23.0"
+strum = { workspace = true }
 tempfile = "3.1.0"
 
 [[bench]]

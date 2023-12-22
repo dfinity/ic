@@ -1,60 +1,277 @@
-type DisplayLogsRequest = record { to : text; from : text; address : text };
 type EthereumNetwork = variant {
     // The public Ethereum mainnet.
     Mainnet;
     // The public Ethereum Sepolia testnet.
     Sepolia;
 };
+
+type CanisterStatusResponse = record {
+  status : CanisterStatusType;
+  memory_size : nat;
+  cycles : nat;
+  settings : DefiniteCanisterSettings;
+  idle_cycles_burned_per_day : nat;
+  module_hash : opt vec nat8;
+};
+
+type CanisterStatusType = variant { stopped; stopping; running };
+
+type DefiniteCanisterSettings = record {
+  freezing_threshold : nat;
+  controllers : vec principal;
+  memory_allocation : nat;
+  compute_allocation : nat;
+};
+
+type BlockTag = variant {
+    /// The latest mined block.
+    Latest;
+
+    /// The latest safe head block.
+    Safe;
+
+    /// The latest finalized block.
+    Finalized;
+};
+
+// The initialization parameters of the minter canister.
 type InitArg = record {
     // The minter will interact with this Ethereum network.
-    eth_network : EthereumNetwork;
+    ethereum_network : EthereumNetwork;
+
+    // The name of the ECDSA key to use.
+    // E.g., "dfx_test_key" on the local replica.
     ecdsa_key_name : text;
+
+    // Address of the helper smart contract.
+    ethereum_contract_address : opt text;
+
+    // The principal of the ledger that handles ckETH transfers.
+    // The default account of the ckETH minter must be configured as
+    // the minting account of the ledger.
     ledger_id : principal;
-    next_transaction_nonce: nat
+
+    // Determine ethereum block height observed by minter.
+    ethereum_block_height: BlockTag;
+
+    // Minimum amount in Wei that can be withdrawn.
+    minimum_withdrawal_amount : nat;
+
+    // Nonce of the next transaction to be sent to the Ethereum network.
+    next_transaction_nonce : nat;
+
+    // Block number to start scrapping from on the Ethereum network.
+    // Scrapping the logs will resume at `last_scraped_block_number + 1` (inclusive).
+    last_scraped_block_number : nat;
 };
-type JsonRpcResult = variant {
-  Error : record { code : int64; message : text };
-   Result : text;
+
+type UpgradeArg = record {
+    // Change the nonce of the next transaction to be sent to the Ethereum network.
+    next_transaction_nonce : opt nat;
+
+    // Change the minimum amount in Wei that can be withdrawn.
+    minimum_withdrawal_amount : opt nat;
+
+    // Change the helper smart contract address.
+    ethereum_contract_address : opt text;
+
+    // Change the ethereum block height observed by the minter.
+    ethereum_block_height : opt BlockTag;
 };
-type MinterArg = variant { UpgradeArg; InitArg : InitArg };
+
+type MinterArg = variant { UpgradeArg : UpgradeArg; InitArg : InitArg };
+
+// Estimate price of an EIP-1559 transaction
+// when converting ckETH to ETH, see https://eips.ethereum.org/EIPS/eip-1559
+type Eip1559TransactionPrice = record {
+    // Maximum amount of gas transaction is authorized to consume.
+    gas_limit : nat;
+
+    // Maximum amount of Wei per gas unit that the transaction is willing to pay in total.
+    // This covers the base fee determined by the network and the `max_priority_fee_per_gas`.
+    max_fee_per_gas : nat;
+
+    // Maximum amount of Wei per gas unit that the transaction gives to miners
+    // to incentivize them to include their transaction (priority fee).
+    max_priority_fee_per_gas : nat;
+
+    // Maximum amount of Wei that can be charged for the transaction,
+    // computed as `max_fee_per_gas * gas_limit`
+    max_transaction_fee : nat;
+};
+
+type EthTransaction = record { transaction_hash : text };
+
+// Status of a finalized transaction.
+type TxFinalizedStatus = variant {
+    // Transaction was successful.
+    Success : EthTransaction;
+    // Transaction failed, user got reimbursed.
+    Reimbursed : record {
+        transaction_hash : text;
+        reimbursed_amount : nat;
+        reimbursed_in_block : nat;
+    };
+    // Transaction failed and will be reimbursed,
+    PendingReimbursement : EthTransaction;
+};
+
+// Retrieve the status of a withdrawal request.
 type RetrieveEthStatus = variant {
+    // Withdrawal request is not found.
     NotFound;
-    PendingSigning;
-    Found: record {transaction_hash : text};
+
+    // Withdrawal request is waiting to be processed.
+    Pending;
+
+    // Transaction fees were estimated and an Ethereum transaction was created.
+    // Transaction is not signed yet.
+    TxCreated;
+
+    // Ethereum transaction was signed and is sent to the network.
+    TxSent : EthTransaction;
+
+    // Ethereum transaction is finalized.
+    TxFinalized : TxFinalizedStatus;
 };
+
+type WithdrawalArg = record { recipient : text; amount : nat };
+
 type RetrieveEthRequest = record { block_index : nat };
+
 type WithdrawalError = variant {
     // The withdrawal amount is too low.
     // The payload contains the minimal withdrawal amount.
-    AmountTooLow : record { min_withdrawal_amount: nat };
+    AmountTooLow : record { min_withdrawal_amount : nat };
     // The ckETH balance of the withdrawal account is too low.
     InsufficientFunds : record { balance : nat };
     // The allowance given to the minter is too low.
     InsufficientAllowance : record { allowance : nat };
+   // Recipient's address is blocked.
+   // No withdrawal can be made to that address.
+    RecipientAddressBlocked : record { address : text };
     // The minter is overloaded, retry the request.
     // The payload contains a human-readable message explaining what caused the unavailability.
-    TemporarilyUnavailable: text;
+    TemporarilyUnavailable : text;
 };
+
+type EventSource = record {
+    transaction_hash : text;
+    log_index : nat;
+};
+
+type TransactionReceipt = record {
+    block_hash : text;
+    block_number : nat;
+    effective_gas_price : nat;
+    gas_used : nat;
+    status : variant { Success; Failure };
+    transaction_hash : text;
+};
+
+type UnsignedTransaction = record {
+    chain_id : nat;
+    nonce : nat;
+    max_priority_fee_per_gas : nat;
+    max_fee_per_gas : nat;
+    gas_limit : nat;
+    destination : text;
+    value : nat;
+    data : blob;
+    access_list : vec record { address : text; storage_keys : vec blob };
+};
+
+type Event = record {
+    timestamp : nat64;
+    payload : variant {
+        Init : InitArg;
+        Upgrade : UpgradeArg;
+        AcceptedDeposit : record {
+            transaction_hash : text;
+            block_number : nat;
+            log_index : nat;
+            from_address : text;
+            value : nat;
+            "principal" : principal;
+        };
+        InvalidDeposit : record {
+            event_source : EventSource;
+            reason : text;
+        };
+        MintedCkEth : record {
+            event_source: EventSource;
+            mint_block_index: nat;
+        };
+        SyncedToBlock : record {
+            block_number : nat;
+        };
+        AcceptedEthWithdrawalRequest : record {
+            withdrawal_amount : nat;
+            destination : text;
+            ledger_burn_index : nat;
+            from : principal;
+            from_subaccount : opt blob;
+            created_at: opt nat64;
+        };
+        CreatedTransaction : record {
+            withdrawal_id : nat;
+            transaction : UnsignedTransaction;
+        };
+        SignedTransaction : record {
+            withdrawal_id : nat;
+            raw_transaction : text;
+        };
+        ReplacedTransaction : record {
+            withdrawal_id : nat;
+            transaction : UnsignedTransaction;
+        };
+        FinalizedTransaction : record {
+            withdrawal_id : nat;
+            transaction_receipt : TransactionReceipt;
+        };
+        ReimbursedEthWithdrawal : record {
+            reimbursed_in_block : nat;
+            reimbursed_amount : nat;
+            withdrawal_id : nat;
+            transaction_hash : opt text;
+        };
+        SkippedBlock : record {
+            block_number : nat;
+        };
+    };
+};
+
 service : (MinterArg) -> {
+    // Retrieve the Ethereum address controlled by the minter:
+    // * Deposits will be transferred from the helper smart contract to this address
+    // * Withdrawals will originate from this address
+    // IMPORTANT: Do NOT send ETH to this address directly. Use the helper smart contract instead so that the minter
+    // knows to which IC principal the funds should be deposited.
     minter_address : () -> (text);
-    test_transfer : (nat64, nat64, text) -> (JsonRpcResult);
-    eip_1559_transaction_price: () -> (record {
-        base_fee_from_last_finalized_block : nat;
-        base_fee_of_next_finalized_block : nat;
-        max_priority_fee_per_gas : nat;
-        max_fee_per_gas : nat;
-        gas_limit : nat;
-    });
-    withdraw : (nat, text) -> (variant { Ok : RetrieveEthRequest; Err : WithdrawalError });
+
+    // Address of the helper smart contract.
+    // IMPORTANT:
+    // * Use this address to send ETH to the minter to convert it to ckETH.
+    // * In case the smart contract needs to be updated the returned address will change!
+    //   Always check the address before making a transfer.
+    smart_contract_address : () -> (text) query;
+
+    // Estimate the price of a transaction issued by the minter when converting ckETH to ETH.
+    eip_1559_transaction_price : () -> (Eip1559TransactionPrice);
+
+    // Withdraw the specified amount in Wei to the given Ethereum address.
+    // IMPORTANT: The current gas limit is set to 21,000 for a transaction so withdrawals to smart contract addresses will likely fail.
+    withdraw_eth : (WithdrawalArg) -> (variant { Ok : RetrieveEthRequest; Err : WithdrawalError });
+
+    // Retrieve the status of a withdrawal request.
     retrieve_eth_status : (nat64) -> (RetrieveEthStatus);
-    dump_state_for_debugging: () -> ( record {
-        ecdsa_key_name : text;
-        last_seen_block_number: nat;
-        minted_transactions : vec record {transaction_hash : text};
-        invalid_transactions : vec record {transaction_hash : text};
-        next_transaction_nonce : nat;
-        unapproved_retrieve_eth_requests : vec text;
-        signed_retrieve_eth_requests : vec text;
-        sent_retrieve_eth_requests : vec text;
-    }) query;
+
+    // Check if an address is blocked by the minter.
+    is_address_blocked : (text) -> (bool) query;
+    // Retrieve the status of the minter canister.
+    get_canister_status : () -> (CanisterStatusResponse);
+
+    // Retrive events from the minter's audit log.
+    // The endpoint can return fewer events than requested to bound the response size.
+    get_events : (record { start : nat64; length : nat64 }) -> (record { events : vec Event; total_event_count : nat64 }) query;
 }

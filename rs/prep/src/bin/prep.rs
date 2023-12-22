@@ -23,21 +23,22 @@ use ic_prep_lib::{
     subnet_configuration::{SubnetConfig, SubnetIndex, SubnetRunningState},
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
+use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, PrincipalId, ReplicaVersion};
 
 /// the filename of the update disk image, as published on the cdn
-const UPD_IMG_FILENAME: &str = "update-img.tar.gz";
+const UPD_IMG_FILENAME: &str = "update-img.tar.zst";
 /// in case the replica version id is specified on the command line, but not the
 /// release package url and hash, the following url-template will be used to
 /// fetch the sha256 of the corresponding image.
 const UPD_IMG_DEFAULT_SHA256_URL: &str =
-    "https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img/SHA256SUMS";
+    "https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img-dev/SHA256SUMS";
 /// in case the replica version id is specified on the command line, but not the
 /// release package url and hash, the following url-template will be used to
 /// specify the update image.
 const UPD_IMG_DEFAULT_URL: &str =
-    "https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img/update-img.tar.gz";
+    "https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img-dev/update-img.tar.zst";
 const CDN_HTTP_ATTEMPTS: usize = 3;
 const RETRY_BACKOFF: Duration = Duration::from_secs(5);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(12);
@@ -58,7 +59,7 @@ struct CliArgs {
     /// If replica-version is specified and both release-package-download-url
     /// and release-package-sha256-hex are unspecified, the
     /// release-package-download-url will default to
-    /// https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img/update-img.tar.gz
+    /// https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img/update-img.tar.zst
     #[clap(long, parse(try_from_str = url::Url::parse))]
     pub release_package_download_url: Option<Url>,
 
@@ -69,7 +70,7 @@ struct CliArgs {
     /// If replica-version is specified and both release-package-download-url
     /// and release-package-sha256-hex are unspecified, the
     /// release-package-download-url will downloaded from
-    /// https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img/SHA256SUMS
+    /// https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img-dev/SHA256SUMS
     #[clap(long)]
     pub release_package_sha256_hex: Option<String>,
 
@@ -159,6 +160,10 @@ struct CliArgs {
     /// commas.
     #[clap(long)]
     whitelisted_prefixes: Option<String>,
+
+    /// The indices of subnets that should have the SEV feature enabled, if any.
+    #[clap(long, use_value_delimiter = true)]
+    pub sev_subnet_indices: Vec<u64>,
 }
 
 fn main() -> Result<()> {
@@ -177,6 +182,7 @@ fn main() -> Result<()> {
         }
     }
 
+    let replica_version = valid_args.replica_version_id.unwrap_or_default();
     let root_subnet_idx = valid_args.nns_subnet_index.unwrap_or(0);
     let mut topology_config = TopologyConfig::default();
     for (i, (subnet_id, nodes)) in valid_args.subnets.iter().enumerate() {
@@ -185,11 +191,18 @@ fn main() -> Result<()> {
         } else {
             SubnetType::Application
         };
+        let features = valid_args
+            .sev_subnet_indices
+            .contains(&(i as u64))
+            .then_some(SubnetFeatures {
+                sev_enabled: true,
+                ..Default::default()
+            });
+
         let subnet_configuration = SubnetConfig::new(
             *subnet_id,
             nodes.to_owned(),
-            valid_args.replica_version_id.clone(),
-            None,
+            replica_version.clone(),
             valid_args.max_ingress_bytes_per_message,
             None,
             None,
@@ -201,7 +214,7 @@ fn main() -> Result<()> {
             None,
             None,
             None,
-            None,
+            features,
             None,
             None,
             valid_args.ssh_readonly_access.clone(),
@@ -216,7 +229,7 @@ fn main() -> Result<()> {
     let mut ic_config0 = IcConfig::new(
         valid_args.working_dir.as_path(),
         topology_config,
-        valid_args.replica_version_id,
+        replica_version,
         valid_args.generate_subnet_records,
         Some(root_subnet_idx),
         valid_args.release_package_download_url,
@@ -230,6 +243,7 @@ fn main() -> Result<()> {
 
     ic_config0
         .set_use_specified_ids_allocation_range(valid_args.use_specified_ids_allocation_range);
+    ic_config0.set_whitelisted_prefixes(valid_args.whitelisted_prefixes);
 
     let ic_config = match valid_args.dc_pk_dir {
         Some(dir) => ic_config0.load_registry_node_operator_records_from_dir(
@@ -266,6 +280,7 @@ struct ValidatedArgs {
     pub guest_launch_measurement_sha256_hex: Option<String>,
     pub use_specified_ids_allocation_range: bool,
     pub whitelisted_prefixes: Option<String>,
+    pub sev_subnet_indices: Vec<u64>,
 }
 
 impl CliArgs {
@@ -302,7 +317,7 @@ impl CliArgs {
             if let Some(subnet_index) = subnet_index {
                 subnets
                     .entry(*subnet_index)
-                    .or_insert_with(BTreeMap::<_, _>::new)
+                    .or_default()
                     .insert(*node_index, config);
             } else {
                 unassigned_nodes.insert(*node_index, config);
@@ -319,6 +334,16 @@ impl CliArgs {
                 self.nns_subnet_index.unwrap(),
                 subnets.keys().collect::<Vec<_>>()
             );
+        }
+
+        for index in &self.sev_subnet_indices {
+            if !subnets.contains_key(index) {
+                bail!(
+                    "SEV subnet index {} does not match any of subnet indices {:?}",
+                    index,
+                    subnets.keys().collect::<Vec<_>>()
+                );
+            }
         }
 
         let dc_pk_path = match self.dc_pk_path {
@@ -409,6 +434,7 @@ impl CliArgs {
             guest_launch_measurement_sha256_hex: self.guest_launch_measurement_sha256_hex,
             use_specified_ids_allocation_range: self.use_specified_ids_allocation_range,
             whitelisted_prefixes: self.whitelisted_prefixes,
+            sev_subnet_indices: self.sev_subnet_indices,
         })
     }
 }
@@ -485,8 +511,7 @@ mod test_flag_node_parser {
     use assert_matches::assert_matches;
     use pretty_assertions::assert_eq;
 
-    const GOOD_FLAG: &str =
-        r#"idx:1,subnet_idx:2,xnet_api:"1.2.3.4:81",public_api:"3.4.5.6:82",p2p_addr:"1.2.3.4:80""#;
+    const GOOD_FLAG: &str = r#"idx:1,subnet_idx:2,xnet_api:"1.2.3.4:81",public_api:"3.4.5.6:82""#;
 
     /// Verifies that a good flag parses correctly
     #[test]
@@ -498,10 +523,9 @@ mod test_flag_node_parser {
             config: NodeConfiguration {
                 xnet_api: "1.2.3.4:81".parse().unwrap(),
                 public_api: "3.4.5.6:82".parse().unwrap(),
-                p2p_addr: "1.2.3.4:80".parse().unwrap(),
                 node_operator_principal_id: None,
                 secret_key_store: None,
-                chip_id: vec![],
+                chip_id: None,
             },
         };
 
@@ -513,12 +537,11 @@ mod test_flag_node_parser {
     fn missing_fields() {
         // Each flag variant omits a field, starting with `idx`.
         let flags = vec![
-            r#"subnet_idx:2,xnet_api:"1.2.3.4:81",public_api:"3.4.5.6:82",p2p_addr:"1.2.3.4:80""#,
+            r#"subnet_idx:2,xnet_api:"1.2.3.4:81",public_api:"3.4.5.6:82""#,
             // Omitting subnet index yields an unassigned node.
-            // r#"idx:1,xnet_api:"1.2.3.4:81",public_api:"3.4.5.6:82",p2p_addr:"1.2.3.4:80""#,
-            r#"idx:1,subnet_idx:2,public_api:"3.4.5.6:82",p2p_addr:"1.2.3.4:80""#,
-            r#"idx:1,subnet_idx:2,xnet_api:"1.2.3.4:81",p2p_addr:"1.2.3.4:80""#,
-            r#"idx:1,subnet_idx:2,xnet_api:"1.2.3.4:81",public_api:"3.4.5.6:82""#,
+            // r#"idx:1,xnet_api:"1.2.3.4:81",public_api:"3.4.5.6:82""#,
+            r#"idx:1,subnet_idx:2,public_api:"3.4.5.6:82""#,
+            r#"idx:1,subnet_idx:2,xnet_api:"1.2.3.4:81""#,
         ];
 
         for flag in flags {

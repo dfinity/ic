@@ -1,5 +1,6 @@
 ---
 source: rs/embedders/tests/instrumentation.rs
+assertion_line: 55
 expression: out
 ---
 (module
@@ -19,7 +20,7 @@ expression: out
   (func (;5;) (type 0) (param i32) (result i32)
     (local i32 i32)
     global.get 0
-    i64.const 18
+    i64.const 19
     i64.sub
     global.set 0
     global.get 0
@@ -42,17 +43,13 @@ expression: out
     select
     local.set 2
     block ;; label = @1
-      global.get 0
-      i64.const 4
-      i64.sub
-      global.set 0
       local.get 0
       i32.const 1
       i32.lt_s
       br_if 0 (;@1;)
       loop ;; label = @2
         global.get 0
-        i64.const 15
+        i64.const 10
         i64.sub
         global.set 0
         global.get 0
@@ -91,6 +88,10 @@ expression: out
           i32.const 1
           drop
         end
+        global.get 0
+        i64.const 6
+        i64.sub
+        global.set 0
         i32.const 1
         i32.add
         local.tee 1
@@ -98,6 +99,10 @@ expression: out
         br_if 0 (;@2;)
       end
     end
+    global.get 0
+    i64.const 14
+    i64.sub
+    global.set 0
     local.get 2
     i32.const 97
     i32.mul
@@ -106,7 +111,7 @@ expression: out
   )
   (func (;6;) (type 0) (param i32) (result i32)
     global.get 0
-    i64.const 3
+    i64.const 4
     i64.sub
     global.set 0
     global.get 0
@@ -190,8 +195,8 @@ expression: out
     i32.sub
   )
   (memory (;0;) 17)
-  (memory (;1;) i64 0 1048576)
-  (memory (;2;) 256 256)
+  (memory (;1;) i64 0 1572864)
+  (memory (;2;) 384 384)
   (global (;0;) (mut i64) i64.const 0)
   (global (;1;) (mut i64) i64.const 0)
   (global (;2;) (mut i64) i64.const 0)

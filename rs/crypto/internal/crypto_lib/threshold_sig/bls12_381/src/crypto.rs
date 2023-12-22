@@ -68,8 +68,8 @@ pub(crate) fn generate_threshold_key(
     receivers: NumberOfNodes,
 ) -> Result<(PublicCoefficients, Vec<SecretKey>), InvalidArgumentError> {
     verify_keygen_args(threshold, receivers)?;
-    let mut rng = seed.into_rng();
-    let polynomial = Polynomial::random(threshold.get() as usize, &mut rng);
+    let rng = &mut seed.into_rng();
+    let polynomial = Polynomial::random(threshold.get() as usize, rng);
     Ok(keygen_from_polynomial(polynomial, receivers))
 }
 
@@ -103,9 +103,9 @@ pub(crate) fn threshold_share_secret_key(
 ) -> Result<(PublicCoefficients, Vec<SecretKey>), InvalidArgumentError> {
     verify_keygen_args(threshold, receivers)?;
 
-    let mut rng = seed.into_rng();
+    let rng = &mut seed.into_rng();
     let polynomial = {
-        let mut polynomial = Polynomial::random(threshold.get() as usize, &mut rng);
+        let mut polynomial = Polynomial::random(threshold.get() as usize, rng);
         polynomial.set_coeff(0, secret.clone());
         polynomial
     };

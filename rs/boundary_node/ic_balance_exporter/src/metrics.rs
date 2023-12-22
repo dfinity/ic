@@ -21,8 +21,8 @@ impl MetricParams {
     pub fn new(meter: &Meter, name: &str) -> Self {
         Self {
             counter: meter
-                .u64_counter(format!("{name}.total"))
-                .with_description(format!("Counts occurences of {name} calls"))
+                .u64_counter(name.to_string())
+                .with_description(format!("Counts occurrences of {name} calls"))
                 .init(),
             recorder: meter
                 .f64_histogram(format!("{name}.duration_nsec"))

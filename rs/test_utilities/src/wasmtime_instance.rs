@@ -1,5 +1,4 @@
-use std::convert::TryFrom;
-use std::sync::Arc;
+use std::{convert::TryFrom, rc::Rc};
 
 use ic_base_types::NumBytes;
 use ic_config::{flag_status::FlagStatus, subnet_config::SchedulerConfig};
@@ -107,9 +106,7 @@ impl WasmtimeInstanceBuilder {
         }
     }
 
-    pub fn try_build(
-        self,
-    ) -> Result<WasmtimeInstance<SystemApiImpl>, (HypervisorError, SystemApiImpl)> {
+    pub fn try_build(self) -> Result<WasmtimeInstance, (HypervisorError, SystemApiImpl)> {
         let log = no_op_logger();
 
         let wasm = if !self.wat.is_empty() {
@@ -144,6 +141,7 @@ impl WasmtimeInstanceBuilder {
             self.api_type,
             sandbox_safe_system_state,
             ic_types::NumBytes::from(0),
+            ic_types::NumBytes::from(0),
             ExecutionParameters {
                 instruction_limits: InstructionLimits::new(
                     FlagStatus::Disabled,
@@ -165,7 +163,7 @@ impl WasmtimeInstanceBuilder {
             embedder.config().feature_flags.wasm_native_stable_memory,
             embedder.config().max_sum_exported_function_name_lengths,
             Memory::new_for_testing(),
-            Arc::new(ic_system_api::DefaultOutOfInstructionsHandler {}),
+            Rc::new(ic_system_api::DefaultOutOfInstructionsHandler {}),
             log,
         );
         let instruction_limit = api.slice_instruction_limit();
@@ -183,16 +181,16 @@ impl WasmtimeInstanceBuilder {
                     ic_replicated_state::NumWasmPages::from(0),
                 ),
                 ModificationTracking::Track,
-                api,
+                Some(api),
             )
             .map(|mut result| {
                 result.set_instruction_counter(i64::try_from(instruction_limit.get()).unwrap());
                 result
             });
-        instance
+        instance.map_err(|(h, s)| (h, s.unwrap()))
     }
 
-    pub fn build(self) -> WasmtimeInstance<SystemApiImpl> {
+    pub fn build(self) -> WasmtimeInstance {
         let instance = self.try_build();
         instance
             .map_err(|r| r.0)

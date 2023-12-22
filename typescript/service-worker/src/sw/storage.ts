@@ -208,7 +208,7 @@ class Storage<StorageDB extends DBSchema | unknown = unknown> {
   }
 
   /**
-   * Sets the value for a given key to indexed db store, it wrapps the value with the given ttl to
+   * Sets the value for a given key to indexed db store, it wraps the value with the given ttl to
    * expire the record. If TTL is not present, the value won't expire.
    *
    * @param key Key to set into the indexed db

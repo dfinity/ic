@@ -12,6 +12,7 @@ use criterion::{
 };
 use either::Either;
 use http::Request;
+use ic_base_types::NodeId;
 use ic_icos_sev::Sev;
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -20,15 +21,14 @@ use ic_p2p_test_utils::{
 };
 use ic_peer_manager::SubnetTopology;
 use ic_quic_transport::{DummyUdpSocket, QuicTransport, Transport};
-use ic_types::NodeId;
-use ic_types_test_utils::ids::node_test_id;
+use ic_types_test_utils::ids::{node_test_id, SUBNET_1};
 use tokio::{
     runtime::{Handle, Runtime},
     sync::watch,
     task::JoinSet,
 };
 
-/// Benchmark tests RPS and throughput from one to NUM_NODES-1 with PARRALEL_REQUSTS number of requests at once.
+/// Benchmark tests RPS and throughput from one to NUM_NODES-1 with PARALLEL_REQUESTS number of requests at once.
 /// Adjust these values to test different scenarios.
 const NUM_NODES: u64 = 13;
 const PARALLEL_REQUESTS: u64 = 10;
@@ -49,21 +49,26 @@ fn spawn_transport(
     let node_addr: SocketAddr = (Ipv4Addr::LOCALHOST, 8000 + id as u16).into();
     let node_id = node_test_id(id);
     let tls = temp_crypto_component_with_tls_keys(&registry_handle, node_id);
-    let sev = Arc::new(Sev::new(node_id, registry_handle.registry_client.clone()));
+    let sev = Arc::new(Sev::new(
+        node_id,
+        SUBNET_1,
+        registry_handle.registry_client.clone(),
+        log.clone(),
+    ));
     registry_handle.registry_client.reload();
     registry_handle.registry_client.update_to_latest_version();
 
-    let transport = Arc::new(QuicTransport::build(
+    let transport = Arc::new(QuicTransport::start(
         &log,
         &MetricsRegistry::default(),
-        rt,
+        &rt,
         tls,
         registry_handle.registry_client.clone(),
         sev,
         node_id,
         watch_rx,
         Either::<_, DummyUdpSocket>::Left(node_addr),
-        Some(Router::new().route("/", any(pong))),
+        Router::new().route("/", any(pong)),
     ));
     (transport, node_id, node_addr)
 }
@@ -133,19 +138,19 @@ fn bench_transport(criterion: &mut Criterion) {
         pretty_print(num_request_per_iter)
     );
     println!(
-        "Transfered request data per iteration: {} Bytes",
+        "Transferred request data per iteration: {} Bytes",
         pretty_print(num_request_per_iter * REQUEST_SIZE_BYTES)
     );
     println!(
-        "Transfered request data per iteration per peer: {} Bytes",
+        "Transferred request data per iteration per peer: {} Bytes",
         pretty_print(num_request_per_iter * REQUEST_SIZE_BYTES / NUM_NODES)
     );
     println!(
-        "Transfered response data per iteration: {} Bytes",
+        "Transferred response data per iteration: {} Bytes",
         pretty_print(num_request_per_iter * RESPONSE_SIZE_BYTES)
     );
     println!(
-        "Transfered response data per iteration per peer: {} Bytes",
+        "Transferred response data per iteration per peer: {} Bytes",
         pretty_print(num_request_per_iter * RESPONSE_SIZE_BYTES / NUM_NODES)
     );
 

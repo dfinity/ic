@@ -1,11 +1,12 @@
 use assert_matches::assert_matches;
-use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_common::types::ProposalId;
-use ic_nns_governance::pb::v1::governance_error::ErrorType;
-use ic_nns_governance::pb::v1::manage_neuron_response::{Command, FollowResponse};
-use ic_nns_governance::pb::v1::{Tally, Topic, Vote};
-use ic_nns_test_utils::common::NnsInitPayloadsBuilder;
+use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
+use ic_nns_governance::pb::v1::{
+    governance_error::ErrorType,
+    manage_neuron_response::{Command, FollowResponse},
+    Tally, Topic, Vote,
+};
 use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
     neuron_helpers::{
         get_neuron_1, get_neuron_2, get_neuron_3, get_nonexistent_neuron, get_unauthorized_neuron,
         submit_proposal, TestNeuronOwner,
@@ -108,7 +109,7 @@ fn nonexistent_neuron_cannot_follow_neuron() {
     let n1 = get_neuron_1();
     let nonexistent_neuron = get_nonexistent_neuron();
 
-    // the nonexisting neuron cannot follow a neuron
+    // the non-existing neuron cannot follow a neuron
     let result = nns_set_followees_for_neuron(
         &mut state_machine,
         nonexistent_neuron.principal_id,
@@ -399,7 +400,7 @@ fn check_ballots(
     let ballots = info.ballots;
     assert!(!ballots.is_empty());
     let ballot = &ballots[&(neuron.neuron_id).id];
-    (ballot.voting_power, Vote::from(ballot.vote))
+    (ballot.voting_power, Vote::try_from(ballot.vote).unwrap())
 }
 
 fn get_yes_votes(state_machine: &mut StateMachine, proposal_id: &ProposalId) -> u64 {

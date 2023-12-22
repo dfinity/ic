@@ -52,7 +52,7 @@ try_from_u8!(
         GetGlobal = 22,
         BadPrint = 23,
         SetPreUpgrade = 24,
-        // = 25,
+        AppendGlobal = 25,
         Time = 26,
         CyclesAvailable = 27,
         CyclesBalance = 28,
@@ -105,5 +105,9 @@ try_from_u8!(
         MintCycles = 75,
         OneWayCallNew = 76,
         IsController = 77,
+        CyclesBurn128 = 78,
+        BlobLength = 79,
+        PushEqualBytes = 80,
+        InReplicatedExecution = 81,
     }
 );

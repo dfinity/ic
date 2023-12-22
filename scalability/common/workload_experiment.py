@@ -27,7 +27,7 @@ gflags.DEFINE_integer("wg_subnet", 0, "Subnet in which to run the workload gener
 gflags.DEFINE_string("mainnet_target_subnet_id", "", "Subnet ID that is running the canister specified by canister_id.")
 gflags.DEFINE_boolean("target_all", False, "Target all nodes, even when running query calls.")
 gflags.DEFINE_string(
-    "workload_generator_machines", "", "Set workload generator IP adresses from this comma-separated list directly."
+    "workload_generator_machines", "", "Set workload generator IP addresses from this comma-separated list directly."
 )
 gflags.DEFINE_integer(
     "query_target_node_idx",
@@ -296,7 +296,7 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
                 if rate_rps <= self.quiet_rate_rps:
                     recovered = True
 
-            except StatisticsError:
+            except (StatisticsError, json.JSONDecodeError):
                 logging.error(f"Failed to parse prometheus response {r} - {logging.traceback.format_exc()}")
 
             time.sleep(sleep_per_iteration_s)

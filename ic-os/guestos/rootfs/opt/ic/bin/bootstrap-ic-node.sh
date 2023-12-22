@@ -62,8 +62,10 @@ function get_guestos_version() {
         "gauge"
 }
 
-# List all block devices marked as "removable".
-function find_removable_devices() {
+# List all block devices that could potentially contain the ic-bootstrap.tar configuration,
+# i.e. "removable" devices, devices with the serial "config"
+# or devices containing a filesystem with the label "CONFIG".
+function find_config_devices() {
     for DEV in $(ls -C /sys/class/block); do
         echo "Consider device $DEV" >&2
         if [ -e /sys/class/block/"${DEV}"/removable ]; then
@@ -73,7 +75,8 @@ function find_removable_devices() {
             # configuration device is identified by the serial "config".
             local IS_REMOVABLE=$(cat /sys/class/block/"${DEV}"/removable)
             local CONFIG_SERIAL=$(udevadm info --name=/dev/"${DEV}" | grep "ID_SCSI_SERIAL=config")
-            if [ "${IS_REMOVABLE}" == 1 ] || [ "${CONFIG_SERIAL}" != "" ]; then
+            local FS_LABEL=$(lsblk --fs --noheadings --output LABEL /dev/"${DEV}")
+            if [ "${IS_REMOVABLE}" == 1 ] || [ "${CONFIG_SERIAL}" != "" ] || [ "${FS_LABEL}" == "CONFIG" ]; then
                 # If this is a partitioned device (and it usually is), then
                 # the first partition is of relevance.
                 # return first partition for use instead.
@@ -113,18 +116,18 @@ function process_bootstrap() {
     # take injected config bits and move them to state directories
     if [ -e "${TMPDIR}/ic_crypto" ]; then
         echo "Installing initial crypto material"
-        cp -r -T "${TMPDIR}/ic_crypto" "${STATE_ROOT}/crypto"
+        cp -rL -T "${TMPDIR}/ic_crypto" "${STATE_ROOT}/crypto"
     fi
     for ITEM in ic_registry_local_store nns_public_key.pem node_operator_private_key.pem; do
         if [ -e "${TMPDIR}/${ITEM}" ]; then
             echo "Setting up initial ${ITEM}"
-            cp -r -T "${TMPDIR}/${ITEM}" "${STATE_ROOT}/data/${ITEM}"
+            cp -rL -T "${TMPDIR}/${ITEM}" "${STATE_ROOT}/data/${ITEM}"
         fi
     done
 
     # stash the following configuration files to config store
     # note: keep this list in sync with configurations supported in build-bootstrap-config-image.sh
-    for FILE in journalbeat.conf network.conf nns.conf backup.conf log.conf malicious_behavior.conf bitcoind_addr.conf socks_proxy.conf; do
+    for FILE in filebeat.conf network.conf nns.conf backup.conf log.conf malicious_behavior.conf bitcoind_addr.conf socks_proxy.conf; do
         if [ -e "${TMPDIR}/${FILE}" ]; then
             echo "Setting up ${FILE}"
             cp "${TMPDIR}/${FILE}" "${CONFIG_ROOT}/${FILE}"
@@ -133,7 +136,7 @@ function process_bootstrap() {
     for DIR in accounts_ssh_authorized_keys; do
         if [ -e "${TMPDIR}/${DIR}" ]; then
             echo "Setting up accounts_ssh_authorized_keys"
-            cp -r "${TMPDIR}/${DIR}" "${CONFIG_ROOT}/${DIR}"
+            cp -rL "${TMPDIR}/${DIR}" "${CONFIG_ROOT}/${DIR}"
         fi
     done
 
@@ -148,23 +151,29 @@ MAX_TRIES=10
 
 get_guestos_version
 
+write_metric_attr "guestos_boot_action" \
+    "{successful_boot=\"true\"}" \
+    "0" \
+    "GuestOS boot action" \
+    "gauge"
+
 if [ -f /boot/config/CONFIGURED ]; then
     echo "Bootstrap completed already"
     exit 0
 fi
 
 while [ ! -f /boot/config/CONFIGURED ]; do
-    echo "Locating removable device"
-    DEV="$(find_removable_devices)"
+    echo "Locating CONFIG device"
+    DEV="$(find_config_devices)"
 
-    # Check whether we were provided with a removable device -- on "real"
+    # Check whether we were provided with a CONFIG device -- on "real"
     # VM deployments this will be the method used to inject bootstrap information
     # into the system.
     # But even if nothing can be mounted, just try and see if something usable
     # is there already -- this might be useful when operating this thing as a
     # docker container instead of full-blown VM.
     if [ "${DEV}" != "" ]; then
-        echo "Found removable device at ${DEV}"
+        echo "Found CONFIG device at ${DEV}"
         mount -t vfat -o ro "${DEV}" /mnt
     fi
 

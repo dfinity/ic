@@ -11,7 +11,7 @@
 //! The orchestrator also triggers upgrades of the replica
 //! process. For that, it periodically performs the following operations:
 //!
-//! 1. Ask the registry for the current peers in the subnetwork it is suposed to
+//! 1. Ask the registry for the current peers in the subnetwork it is supposed to
 //! run it.
 //!
 //! 2. From each peer, fetch the latest catch-up package via a separate CUP
@@ -37,11 +37,12 @@ mod catch_up_package_provider;
 mod dashboard;
 pub mod error;
 mod firewall;
+mod hostos_upgrade;
 mod metrics;
 pub mod orchestrator;
+mod process_manager;
 mod registration;
 mod registry_helper;
-mod replica_process;
 mod signer;
 mod ssh_access_manager;
 mod upgrade;

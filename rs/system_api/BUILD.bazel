@@ -6,7 +6,7 @@ rust_library(
     name = "system_api",
     srcs = glob(["src/**"]),
     crate_name = "ic_system_api",
-    version = "0.8.0",
+    version = "0.9.0",
     deps = [
         "//rs/config",
         "//rs/constants",
@@ -52,7 +52,6 @@ INTEGRATION_TEST_DEPS = [
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
     "//rs/test_utilities",
-    "//rs/test_utilities/execution_environment",
     "//rs/types/base_types",
     "//rs/types/error_types",
     "//rs/types/ic00_types",
@@ -83,4 +82,13 @@ rust_test(
     deps = INTEGRATION_TEST_DEPS + [
         "@crate_index//:prometheus",
     ],
+)
+
+rust_test(
+    name = "system_api_tracking_test",
+    srcs = [
+        "tests/system_api_tracking.rs",
+    ],
+    crate_root = "tests/system_api_tracking.rs",
+    deps = INTEGRATION_TEST_DEPS,
 )

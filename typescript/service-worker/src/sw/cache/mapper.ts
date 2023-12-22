@@ -8,7 +8,7 @@ export class CacheMapper {
    * and optional options with method, search and vary headers available from the response.
    * @param request Used to create the key
    * @param response Used to create the key
-   * @param options Wether it should use method, search and vary headers to compose the key
+   * @param options Whether it should use method, search and vary headers to compose the key
    */
   static toRequestKey(
     request: Request,
@@ -42,10 +42,10 @@ export class CacheMapper {
   }
 
   /**
-   * Creates a sha-256 hex from the given request, reponse and cache query options.
+   * Creates a sha-256 hex from the given request, response and cache query options.
    * @param request Used to create the key
    * @param response Used to create the key
-   * @param options Wether it should use method, search and vary headers to compose the key
+   * @param options Whether it should use method, search and vary headers to compose the key
    */
   static async toRequestKeyHash(
     request: Request,

@@ -110,9 +110,9 @@ prop_compose! {
         RequestMetadata {
             call_tree_depth,
             call_tree_start_time: call_tree_start_time_nanos
-                .map(|call_tree_start_time_nanos| Time::from_nanos_since_unix_epoch(call_tree_start_time_nanos)),
+                .map(Time::from_nanos_since_unix_epoch),
             call_subtree_deadline: call_subtree_deadline_nanos
-                .map(|deadline_nanos| Time::from_nanos_since_unix_epoch(deadline_nanos)),
+                .map(Time::from_nanos_since_unix_epoch),
         }
     }
 }
@@ -163,7 +163,7 @@ prop_compose! {
                 let req: CanonicalRequestV13 = (&request, certification_version).into();
                 req.try_into().unwrap()
             }
-            V14 => {
+            V14 | V15 => {
                 let req: CanonicalRequestV14 = (&request, certification_version).into();
                 req.try_into().unwrap()
             }

@@ -1,21 +1,29 @@
+use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_error_types::{ErrorCode, UserError};
+use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+use ic_replicated_state::{ExecutionTask, ReplicatedState};
+use ic_state_machine_tests::{IngressState, IngressStatus};
 use ic_types::{
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
 };
 
 use ic_ic00_types::{
-    CanisterChange, CanisterInstallMode, EmptyBlob, InstallCodeArgs, Method, Payload,
+    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode,
+    CanisterInstallModeV2, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgs, Method, Payload,
+    UploadChunkArgs, UploadChunkReply,
 };
 use ic_replicated_state::canister_state::NextExecution;
 use ic_test_utilities_execution_environment::{
-    check_ingress_status, ExecutionTest, ExecutionTestBuilder,
+    check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
 };
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_types::messages::MessageId;
 use ic_types::{ingress::WasmResult, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES};
 use ic_types_test_utils::ids::user_test_id;
 use ic_types_test_utils::ids::{canister_test_id, subnet_test_id};
+use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use maplit::btreemap;
 use std::mem::size_of;
 
 const DTS_INSTALL_WAT: &str = r#"
@@ -590,7 +598,7 @@ fn install_code_with_start_with_err() {
 
     let wasm: &str = r#"
     (module
-    
+
         (func $start
             (drop (memory.grow (i32.const 1)))
             (memory.fill (i32.const 0) (i32.const 13) (i32.const 1000))
@@ -769,6 +777,7 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
         ic_config::execution_environment::Config::default().default_freeze_threshold,
         MemoryAllocation::BestEffort,
         NumBytes::new(canister_history_memory_usage as u64),
+        NumBytes::new(0),
         ComputeAllocation::zero(),
         test.subnet_size(),
         Cycles::zero(),
@@ -793,8 +802,7 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
         check_ingress_status(test.ingress_status(&message_id)),
         Err(UserError::new(
             ErrorCode::CanisterOutOfCycles,
-            format!("Canister installation failed with `Canister {} is out of cycles: requested {} cycles but the available balance is {} cycles and the freezing threshold {} cycles`", canister_id,
-            minimum_balance, original_balance, freezing_threshold_cycles)
+            format!("Canister installation failed with `Canister {} is out of cycles: please top up the canister with at least {} additional cycles`", canister_id, (freezing_threshold_cycles + minimum_balance) - original_balance)
         ))
     );
 }
@@ -1092,13 +1100,12 @@ fn clean_in_progress_install_code_calls_from_subnet_call_context_manager() {
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
         .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
+        // Ensure that all `install_code()` executions will get paused.
         .with_install_code_slice_instruction_limit(1_000)
         .with_deterministic_time_slicing()
         .with_manual_execution()
         .with_caller(own_subnet, caller_canister)
         .build();
-
-    let ingress_memory_capacity = test.ingress_memory_capacity();
 
     // Create two canisters.
     let canister_id_1 = test
@@ -1115,24 +1122,6 @@ fn clean_in_progress_install_code_calls_from_subnet_call_context_manager() {
     test.canister_update_controller(canister_id_2, controllers)
         .unwrap();
 
-    let canister_states = test
-        .state()
-        .canister_states
-        .keys()
-        .cloned()
-        .collect::<Vec<_>>();
-
-    let install_code_args = |canister_id: CanisterId| InstallCodeArgs {
-        canister_id: canister_id.get(),
-        mode: CanisterInstallMode::Install,
-        wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
-        arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
-        query_allocation: None,
-        sender_canister_version: None,
-    };
-
     // SubnetCallContextManager does not contain any entries before executing the messages.
     assert_eq!(
         test.state()
@@ -1141,10 +1130,7 @@ fn clean_in_progress_install_code_calls_from_subnet_call_context_manager() {
             .install_code_calls_len(),
         0
     );
-
-    //
-    // Test install code call with canister request origin.
-    //
+    // Neither does canister 1's task queue.
     assert_eq!(
         test.canister_state(canister_id_1)
             .system_state
@@ -1152,6 +1138,13 @@ fn clean_in_progress_install_code_calls_from_subnet_call_context_manager() {
             .len(),
         0
     );
+
+    //
+    // Test install code call with canister request origin.
+    //
+
+    // `install_code()` will not complete execution in one slice and become paused,
+    // because we've set a very low `install_code_slice_instruction_limit` above.
     test.inject_call_to_ic00(
         Method::InstallCode,
         install_code_args(canister_id_1).encode(),
@@ -1159,11 +1152,12 @@ fn clean_in_progress_install_code_calls_from_subnet_call_context_manager() {
     );
     test.execute_subnet_message();
 
-    // SubnetCallContextManager contains a install code call after executing the message.
+    // The first task of canister 1 is a `ContinueInstallCode`.
     assert_eq!(
         test.canister_state(canister_id_1).next_execution(),
         NextExecution::ContinueInstallCode
     );
+    // And `SubnetCallContextManager` now contains one `InstallCodeCall`.
     assert_eq!(
         test.state()
             .metadata
@@ -1172,10 +1166,16 @@ fn clean_in_progress_install_code_calls_from_subnet_call_context_manager() {
         1
     );
 
-    // Will keep the entry from the SubnetCallContextManager and does not produce a response.
-    let is_local_canister = |canister_id: CanisterId| canister_states.contains(&canister_id);
-    test.state_mut()
-        .reject_in_progress_management_calls(is_local_canister, ingress_memory_capacity);
+    // Helper function for invoking `after_split()`.
+    fn after_split(state: &mut ReplicatedState) {
+        state.metadata.split_from = Some(state.metadata.own_subnet_id);
+        state.after_split();
+    }
+
+    // A no-op subnet split (no canisters migrated).
+    after_split(test.state_mut());
+
+    // Retains the `InstallCodeCall` and does not produce a response.
     assert_eq!(
         test.state()
             .metadata
@@ -1185,11 +1185,11 @@ fn clean_in_progress_install_code_calls_from_subnet_call_context_manager() {
     );
     assert!(!test.state().subnet_queues().has_output());
 
-    // Faking canister migration to another subnet.
-    // Will remove the entry from the SubnetCallContextManager and produce a response.
-    let is_not_local_canister = |canister_id: CanisterId| !canister_states.contains(&canister_id);
-    test.state_mut()
-        .reject_in_progress_management_calls(is_not_local_canister, ingress_memory_capacity);
+    // Simulate a subnet split that migrates canister 1 to another subnet.
+    test.state_mut().take_canister_state(&canister_id_1);
+    after_split(test.state_mut());
+
+    // Should have removed the `InstallCodeCall` and produced a reject response.
     assert_eq!(
         test.state()
             .metadata
@@ -1213,6 +1213,24 @@ fn clean_in_progress_install_code_calls_from_subnet_call_context_manager() {
     // Send install code message and start execution.
     let message_id = test.dts_install_code(install_code_args(canister_id_2));
 
+    // The first task of canister 2 is a `ContinueInstallCode`.
+    assert_eq!(
+        test.canister_state(canister_id_2).next_execution(),
+        NextExecution::ContinueInstallCode
+    );
+    // And `SubnetCallContextManager` now contains one `InstallCodeCall`.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .install_code_calls_len(),
+        1
+    );
+
+    // A no-op subnet split (no canisters migrated).
+    after_split(test.state_mut());
+
+    // Retains the `InstallCodeCall` and does not change the ingress state.
     assert_eq!(
         test.canister_state(canister_id_2).next_execution(),
         NextExecution::ContinueInstallCode
@@ -1224,9 +1242,19 @@ fn clean_in_progress_install_code_calls_from_subnet_call_context_manager() {
             .install_code_calls_len(),
         1
     );
+    assert_matches!(
+        test.ingress_status(&message_id),
+        IngressStatus::Known {
+            state: IngressState::Processing,
+            ..
+        }
+    );
 
-    test.state_mut()
-        .reject_in_progress_management_calls(is_not_local_canister, ingress_memory_capacity);
+    // Simulate a subnet split that migrates canister 2 to another subnet.
+    test.state_mut().take_canister_state(&canister_id_2);
+    after_split(test.state_mut());
+
+    // Should have removed the `InstallCodeCall` and set the ingress state to `Failed`.
     assert_eq!(
         test.state()
             .metadata
@@ -1241,4 +1269,895 @@ fn clean_in_progress_install_code_calls_from_subnet_call_context_manager() {
             format!("Canister {} migrated during a subnet split", canister_id_2),
         ))
     );
+}
+
+/// Ensures that in-progress install code calls are left in a consistent state
+/// after a subnet split: i.e. there is no install code call that is tracked by
+/// a canister, but not by the subnet call context manager; or the other way
+/// around.
+#[test]
+fn consistent_install_code_calls_after_split() {
+    const INSTRUCTION_LIMIT: u64 = 3_000_000;
+    let subnet_a = subnet_test_id(1);
+    let subnet_b = subnet_test_id(2);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(subnet_a)
+        .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
+        // Ensure that all `install_code()` executions will get paused.
+        .with_install_code_slice_instruction_limit(1_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .with_caller(subnet_a, caller_canister)
+        .build();
+
+    // Create four canisters.
+    let mut create_canister = || {
+        test.create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+            .unwrap()
+    };
+    let canister_id_1 = create_canister();
+    let canister_id_2 = create_canister();
+    let canister_id_3 = create_canister();
+    let canister_id_4 = create_canister();
+
+    // Set controllers.
+    let controllers = vec![caller_canister.get(), test.user_id().get()];
+    let mut set_controllers = |canister_id, controllers| {
+        test.canister_update_controller(canister_id, controllers)
+            .unwrap();
+    };
+    set_controllers(canister_id_1, controllers.clone());
+    set_controllers(canister_id_2, controllers.clone());
+    set_controllers(canister_id_3, controllers.clone());
+    set_controllers(canister_id_4, controllers);
+
+    // No in-progress install code calls across the subnet.
+    assert_consistent_install_code_calls(test.state(), 0);
+
+    // Start executing one install code call as canister request on each of canisters 1 and 3.
+    //
+    // `install_code()` will not complete execution in one slice and become paused,
+    // because we've set a very low `install_code_slice_instruction_limit` above.
+    test.inject_call_to_ic00(
+        Method::InstallCode,
+        install_code_args(canister_id_1).encode(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_subnet_message();
+    test.inject_call_to_ic00(
+        Method::InstallCode,
+        install_code_args(canister_id_3).encode(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_subnet_message();
+
+    // Start executing one install code call as ingress message on each of canisters 2 and 4.
+    test.dts_install_code(install_code_args(canister_id_2));
+    test.dts_install_code(install_code_args(canister_id_4));
+
+    // Simulate a checkpoint, to abort all paused `install_call()` executions.
+    test.abort_all_paused_executions();
+
+    // 4 in-progress install code calls across the subnet.
+    assert_consistent_install_code_calls(test.state(), 4);
+
+    // Retain canisters 1 and 2 on subnet A, migrate canisters 3 and 4 to subnet B.
+    let routing_table = RoutingTable::try_from(btreemap! {
+        CanisterIdRange {start: canister_id_1, end: canister_id_2} => subnet_a,
+        CanisterIdRange {start: canister_id_3, end: canister_id_4} => subnet_b,
+    })
+    .unwrap();
+
+    // Split subnet A'.
+    let mut state_a = test
+        .state()
+        .clone()
+        .split(subnet_a, &routing_table, None)
+        .unwrap();
+
+    // Restore consistency between install code calls tracked by canisters and subnet.
+    state_a.after_split();
+
+    // 2 in-progress install code calls across subnet A'.
+    assert_consistent_install_code_calls(&state_a, 2);
+
+    // Split subnet B.
+    let mut state_b = test
+        .state()
+        .clone()
+        .split(subnet_b, &routing_table, None)
+        .unwrap();
+
+    // Restore consistency between install code calls tracked by canisters and subnet.
+    state_b.after_split();
+
+    // 0 in-progress install code calls across subnet B.
+    assert_consistent_install_code_calls(&state_b, 0);
+}
+
+/// Helper function asserting that there is an exact match between aborted
+/// install code calls tracked by the subnet call context manager on the one
+/// hand; and by the canisters, on the other.
+fn assert_consistent_install_code_calls(state: &ReplicatedState, expected_calls: usize) {
+    // Collect the call IDs and calls of all aborted install code calls.
+    let canister_install_code_contexts: Vec<_> = state
+        .canister_states
+        .values()
+        .filter_map(|canister| {
+            if let Some(ExecutionTask::AbortedInstallCode {
+                message, call_id, ..
+            }) = canister.next_task()
+            {
+                Some((call_id, message))
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(expected_calls, canister_install_code_contexts.len());
+
+    // Clone the `SubnetCallContextManager` and remove all calls collected above from it.
+    let mut subnet_call_context_manager = state.metadata.subnet_call_context_manager.clone();
+    for (call_id, call) in canister_install_code_contexts {
+        subnet_call_context_manager
+            .remove_install_code_call(*call_id)
+            .unwrap_or_else(|| {
+                panic!(
+                    "Canister AbortedInstallCode task without matching subnet InstallCodeCall: {} {:?}",
+                    call_id, call
+                )
+            });
+    }
+
+    // And ensure that no `InstallCodeCalls` are left over in the `SubnetCallContextManager`.
+    assert!(
+            subnet_call_context_manager.install_code_calls_len() == 0,
+            "InstallCodeCalls in SubnetCallContextManager without matching canister AbortedInstallCode task: {:?}",
+            subnet_call_context_manager.remove_non_local_install_code_calls(|_| false)
+        );
+}
+
+fn install_code_args(canister_id: CanisterId) -> InstallCodeArgs {
+    InstallCodeArgs {
+        canister_id: canister_id.get(),
+        mode: CanisterInstallMode::Install,
+        wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
+        arg: vec![],
+        compute_allocation: None,
+        memory_allocation: None,
+        query_allocation: None,
+        sender_canister_version: None,
+    }
+}
+
+#[test]
+fn install_chunked_works_from_whitelist() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+
+    let canister_id = test.create_canister(CYCLES);
+
+    // Upload two chunks that make up the universal canister.
+    let uc_wasm = UNIVERSAL_CANISTER_WASM;
+    let wasm_module_hash = ic_crypto_sha2::Sha256::hash(uc_wasm).to_vec();
+    let chunk1 = &uc_wasm[..uc_wasm.len() / 2];
+    let chunk2 = &uc_wasm[uc_wasm.len() / 2..];
+    let hash1 = UploadChunkReply::decode(&get_reply(
+        test.subnet_message(
+            "upload_chunk",
+            UploadChunkArgs {
+                canister_id: canister_id.into(),
+                chunk: chunk1.to_vec(),
+            }
+            .encode(),
+        ),
+    ))
+    .unwrap()
+    .hash;
+    let hash2 = UploadChunkReply::decode(&get_reply(
+        test.subnet_message(
+            "upload_chunk",
+            UploadChunkArgs {
+                canister_id: canister_id.into(),
+                chunk: chunk2.to_vec(),
+            }
+            .encode(),
+        ),
+    ))
+    .unwrap()
+    .hash;
+
+    // Install the universal canister
+    let _install_response = get_reply(
+        test.subnet_message(
+            "install_chunked_code",
+            InstallChunkedCodeArgs::new(
+                CanisterInstallModeV2::Install,
+                canister_id,
+                Some(canister_id),
+                vec![hash1, hash2],
+                wasm_module_hash,
+                vec![],
+            )
+            .encode(),
+        ),
+    );
+
+    // Check the canister is working
+    let wasm = ic_universal_canister::wasm().reply().build();
+
+    let result = test.ingress(canister_id, "update", wasm);
+    assert_matches!(result, Ok(WasmResult::Reply(_)));
+}
+
+#[test]
+fn install_chunked_defaults_to_using_target_as_store() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+
+    let canister_id = test.create_canister(CYCLES);
+
+    // Upload universal canister.
+    let uc_wasm = UNIVERSAL_CANISTER_WASM;
+    let wasm_module_hash = ic_crypto_sha2::Sha256::hash(uc_wasm).to_vec();
+    let hash = UploadChunkReply::decode(&get_reply(
+        test.subnet_message(
+            "upload_chunk",
+            UploadChunkArgs {
+                canister_id: canister_id.into(),
+                chunk: uc_wasm.to_vec(),
+            }
+            .encode(),
+        ),
+    ))
+    .unwrap()
+    .hash;
+
+    // Install the universal canister without passing a store canister.
+    let _install_response = get_reply(
+        test.subnet_message(
+            "install_chunked_code",
+            InstallChunkedCodeArgs::new(
+                CanisterInstallModeV2::Install,
+                canister_id,
+                // No store canister provided!
+                None,
+                vec![hash],
+                wasm_module_hash,
+                vec![],
+            )
+            .encode(),
+        ),
+    );
+
+    // Check the canister is working
+    let wasm = ic_universal_canister::wasm().reply().build();
+
+    let result = test.ingress(canister_id, "update", wasm);
+    assert_matches!(result, Ok(WasmResult::Reply(_)));
+}
+
+#[test]
+fn install_chunked_recorded_in_history() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+
+    let canister_id = test.create_canister(CYCLES);
+
+    // Upload universal canister.
+    let uc_wasm = UNIVERSAL_CANISTER_WASM;
+    let wasm_module_hash = ic_crypto_sha2::Sha256::hash(uc_wasm).to_vec();
+    let hash = UploadChunkReply::decode(&get_reply(
+        test.subnet_message(
+            "upload_chunk",
+            UploadChunkArgs {
+                canister_id: canister_id.into(),
+                chunk: uc_wasm.to_vec(),
+            }
+            .encode(),
+        ),
+    ))
+    .unwrap()
+    .hash;
+
+    // Install the universal canister.
+    let _install_response = get_reply(
+        test.subnet_message(
+            "install_chunked_code",
+            InstallChunkedCodeArgs::new(
+                CanisterInstallModeV2::Install,
+                canister_id,
+                None,
+                vec![hash],
+                wasm_module_hash.clone(),
+                vec![],
+            )
+            .encode(),
+        ),
+    );
+
+    // Check that the canister history records the install.
+    // Expect 2 changes, first is canister creation.
+    let state = test.canister_state(canister_id);
+    assert_eq!(
+        state
+            .system_state
+            .get_canister_history()
+            .get_total_num_changes(),
+        2
+    );
+    assert_eq!(
+        state
+            .system_state
+            .get_canister_history()
+            .get_changes(2)
+            .collect::<Vec<_>>()[1],
+        &std::sync::Arc::new(CanisterChange::new(
+            test.time().as_nanos_since_unix_epoch(),
+            1,
+            CanisterChangeOrigin::from_user(test.user_id().get()),
+            CanisterChangeDetails::code_deployment(
+                CanisterInstallMode::Install,
+                wasm_module_hash.try_into().unwrap()
+            ),
+        ))
+    )
+}
+
+#[test]
+fn install_chunked_works_from_other_canister() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+
+    let target_canister = test.create_canister(CYCLES);
+    let store_canister = test.create_canister(CYCLES);
+
+    // Upload universal canister chunk.
+    let uc_wasm = UNIVERSAL_CANISTER_WASM;
+    let hash = UploadChunkReply::decode(&get_reply(
+        test.subnet_message(
+            "upload_chunk",
+            UploadChunkArgs {
+                canister_id: store_canister.into(),
+                chunk: uc_wasm.to_vec(),
+            }
+            .encode(),
+        ),
+    ))
+    .unwrap()
+    .hash;
+
+    // Install the universal canister
+    let _install_response = get_reply(
+        test.subnet_message(
+            "install_chunked_code",
+            InstallChunkedCodeArgs::new(
+                CanisterInstallModeV2::Install,
+                target_canister,
+                Some(store_canister),
+                vec![hash.clone()],
+                hash,
+                vec![],
+            )
+            .encode(),
+        ),
+    );
+
+    // Check the canister is working
+    let wasm = ic_universal_canister::wasm().reply().build();
+
+    let result = test.ingress(target_canister, "update", wasm);
+    assert_matches!(result, Ok(WasmResult::Reply(_)));
+}
+
+#[test]
+fn install_chunked_fails_with_wrong_chunk_hash() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+
+    let canister_id = test.create_canister(CYCLES);
+
+    // Upload universal canister chunk.
+    let uc_wasm = UNIVERSAL_CANISTER_WASM;
+    let hash = UploadChunkReply::decode(&get_reply(
+        test.subnet_message(
+            "upload_chunk",
+            UploadChunkArgs {
+                canister_id: canister_id.into(),
+                chunk: uc_wasm.to_vec(),
+            }
+            .encode(),
+        ),
+    ))
+    .unwrap()
+    .hash;
+
+    // Modify the hash so it is incorrect
+    let mut wrong_hash = hash.clone();
+    wrong_hash[0] = wrong_hash[0].wrapping_add(1);
+
+    // Check error on install
+    let error = test
+        .subnet_message(
+            "install_chunked_code",
+            InstallChunkedCodeArgs::new(
+                CanisterInstallModeV2::Install,
+                canister_id,
+                Some(canister_id),
+                vec![wrong_hash],
+                hash,
+                vec![],
+            )
+            .encode(),
+        )
+        .unwrap_err();
+
+    assert_eq!(error.code(), ErrorCode::CanisterContractViolation);
+}
+
+#[test]
+fn install_chunked_fails_with_wrong_wasm_hash() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+
+    let canister_id = test.create_canister(CYCLES);
+
+    // Upload universal canister chunk.
+    let uc_wasm = UNIVERSAL_CANISTER_WASM;
+    let hash = UploadChunkReply::decode(&get_reply(
+        test.subnet_message(
+            "upload_chunk",
+            UploadChunkArgs {
+                canister_id: canister_id.into(),
+                chunk: uc_wasm.to_vec(),
+            }
+            .encode(),
+        ),
+    ))
+    .unwrap()
+    .hash;
+
+    // Modify the hash so it is incorrect
+    let mut wrong_hash = hash.clone();
+    wrong_hash[0] = wrong_hash[0].wrapping_add(1);
+
+    // Check error on install
+    let error = test
+        .subnet_message(
+            "install_chunked_code",
+            InstallChunkedCodeArgs::new(
+                CanisterInstallModeV2::Install,
+                canister_id,
+                Some(canister_id),
+                vec![hash],
+                wrong_hash,
+                vec![],
+            )
+            .encode(),
+        )
+        .unwrap_err();
+
+    assert_eq!(error.code(), ErrorCode::CanisterContractViolation);
+}
+
+#[test]
+fn install_chunked_fails_when_store_canister_not_found() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+
+    let target_canister = test.create_canister(CYCLES);
+    // Store canister doesn't actually exist.
+    let store_canister = canister_test_id(0);
+
+    let hash = ic_crypto_sha2::Sha256::hash(UNIVERSAL_CANISTER_WASM).to_vec();
+
+    // Install the universal canister
+    let error = test
+        .subnet_message(
+            "install_chunked_code",
+            InstallChunkedCodeArgs::new(
+                CanisterInstallModeV2::Install,
+                target_canister,
+                Some(store_canister),
+                vec![hash.clone()],
+                hash,
+                vec![],
+            )
+            .encode(),
+        )
+        .unwrap_err();
+
+    assert_eq!(error.code(), ErrorCode::CanisterContractViolation);
+}
+
+#[test]
+fn install_chunked_works_from_controller_of_store() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+
+    let store_canister = test.create_canister(CYCLES);
+    let target_canister = test.create_canister(CYCLES);
+    // Upload universal canister chunk to store.
+    let uc_wasm = UNIVERSAL_CANISTER_WASM;
+    let hash = UploadChunkReply::decode(&get_reply(
+        test.subnet_message(
+            "upload_chunk",
+            UploadChunkArgs {
+                canister_id: store_canister.into(),
+                chunk: uc_wasm.to_vec(),
+            }
+            .encode(),
+        ),
+    ))
+    .unwrap()
+    .hash;
+
+    // Create universal canister and use it to install on target.
+    let uc = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .unwrap();
+    test.set_controller(store_canister, uc.into()).unwrap();
+    test.set_controller(target_canister, uc.into()).unwrap();
+
+    // Install UC wasm on target canister from another canister.
+    let install = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::InstallChunkedCode,
+            call_args()
+                .other_side(
+                    InstallChunkedCodeArgs::new(
+                        CanisterInstallModeV2::Install,
+                        target_canister,
+                        Some(store_canister),
+                        vec![hash.clone()],
+                        hash,
+                        vec![],
+                    )
+                    .encode(),
+                )
+                .on_reject(wasm().reject_message().reject()),
+            Cycles::new(CYCLES.get() / 2),
+        )
+        .build();
+    let result = test.ingress(uc, "update", install);
+    assert_matches!(result, Ok(WasmResult::Reply(_)));
+}
+
+#[test]
+fn install_chunked_works_fails_from_noncontroller_of_store() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+
+    let store_canister = test.create_canister(CYCLES);
+    let target_canister = test.create_canister(CYCLES);
+    // Upload universal canister chunk to store.
+    let uc_wasm = UNIVERSAL_CANISTER_WASM;
+    let hash = UploadChunkReply::decode(&get_reply(
+        test.subnet_message(
+            "upload_chunk",
+            UploadChunkArgs {
+                canister_id: store_canister.into(),
+                chunk: uc_wasm.to_vec(),
+            }
+            .encode(),
+        ),
+    ))
+    .unwrap()
+    .hash;
+
+    // Create universal canister and use it to install on target.
+    // Don't make it a controller of the store.
+    let uc = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .unwrap();
+    test.set_controller(target_canister, uc.into()).unwrap();
+
+    // Install UC wasm on target canister
+    let install = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::InstallChunkedCode,
+            call_args()
+                .other_side(
+                    InstallChunkedCodeArgs::new(
+                        CanisterInstallModeV2::Install,
+                        target_canister,
+                        Some(store_canister),
+                        vec![hash.clone()],
+                        hash,
+                        vec![],
+                    )
+                    .encode(),
+                )
+                .on_reject(wasm().reject_message().reject()),
+            Cycles::new(CYCLES.get() / 2),
+        )
+        .build();
+    let result = test.ingress(uc, "update", install);
+    match result {
+        Ok(WasmResult::Reject(reject)) => {
+            assert!(
+                reject.contains(&format!(
+                    "Only the controllers of the canister {} can control it",
+                    store_canister
+                )),
+                "Unexpected reject message {}",
+                reject
+            );
+        }
+        other => panic!("Expected reject, but got {:?}", other),
+    }
+}
+
+#[test]
+fn install_with_dts_correctly_updates_system_state() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_install_code_instruction_limit(1_000_000_000)
+        .with_install_code_slice_instruction_limit(1_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .build();
+
+    // Setup of the test: create a canister and set its certified data and
+    // global timer.
+
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+
+    let payload = InstallCodeArgs {
+        mode: CanisterInstallMode::Install,
+        canister_id: canister_id.get(),
+        wasm_module: UNIVERSAL_CANISTER_WASM.to_vec(),
+        arg: vec![],
+        compute_allocation: None,
+        memory_allocation: None,
+        query_allocation: None,
+        sender_canister_version: None,
+    };
+
+    // It might take multiple DTS steps to finish installation.
+    let ingress_id = test.dts_install_code(payload);
+    test.execute_message(canister_id);
+    let ingress_status = test.ingress_status(&ingress_id);
+    check_ingress_status(ingress_status).unwrap();
+
+    // Set the certified data and global timer of the canister.
+    let (ingress_id, _) = test.ingress_raw(
+        canister_id,
+        "update",
+        wasm()
+            .certified_data_set(&[42])
+            .set_global_timer_method(wasm().inc_global_counter())
+            .api_global_timer_set(u64::MAX)
+            .push_bytes(&[])
+            .append_and_reply()
+            .build(),
+    );
+
+    // It might take multiple DTS steps to finish the update call.
+    test.execute_message(canister_id);
+    let ingress_status = test.ingress_status(&ingress_id);
+    check_ingress_status(ingress_status).unwrap();
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.certified_data,
+        vec![42]
+    );
+
+    assert!(test
+        .canister_state(canister_id)
+        .system_state
+        .global_timer
+        .to_nanos_since_unix_epoch()
+        .is_some());
+
+    let version_before = test
+        .canister_state(canister_id)
+        .system_state
+        .canister_version;
+
+    let history_entries_before = test
+        .canister_state(canister_id)
+        .system_state
+        .get_canister_history()
+        .get_total_num_changes();
+
+    // Reinstall the canister with DTS.
+    let payload = InstallCodeArgs {
+        mode: CanisterInstallMode::Reinstall,
+        canister_id: canister_id.get(),
+        wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
+        arg: vec![],
+        compute_allocation: None,
+        memory_allocation: None,
+        query_allocation: None,
+        sender_canister_version: None,
+    };
+
+    let ingress_id = test.dts_install_code(payload);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueInstallCode
+    );
+
+    test.execute_message(canister_id);
+
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None
+    );
+
+    let ingress_status = test.ingress_status(&ingress_id);
+    check_ingress_status(ingress_status).unwrap();
+
+    // Check that the system state is properly updated.
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.certified_data,
+        vec![] as Vec<u8>
+    );
+
+    assert!(test
+        .canister_state(canister_id)
+        .system_state
+        .global_timer
+        .to_nanos_since_unix_epoch()
+        .is_none());
+
+    let version_after = test
+        .canister_state(canister_id)
+        .system_state
+        .canister_version;
+
+    assert_eq!(version_before + 1, version_after);
+
+    let history_entries_after = test
+        .canister_state(canister_id)
+        .system_state
+        .get_canister_history()
+        .get_total_num_changes();
+
+    assert_eq!(history_entries_before + 1, history_entries_after);
+}
+
+#[test]
+fn upgrade_with_dts_correctly_updates_system_state() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_install_code_instruction_limit(1_000_000_000)
+        .with_install_code_slice_instruction_limit(1_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .build();
+
+    // Setup of the test: create a canister and set its certified data and
+    // global timer.
+
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+
+    let payload = InstallCodeArgs {
+        mode: CanisterInstallMode::Install,
+        canister_id: canister_id.get(),
+        wasm_module: UNIVERSAL_CANISTER_WASM.to_vec(),
+        arg: vec![],
+        compute_allocation: None,
+        memory_allocation: None,
+        query_allocation: None,
+        sender_canister_version: None,
+    };
+
+    // It might take multiple DTS steps to finish installation.
+    let ingress_id = test.dts_install_code(payload);
+    test.execute_message(canister_id);
+    let ingress_status = test.ingress_status(&ingress_id);
+    check_ingress_status(ingress_status).unwrap();
+
+    // Set the certified data and global timer of the canister.
+    let (ingress_id, _) = test.ingress_raw(
+        canister_id,
+        "update",
+        wasm()
+            .certified_data_set(&[42])
+            .set_global_timer_method(wasm().inc_global_counter())
+            .api_global_timer_set(u64::MAX)
+            .push_bytes(&[])
+            .append_and_reply()
+            .build(),
+    );
+
+    // It might take multiple DTS steps to finish the update call.
+    test.execute_message(canister_id);
+    let ingress_status = test.ingress_status(&ingress_id);
+    check_ingress_status(ingress_status).unwrap();
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.certified_data,
+        vec![42]
+    );
+
+    assert!(test
+        .canister_state(canister_id)
+        .system_state
+        .global_timer
+        .to_nanos_since_unix_epoch()
+        .is_some());
+
+    let version_before = test
+        .canister_state(canister_id)
+        .system_state
+        .canister_version;
+
+    let history_entries_before = test
+        .canister_state(canister_id)
+        .system_state
+        .get_canister_history()
+        .get_total_num_changes();
+
+    // Upgrade the canister with DTS.
+    let payload = InstallCodeArgs {
+        mode: CanisterInstallMode::Upgrade,
+        canister_id: canister_id.get(),
+        wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
+        arg: vec![],
+        compute_allocation: None,
+        memory_allocation: None,
+        query_allocation: None,
+        sender_canister_version: None,
+    };
+
+    let ingress_id = test.dts_install_code(payload);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueInstallCode
+    );
+
+    test.execute_message(canister_id);
+
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None
+    );
+
+    let ingress_status = test.ingress_status(&ingress_id);
+    let result = check_ingress_status(ingress_status).unwrap();
+    assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
+
+    // Check that the system state is properly updated.
+
+    // Certified data is preserved on ugprades.
+    assert_eq!(
+        test.canister_state(canister_id).system_state.certified_data,
+        vec![42]
+    );
+
+    assert!(test
+        .canister_state(canister_id)
+        .system_state
+        .global_timer
+        .to_nanos_since_unix_epoch()
+        .is_none());
+
+    let version_after = test
+        .canister_state(canister_id)
+        .system_state
+        .canister_version;
+
+    assert_eq!(version_before + 1, version_after);
+
+    let history_entries_after = test
+        .canister_state(canister_id)
+        .system_state
+        .get_canister_history()
+        .get_total_num_changes();
+
+    assert_eq!(history_entries_before + 1, history_entries_after);
 }

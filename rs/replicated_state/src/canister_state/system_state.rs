@@ -1,10 +1,13 @@
 mod call_context_manager;
+pub mod wasm_chunk_store;
 
+use self::wasm_chunk_store::{WasmChunkStore, WasmChunkStoreMetadata};
 use super::queues::can_push;
 pub use super::queues::memory_required_to_push_request;
 pub use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
-use crate::{CanisterQueues, CanisterState, InputQueueType, StateError};
+use crate::page_map::PageAllocatorFileDescriptor;
+use crate::{CanisterQueues, CanisterState, InputQueueType, PageMap, StateError};
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::NumSeconds;
 use ic_ic00_types::{CanisterChange, CanisterChangeDetails, CanisterChangeOrigin};
@@ -13,6 +16,7 @@ use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::canister_state_bits::v1 as pb,
 };
+
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     messages::{
@@ -24,6 +28,7 @@ use ic_types::{
 };
 use lazy_static::lazy_static;
 use maplit::btreeset;
+use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
@@ -56,6 +61,7 @@ pub enum CyclesUseCase {
     HTTPOutcalls,
     DeletedCanisters,
     NonConsumed,
+    BurnedCycles,
 }
 
 impl CyclesUseCase {
@@ -74,6 +80,7 @@ impl CyclesUseCase {
             Self::HTTPOutcalls => "HTTPOutcalls",
             Self::DeletedCanisters => "DeletedCanisters",
             Self::NonConsumed => "NonConsumed",
+            Self::BurnedCycles => "BurnedCycles",
         }
     }
 }
@@ -92,6 +99,7 @@ impl From<CyclesUseCase> for i32 {
             CyclesUseCase::HTTPOutcalls => 9,
             CyclesUseCase::DeletedCanisters => 10,
             CyclesUseCase::NonConsumed => 11,
+            CyclesUseCase::BurnedCycles => 12,
         }
     }
 }
@@ -110,6 +118,7 @@ impl From<i32> for CyclesUseCase {
             9 => Self::HTTPOutcalls,
             10 => Self::DeletedCanisters,
             11 => Self::NonConsumed,
+            12 => Self::BurnedCycles,
             _ => panic!("Unsupported value"),
         }
     }
@@ -129,7 +138,7 @@ pub struct CanisterMetrics {
     pub scheduled_as_first: u64,
     pub skipped_round_due_to_no_messages: u64,
     pub executed: u64,
-    pub interruped_during_execution: u64,
+    pub interrupted_during_execution: u64,
     pub consumed_cycles_since_replica_started: NominalCycles,
     consumed_cycles_since_replica_started_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
 }
@@ -139,7 +148,7 @@ impl CanisterMetrics {
         scheduled_as_first: u64,
         skipped_round_due_to_no_messages: u64,
         executed: u64,
-        interruped_during_execution: u64,
+        interrupted_during_execution: u64,
         consumed_cycles_since_replica_started: NominalCycles,
         consumed_cycles_since_replica_started_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
     ) -> Self {
@@ -147,7 +156,7 @@ impl CanisterMetrics {
             scheduled_as_first,
             skipped_round_due_to_no_messages,
             executed,
-            interruped_during_execution,
+            interrupted_during_execution,
             consumed_cycles_since_replica_started,
             consumed_cycles_since_replica_started_by_use_cases,
         }
@@ -301,6 +310,12 @@ pub struct SystemState {
     /// Resource reservation cycles.
     reserved_balance: Cycles,
 
+    /// The user-specified upper limit on `reserved_balance`.
+    ///
+    /// A resource allocation operation that attempts to reserve `N` cycles will
+    /// fail if `reserved_balance + N` exceeds this limit if the limit is set.
+    reserved_balance_limit: Option<Cycles>,
+
     /// Tasks to execute before processing input messages.
     /// Currently the task queue is empty outside of execution rounds.
     pub task_queue: VecDeque<ExecutionTask>,
@@ -313,6 +328,9 @@ pub struct SystemState {
 
     /// Canister history.
     canister_history: CanisterHistory,
+
+    /// Store of Wasm chunks to support installation of large Wasm modules.
+    pub wasm_chunk_store: WasmChunkStore,
 }
 
 /// A wrapper around the different canister statuses.
@@ -441,8 +459,7 @@ pub enum ExecutionTask {
         message: CanisterCall,
         // The call id used by the subnet to identify long running install
         // code messages.
-        // TODO(EXC-1454): Make call_id non-optional.
-        call_id: Option<InstallCodeCallId>,
+        call_id: InstallCodeCallId,
         // The execution cost that has already been charged from the canister.
         // Retried execution does not have to pay for it again.
         prepaid_execution_cycles: Cycles,
@@ -505,7 +522,7 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
                     task: Some(pb::execution_task::Task::AbortedInstallCode(
                         pb::execution_task::AbortedInstallCode {
                             message: Some(message),
-                            call_id: call_id.map(|call_id| call_id.get()),
+                            call_id: Some(call_id.get()),
                             prepaid_execution_cycles: Some((*prepaid_execution_cycles).into()),
                         },
                     )),
@@ -541,12 +558,12 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                         CanisterMessage::Ingress(Arc::new(v.try_into()?)),
                     ),
                     PbInput::Task(val) => {
-                        let task = PbCanisterTask::from_i32(val).ok_or(
+                        let task = PbCanisterTask::try_from(val).map_err(|_| {
                             ProxyDecodeError::ValueOutOfRange {
                                 typ: "CanisterTask",
                                 err: format!("Unexpected value of canister task: {}", val),
-                            },
-                        )?;
+                            }
+                        })?;
                         let task = match task {
                             PbCanisterTask::Unspecified => {
                                 return Err(ProxyDecodeError::ValueOutOfRange {
@@ -584,11 +601,12 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                     .map(|c| c.try_into())
                     .transpose()?
                     .unwrap_or_else(Cycles::zero);
+                let call_id = aborted.call_id.ok_or(ProxyDecodeError::MissingField(
+                    "AbortedInstallCode::call_id",
+                ))?;
                 ExecutionTask::AbortedInstallCode {
                     message,
-                    call_id: aborted
-                        .call_id
-                        .map(|call_id| InstallCodeCallId::from(call_id)),
+                    call_id: InstallCodeCallId::new(call_id),
                     prepaid_execution_cycles,
                 }
             }
@@ -629,9 +647,15 @@ impl TryFrom<pb::CanisterHistory> for CanisterHistory {
 }
 
 #[derive(Debug)]
-pub struct InsufficientCyclesError {
-    pub requested: Cycles,
-    pub available: Cycles,
+pub enum ReservationError {
+    InsufficientCycles {
+        requested: Cycles,
+        available: Cycles,
+    },
+    ReservedLimitExceed {
+        requested: Cycles,
+        limit: Cycles,
+    },
 }
 
 impl SystemState {
@@ -640,55 +664,25 @@ impl SystemState {
         controller: PrincipalId,
         initial_cycles: Cycles,
         freeze_threshold: NumSeconds,
+        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> Self {
-        Self::new(
+        Self::new_internal(
             canister_id,
             controller,
             initial_cycles,
             freeze_threshold,
             CanisterStatus::new_running(),
+            WasmChunkStore::new(fd_factory),
         )
     }
 
-    pub fn new_stopping(
-        canister_id: CanisterId,
-        controller: PrincipalId,
-        initial_cycles: Cycles,
-        freeze_threshold: NumSeconds,
-    ) -> Self {
-        Self::new(
-            canister_id,
-            controller,
-            initial_cycles,
-            freeze_threshold,
-            CanisterStatus::Stopping {
-                call_context_manager: CallContextManager::default(),
-                stop_contexts: Vec::default(),
-            },
-        )
-    }
-
-    pub fn new_stopped(
-        canister_id: CanisterId,
-        controller: PrincipalId,
-        initial_cycles: Cycles,
-        freeze_threshold: NumSeconds,
-    ) -> Self {
-        Self::new(
-            canister_id,
-            controller,
-            initial_cycles,
-            freeze_threshold,
-            CanisterStatus::Stopped,
-        )
-    }
-
-    pub fn new(
+    fn new_internal(
         canister_id: CanisterId,
         controller: PrincipalId,
         initial_cycles: Cycles,
         freeze_threshold: NumSeconds,
         status: CanisterStatus,
+        wasm_chunk_store: WasmChunkStore,
     ) -> Self {
         Self {
             canister_id,
@@ -697,6 +691,7 @@ impl SystemState {
             cycles_balance: initial_cycles,
             ingress_induction_cycles_debit: Cycles::zero(),
             reserved_balance: Cycles::zero(),
+            reserved_balance_limit: None,
             memory_allocation: MemoryAllocation::BestEffort,
             freeze_threshold,
             status,
@@ -706,6 +701,7 @@ impl SystemState {
             global_timer: CanisterTimer::Inactive,
             canister_version: 0,
             canister_history: CanisterHistory::default(),
+            wasm_chunk_store,
         }
     }
 
@@ -714,14 +710,18 @@ impl SystemState {
     /// module is run. There is nothing interesting in the system state
     /// that can be accessed at that point in time, hence this
     /// "slightly" fake system state.
-    pub fn new_for_start(canister_id: CanisterId) -> Self {
+    pub fn new_for_start(
+        canister_id: CanisterId,
+        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+    ) -> Self {
         let controller = *canister_id.get_ref();
-        Self::new(
+        Self::new_internal(
             canister_id,
             controller,
             Cycles::zero(),
             NumSeconds::from(0),
             CanisterStatus::Stopped,
+            WasmChunkStore::new(fd_factory),
         )
     }
 
@@ -738,10 +738,13 @@ impl SystemState {
         cycles_balance: Cycles,
         ingress_induction_cycles_debit: Cycles,
         reserved_balance: Cycles,
+        reserved_balance_limit: Option<Cycles>,
         task_queue: VecDeque<ExecutionTask>,
         global_timer: CanisterTimer,
         canister_version: u64,
         canister_history: CanisterHistory,
+        wasm_chunk_store_data: PageMap,
+        wasm_chunk_store_metadata: WasmChunkStoreMetadata,
     ) -> Self {
         Self {
             controllers,
@@ -755,11 +758,81 @@ impl SystemState {
             cycles_balance,
             ingress_induction_cycles_debit,
             reserved_balance,
+            reserved_balance_limit,
             task_queue,
             global_timer,
             canister_version,
             canister_history,
+            wasm_chunk_store: WasmChunkStore::from_checkpoint(
+                wasm_chunk_store_data,
+                wasm_chunk_store_metadata,
+            ),
         }
+    }
+
+    pub fn new_running_for_testing(
+        canister_id: CanisterId,
+        controller: PrincipalId,
+        initial_cycles: Cycles,
+        freeze_threshold: NumSeconds,
+    ) -> Self {
+        Self::new_for_testing(
+            canister_id,
+            controller,
+            initial_cycles,
+            freeze_threshold,
+            CanisterStatus::new_running(),
+        )
+    }
+
+    pub fn new_stopping_for_testing(
+        canister_id: CanisterId,
+        controller: PrincipalId,
+        initial_cycles: Cycles,
+        freeze_threshold: NumSeconds,
+    ) -> Self {
+        Self::new_for_testing(
+            canister_id,
+            controller,
+            initial_cycles,
+            freeze_threshold,
+            CanisterStatus::Stopping {
+                call_context_manager: CallContextManager::default(),
+                stop_contexts: Vec::default(),
+            },
+        )
+    }
+
+    pub fn new_stopped_for_testing(
+        canister_id: CanisterId,
+        controller: PrincipalId,
+        initial_cycles: Cycles,
+        freeze_threshold: NumSeconds,
+    ) -> Self {
+        Self::new_for_testing(
+            canister_id,
+            controller,
+            initial_cycles,
+            freeze_threshold,
+            CanisterStatus::Stopped,
+        )
+    }
+
+    fn new_for_testing(
+        canister_id: CanisterId,
+        controller: PrincipalId,
+        initial_cycles: Cycles,
+        freeze_threshold: NumSeconds,
+        status: CanisterStatus,
+    ) -> Self {
+        Self::new_internal(
+            canister_id,
+            controller,
+            initial_cycles,
+            freeze_threshold,
+            status,
+            WasmChunkStore::new_for_testing(wasm_chunk_store::DEFAULT_MAX_SIZE),
+        )
     }
 
     pub fn canister_id(&self) -> CanisterId {
@@ -788,6 +861,29 @@ impl SystemState {
         self.reserved_balance
     }
 
+    /// Returns the user-specified upper limit on `reserved_balance`.
+    pub fn reserved_balance_limit(&self) -> Option<Cycles> {
+        self.reserved_balance_limit
+    }
+
+    /// Sets the user-specified upper limit on `reserved_balance()`.
+    pub fn set_reserved_balance_limit(&mut self, limit: Cycles) {
+        self.reserved_balance_limit = Some(limit);
+    }
+
+    /// Initializes `reserved_balance_limit` to the given default value if it
+    /// was not already set.
+    pub fn initialize_reserved_balance_limit_if_empty(&mut self, default_limit: Cycles) {
+        if self.reserved_balance_limit.is_none() {
+            self.reserved_balance_limit = Some(default_limit);
+        }
+    }
+
+    /// Sets `reserved_balance_limit` to `None` for testing.
+    pub fn clear_reserved_balance_limit_for_testing(&mut self) {
+        self.reserved_balance_limit = None;
+    }
+
     /// Records the given amount as debit that will be charged from the balance
     /// at some point in the future.
     ///
@@ -811,6 +907,7 @@ impl SystemState {
         &mut self,
         canister_id: CanisterId,
         log: &ReplicaLogger,
+        charging_from_balance_error: &IntCounter,
     ) {
         // We rely on saturating operations of `Cycles` here.
         let remaining_debit = self.ingress_induction_cycles_debit - self.cycles_balance;
@@ -818,7 +915,7 @@ impl SystemState {
         if remaining_debit.get() > 0 {
             // This case is unreachable and may happen only due to a bug: if the
             // caller has reduced the cycles balance below the cycles debit.
-            // TODO(RUN-299): Increment a critical error counter here.
+            charging_from_balance_error.inc();
             error!(
                 log,
                 "[EXC-BUG]: Debited cycles exceed the cycles balance of {} by {} in install_code",
@@ -1245,7 +1342,8 @@ impl SystemState {
             | CyclesUseCase::ECDSAOutcalls
             | CyclesUseCase::HTTPOutcalls
             | CyclesUseCase::DeletedCanisters
-            | CyclesUseCase::NonConsumed => requested_amount,
+            | CyclesUseCase::NonConsumed
+            | CyclesUseCase::BurnedCycles => requested_amount,
         };
         self.cycles_balance -= remaining_amount;
         self.observe_consumed_cycles_with_use_case(
@@ -1257,9 +1355,17 @@ impl SystemState {
 
     /// Moves the given amount of cycles from the main balance to the reserved balance.
     /// Returns an error if the main balance is lower than the requested amount.
-    pub fn reserve_cycles(&mut self, amount: Cycles) -> Result<(), InsufficientCyclesError> {
+    pub fn reserve_cycles(&mut self, amount: Cycles) -> Result<(), ReservationError> {
+        if let Some(reserved_balance_limit) = self.reserved_balance_limit {
+            if self.reserved_balance + amount > reserved_balance_limit {
+                return Err(ReservationError::ReservedLimitExceed {
+                    requested: self.reserved_balance + amount,
+                    limit: reserved_balance_limit,
+                });
+            }
+        }
         if amount > self.cycles_balance {
-            Err(InsufficientCyclesError {
+            Err(ReservationError::InsufficientCycles {
                 requested: amount,
                 available: self.cycles_balance,
             })

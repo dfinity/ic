@@ -75,6 +75,7 @@ impl LedgerAccess for Access {
     }
 }
 
+#[candid_method(init)]
 #[init]
 fn init(args: LedgerArgument) {
     match args {
@@ -88,6 +89,7 @@ fn init(args: LedgerArgument) {
             panic!("Cannot initialize the canister with an Upgrade argument. Please provide an Init argument.");
         }
     }
+    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
 }
 
 #[pre_upgrade]
@@ -162,15 +164,13 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         let token_pool: Nat = ledger.balances().token_pool.into();
         w.encode_gauge(
             "ledger_balances_token_pool",
-            // TODO: support larger integers in metrics
-            token_pool.0.to_u128().unwrap() as f64,
+            token_pool.0.to_f64().unwrap_or(f64::INFINITY),
             "Total number of Tokens in the pool.",
         )?;
         let total_supply: Nat = ledger.balances().total_supply().into();
         w.encode_gauge(
             "ledger_total_supply",
-            // TODO: support larger integers in metrics
-            total_supply.0.to_u128().unwrap() as f64,
+            total_supply.0.to_f64().unwrap_or(f64::INFINITY),
             "Total number of tokens in circulation.",
         )?;
         w.encode_gauge(
@@ -191,7 +191,6 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     })
 }
 
-#[candid_method(query)]
 #[query]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
@@ -568,7 +567,7 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
                 spender: arg.spender,
                 amount,
                 expected_allowance,
-                expires_at: arg.expires_at.map(TimeStamp::from_nanos_since_unix_epoch),
+                expires_at: arg.expires_at,
                 fee: arg.fee.map(|_| expected_fee_tokens),
             },
             created_at_time: arg.created_at_time,
@@ -624,13 +623,12 @@ fn main() {}
 
 #[test]
 fn check_candid_interface() {
-    use candid::utils::{service_compatible, CandidSource};
-    use std::path::PathBuf;
+    use candid::utils::{service_equal, CandidSource};
 
     let new_interface = __export_service();
-    let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+    let manifest_dir = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let old_interface = manifest_dir.join("ledger.did");
-    service_compatible(
+    service_equal(
         CandidSource::Text(&new_interface),
         CandidSource::File(old_interface.as_path()),
     )

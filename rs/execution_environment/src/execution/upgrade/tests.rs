@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use ic_error_types::ErrorCode;
-use ic_ic00_types::{EmptyBlob, Payload};
+use ic_ic00_types::{EmptyBlob, Payload, SkipPreUpgrade};
 use ic_logger::replica_logger::LogEntryLogger;
 use ic_replicated_state::{canister_state::NextExecution, CanisterState};
 use ic_state_machine_tests::{IngressState, WasmResult};
@@ -229,16 +229,20 @@ fn upgrade_fails_on_not_enough_cycles() {
         .cycles_account_manager()
         .execution_cost((MAX_INSTRUCTIONS_PER_SLICE * 3).into(), test.subnet_size());
 
-    let canister_memory_usage = {
+    let (canister_memory_usage, canister_message_memory_usage) = {
         // Create a dummy canister just to get its memory usage.
         let id = test.canister_from_binary(old_empty_binary()).unwrap();
-        test.canister_state(id).memory_usage()
+        (
+            test.canister_state(id).memory_usage(),
+            test.canister_state(id).message_memory_usage(),
+        )
     };
 
     let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
         ic_config::execution_environment::Config::default().default_freeze_threshold,
         MemoryAllocation::BestEffort,
         canister_memory_usage,
+        canister_message_memory_usage,
         ComputeAllocation::zero(),
         test.subnet_size(),
         Cycles::zero(),
@@ -328,6 +332,79 @@ fn upgrade_fails_on_short_pre_upgrade_trap() {
     let result = test.upgrade_canister(canister_id, new_empty_binary());
     assert_eq!(result.unwrap_err().code(), ErrorCode::CanisterTrapped);
     assert_canister_state_after_err(&canister_state_before, test.canister_state(canister_id));
+}
+
+#[test]
+fn test_install_and_reinstall_with_canister_install_mode_v2() {
+    let mut test = execution_test_with_max_rounds(1);
+    let old_binary = binary(&[(Function::PreUpgrade, Execution::Short)]);
+    let canister_id = test.create_canister(Cycles::from(1_000_000_000_000u128));
+    // test install
+    assert_eq!(test.install_canister_v2(canister_id, old_binary), Ok(()));
+    // test reinstall
+    let canister_state_before = test.canister_state(canister_id).clone();
+    let result = test.reinstall_canister_v2(canister_id, new_empty_binary());
+    assert_eq!(result, Ok(()));
+    assert_ne!(&canister_state_before, test.canister_state(canister_id));
+}
+
+#[test]
+fn test_pre_upgrade_execution_with_canister_install_mode_v2() {
+    let mut test = execution_test_with_max_rounds(1);
+
+    for skip_pre_upgrade in [
+        None,
+        Some(SkipPreUpgrade(None)),
+        Some(SkipPreUpgrade(Some(false))),
+        Some(SkipPreUpgrade(Some(true))),
+    ] {
+        let old_binary = binary(&[(Function::PreUpgrade, Execution::ShortTrap)]);
+        let canister_id = test.create_canister(Cycles::from(1_000_000_000_000u128));
+        test.install_canister_v2(canister_id, old_binary).unwrap();
+        let canister_state_before = test.canister_state(canister_id).clone();
+
+        let result = test.upgrade_canister_v2(canister_id, new_empty_binary(), skip_pre_upgrade);
+
+        if skip_pre_upgrade == Some(SkipPreUpgrade(Some(true))) {
+            assert_eq!(result, Ok(()));
+            assert_canister_state_after_ok(
+                &canister_state_before,
+                test.canister_state(canister_id),
+            );
+        } else {
+            assert_eq!(result.unwrap_err().code(), ErrorCode::CanisterTrapped);
+            assert_canister_state_after_err(
+                &canister_state_before,
+                test.canister_state(canister_id),
+            );
+        }
+    }
+}
+
+#[test]
+fn test_upgrade_execution_with_canister_install_mode_v2() {
+    let mut test = execution_test_with_max_rounds(1);
+
+    for skip_pre_upgrade in [
+        None,
+        Some(SkipPreUpgrade(None)),
+        Some(SkipPreUpgrade(Some(false))),
+        Some(SkipPreUpgrade(Some(true))),
+    ] {
+        let old_binary = binary(&[(Function::PreUpgrade, Execution::Short)]);
+        let canister_id = test.create_canister(Cycles::from(1_000_000_000_000u128));
+        test.install_canister_v2(canister_id, old_binary).unwrap();
+        let canister_state_before = test.canister_state(canister_id).clone();
+
+        let result = test.upgrade_canister_v2(
+            canister_id,
+            binary(&[(Function::PostUpgrade, Execution::ShortTrap)]),
+            skip_pre_upgrade,
+        );
+
+        assert_eq!(result.unwrap_err().code(), ErrorCode::CanisterTrapped);
+        assert_canister_state_after_err(&canister_state_before, test.canister_state(canister_id));
+    }
 }
 
 #[test]
@@ -906,4 +983,38 @@ fn dts_uninstall_with_aborted_upgrade() {
             canister_id,
         )
     );
+}
+
+#[test]
+fn upgrade_with_skip_pre_upgrade_fails_on_no_execution_state() {
+    let mut test = execution_test_with_max_rounds(1);
+    // Create canister with no binary and hence no execution state
+    let canister_id = test.create_canister(1_000_000_000_u64.into());
+    let canister_state_before = test.canister_state(canister_id).clone();
+
+    let result = test.upgrade_canister_v2(
+        canister_id,
+        new_empty_binary(),
+        Some(SkipPreUpgrade(Some(true))),
+    );
+    assert_eq!(
+        result.unwrap_err().code(),
+        ErrorCode::CanisterWasmModuleNotFound
+    );
+    assert_canister_state_after_err(&canister_state_before, test.canister_state(canister_id));
+}
+
+#[test]
+fn upgrade_with_skip_pre_upgrade_ok_with_no_pre_upgrade() {
+    let mut test = execution_test_with_max_rounds(1);
+    let canister_id = test.canister_from_binary(old_empty_binary()).unwrap();
+    let canister_state_before = test.canister_state(canister_id).clone();
+
+    let result = test.upgrade_canister_v2(
+        canister_id,
+        new_empty_binary(),
+        Some(SkipPreUpgrade(Some(true))),
+    );
+    assert_eq!(result, Ok(()));
+    assert_canister_state_after_ok(&canister_state_before, test.canister_state(canister_id));
 }

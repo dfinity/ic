@@ -1,12 +1,15 @@
 [package]
 name = "tree-deserializer"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 leb128 = "0.2.4"
-serde = { version = "1.0.99", features = [ "derive" ] }
+serde = { workspace = true }
 
 [dev-dependencies]
 maplit = "1.0.2"

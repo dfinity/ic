@@ -41,6 +41,11 @@ pub enum CertificateValidationError {
     MultipleSubnetDelegationsNotAllowed,
     /// The given canister id is not contained in the ranges specified by the subnet delegation.
     CanisterIdOutOfRange,
+    /// The given subnet id does not match the subnet id in the delegation.
+    SubnetIdMismatch {
+        provided_subnet_id: SubnetId,
+        delegation_subnet_id: SubnetId,
+    },
 }
 
 impl fmt::Display for CertificateValidationError {
@@ -71,6 +76,11 @@ impl fmt::Display for CertificateValidationError {
                     "canister id does not match the canister id range specified in the certificate"
                 )
             }
+            Self::SubnetIdMismatch { provided_subnet_id, delegation_subnet_id } => write!(
+                f,
+                "provided subnet id {} does not match subnet id in delegation {}",
+                provided_subnet_id, delegation_subnet_id,
+            ),
         }
     }
 }
@@ -212,6 +222,48 @@ pub fn verify_certificate_with_cache(
     root_pk: &ThresholdSigPublicKey,
 ) -> Result<Certificate, CertificateValidationError> {
     verify_certificate_internal(certificate, canister_id, root_pk, true)
+}
+
+/// Verifies a certificate for a read state on the subnet endpoint (i.e. a
+/// certificate returned by /api/v2/subnet/<subnet_id>/read_state).
+///
+/// See doc comments of `verify_certificate` for more details.
+///
+/// In case a delegation is present, then the delegation certificate is valid
+/// for the subnet id that is provided, i.e. the provided subnet id must
+/// match the delegation subnet id.
+///
+/// Additionally the delegation certificate is valid without doing any check
+/// on the canister ranges included in the certificate.
+pub fn verify_certificate_for_subnet_read_state(
+    certificate: &[u8],
+    subnet_id: &SubnetId,
+    root_pk: &ThresholdSigPublicKey,
+) -> Result<Certificate, CertificateValidationError> {
+    let certificate: Certificate = parse_certificate(certificate)?;
+    let key = if let Some(delegation) = &certificate.delegation {
+        let delegation_subnet_id = PrincipalId::try_from(&*delegation.subnet_id)
+            .map(SubnetId::from)
+            .map_err(|err| {
+                CertificateValidationError::DeserError(format!(
+                    "failed to parse delegation subnet id: {}",
+                    err
+                ))
+            })?;
+        if subnet_id != &delegation_subnet_id {
+            return Err(CertificateValidationError::SubnetIdMismatch {
+                provided_subnet_id: *subnet_id,
+                delegation_subnet_id,
+            });
+        }
+
+        verify_delegation_certificate(&delegation.certificate, subnet_id, root_pk, None, false)?
+    } else {
+        *root_pk
+    };
+
+    verify_certificate_signature(&certificate, &key, false)?;
+    Ok(certificate)
 }
 
 /// Verifies a certificate with optional signature cache.

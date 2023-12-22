@@ -664,11 +664,10 @@ mod pks_and_sks_contains {
     fn should_return_error_for_pks_and_sks_contains_if_tls_certificate_does_not_match() {
         let csp_vault = LocalCspVault::builder_for_test().build();
         let shadow_csp_vault = LocalCspVault::builder_for_test().build();
-        const NOT_AFTER: &str = "99991231235959Z";
         let mut current_node_public_keys = generate_all_keys(&csp_vault);
         current_node_public_keys.tls_certificate = {
             let _ = shadow_csp_vault
-                .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
+                .gen_tls_key_pair(node_test_id(NODE_1))
                 .expect("Failed to generate tks certificate");
             shadow_csp_vault
                 .current_node_public_keys()
@@ -1000,7 +999,7 @@ mod validate_pks_and_sks {
                     ..required_node_public_keys_and_time().0
                 },
                 expected: ValidatePksAndSksError::TlsCertificateError(PublicKeyInvalid(
-                    "invalid TLS certificate: failed to parse DER".to_string(),
+                    "Malformed certificate: TlsPublicKeyCertCreationError { internal_error: \"Error parsing DER: Parsing Error: InvalidDate\" }".to_string(),
                 )),
             },
             ParameterizedTest {

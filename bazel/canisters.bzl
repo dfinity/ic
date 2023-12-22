@@ -2,8 +2,9 @@
 This module defines utilities for building Rust canisters.
 """
 
-load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("@rules_motoko//motoko:defs.bzl", "motoko_binary")
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("//bazel:candid.bzl", "did_git_test")
 
 def _wasm_rust_transition_impl(_settings, _attr):
     return {
@@ -60,6 +61,7 @@ def rust_canister(name, service_file, **kwargs):
     """
     wasm_name = "_wasm_" + name.replace(".", "_")
     kwargs.setdefault("visibility", ["//visibility:public"])
+    kwargs.setdefault("tags", []).append("canister")
 
     rust_binary(
         name = wasm_name,
@@ -72,17 +74,27 @@ def rust_canister(name, service_file, **kwargs):
         binary = ":" + wasm_name,
     )
 
+    did_git_test(
+        name = name + "_did_git_test",
+        did = service_file,
+    )
+
     # Invokes canister WebAssembly module optimizer and attaches the candid file.
     native.genrule(
         name = name + ".opt",
         srcs = [name + ".raw", service_file],
         outs = [name + ".opt.wasm"],
         message = "Shrinking canister " + name,
-        exec_tools = ["@crate_index//:ic-wasm__ic-wasm"],
+        tools = ["@crate_index//:ic-wasm__ic-wasm"],
         cmd_bash = """
         $(location @crate_index//:ic-wasm__ic-wasm) $(location {input_wasm}) -o $@ shrink && \
         $(location @crate_index//:ic-wasm__ic-wasm) $@ -o $@ metadata candid:service --visibility public --file $(location {service_file})
         """.format(input_wasm = name + ".raw", service_file = service_file),
+    )
+
+    native.alias(
+        name = name + ".didfile",
+        actual = service_file,
     )
 
     inject_version_into_wasm(
@@ -111,6 +123,11 @@ def motoko_canister(name, entry, deps):
         deps = deps,
     )
 
+    native.alias(
+        name = name + ".didfile",
+        actual = raw_did,
+    )
+
     inject_version_into_wasm(
         name = name,
         src_wasm = raw_wasm,
@@ -134,7 +151,7 @@ def inject_version_into_wasm(*, name, src_wasm, version_file = "//bazel:version.
         ],
         outs = [name + ".wasm"],
         message = "Injecting version into wasm.",
-        exec_tools = ["@crate_index//:ic-wasm__ic-wasm"],
+        tools = ["@crate_index//:ic-wasm__ic-wasm"],
         cmd_bash = " ".join([
             "$(location @crate_index//:ic-wasm__ic-wasm)",
             "$(location %s)" % src_wasm,  # Input file.

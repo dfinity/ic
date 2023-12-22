@@ -23,10 +23,7 @@ end::catalog[] */
 use super::utils::rw_message::install_nns_and_check_progress;
 use crate::{
     driver::{ic::InternetComputer, test_env::TestEnv, test_env_api::*},
-    orchestrator::utils::{
-        ssh_access::update_ssh_keys_for_all_unassigned_nodes,
-        upgrade::fetch_update_file_sha256_with_retry,
-    },
+    orchestrator::utils::ssh_access::update_ssh_keys_for_all_unassigned_nodes,
 };
 use crate::{
     nns::{
@@ -37,10 +34,7 @@ use crate::{
         generate_key_strings, get_updateunassignednodespayload,
         wait_until_authentication_is_granted, AuthMean,
     },
-    orchestrator::utils::upgrade::{
-        fetch_unassigned_node_version, get_blessed_replica_versions, get_update_image_url,
-        UpdateImageType,
-    },
+    orchestrator::utils::upgrade::{fetch_unassigned_node_version, get_blessed_replica_versions},
     util::{block_on, get_nns_node, runtime_from_url},
 };
 use anyhow::bail;
@@ -92,7 +86,10 @@ pub fn test(env: TestEnv) {
     let original_version = fetch_unassigned_node_version(&unassigned_node).unwrap();
     info!(logger, "Original replica version: {}", original_version);
 
-    let upgrade_url = get_update_image_url(UpdateImageType::ImageTest, &original_version);
+    let upgrade_url = env
+        .get_ic_os_update_img_test_url()
+        .expect("no image URL")
+        .to_string();
     info!(logger, "Upgrade URL: {}", upgrade_url);
     let target_version = format!("{}-test", original_version);
     let new_replica_version = ReplicaVersion::try_from(target_version.clone()).unwrap();
@@ -106,7 +103,9 @@ pub fn test(env: TestEnv) {
         info!(logger, "Registry version: {}", reg_ver);
         let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
         info!(logger, "Initial: {:?}", blessed_versions);
-        let sha256 = fetch_update_file_sha256_with_retry(&logger, &original_version, true).await;
+        let sha256 = env
+            .get_ic_os_update_img_test_sha256()
+            .expect("no SHA256 hash");
         info!(logger, "Update image SHA256: {}", sha256);
 
         // prepare for the 1. proposal

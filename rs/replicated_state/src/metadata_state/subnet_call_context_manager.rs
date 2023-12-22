@@ -9,11 +9,12 @@ use ic_types::{
     canister_http::CanisterHttpRequestContext,
     crypto::threshold_sig::ni_dkg::{id::ni_dkg_target_id, NiDkgTargetId},
     messages::{CallbackId, CanisterCall, Request, StopCanisterCallId},
-    node_id_into_protobuf, node_id_try_from_option, CanisterId, NodeId, RegistryVersion, Time,
+    node_id_into_protobuf, node_id_try_from_option, CanisterId, ExecutionRound, NodeId,
+    RegistryVersion, Time,
 };
 use phantom_newtype::Id;
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     convert::{From, TryFrom},
     sync::Arc,
 };
@@ -57,7 +58,7 @@ pub type InstallCodeCallId = Id<InstallCodeCallIdTag, u64>;
 /// Collection of install code call messages whose execution is paused at the
 /// end of the round.
 ///
-/// During a subnet split, these messages will be autmatically rejected if
+/// During a subnet split, these messages will be automatically rejected if
 /// the targeted canister has moved to a new subnet.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct InstallCodeCallManager {
@@ -102,7 +103,7 @@ impl InstallCodeCallManager {
 /// Collection of stop canister messages whose execution is paused at the
 /// end of the round.
 ///
-/// During a subnet split, these messages will be autmatically rejected if
+/// During a subnet split, these messages will be automatically rejected if
 /// the target canister has moved to a new subnet.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct StopCanisterCallManager {
@@ -121,6 +122,10 @@ impl StopCanisterCallManager {
 
     fn remove_call(&mut self, call_id: StopCanisterCallId) -> Option<StopCanisterCall> {
         self.stop_canister_calls.remove(&call_id)
+    }
+
+    fn get_time(&self, call_id: &StopCanisterCallId) -> Option<Time> {
+        self.stop_canister_calls.get(call_id).map(|x| x.time)
     }
 
     /// Removes and returns all `StopCanisterCalls` not targeted to local canisters.
@@ -173,6 +178,10 @@ impl CanisterManagementCalls {
         self.stop_canister_call_manager.remove_call(call_id)
     }
 
+    fn get_time_for_stop_canister_call(&self, call_id: &StopCanisterCallId) -> Option<Time> {
+        self.stop_canister_call_manager.get_time(call_id)
+    }
+
     pub fn install_code_calls_len(&self) -> usize {
         self.install_code_call_manager.install_code_calls.len()
     }
@@ -193,6 +202,7 @@ pub struct SubnetCallContextManager {
     pub bitcoin_send_transaction_internal_contexts:
         BTreeMap<CallbackId, BitcoinSendTransactionInternalContext>,
     canister_management_calls: CanisterManagementCalls,
+    pub raw_rand_contexts: VecDeque<RawRandContext>,
 }
 
 impl SubnetCallContextManager {
@@ -346,6 +356,11 @@ impl SubnetCallContextManager {
             .remove_stop_canister_call(call_id)
     }
 
+    pub fn get_time_for_stop_canister_call(&self, call_id: &StopCanisterCallId) -> Option<Time> {
+        self.canister_management_calls
+            .get_time_for_stop_canister_call(call_id)
+    }
+
     pub fn remove_non_local_stop_canister_calls(
         &mut self,
         is_local_canister: impl Fn(CanisterId) -> bool,
@@ -357,6 +372,35 @@ impl SubnetCallContextManager {
 
     pub fn stop_canister_calls_len(&self) -> usize {
         self.canister_management_calls.stop_canister_calls_len()
+    }
+
+    pub fn push_raw_rand_request(
+        &mut self,
+        request: Request,
+        execution_round_id: ExecutionRound,
+        time: Time,
+    ) {
+        self.raw_rand_contexts.push_back(RawRandContext {
+            request,
+            execution_round_id,
+            time,
+        });
+    }
+
+    pub fn remove_non_local_raw_rand_calls(
+        &mut self,
+        is_local_canister: impl Fn(CanisterId) -> bool,
+    ) -> Vec<RawRandContext> {
+        let mut removed = Vec::new();
+        self.raw_rand_contexts.retain(|context| {
+            if is_local_canister(context.request.sender()) {
+                true
+            } else {
+                removed.push(context.clone());
+                false
+            }
+        });
+        removed
     }
 }
 
@@ -454,6 +498,11 @@ impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {
                 .canister_management_calls
                 .stop_canister_call_manager
                 .next_call_id,
+            raw_rand_contexts: item
+                .raw_rand_contexts
+                .iter()
+                .map(|context| context.into())
+                .collect(),
         }
     }
 }
@@ -548,6 +597,11 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
             next_call_id: item.next_stop_canister_call_id,
             stop_canister_calls,
         };
+        let mut raw_rand_contexts = VecDeque::<RawRandContext>::new();
+        for pb_context in item.raw_rand_contexts {
+            let context = RawRandContext::try_from((time, pb_context))?;
+            raw_rand_contexts.push_back(context);
+        }
 
         Ok(Self {
             next_callback_id: item.next_callback_id,
@@ -561,6 +615,7 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
                 install_code_call_manager,
                 stop_canister_call_manager,
             },
+            raw_rand_contexts,
         })
     }
 }
@@ -944,5 +999,81 @@ impl TryFrom<(Time, pb_metadata::StopCanisterCall)> for StopCanisterCall {
                 .time
                 .map_or(time, |t| Time::from_nanos_since_unix_epoch(t.time_nanos)),
         })
+    }
+}
+
+/// Struct for tracking the required information needed for creating a response.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RawRandContext {
+    pub request: Request,
+    pub time: Time,
+    pub execution_round_id: ExecutionRound,
+}
+
+impl From<&RawRandContext> for pb_metadata::RawRandContext {
+    fn from(context: &RawRandContext) -> Self {
+        pb_metadata::RawRandContext {
+            request: Some((&context.request).into()),
+            execution_round_id: context.execution_round_id.get(),
+            time: Some(pb_metadata::Time {
+                time_nanos: context.time.as_nanos_since_unix_epoch(),
+            }),
+        }
+    }
+}
+
+impl TryFrom<(Time, pb_metadata::RawRandContext)> for RawRandContext {
+    type Error = ProxyDecodeError;
+    fn try_from((time, context): (Time, pb_metadata::RawRandContext)) -> Result<Self, Self::Error> {
+        let request: Request = try_from_option_field(context.request, "RawRandContext::request")?;
+
+        Ok(RawRandContext {
+            request,
+            execution_round_id: ExecutionRound::new(context.execution_round_id),
+            time: context
+                .time
+                .map_or(time, |t| Time::from_nanos_since_unix_epoch(t.time_nanos)),
+        })
+    }
+}
+
+mod testing {
+    use super::*;
+
+    /// Early warning system / stumbling block forcing the authors of changes adding
+    /// or removing replicated state fields to think about and/or ask the Message
+    /// Routing team to think about any repercussions to the subnet splitting logic.
+    ///
+    /// If you do find yourself having to make changes to this function, it is quite
+    /// possible that you have not broken anything. But there is a non-zero chance
+    /// for changes to the structure of the replicated state to also require changes
+    /// to the subnet splitting logic or risk breaking it. Which is why this brute
+    /// force check exists.
+    ///
+    /// See `ReplicatedState::split()` and `ReplicatedState::after_split()` for more
+    /// context.
+    #[allow(dead_code)]
+    fn subnet_splitting_change_guard_do_not_modify_without_reading_doc_comment() {
+        //
+        // DO NOT MODIFY WITHOUT READING DOC COMMENT!
+        //
+        let canister_management_calls = CanisterManagementCalls {
+            install_code_call_manager: Default::default(),
+            stop_canister_call_manager: Default::default(),
+        };
+        //
+        // DO NOT MODIFY WITHOUT READING DOC COMMENT!
+        //
+        let _subnet_call_context_manager = SubnetCallContextManager {
+            next_callback_id: 0,
+            setup_initial_dkg_contexts: Default::default(),
+            sign_with_ecdsa_contexts: Default::default(),
+            canister_http_request_contexts: Default::default(),
+            ecdsa_dealings_contexts: Default::default(),
+            bitcoin_get_successors_contexts: Default::default(),
+            bitcoin_send_transaction_internal_contexts: Default::default(),
+            canister_management_calls,
+            raw_rand_contexts: Default::default(),
+        };
     }
 }

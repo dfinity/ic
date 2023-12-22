@@ -230,7 +230,7 @@ impl fmt::Display for ParseAddressError {
             Self::NoData => write!(fmt, "the address contains no data"),
             Self::InvalidBech32Variant { expected, found } => write!(
                 fmt,
-                "invalied bech32 variant, expected: {:?}, found: {:?}",
+                "invalid bech32 variant, expected: {:?}, found: {:?}",
                 expected, found
             ),
         }

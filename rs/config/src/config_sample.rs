@@ -81,6 +81,13 @@ pub const SAMPLE_CONFIG: &str = r#"
         listening_port: 3000,
     },
     // ============================================
+    // Configuration of IPv4 networking
+    // ============================================
+    ipv4_config: {
+        public_address: "",
+        public_gateway: "",
+    },
+    // ============================================
     // Configuration of registry client
     // ============================================
     registry_client: {
@@ -122,9 +129,10 @@ pub const SAMPLE_CONFIG: &str = r#"
         // Alternatives:
         // - EXAMPLE: csp_vault_type: "in_replica",
         //   CspVault is an internal structure of the replica process.
-        // - EXAMPLE: csp_vault_type: { unix_socket: "/some/path/to/socket" },
+        // - EXAMPLE: csp_vault_type: { unix_socket: { logic: "/some/path/to/socket", metrics: "/some/path/to/another_socket" } },
         //   CspVault is run as a separate process, which can be reached via a Unix socket.
-        csp_vault_type: { unix_socket: "/some/path/to/socket" },
+        //   It also has an optional Unix socket for exporting metrics.
+        csp_vault_type: { unix_socket: { logic: "/some/path/to/socket", metrics: "/some/path/to/another_socket" } },
     },
     // ========================================
     // Configuration of the message scheduling.
@@ -348,7 +356,7 @@ pub const SAMPLE_CONFIG: &str = r#"
       poll_delay_duration_ms: 5000
     },
     // ====================================
-    // Configuration of various adapters. 
+    // Configuration of various adapters.
     // ====================================
     adapters_config: {
         bitcoin_testnet_uds_path: "/tmp/bitcoin_uds",
@@ -356,6 +364,8 @@ pub const SAMPLE_CONFIG: &str = r#"
         // specified in the systemd socket file.
         // The canister http adapter socket file is: /ic-os/guestos/rootfs/systemd/system/ic-https-outcalls-adapter.socket
         https_outcalls_uds_path: "/run/ic-node/https-outcalls-adapter/socket",
+    },
+    bitcoin_payload_builder_config: {
     },
 }
 "#;

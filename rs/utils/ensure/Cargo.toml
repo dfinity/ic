@@ -1,0 +1,7 @@
+[package]
+name = "ic-utils-ensure"
+description = "Assert that returns a result."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true

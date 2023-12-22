@@ -1,4 +1,4 @@
-use ic_crypto::threshold_sig_public_key_to_der;
+use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_protobuf::registry::crypto::v1::PublicKey as PbPublicKey;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;

@@ -1,7 +1,10 @@
 [package]
 name = "ic-boundary"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [[bin]]
 name = "ic-boundary"
@@ -17,19 +20,23 @@ async-scoped = { version = "0.7", features = ["use-tokio"] }
 async-trait = "0.1.56"
 axum = "0.6.1"
 axum-server = { version = "0.5.1", features = ["tls-rustls"] }
-bytes = "1.4.0"
+bytes = { workspace = true }
 candid = { workspace = true }
 clap = { version = "4", features = ["derive"] }
 dashmap = "5.3.4"
 ethnum = { workspace = true }
-futures = "0.3.21"
+futures = { workspace = true }
 futures-util = "0.3.28"
 hex = "0.4.3"
 http = "0.2.6"
+http-body = "0.4"
 hyper = "0.14.18"
 hyper-rustls = "0.24.0"
+ic-btc-interface = { workspace = true }
 ic-config = { path = "../../config" }
 ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
+ic-crypto-utils-tls = { path = "../../crypto/utils/tls" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-client = { path = "../../registry/client" }
@@ -37,50 +44,51 @@ ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-local-store = { path = "../../registry/local_store" }
 ic-registry-replicator = { path = "../../orchestrator/registry_replicator" }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-types = { path = "../../types/types" }
+ic-ic00-types = { path = "../../types/ic00_types" }
 instant-acme = "0.3.2"
+jemallocator = "0.3"
+jemalloc-ctl = "0.3"
+lazy_static = "1.4.0"
 mockall = "0.11.4"
-opentelemetry = { version = "0.20", features = ["metrics"] }
-opentelemetry-prometheus = "0.13.0"
-prometheus = "0.13.3"
+moka = { version = "0.12", features = ["future"] }
+prometheus = { workspace = true }
 rand = "0.8.4"
-rcgen = "0.10.0"
+rayon = "1.5.3"
+rcgen = { workspace = true }
+regex = "1.3.9"
 # same feature as in bazel
-reqwest = { version = "0.11.18", features = [
-    "blocking",
-    "json",
-    "multipart",
-    "native-tls",
-    "rustls-tls",
-    "stream",
-] }
+reqwest = { workspace = true }
 rustls = { version = "^0.21.0", features = ["dangerous_configuration"] }
-simple_moving_average = "0.1.2"
-serde = "1.0.163"
-serde_cbor = "0.11.2"
-serde_json = "1.0.96"
-slog = "2.5.2"
+serde = { workspace = true }
+serde_cbor = { workspace = true }
+serde_json = { workspace = true }
+slog = { workspace = true }
 tempfile = "3.6.0"
 thiserror = "1.0.40"
-tokio = { version = "1.19.2", features = ["full"] }
+tokio = { workspace = true }
 tokio-rustls = { version = "0.24.0", features = ["dangerous_configuration"] }
-tower = { version = "0.4.11", features = [
-    "buffer",
-    "limit",
-    "load-shed",
-    "steer",
-    "timeout",
+tower = { workspace = true }
+tower_governor = "0.1"
+tower-http = { version = "0.4.4", features = [
+    "trace",
+    "request-id",
     "util",
+    "compression-full",
 ] }
-tower-http = { version = "0.4.3", features = ["trace", "request-id", "util"] }
 tracing = "0.1.35"
+tracing-slog = "0.2"
 tracing-subscriber = { version = "0.3.11", features = ["json"] }
 url = "2.1.1"
-x509-parser = { version = "0.15.0", features = ["verify"] }
+x509-parser = { version = "0.15.1", features = ["verify"] }
 
 [dev-dependencies]
-wiremock = "=0.5.18"
+wiremock = "=0.5.19"
+ic-base-types = { path = "../../types/base_types" }
 ic-crypto-test-utils-keys = { path = "../../crypto/test_utils/keys" }
+ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
+ic-certification-test-utils = { path = "../../certification/test-utils" }
 ic-registry-client-fake = { path = "../../registry/fake" }
 ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-registry-routing-table = { path = "../../registry/routing_table" }

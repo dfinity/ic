@@ -1,13 +1,14 @@
 [package]
 name = "ic-p2p"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-async-trait = "0.1.36"
 bincode = "1.2.1"
 crossbeam-channel = "0.5.8"
-futures = "0.3.10"
 ic-config = { path = "../config" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
@@ -22,14 +23,14 @@ ic-state-manager = { path = "../state_manager" }
 linked-hash-map = "0.5.3"
 lru = { version = "0.7.8", default-features = false }
 parking_lot = "0.12.1"
-prometheus = { version = "0.12.0", features = [ "process" ] }
-serde = { version = "1.0.99", features = [ "derive" ] }
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
-strum = "0.23.0"
-strum_macros = "0.23.0"
+prometheus = { workspace = true }
+serde = { workspace = true }
+slog = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
 threadpool = "1.8.1"
-tokio = { version = "1.15.0", features = ["full"] }
-tower = "0.4.12"
+tokio = { workspace = true }
+tower = { workspace = true }
 
 [dev-dependencies]
 ic-artifact-manager = { path = "../artifact_manager" }
@@ -37,8 +38,8 @@ ic-artifact-pool = { path = "../artifact_pool" }
 ic-https-outcalls-adapter-client = { path = "../https_outcalls/client" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-execution-environment = { path = "../execution_environment" }
+ic-interfaces-mocks = { path = "../interfaces/mocks" }
 ic-icos-sev = { path = "../ic_os/sev" }
-ic-interfaces-transport-mocks = { path = "../interfaces/transport/mocks" }
 ic-logger = { path = "../monitoring/logger" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-fake = { path = "../registry/fake" }
@@ -48,5 +49,4 @@ ic-replica-setup-ic-network = { path = "../replica/setup_ic_network" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
-mockall = "0.7.2"
 tempfile = "3.1.0"

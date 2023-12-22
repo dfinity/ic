@@ -189,7 +189,7 @@ canister_version_tests ecid =
                               ctr2 @?= 2,
                             simpleTestCase "after failed query" ecid $ \cid -> do
                               ctr1 <- query cid (replyData canister_version) >>= asWord64
-                              query' cid (trap "") >>= isReject [5]
+                              query' cid (trap "") >>= isQueryReject ecid [5]
                               ctr2 <- query cid (replyData canister_version) >>= asWord64
                               ctr1 @?= 1
                               ctr2 @?= 1,
@@ -225,7 +225,7 @@ canister_version_tests ecid =
                               ctr2 @?= 1,
                             simpleTestCase "after failed upgrade" ecid $ \cid -> do
                               ctr1 <- query cid (replyData canister_version) >>= asWord64
-                              ic_install' ic00 (enum #upgrade) cid "" "" >>= isReject [5]
+                              ic_install' ic00 (enumNothing #upgrade) cid "" "" >>= isReject [5]
                               ctr2 <- query cid (replyData canister_version) >>= asWord64
                               ctr1 @?= 1
                               ctr2 @?= 1,
