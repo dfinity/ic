@@ -128,10 +128,7 @@ fn call_context_handling() {
     );
 
     // One outstanding call is closed
-    let callback = call_context_manager
-        .peek_callback(callback_id1)
-        .unwrap()
-        .clone();
+    let callback = call_context_manager.callback(callback_id1).unwrap().clone();
     assert_eq!(
         callback.on_reply,
         WasmClosure {
@@ -182,10 +179,7 @@ fn call_context_handling() {
     );
 
     // The outstanding call of CallContext 2 is back
-    let callback = call_context_manager
-        .peek_callback(callback_id3)
-        .unwrap()
-        .clone();
+    let callback = call_context_manager.callback(callback_id3).unwrap().clone();
     assert_eq!(
         callback.on_reply,
         WasmClosure {
@@ -222,10 +216,7 @@ fn call_context_handling() {
     assert_eq!(call_context_manager.call_contexts().len(), 1);
 
     // the last outstanding call of CallContext 1 is finished
-    let callback = call_context_manager
-        .peek_callback(callback_id2)
-        .unwrap()
-        .clone();
+    let callback = call_context_manager.callback(callback_id2).unwrap().clone();
     assert_eq!(
         callback.on_reply,
         WasmClosure {
