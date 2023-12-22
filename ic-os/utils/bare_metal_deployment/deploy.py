@@ -190,7 +190,7 @@ def get_url_content(url: str) -> Optional[str]:
             log.warning(f"Response from {url}: {response.status_code} - {response.reason}")
             return None
         return response.text
-    except requests.ConnectTimeoutError:
+    except requests.Timeout:
         log.warning(f"Timed out while connecting to {url}")
         return None
 
