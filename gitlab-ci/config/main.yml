@@ -896,16 +896,19 @@ bazel-test-bare-metal:
       --config_path $(realpath  ./ic-os/utils/bare_metal_deployment/zh2-dll01.yaml) \
       --csv_filename $(realpath "$ZH2_DLL01_CSV_SECRETS_PATH") \
       --file_share_ssh_key $(realpath "$ZH2_FILE_SHARE_KEY_PATH") \
-      --file_share_username ci_interim
+      --file_share_username ci_interim \
+      --ci_mode
 
       bazel run //ic-os/setupos/envs/dev-sev:launch_bare_metal -- \
       --config_path $(realpath  ./ic-os/utils/bare_metal_deployment/zh2-dll01.yaml) \
       --csv_filename $(realpath "$ZH2_DLL01_CSV_SECRETS_PATH") \
       --file_share_ssh_key $(realpath "$ZH2_FILE_SHARE_KEY_PATH") \
-      --file_share_username ci_interim
+      --file_share_username ci_interim \
+      --ci_mode
 
       bazel run //ic-os/setupos/envs/prod:launch_bare_metal -- \
       --config_path $(realpath  ./ic-os/utils/bare_metal_deployment/zh2-dll01.yaml) \
       --csv_filename $(realpath "$ZH2_DLL01_CSV_SECRETS_PATH") \
       --file_share_ssh_key $(realpath "$ZH2_FILE_SHARE_KEY_PATH") \
-      --file_share_username ci_interim
+      --file_share_username ci_interim \
+      --ci_mode
