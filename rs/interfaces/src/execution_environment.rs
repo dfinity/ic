@@ -85,7 +85,6 @@ pub enum PerformanceCounterType {
 }
 
 /// System API call ids to track their execution (in alphabetical order).
-#[derive(Debug)]
 pub enum SystemApiCallId {
     /// Tracker for `ic0.accept_message())`
     AcceptMessage,
@@ -197,8 +196,7 @@ pub enum SystemApiCallId {
 
 /// System API call counters, i.e. how many times each tracked System API call
 /// was invoked.
-// #[derive(Serialize, Deserialize, Clone, Debug, Default)]
-#[derive(Clone, Default)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct SystemApiCallCounters {
     /// Counter for `ic0.call_perform()`
     pub call_perform: usize,
@@ -208,6 +206,19 @@ pub struct SystemApiCallCounters {
     pub canister_cycle_balance128: usize,
     /// Counter for `ic0.time()`
     pub time: usize,
+}
+
+impl SystemApiCallCounters {
+    pub fn saturating_add(&mut self, rhs: Self) {
+        self.call_perform = self.call_perform.saturating_add(rhs.call_perform);
+        self.canister_cycle_balance = self
+            .canister_cycle_balance
+            .saturating_add(rhs.canister_cycle_balance);
+        self.canister_cycle_balance128 = self
+            .canister_cycle_balance128
+            .saturating_add(rhs.canister_cycle_balance128);
+        self.time = self.time.saturating_add(rhs.time);
+    }
 }
 
 /// Tracks the available memory on a subnet. The main idea is to separately track
@@ -1173,6 +1184,8 @@ pub struct WasmExecutionOutput {
     pub allocated_bytes: NumBytes,
     pub allocated_message_bytes: NumBytes,
     pub instance_stats: InstanceStats,
+    /// How many times each tracked System API call was invoked.
+    pub system_api_call_counters: SystemApiCallCounters,
 }
 
 impl fmt::Display for WasmExecutionOutput {

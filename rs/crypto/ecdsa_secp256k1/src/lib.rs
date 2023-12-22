@@ -334,6 +334,8 @@ impl PublicKey {
     ///
     /// This is just the encoding of the point. Both compressed and uncompressed
     /// points are accepted
+    ///
+    /// See SEC1 <https://www.secg.org/sec1-v2.pdf> section 2.3.3 for details of the format
     pub fn deserialize_sec1(bytes: &[u8]) -> Result<Self, KeyDecodingError> {
         let key = k256::ecdsa::VerifyingKey::from_sec1_bytes(bytes)
             .map_err(|e| KeyDecodingError::InvalidKeyEncoding(format!("{:?}", e)))?;
@@ -362,6 +364,8 @@ impl PublicKey {
     /// Serialize a public key in SEC1 format
     ///
     /// The point can optionally be compressed
+    ///
+    /// See SEC1 <https://www.secg.org/sec1-v2.pdf> section 2.3.3 for details
     pub fn serialize_sec1(&self, compressed: bool) -> Vec<u8> {
         self.key.to_encoded_point(compressed).as_bytes().to_vec()
     }

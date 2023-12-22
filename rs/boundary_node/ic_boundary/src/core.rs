@@ -14,6 +14,7 @@ use axum::{
     routing::method_routing::{get, post},
     Router,
 };
+use axum_extra::middleware::option_layer;
 use axum_server::{accept::DefaultAcceptor, Server};
 use futures::TryFutureExt;
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
@@ -21,52 +22,47 @@ use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::{LocalStoreImpl, LocalStoreReader};
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::CanisterId;
+use lazy_static::lazy_static;
 use prometheus::Registry;
+use regex::Regex;
 use rustls::cipher_suite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384};
 use tokio::sync::RwLock;
 use tower::ServiceBuilder;
 use tower_http::{compression::CompressionLayer, request_id::MakeRequestUuid, ServiceBuilderExt};
 use tracing::info;
 
-#[cfg(feature = "tls")]
-use {
-    axum::{handler::Handler, Extension},
-    instant_acme::LetsEncrypt,
-};
-
 use crate::{
     cache::{cache_middleware, Cache},
     check::{Checker, Runner as CheckRunner},
     cli::Cli,
-    configuration::{
-        Configurator, Configure, FirewallConfigurator, ServiceConfiguration, TlsConfigurator,
-        WithDeduplication,
-    },
     dns::DnsResolver,
     firewall::{FirewallGenerator, SystemdReloader},
-    http::ReqwestClient,
+    http::{HttpClient, ReqwestClient},
     management,
     metrics::{
         self, HttpMetricParams, HttpMetricParamsStatus, MetricParams, MetricParamsCheck,
         MetricParamsPersist, MetricParamsSnapshot, MetricsCache, MetricsRunner, WithMetrics,
         WithMetricsCheck, WithMetricsPersist, WithMetricsSnapshot,
     },
-    nns::{Load, Loader},
-    persist,
+    persist::{Persister, Routes},
     rate_limiting::RateLimit,
     retry::{retry_request, RetryParams},
     routes::{self, Health, Lookup, Proxy, ProxyRouter, RootKey},
-    snapshot::{SnapshotPersister, Snapshotter},
+    snapshot::{RegistrySnapshot, SnapshotPersister, Snapshotter},
     tls_verify::TlsVerifier,
 };
 
 #[cfg(feature = "tls")]
-use crate::{
-    acme::Acme,
-    tls::{
-        load_or_create_acme_account, CustomAcceptor, Loader as TlsLoader, Provisioner, TokenSetter,
-        WithLoad, WithStore,
+use {
+    crate::{
+        acme::Acme,
+        configuration::{ConfigurationRunner, Configurator, TlsConfigurator},
+        tls::{
+            acme_challenge, load_or_create_acme_account, redirect_to_https, CustomAcceptor,
+            Loader as TlsLoader, Provisioner, TokenOwner, WithLoad, WithStore,
+        },
     },
+    instant_acme::LetsEncrypt,
 };
 
 pub const SERVICE_NAME: &str = "ic_boundary";
@@ -85,9 +81,14 @@ const METRICS_CACHE_CAPACITY: usize = 15 * MB;
 
 pub const MANAGEMENT_CANISTER_ID_PRINCIPAL: CanisterId = CanisterId::ic_00();
 
+lazy_static! {
+    pub static ref HOSTNAME_REGEX: Regex =
+        Regex::new(r"^([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])(\.([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9]))*$").unwrap();
+}
+
 pub async fn main(cli: Cli) -> Result<(), Error> {
     // Metrics
-    let registry: Registry = Registry::new_custom(Some(SERVICE_NAME.into()), None)?;
+    let metrics_registry: Registry = Registry::new_custom(Some(SERVICE_NAME.into()), None)?;
 
     info!(
         msg = format!("Starting {SERVICE_NAME}"),
@@ -145,39 +146,9 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         .context("failed to start registry client")?;
 
     #[cfg(feature = "tls")]
-    let (tls_configurator, tls_acceptor, token) = prepare_tls(&cli, &registry)
+    let (configuration_runner, tls_acceptor, token_owner) = prepare_tls(&cli, &metrics_registry)
         .await
         .context("unable to prepare TLS")?;
-
-    // No-op configurator is used to make compiler/clippy happy
-    // Otherwise the enums in Configurator become single-variant and it complains
-    #[cfg(not(feature = "tls"))]
-    let tls_configurator = TlsConfigurator {};
-
-    // Firewall Configuration
-    let fw_configurator = FirewallConfigurator {};
-    let fw_configurator = WithDeduplication::wrap(fw_configurator);
-    let fw_configurator = WithMetrics(
-        fw_configurator,
-        MetricParams::new(&registry, "configure_firewall"),
-    );
-
-    // Service Configurator
-    let svc_configurator = Configurator {
-        tls: Box::new(tls_configurator),
-        firewall: Box::new(fw_configurator),
-    };
-
-    // Configuration
-    let configuration_runner = ConfigurationRunner::new(
-        Loader::new(registry_client.clone()), // loader
-        svc_configurator,                     // configurator
-    );
-    let configuration_runner = WithMetrics(
-        configuration_runner,
-        MetricParams::new(&registry, "run_configuration"),
-    );
-    let configuration_runner = WithThrottle(configuration_runner, ThrottleParams::new(10 * SECOND));
 
     // Caching
     let cache = cli.cache.cache_size_bytes.map(|x| {
@@ -193,117 +164,22 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     });
 
     // Server / API
-    let proxy_router = ProxyRouter::new(
+    let routers_https = setup_router(
+        registry_snapshot.clone(),
+        routing_table.clone(),
         http_client.clone(),
-        Arc::clone(&routing_table),
-        Arc::clone(&registry_snapshot),
+        &cli,
+        &metrics_registry,
+        cache.clone(),
     );
-
-    let proxy_router = Arc::new(proxy_router);
-
-    let (proxy, lookup, root_key, health) = (
-        proxy_router.clone() as Arc<dyn Proxy>,
-        proxy_router.clone() as Arc<dyn Lookup>,
-        proxy_router.clone() as Arc<dyn RootKey>,
-        proxy_router.clone() as Arc<dyn Health>,
-    );
-
-    let routers_https = {
-        let query_route = {
-            let mut route = Router::new().route(routes::PATH_QUERY, {
-                post(routes::handle_call).with_state(proxy.clone())
-            });
-
-            // Add caching layer if configured
-            if let Some(v) = &cache {
-                route = route.layer(middleware::from_fn_with_state(v.clone(), cache_middleware));
-            }
-
-            route
-        };
-
-        let call_route = {
-            let mut route = Router::new().route(routes::PATH_CALL, {
-                post(routes::handle_call).with_state(proxy.clone())
-            });
-
-            // will panic if ip_rate_limit is Some(0)
-            if let Some(rl) = cli.rate_limiting.rate_limit_per_second_per_ip {
-                route = RateLimit::try_from(rl).unwrap().add_ip_rate_limiting(route);
-            }
-
-            // will panic if subnet_rate_limit is Some(0)
-            if let Some(rl) = cli.rate_limiting.rate_limit_per_second_per_subnet {
-                route = RateLimit::try_from(rl)
-                    .unwrap()
-                    .add_subnet_rate_limiting(route)
-            }
-
-            route
-        };
-
-        let read_state_route = Router::new().route(routes::PATH_READ_STATE, {
-            post(routes::handle_call).with_state(proxy.clone())
-        });
-
-        let status_route = Router::new()
-            .route(routes::PATH_STATUS, {
-                get(routes::status).with_state((root_key.clone(), health.clone()))
-            })
-            .layer(middleware::from_fn_with_state(
-                HttpMetricParamsStatus::new(&registry),
-                metrics::metrics_middleware_status,
-            ));
-
-        let health_route = Router::new().route(routes::PATH_HEALTH, {
-            get(routes::health).with_state(health.clone())
-        });
-
-        let proxy_routes = query_route.merge(call_route).merge(read_state_route).layer(
-            // Layers under ServiceBuilder are executed top-down (opposite to that under Router)
-            // 1st layer wraps 2nd layer and so on
-            ServiceBuilder::new()
-                .concurrency_limit(cli.listen.max_concurrency)
-                .layer(middleware::from_fn(routes::validate_request))
-                .layer(middleware::from_fn(routes::postprocess_response))
-                .layer(
-                    CompressionLayer::new()
-                        .gzip(true)
-                        .br(true)
-                        .zstd(true)
-                        .deflate(true),
-                )
-                .layer(middleware::from_fn(routes::pre_compression))
-                .set_x_request_id(MakeRequestUuid)
-                .layer(middleware::from_fn_with_state(
-                    HttpMetricParams::new(&registry, "http_request_in"),
-                    metrics::metrics_middleware,
-                ))
-                .layer(middleware::from_fn(routes::preprocess_request))
-                .layer(middleware::from_fn(management::btc_mw))
-                .layer(middleware::from_fn_with_state(
-                    lookup.clone(),
-                    routes::lookup_subnet,
-                ))
-                .layer(middleware::from_fn_with_state(
-                    RetryParams {
-                        retry_count: cli.retry.retry_count as usize,
-                        retry_update_call: cli.retry.retry_update_call,
-                    },
-                    retry_request,
-                )),
-        );
-
-        proxy_routes.merge(status_route).merge(health_route)
-    };
 
     #[cfg(feature = "tls")]
     let routers_http = Router::new()
         .route(
             "/.well-known/acme-challenge/:token",
-            get(routes::acme_challenge.layer(Extension(token))),
+            get(acme_challenge).with_state(token_owner),
         )
-        .fallback(routes::redirect_to_https);
+        .fallback(redirect_to_https);
 
     // Use HTTPS routers for HTTP if TLS is disabled
     #[cfg(not(feature = "tls"))]
@@ -315,7 +191,11 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         cli.listen.http_port,
     ))
     .acceptor(DefaultAcceptor)
-    .serve(routers_http.clone().into_make_service());
+    .serve(
+        routers_http
+            .clone()
+            .into_make_service_with_connect_info::<SocketAddr>(),
+    );
 
     // HTTPS
     #[cfg(feature = "tls")]
@@ -324,7 +204,11 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         cli.listen.https_port,
     ))
     .acceptor(tls_acceptor.clone())
-    .serve(routers_https.clone().into_make_service());
+    .serve(
+        routers_https
+            .clone()
+            .into_make_service_with_connect_info::<SocketAddr>(),
+    );
 
     // Metrics
     let metrics_cache = Arc::new(RwLock::new(MetricsCache::new(METRICS_CACHE_CAPACITY)));
@@ -342,17 +226,17 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             cache: metrics_cache.clone(),
         });
 
-    let metrics_runner = WithMetrics(
-        WithThrottle(
+    let metrics_runner = WithThrottle(
+        WithMetrics(
             MetricsRunner::new(
                 metrics_cache,
-                registry.clone(),
+                metrics_registry.clone(),
                 cache,
                 Arc::clone(&registry_snapshot),
             ),
-            ThrottleParams::new(5 * SECOND),
+            MetricParams::new(&metrics_registry, "run_metrics"),
         ),
-        MetricParams::new(&registry, "run_metrics"),
+        ThrottleParams::new(5 * SECOND),
     );
 
     // Snapshots
@@ -378,22 +262,22 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
 
             snapshotter
         },
-        MetricParamsSnapshot::new(&registry),
+        MetricParamsSnapshot::new(&metrics_registry),
     );
 
     let snapshot_runner = WithThrottle(snapshot_runner, ThrottleParams::new(5 * SECOND));
 
     // Checks
     let persister = WithMetricsPersist(
-        persist::Persister::new(Arc::clone(&routing_table)),
-        MetricParamsPersist::new(&registry),
+        Persister::new(Arc::clone(&routing_table)),
+        MetricParamsPersist::new(&metrics_registry),
     );
 
     let checker = Checker::new(
         http_client,
         Duration::from_secs(cli.listen.http_timeout_check),
     );
-    let checker = WithMetricsCheck(checker, MetricParamsCheck::new(&registry));
+    let checker = WithMetricsCheck(checker, MetricParamsCheck::new(&metrics_registry));
     let checker = WithRetryLimited(checker, cli.health.check_retries, Duration::ZERO);
 
     let check_runner = CheckRunner::new(
@@ -403,7 +287,10 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         persister,
         checker,
     );
-    let check_runner = WithMetrics(check_runner, MetricParams::new(&registry, "run_check"));
+    let check_runner = WithMetrics(
+        check_runner,
+        MetricParams::new(&metrics_registry, "run_check"),
+    );
     let check_runner = WithThrottle(
         check_runner,
         ThrottleParams::new(Duration::from_secs(cli.health.check_interval)),
@@ -411,6 +298,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
 
     // Runners
     let runners: Vec<Box<dyn Run>> = vec![
+        #[cfg(feature = "tls")]
         Box::new(configuration_runner),
         Box::new(snapshot_runner),
         Box::new(check_runner),
@@ -498,11 +386,128 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     Ok(())
 }
 
+pub fn setup_router(
+    registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
+    routing_table: Arc<ArcSwapOption<Routes>>,
+    http_client: Arc<dyn HttpClient>,
+    cli: &Cli,
+    metrics_registry: &Registry,
+    cache: Option<Arc<Cache>>,
+) -> Router {
+    let proxy_router = ProxyRouter::new(
+        http_client.clone(),
+        Arc::clone(&routing_table),
+        Arc::clone(&registry_snapshot),
+    );
+
+    let proxy_router = Arc::new(proxy_router);
+
+    let (proxy, lookup, root_key, health) = (
+        proxy_router.clone() as Arc<dyn Proxy>,
+        proxy_router.clone() as Arc<dyn Lookup>,
+        proxy_router.clone() as Arc<dyn RootKey>,
+        proxy_router.clone() as Arc<dyn Health>,
+    );
+
+    let query_route = Router::new()
+        .route(routes::PATH_QUERY, {
+            post(routes::handle_call).with_state(proxy.clone())
+        })
+        .layer(option_layer(cache.map(|x| {
+            middleware::from_fn_with_state(x.clone(), cache_middleware)
+        })));
+
+    let call_route = {
+        let mut route = Router::new().route(routes::PATH_CALL, {
+            post(routes::handle_call).with_state(proxy.clone())
+        });
+
+        // will panic if ip_rate_limit is Some(0)
+        if let Some(rl) = cli.rate_limiting.rate_limit_per_second_per_ip {
+            route = RateLimit::try_from(rl).unwrap().add_ip_rate_limiting(route);
+        }
+
+        // will panic if subnet_rate_limit is Some(0)
+        if let Some(rl) = cli.rate_limiting.rate_limit_per_second_per_subnet {
+            route = RateLimit::try_from(rl)
+                .unwrap()
+                .add_subnet_rate_limiting(route)
+        }
+
+        route
+    };
+
+    let read_state_route = Router::new().route(routes::PATH_READ_STATE, {
+        post(routes::handle_call).with_state(proxy.clone())
+    });
+
+    let status_route = Router::new()
+        .route(routes::PATH_STATUS, {
+            get(routes::status).with_state((root_key.clone(), health.clone()))
+        })
+        .layer(middleware::from_fn_with_state(
+            HttpMetricParamsStatus::new(metrics_registry),
+            metrics::metrics_middleware_status,
+        ));
+
+    let health_route = Router::new().route(routes::PATH_HEALTH, {
+        get(routes::health).with_state(health.clone())
+    });
+
+    let proxy_routes = query_route.merge(call_route).merge(read_state_route).layer(
+        // Layers under ServiceBuilder are executed top-down (opposite to that under Router)
+        // 1st layer wraps 2nd layer and so on
+        ServiceBuilder::new()
+            .concurrency_limit(cli.listen.max_concurrency)
+            .layer(middleware::from_fn(routes::validate_request))
+            .layer(middleware::from_fn(routes::postprocess_response))
+            .set_x_request_id(MakeRequestUuid)
+            .layer(option_layer(
+                (!cli.monitoring.disable_request_logging).then_some(
+                    middleware::from_fn_with_state(
+                        HttpMetricParams::new(metrics_registry, "http_request_in"),
+                        metrics::metrics_middleware,
+                    ),
+                ),
+            ))
+            .layer(middleware::from_fn(routes::preprocess_request))
+            .layer(middleware::from_fn(management::btc_mw))
+            .layer(option_layer(
+                cli.rate_limiting.rate_limit_ledger_transfer.map(|x| {
+                    middleware::from_fn_with_state(
+                        Arc::new(management::LedgerRatelimitState::new(x)),
+                        management::ledger_ratelimit_transfer_mw,
+                    )
+                }),
+            ))
+            .layer(middleware::from_fn_with_state(
+                lookup.clone(),
+                routes::lookup_subnet,
+            ))
+            .layer(middleware::from_fn_with_state(
+                RetryParams {
+                    retry_count: cli.retry.retry_count as usize,
+                    retry_update_call: cli.retry.retry_update_call,
+                },
+                retry_request,
+            )),
+    );
+
+    proxy_routes.merge(status_route).merge(health_route)
+}
+
 #[cfg(feature = "tls")]
 async fn prepare_tls(
     cli: &Cli,
     registry: &Registry,
-) -> Result<(impl Configure, CustomAcceptor, Arc<RwLock<Option<String>>>), Error> {
+) -> Result<(impl Run, CustomAcceptor, Arc<TokenOwner>), Error> {
+    if !HOSTNAME_REGEX.is_match(&cli.tls.hostname) {
+        return Err(anyhow!(
+            "'{}' does not look like a valid hostname",
+            cli.tls.hostname
+        ));
+    }
+
     // TLS Certificates (Ingress)
     let tls_loader = TlsLoader {
         cert_path: cli.tls.tls_cert_path.clone(),
@@ -545,14 +550,11 @@ async fn prepare_tls(
     let acme_obtain = WithRetry(acme_obtain, Duration::from_secs(60));
     let acme_obtain = Box::new(acme_obtain);
 
-    // ACME Token
-    let token: Arc<RwLock<Option<String>>> = Arc::new(RwLock::new(None));
-
-    let token_setter = TokenSetter(Arc::clone(&token));
-    let token_setter = Box::new(token_setter);
+    // ACME Token owner
+    let token_owner = Arc::new(TokenOwner::new());
 
     let tls_provisioner = Provisioner::new(
-        token_setter,
+        Arc::clone(&token_owner),
         acme_order,
         acme_ready,
         acme_finalize,
@@ -562,7 +564,7 @@ async fn prepare_tls(
     let tls_provisioner = WithLoad(
         tls_provisioner,
         tls_loader.clone(),
-        30 * DAY, // Renew if expiration within
+        cli.tls.renew_days_before * DAY, // Renew if expiration within
     );
     let tls_provisioner = Box::new(tls_provisioner);
 
@@ -570,7 +572,6 @@ async fn prepare_tls(
     let tls_acceptor = Arc::new(ArcSwapOption::new(None));
 
     let tls_configurator = TlsConfigurator::new(tls_acceptor.clone(), tls_provisioner);
-    let tls_configurator = WithDeduplication::wrap(tls_configurator);
     let tls_configurator = WithMetrics(
         tls_configurator,
         MetricParams::new(registry, "configure_tls"),
@@ -578,7 +579,24 @@ async fn prepare_tls(
 
     let tls_acceptor = CustomAcceptor::new(tls_acceptor);
 
-    Ok((tls_configurator, tls_acceptor, token))
+    // Service Configurator
+    let svc_configurator = Configurator {
+        tls: Box::new(tls_configurator),
+    };
+
+    // Configuration
+    let configuration_runner = ConfigurationRunner::new(
+        cli.tls.hostname.clone(),
+        svc_configurator, // configurator
+    );
+    let configuration_runner = WithMetrics(
+        configuration_runner,
+        MetricParams::new(registry, "run_configuration"),
+    );
+    let configuration_runner =
+        WithThrottle(configuration_runner, ThrottleParams::new(600 * SECOND));
+
+    Ok((configuration_runner, tls_acceptor, token_owner))
 }
 
 #[async_trait]
@@ -648,39 +666,6 @@ impl<T: Run> Run for WithThrottle<T> {
         self.1.next_time = Some(Instant::now() + self.1.throttle_duration);
 
         self.0.run().await
-    }
-}
-
-pub struct ConfigurationRunner<L, C> {
-    loader: L,
-    configurator: C,
-}
-
-impl<L, C> ConfigurationRunner<L, C> {
-    pub fn new(loader: L, configurator: C) -> Self {
-        Self {
-            loader,
-            configurator,
-        }
-    }
-}
-
-#[async_trait]
-impl<L: Load, C: Configure> Run for ConfigurationRunner<L, C> {
-    async fn run(&mut self) -> Result<(), Error> {
-        let r = self
-            .loader
-            .load()
-            .await
-            .context("failed to load service configuration")?;
-
-        // TLS
-        self.configurator
-            .configure(&ServiceConfiguration::Tls(r.name))
-            .await
-            .context("failed to apply tls configuration")?;
-
-        Ok(())
     }
 }
 

@@ -21,7 +21,8 @@ flate2 = "1.0.22"
 futures = { workspace = true }
 ic-agent = { workspace = true }
 ic-utils = { workspace = true, features = ["raw"] }
-ic-response-verification = "1.2.0"
+ic-response-verification = "2.0"
+ic-http-certification = "2.0"
 idna = "0.3.0"
 instant-acme = "0.3.2"
 leb128 = "0.2.5"

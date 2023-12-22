@@ -24,7 +24,7 @@ use ic_sns_swap::pb::{
 };
 use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSnsesResponse};
 use lazy_static::lazy_static;
-use maplit::{btreemap, hashmap, hashset};
+use maplit::{btreemap, hashmap};
 use std::{
     collections::VecDeque,
     convert::TryFrom,
@@ -205,7 +205,7 @@ impl Environment for MockEnvironment<'_> {
     }
 
     fn heap_growth_potential(&self) -> HeapGrowthPotential {
-        unimplemented!();
+        HeapGrowthPotential::NoIssue
     }
 
     async fn call_canister_method(
@@ -1391,8 +1391,7 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
     use super::*;
     use ic_nervous_system_proto::pb::v1 as pb;
     use ic_sns_init::pb::v1::sns_init_payload;
-    use test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING;
-    use test_data::{IMAGE_1, IMAGE_2};
+    use test_data::{CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING, IMAGE_1, IMAGE_2};
 
     // Alias types from crate::pb::v1::...
     //
@@ -2139,6 +2138,7 @@ fn test_pre_and_post_upgrade_first_time() {
                 followees: vec![NeuronId { id : 3}]
             }
         },
+        account: vec![0; 32],
         ..Default::default()
     };
     let neurons = btreemap! { 1 => neuron1 };
@@ -2191,126 +2191,51 @@ fn test_pre_and_post_upgrade_first_time() {
 }
 
 #[test]
-fn governance_sets_seed_accounts_if_unset() {
-    // Setup the test
-
+fn can_spawn_neurons_only_true_when_not_spawning_and_neurons_ready_to_spawn() {
     let proto = GovernanceProto {
-        // Setting the seed_accounts to None in GovernanceProto should trigger the Governance
-        // canister to set seed_accounts itself.
-        seed_accounts: None,
         ..Default::default()
     };
 
-    // Capture all of the Seed and ECT accounts into a Set to be used to verify
-    // success later.
-    let mut expected_seed_account_ids: HashSet<String> = SEED_ROUND_ACCOUNTS
-        .iter()
-        .map(|(account_id, _)| account_id.to_string())
-        .collect();
-    let mut expected_ect_account_ids: HashSet<String> = ECT_ACCOUNTS
-        .iter()
-        .map(|(account_id, _)| account_id.to_string())
-        .collect();
+    let mock_env = MockEnvironment {
+        expected_call_canister_method_calls: Arc::new(Mutex::new(Default::default())),
+        now: Arc::new(Mutex::new(100)),
+    };
 
-    // Execute code under test
-
-    let governance = Governance::new(
+    let mut governance = Governance::new(
         proto,
-        Box::<MockEnvironment<'_>>::default(),
+        Box::new(mock_env),
         Box::new(StubIcpLedger {}),
         Box::new(StubCMC {}),
     );
+    // No neurons to spawn...
+    assert!(!governance.can_spawn_neurons());
 
-    // Verify
+    governance
+        .neuron_store
+        .add_neuron(Neuron {
+            id: Some(NeuronId { id: 1 }),
+            spawn_at_timestamp_seconds: Some(99),
+            ..Default::default()
+        })
+        .unwrap();
 
-    assert!(governance.heap_data.seed_accounts.is_some());
-    // Assert that seed_accounts is created as expected
-    for seed_account in &governance
-        .heap_data
-        .seed_accounts
-        .as_ref()
-        .unwrap()
-        .accounts
-    {
-        let SeedAccount {
-            account_id,
-            tag_start_timestamp_seconds,
-            tag_end_timestamp_seconds,
-            error_count,
-            neuron_type,
-        } = seed_account;
+    governance.heap_data.spawning_neurons = Some(true);
 
-        // This should be set to their default to be used later during processing.
-        assert_eq!(*tag_start_timestamp_seconds, None);
-        assert_eq!(*tag_end_timestamp_seconds, None);
-        assert_eq!(*error_count, 0);
+    // spawning_neurons is true, so it shouldn't be able to spawn again.
+    assert!(!governance.can_spawn_neurons());
 
-        // Make sure the SeedAccount has the correct Neuron type and is set. Do this by removing
-        // it from the set of expected account ids.
-        match NeuronType::try_from(*neuron_type) {
-            Ok(NeuronType::Seed) => {
-                assert!(expected_seed_account_ids.contains(account_id.as_str()));
-                expected_seed_account_ids.remove(account_id.as_str());
-            }
-            Ok(NeuronType::Ect) => {
-                assert!(expected_ect_account_ids.contains(account_id.as_str()));
-                expected_ect_account_ids.remove(account_id.as_str());
-            }
-            Err(msg) => panic!(
-                "SeedAccount {} has an unknown NeuronType value as i32 {}. Error: {:?}",
-                account_id, neuron_type, msg
-            ),
-            Ok(NeuronType::Unspecified) => panic!(
-                "SeedAccount {} has a disallowed NeuronType value {}",
-                account_id, neuron_type
-            ),
-        }
-    }
+    governance.heap_data.spawning_neurons = None;
 
-    // Make sure no Seed Accounts were skipped
-    assert_eq!(expected_seed_account_ids, hashset! {});
-    assert_eq!(expected_ect_account_ids, hashset! {});
+    // Work to do, no lock, should say yes.
+    assert!(governance.can_spawn_neurons());
 }
 
-/// This test makes sure that seed_accounts survives across upgrades
 #[test]
-fn governance_ignores_if_seed_accounts_is_set() {
-    // Setup the test
+fn topic_min_max_test() {
+    use strum::IntoEnumIterator;
 
-    let expected_seed_accounts = Some(SeedAccounts {
-        accounts: vec![
-            SeedAccount {
-                account_id: "Some Random String".to_string(),
-                tag_start_timestamp_seconds: None,
-                tag_end_timestamp_seconds: None,
-                error_count: 0,
-                neuron_type: NeuronType::Seed as i32,
-            },
-            SeedAccount {
-                account_id: "Some Other Random String".to_string(),
-                tag_end_timestamp_seconds: None,
-                tag_start_timestamp_seconds: None,
-                error_count: 0,
-                neuron_type: NeuronType::Ect as i32,
-            },
-        ],
-    });
-
-    let proto = GovernanceProto {
-        seed_accounts: expected_seed_accounts.clone(),
-        ..Default::default()
-    };
-
-    // Execute code under test
-
-    // Since seed_accounts is None, it should be set after calling new()
-    let governance = Governance::new(
-        proto,
-        Box::<MockEnvironment<'_>>::default(),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
-    );
-
-    assert!(governance.heap_data.seed_accounts.is_some());
-    assert_eq!(governance.heap_data.seed_accounts, expected_seed_accounts);
+    for topic in Topic::iter() {
+        assert!(topic >= Topic::MIN, "Topic::MIN needs to be updated");
+        assert!(topic <= Topic::MAX, "Topic::MAX needs to be updated");
+    }
 }

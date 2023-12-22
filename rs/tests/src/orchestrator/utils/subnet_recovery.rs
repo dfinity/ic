@@ -6,8 +6,8 @@ use crate::orchestrator::utils::rw_message::{
 };
 use crate::orchestrator::utils::ssh_access::execute_bash_command;
 use crate::orchestrator::utils::upgrade::assert_assigned_replica_version;
-use crate::tecdsa::tecdsa_signature_test::{
-    add_ecdsa_key_with_timeout_and_rotation_period, create_new_subnet_with_keys,
+use crate::tecdsa::{
+    add_ecdsa_keys_with_timeout_and_rotation_period, create_new_subnet_with_keys,
     empty_subnet_update, execute_update_subnet_proposal, get_public_key_with_retries,
     get_signature_with_logger, make_key, verify_signature, KEY_ID1,
 };
@@ -271,12 +271,13 @@ pub(crate) fn enable_ecdsa_on_subnet(
     let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
 
-    block_on(add_ecdsa_key_with_timeout_and_rotation_period(
+    block_on(add_ecdsa_keys_with_timeout_and_rotation_period(
         &governance,
         subnet_id,
-        make_key(KEY_ID1),
+        vec![make_key(KEY_ID1)],
         None,
         rotation_period,
+        logger,
     ));
 
     enable_ecdsa_signing_on_subnet(nns_node, canister, subnet_id, logger)
@@ -302,6 +303,8 @@ pub(crate) fn enable_ecdsa_signing_on_subnet(
     block_on(execute_update_subnet_proposal(
         &governance,
         enable_signing_payload,
+        "Enable ECDSA signing",
+        logger,
     ));
 
     get_ecdsa_pub_key(canister, logger)
@@ -347,6 +350,7 @@ pub(crate) fn enable_ecdsa_on_new_subnet(
             subnet_id: Some(root_subnet_id.get()),
         }],
         replica_version,
+        logger,
     ));
 
     let snapshot =
@@ -388,6 +392,8 @@ pub(crate) fn disable_ecdsa_on_subnet(
     block_on(execute_update_subnet_proposal(
         &governance,
         disable_signing_payload,
+        "Disable ECDSA signing",
+        logger,
     ));
 
     info!(logger, "Waiting until signing fails.");

@@ -16,7 +16,7 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateManager, StateManagerError};
 use ic_logger::{debug, fatal, info, warn, ReplicaLogger};
 use ic_metrics::buckets::{add_bucket, decimal_buckets, decimal_buckets_with_zero};
-use ic_metrics::{MetricsRegistry, Timer};
+use ic_metrics::MetricsRegistry;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
@@ -29,6 +29,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{NetworkTopology, ReplicatedState, SubnetTopology};
+use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{
     batch::Batch,
     crypto::KeyPurpose,
@@ -97,14 +98,14 @@ pub const CRITICAL_ERROR_BATCH_TIME_REGRESSION: &str = "mr_batch_time_regression
 /// previous `MessageTime`) were first added to / learned about in a stream.
 struct MessageTime {
     index: StreamIndex,
-    time: Timer,
+    time: Instant,
 }
 
 impl MessageTime {
     fn new(index: StreamIndex) -> Self {
         MessageTime {
             index,
-            time: Timer::start(),
+            time: Instant::now(),
         }
     }
 }
@@ -154,7 +155,7 @@ impl StreamTimeline {
                     // Discard all timeline entries with indexes smaller than the
                     // observed index.
                     Some(entry) if entry.index <= index.into() => {
-                        self.entries.pop_front().unwrap();
+                        self.entries.pop_front();
                         continue;
                     }
                     Some(entry) => break entry,
@@ -162,7 +163,7 @@ impl StreamTimeline {
                 }
             };
 
-            self.histogram.observe(entry.time.elapsed());
+            self.histogram.observe(entry.time.elapsed().as_secs_f64());
         }
     }
 }
@@ -541,6 +542,7 @@ impl BatchProcessorImpl {
             stream_builder,
             log.clone(),
             metrics.clone(),
+            hypervisor_config.query_stats_epoch_length,
         ));
 
         Self {
@@ -556,11 +558,11 @@ impl BatchProcessorImpl {
 
     /// Adds an observation to the `METRIC_PROCESS_BATCH_PHASE_DURATION`
     /// histogram for the given phase.
-    fn observe_phase_duration(&self, phase: &str, timer: &Timer) {
+    fn observe_phase_duration(&self, phase: &str, since: &Instant) {
         self.metrics
             .process_batch_phase_duration
             .with_label_values(&[phase])
-            .observe(timer.elapsed());
+            .observe(since.elapsed().as_secs_f64());
     }
 
     /// Observes metrics related to memory used by canisters. It includes:
@@ -752,15 +754,21 @@ impl BatchProcessorImpl {
                 .map_err(|err| registry_error("public key in transcript", Some(*subnet_id), err))?
                 .value
                 .map(|transcripts| {
-                    ic_crypto_utils_threshold_sig_der::public_key_to_der(
-                        &transcripts.high_threshold.public_key().into_bytes(),
-                    )
-                    .map_err(|err: String| {
-                        Persistent(format!(
-                            "'public key to DER for subnet {}' failed, err: {}",
+                    match ThresholdSigPublicKey::try_from(&transcripts.high_threshold) {
+                        Ok(public_key) => ic_crypto_utils_threshold_sig_der::public_key_to_der(
+                            &public_key.into_bytes(),
+                        )
+                        .map_err(|err: String| {
+                            Persistent(format!(
+                                "'public key to DER for subnet {}' failed, err: {}",
+                                *subnet_id, err
+                            ))
+                        }),
+                        Err(err) => Err(Persistent(format!(
+                            "'public key from transcript for subnet {}' failed, err: {:?}",
                             *subnet_id, err
-                        ))
-                    })
+                        ))),
+                    }
                 })
                 .transpose()?
                 .ok_or_else(|| not_found_error("public key in transcript", Some(*subnet_id)))?;
@@ -916,7 +924,7 @@ impl BatchProcessorImpl {
 impl BatchProcessor for BatchProcessorImpl {
     fn process_batch(&self, batch: Batch) {
         let _process_batch_start = Instant::now();
-        let timer = Timer::start();
+        let since = Instant::now();
 
         // Fetch the mutable tip from StateManager
         let mut state = match self
@@ -953,7 +961,7 @@ impl BatchProcessor for BatchProcessorImpl {
                 .set(batch.batch_number.get() as i64);
             state.after_split();
         }
-        self.observe_phase_duration(PHASE_LOAD_STATE, &timer);
+        self.observe_phase_duration(PHASE_LOAD_STATE, &since);
 
         debug!(self.log, "Processing batch {}", batch.batch_number);
         let commit_height = Height::from(batch.batch_number.get());
@@ -1002,16 +1010,18 @@ impl BatchProcessor for BatchProcessorImpl {
             info!(self.log, "[MALICIOUS]: Delayed execution by {:?}", delay);
         }
 
-        let phase_timer = Timer::start();
+        let phase_since = Instant::now();
 
         self.state_manager.commit_and_certify(
             state_after_round,
             commit_height,
             certification_scope,
         );
-        self.observe_phase_duration(PHASE_COMMIT, &phase_timer);
+        self.observe_phase_duration(PHASE_COMMIT, &phase_since);
 
-        self.metrics.process_batch_duration.observe(timer.elapsed());
+        self.metrics
+            .process_batch_duration
+            .observe(since.elapsed().as_secs_f64());
         self.metrics
             .registry_version
             .set(registry_version.get() as i64);

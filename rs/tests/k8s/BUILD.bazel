@@ -1,0 +1,52 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/prep",
+    "//rs/types/types",
+    "//rs/registry/subnet_type",
+    "//rs/registry/provisional_whitelist",
+    "@crate_index//:anyhow",
+    "@crate_index//:async-std",
+    "@crate_index//:backon",
+    "@crate_index//:cidr",
+    "@crate_index//:clap_4_0_0",
+    "@crate_index//:chrono",
+    "@crate_index//:futures",
+    "@crate_index//:http",
+    "@crate_index//:k8s-openapi",
+    "@crate_index//:kube",
+    "@crate_index//:once_cell",
+    "@crate_index//:rand",
+    "@crate_index//:reqwest",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+    "@crate_index//:serde_yaml",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
+    "@crate_index//:tokio-util",
+    "@crate_index//:tracing",
+    "@crate_index//:tracing-subscriber",
+]
+
+rust_library(
+    name = "tnet",
+    srcs = glob(
+        ["src/**/*.rs"],
+    ),
+    crate_name = "k8s",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "tnet_test",
+    crate = ":tnet",
+    deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "tnetctl",
+    srcs = ["src/main.rs"],
+    deps = [":tnet"] + DEPENDENCIES,
+)

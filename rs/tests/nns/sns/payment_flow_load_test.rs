@@ -12,7 +12,7 @@ use ic_tests::systest;
 
 fn workload_rps70_many_ticket_participants(env: TestEnv) {
     generate_ticket_participants_workload(
-        env,
+        &env,
         70,
         Duration::from_secs(60),
         SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,
@@ -21,7 +21,7 @@ fn workload_rps70_many_ticket_participants(env: TestEnv) {
 
 fn workload_rps65_many_ticket_participants(env: TestEnv) {
     generate_ticket_participants_workload(
-        env,
+        &env,
         65,
         Duration::from_secs(60),
         SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,
@@ -30,7 +30,7 @@ fn workload_rps65_many_ticket_participants(env: TestEnv) {
 
 fn workload_rps60_many_ticket_participants(env: TestEnv) {
     generate_ticket_participants_workload(
-        env,
+        &env,
         60,
         Duration::from_secs(60),
         SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,
@@ -39,7 +39,7 @@ fn workload_rps60_many_ticket_participants(env: TestEnv) {
 
 fn workload_rps55_many_ticket_participants(env: TestEnv) {
     generate_ticket_participants_workload(
-        env,
+        &env,
         55,
         Duration::from_secs(60),
         SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,
@@ -48,7 +48,7 @@ fn workload_rps55_many_ticket_participants(env: TestEnv) {
 
 fn workload_rps50_many_ticket_participants(env: TestEnv) {
     generate_ticket_participants_workload(
-        env,
+        &env,
         50,
         Duration::from_secs(60),
         SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,

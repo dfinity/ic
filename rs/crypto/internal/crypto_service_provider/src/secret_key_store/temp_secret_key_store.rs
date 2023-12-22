@@ -4,10 +4,12 @@ use crate::secret_key_store::{
     SecretKeyStore, SecretKeyStoreInsertionError, SecretKeyStoreWriteError,
 };
 use crate::types::CspSecretKey;
+use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_types::scope::Scope;
 use std::fs;
 use std::fs::Permissions;
 use std::os::unix::fs::PermissionsExt;
+use std::sync::Arc;
 use tempfile::TempDir;
 
 /// This store is opened in a newly created temporary directory, which will
@@ -33,7 +35,12 @@ impl TempSecretKeyStore {
             )
         });
         let temp_file = "temp_sks_data.pb";
-        let store = ProtoSecretKeyStore::open(temp_dir.path(), temp_file, None);
+        let store = ProtoSecretKeyStore::open(
+            temp_dir.path(),
+            temp_file,
+            None,
+            Arc::new(CryptoMetrics::none()),
+        );
         TempSecretKeyStore {
             store,
             _temp_dir: temp_dir,

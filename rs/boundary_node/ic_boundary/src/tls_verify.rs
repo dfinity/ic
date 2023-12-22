@@ -1,6 +1,8 @@
 use std::{sync::Arc, time::SystemTime};
 
 use arc_swap::ArcSwapOption;
+use ic_crypto_internal_basic_sig_ed25519::types::PublicKeyBytes as BasicSigEd25519PublicKeyBytes;
+use ic_crypto_internal_basic_sig_ed25519::types::SignatureBytes as BasicSigEd25519SignatureBytes;
 use ic_crypto_utils_tls::{
     node_id_from_cert_subject_common_name, tls_pubkey_cert_from_rustls_certs,
 };
@@ -102,9 +104,32 @@ impl ServerCertVerifier for TlsVerifier {
             .map_err(|_x| RustlsError::InvalidCertificate(CertificateError::BadEncoding))?;
 
         // Verify the provided self-signed certificate using the public key from registry
-        provided_cert
-            .verify_signature(Some(&node_cert.tbs_certificate.subject_pki))
-            .map_err(|_x| RustlsError::InvalidCertificate(CertificateError::BadSignature))?;
+        let node_tls_pubkey_from_registry = BasicSigEd25519PublicKeyBytes::try_from(
+            node_cert
+                .tbs_certificate
+                .subject_pki
+                .subject_public_key
+                .data
+                .to_vec(),
+        )
+        .map_err(|e| {
+            RustlsError::InvalidCertificate(CertificateError::Other(Arc::from(Box::from(format!(
+                "node cert: invalid Ed25519 public key: {e}"
+            )))))
+        })?;
+        let provided_cert_sig =
+            BasicSigEd25519SignatureBytes::try_from(provided_cert.signature_value.data.to_vec())
+                .map_err(|e| {
+                    RustlsError::InvalidCertificate(CertificateError::Other(Arc::from(Box::from(
+                        format!("node cert: invalid Ed25519 signature: {e}"),
+                    ))))
+                })?;
+        ic_crypto_internal_basic_sig_ed25519::verify(
+            &provided_cert_sig,
+            provided_cert.tbs_certificate.as_ref(),
+            &node_tls_pubkey_from_registry,
+        )
+        .map_err(|_x| RustlsError::InvalidCertificate(CertificateError::BadSignature))?;
 
         // Check if the certificate is valid at provided `now` time
         if !provided_cert.validity.is_valid_at(

@@ -5,7 +5,6 @@ mod query_cache;
 mod query_call_graph;
 mod query_context;
 mod query_scheduler;
-pub mod query_stats;
 #[cfg(test)]
 mod tests;
 
@@ -26,6 +25,7 @@ use ic_interfaces::execution_environment::{
 use ic_interfaces_state_manager::{Labeled, StateReader};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
+use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::batch::QueryStats;
@@ -51,7 +51,6 @@ use tokio::sync::oneshot;
 use tower::{util::BoxCloneService, Service};
 
 pub(crate) use self::query_scheduler::{QueryScheduler, QuerySchedulerFlag};
-use self::query_stats::QueryStatsCollector;
 use ic_ic00_types::{BitcoinGetBalanceArgs, BitcoinGetUtxosArgs, Payload, QueryMethod};
 use ic_replicated_state::NetworkTopology;
 
@@ -130,6 +129,7 @@ impl InternalHttpQueryHandler {
         local_query_execution_stats: QueryStatsCollector,
     ) -> Self {
         let query_cache_capacity = config.query_cache_capacity;
+        let query_cache_max_expiry_time = config.query_cache_max_expiry_time;
         Self {
             log,
             hypervisor,
@@ -139,7 +139,11 @@ impl InternalHttpQueryHandler {
             max_instructions_per_query,
             cycles_account_manager,
             local_query_execution_stats,
-            query_cache: query_cache::QueryCache::new(metrics_registry, query_cache_capacity),
+            query_cache: query_cache::QueryCache::new(
+                metrics_registry,
+                query_cache_capacity,
+                query_cache_max_expiry_time,
+            ),
         }
     }
 
@@ -226,7 +230,7 @@ impl QueryHandler for InternalHttpQueryHandler {
 
         // Check the query cache first (if the query caching is enabled).
         // If a valid cache entry found, the result will be immediately returned.
-        // Otherwise, the key and the env will be kept for the `insert` below.
+        // Otherwise, the key and the env will be kept for the `push` below.
         let (cache_entry_key, cache_entry_env) = if self.config.query_caching == FlagStatus::Enabled
         {
             let key = query_cache::EntryKey::from(&query);
@@ -274,12 +278,13 @@ impl QueryHandler for InternalHttpQueryHandler {
             Arc::clone(&self.cycles_account_manager),
             &measurement_scope,
         );
+        context.observe_system_api_calls(&self.metrics.query_system_api_calls);
 
-        // Add the query execution result to the query cache  (if the query caching is enabled).
+        // Add the query execution result to the query cache (if the query caching is enabled).
         if self.config.query_caching == FlagStatus::Enabled {
             if let (Some(key), Some(env)) = (cache_entry_key, cache_entry_env) {
-                self.query_cache
-                    .push(key, query_cache::EntryValue::new(env, result.clone()));
+                let call_counters = context.system_api_call_counters();
+                self.query_cache.push(key, env, &result, call_counters);
             }
         }
         result

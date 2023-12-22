@@ -13,16 +13,15 @@ use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::pb::v1::neuron::DissolveState;
 use ic_nns_governance::pb::v1::Neuron;
 use ic_rosetta_api::convert::{
-    from_hex, from_model_account_identifier, operations_to_requests, principal_id_from_public_key,
-    to_hex, to_model_account_identifier,
+    from_hex, from_model_account_identifier, operations_to_requests, to_hex,
+    to_model_account_identifier,
 };
 use ic_rosetta_api::errors::ApiError;
 use ic_rosetta_api::models::amount::{signed_amount, tokens_to_amount};
 use ic_rosetta_api::models::operation::OperationType;
 use ic_rosetta_api::models::{
     ConstructionCombineResponse, ConstructionParseResponse, ConstructionPayloadsRequestMetadata,
-    ConstructionPayloadsResponse, CurveType, Error, PublicKey, RosettaSupportedKeyPair, Signature,
-    SignatureType,
+    ConstructionPayloadsResponse, CurveType, Error, PublicKey, Signature, SignatureType,
 };
 use ic_rosetta_api::models::{ConstructionSubmitResponse, Error as RosettaError};
 use ic_rosetta_api::request::request_result::RequestResult;
@@ -43,6 +42,8 @@ use icp_ledger::{AccountIdentifier, Operation};
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::{thread_rng, SeedableRng};
+use rosetta_core::convert::principal_id_from_public_key;
+use rosetta_core::models::RosettaSupportedKeyPair;
 use rosetta_core::objects::ObjectMap;
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -402,7 +403,10 @@ where
     );
 
     let metadata_res = ros
-        .construction_metadata(pre_res.options, Some(all_sender_pks.clone()))
+        .construction_metadata(
+            Some(pre_res.options.try_into().unwrap()),
+            Some(all_sender_pks.clone()),
+        )
         .await
         .unwrap()?;
     let dry_run_suggested_fee = metadata_res.suggested_fee.map(|mut suggested_fee| {
@@ -443,7 +447,10 @@ where
         "Preprocess should report that sender's pk is required"
     );
     let metadata_res = ros
-        .construction_metadata(pre_res.options, Some(all_sender_pks.clone()))
+        .construction_metadata(
+            Some(pre_res.options.try_into().unwrap()),
+            Some(all_sender_pks.clone()),
+        )
         .await
         .unwrap()?;
     let suggested_fee = metadata_res.suggested_fee.clone().map(|mut suggested_fee| {

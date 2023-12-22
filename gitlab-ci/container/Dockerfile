@@ -24,7 +24,7 @@ RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /
     curl -fsSL "https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable/xUbuntu_20.04/Release.key" | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/devel_kubic_libcontainers_stable.gpg > /dev/null && \
     echo 'deb http://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_20.04/ /' | sudo tee /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list && \
     apt -yq update && \
-    apt -yqq install --no-install-recommends docker-ce-cli podman buildah zip fuse-overlayfs
+    apt -yqq install --no-install-recommends docker-ce-cli podman buildah zip fuse-overlayfs xtail
 
 # install afl & gsutils deps for bazel-fuzzers
 RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
@@ -54,8 +54,7 @@ RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.12.2/
     chmod 777 /usr/bin/bazel
 
 ARG nvm_version=v0.39.1
-ARG dependency_mgmt_agent_js_node_version=16
-ARG dependency_mgmt_nns_dapp_node_version=18
+ARG dependency_mgmt_nns_dapp_node_version=18.17.1
 ARG dependency_mgmt_default_node_version=19
 ENV NVM_DIR=/opt/nvm
 RUN mkdir $NVM_DIR && \
@@ -64,7 +63,6 @@ RUN mkdir $NVM_DIR && \
 COPY typescript/service-worker/.nvmrc /tmp/sw.npmrc
 RUN . /opt/nvm/nvm.sh && \
     nvm install $(cat /tmp/sw.npmrc) && \
-    nvm install ${dependency_mgmt_agent_js_node_version} && \
     nvm install ${dependency_mgmt_nns_dapp_node_version} && \
     nvm install ${dependency_mgmt_default_node_version}
 

@@ -11,11 +11,19 @@ echo "Bazel version: $(bazel version)"
 
 AWS_CREDS="${HOME}/.aws/credentials"
 mkdir -p "$(dirname "${AWS_CREDS}")"
-ln -fs "${AWS_SHARED_CREDENTIALS_FILE}" "${AWS_CREDS}"
+# handle github and gitlab differnetly
+if [ -n "${AWS_SHARED_CREDENTIALS_FILE+x}" ]; then
+    ln -fs "${AWS_SHARED_CREDENTIALS_FILE}" "${AWS_CREDS}"
+elif [ -n "${AWS_SHARED_CREDENTIALS_CONTENT+x}" ]; then
+    echo "$AWS_SHARED_CREDENTIALS_CONTENT" >"$AWS_CREDS"
+else
+    echo '$AWS_SHARED_CREDENTIALS_CONTENT or $AWS_SHARED_CREDENTIALS_FILE has to be set' >&2
+    exit 1
+fi
 
 GITLAB_TOKEN="${HOME}/.gitlab/api_token"
 mkdir -p "$(dirname "${GITLAB_TOKEN}")"
-echo "$GITLAB_API_TOKEN" >"${GITLAB_TOKEN}"
+echo "${GITLAB_API_TOKEN:-}" >"${GITLAB_TOKEN}"
 
 ic_version_rc_only="0000000000000000000000000000000000000000"
 if [ "$CI_COMMIT_REF_PROTECTED" = "true" ]; then
@@ -38,7 +46,7 @@ buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" "${CI_JOB_NAME}-bazel-cmd" 
     ${BAZEL_STARTUP_ARGS} \
     ${BAZEL_COMMAND} \
     ${BAZEL_CI_CONFIG} \
-    --build_metadata=BUILDBUDDY_LINKS="[GitLab CI Job](${CI_JOB_URL})" \
+    --build_metadata=BUILDBUDDY_LINKS="[CI Job](${CI_JOB_URL})" \
     --ic_version="${CI_COMMIT_SHA}" \
     --ic_version_rc_only="${ic_version_rc_only}" \
     --rc="${RC:-"False"}" \
@@ -52,5 +60,6 @@ if [ "$EXIT_CODE" == "38" ]; then
     # ERROR: The Build Event Protocol upload failed: Not retrying publishBuildEvents, no more attempts left: status='Status{code=CANCELLED, description=context canceled, cause=null}' CANCELLED: CANCELLED: context canceled CANCELLED: CANCELLED: context canceled
     #Error: exit status 38
 else
+    echo "bazel process exited with $EXIT_CODE" >&2
     exit "$EXIT_CODE"
 fi

@@ -221,6 +221,26 @@ fn can_persist_and_load_an_empty_page_map() {
 }
 
 #[test]
+fn can_load_a_page_map_without_files() {
+    let tmp = tempfile::Builder::new()
+        .prefix("checkpoints")
+        .tempdir()
+        .unwrap();
+    let heap_file = tmp.path().join("missing_file");
+
+    let loaded_map = PageMap::open(
+        &heap_file,
+        &[],
+        Height::new(0),
+        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+    )
+    .expect("opening an empty page map must succeed");
+
+    // base_height will be different, but is not part of eq
+    assert_eq!(PageMap::new_for_testing(), loaded_map);
+}
+
+#[test]
 fn returns_an_error_if_file_size_is_not_a_multiple_of_page_size() {
     use std::io::Write;
 

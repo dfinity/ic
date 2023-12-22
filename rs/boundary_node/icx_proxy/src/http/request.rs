@@ -4,7 +4,7 @@ use crate::http::headers::REQUIRE_CERTIFICATION_HEADER_NAME;
 use crate::proxy::REQUEST_BODY_SIZE_LIMIT;
 use hyper::http::request::Parts;
 use hyper::{Body, Uri};
-use ic_response_verification::types::Request;
+use ic_http_certification::HttpRequest as Request;
 use tracing::trace;
 
 pub struct HttpRequest {

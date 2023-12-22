@@ -199,7 +199,10 @@ pub fn block(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::common::{storage::types::RosettaBlock, types::BlockTransactionResponseBuilder};
+    use crate::common::{
+        storage::types::{RosettaBlock, Tokens},
+        types::BlockTransactionResponseBuilder,
+    };
     use ic_icrc1_test_utils::valid_blockchain_strategy;
     use proptest::prelude::*;
 
@@ -211,7 +214,7 @@ mod test {
             ..ProptestConfig::default()
         })]
                        #[test]
-                    fn test_network_status_service(blockchain in valid_blockchain_strategy(BLOCKHAIN_LENGTH)){
+                    fn test_network_status_service(blockchain in valid_blockchain_strategy::<Tokens>(BLOCKHAIN_LENGTH)){
                         let storage_client_memory = Arc::new(StorageClient::new_in_memory().unwrap());
                         let mut rosetta_blocks = vec![];
                         for (index,block) in blockchain.clone().into_iter().enumerate(){
@@ -241,7 +244,7 @@ mod test {
                     }
 
                     #[test]
-                    fn test_block_service(blockchain in valid_blockchain_strategy(BLOCKHAIN_LENGTH)){
+                    fn test_block_service(blockchain in valid_blockchain_strategy::<Tokens>(BLOCKHAIN_LENGTH)){
                         let storage_client_memory = Arc::new(StorageClient::new_in_memory().unwrap());
                         let invalid_block_hash = "0x1234".to_string();
                         let invalid_block_idx = blockchain.len() as u64 + 1;
@@ -360,7 +363,7 @@ mod test {
             }
 
             #[test]
-            fn test_block_transaction_service(blockchain in valid_blockchain_strategy(BLOCKHAIN_LENGTH)){
+            fn test_block_transaction_service(blockchain in valid_blockchain_strategy::<Tokens>(BLOCKHAIN_LENGTH)){
                 let storage_client_memory = Arc::new(StorageClient::new_in_memory().unwrap());
                 let invalid_block_hash = "0x1234".to_string();
                 let invalid_block_idx = blockchain.len() as u64 + 1;

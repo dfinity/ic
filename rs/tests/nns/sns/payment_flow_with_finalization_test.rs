@@ -5,9 +5,8 @@ use ic_tests::driver::test_env::TestEnv;
 use ic_tests::driver::test_env_api::NnsCanisterWasmStrategy;
 use ic_tests::nns_tests::neurons_fund;
 use ic_tests::nns_tests::neurons_fund::NnsNfNeuron;
-use ic_tests::nns_tests::sns_deployment;
 use ic_tests::nns_tests::{
-    sns_deployment::{generate_ticket_participants_workload, initiate_token_swap},
+    sns_deployment, sns_deployment::generate_ticket_participants_workload, swap_finalization,
     swap_finalization::finalize_committed_swap,
 };
 use ic_tests::sns_client::test_create_service_nervous_system_proposal;
@@ -25,20 +24,21 @@ fn create_service_nervous_system_proposal() -> CreateServiceNervousSystem {
 }
 
 fn nns_nf_neurons() -> Vec<NnsNfNeuron> {
-    let cf_contribution = create_service_nervous_system_proposal()
+    let max_nf_contribution = create_service_nervous_system_proposal()
         .swap_parameters
         .unwrap()
-        .neurons_fund_investment_icp
+        .maximum_direct_participation_icp
         .unwrap()
         .e8s
-        .unwrap();
+        .unwrap()
+        * 2;
 
-    neurons_fund::initial_nns_neurons(cf_contribution * 100, 1)
+    neurons_fund::initial_nns_neurons(max_nf_contribution * 10, 1)
 }
 
-fn sns_setup_legacy(env: TestEnv) {
-    sns_deployment::setup_legacy(
-        env,
+fn sns_setup_with_one_proposal(env: TestEnv) {
+    sns_deployment::setup(
+        &env,
         vec![],
         nns_nf_neurons(),
         create_service_nervous_system_proposal(),
@@ -47,11 +47,8 @@ fn sns_setup_legacy(env: TestEnv) {
     );
 }
 
-/// Initiate the token swap with the parameters returned by
-/// [`create_service_nervous_system_proposal`] (rather than the default
-/// parameters)
-fn initiate_token_swap_with_custom_parameters(env: TestEnv) {
-    initiate_token_swap(env, create_service_nervous_system_proposal());
+fn wait_for_swap_to_start(env: TestEnv) {
+    block_on(swap_finalization::wait_for_swap_to_start(&env));
 }
 
 /// Creates ticket participants which will contribute in such a way that they'll hit max_icp_e8s with min_participants.
@@ -70,18 +67,14 @@ fn generate_ticket_participants_workload_necessary_to_close_the_swap(env: TestEn
     let num_participants = swap_params.minimum_participants.unwrap();
 
     // Calculate a value for `contribution_per_user` that will cause the icp
-    // raised by the swap to exactly equal `params.max_icp_e8s - cf_contribution`.
-    let cf_contribution = create_service_nervous_system_proposal()
-        .swap_parameters
-        .unwrap()
-        .neurons_fund_investment_icp
-        .unwrap()
-        .e8s
-        .unwrap();
-
+    // raised by the swap to exactly equal `params.max_icp_e8s`.
     let contribution_per_user = ic_tests::util::divide_perfectly(
-        "max_icp_e8s",
-        swap_params.maximum_icp.unwrap().e8s.unwrap() - cf_contribution,
+        "maximum_direct_participation_icp",
+        swap_params
+            .maximum_direct_participation_icp
+            .unwrap()
+            .e8s
+            .unwrap(),
         num_participants,
     )
     .unwrap();
@@ -90,7 +83,7 @@ fn generate_ticket_participants_workload_necessary_to_close_the_swap(env: TestEn
     // So if we set rps to `1`, and the duration to `num_participants`, we'll
     // have `num_participants` participants.
     generate_ticket_participants_workload(
-        env,
+        &env,
         1,
         Duration::from_secs(num_participants),
         contribution_per_user,
@@ -100,14 +93,14 @@ fn generate_ticket_participants_workload_necessary_to_close_the_swap(env: TestEn
 fn finalize_swap(env: TestEnv) {
     let create_service_nervous_system_proposal = create_service_nervous_system_proposal();
     block_on(finalize_committed_swap(
-        env,
+        &env,
         create_service_nervous_system_proposal,
     ));
 }
 
-/// This test is similar to //rs/tests/nns/sns:payment_flow_test, except it also finalizes the swap.
-/// A load test is currently not possible because finalization is too slow. This will be fixed during
-/// one-proposal, so a load test will be added then.
+/// Creates an SNS and participates it enough to close the swap, then checks that the swap
+/// finalizes as expected.
+/// A load test that includes finalization is currently not possible because finalization is too slow.
 ///
 /// Runbook:
 /// 1. Install NNS (with N users, each with X ICP) and SNS
@@ -126,8 +119,8 @@ fn finalize_swap(env: TestEnv) {
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_overall_timeout(Duration::from_secs(15 * 60)) // 15 min
-        .with_setup(sns_setup_legacy)
-        .add_test(systest!(initiate_token_swap_with_custom_parameters))
+        .with_setup(sns_setup_with_one_proposal)
+        .add_test(systest!(wait_for_swap_to_start))
         .add_test(systest!(
             generate_ticket_participants_workload_necessary_to_close_the_swap
         ))

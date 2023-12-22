@@ -666,7 +666,9 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             let subnet_topology = network_topology.subnets.get(&subnet_id).unwrap();
             assert_eq!(
                 ic_crypto_utils_threshold_sig_der::public_key_to_der(
-                    &transcript.public_key().into_bytes()
+                    &ThresholdSigPublicKey::try_from(transcript)
+                        .expect("should extract public key from high threshold transcript")
+                        .into_bytes()
                 )
                 .unwrap(),
                 subnet_topology.public_key,

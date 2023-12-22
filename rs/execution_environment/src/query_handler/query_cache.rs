@@ -1,11 +1,12 @@
 use ic_base_types::{CanisterId, NumBytes};
 use ic_error_types::UserError;
+use ic_interfaces::execution_environment::SystemApiCallCounters;
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{ingress::WasmResult, messages::UserQuery, CountBytes, Cycles, Time, UserId};
 use ic_utils_lru_cache::LruCache;
 use prometheus::{Histogram, IntCounter, IntGauge};
-use std::{mem::size_of_val, sync::Mutex};
+use std::{mem::size_of_val, sync::Mutex, time::Duration};
 
 use crate::metrics::duration_histogram;
 
@@ -16,13 +17,17 @@ mod tests;
 /// Query Cache metrics.
 pub(crate) struct QueryCacheMetrics {
     pub hits: IntCounter,
+    pub hits_with_ignored_time: IntCounter,
+    pub hits_with_ignored_canister_balance: IntCounter,
     pub misses: IntCounter,
     pub evicted_entries: IntCounter,
     pub evicted_entries_duration: Histogram,
     pub invalidated_entries: IntCounter,
     pub invalidated_entries_by_time: IntCounter,
+    pub invalidated_entries_by_max_expiry_time: IntCounter,
     pub invalidated_entries_by_canister_version: IntCounter,
     pub invalidated_entries_by_canister_balance: IntCounter,
+    pub invalidated_entries_by_nested_call: IntCounter,
     pub invalidated_entries_duration: Histogram,
     pub count_bytes: IntGauge,
     pub len: IntGauge,
@@ -34,6 +39,14 @@ impl QueryCacheMetrics {
             hits: metrics_registry.int_counter(
                 "execution_query_cache_hits_total",
                 "The total number of replica side query cache hits",
+            ),
+            hits_with_ignored_time: metrics_registry.int_counter(
+                "execution_query_cache_hits_with_ignored_time_total",
+                "The total number of cache hits into entries with ignored time",
+            ),
+            hits_with_ignored_canister_balance: metrics_registry.int_counter(
+                "execution_query_cache_hits_with_ignored_canister_balance_total",
+                "The total number of cache hits into entries with ignored canister balance",
             ),
             misses: metrics_registry.int_counter(
                 "execution_query_cache_misses_total",
@@ -56,6 +69,10 @@ impl QueryCacheMetrics {
                 "execution_query_cache_invalidated_entries_by_time_total",
                 "The total number of invalidated entries due to the changed time",
             ),
+            invalidated_entries_by_max_expiry_time: metrics_registry.int_counter(
+                "execution_query_cache_invalidated_entries_by_max_expiry_time_total",
+                "The total number of invalidated entries due to the max expiry time",
+            ),
             invalidated_entries_by_canister_version: metrics_registry.int_counter(
                 "execution_query_cache_invalidated_entries_by_canister_version_total",
                 "The total number of invalidated entries due to the changed canister version",
@@ -63,6 +80,10 @@ impl QueryCacheMetrics {
             invalidated_entries_by_canister_balance: metrics_registry.int_counter(
                 "execution_query_cache_invalidated_entries_by_canister_balance_total",
                 "The total number of invalidated entries due to the changed canister balance",
+            ),
+            invalidated_entries_by_nested_call: metrics_registry.int_counter(
+                "execution_query_cache_invalidated_entries_by_nested_call_total",
+                "The total number of invalidated entries due to a nested call",
             ),
             invalidated_entries_duration: duration_histogram(
                 "execution_query_cache_invalidated_entries_duration_seconds",
@@ -86,7 +107,7 @@ impl QueryCacheMetrics {
 ///
 /// The key is to distinguish query cache entries, i.e. entries with different
 /// keys are (almost) completely independent from each other.
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Clone, Eq, Hash, PartialEq)]
 pub(crate) struct EntryKey {
     /// Query source.
     pub source: UserId,
@@ -116,24 +137,18 @@ impl From<&UserQuery> for EntryKey {
 }
 
 ////////////////////////////////////////////////////////////////////////
-/// Query Cache entry environment metadata.
+/// Query Cache entry environment metadata captured before the query execution.
 ///
-/// The structure captures the environment metadata. The cache entry is valid
-/// only when its environment metadata matches the current state environment.
+/// The cache entry is valid as long as the metadata is unchanged,
+/// or it can be proven that the query does not depend on the change.
 #[derive(PartialEq)]
 pub(crate) struct EntryEnv {
-    /// The Consensus-determined time when the cache entry was created.
+    /// The consensus-determined time when the query is executed.
     pub batch_time: Time,
-    /// Receiving canister version.
+    /// Receiving canister version (includes both canister updates and upgrades).
     pub canister_version: u64,
     /// Receiving canister cycles balance.
     pub canister_balance: Cycles,
-}
-
-impl CountBytes for EntryEnv {
-    fn count_bytes(&self) -> usize {
-        size_of_val(self)
-    }
 }
 
 impl TryFrom<(&EntryKey, &ReplicatedState)> for EntryEnv {
@@ -152,27 +167,59 @@ impl TryFrom<(&EntryKey, &ReplicatedState)> for EntryEnv {
 ////////////////////////////////////////////////////////////////////////
 /// Query Cache entry value.
 pub(crate) struct EntryValue {
+    /// Query Cache entry environment metadata captured before the query execution.
     env: EntryEnv,
+    /// The result produced by the query.
     result: Result<WasmResult, UserError>,
+    /// If set, the `env.batch_time` might be ignored.
+    ignore_batch_time: bool,
+    /// If set, the `env.canister_balance` might be ignored.
+    ignore_canister_balance: bool,
 }
 
 impl CountBytes for EntryValue {
     fn count_bytes(&self) -> usize {
-        self.env.count_bytes() + self.result.count_bytes()
+        size_of_val(self) + self.result.count_bytes()
     }
 }
 
 impl EntryValue {
-    pub(crate) fn new(env: EntryEnv, result: Result<WasmResult, UserError>) -> Self {
-        Self { env, result }
+    pub(crate) fn new(
+        env: EntryEnv,
+        result: Result<WasmResult, UserError>,
+        system_api_call_counters: &SystemApiCallCounters,
+    ) -> EntryValue {
+        // It's safe to ignore `batch_time` changes if the query never calls `ic0.time()`.
+        let ignore_batch_time = system_api_call_counters.time == 0;
+        // It's safe to ignore `canister_balance` changes if the query never checks the balance.
+        let ignore_canister_balance = system_api_call_counters.canister_cycle_balance == 0
+            && system_api_call_counters.canister_cycle_balance128 == 0;
+        EntryValue {
+            env,
+            result,
+            ignore_batch_time,
+            ignore_canister_balance,
+        }
     }
 
-    fn is_valid(&self, env: &EntryEnv) -> bool {
-        self.env == *env
+    fn is_valid(&self, env: &EntryEnv, max_expiry_time: Duration) -> bool {
+        self.is_valid_time(env)
+            && self.is_not_expired(env, max_expiry_time)
+            && self.is_valid_canister_version(env)
+            && self.is_valid_canister_balance(env)
     }
 
     fn is_valid_time(&self, env: &EntryEnv) -> bool {
-        self.env.batch_time == env.batch_time
+        self.ignore_batch_time || self.env.batch_time == env.batch_time
+    }
+
+    /// Check cache entry max expiration time.
+    fn is_not_expired(&self, env: &EntryEnv, max_expiry_time: Duration) -> bool {
+        if let Some(duration) = env.batch_time.checked_sub(self.env.batch_time) {
+            duration <= max_expiry_time
+        } else {
+            true
+        }
     }
 
     fn is_valid_canister_version(&self, env: &EntryEnv) -> bool {
@@ -180,7 +227,17 @@ impl EntryValue {
     }
 
     fn is_valid_canister_balance(&self, env: &EntryEnv) -> bool {
-        self.env.canister_balance == env.canister_balance
+        self.ignore_canister_balance || self.env.canister_balance == env.canister_balance
+    }
+
+    /// Return true if the time difference was ignored.
+    fn is_ignored_time(&self, env: &EntryEnv) -> bool {
+        self.env.batch_time != env.batch_time && self.ignore_batch_time
+    }
+
+    /// Return true if the canister balance difference was ignored.
+    fn is_ignored_canister_balance(&self, env: &EntryEnv) -> bool {
+        self.env.canister_balance != env.canister_balance && self.ignore_canister_balance
     }
 
     fn result(&self) -> Result<WasmResult, UserError> {
@@ -198,7 +255,9 @@ pub(crate) struct QueryCache {
     // We can't use `RwLock`, as the `LruCache::get()` requires mutable reference
     // to update the LRU.
     cache: Mutex<LruCache<EntryKey, EntryValue>>,
-    // Query cache metrics (public for tests)
+    /// The upper limit on how long the cache entry stays valid in the query cache.
+    max_expiry_time: Duration,
+    /// Query cache metrics (public for tests)
     pub(crate) metrics: QueryCacheMetrics,
 }
 
@@ -209,13 +268,20 @@ impl CountBytes for QueryCache {
 }
 
 impl QueryCache {
-    pub(crate) fn new(metrics_registry: &MetricsRegistry, capacity: NumBytes) -> Self {
+    /// Create a new `QueryCache` instance.
+    pub(crate) fn new(
+        metrics_registry: &MetricsRegistry,
+        capacity: NumBytes,
+        max_expiry_time: Duration,
+    ) -> Self {
         QueryCache {
             cache: Mutex::new(LruCache::new(capacity)),
+            max_expiry_time,
             metrics: QueryCacheMetrics::new(metrics_registry),
         }
     }
 
+    /// Return the cached `Result` if it's still valid, updating the metrics.
     pub(crate) fn get_valid_result(
         &self,
         key: &EntryKey,
@@ -225,12 +291,17 @@ impl QueryCache {
         let now = env.batch_time;
 
         if let Some(value) = cache.get(key) {
-            if value.is_valid(env) {
+            if value.is_valid(env, self.max_expiry_time) {
                 let res = value.result();
                 // Update the metrics.
                 self.metrics.hits.inc();
-                let count_bytes = cache.count_bytes() as i64;
-                self.metrics.count_bytes.set(count_bytes);
+                // For the sake of correctness, we need a fall-through logic here.
+                if value.is_ignored_time(env) {
+                    self.metrics.hits_with_ignored_time.inc();
+                }
+                if value.is_ignored_canister_balance(env) {
+                    self.metrics.hits_with_ignored_canister_balance.inc();
+                }
                 // The cache entry is valid, return it.
                 return Some(res);
             } else {
@@ -243,6 +314,9 @@ impl QueryCache {
                 if !value.is_valid_time(env) {
                     self.metrics.invalidated_entries_by_time.inc();
                 }
+                if !value.is_not_expired(env, self.max_expiry_time) {
+                    self.metrics.invalidated_entries_by_max_expiry_time.inc();
+                }
                 if !value.is_valid_canister_version(env) {
                     self.metrics.invalidated_entries_by_canister_version.inc();
                 }
@@ -251,29 +325,49 @@ impl QueryCache {
                 }
                 // The cache entry is no longer valid, remove it.
                 cache.pop(key);
+                // Update the metrics.
+                let count_bytes = cache.count_bytes() as i64;
+                self.metrics.count_bytes.set(count_bytes);
             }
         }
         None
     }
 
-    pub(crate) fn push(&self, key: EntryKey, value: EntryValue) -> Vec<(EntryKey, EntryValue)> {
-        let now = value.env.batch_time;
+    /// Push a new `result` to the cache, evicting LRU entries if needed and updating the metrics.
+    pub(crate) fn push(
+        &self,
+        key: EntryKey,
+        env: EntryEnv,
+        result: &Result<WasmResult, UserError>,
+        system_api_call_counters: &SystemApiCallCounters,
+    ) {
+        let now = env.batch_time;
+        // Push is always a cache miss.
+        self.metrics.misses.inc();
+
+        // The result should not be saved if the query calls a nested query.
+        if system_api_call_counters.call_perform != 0 {
+            // Because of the nested calls the entry is immediately invalidated.
+            self.metrics.invalidated_entries.inc();
+            self.metrics.invalidated_entries_duration.observe(0_f64);
+            self.metrics.invalidated_entries_by_nested_call.inc();
+            return;
+        }
+
+        let value = EntryValue::new(env, result.clone(), system_api_call_counters);
         let mut cache = self.cache.lock().unwrap();
         let evicted_entries = cache.push(key, value);
 
-        // Update the metrics.
+        // Update other metrics.
         self.metrics
             .evicted_entries
             .inc_by(evicted_entries.len() as u64);
-        for (_evited_key, evicted_value) in &evicted_entries {
+        for (_evicted_key, evicted_value) in &evicted_entries {
             let d = evicted_value.elapsed_seconds(now);
             self.metrics.evicted_entries_duration.observe(d);
         }
-        self.metrics.misses.inc();
         let count_bytes = cache.count_bytes() as i64;
         self.metrics.count_bytes.set(count_bytes);
         self.metrics.len.set(cache.len() as i64);
-
-        evicted_entries
     }
 }

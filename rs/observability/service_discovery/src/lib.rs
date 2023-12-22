@@ -3,12 +3,8 @@
 //! The target IP addresses and labels are the same for all endpoints, except
 //! that the host IPv6 addresses for `host_node_exporter` are inferred from the
 //! the one used for `replica` according to a fixed address schema. The ports
-//! are set as follows:
+//! are set as per job_types.rs:
 //!
-//! * `host_node_exporter` -> 9100
-//! * `node_exporter`      -> 9100
-//! * `orchestrator`       -> 9091
-//! * `replica`            -> 9090
 #![allow(clippy::await_holding_lock, clippy::result_large_err)]
 use std::{
     collections::{btree_map::Entry, BTreeMap, BTreeSet, HashMap},
@@ -317,7 +313,11 @@ impl IcServiceDiscovery for IcServiceDiscoveryImpl {
 
         if job == JobType::NodeExporter(NodeOS::Host) {
             mapping = Some(Box::new(|sockaddr: SocketAddr| {
-                guest_to_host_address((set_port(9100))(sockaddr))
+                guest_to_host_address((set_port(job.port()))(sockaddr))
+            }));
+        } else if job == JobType::MetricsProxy {
+            mapping = Some(Box::new(|sockaddr: SocketAddr| {
+                guest_to_host_address((set_port(job.port()))(sockaddr))
             }));
         }
 

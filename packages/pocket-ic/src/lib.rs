@@ -46,7 +46,7 @@ use common::rest::{
     Topology,
 };
 use ic_cdk::api::management_canister::{
-    main::{CanisterInstallMode, InstallCodeArgument},
+    main::{CanisterInstallMode, InstallCodeArgument, UpdateSettingsArgument},
     provisional::{CanisterId, CanisterIdRecord, CanisterSettings},
 };
 use reqwest::Url;
@@ -582,6 +582,33 @@ impl PocketIc {
                 canister_id,
                 wasm_module,
                 arg,
+            },),
+        )
+    }
+
+    /// Set canister's controllers.
+    #[instrument(skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub fn set_controllers(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+        new_controllers: Vec<Principal>,
+    ) -> Result<(), CallError> {
+        let settings = CanisterSettings {
+            controllers: Some(new_controllers),
+            compute_allocation: None,
+            memory_allocation: None,
+            freezing_threshold: None,
+        };
+        call_candid_as::<(UpdateSettingsArgument,), ()>(
+            self,
+            Principal::management_canister(),
+            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+            sender.unwrap_or(Principal::anonymous()),
+            "update_settings",
+            (UpdateSettingsArgument {
+                canister_id,
+                settings,
             },),
         )
     }

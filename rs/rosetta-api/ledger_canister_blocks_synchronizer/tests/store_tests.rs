@@ -1,10 +1,9 @@
 use ic_ledger_canister_blocks_synchronizer::{
     balance_book::{BalanceBook, ClientBalancesStore},
     blocks::{BlockStoreError, Blocks},
+    timestamp_to_iso8601,
 };
-use ic_ledger_canister_blocks_synchronizer_test_utils::{
-    create_tmp_dir, init_test_logger, sample_data::Scribe,
-};
+use ic_ledger_canister_blocks_synchronizer_test_utils::{create_tmp_dir, sample_data::Scribe};
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction};
 use ic_ledger_core::{
     approvals::AllowanceTable, balances::BalancesStore, block::BlockType, timestamp::TimeStamp,
@@ -55,7 +54,6 @@ impl LedgerContext for TestContext {
 
 #[actix_rt::test]
 async fn store_smoke_test() {
-    init_test_logger();
     let tmpdir = create_tmp_dir();
     let mut store = sqlite_on_disk_store(tmpdir.path());
     let scribe = Scribe::new_with_sample_data(10, 100);
@@ -88,7 +86,6 @@ async fn store_smoke_test() {
 
 #[actix_rt::test]
 async fn store_coherence_test() {
-    init_test_logger();
     let tmpdir = create_tmp_dir();
 
     let location = tmpdir.path();
@@ -100,10 +97,16 @@ async fn store_coherence_test() {
     for hb in &scribe.blockchain {
         let hash = hb.hash.into_bytes().to_vec();
         let parent_hash = hb.parent_hash.map(|ph| ph.into_bytes().to_vec());
-        let command = "INSERT INTO blocks (hash, block, parent_hash, idx, verified) VALUES (?1, ?2, ?3, ?4, FALSE)";
+        let command = "INSERT INTO blocks (hash, block, parent_hash, idx, verified, timestamp) VALUES (?1, ?2, ?3, ?4, FALSE, ?5)";
         con.execute(
             command,
-            params![hash, hb.block.clone().into_vec(), parent_hash, hb.index],
+            params![
+                hash,
+                hb.block.clone().into_vec(),
+                parent_hash,
+                hb.index,
+                timestamp_to_iso8601(hb.timestamp)
+            ],
         )
         .unwrap();
     }
@@ -126,7 +129,6 @@ async fn store_coherence_test() {
 
 #[actix_rt::test]
 async fn store_account_balances_test() {
-    init_test_logger();
     let tmpdir = create_tmp_dir();
     let mut store = sqlite_on_disk_store(tmpdir.path());
     let scribe = Scribe::new_with_sample_data(10, 100);
@@ -136,7 +138,7 @@ async fn store_account_balances_test() {
         let tx = Block::decode(hb.block.clone()).unwrap().transaction;
         let operation = tx.operation;
         context.balance_book.store.transaction_context = Some(hb.index);
-        apply_operation(&mut context, &operation, now).ok();
+        apply_operation(&mut context, &operation, now).unwrap();
         context.balance_book.store.transaction_context = None;
         store.push(hb).unwrap();
         store.set_hashed_block_to_verified(&hb.index).unwrap();
@@ -185,7 +187,6 @@ async fn store_account_balances_test() {
 
 #[actix_rt::test]
 async fn store_prune_test() {
-    init_test_logger();
     let tmpdir = create_tmp_dir();
     let mut store = sqlite_on_disk_store(tmpdir.path());
     let scribe = Scribe::new_with_sample_data(10, 100);
@@ -204,7 +205,6 @@ async fn store_prune_test() {
 
 #[actix_rt::test]
 async fn store_prune_corner_cases_test() {
-    init_test_logger();
     let tmpdir = create_tmp_dir();
     let mut store = sqlite_on_disk_store(tmpdir.path());
     let scribe = Scribe::new_with_sample_data(10, 100);
@@ -227,7 +227,6 @@ async fn store_prune_corner_cases_test() {
 
 #[actix_rt::test]
 async fn store_prune_first_balance_test() {
-    init_test_logger();
     let tmpdir = create_tmp_dir();
     let mut store = sqlite_on_disk_store(tmpdir.path());
     let scribe = Scribe::new_with_sample_data(10, 100);
@@ -248,7 +247,6 @@ async fn store_prune_first_balance_test() {
 
 #[actix_rt::test]
 async fn store_prune_and_load_test() {
-    init_test_logger();
     let tmpdir = create_tmp_dir();
     let mut store = sqlite_on_disk_store(tmpdir.path());
 

@@ -19,7 +19,9 @@ use ic_nns_test_utils::{
     },
     state_test_helpers::set_controllers,
 };
-use ic_sns_governance::pb::v1::{ListNeurons, ListNeuronsResponse, NervousSystemParameters};
+use ic_sns_governance::pb::v1::{
+    governance::Version, ListNeurons, ListNeuronsResponse, NervousSystemParameters,
+};
 use ic_sns_init::SnsCanisterInitPayloads;
 use ic_sns_root::pb::v1::{
     RegisterDappCanisterRequest, RegisterDappCanisterResponse, RegisterDappCanistersRequest,
@@ -107,36 +109,55 @@ pub fn setup_sns_canisters(
     );
 
     let SnsCanisterInitPayloads {
-        governance,
+        mut governance,
         ledger,
         root,
         swap,
         index,
     } = payloads;
 
+    let (root_sns_wasm, governance_sns_wasm, ledger_sns_wasm, swap_sns_wasm, index_sns_wasm) = (
+        build_root_sns_wasm(),
+        build_governance_sns_wasm(),
+        build_ledger_sns_wasm(),
+        build_swap_sns_wasm(),
+        build_index_sns_wasm(),
+    );
+
+    let deployed_version = Version {
+        root_wasm_hash: root_sns_wasm.sha256_hash().to_vec(),
+        governance_wasm_hash: governance_sns_wasm.sha256_hash().to_vec(),
+        ledger_wasm_hash: ledger_sns_wasm.sha256_hash().to_vec(),
+        swap_wasm_hash: swap_sns_wasm.sha256_hash().to_vec(),
+        archive_wasm_hash: vec![], // tests don't need it for now so we don't compile it.
+        index_wasm_hash: index_sns_wasm.sha256_hash().to_vec(),
+    };
+
+    governance.deployed_version = Some(deployed_version);
+
     install_canister(
         root_canister_id,
-        build_root_sns_wasm().wasm,
+        root_sns_wasm.wasm,
         Encode!(&root).unwrap(),
     );
     install_canister(
         governance_canister_id,
-        build_governance_sns_wasm().wasm,
+        governance_sns_wasm.wasm,
         Encode!(&governance).unwrap(),
     );
     install_canister(
         ledger_canister_id,
-        build_ledger_sns_wasm().wasm,
+        ledger_sns_wasm.wasm,
         Encode!(&ledger).unwrap(),
     );
     install_canister(
         swap_canister_id,
-        build_swap_sns_wasm().wasm,
+        swap_sns_wasm.wasm,
         Encode!(&swap).unwrap(),
     );
     install_canister(
         index_canister_id,
-        build_index_sns_wasm().wasm,
+        index_sns_wasm.wasm,
         Encode!(&index).unwrap(),
     );
 

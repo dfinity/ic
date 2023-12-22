@@ -218,7 +218,8 @@ pub fn dummy_transcript_for_tests_with_params(
         internal_csp_transcript: CspNiDkgTranscript::Groth20_Bls12_381(
             ni_dkg_groth20_bls12_381::Transcript {
                 public_coefficients: ni_dkg_groth20_bls12_381::PublicCoefficientsBytes {
-                    coefficients: vec![PublicKeyBytes([0; PublicKeyBytes::SIZE])],
+                    // the following public key matches the one used in StateMachine tests
+                    coefficients: vec![PublicKeyBytes(hex::decode("adf65638a53056b2222c91bb2457b0274bca95198a5acbdadfe7fd72178f069bdea8d99e9479d8087a2686fc81bf3c4b11fe275570d481f1698f79d468afe0e57acc1e298f8b69798da7a891bbec197093ec5f475909923d48bfed6843dbed1f").unwrap().try_into().unwrap())],
                 },
                 receiver_data: BTreeMap::new(),
             },

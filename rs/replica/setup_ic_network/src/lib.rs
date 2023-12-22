@@ -31,7 +31,7 @@ use ic_https_outcalls_consensus::{
     pool_manager::CanisterHttpPoolManagerImpl,
 };
 use ic_icos_sev::Sev;
-use ic_ingress_manager::IngressManager;
+use ic_ingress_manager::{CustomRandomState, IngressManager};
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
     execution_environment::IngressHistoryReader,
@@ -65,6 +65,7 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     p2p::GossipAdvert,
     replica_config::ReplicaConfig,
+    state_sync::StateSyncMessage,
     NodeId, SubnetId,
 };
 use std::{
@@ -147,7 +148,7 @@ pub fn setup_consensus_and_p2p(
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
     catch_up_package: CatchUpPackage,
-    state_sync_client: Arc<dyn StateSyncClient>,
+    state_sync_client: Arc<dyn StateSyncClient<Message = StateSyncMessage>>,
     xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
     self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
     query_stats_payload_builder: Box<dyn BatchPayloadBuilder>,
@@ -206,7 +207,7 @@ pub fn setup_consensus_and_p2p(
     let mut new_p2p_consensus = ic_consensus_manager::ConsensusManagerBuilder::new(
         log.clone(),
         rt_handle.clone(),
-        metrics_registry,
+        metrics_registry.clone(),
     );
 
     let mut p2p_router = None;
@@ -502,6 +503,7 @@ fn start_consensus(
         Arc::clone(&state_reader) as Arc<_>,
         cycles_account_manager,
         malicious_flags.clone(),
+        CustomRandomState::default(),
     ));
 
     let canister_http_payload_builder = Arc::new(CanisterHttpPayloadBuilderImpl::new(

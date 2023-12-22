@@ -383,6 +383,32 @@ message Neuron {
   optional NeuronType neuron_type = 22;
 }
 
+// Subset of Neuron that has no collections or big fields that might not exist in most neurons, and
+// the goal is to keep the size of the struct consistent and can be easily stored in a
+// StableBTreeMap. For the meaning of each field, see the Neuron struct.
+message AbridgedNeuron {
+  // TODO: drop this field after the change to use AbridgedNeuron is released.
+  ic_nns_common.pb.v1.NeuronId id = 1;
+  bytes account = 2;
+  ic_base_types.pb.v1.PrincipalId controller = 3;
+  uint64 cached_neuron_stake_e8s = 5;
+  uint64 neuron_fees_e8s = 6;
+  uint64 created_timestamp_seconds = 7;
+  uint64 aging_since_timestamp_seconds = 8;
+  optional uint64 spawn_at_timestamp_seconds = 19;
+  oneof dissolve_state {
+    uint64 when_dissolved_timestamp_seconds = 9;
+    uint64 dissolve_delay_seconds = 10;
+  }
+  bool kyc_verified = 13;
+  uint64 maturity_e8s_equivalent = 15;
+  optional uint64 staked_maturity_e8s_equivalent = 20;
+  optional bool auto_stake_maturity = 21;
+  bool not_for_profit = 16;
+  optional uint64 joined_community_fund_timestamp_seconds = 17;
+  optional NeuronType neuron_type = 22;
+}
+
 // Types of a Neuron.
 enum NeuronType {
   // Placeholder value due to the proto3 requirement for a zero default.
@@ -2147,42 +2173,12 @@ message Governance {
   // This is the inverse of what is stored in a Neuron (its followees).
   map<int32, FollowersMap> topic_followee_index = 22;
 
-  // The list of seed accounts existing in the Genesis Token Canister (GTC). These accounts are used during the
-  // tagging process of Seed Neurons in the NNS.
-  message SeedAccounts {
-    // An individual seed account existing in the Genesis Token Canister (GTC). This account is used during the
-    // tagging process of Seed Neurons in the NNS. The structure of the Seed Account allows for idempotent
-    // processing of all SeedAccounts in the NNS Governance Canister's heartbeat.
-    message SeedAccount {
-      // The id of the Account in the GTC.
-      string account_id = 1;
-
-      // The timestamp in seconds of when this SeedAccount began tagging of its Seed Neurons. If set to None,
-      // this account has yet to be processed. If set to Some, this account has began or finished processing.
-      optional uint64 tag_start_timestamp_seconds = 2;
-
-      // The timestamp in seconds of when this SeedAccount finished tagging of its Seed Neurons. If set to None,
-      // this account has yet to be processed, or has started processing. If set to Some, this account has
-      // finished processing.
-      optional uint64 tag_end_timestamp_seconds = 3;
-
-      // The count of errors encountered when processing this SeedAccount. This is used when considering whether
-      // this SeedAccount is eligible for tagging. If the error_count is too high, the tagging process will ignore
-      // it and continue on to the next SeedAccount.
-      uint64 error_count = 4;
-
-      // The type of the Neuron (either Seed or ECT). This type will be applied to all neurons found in
-      // the tagging process for this account.
-      NeuronType neuron_type = 5;
-    }
-
-    repeated SeedAccount accounts = 1;
-  }
-
-  optional SeedAccounts seed_accounts = 23;
-
   reserved 6;
   reserved "authz";
+
+  // Reserved id for deprecated `seed_accounts`
+  reserved 23;
+  reserved "seed_accounts";
 }
 
 // Proposals with restricted voting are not included unless the caller

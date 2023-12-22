@@ -1,6 +1,7 @@
 use super::*;
 
 use crate::pb::v1::Vote;
+use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::ProposalId;
 use lazy_static::lazy_static;
 use pretty_assertions::assert_eq;
@@ -375,32 +376,121 @@ fn test_store_simplest_nontrivial_case() {
     assert_no_zombie_references_in(
         "hot_keys",
         &store.hot_keys_map,
-        |key, _| NeuronId { id: key.0 },
+        |key, _| key.0,
         original_neuron_id,
     );
     assert_no_zombie_references_in(
         "recent_ballots",
         &store.recent_ballots_map,
-        |key, _| NeuronId { id: key.0 },
+        |key, _| key.0,
         original_neuron_id,
     );
     assert_no_zombie_references_in(
         "followees",
         &store.followees_map,
-        |_, followee_id| NeuronId { id: followee_id },
+        |_, followee_id| followee_id,
         original_neuron_id,
     );
 
     assert_no_zombie_references_in(
         "known_neuron_data",
         &store.known_neuron_data_map,
-        |key, _| NeuronId { id: key },
+        |key, _| key,
         original_neuron_id,
     );
     assert_no_zombie_references_in(
         "transfer",
         &store.transfer_map,
-        |key, _| NeuronId { id: key },
+        |key, _| key,
         original_neuron_id,
     );
+}
+
+#[test]
+fn test_store_as_neuron_deserialized_as_abridged() {
+    // Step 1: Prepare a neuron and get its serialized bytes.
+    let neuron = Neuron {
+        id: Some(NeuronId { id: 1 }),
+        account: vec![u8::MAX; 32],
+        controller: Some(PrincipalId::new_user_test_id(1)),
+        cached_neuron_stake_e8s: 1,
+        neuron_fees_e8s: 2,
+        created_timestamp_seconds: 3,
+        aging_since_timestamp_seconds: 4,
+        spawn_at_timestamp_seconds: Some(5),
+        kyc_verified: false,
+        maturity_e8s_equivalent: 6,
+        staked_maturity_e8s_equivalent: Some(7),
+        auto_stake_maturity: Some(true),
+        not_for_profit: true,
+        joined_community_fund_timestamp_seconds: Some(8),
+        neuron_type: Some(9),
+        dissolve_state: Some(NeuronDissolveState::WhenDissolvedTimestampSeconds(10)),
+        ..Default::default()
+    };
+    let serialized = neuron.encode_to_vec();
+
+    // Step 2: Deserialize as abridged neuron.
+    let abridged = AbridgedNeuron::decode(&serialized[..]).unwrap();
+
+    // Step 3: Verify the abridged neuron has the same fields.
+    assert_eq!(
+        abridged,
+        AbridgedNeuron {
+            id: Some(NeuronId { id: 1 }),
+            account: vec![u8::MAX; 32],
+            controller: Some(PrincipalId::new_user_test_id(1)),
+            cached_neuron_stake_e8s: 1,
+            neuron_fees_e8s: 2,
+            created_timestamp_seconds: 3,
+            aging_since_timestamp_seconds: 4,
+            spawn_at_timestamp_seconds: Some(5),
+            kyc_verified: false,
+            maturity_e8s_equivalent: 6,
+            staked_maturity_e8s_equivalent: Some(7),
+            auto_stake_maturity: Some(true),
+            not_for_profit: true,
+            joined_community_fund_timestamp_seconds: Some(8),
+            neuron_type: Some(9),
+            dissolve_state: Some(AbridgedNeuronDissolveState::WhenDissolvedTimestampSeconds(
+                10
+            )),
+        }
+    );
+}
+
+#[test]
+fn test_abridged_neuron_size() {
+    // All VARINT encoded fields (e.g. int32, uint64, ..., as opposed to fixed32/fixed64) have
+    // larger serialized size for larger numbers (10 bytes for u64::MAX as uint64, while 1 byte for
+    // 0u64). Therefore, we make the numbers below as large as possible even though they aren't
+    // realistic.
+    let abridged_neuron = AbridgedNeuron {
+        id: Some(NeuronId { id: u64::MAX }),
+        account: vec![u8::MAX; 32],
+        controller: Some(PrincipalId::new(
+            PrincipalId::MAX_LENGTH_IN_BYTES,
+            [u8::MAX; PrincipalId::MAX_LENGTH_IN_BYTES],
+        )),
+        cached_neuron_stake_e8s: u64::MAX,
+        neuron_fees_e8s: u64::MAX,
+        created_timestamp_seconds: u64::MAX,
+        aging_since_timestamp_seconds: u64::MAX,
+        spawn_at_timestamp_seconds: Some(u64::MAX),
+        kyc_verified: true,
+        maturity_e8s_equivalent: u64::MAX,
+        staked_maturity_e8s_equivalent: Some(u64::MAX),
+        auto_stake_maturity: Some(true),
+        not_for_profit: true,
+        joined_community_fund_timestamp_seconds: Some(u64::MAX),
+        neuron_type: Some(i32::MAX),
+        dissolve_state: Some(AbridgedNeuronDissolveState::WhenDissolvedTimestampSeconds(
+            u64::MAX,
+        )),
+    };
+
+    assert!(abridged_neuron.encoded_len() as u32 <= AbridgedNeuron::MAX_SIZE);
+    // This size can be updated. This assertion is created so that we are aware of the available
+    // headroom.
+    assert_eq!(abridged_neuron.encoded_len(), 197);
 }

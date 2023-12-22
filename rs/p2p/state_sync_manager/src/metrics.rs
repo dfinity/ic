@@ -1,7 +1,6 @@
 use ic_metrics::{
     buckets::decimal_buckets, tokio_metrics_collector::TokioTaskMetricsCollector, MetricsRegistry,
 };
-use ic_types::artifact::StateSyncMessage;
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGauge};
 use tokio_metrics::TaskMonitor;
 
@@ -119,10 +118,7 @@ impl OngoingStateSyncMetrics {
     }
 
     /// Utility to record metrics for download result.
-    pub fn record_chunk_download_result(
-        &self,
-        res: &Result<Option<StateSyncMessage>, DownloadChunkError>,
-    ) {
+    pub fn record_chunk_download_result<T>(&self, res: &Result<Option<T>, DownloadChunkError>) {
         match res {
             // Received chunk
             Ok(Some(_)) => {

@@ -1,9 +1,13 @@
-use crate::pb::v1::{
-    governance_error::ErrorType, manage_neuron, neuron::DissolveState, proposal::Action, Ballot,
-    Empty, GovernanceError, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
-    NeuronPermissionType, Vote,
+use crate::{
+    pb::v1::{
+        governance_error::ErrorType, manage_neuron, neuron::DissolveState, proposal::Action,
+        Ballot, Empty, GovernanceError, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
+        NeuronPermissionType, Vote,
+    },
+    types::function_id_to_proposal_criticality,
 };
 use ic_base_types::PrincipalId;
+use ic_sns_governance_proposal_criticality::ProposalCriticality;
 use icrc_ledger_types::icrc1::account::Subaccount;
 use std::{
     cmp::Ordering,
@@ -235,47 +239,72 @@ impl Neuron {
     /// neuron doesn't specify any followees for `action`).
     pub(crate) fn would_follow_ballots(
         &self,
-        action: u64,
+        function_id: u64,
         ballots: &BTreeMap<String, Ballot>,
     ) -> Vote {
-        // Compute the list of followees for this action. If no
-        // following is specified for the action, use the followees
-        // from the 'Unspecified' action.
-        let unspecified_key = u64::from(&Action::Unspecified(Empty {}));
-        if let Some(followees) = self
-            .followees
-            .get(&(action))
-            .filter(|followees| !followees.followees.is_empty())
-            .or_else(|| self.followees.get(&unspecified_key))
-            // extract plain vector from 'Followees' proto
-            .map(|x| &x.followees)
-        {
-            // If, for some reason, a list of followees is specified
-            // but empty (this is not normal), don't vote 'no', as
-            // would be the natural result of the algorithm below, but
-            // instead don't cast a vote.
-            if followees.is_empty() {
-                return Vote::Unspecified;
-            }
-            let mut yes: usize = 0;
-            let mut no: usize = 0;
-            for f in followees.iter() {
-                if let Some(f_vote) = ballots.get(&f.to_string()) {
-                    if f_vote.vote == (Vote::Yes as i32) {
-                        yes += 1;
-                    } else if f_vote.vote == (Vote::No as i32) {
-                        no += 1;
-                    }
+        // Step 1: Who are the relevant followees?
+
+        let empty = vec![];
+        let get_followee_neuron_ids = |function_id| -> &Vec<NeuronId> {
+            self.followees
+                .get(&function_id)
+                .map(|followees_message| &followees_message.followees)
+                // If there was no Followees object, then result is empty Vec. Therefore, we treat
+                // None the same as Some(Followees { followees: vec![] }).
+                .unwrap_or(&empty)
+        };
+
+        let mut followee_neuron_ids = get_followee_neuron_ids(function_id);
+
+        // If the function is not critical, and this Neuron does not have followees specifically for
+        // the function, then fall back to the "catch-all" following.
+        if followee_neuron_ids.is_empty() {
+            use ProposalCriticality::{Critical, Normal};
+            match function_id_to_proposal_criticality(function_id) {
+                Normal => {
+                    let fallback_pseudo_function_id = u64::from(&Action::Unspecified(Empty {}));
+                    followee_neuron_ids = get_followee_neuron_ids(fallback_pseudo_function_id);
                 }
-            }
-            if 2 * yes > followees.len() {
-                return Vote::Yes;
-            }
-            if 2 * no >= followees.len() {
-                return Vote::No;
+                Critical => (),
             }
         }
-        // No followees specified.
+
+        // This is needed to avoid returning No in Step 3 due to no followees.
+        if followee_neuron_ids.is_empty() {
+            return Vote::Unspecified;
+        }
+
+        // Step 2: Count followee votes.
+        let mut yes: usize = 0;
+        let mut no: usize = 0;
+        for followee_neuron_id in followee_neuron_ids {
+            let followee_vote = match ballots.get(&followee_neuron_id.to_string()) {
+                Some(ballot) => ballot.vote,
+                None => {
+                    // We are following someone who doesn't even have an empty
+                    // ballot. Maybe this followee should be removed?
+                    continue;
+                }
+            };
+
+            if followee_vote == Vote::Yes as i32 {
+                yes += 1;
+            } else if followee_vote == Vote::No as i32 {
+                no += 1;
+            }
+        }
+
+        // Step 3: Use vote counts to decide which Vote option to return.
+
+        // If a majority of followees voted Yes, return Yes.
+        if 2 * yes > followee_neuron_ids.len() {
+            return Vote::Yes;
+        }
+        // If a majority for Yes can never be achieved, return No.
+        if 2 * no >= followee_neuron_ids.len() {
+            return Vote::No;
+        }
+        // Otherwise, we are still open to going either way.
         Vote::Unspecified
     }
 

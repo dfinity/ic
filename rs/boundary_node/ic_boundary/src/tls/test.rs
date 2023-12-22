@@ -6,8 +6,8 @@ use rcgen::{Certificate, CertificateParams, DistinguishedName, DnType, DnValue};
 use tempfile::NamedTempFile;
 
 use crate::tls::{
-    extract_cert_validity, LoadError, MockLoad, MockProvision, MockStore, Provision, WithLoad,
-    WithStore,
+    extract_cert_validity, LoadError, MockLoad, MockProvision, MockStore, Provision,
+    ProvisionResult, WithLoad, WithStore,
 };
 
 use wiremock::{
@@ -15,7 +15,7 @@ use wiremock::{
     Mock, MockServer, ResponseTemplate,
 };
 
-use super::load_or_create_acme_account;
+use super::{load_or_create_acme_account, TLSCert};
 
 fn generate_certificate_chain(
     name: &str,
@@ -119,7 +119,12 @@ async fn with_load_not_found_test() -> Result<(), Error> {
     p.expect_provision()
         .times(1)
         .with(predicate::eq("example.com"))
-        .returning(|_| Ok(("cert".into(), "pkey".into())));
+        .returning(|_| {
+            Ok(ProvisionResult::Issued(TLSCert(
+                "cert".into(),
+                "pkey".into(),
+            )))
+        });
 
     let mut l = MockLoad::new();
     l.expect_load()
@@ -133,7 +138,10 @@ async fn with_load_not_found_test() -> Result<(), Error> {
     );
 
     let out = p.provision("example.com").await?;
-    assert_eq!(out, ("cert".into(), "pkey".into()));
+    assert_eq!(
+        out,
+        ProvisionResult::Issued(TLSCert("cert".into(), "pkey".into()))
+    );
 
     Ok(())
 }
@@ -155,12 +163,17 @@ async fn with_load_expired_test() -> Result<(), Error> {
     p.expect_provision()
         .times(1)
         .with(predicate::eq("example.com"))
-        .returning(|_| Ok(("cert".into(), "pkey".into())));
+        .returning(|_| {
+            Ok(ProvisionResult::Issued(TLSCert(
+                "cert".into(),
+                "pkey".into(),
+            )))
+        });
 
     let mut l = MockLoad::new();
     l.expect_load()
         .times(1)
-        .returning(move || Ok((cert_chain.clone(), "pkey".into())));
+        .returning(move || Ok(TLSCert(cert_chain.clone(), "pkey".into())));
 
     let mut p = WithLoad(
         p,                      // provisioner
@@ -169,7 +182,10 @@ async fn with_load_expired_test() -> Result<(), Error> {
     );
 
     let out = p.provision("example.com").await?;
-    assert_eq!(out, ("cert".into(), "pkey".into()));
+    assert_eq!(
+        out,
+        ProvisionResult::Issued(TLSCert("cert".into(), "pkey".into()))
+    );
 
     Ok(())
 }
@@ -195,7 +211,7 @@ async fn with_load_valid_test() -> Result<(), Error> {
     let cert_chain_cpy = cert_chain.clone();
     l.expect_load()
         .times(1)
-        .returning(move || Ok((cert_chain_cpy.clone(), "pkey".into())));
+        .returning(move || Ok(TLSCert(cert_chain_cpy.clone(), "pkey".into())));
 
     let mut p = WithLoad(
         p,                      // provisioner
@@ -204,7 +220,10 @@ async fn with_load_valid_test() -> Result<(), Error> {
     );
 
     let out = p.provision("example.com").await?;
-    assert_eq!(out, (cert_chain, "pkey".into()));
+    assert_eq!(
+        out,
+        ProvisionResult::StillValid(TLSCert(cert_chain, "pkey".into()))
+    );
 
     Ok(())
 }
@@ -215,18 +234,26 @@ async fn with_store_test() -> Result<(), Error> {
     p.expect_provision()
         .times(1)
         .with(predicate::eq("example.com"))
-        .returning(|_| Ok(("cert".into(), "pkey".into())));
+        .returning(|_| {
+            Ok(ProvisionResult::Issued(TLSCert(
+                "cert".into(),
+                "pkey".into(),
+            )))
+        });
 
     let mut s = MockStore::new();
     s.expect_store()
         .times(1)
-        .with(predicate::eq(("cert".into(), "pkey".into())))
+        .with(predicate::eq(TLSCert("cert".into(), "pkey".into())))
         .returning(|_| Ok(()));
 
     let mut p = WithStore(p, s);
 
     let out = p.provision("example.com").await?;
-    assert_eq!(out, ("cert".into(), "pkey".into()));
+    assert_eq!(
+        out,
+        ProvisionResult::Issued(TLSCert("cert".into(), "pkey".into()))
+    );
 
     Ok(())
 }

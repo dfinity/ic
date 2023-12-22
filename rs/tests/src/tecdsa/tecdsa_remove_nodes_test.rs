@@ -16,17 +16,18 @@ Success::
 
 end::catalog[] */
 
+use super::DKG_INTERVAL;
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, NnsInstallationBuilder,
 };
 use crate::nns::remove_nodes_via_endpoint;
-use crate::tecdsa::tecdsa_signature_test::{
+use crate::tecdsa::{
     enable_ecdsa_signing, get_public_key_with_logger, get_signature_with_logger, make_key,
 };
 use crate::{
-    tecdsa::tecdsa_signature_test::{verify_signature, KEY_ID1},
+    tecdsa::{verify_signature, KEY_ID1},
     util::*,
 };
 use canister_test::{Canister, Cycles};
@@ -37,8 +38,6 @@ use ic_types::Height;
 use rand::seq::SliceRandom;
 use rand_chacha::ChaCha8Rng;
 use slog::info;
-
-use super::tecdsa_signature_test::DKG_INTERVAL;
 
 const NODES_COUNT: usize = 4;
 const REMOVE_NODES_COUNT: usize = (NODES_COUNT / 3) + 1;
@@ -80,7 +79,13 @@ pub fn test(env: TestEnv) {
         let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
         info!(log, "Enable ECDSA signing");
-        enable_ecdsa_signing(&governance, nns_subnet.subnet_id, make_key(KEY_ID1)).await;
+        enable_ecdsa_signing(
+            &governance,
+            nns_subnet.subnet_id,
+            vec![make_key(KEY_ID1)],
+            &log,
+        )
+        .await;
         let msg_can = MessageCanister::new(&nns_agent, nns_node.effective_canister_id()).await;
         info!(log, "Getting public key");
         let public_key = get_public_key_with_logger(make_key(KEY_ID1), &msg_can, &log)

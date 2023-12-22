@@ -120,6 +120,7 @@ fn generate_config(cli: &CliArgs, targets: Vec<TargetDto>, logger: Logger) {
             JobType::NodeExporter(NodeOS::Host),
             JobType::Orchestrator,
             JobType::Replica,
+            JobType::MetricsProxy,
         ],
     };
 

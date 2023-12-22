@@ -1,5 +1,6 @@
 use axum::{http::Request, Router};
 use bytes::Bytes;
+use either::Either;
 use futures::{
     future::{join_all, BoxFuture},
     FutureExt,
@@ -7,15 +8,16 @@ use futures::{
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_tls_interfaces::TlsConfig;
+use ic_icos_sev::Sev;
 use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
-use ic_peer_manager::{start_peer_manager, SubnetTopology};
+use ic_peer_manager::start_peer_manager;
 use ic_protobuf::registry::{
     node::v1::{ConnectionEndpoint, NodeRecord},
     subnet::v1::SubnetRecord,
 };
-use ic_quic_transport::{ConnId, Transport};
+use ic_quic_transport::{ConnId, DummyUdpSocket, QuicTransport, SubnetTopology, Transport};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_node_record_key;
 use ic_registry_local_registry::LocalRegistry;
@@ -23,8 +25,10 @@ use ic_registry_local_store::{compact_delta_to_changelog, LocalStoreImpl, LocalS
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities::types::ids::subnet_test_id;
 use ic_test_utilities_registry::add_subnet_record;
+use ic_types_test_utils::ids::SUBNET_1;
 use std::{
     collections::{HashMap, HashSet},
+    net::SocketAddr,
     str::FromStr,
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -33,7 +37,11 @@ use std::{
     time::Duration,
 };
 use tempfile::TempDir;
-use tokio::{runtime::Handle, sync::watch::Receiver, task::JoinHandle};
+use tokio::{
+    runtime::Handle,
+    sync::watch::{self, Receiver},
+    task::JoinHandle,
+};
 
 pub mod consensus;
 pub mod mocks;
@@ -166,6 +174,59 @@ pub fn create_peer_manager_and_registry_handle(
         registry_handle.registry_client.clone() as Arc<_>,
     );
     (jh, rcv, registry_handle)
+}
+
+/// Id is used to get a unique localhost address space. So it should be different for each test.
+#[allow(clippy::type_complexity)]
+pub fn fully_connected_localhost_subnet(
+    rt: &Handle,
+    log: ReplicaLogger,
+    id: u8,
+    router: Vec<(NodeId, Router)>,
+) -> (
+    Vec<(NodeId, Arc<dyn Transport>)>,
+    watch::Receiver<SubnetTopology>,
+) {
+    assert!(
+        id > 0,
+        "ID is used to reserve a localhost address that is unique and shoud not be zero."
+    );
+    let mut node_ids = Vec::new();
+    let (_jh, topology_watcher, mut registry_handler) =
+        create_peer_manager_and_registry_handle(rt, log.clone());
+    for (i, (node, router)) in router.into_iter().enumerate() {
+        let node_crypto = temp_crypto_component_with_tls_keys(&registry_handler, node);
+        let sev_handshake = Arc::new(Sev::new(
+            node,
+            SUBNET_1,
+            registry_handler.registry_client.clone(),
+            log.clone(),
+        ));
+        registry_handler.registry_client.update_to_latest_version();
+        registry_handler.registry_client.reload();
+
+        let socket: SocketAddr = format!("127.1.{id}.{}:4100", i + 1).parse().unwrap();
+
+        let transport = Arc::new(QuicTransport::start(
+            &log,
+            &MetricsRegistry::default(),
+            rt,
+            node_crypto,
+            registry_handler.registry_client.clone(),
+            sev_handshake,
+            node,
+            topology_watcher.clone(),
+            Either::Left::<_, DummyUdpSocket>(socket),
+            router,
+        )) as Arc<_>;
+        registry_handler.add_node(
+            RegistryVersion::from(i as u64 + 1),
+            node,
+            Some(&socket.ip().to_string()),
+        );
+        node_ids.push((node, transport));
+    }
+    (node_ids, topology_watcher)
 }
 
 /// Get protobuf-encoded snapshot of the mainnet registry state (around jan. 2022)

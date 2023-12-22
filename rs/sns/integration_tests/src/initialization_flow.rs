@@ -309,8 +309,6 @@ impl SnsInitializationFlowTestSetup {
     }
 }
 
-/// TODO[NNS1-2636]: Reenable this test after Swap starts calling settle_neurons_fund_participation.
-#[ignore]
 #[test]
 fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation() {
     // Step 0: Setup the world and record its state
@@ -443,26 +441,12 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
         &0,   // offset
     )
     .cf_participants;
-    assert!(!cf_participants.is_empty());
-
-    for cf_participant in &cf_participants {
-        for cf_neuron in &cf_participant.cf_neurons {
-            let pledged_icp = cf_neuron.amount_icp_e8s;
-            let cf_neuron_nns_id = NeuronId {
-                id: cf_neuron.nns_neuron_id,
-            };
-
-            let initial_maturity = initial_nns_neurons_maturity_snapshot
-                .get(&cf_neuron_nns_id)
-                .unwrap();
-
-            let current_maturity = current_nns_neurons_maturity_snapshot
-                .get(&cf_neuron_nns_id)
-                .unwrap();
-
-            assert_eq!(*current_maturity + pledged_icp, *initial_maturity);
-        }
-    }
+    // With Matched Funding, this field remains unset set until the swap finalization phase.
+    assert!(
+        cf_participants.is_empty(),
+        "Unexpected Neurons' Fund participants: {:#?}",
+        cf_participants
+    );
 
     // Step 3: Advance time to open the swap for participation, and then finish it
     sns_initialization_flow_test.advance_time_to_open_swap(test_sns.swap_canister_id.unwrap());
@@ -534,6 +518,17 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
         .map(|amount_icp_e8| amount_icp_e8 - icp_transfer_fee_e8s)
         .sum::<u64>();
 
+    // The Neurons' Fund participants should be known by now.
+    let cf_participants = list_community_fund_participants(
+        &sns_initialization_flow_test.state_machine,
+        &CanisterId::try_from(test_sns.swap_canister_id.unwrap()).unwrap(),
+        &PrincipalId::new_anonymous(),
+        &100, // Limit
+        &0,   // offset
+    )
+    .cf_participants;
+    assert!(!cf_participants.is_empty());
+
     // Unlike the direct participants, since NNS Governance is sending minted ICP, there is no
     // transfer fee.
     let expected_cf_participation_amount_e8s: u64 = cf_participants
@@ -547,7 +542,28 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
         expected_direct_participation_amount_e8s + expected_cf_participation_amount_e8s,
     );
 
-    // Check that the NF neurons are configured correctly
+    // Check that the Neurons' Fund maturity is conserved, i.e., the amount of maturity in each
+    // Neurons' Fund neuron has decreased by how much that neuron participated in the swap (as
+    // per the rules of Matched Funding).
+    for cf_participant in &cf_participants {
+        for cf_neuron in &cf_participant.cf_neurons {
+            let pledged_icp = cf_neuron.amount_icp_e8s;
+            let cf_neuron_nns_id = NeuronId {
+                id: cf_neuron.nns_neuron_id,
+            };
+
+            let initial_maturity = initial_nns_neurons_maturity_snapshot
+                .get(&cf_neuron_nns_id)
+                .unwrap();
+
+            let current_maturity = current_nns_neurons_maturity_snapshot
+                .get(&cf_neuron_nns_id)
+                .unwrap();
+
+            assert_eq!(*current_maturity + pledged_icp, *initial_maturity);
+        }
+    }
+
     let cf_participants_principals = cf_participants
         .iter()
         .map(|cf_participant| cf_participant.hotkey_principal.clone())
@@ -575,8 +591,6 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
     assert!(at_least_one_sns_neuron_is_nf_controlled);
 }
 
-/// TODO[NNS1-2636]: Reenable this test after Swap starts calling settle_neurons_fund_participation.
-#[ignore]
 #[test]
 fn test_one_proposal_sns_initialization_success_without_neurons_fund_participation() {
     // Step 0: Setup the world and record its state
@@ -603,9 +617,9 @@ fn test_one_proposal_sns_initialization_success_without_neurons_fund_participati
         .swap_parameters
         .clone();
 
-    // Set the Neurons Fund investment to zero
+    // Disable Neurons' Fund participation
     if let Some(s) = &mut swap_parameters {
-        s.neurons_fund_investment_icp = Some(Tokens::from_tokens(0));
+        s.neurons_fund_participation = Some(false);
         if s.minimum_icp.is_some() {
             s.minimum_direct_participation_icp = s.minimum_icp;
         }
@@ -1057,8 +1071,6 @@ fn test_one_proposal_sns_initialization_swap_cannot_be_opened_by_legacy_method()
         .contains("Invalid lifecycle state to open the swap: must be Pending, was Adopted"));
 }
 
-/// TODO[NNS1-2636]: Reenable this test after Swap starts calling settle_neurons_fund_participation.
-#[ignore]
 #[test]
 fn test_one_proposal_sns_initialization_failed_swap_returns_neurons_fund_and_dapps() {
     // Step 0: Setup the world and record its state

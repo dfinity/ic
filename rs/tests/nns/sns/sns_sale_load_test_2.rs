@@ -4,7 +4,7 @@ use std::time::Duration;
 use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::driver::test_env::TestEnv;
 use ic_tests::nns_tests::sns_deployment::{
-    add_one_participant, initiate_token_swap_with_oc_parameters, sns_setup_legacy,
+    add_one_participant, initiate_token_swap_with_oc_parameters, sns_setup,
     workload_rps1200_get_state_query, workload_rps1200_get_state_update,
     workload_rps1200_refresh_buyer_tokens, workload_rps400_get_state_query,
     workload_rps400_get_state_update, workload_rps400_refresh_buyer_tokens,
@@ -47,7 +47,7 @@ fn workload_rps1200_refresh_buyer_tokens_after(env: TestEnv) {
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_overall_timeout(Duration::from_secs(30 * 60)) // 30 min
-        .with_setup(sns_setup_legacy)
+        .with_setup(sns_setup)
         .add_test(systest!(initiate_token_swap_with_oc_parameters))
         .add_test(systest!(workload_rps400_get_state_query))
         .add_test(systest!(workload_rps800_get_state_query))

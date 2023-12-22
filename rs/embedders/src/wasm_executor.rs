@@ -21,7 +21,7 @@ use crate::{
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, InstanceStats, OutOfInstructionsHandler,
-    SubnetAvailableMemory, SystemApi, WasmExecutionOutput,
+    SubnetAvailableMemory, SystemApi, SystemApiCallCounters, WasmExecutionOutput,
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -454,6 +454,7 @@ pub fn wasm_execution_error(
             allocated_bytes: NumBytes::from(0),
             allocated_message_bytes: NumBytes::from(0),
             instance_stats: InstanceStats::default(),
+            system_api_call_counters: SystemApiCallCounters::default(),
         },
         None,
     )
@@ -617,6 +618,7 @@ pub fn process(
                     allocated_bytes: NumBytes::from(0),
                     allocated_message_bytes: NumBytes::from(0),
                     instance_stats: InstanceStats::default(),
+                    system_api_call_counters: SystemApiCallCounters::default(),
                 },
                 None,
                 Err(system_api.unwrap()), // should be safe because we've passed Some(api) to new_instance
@@ -637,6 +639,7 @@ pub fn process(
     let instance_stats = instance.get_stats();
     //unwrap should not fail, because we have passed Some(system_api) to the instance above
     let system_api = instance.store_data_mut().system_api_mut().unwrap();
+    let system_api_call_counters = system_api.call_counters();
     let slice_instruction_limit = system_api.slice_instruction_limit();
     // Capping at the limit to preserve the existing behaviour. It should be
     // possible to remove capping after ensuring that all callers can handle
@@ -725,6 +728,7 @@ pub fn process(
             allocated_bytes,
             allocated_message_bytes,
             instance_stats,
+            system_api_call_counters,
         },
         wasm_state_changes,
         Ok(instance),

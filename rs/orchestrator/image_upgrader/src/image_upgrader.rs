@@ -158,11 +158,8 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
                 "Request to download image {:?} from {}",
                 version, release_package_url
             );
-            let file_downloader = FileDownloader::new_with_timeout(
-                Some(self.log().clone()),
-                Duration::from_secs(60),
-                /* allow_redirects = */ true,
-            );
+            let file_downloader =
+                FileDownloader::new_with_timeout(Some(self.log().clone()), Duration::from_secs(60));
             let start_time = std::time::Instant::now();
             let download_result = file_downloader
                 .download_file(release_package_url, self.image_path(), hash.clone())

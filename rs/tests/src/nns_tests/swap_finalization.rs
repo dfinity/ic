@@ -18,23 +18,23 @@ use crate::{
 
 /// If the swap is committed, waits for the swap to finalize (for up to 2 minutes).
 pub async fn finalize_committed_swap(
-    env: TestEnv,
+    env: &TestEnv,
     create_service_nervous_system_proposal: CreateServiceNervousSystem,
 ) {
     let log = env.logger();
     info!(log, "Finalizing the swap");
 
-    let sns_client = SnsClient::read_attribute(&env);
+    let sns_client = SnsClient::read_attribute(env);
     let sns_request_provider = SnsRequestProvider::from_sns_client(&sns_client);
     let app_node = env.get_first_healthy_application_node_snapshot();
     let canister_agent = app_node.build_canister_agent().await;
 
     info!(log, "Waiting for the swap to be finalized");
 
-    wait_for_swap_to_finalize(&env, Duration::from_secs(200)).await;
+    wait_for_swap_to_finalize(env, Duration::from_secs(200)).await;
 
     sns_client
-        .assert_state(&env, Lifecycle::Committed, Mode::Normal)
+        .assert_state(env, Lifecycle::Committed, Mode::Normal)
         .await;
 
     info!(log, "Checking that the swap finalized successfully");
@@ -53,7 +53,7 @@ pub async fn finalize_committed_swap(
         log,
         "Swap finalization check 2: Get all neurons from SNS governance"
     );
-    let neurons = get_all_neurons(&env).await;
+    let neurons = get_all_neurons(env).await;
 
     info!(
         log,
@@ -263,7 +263,7 @@ async fn get_all_neurons(env: &TestEnv) -> Vec<ic_sns_governance::pb::v1::Neuron
         for _ in 0..max_pages {
             let list_neurons_request =
                 sns_request_provider.list_neurons(0, start_page_at.clone(), None, CallMode::Query);
-            let neurons_page = canister_agent
+            let neurons_page: Vec<ic_sns_governance::pb::v1::Neuron> = canister_agent
                 .call_and_parse(&list_neurons_request)
                 .await
                 .result()
@@ -285,7 +285,7 @@ async fn get_all_neurons(env: &TestEnv) -> Vec<ic_sns_governance::pb::v1::Neuron
     neurons
 }
 
-pub async fn wait_for_swap_to_start(env: TestEnv) {
+pub async fn wait_for_swap_to_start(env: &TestEnv) {
     let log: slog::Logger = env.logger();
     let start_time = std::time::SystemTime::now();
     let time_since_unix_epoch = start_time
@@ -293,7 +293,7 @@ pub async fn wait_for_swap_to_start(env: TestEnv) {
         .unwrap()
         .as_secs();
 
-    let sns_client = SnsClient::read_attribute(&env);
+    let sns_client = SnsClient::read_attribute(env);
     let sns_request_provider = SnsRequestProvider::from_sns_client(&sns_client);
     let app_node = env.get_first_healthy_application_node_snapshot();
     let canister_agent = app_node.build_canister_agent().await;
@@ -326,7 +326,7 @@ pub async fn wait_for_swap_to_start(env: TestEnv) {
     sleep(Duration::from_secs(seconds_to_wait)).await;
 
     sns_client
-        .assert_state(&env, Lifecycle::Open, Mode::PreInitializationSwap)
+        .assert_state(env, Lifecycle::Open, Mode::PreInitializationSwap)
         .await;
 
     info!(

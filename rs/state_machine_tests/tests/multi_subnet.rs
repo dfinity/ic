@@ -21,12 +21,11 @@ fn test_setup(
     subnet_type: SubnetType,
     subnet_list: Vec<SubnetId>,
     routing_table: RoutingTable,
-    now: std::time::SystemTime,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
 ) -> Arc<StateMachine> {
     let config =
         StateMachineConfig::new(SubnetConfig::new(subnet_type), HypervisorConfig::default());
-    let env = StateMachineBuilder::new()
+    StateMachineBuilder::new()
         .with_config(Some(config))
         .with_subnet_id(subnet_id)
         .with_subnet_list(subnet_list)
@@ -36,9 +35,7 @@ fn test_setup(
             curve: EcdsaCurve::Secp256k1,
             name: format!("master_ecdsa_public_key_{}", subnet_id),
         }])
-        .build_with_subnets(subnets);
-    env.set_time(now);
-    env
+        .build_with_subnets(subnets)
 }
 
 #[test]
@@ -69,14 +66,12 @@ fn counter_canister_call_test() {
 
     // Set up the two state machines for the two (app) subnets.
     let subnets = Arc::new(RwLock::new(BTreeMap::new()));
-    let now = std::time::SystemTime::now();
     let env1 = test_setup(
         subnets.clone(),
         subnet_id1,
         SubnetType::Application,
         subnet_list.clone(),
         routing_table.clone(),
-        now,
         registry_data_provider.clone(),
     );
     let env2 = test_setup(
@@ -85,7 +80,6 @@ fn counter_canister_call_test() {
         SubnetType::Application,
         subnet_list,
         routing_table,
-        now,
         registry_data_provider.clone(),
     );
 
@@ -312,13 +306,13 @@ fn counter_canister_call_test() {
         .unwrap();
 
     // This time we need to execute multiple rounds on the 1st subnet
-    // to induct all ingress messages with large payloads.
-    // In particular, the third ingress message is not yet picked up
-    // from the ingress pool after a single round.
+    // to induct all ingress messages with large payloads. The ingress
+    // messages are *not* selected in a deterministic order, so we check
+    // that any two out of three messages are known.
     env1.execute_round();
     assert!(matches!(
         env1.ingress_status(&msg10_id),
-        IngressStatus::Known { .. }
+        IngressStatus::Unknown { .. }
     ));
     assert!(matches!(
         env1.ingress_status(&msg11_id),
@@ -326,15 +320,25 @@ fn counter_canister_call_test() {
     ));
     assert!(matches!(
         env1.ingress_status(&msg12_id),
-        IngressStatus::Unknown
+        IngressStatus::Known { .. }
     ));
+
     // The third ingress message is only inducted after a repeated
     // call to execute a round.
     env1.execute_round();
     assert!(matches!(
-        env1.ingress_status(&msg12_id),
-        IngressStatus::Known { .. }
+        (
+            env1.ingress_status(&msg10_id),
+            env1.ingress_status(&msg11_id),
+            env1.ingress_status(&msg12_id)
+        ),
+        (
+            IngressStatus::Known { .. },
+            IngressStatus::Known { .. },
+            IngressStatus::Known { .. }
+        )
     ));
+
     // We also need execute to multiple rounds on the 2nd subnet
     // to induct the ingress message with large payload
     // and all three inter-canister calls with large arguments

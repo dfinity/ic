@@ -4,14 +4,12 @@ use ic_interfaces::execution_environment::{
     ExecutionRoundType, RegistryExecutionSettings, Scheduler,
 };
 use ic_logger::{fatal, ReplicaLogger};
-use ic_metrics::Timer;
+use ic_query_stats::deliver_query_stats;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_replicated_state::{NetworkTopology, ReplicatedState};
 use ic_types::{batch::Batch, ExecutionRound};
+use std::time::Instant;
 
-use self::query_stats::deliver_query_stats;
-
-mod query_stats;
 #[cfg(test)]
 mod tests;
 
@@ -37,6 +35,7 @@ pub(crate) struct StateMachineImpl {
     stream_builder: Box<dyn StreamBuilder>,
     log: ReplicaLogger,
     metrics: MessageRoutingMetrics,
+    query_stats_epoch_length: u64,
 }
 
 impl StateMachineImpl {
@@ -46,6 +45,7 @@ impl StateMachineImpl {
         stream_builder: Box<dyn StreamBuilder>,
         log: ReplicaLogger,
         metrics: MessageRoutingMetrics,
+        query_stats_epoch_length: u64,
     ) -> Self {
         Self {
             scheduler,
@@ -53,16 +53,17 @@ impl StateMachineImpl {
             stream_builder,
             log,
             metrics,
+            query_stats_epoch_length,
         }
     }
 
     /// Adds an observation to the `METRIC_PROCESS_BATCH_PHASE_DURATION`
     /// histogram for the given phase.
-    fn observe_phase_duration(&self, phase: &str, timer: &Timer) {
+    fn observe_phase_duration(&self, phase: &str, since: &Instant) {
         self.metrics
             .process_batch_phase_duration
             .with_label_values(&[phase])
-            .observe(timer.elapsed());
+            .observe(since.elapsed().as_secs_f64());
     }
 }
 
@@ -76,11 +77,17 @@ impl StateMachine for StateMachineImpl {
         registry_settings: &RegistryExecutionSettings,
         node_public_keys: NodePublicKeys,
     ) -> ReplicatedState {
-        let phase_timer = Timer::start();
+        let since = Instant::now();
 
         // Get query stats from blocks and add them to the state, so that they can be aggregated later.
         if let Some(query_stats) = &batch.messages.query_stats {
-            deliver_query_stats(query_stats, &mut state, batch.batch_number, &self.log);
+            deliver_query_stats(
+                query_stats,
+                &mut state,
+                batch.batch_number,
+                &self.log,
+                self.query_stats_epoch_length,
+            );
         }
 
         if batch.time >= state.metadata.batch_time {
@@ -116,10 +123,10 @@ impl StateMachine for StateMachineImpl {
         self.metrics
             .timed_out_requests_total
             .inc_by(timed_out_requests);
-        self.observe_phase_duration(PHASE_TIME_OUT_REQUESTS, &phase_timer);
+        self.observe_phase_duration(PHASE_TIME_OUT_REQUESTS, &since);
 
         // Preprocess messages and add messages to the induction pool through the Demux.
-        let phase_timer = Timer::start();
+        let since = Instant::now();
         let mut state_with_messages = self.demux.process_payload(state, batch.messages);
 
         // Append additional responses to the consensus queue.
@@ -127,7 +134,7 @@ impl StateMachine for StateMachineImpl {
             .consensus_queue
             .append(&mut batch.consensus_responses);
 
-        self.observe_phase_duration(PHASE_INDUCTION, &phase_timer);
+        self.observe_phase_duration(PHASE_INDUCTION, &since);
 
         let execution_round_type = if batch.requires_full_state_hash {
             ExecutionRoundType::CheckpointRound
@@ -135,7 +142,7 @@ impl StateMachine for StateMachineImpl {
             ExecutionRoundType::OrdinaryRound
         };
 
-        let phase_timer = Timer::start();
+        let since = Instant::now();
         // Process messages from the induction pool through the Scheduler.
         let state_after_execution = self.scheduler.execute_round(
             state_with_messages,
@@ -145,12 +152,12 @@ impl StateMachine for StateMachineImpl {
             execution_round_type,
             registry_settings,
         );
-        self.observe_phase_duration(PHASE_EXECUTION, &phase_timer);
+        self.observe_phase_duration(PHASE_EXECUTION, &since);
 
-        let phase_timer = Timer::start();
+        let since = Instant::now();
         // Postprocess the state and consolidate the Streams.
         let state_after_stream_builder = self.stream_builder.build_streams(state_after_execution);
-        self.observe_phase_duration(PHASE_MESSAGE_ROUTING, &phase_timer);
+        self.observe_phase_duration(PHASE_MESSAGE_ROUTING, &since);
 
         state_after_stream_builder
     }

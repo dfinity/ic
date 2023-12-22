@@ -5,12 +5,13 @@ use ic_interfaces::execution_environment::{
 };
 use ic_interfaces_state_manager::{StateManagerError, StateReader};
 use ic_logger::{fatal, ReplicaLogger};
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry, Timer};
+use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{ingress::IngressState, ingress::IngressStatus, messages::MessageId, Height, Time};
 use prometheus::{Histogram, HistogramVec};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
+use std::time::Instant;
 
 /// Struct that implements the ingress history reader trait. Consumers of this
 /// trait can use this to inspect the ingress history.
@@ -69,7 +70,7 @@ impl IngressHistoryReader for IngressHistoryReaderImpl {
 /// clock" or "absolute time").
 struct TransitionStartTime {
     ic_time: Time,
-    system_time: Timer,
+    system_time: Instant,
 }
 
 /// Struct that implements the ingress history writer trait. Consumers of this
@@ -158,7 +159,7 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
                     message_id.clone(),
                     TransitionStartTime {
                         ic_time: time,
-                        system_time: Timer::start(),
+                        system_time: Instant::now(),
                     },
                 );
             }
@@ -209,19 +210,13 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
 impl IngressHistoryWriterImpl {
     /// Return an Option<(ic_time_duration, wall_clock_duration)>.
     fn calculate_durations(&self, message_id: &MessageId, time: Time) -> Option<(f64, f64)> {
-        let timer: Option<TransitionStartTime>;
-        {
-            let mut map = self.received_time.write().unwrap();
-            timer = map.remove(message_id)
-        }
-        if let Some(timer) = timer {
-            Some((
+        let mut map = self.received_time.write().unwrap();
+        map.remove(message_id).map(|timer| {
+            (
                 (time.saturating_sub(timer.ic_time)).as_secs_f64(),
-                timer.system_time.elapsed(),
-            ))
-        } else {
-            None
-        }
+                timer.system_time.elapsed().as_secs_f64(),
+            )
+        })
     }
 }
 

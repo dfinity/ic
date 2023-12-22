@@ -6,12 +6,12 @@ use ic_ledger_core::block::EncodedBlock;
 use ic_types::CanisterId;
 use icp_ledger::protobuf::{ArchiveIndexEntry, ArchiveIndexResponse, TipOfChainRequest};
 use icp_ledger::{BlockArg, BlockIndex, BlockRes, GetBlocksArgs, GetBlocksRes, TipOfChainRes};
-use log::{debug, trace, warn};
 use on_wire::{FromWire, IntoWire};
 use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::sync::Arc;
 use tokio::task::{spawn, JoinHandle};
+use tracing::{debug, trace, warn};
 use url::Url;
 
 #[derive(Default)]

@@ -29,8 +29,8 @@ use std::time::{Duration, Instant};
 use url::Url;
 
 use async_trait::async_trait;
-use log::{debug, error, warn};
 use reqwest::{Client, StatusCode};
+use tracing::{debug, error, warn};
 
 use dfn_candid::CandidOne;
 use ic_ledger_canister_blocks_synchronizer::blocks::Blocks;
@@ -207,7 +207,7 @@ impl LedgerClient {
             }
             Err(e) => {
                 if e.contains("has no query method") || e.contains("not found") {
-                    log::warn!("Symbol endpoint not present in the ledger canister. Couldn't verify token symbol.");
+                    tracing::warn!("Symbol endpoint not present in the ledger canister. Couldn't verify token symbol.");
                 } else {
                     return Err(ApiError::internal_error(format!(
                         "Failed to fetch symbol name from the ledger: {}",

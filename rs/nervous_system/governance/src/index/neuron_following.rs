@@ -279,6 +279,12 @@ where
         let key = ((category, followee_id.clone()), follower_id.clone());
         self.category_followee_follower_to_null.contains_key(&key)
     }
+
+    /// Validates that some of the data in stable storage can be read, in order to prevent broken
+    /// schema. Should only be called in post_upgrade.
+    pub fn validate(&self) {
+        super::validate_stable_btree_map(&self.category_followee_follower_to_null);
+    }
 }
 
 impl<NeuronId, Category, M> NeuronFollowingIndex<NeuronId, Category>

@@ -24,7 +24,7 @@ use ic_interfaces::p2p::state_sync::StateSyncClient;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_quic_transport::Transport;
 use ic_types::{
-    artifact::{Artifact, StateSyncArtifactId, StateSyncMessage},
+    artifact::StateSyncArtifactId,
     chunkable::ChunkId,
     chunkable::{ArtifactErrorCode, Chunkable},
     NodeId,
@@ -52,7 +52,7 @@ const CHUNK_DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(10);
 /// to last for 1000 blocks (two checkpoint intervals) -> 1000b/0.1b/s = 10000s
 const STATE_SYNC_TIMEOUT: Duration = Duration::from_secs(10000);
 
-struct OngoingStateSync {
+struct OngoingStateSync<T: Send> {
     log: ReplicaLogger,
     rt: Handle,
     artifact_id: StateSyncArtifactId,
@@ -66,10 +66,10 @@ struct OngoingStateSync {
     allowed_downloads: usize,
     chunks_to_download: Box<dyn Iterator<Item = ChunkId> + Send>,
     // Event tasks
-    downloading_chunks: JoinMap<ChunkId, DownloadResult>,
+    downloading_chunks: JoinMap<ChunkId, DownloadResult<T>>,
     // State sync
-    state_sync: Arc<dyn StateSyncClient>,
-    tracker: Arc<Mutex<Box<dyn Chunkable + Send + Sync>>>,
+    state_sync: Arc<dyn StateSyncClient<Message = T>>,
+    tracker: Arc<Mutex<Box<dyn Chunkable<T> + Send>>>,
     state_sync_finished: bool,
 }
 
@@ -78,18 +78,18 @@ pub(crate) struct OngoingStateSyncHandle {
     pub jh: JoinHandle<()>,
 }
 
-pub(crate) struct DownloadResult {
+pub(crate) struct DownloadResult<T> {
     peer_id: NodeId,
-    result: Result<Option<StateSyncMessage>, DownloadChunkError>,
+    result: Result<Option<T>, DownloadChunkError>,
 }
 
-pub(crate) fn start_ongoing_state_sync(
+pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
     log: ReplicaLogger,
     rt: &Handle,
     metrics: OngoingStateSyncMetrics,
-    tracker: Arc<Mutex<Box<dyn Chunkable + Send + Sync>>>,
+    tracker: Arc<Mutex<Box<dyn Chunkable<T> + Send>>>,
     artifact_id: StateSyncArtifactId,
-    state_sync: Arc<dyn StateSyncClient>,
+    state_sync: Arc<dyn StateSyncClient<Message = T>>,
     transport: Arc<dyn Transport>,
 ) -> OngoingStateSyncHandle {
     let (new_peers_tx, new_peers_rx) = tokio::sync::mpsc::channel(ONGOING_STATE_SYNC_CHANNEL_SIZE);
@@ -116,7 +116,7 @@ pub(crate) fn start_ongoing_state_sync(
     }
 }
 
-impl OngoingStateSync {
+impl<T: 'static + Send> OngoingStateSync<T> {
     pub async fn run(mut self) {
         let state_sync_timeout = tokio::time::sleep(STATE_SYNC_TIMEOUT);
         tokio::pin!(state_sync_timeout);
@@ -192,7 +192,7 @@ impl OngoingStateSync {
 
     async fn handle_downloaded_chunk_result(
         &mut self,
-        DownloadResult { peer_id, result }: DownloadResult,
+        DownloadResult { peer_id, result }: DownloadResult<T>,
     ) {
         self.metrics.record_chunk_download_result(&result);
         match result {
@@ -295,11 +295,11 @@ impl OngoingStateSync {
     async fn download_chunk_task(
         peer_id: NodeId,
         client: Arc<dyn Transport>,
-        tracker: Arc<Mutex<Box<dyn Chunkable + Send + Sync>>>,
+        tracker: Arc<Mutex<Box<dyn Chunkable<T> + Send>>>,
         artifact_id: StateSyncArtifactId,
         chunk_id: ChunkId,
         metrics: OngoingStateSyncMetrics,
-    ) -> DownloadResult {
+    ) -> DownloadResult<T> {
         let _timer = metrics.chunk_download_duration.start_timer();
 
         let response_result = tokio::time::timeout(
@@ -329,7 +329,7 @@ impl OngoingStateSync {
 
         let chunk_add_result = tokio::task::spawn_blocking(move || {
             let chunk = parse_chunk_handler_response(response, chunk_id, metrics)?;
-            Ok(tracker.lock().unwrap().add_chunk(chunk))
+            Ok(tracker.lock().unwrap().add_chunk(chunk_id, chunk))
         })
         .await
         .map_err(|err| DownloadChunkError::RequestError {
@@ -339,11 +339,7 @@ impl OngoingStateSync {
         .and_then(std::convert::identity);
 
         let result = match chunk_add_result {
-            Ok(Ok(Artifact::StateSync(msg))) => Ok(Some(msg)),
-            Ok(Ok(_)) => {
-                //TODO: (NET-1448) With new protobufs this condition will redundant.
-                panic!("Should not happen");
-            }
+            Ok(Ok(msg)) => Ok(Some(msg)),
             Ok(Err(ArtifactErrorCode::ChunksMoreNeeded)) => Ok(None),
             Ok(Err(ArtifactErrorCode::ChunkVerificationFailed)) => {
                 Err(DownloadChunkError::RequestError {
@@ -389,6 +385,9 @@ mod tests {
 
     use super::*;
 
+    #[derive(Clone)]
+    struct TestMessage;
+
     fn compress_empty_bytes() -> Bytes {
         let mut raw = BytesMut::new();
         Bytes::new()
@@ -412,7 +411,7 @@ mod tests {
                     .body(compress_empty_bytes())
                     .unwrap())
             });
-            let mut c = MockChunkable::default();
+            let mut c = MockChunkable::<TestMessage>::default();
             c.expect_chunks_to_download()
                 .returning(|| Box::new(std::iter::once(ChunkId::from(1))));
 
@@ -451,7 +450,7 @@ mod tests {
                     .body(compress_empty_bytes())
                     .unwrap())
             });
-            let mut c = MockChunkable::default();
+            let mut c = MockChunkable::<TestMessage>::default();
             c.expect_chunks_to_download()
                 .returning(|| Box::new(std::iter::once(ChunkId::from(1))));
             c.expect_add_chunk()
@@ -497,7 +496,7 @@ mod tests {
                     .body(compress_empty_bytes())
                     .unwrap())
             });
-            let mut c = MockChunkable::default();
+            let mut c = MockChunkable::<TestMessage>::default();
             // Endless iterator
             c.expect_chunks_to_download()
                 .returning(|| Box::new(std::iter::once(ChunkId::from(1))));

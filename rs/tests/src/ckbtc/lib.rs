@@ -8,9 +8,7 @@ use crate::{
     },
     icrc1_agent_test::install_icrc1_ledger,
     nns::vote_and_execute_proposal,
-    tecdsa::tecdsa_signature_test::{
-        get_public_key_with_logger, get_signature_with_logger, make_key, verify_signature,
-    },
+    tecdsa::{get_public_key_with_logger, get_signature_with_logger, make_key, verify_signature},
     util::{assert_create_agent, runtime_from_url, MessageCanister},
 };
 use candid::{Encode, Principal};

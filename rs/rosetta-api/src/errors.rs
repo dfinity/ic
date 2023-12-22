@@ -292,6 +292,12 @@ pub fn convert_to_api_error(err: Error, token_name: &str) -> ApiError {
     }
 }
 
+impl From<rosetta_core::miscellaneous::Error> for ApiError {
+    fn from(err: rosetta_core::miscellaneous::Error) -> Self {
+        convert_to_api_error(crate::models::Error(err), crate::DEFAULT_TOKEN_SYMBOL)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct ICError {
     #[serde(skip)]

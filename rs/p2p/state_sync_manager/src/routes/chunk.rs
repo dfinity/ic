@@ -13,7 +13,7 @@ use ic_logger::ReplicaLogger;
 use ic_protobuf::p2p::v1 as pb;
 use ic_types::{
     artifact::StateSyncArtifactId,
-    chunkable::{ArtifactChunk, ChunkId},
+    chunkable::{Chunk, ChunkId},
 };
 use prost::Message;
 
@@ -22,16 +22,16 @@ pub const STATE_SYNC_CHUNK_PATH: &str = "/state-sync/chunk";
 /// State sync uses 1Mb chunks. To be safe we use 8Mib here same as transport.
 const MAX_CHUNK_SIZE: usize = 8 * 1024 * 1024;
 
-pub(crate) struct StateSyncChunkHandler {
+pub(crate) struct StateSyncChunkHandler<T> {
     _log: ReplicaLogger,
-    state_sync: Arc<dyn StateSyncClient>,
+    state_sync: Arc<dyn StateSyncClient<Message = T>>,
     metrics: StateSyncManagerHandlerMetrics,
 }
 
-impl StateSyncChunkHandler {
+impl<T> StateSyncChunkHandler<T> {
     pub fn new(
         log: ReplicaLogger,
-        state_sync: Arc<dyn StateSyncClient>,
+        state_sync: Arc<dyn StateSyncClient<Message = T>>,
         metrics: StateSyncManagerHandlerMetrics,
     ) -> Self {
         Self {
@@ -42,8 +42,8 @@ impl StateSyncChunkHandler {
     }
 }
 
-pub(crate) async fn state_sync_chunk_handler(
-    State(state): State<Arc<StateSyncChunkHandler>>,
+pub(crate) async fn state_sync_chunk_handler<T: 'static>(
+    State(state): State<Arc<StateSyncChunkHandler<T>>>,
     payload: Bytes,
 ) -> Result<Bytes, StatusCode> {
     // Parse payload
@@ -56,7 +56,7 @@ pub(crate) async fn state_sync_chunk_handler(
         tokio::task::spawn_blocking(
             move || match state.state_sync.chunk(&artifact_id, chunk_id) {
                 Some(data) => {
-                    let pb_chunk = pb::StateSyncChunkResponse { data: data.into() };
+                    let pb_chunk = pb::StateSyncChunkResponse { data };
                     let mut raw = BytesMut::with_capacity(pb_chunk.encoded_len());
                     pb_chunk.encode(&mut raw).expect("Allocated enough memory");
                     let raw = raw.freeze();
@@ -100,7 +100,7 @@ pub(crate) fn parse_chunk_handler_response(
     response: Response<Bytes>,
     chunk_id: ChunkId,
     metrics: OngoingStateSyncMetrics,
-) -> Result<ArtifactChunk, DownloadChunkError> {
+) -> Result<Chunk, DownloadChunkError> {
     let (parts, body) = response.into_parts();
 
     match parts.status {
@@ -127,12 +127,7 @@ pub(crate) fn parse_chunk_handler_response(
                     }
                 })?;
 
-            let chunk = ArtifactChunk {
-                chunk_id,
-                artifact_chunk_data:
-                    ic_types::chunkable::ArtifactChunkData::SemiStructuredChunkData(pb.data),
-            };
-            Ok(chunk)
+            Ok(pb.data)
         }
         StatusCode::NO_CONTENT => Err(DownloadChunkError::NoContent),
         StatusCode::TOO_MANY_REQUESTS => Err(DownloadChunkError::Overloaded),

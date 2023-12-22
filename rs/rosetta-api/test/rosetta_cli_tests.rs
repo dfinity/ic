@@ -1,7 +1,6 @@
 use super::*;
 
-use ic_ledger_canister_blocks_synchronizer_test_utils::init_test_logger;
-use log::debug;
+use tracing::log::debug;
 
 fn rosetta_cli() -> String {
     match std::env::var("ROSETTA_CLI").ok() {
@@ -23,8 +22,6 @@ fn local(file: &str) -> String {
 
 #[actix_rt::test]
 async fn rosetta_cli_data_test() {
-    init_test_logger();
-
     let addr = "127.0.0.1:8091".to_string();
 
     let mut scribe = Scribe::new();
@@ -82,8 +79,6 @@ async fn rosetta_cli_data_test() {
 
 #[actix_rt::test]
 async fn rosetta_cli_construction_create_account_test() {
-    init_test_logger();
-
     let addr = "127.0.0.1:8092".to_string();
 
     let mut scribe = Scribe::new();
@@ -147,8 +142,6 @@ async fn rosetta_cli_construction_create_account_test() {
 
 #[actix_rt::test]
 async fn rosetta_cli_construction_test() {
-    init_test_logger();
-
     let addr = "127.0.0.1:8093".to_string();
 
     let mut scribe = Scribe::new();

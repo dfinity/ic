@@ -9,10 +9,10 @@ use crate::{
         proposal::Action,
         transfer_sns_treasury_funds::TransferFrom,
         DeregisterDappCanisters, ExecuteGenericNervousSystemFunction, Governance,
-        ManageSnsMetadata, MintSnsTokens, Motion, NervousSystemFunction, NervousSystemParameters,
-        Proposal, ProposalData, ProposalDecisionStatus, ProposalRewardStatus,
-        RegisterDappCanisters, Tally, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
-        UpgradeSnsToNextVersion, Vote,
+        ManageLedgerParameters, ManageSnsMetadata, MintSnsTokens, Motion, NervousSystemFunction,
+        NervousSystemParameters, Proposal, ProposalData, ProposalDecisionStatus,
+        ProposalRewardStatus, RegisterDappCanisters, Tally, TransferSnsTreasuryFunds,
+        UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
     },
 };
 
@@ -245,6 +245,9 @@ pub async fn validate_and_render_action(
                 .and_then(|params| params.transaction_fee_e8s)
                 .unwrap_or(DEFAULT_TRANSFER_FEE.get_e8s());
             validate_and_render_mint_sns_tokens(mint, sns_transfer_fee_e8s)
+        }
+        proposal::Action::ManageLedgerParameters(manage_ledger_parameters) => {
+            validate_and_render_manage_ledger_parameters(manage_ledger_parameters)
         }
     }
 }
@@ -584,6 +587,10 @@ fn validate_canister_id(
     }
 }
 
+impl ValidGenericNervousSystemFunction {
+    pub const MIN_ID: u64 = 1000;
+}
+
 impl TryFrom<&NervousSystemFunction> for ValidGenericNervousSystemFunction {
     type Error = String;
 
@@ -608,8 +615,11 @@ impl TryFrom<&NervousSystemFunction> for ValidGenericNervousSystemFunction {
 
         let mut defects = vec![];
 
-        if *id < 1000 {
-            defects.push("NervousSystemFunction's must have ids starting at 1000".to_string());
+        if *id < Self::MIN_ID {
+            defects.push(format!(
+                "NervousSystemFunction's must have ids starting at {}",
+                Self::MIN_ID,
+            ));
         }
 
         if name.is_empty() || name.len() > 256 {
@@ -926,6 +936,27 @@ pub fn validate_and_render_manage_sns_metadata(
             "Error: ManageSnsMetadata must change at least one value, all values are None"
                 .to_string(),
         )
+    } else {
+        Ok(render)
+    }
+}
+
+fn validate_and_render_manage_ledger_parameters(
+    manage_ledger_parameters: &ManageLedgerParameters,
+) -> Result<String, String> {
+    let mut no_change = true;
+    let mut render = "# Proposal to change ledger parameters:\n".to_string();
+    if let Some(transfer_fee) = &manage_ledger_parameters.transfer_fee {
+        render += &format!(
+            "# Set token transfer fee: {} token-quantums. \n",
+            transfer_fee
+        );
+        no_change = false;
+    }
+    if no_change {
+        Err(String::from(
+            "ManageLedgerParameters must change at least one value, all values are None",
+        ))
     } else {
         Ok(render)
     }
@@ -3177,6 +3208,27 @@ Version {
         assert_eq!(
             ProposalData::majority_decision(yes_votes, no_votes + 1, total_votes, threshold),
             Vote::No
+        );
+    }
+
+    #[test]
+    fn validate_and_render_manage_ledger_parameters_must_be_changes() {
+        let rendered_error =
+            validate_and_render_manage_ledger_parameters(&ManageLedgerParameters::default())
+                .unwrap_err();
+        assert!(rendered_error.contains("must change at least one value"));
+    }
+
+    #[test]
+    fn test_validate_and_render_manage_ledger_parameters() {
+        let new_fee = 751;
+        let render = validate_and_render_manage_ledger_parameters(&ManageLedgerParameters {
+            transfer_fee: Some(new_fee),
+        })
+        .unwrap();
+        assert_eq!(
+            render,
+            format!("# Proposal to change ledger parameters:\n# Set token transfer fee: {} token-quantums. \n", new_fee)
         );
     }
 }

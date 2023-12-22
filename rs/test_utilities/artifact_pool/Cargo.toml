@@ -17,6 +17,7 @@ ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
+ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-test-utilities = { path = "../" }
 ic-types = { path = "../../types/types" }

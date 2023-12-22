@@ -193,7 +193,7 @@ impl RosettaApiClient {
         ops: Vec<Operation>,
     ) -> Result<Result<ConstructionPreprocessResponse, Error>, String> {
         let req = ConstructionPreprocessRequest::new(
-            ic_rosetta_api::models::NetworkIdentifier(self.network_id()),
+            ic_rosetta_api::models::NetworkIdentifier(self.network_id()).into(),
             ops,
         );
         to_rosetta_response::<ConstructionPreprocessResponse>(

@@ -587,6 +587,7 @@ impl ReplicatedState {
             mut message_memory_taken,
             wasm_custom_sections_memory_taken,
             canister_history_memory_taken,
+            wasm_chunk_store_memory_usage,
         ) = self
             .canisters_iter()
             .map(|canister| {
@@ -598,6 +599,7 @@ impl ReplicatedState {
                     canister.system_state.message_memory_usage(),
                     canister.wasm_custom_sections_memory_usage(),
                     canister.canister_history_memory_usage(),
+                    canister.wasm_chunk_store_memory_usage(),
                 )
             })
             .reduce(|accum, val| {
@@ -606,6 +608,7 @@ impl ReplicatedState {
                     accum.1 + val.1,
                     accum.2 + val.2,
                     accum.3 + val.3,
+                    accum.4 + val.4,
                 )
             })
             .unwrap_or_default();
@@ -613,7 +616,9 @@ impl ReplicatedState {
         message_memory_taken += (self.subnet_queues.memory_usage() as u64).into();
 
         MemoryTaken {
-            execution: raw_memory_taken + canister_history_memory_taken,
+            execution: raw_memory_taken
+                + canister_history_memory_taken
+                + wasm_chunk_store_memory_usage,
             messages: message_memory_taken,
             wasm_custom_sections: wasm_custom_sections_memory_taken,
             canister_history: canister_history_memory_taken,
@@ -775,6 +780,14 @@ impl ReplicatedState {
     /// Returns an immutable reference to `self.subnet_queues`.
     pub fn subnet_queues(&self) -> &CanisterQueues {
         &self.subnet_queues
+    }
+
+    /// See `IngressQueue::filter_messages()` for documentation.
+    pub fn filter_subnet_queues_ingress_messages<F>(&mut self, filter: F) -> Vec<Arc<Ingress>>
+    where
+        F: FnMut(&Arc<Ingress>) -> bool,
+    {
+        self.subnet_queues.filter_ingress_messages(filter)
     }
 
     /// Returns an immutable reference to `self.epoch_query_stats`.

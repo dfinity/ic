@@ -8,7 +8,7 @@ use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{debug, info, warn, ReplicaLogger};
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry, Timer};
+use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::messaging::xnet::v1 as pb;
 use ic_protobuf::proxy::ProtoProxy;
 use ic_registry_client_helpers::node::NodeRegistry;
@@ -19,6 +19,7 @@ use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::Instant;
 use threadpool::ThreadPool;
 use tokio::{
     runtime,
@@ -369,7 +370,7 @@ fn route_request(
     certified_stream_store: &dyn CertifiedStreamStore,
     metrics: &XNetEndpointMetrics,
 ) -> Response<Body> {
-    let timer = Timer::start();
+    let since = Instant::now();
     let mut resource = RESOURCE_ERROR;
     let response = match url.path() {
         API_URL_STREAMS => {
@@ -429,7 +430,7 @@ fn route_request(
     metrics
         .request_duration
         .with_label_values(&[resource, response.status().as_str()])
-        .observe(timer.elapsed());
+        .observe(since.elapsed().as_secs_f64());
 
     response
 }

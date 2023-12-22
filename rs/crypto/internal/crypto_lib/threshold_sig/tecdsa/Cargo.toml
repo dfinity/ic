@@ -38,6 +38,7 @@ criterion = { version = "0.5", features = ["html_reports"] }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
 bip32 = { version = "0.5", features = ["secp256k1"] }
 num-traits = { version = "0.2.15" }
+strum = "0.25"
 
 [[bench]]
 name = "field_ops"

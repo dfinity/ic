@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Convenience functions `update_candid` and `update_candid_as`.
+- New `set_controllers` method to set canister's controllers.
 
 
 

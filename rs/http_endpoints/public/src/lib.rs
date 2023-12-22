@@ -6,12 +6,10 @@
 //! naming used in the [Interface
 //! Specification](https://sdk.dfinity.org/docs/interface-spec/index.html)
 mod body;
-mod call;
 mod catch_up_package;
 mod common;
 mod dashboard;
 mod health_status_refresher;
-mod metrics;
 mod pprof;
 mod query;
 mod read_state;
@@ -19,7 +17,18 @@ mod state_reader_executor;
 mod status;
 mod threads;
 mod types;
-mod validator_executor;
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "fuzzing_code")] {
+        pub mod validator_executor;
+        pub mod metrics;
+        pub mod call;
+    } else {
+        mod validator_executor;
+        mod metrics;
+        mod call;
+    }
+}
 
 use crate::{
     body::BodyReceiverLayer,
@@ -109,7 +118,7 @@ const HTTP_DASHBOARD_URL_PATH: &str = "/_/dashboard";
 const CONTENT_TYPE_CBOR: &str = "application/cbor";
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct HttpError {
+pub struct HttpError {
     pub status: StatusCode,
     pub message: String,
 }

@@ -84,7 +84,6 @@ use ic_types::{
         IngressArtifact,
     },
     chunkable::ChunkId,
-    chunkable::CHUNKID_UNIT_CHUNK,
     crypto::CryptoHash,
     p2p::GossipAdvert,
     NodeId, RegistryVersion,
@@ -96,6 +95,8 @@ use std::{
     ops::DerefMut,
     time::{Instant, SystemTime},
 };
+
+const CHUNKID_UNIT_CHUNK: u32 = 0;
 
 /// `DownloadManagerImpl` implements the `DownloadManager` trait.
 impl GossipImpl {
@@ -301,7 +302,6 @@ impl GossipImpl {
             // FileTreeSync is not of ArtifactKind kind, and it's used only for testing.
             // Thus, we make up the integrity_hash.
             Artifact::FileTreeSync(_msg) => CryptoHash(vec![]),
-            Artifact::StateSync(msg) => ic_types::crypto::crypto_hash(msg).get(),
         };
 
         if expected_ih != advert.integrity_hash {
@@ -376,7 +376,6 @@ impl GossipImpl {
             }
             // This artifact is used only in tests.
             Artifact::FileTreeSync(_) => true,
-            Artifact::StateSync(_) => unimplemented!(),
         };
         if advert_matches_completed_artifact {
             match self
@@ -1011,7 +1010,7 @@ pub mod tests {
     use ic_types::{
         artifact,
         artifact::{Artifact, ArtifactAttribute, ArtifactPriorityFn, Priority},
-        chunkable::ChunkableArtifact,
+        single_chunked::ChunkableArtifact,
         Height, NodeId, PrincipalId,
     };
     use ic_types::{artifact::ArtifactKind, artifact_kind::ConsensusArtifact, consensus::*};

@@ -25,7 +25,7 @@ fn known_values_test() {
         .unwrap();
     println!("Testing {:#?} ...", f);
     let assert_close_enough = |arg_icp_e8s: u64, expected_icp: Decimal| {
-        let observed_icp = f.apply_unchecked(arg_icp_e8s);
+        let observed_icp = f.apply(arg_icp_e8s).unwrap();
         assert!(
             (observed_icp - expected_icp).abs() <= ERROR_TOLERANCE_ICP,
             "Expected f({}) = {} but observed {} (tolerance = {})",
@@ -107,7 +107,7 @@ fn plot_test() {
     );
     for x in 0..=600 {
         let x_icp_e8s = x * E8;
-        let y_icp = f.apply_unchecked(x_icp_e8s);
+        let y_icp = f.apply(x_icp_e8s).unwrap();
         if x_icp_e8s < 34 * E8 {
             assert_eq!(y_icp, dec!(0));
             continue;

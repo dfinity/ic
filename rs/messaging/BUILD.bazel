@@ -26,6 +26,7 @@ rust_library(
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
         "//rs/protobuf",
+        "//rs/query_stats",
         "//rs/registry/helpers",
         "//rs/registry/keys",
         "//rs/registry/provisional_whitelist",

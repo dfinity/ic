@@ -5,6 +5,7 @@ use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use num_traits::ToPrimitive;
 use std::{collections::HashMap, sync::Arc};
 pub mod common;
+pub mod construction_api;
 pub mod data_api;
 pub mod ledger_blocks_synchronization;
 

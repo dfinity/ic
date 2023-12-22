@@ -64,8 +64,6 @@ impl RosettaApiHandle {
         workspace_path: String,
         root_key_blob: Option<&Blob>,
     ) -> Self {
-        let log_conf_file = format!("{}/ic_rosetta_api_log_config.yml", workspace_path);
-
         let workspace = tempfile::Builder::new()
             .prefix("rosetta_api_tmp_")
             .tempdir_in(workspace_path)
@@ -90,9 +88,6 @@ impl RosettaApiHandle {
 
         args.push("--port".to_string());
         args.push(api_port);
-
-        args.push("--log-config-file".to_string());
-        args.push(log_conf_file);
 
         args.push("--store-location".to_string());
         args.push(format!("{}/data", workspace.path().display()));
@@ -244,7 +239,7 @@ impl RosettaApiHandle {
         &self,
         ops: Vec<Operation>,
     ) -> Result<Result<ConstructionPreprocessResponse, RosettaError>, String> {
-        let req = ConstructionPreprocessRequest::new(self.network_id(), ops);
+        let req = ConstructionPreprocessRequest::new(self.network_id().into(), ops);
         to_rosetta_response(
             self.post_json_request(
                 &format!("http://{}/construction/preprocess", self.api_url),

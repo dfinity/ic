@@ -309,11 +309,9 @@ fn get_init() {
 
 /// Returns the initialization data of the canister
 #[candid_method(query, rename = "get_init")]
-async fn get_init_(_request: GetInitRequest) -> GetInitResponse {
+async fn get_init_(request: GetInitRequest) -> GetInitResponse {
     log!(INFO, "get_init");
-    GetInitResponse {
-        init: swap().init.clone(),
-    }
+    swap().get_init(&request)
 }
 
 /// Return the current derived state of the Swap

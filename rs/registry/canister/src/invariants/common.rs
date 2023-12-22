@@ -122,17 +122,12 @@ pub(crate) fn get_api_boundary_node_records_from_snapshot(
     snapshot: &RegistrySnapshot,
 ) -> BTreeMap<NodeId, ApiBoundaryNodeRecord> {
     let mut result = BTreeMap::<NodeId, ApiBoundaryNodeRecord>::new();
-    for key in snapshot.keys() {
-        if let Some(principal_id) =
-            get_api_boundary_node_record_node_id(String::from_utf8(key.clone()).unwrap().as_str())
-        {
+    for (key, value) in snapshot.iter() {
+        let key_str =
+            String::from_utf8(key.clone()).expect("failed to convert UTF-8 byte vector to string");
+        if let Some(principal_id) = get_api_boundary_node_record_node_id(&key_str) {
             // This is indeed an api boundary node record
-            let api_boundary_node_record = match snapshot.get(key) {
-                Some(api_boundary_node_record_bytes) => {
-                    decode_or_panic::<ApiBoundaryNodeRecord>(api_boundary_node_record_bytes.clone())
-                }
-                None => panic!("Cannot fetch api boundary node record for an existing key"),
-            };
+            let api_boundary_node_record = decode_or_panic::<ApiBoundaryNodeRecord>(value.clone());
             let node_id = NodeId::from(principal_id);
             result.insert(node_id, api_boundary_node_record);
         }
@@ -182,4 +177,59 @@ pub(crate) fn assert_valid_urls_and_hash(urls: &[String], hash: &str, allow_file
             panic!("Release package URL {url} is not valid: {e}");
         }
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use ic_base_types::{NodeId, PrincipalId};
+    use ic_protobuf::registry::api_boundary_node::v1::ApiBoundaryNodeRecord;
+    use ic_registry_keys::make_api_boundary_node_record_key;
+
+    use crate::mutations::common::encode_or_panic;
+
+    use super::{
+        get_api_boundary_node_records_from_snapshot, get_value_from_snapshot, RegistrySnapshot,
+    };
+
+    #[test]
+    fn test_get_api_boundary_node_records_from_snapshot_success() {
+        let mut snapshot = RegistrySnapshot::new();
+        let node_id: NodeId = PrincipalId::new_node_test_id(0).into();
+        let record = ApiBoundaryNodeRecord::default();
+        snapshot.insert(
+            make_api_boundary_node_record_key(node_id).into_bytes(), // correct key
+            encode_or_panic(&record),                                // correct value
+        );
+
+        let api_bn_records = get_api_boundary_node_records_from_snapshot(&snapshot);
+        assert_eq!(api_bn_records.len(), 1);
+        assert_eq!(api_bn_records[&node_id], record);
+    }
+
+    #[test]
+    #[should_panic(expected = "could not decode byte vector as PB Message")]
+    fn test_get_api_boundary_node_records_from_snapshot_with_wrongly_encoded_record() {
+        let mut snapshot = RegistrySnapshot::new();
+        let node_id: NodeId = PrincipalId::new_node_test_id(0).into();
+        snapshot.insert(
+            make_api_boundary_node_record_key(node_id).into_bytes(), // correct key
+            vec![0], // incorrect value, not an encoded ApiBoundaryNodeRecord
+        );
+        // this call should panic when decoding the ApiBoundaryNodeRecord
+        get_api_boundary_node_records_from_snapshot(&snapshot);
+    }
+
+    #[test]
+    #[should_panic(expected = "could not decode byte vector as PB Message")]
+    fn test_get_value_from_snapshot_panics() {
+        let mut snapshot = RegistrySnapshot::new();
+        let node_id: NodeId = PrincipalId::new_node_test_id(0).into();
+        let key = make_api_boundary_node_record_key(node_id);
+        snapshot.insert(
+            key.clone().into_bytes(), // correct key
+            vec![0],                  // incorrect value, not an encoded ApiBoundaryNodeRecord
+        );
+        // this call should panic when decoding the ApiBoundaryNodeRecord
+        get_value_from_snapshot::<ApiBoundaryNodeRecord>(&snapshot, key);
+    }
 }

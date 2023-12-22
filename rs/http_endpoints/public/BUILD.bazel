@@ -1,8 +1,12 @@
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
+load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 
-package(default_visibility = ["//rs/replica:__subpackages__"])
+package(default_visibility = [
+    "//rs/http_endpoints:__subpackages__",
+    "//rs/replica:__subpackages__",
+])
 
 DEPENDENCIES = [
     "//rs/async_utils",
@@ -29,6 +33,7 @@ DEPENDENCIES = [
     "@crate_index//:askama",
     "@crate_index//:bytes",
     "@crate_index//:byte-unit",
+    "@crate_index//:cfg-if",
     "@crate_index//:crossbeam",
     "@crate_index//:futures",
     "@crate_index//:futures-util",
@@ -101,10 +106,15 @@ rust_library(
     aliases = ALIASES,
     crate_features = select({
         "//bazel:malicious_code_enabled": ["malicious_code"],
+        "//bazel:fuzzing_code_enabled": ["fuzzing_code"],
         "//conditions:default": [],
     }),
     crate_name = "ic_http_endpoints_public",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    rustc_flags = select({
+        "//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
+        "//conditions:default": [],
+    }),
     version = "0.9.0",
     deps = DEPENDENCIES + [":build_script"],
 )

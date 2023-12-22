@@ -1,4 +1,5 @@
 use std::{
+    net::SocketAddr,
     pin::Pin,
     sync::{atomic::AtomicBool, Arc},
     time::Instant,
@@ -9,7 +10,7 @@ use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use axum::{
     body::Body,
-    extract::State,
+    extract::{ConnectInfo, RawQuery, State},
     http::Request,
     middleware::Next,
     response::{IntoResponse, Response},
@@ -17,7 +18,9 @@ use axum::{
 };
 use bytes::Buf;
 use futures::task::{Context as FutContext, Poll};
-use http::header::{HeaderMap, HeaderValue, CONTENT_LENGTH, CONTENT_TYPE};
+use http::header::{
+    HeaderMap, HeaderValue, CONTENT_LENGTH, CONTENT_TYPE, HOST, ORIGIN, REFERER, USER_AGENT,
+};
 use http_body::Body as HttpBody;
 use ic_types::{messages::ReplicaHealthStatus, CanisterId};
 use jemalloc_ctl::{epoch, stats};
@@ -608,6 +611,9 @@ pub async fn metrics_middleware_status(
 // middleware to log and measure proxied requests
 pub async fn metrics_middleware(
     State(metric_params): State<HttpMetricParams>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    RawQuery(query_string): RawQuery,
+    headers: HeaderMap,
     Extension(request_id): Extension<RequestId>,
     request: Request<Body>,
     next: Next<Body>,
@@ -646,6 +652,7 @@ pub async fn metrics_middleware(
     let sender = ctx.sender.map(|x| x.to_string());
     let node_id = node.as_ref().map(|x| x.id.to_string());
     let subnet_id = node.as_ref().map(|x| x.subnet_id.to_string());
+    let ip_family = if addr.is_ipv4() { "4" } else { "6" };
 
     let HttpMetricParams {
         action,
@@ -671,7 +678,13 @@ pub async fn metrics_middleware(
 
         let retry_result = retry_result.clone();
 
-        let retry_label =
+        // Prepare labels
+        // Otherwise "temporary value dropped" error occurs
+        let error_cause_lbl = error_cause.clone().unwrap_or("none".to_string());
+        let subnet_id_lbl = subnet_id.clone().unwrap_or("unknown".to_string());
+        let cache_status_lbl = &cache_status.to_string();
+        let cache_bypass_reason_lbl = cache_bypass_reason.clone().unwrap_or("none".to_string());
+        let retry_lbl =
             // Check if retry happened and if it succeeded
             if let Some(v) = &retry_result {
                 if v.success {
@@ -683,13 +696,6 @@ pub async fn metrics_middleware(
                 "no"
             };
 
-        // Prepare labels
-        // Otherwise "temporary value dropped" error occurs
-        let error_cause_lbl = error_cause.clone().unwrap_or("none".to_string());
-        let subnet_id_lbl = subnet_id.clone().unwrap_or("unknown".to_string());
-        let cache_status_lbl = &cache_status.to_string();
-        let cache_bypass_reason_lbl = cache_bypass_reason.clone().unwrap_or("none".to_string());
-
         // Average cardinality up to 150k
         let labels = &[
             request_type.as_str(),            // x3
@@ -698,7 +704,7 @@ pub async fn metrics_middleware(
             error_cause_lbl.as_str(),         // x15 but usually x6
             cache_status_lbl.as_str(),        // x4
             cache_bypass_reason_lbl.as_str(), // x6 but since it relates only to BYPASS cache status -> total for 2 fields is x9
-            retry_label,                      // x3
+            retry_lbl,                        // x3
         ];
 
         counter.with_label_values(labels).inc();
@@ -709,6 +715,19 @@ pub async fn metrics_middleware(
         response_sizer
             .with_label_values(labels)
             .observe(response_size as f64);
+
+        let header_host = headers
+            .get(HOST)
+            .map(|v| v.to_str().unwrap_or("parsing_error"));
+        let header_origin = headers
+            .get(ORIGIN)
+            .map(|v| v.to_str().unwrap_or("parsing_error"));
+        let header_referer = headers
+            .get(REFERER)
+            .map(|v| v.to_str().unwrap_or("parsing_error"));
+        let header_user_agent = headers
+            .get(USER_AGENT)
+            .map(|v| v.to_str().unwrap_or("parsing_error"));
 
         info!(
             action,
@@ -734,6 +753,12 @@ pub async fn metrics_middleware(
             cache_bypass_reason = cache_bypass_reason.map(|x| x.to_string()),
             nonce_len = ctx.nonce.clone().map(|x| x.len()),
             arg_len = ctx.arg.clone().map(|x| x.len()),
+            ip_family,
+            query_string,
+            header_host,
+            header_origin,
+            header_referer,
+            header_user_agent,
         );
     };
 

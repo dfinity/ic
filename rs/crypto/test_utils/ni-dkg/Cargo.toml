@@ -9,6 +9,7 @@ documentation.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+hex = "0.4.2"
 ic-crypto-internal-bls12-381-type = { path = "../../internal/crypto_lib/bls12_381/type" }
 ic-crypto-internal-types = { path = "../../internal/crypto_lib/types" }
 ic-crypto-internal-csp = { path = "../../internal/crypto_service_provider" }
@@ -27,6 +28,5 @@ rand_chacha = "0.3"
 serde = { workspace = true }
 
 [dev-dependencies]
-hex = "0.4.2"
 ic-crypto-test-utils = { path = "../../test_utils" }
 ic-types-test-utils = { path = "../../../types/types_test_utils" }

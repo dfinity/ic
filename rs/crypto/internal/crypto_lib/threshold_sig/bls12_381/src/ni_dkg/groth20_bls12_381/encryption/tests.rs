@@ -1,5 +1,6 @@
 #![allow(clippy::unwrap_used)]
 //! Tests for the CLib NiDKG forward secure encryption
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 pub use rand::{Rng, RngCore, SeedableRng};
 pub use rand_chacha::ChaChaRng;
 pub use std::collections::BTreeMap;
@@ -77,6 +78,29 @@ fn single_stepping_a_key_should_increment_current_epoch() {
             epoch, key_epoch
         );
     }
+}
+
+#[test]
+fn should_not_update_key_on_current_or_past_epoch() {
+    let rng = &mut reproducible_rng();
+    let mut associated_data = [0u8; 4];
+    rng.fill_bytes(&mut associated_data[..]);
+
+    let key_with_pop = create_forward_secure_key_pair(Seed::from_rng(rng), &associated_data);
+    let mut secret_key = SecretKey::deserialize(&key_with_pop.secret_key);
+    let secret_key_epoch = Epoch::from(10);
+    update_key_inplace_to_epoch(&mut secret_key, secret_key_epoch, Seed::from_rng(rng));
+    assert_eq!(secret_key.current_epoch(), Some(secret_key_epoch));
+
+    let past_epoch = Epoch::from(9);
+    let key_before_update = secret_key.serialize();
+
+    // Update key to a previous epoch
+    update_key_inplace_to_epoch(&mut secret_key, past_epoch, Seed::from_rng(rng));
+    assert_eq!(secret_key.serialize(), key_before_update);
+    // Update key to current epoch
+    update_key_inplace_to_epoch(&mut secret_key, secret_key_epoch, Seed::from_rng(rng));
+    assert_eq!(secret_key.serialize(), key_before_update);
 }
 
 #[test]

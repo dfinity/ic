@@ -1,7 +1,7 @@
 use super::*;
 
+use ic_ledger_canister_blocks_synchronizer_test_utils::create_tmp_dir;
 use ic_ledger_canister_blocks_synchronizer_test_utils::sample_data::Scribe;
-use ic_ledger_canister_blocks_synchronizer_test_utils::{create_tmp_dir, init_test_logger};
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::tokens::CheckedAdd;
 use ic_rosetta_api::convert::{block_id, from_hash, to_hash};
@@ -24,8 +24,6 @@ use std::sync::Arc;
 
 #[actix_rt::test]
 async fn smoke_test() {
-    init_test_logger();
-
     let mut scribe = Scribe::new();
     let num_transactions: usize = 1000;
     let num_accounts = 100;
@@ -225,8 +223,6 @@ async fn smoke_test() {
 
 #[actix_rt::test]
 async fn blocks_test() {
-    init_test_logger();
-
     let ledger = Arc::new(TestLedger::new());
     let req_handler = RosettaRequestHandler::new_with_default_blockchain(ledger.clone());
     let mut scribe = Scribe::new();
@@ -401,15 +397,13 @@ async fn blocks_test() {
 
 #[actix_rt::test]
 async fn balances_test() {
-    init_test_logger();
-
     let ledger = Arc::new(TestLedger::new());
     let req_handler = RosettaRequestHandler::new_with_default_blockchain(ledger.clone());
     let mut scribe = Scribe::new();
 
     scribe.gen_accounts(2, 1_000_000);
     for b in &scribe.blockchain {
-        ledger.add_block(b.clone()).await.ok();
+        ledger.add_block(b.clone()).await.unwrap();
     }
 
     let acc0 = acc_id(0);
@@ -428,7 +422,7 @@ async fn balances_test() {
     ledger
         .add_block(scribe.blockchain.back().unwrap().clone())
         .await
-        .ok();
+        .unwrap();
     assert_eq!(
         get_balance(&req_handler, None, acc0).await.unwrap(),
         *scribe.balance_book.get(&acc0).unwrap()
@@ -444,7 +438,7 @@ async fn balances_test() {
     ledger
         .add_block(scribe.blockchain.back().unwrap().clone())
         .await
-        .ok();
+        .unwrap();
     assert_eq!(
         get_balance(&req_handler, None, acc0).await.unwrap(),
         *scribe.balance_book.get(&acc0).unwrap()
@@ -458,7 +452,7 @@ async fn balances_test() {
     ledger
         .add_block(scribe.blockchain.back().unwrap().clone())
         .await
-        .ok();
+        .unwrap();
     assert_eq!(
         get_balance(&req_handler, None, acc0).await.unwrap(),
         *scribe.balance_book.get(&acc0).unwrap()
@@ -477,14 +471,7 @@ async fn balances_test() {
 
 fn verify_balances(scribe: &Scribe, blocks: &Blocks, start_idx: usize) {
     for hb in scribe.blockchain.iter().skip(start_idx) {
-        assert_eq!(
-            *hb,
-            blocks
-                .get_hashed_block(&hb.index)
-                .ok()
-                .ok_or(false)
-                .unwrap()
-        );
+        assert_eq!(*hb, blocks.get_hashed_block(&hb.index).unwrap());
         assert!(blocks.is_verified_by_hash(&hb.hash).unwrap());
         for (account, amount) in scribe.balance_history.get(hb.index as usize).unwrap() {
             assert_eq!(
@@ -663,7 +650,6 @@ async fn verify_account_search(
 
 #[actix_rt::test]
 async fn load_from_store_test() {
-    init_test_logger();
     let tmpdir = create_tmp_dir();
     let location = tmpdir.path();
     let scribe = Scribe::new_with_sample_data(10, 150);
@@ -751,7 +737,6 @@ async fn load_from_store_test() {
 // remove this test if it's in the way of a new spec
 #[actix_rt::test]
 async fn load_unverified_test() {
-    init_test_logger();
     let tmpdir = create_tmp_dir();
     let location = tmpdir.path();
     let scribe = Scribe::new_with_sample_data(10, 150);
@@ -789,7 +774,6 @@ async fn load_unverified_test() {
 
 #[actix_rt::test]
 async fn store_batch_test() {
-    init_test_logger();
     let tmpdir = create_tmp_dir();
     let location = tmpdir.path();
     let scribe = Scribe::new_with_sample_data(10, 150);
@@ -805,7 +789,7 @@ async fn store_batch_test() {
         blocks.get_hashed_block(&20).unwrap(),
         *scribe.blockchain.get(20).unwrap()
     );
-    assert!(blocks.get_hashed_block(&21).ok().is_none());
+    assert!(blocks.get_hashed_block(&21).is_err());
 
     let mut part2: Vec<HashedBlock> = scribe.blockchain.iter().skip(21).cloned().collect();
 
@@ -818,14 +802,14 @@ async fn store_batch_test() {
         blocks.get_hashed_block(&30).unwrap(),
         *scribe.blockchain.get(30).unwrap()
     );
-    assert!(blocks.get_hashed_block(&31).ok().is_none());
+    assert!(blocks.get_hashed_block(&31).is_err());
 
     assert!(blocks.push_batch(part3.clone()).is_err());
     assert_eq!(
         blocks.get_hashed_block(&30).unwrap(),
         *scribe.blockchain.get(30).unwrap()
     );
-    assert!(blocks.get_hashed_block(&31).ok().is_none());
+    assert!(blocks.get_hashed_block(&31).is_err());
 
     part3.pop();
 
@@ -835,7 +819,7 @@ async fn store_batch_test() {
         blocks.get_hashed_block(&last_idx).unwrap(),
         *scribe.blockchain.back().unwrap()
     );
-    assert!(blocks.get_hashed_block(&(last_idx + 1)).ok().is_none());
+    assert!(blocks.get_hashed_block(&(last_idx + 1)).is_err());
 
     blocks.set_hashed_block_to_verified(&last_idx).unwrap();
     verify_balances(&scribe, &blocks, 0);

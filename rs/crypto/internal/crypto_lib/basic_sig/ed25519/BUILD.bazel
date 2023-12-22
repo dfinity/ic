@@ -45,6 +45,7 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     visibility = [
+        "//rs/boundary_node/ic_boundary:__pkg__",
         "//rs/crypto:__subpackages__",
         "//rs/messaging:__pkg__",
         "//rs/replicated_state:__pkg__",

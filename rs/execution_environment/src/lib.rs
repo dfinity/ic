@@ -15,10 +15,6 @@ mod scheduler;
 mod types;
 pub mod util;
 
-use query_handler::query_stats::QueryStatsPayloadBuilderParams;
-// We need to expose this for testing purposes
-pub use query_handler::query_stats::init_query_stats;
-
 use crate::anonymous_query_handler::AnonymousQueryHandler;
 use crate::ingress_filter::IngressFilterServiceImpl;
 pub use execution_environment::{
@@ -38,6 +34,7 @@ use ic_interfaces::execution_environment::{
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
+use ic_query_stats::QueryStatsPayloadBuilderParams;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{CallOrigin, NetworkTopology, ReplicatedState};
@@ -128,7 +125,8 @@ impl ExecutionServices {
         let ingress_history_reader =
             Box::new(IngressHistoryReaderImpl::new(Arc::clone(&state_reader)));
 
-        let (query_stats_collector, query_stats_payload_builder) = init_query_stats(logger.clone());
+        let (query_stats_collector, query_stats_payload_builder) =
+            ic_query_stats::init_query_stats(logger.clone(), config.query_stats_epoch_length);
 
         let exec_env = Arc::new(ExecutionEnvironment::new(
             logger.clone(),

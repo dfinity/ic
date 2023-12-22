@@ -1,25 +1,28 @@
+use self::database_access::INSERT_INTO_TRANSACTIONS_STATEMENT;
+use crate::iso8601_to_timestamp;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_core::tokens::CheckedAdd;
 use ic_ledger_hash_of::HashOf;
-use icp_ledger::{AccountIdentifier, Block, Tokens};
+use icp_ledger::{AccountIdentifier, Block, TimeStamp, Tokens};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::path::Path;
 use std::sync::Mutex;
 
-use self::database_access::INSERT_INTO_TRANSACTIONS_STATEMENT;
-
 mod database_access {
     use super::vec_into_array;
-    use crate::blocks::{BlockStoreError, HashedBlock};
+    use crate::{
+        blocks::{BlockStoreError, HashedBlock},
+        iso8601_to_timestamp, timestamp_to_iso8601,
+    };
     use ic_ledger_canister_core::ledger::LedgerTransaction;
     use ic_ledger_core::{
         block::{BlockType, EncodedBlock},
         Tokens,
     };
     use ic_ledger_hash_of::HashOf;
-    use icp_ledger::{AccountIdentifier, Block, Operation, TimeStamp};
+    use icp_ledger::{AccountIdentifier, Block, Operation};
     use rusqlite::{named_params, params, types::Null, Connection, Error, Statement};
 
     pub fn push_hashed_block(
@@ -27,7 +30,7 @@ mod database_access {
         hb: &HashedBlock,
     ) -> Result<(), BlockStoreError> {
         let mut stmt = con
-        .prepare("INSERT INTO blocks (hash, block, parent_hash, idx, verified) VALUES (?1, ?2, ?3, ?4, FALSE)")
+        .prepare("INSERT INTO blocks (hash, block, parent_hash, idx, verified, timestamp) VALUES (?1, ?2, ?3, ?4, FALSE, ?5)")
         .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         push_hashed_block_execution(hb, &mut stmt)
     }
@@ -42,7 +45,8 @@ mod database_access {
             hash,
             hb.block.clone().into_vec(),
             parent_hash,
-            hb.index
+            hb.index,
+            timestamp_to_iso8601(hb.timestamp),
         ])
         .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         Ok(())
@@ -59,13 +63,6 @@ mod database_access {
             .prepare(INSERT_INTO_TRANSACTIONS_STATEMENT)
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         push_transaction_execution(tx, &mut stmt, index)
-    }
-
-    fn timestamp_to_iso8601(ts: TimeStamp) -> String {
-        let secs = (ts.as_nanos_since_unix_epoch() / 1_000_000_000) as i64;
-        let nsecs = (ts.as_nanos_since_unix_epoch() % 1_000_000_000) as u32;
-        let datetime = chrono::NaiveDateTime::from_timestamp_opt(secs, nsecs).unwrap();
-        chrono::DateTime::<chrono::Utc>::from_utc(datetime, chrono::Utc).to_rfc3339()
     }
 
     pub fn push_transaction_execution(
@@ -263,7 +260,7 @@ mod database_access {
         block_idx: &u64,
     ) -> Result<HashedBlock, BlockStoreError> {
         let command = format!(
-            "SELECT  hash, block, parent_hash,idx from blocks where idx = {}",
+            "SELECT  hash, block, parent_hash, idx, timestamp from blocks where idx = {}",
             block_idx
         );
         let mut blocks = read_hashed_block(con, command.as_str())?.into_iter();
@@ -290,6 +287,7 @@ mod database_access {
                         opt_bytes.map(|bytes| HashOf::new(vec_into_array(bytes)))
                     })?,
                     index: row.get(3)?,
+                    timestamp: iso8601_to_timestamp(row.get(4)?),
                 })
             })
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
@@ -366,8 +364,8 @@ mod database_access {
         verified: Option<bool>,
     ) -> Result<HashedBlock, BlockStoreError> {
         let command = match verified {
-            Some(verified) => format!("SELECT  hash, block, parent_hash,idx from blocks WHERE verified = {} ORDER BY idx ASC Limit 2",verified),
-            None => "SELECT  hash, block, parent_hash,idx from blocks ORDER BY idx ASC Limit 2".to_string()
+            Some(verified) => format!("SELECT hash, block, parent_hash, idx, timestamp from blocks WHERE verified = {} ORDER BY idx ASC Limit 2",verified),
+            None => "SELECT hash, block, parent_hash, idx, timestamp from blocks ORDER BY idx ASC Limit 2".to_string()
         };
         let mut blocks = read_hashed_block(con, command.as_str())?.into_iter();
         match blocks.next() {
@@ -392,8 +390,8 @@ mod database_access {
         verified: Option<bool>,
     ) -> Result<HashedBlock, BlockStoreError> {
         let command = match verified {
-            Some(verified) => format!("SELECT  hash, block, parent_hash,idx from blocks WHERE verified = {} ORDER BY idx DESC Limit 1",verified),
-            None => "SELECT  hash, block, parent_hash,idx from blocks ORDER BY idx DESC Limit 1".to_string()
+            Some(verified) => format!("SELECT hash, block, parent_hash, idx, timestamp from blocks WHERE verified = {} ORDER BY idx DESC Limit 1",verified),
+            None => "SELECT hash, block, parent_hash, idx, timestamp from blocks ORDER BY idx DESC Limit 1".to_string()
         };
         let mut blocks = read_hashed_block(con, command.as_str())?.into_iter();
         match blocks.next() {
@@ -688,6 +686,7 @@ pub struct HashedBlock {
     pub hash: HashOf<EncodedBlock>,
     pub parent_hash: Option<HashOf<EncodedBlock>>,
     pub index: u64,
+    pub timestamp: TimeStamp,
 }
 
 impl HashedBlock {
@@ -695,12 +694,14 @@ impl HashedBlock {
         block: EncodedBlock,
         parent_hash: Option<HashOf<EncodedBlock>>,
         index: BlockIndex,
+        timestamp: TimeStamp,
     ) -> HashedBlock {
         HashedBlock {
             hash: Block::block_hash(&block),
             block,
             parent_hash,
             index,
+            timestamp,
         }
     }
 }
@@ -768,7 +769,9 @@ impl Blocks {
                 block BLOB NOT NULL,
                 parent_hash BLOB,
                 idx INTEGER NOT NULL PRIMARY KEY,
-                verified BOOLEAN)
+                verified BOOLEAN,
+                timestamp TEXT
+            )
             "#,
             [],
         )?;
@@ -1053,7 +1056,7 @@ impl Blocks {
         {
             let mut stmt = connection
                 .prepare(
-                    "SELECT hash, block, parent_hash, idx FROM blocks WHERE idx >= ? AND idx < ?",
+                    "SELECT hash, block, parent_hash, idx, timestamp FROM blocks WHERE idx >= ? AND idx < ?",
                 )
                 .map_err(|e| BlockStoreError::Other(e.to_string()))?;
             let mut blocks = stmt
@@ -1065,6 +1068,7 @@ impl Blocks {
                             opt_bytes.map(|bytes| HashOf::new(vec_into_array(bytes)))
                         })?,
                         index: row.get(3)?,
+                        timestamp: iso8601_to_timestamp(row.get(4)?),
                     })
                 })
                 .map_err(|e| BlockStoreError::Other(e.to_string()))?;
@@ -1108,7 +1112,7 @@ impl Blocks {
         connection
             .execute_batch("BEGIN TRANSACTION;")
             .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
-        let mut stmt_hb =  connection.prepare("INSERT INTO blocks (hash, block, parent_hash, idx, verified) VALUES (?1, ?2, ?3, ?4, FALSE)")
+        let mut stmt_hb =  connection.prepare("INSERT INTO blocks (hash, block, parent_hash, idx, verified, timestamp) VALUES (?1, ?2, ?3, ?4, FALSE, ?5)")
         .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         let mut stmt_tx = connection
             .prepare(INSERT_INTO_TRANSACTIONS_STATEMENT)

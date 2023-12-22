@@ -145,12 +145,6 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
     }
 
     /// Sends an advert to all peers.
-    ///
-    /// Memory Consumption:
-    /// - JoinMap: #peers * (32 + ~32)
-    /// - HashMap: #peers * (32 + 8)
-    /// - advert: ±200
-    /// For 10k tasks ~50Mb
     async fn send_advert_to_all_peers(
         rt_handle: Handle,
         log: ReplicaLogger,
@@ -199,7 +193,7 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
         let body = Bytes::from(pb::AdvertUpdate::proxy_encode(advert_update));
 
         let mut in_progress_transmissions = JoinSet::new();
-        // stores the connection ID of the last successful transmission to a peer.
+        // Stores the connection ID of the last successful transmission to a peer.
         let mut initiated_transmissions: HashMap<NodeId, ConnId> = HashMap::new();
         let mut periodic_check_interval = time::interval(Duration::from_secs(5));
 

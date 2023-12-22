@@ -1,6 +1,7 @@
-#![allow(dead_code)] // TODO(NNS1-2409): remove when it is used by NNS Governance.
-
-use crate::pb::v1::{governance_error::ErrorType, GovernanceError};
+use crate::{
+    pb::v1::{governance_error::ErrorType, GovernanceError},
+    storage::validate_stable_btree_map,
+};
 
 use ic_nns_common::pb::v1::NeuronId;
 use ic_stable_structures::{Memory, StableBTreeMap};
@@ -8,7 +9,7 @@ use icp_ledger::Subaccount;
 
 /// An index to make it easy to lookup neuron id by subaccount.
 pub struct NeuronSubaccountIndex<M: Memory> {
-    subaccount_to_id: StableBTreeMap<[u8; 32], u64, M>,
+    subaccount_to_id: StableBTreeMap<[u8; 32], NeuronId, M>,
 }
 
 impl<M: Memory> NeuronSubaccountIndex<M> {
@@ -30,7 +31,7 @@ impl<M: Memory> NeuronSubaccountIndex<M> {
     pub fn contains_entry(&self, neuron_id: NeuronId, subaccount: &Subaccount) -> bool {
         self.subaccount_to_id
             .get(&subaccount.0)
-            .map(|value| value == neuron_id.id)
+            .map(|value| value == neuron_id)
             .unwrap_or_default()
     }
 
@@ -41,7 +42,7 @@ impl<M: Memory> NeuronSubaccountIndex<M> {
         neuron_id: NeuronId,
         subaccount: &Subaccount,
     ) -> Result<(), GovernanceError> {
-        let previous_neuron_id = self.subaccount_to_id.insert(subaccount.0, neuron_id.id);
+        let previous_neuron_id = self.subaccount_to_id.insert(subaccount.0, neuron_id);
         match previous_neuron_id {
             None => Ok(()),
             Some(previous_neuron_id) => {
@@ -66,7 +67,7 @@ impl<M: Memory> NeuronSubaccountIndex<M> {
 
         match previous_neuron_id {
             Some(previous_neuron_id) => {
-                if previous_neuron_id == neuron_id.id {
+                if previous_neuron_id == neuron_id {
                     Ok(())
                 } else {
                     self.subaccount_to_id
@@ -75,7 +76,7 @@ impl<M: Memory> NeuronSubaccountIndex<M> {
                         ErrorType::PreconditionFailed,
                         format!(
                             "Subaccount {:?} exists in the index with a different neuron id {}",
-                            subaccount.0, previous_neuron_id
+                            subaccount.0, previous_neuron_id.id
                         ),
                     ))
                 }
@@ -89,9 +90,13 @@ impl<M: Memory> NeuronSubaccountIndex<M> {
 
     /// Finds the neuron id by subaccount if it exists.
     pub fn get_neuron_id_by_subaccount(&self, subaccount: &Subaccount) -> Option<NeuronId> {
-        self.subaccount_to_id
-            .get(&subaccount.0)
-            .map(|id| NeuronId { id })
+        self.subaccount_to_id.get(&subaccount.0)
+    }
+
+    /// Validates that some of the data in stable storage can be read, in order to prevent broken
+    /// schema. Should only be called in post_upgrade.
+    pub fn validate(&self) {
+        validate_stable_btree_map(&self.subaccount_to_id);
     }
 }
 

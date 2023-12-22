@@ -1,12 +1,13 @@
 /* tag::catalog[]
 end::catalog[] */
 
+use super::{enable_ecdsa_signing, DKG_INTERVAL};
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
 };
-use crate::tecdsa::tecdsa_signature_test::{
+use crate::tecdsa::{
     get_public_key_with_logger, get_signature_with_logger, make_key, verify_signature, KEY_ID1,
 };
 use crate::util::{assert_malicious_from_topo, runtime_from_url, MessageCanister};
@@ -16,8 +17,6 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::Height;
 use slog::info;
-
-use super::tecdsa_signature_test::{enable_ecdsa_signing, DKG_INTERVAL};
 
 pub fn config(env: TestEnv) {
     let malicious_behaviour =
@@ -69,7 +68,13 @@ pub fn test(env: TestEnv) {
             nns_honest_node.effective_canister_id(),
         );
         let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
-        enable_ecdsa_signing(&governance, nns_subnet.subnet_id, make_key(KEY_ID1)).await;
+        enable_ecdsa_signing(
+            &governance,
+            nns_subnet.subnet_id,
+            vec![make_key(KEY_ID1)],
+            &log,
+        )
+        .await;
 
         let msg_can =
             MessageCanister::new(&nns_agent, nns_honest_node.effective_canister_id()).await;

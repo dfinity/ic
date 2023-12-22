@@ -181,7 +181,14 @@ pub async fn update_balance(
         )
         .await?;
 
-        utxos.retain(|u| tip_height < u.height + min_confirmations);
+        utxos.retain(|u| {
+            tip_height
+                < u.height
+                    .checked_add(min_confirmations)
+                    .expect("bug: this shouldn't overflow")
+                    .checked_sub(1)
+                    .expect("bug: this shouldn't underflow")
+        });
         let pending_utxos: Vec<PendingUtxo> = utxos
             .iter()
             .map(|u| PendingUtxo {

@@ -12,9 +12,6 @@ use ic_registry_subnet_type::SubnetType;
 
 use crate::snapshot::RegistrySnapshot;
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Rule {}
-
 pub struct SystemdReloader {
     bin_path: PathBuf,
     service: String,
@@ -30,7 +27,7 @@ impl SystemdReloader {
         }
     }
 
-    pub async fn reload(&self) -> Result<(), Error> {
+    pub fn reload(&self) -> Result<(), Error> {
         let mut child = Command::new(&self.bin_path)
             .args([&self.command, &self.service])
             .stdout(Stdio::piped())

@@ -14,10 +14,9 @@ use axum::{
 use bytes::Bytes;
 use crossbeam_channel::Sender as CrossbeamSender;
 use ic_interfaces::p2p::consensus::{PriorityFnAndFilterProducer, ValidatedPoolReader};
-use ic_logger::{error, ReplicaLogger};
-use ic_peer_manager::SubnetTopology;
+use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
-use ic_quic_transport::{ConnId, Transport};
+use ic_quic_transport::{ConnId, SubnetTopology, Transport};
 use ic_types::artifact::{ArtifactKind, Priority, PriorityFn, UnvalidatedArtifactMutation};
 use ic_types::NodeId;
 use rand::{rngs::SmallRng, seq::IteratorRandom, SeedableRng};
@@ -71,17 +70,14 @@ async fn rpc_handler<Artifact: ArtifactKind>(
     let jh = tokio::task::spawn_blocking(move || {
         let id: Artifact::Id =
             Artifact::PbId::proxy_decode(&payload).map_err(|_| StatusCode::BAD_REQUEST)?;
-        Ok::<_, StatusCode>(
-            pool.read()
-                .unwrap()
-                .get_validated_by_identifier(&id)
-                .map(|msg| Bytes::from(Artifact::PbMessage::proxy_encode(msg))),
-        )
+        let artifact = pool
+            .read()
+            .unwrap()
+            .get_validated_by_identifier(&id)
+            .ok_or(StatusCode::NO_CONTENT)?;
+        Ok::<_, StatusCode>(Bytes::from(Artifact::PbMessage::proxy_encode(artifact)))
     });
-    let bytes = jh
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)??
-        .ok_or(StatusCode::NO_CONTENT)?;
+    let bytes = jh.await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)??;
 
     Ok(bytes)
 }
@@ -224,8 +220,7 @@ where
     }
 
     /// Event loop that processes advert updates and artifact downloads.
-    /// The event loop preserves the following invariant:
-    ///  - The number of download tasks is equal to the total number of distinct slot entries.
+    /// The event loop preserves the invariants checked with `debug_assert`.
     async fn start_event_loop(mut self) {
         let mut priority_fn_interval = time::interval(PRIORITY_FUNCTION_UPDATE_INTERVAL);
         priority_fn_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
@@ -303,6 +298,7 @@ where
             self.metrics.download_task_started_total.inc();
             self.artifact_processor_tasks.spawn_on(
                 Self::process_advert(
+                    self.log.clone(),
                     id,
                     attr,
                     None,
@@ -399,6 +395,7 @@ where
 
                     self.artifact_processor_tasks.spawn_on(
                         Self::process_advert(
+                            self.log.clone(),
                             id.clone(),
                             attribute,
                             artifact.map(|a| (a, peer_id)),
@@ -433,7 +430,7 @@ where
         }
     }
 
-    /// Waits until advert resolves to fetch. If all peers are removed or priority becomes drop a `DownloadResult` is returned.
+    /// Waits until advert resolves to fetch. If all peers are removed or priority becomes drop `DownloadStopped` is returned.
     async fn wait_fetch(
         id: &Artifact::Id,
         attr: &Artifact::Attribute,
@@ -482,9 +479,11 @@ where
     /// The download will be scheduled based on the given priority function, `priority_fn_watcher`.
     ///
     /// The download fails iff:
-    /// - The priority function evaluates the advert to [`Priority::Drop`] -> [`DownloadResult::PriorityIsDrop`]
-    /// - The set of peers advertising the artifact, `peer_rx`, becomes empty -> [`DownloadResult::AllPeersDeletedTheArtifact`]
+    /// - The priority function evaluates the advert to [`Priority::Drop`] -> [`DownloadStopped::PriorityIsDrop`]
+    /// - The set of peers advertising the artifact, `peer_rx`, becomes empty -> [`DownloadStopped::AllPeersDeletedTheArtifact`]
+    /// and the failure condition is reported in the error variant of the returned result.
     async fn download_artifact(
+        log: ReplicaLogger,
         id: &Artifact::Id,
         attr: &Artifact::Attribute,
         // Only first peer for specific artifact ID is considered for push
@@ -506,7 +505,8 @@ where
         .await?;
 
         match artifact {
-            // Artifact was pushed by peer.
+            // Artifact was pushed by peer. In this case we don't need check that the artifact ID corresponds
+            // to the artifact because we earlier derived the ID from the artifact.
             Some((artifact, peer_id)) => Ok((artifact, peer_id)),
 
             // Fetch artifact
@@ -532,8 +532,15 @@ where
                         Ok(Ok(response)) if response.status() == StatusCode::OK => {
                             let body = response.into_body();
                             if let Ok(message) = Artifact::PbMessage::proxy_decode(&body) {
-                                result = Ok((message, peer));
-                                break;
+                                if &Artifact::message_to_advert(&message).id == id {
+                                    result = Ok((message, peer));
+                                    break;
+                                } else {
+                                    warn!(
+                                        log,
+                                        "Peer {} responded with wrong artifact for advert", peer
+                                    );
+                                }
                             }
                         }
                         _ => {
@@ -563,9 +570,10 @@ where
 
     /// Tries to download the given artifact, and insert it into the unvalidated pool.
     ///
-    /// This future completes waits for all peers that advertise the artifact to delete it.
+    /// This future waits for all peers that advertise the artifact to delete it.
     /// The artifact is deleted from the unvalidated pool upon completion.
     async fn process_advert(
+        log: ReplicaLogger,
         id: Artifact::Id,
         attr: Artifact::Attribute,
         // Only first peer for specific artifact ID is considered for push
@@ -582,6 +590,7 @@ where
     ) {
         let _timer = metrics.download_task_duration.start_timer();
         let download_result = Self::download_artifact(
+            log,
             &id,
             &attr,
             artifact,
@@ -659,6 +668,7 @@ where
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
 enum DownloadStopped {
     AllPeersDeletedTheArtifact,
     PriorityIsDrop,
@@ -686,6 +696,7 @@ mod tests {
     use std::{backtrace::Backtrace, sync::Mutex};
 
     use axum::http::Response;
+    use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_p2p_test_utils::{
         consensus::U64Artifact,
@@ -740,7 +751,7 @@ mod tests {
         }
     }
 
-    /// Check that all variants of stale advers to not get added to the slot table.
+    /// Check that all variants of stale adverts to not get added to the slot table.
     #[test]
     fn receiving_stale_advert_updates() {
         // Abort process if a thread panics. This catches detached tokio tasks that panic.
@@ -896,7 +907,7 @@ mod tests {
         });
     }
 
-    /// Check that adverts updates with higher connnection ids take precedence.
+    /// Check that adverts updates with higher connection ids take precedence.
     #[test]
     fn overwrite_slot() {
         // Abort process if a thread panics. This catches detached tokio tasks that panic.
@@ -1806,6 +1817,73 @@ mod tests {
                 .await
             })
             .expect_err("Task should not close because it is stash.");
+        });
+    }
+
+    /// Verify that downloads with AdvertId != ArtifactId are not added to the pool.
+    #[test]
+    fn invalid_artifact_not_accepted() {
+        // Abort process if a thread panics. This catches detached tokio tasks that panic.
+        // https://github.com/tokio-rs/tokio/issues/4516
+        std::panic::set_hook(Box::new(|info| {
+            let stacktrace = Backtrace::force_capture();
+            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+            std::process::abort();
+        }));
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let mut mock_transport = MockTransport::new();
+        let mut seq = Sequence::new();
+        // Respond with artifact that does not correspond to the advertised ID
+        mock_transport
+            .expect_rpc()
+            .once()
+            .returning(|_, _| {
+                Ok(Response::builder()
+                    .body(Bytes::from(
+                        <<U64Artifact as ArtifactKind>::PbMessage>::proxy_encode(1_u64),
+                    ))
+                    .unwrap())
+            })
+            .in_sequence(&mut seq);
+        // Respond with artifact that does correspond to the advertised ID
+        mock_transport
+            .expect_rpc()
+            .once()
+            .returning(|_, _| {
+                // Respond with artifact that does correspond to the advertised ID
+                Ok(Response::builder()
+                    .body(Bytes::from(
+                        <<U64Artifact as ArtifactKind>::PbMessage>::proxy_encode(0_u64),
+                    ))
+                    .unwrap())
+            })
+            .in_sequence(&mut seq);
+
+        let mut pc = PeerCounter::new();
+        pc.insert(NODE_1);
+        let (_peer_tx, mut peer_rx) = watch::channel(pc);
+        let pfn = |_: &_, _: &_| Priority::Fetch;
+        let (_pfn_tx, pfn_rx) = watch::channel(Box::new(pfn) as Box<_>);
+
+        rt.block_on(async {
+            assert_eq!(
+                ConsensusManagerReceiver::<
+                    U64Artifact,
+                    MockValidatedPoolReader,
+                    (AdvertUpdate<U64Artifact>, NodeId, ConnId),
+                >::download_artifact(
+                    no_op_logger(),
+                    &0,
+                    &(),
+                    None,
+                    &mut peer_rx,
+                    pfn_rx,
+                    Arc::new(mock_transport),
+                    ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
+                )
+                .await,
+                Ok((0, NODE_1))
+            )
         });
     }
 }

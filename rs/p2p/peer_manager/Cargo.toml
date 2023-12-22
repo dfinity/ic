@@ -11,6 +11,7 @@ ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-base-types = { path = "../../types/base_types" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
+ic-quic-transport = { path = "../quic_transport" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 prometheus = { workspace = true }
 serde = { workspace = true }

@@ -6,7 +6,7 @@
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::crypto::{ErrorReproducibility, LoadTranscriptResult, NiDkgAlgorithm};
 use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry, Timer};
+use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_types::{
     consensus::{dkg::Summary, HasHeight},
     crypto::threshold_sig::ni_dkg::{
@@ -22,6 +22,7 @@ use std::{
         mpsc::{sync_channel, Receiver},
         Arc,
     },
+    time::Instant,
 };
 
 struct Metrics {
@@ -326,7 +327,7 @@ impl DkgKeyManager {
         };
 
         for (deadline, dkg_id) in transcripts_to_load.into_iter() {
-            let timer = Timer::start();
+            let since = Instant::now();
 
             let crypto = self.crypto.clone();
             let logger = self.logger.clone();
@@ -345,7 +346,7 @@ impl DkgKeyManager {
 
                 let result = loop {
                     let result = NiDkgAlgorithm::load_transcript(&*crypto, transcript);
-                    let elapsed = timer.elapsed();
+                    let elapsed = since.elapsed().as_secs_f64();
 
                     match &result {
                         // Key loaded successfully

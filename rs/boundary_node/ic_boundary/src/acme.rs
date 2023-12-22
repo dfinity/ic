@@ -226,10 +226,10 @@ impl<T: Obtain> Obtain for WithRetry<T> {
             }
 
             // Retry
-            if let Err(ObtainError::OrderNotValid(_)) = out {
-                continue;
-            }
-            if let Err(ObtainError::CertificateNotReady) = out {
+            if matches!(
+                out,
+                Err(ObtainError::OrderNotValid(_)) | Err(ObtainError::CertificateNotReady)
+            ) {
                 continue;
             }
 

@@ -27,9 +27,7 @@ use crate::{
         subnet_recovery::{enable_ecdsa_signing_on_subnet, run_ecdsa_signature_test},
         upgrade::*,
     },
-    tecdsa::tecdsa_signature_test::{
-        add_ecdsa_key_with_timeout_and_rotation_period, make_key, KEY_ID1,
-    },
+    tecdsa::{add_ecdsa_keys_with_timeout_and_rotation_period, make_key, KEY_ID1},
     util::{block_on, runtime_from_url, MessageCanister},
 };
 use canister_test::Canister;
@@ -114,12 +112,13 @@ fn upgrade_downgrade(env: TestEnv, subnet_type: SubnetType) {
             .unwrap()
             .subnet_id;
         info!(logger, "Enabling ECDSA signatures on {subnet_id}.");
-        block_on(add_ecdsa_key_with_timeout_and_rotation_period(
+        block_on(add_ecdsa_keys_with_timeout_and_rotation_period(
             &governance,
             subnet_id,
-            make_key(KEY_ID1),
+            vec![make_key(KEY_ID1)],
             None,
             None,
+            &logger,
         ));
         let key = enable_ecdsa_signing_on_subnet(&nns_node, &nns_canister, subnet_id, &logger);
         run_ecdsa_signature_test(&nns_canister, &logger, key);
