@@ -7,6 +7,8 @@ package(default_visibility = [
 ])
 
 DEPENDENCIES = [
+    # There should not be any deps from "//rs".
+    # If you have to add a new one please consult the NET team.
     "//rs/async_utils",
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/utils/tls",
@@ -14,7 +16,6 @@ DEPENDENCIES = [
     "//rs/interfaces/registry",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
-    "//rs/p2p/peer_manager",
     "//rs/phantom_newtype",
     "//rs/registry/helpers",
     "//rs/types/base_types",

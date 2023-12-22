@@ -51,7 +51,6 @@ use ic_icos_sev::ValidateAttestedStream;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_peer_manager::SubnetTopology;
 use quinn::{
     AsyncUdpSocket, ConnectError, Connecting, Connection, ConnectionError, Endpoint,
     EndpointConfig, RecvStream, SendStream, VarInt,
@@ -69,7 +68,7 @@ use crate::{
     connection_handle::ConnectionHandle,
     metrics::{CONNECTION_RESULT_FAILED_LABEL, CONNECTION_RESULT_SUCCESS_LABEL},
     utils::collect_metrics,
-    ConnId,
+    ConnId, SubnetTopology,
 };
 use crate::{metrics::QuicTransportMetrics, request_handler::run_stream_acceptor};
 

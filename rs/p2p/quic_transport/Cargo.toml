@@ -22,7 +22,6 @@ ic-base-types = { path = "../../types/base_types" }
 ic-icos-sev = { path = "../../ic_os/sev" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
-ic-peer-manager = { path = "../../p2p/peer_manager" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 phantom_newtype = { path = "../../phantom_newtype" }
 prometheus = { workspace = true }

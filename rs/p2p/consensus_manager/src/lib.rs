@@ -9,12 +9,11 @@ use ic_interfaces::p2p::{
 };
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
-use ic_peer_manager::SubnetTopology;
 use ic_protobuf::{
     p2p::v1 as pb,
     proxy::{try_from_option_field, ProtoProxy, ProxyDecodeError},
 };
-use ic_quic_transport::{ConnId, Transport};
+use ic_quic_transport::{ConnId, SubnetTopology, Transport};
 use ic_types::artifact::{ArtifactKind, UnvalidatedArtifactMutation};
 use ic_types::NodeId;
 use phantom_newtype::AmountOf;
