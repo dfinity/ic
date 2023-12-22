@@ -455,7 +455,7 @@ impl ExecutionTest {
                     .call_context_manager()
                     .unwrap();
                 let callback = call_context_manager
-                    .callback(&callback_id)
+                    .callback(callback_id)
                     .expect("Unknown callback id.");
                 call_context_manager
                     .call_context(callback.call_context_id)

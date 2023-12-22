@@ -368,8 +368,8 @@ impl CallContextManager {
     }
 
     /// Returns a reference to the callback with `callback_id`.
-    pub fn callback(&self, callback_id: &CallbackId) -> Option<&Callback> {
-        self.callbacks.get(callback_id)
+    pub fn callback(&self, callback_id: CallbackId) -> Option<&Callback> {
+        self.callbacks.get(&callback_id)
     }
 
     /// Validates the given response before inducting it into the queue.
@@ -379,7 +379,7 @@ impl CallContextManager {
     /// Returns a `StateError::NonMatchingResponse` if the `callback_id` was not found
     /// or if the response is not valid.
     pub(crate) fn validate_response(&self, response: &Response) -> Result<(), StateError> {
-        match self.callback(&response.originator_reply_callback) {
+        match self.callback(response.originator_reply_callback) {
             Some(callback) => {
                 // (EXC-877) Once this is deployed in production,
                 // it's safe to make `respondent` and `originator` non-optional.
@@ -527,11 +527,6 @@ impl CallContextManager {
         let callback_id = CallbackId::from(self.next_callback_id);
         self.callbacks.insert(callback_id, callback);
         callback_id
-    }
-
-    /// Returns a copy of the callback for the given `callback_id`.
-    pub fn peek_callback(&self, callback_id: CallbackId) -> Option<&Callback> {
-        self.callbacks.get(&callback_id)
     }
 
     /// If we get a response for one of the outstanding calls, we unregister
