@@ -189,9 +189,9 @@ def assert_ssh_connectivity(target_url: str, ssh_key_file: Optional[Path]):
         f"SSH connection test failed: {result.stderr.strip()}"
 
 
-def get_url_content(url: str) -> Optional[str]:
+def get_url_content(url: str, timeout_secs: int = 1) -> Optional[str]:
     try:
-        response = requests.get(url, verify=False, timeout=1)
+        response = requests.get(url, verify=False, timeout=timeout_secs)
         if not response.ok:
             log.warning(f"Response from {url}: {response.status_code} - {response.reason}")
             return None
@@ -204,7 +204,7 @@ def get_url_content(url: str) -> Optional[str]:
 def check_guestos_connectivity(ip_address: IPv6Address, timeout_secs: int) -> bool:
     log.info("Attempting to curl metrics endpoint...")
     metrics_endpoint = f"https://[{ip_address.exploded}]:9100/metrics"
-    metrics_output = get_url_content(metrics_endpoint)
+    metrics_output = get_url_content(metrics_endpoint, timeout_secs)
     if not metrics_output:
         log.warning(f"Request to {metrics_endpoint} failed.")
         return False
