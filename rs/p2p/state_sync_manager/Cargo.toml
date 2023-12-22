@@ -30,6 +30,7 @@ zstd = "0.12.4"
 [dev-dependencies]
 ic-memory-transport = { path = "../memory_transport" }
 ic-p2p-test-utils = { path = "../test_utils" }
+ic-state-manager = { path = "../../state_manager" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 turmoil = "0.5"

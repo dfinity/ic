@@ -52,6 +52,7 @@ use ic_p2p::{start_p2p, MAX_ADVERT_BUFFER};
 use ic_quic_transport::DummyUdpSocket;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
+use ic_state_manager::state_sync::types::StateSyncMessage;
 use ic_transport::transport::create_transport;
 use ic_types::{
     artifact::{ArtifactKind, ArtifactTag, UnvalidatedArtifactMutation},
@@ -65,7 +66,6 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     p2p::GossipAdvert,
     replica_config::ReplicaConfig,
-    state_sync::StateSyncMessage,
     NodeId, SubnetId,
 };
 use std::{

@@ -1,8 +1,9 @@
 use ic_state_manager::manifest::validate_manifest;
-use ic_types::crypto::CryptoHash;
-use ic_types::state_sync::{
-    ChunkInfo, FileInfo, Manifest, StateSyncVersion, MAX_SUPPORTED_STATE_SYNC_VERSION,
+use ic_state_manager::state_sync::types::{
+    ChunkInfo, FileInfo, Manifest, MAX_SUPPORTED_STATE_SYNC_VERSION,
 };
+use ic_types::crypto::CryptoHash;
+use ic_types::state_sync::StateSyncVersion;
 use ic_types::CryptoHashOfState;
 use std::{
     convert::TryInto,
@@ -153,9 +154,8 @@ mod tests {
         hash::{chunk_hasher, file_hasher},
         manifest_hash,
     };
-    use ic_types::state_sync::{
-        ChunkInfo, FileInfo, Manifest, StateSyncVersion, CURRENT_STATE_SYNC_VERSION,
-    };
+    use ic_state_manager::state_sync::types::{ChunkInfo, FileInfo, Manifest};
+    use ic_types::state_sync::{StateSyncVersion, CURRENT_STATE_SYNC_VERSION};
 
     use super::verify_manifest;
 

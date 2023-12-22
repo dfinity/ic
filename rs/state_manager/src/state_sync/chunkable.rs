@@ -1,5 +1,10 @@
 use crate::{
     manifest::{build_file_group_chunks, filter_out_zero_chunks, DiffScript},
+    state_sync::types::{
+        decode_manifest, decode_meta_manifest, state_sync_chunk_type, FileGroupChunks, Manifest,
+        MetaManifest, StateSyncChunk, StateSyncMessage, FILE_CHUNK_ID_OFFSET,
+        FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, META_MANIFEST_CHUNK,
+    },
     StateManagerMetrics, StateSyncMetrics, StateSyncRefs,
     CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS, LABEL_COPY_CHUNKS, LABEL_COPY_FILES, LABEL_FETCH,
     LABEL_PREALLOCATE, LABEL_STATE_SYNC_MAKE_CHECKPOINT,
@@ -16,11 +21,6 @@ use ic_types::{
         Chunk, ChunkId, Chunkable,
     },
     malicious_flags::MaliciousFlags,
-    state_sync::{
-        decode_manifest, decode_meta_manifest, state_sync_chunk_type, FileGroupChunks, Manifest,
-        MetaManifest, StateSyncChunk, StateSyncMessage, FILE_CHUNK_ID_OFFSET,
-        FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, META_MANIFEST_CHUNK,
-    },
     CryptoHashOfState, Height,
 };
 use std::os::unix::fs::FileExt;
@@ -1047,7 +1047,7 @@ impl IncompleteState {
                 .sum();
 
             let preallocate_bytes: u64 =
-                (diff_script.zeros_chunks * crate::manifest::DEFAULT_CHUNK_SIZE) as u64;
+                (diff_script.zeros_chunks * crate::state_sync::types::DEFAULT_CHUNK_SIZE) as u64;
 
             let copy_files_bytes: u64 = diff_script
                 .copy_files

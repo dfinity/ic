@@ -9,7 +9,6 @@ use ic_types::{
     messages::{
         CallbackId, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse, Response,
     },
-    state_sync::{ChunkInfo, FileInfo},
     time::UNIX_EPOCH,
     xnet::StreamIndex,
     CanisterId, Cycles, Height, NodeId, RegistryVersion, SubnetId, Time, UserId,
@@ -240,37 +239,5 @@ prop_compose! {
       index in 0..max,
     ) -> StreamIndex {
         StreamIndex::from(index)
-    }
-}
-
-prop_compose! {
-    /// Returns an arbitrary [`ChunkInfo`].
-    pub fn chunk_info() (
-        file_index in any::<u32>(),
-        size_bytes in any::<u32>(),
-        offset in any::<u64>(),
-        hash in any::<[u8; 32]>(),
-    ) -> ChunkInfo {
-        ChunkInfo {
-            file_index,
-            size_bytes,
-            offset,
-            hash,
-        }
-    }
-}
-
-prop_compose! {
-    /// Returns an arbitrary [`ChunkInfo`].
-    pub fn file_info() (
-        relative_path in any::<String>(),
-        size_bytes in any::<u64>(),
-        hash in any::<[u8; 32]>(),
-    ) -> FileInfo {
-        FileInfo {
-            relative_path: std::path::PathBuf::from(relative_path),
-            size_bytes,
-            hash,
-        }
     }
 }
