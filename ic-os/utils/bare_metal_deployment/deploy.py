@@ -22,6 +22,7 @@ import requests
 import tqdm
 from loguru import logger as log
 from simple_parsing import field, parse
+from simple_parsing.helpers import flag
 
 DEFAULT_IDRAC_SCRIPT_DIR = f"{site.getuserbase()}/bin"
 
@@ -32,6 +33,8 @@ NEWER_IDRAC_VERSION_THRESHOLD = 6000000
 DEFAULT_SETUPOS_WAIT_TIME_MINS = 20
 
 BMC_INFO_ENV_VAR = "BMC_INFO_CSV_FILENAME"
+
+DISPLAY_PROGRESS_BAR = True
 
 
 @dataclass
@@ -89,6 +92,9 @@ class Args:
 
     # Directory where idrac scripts are held. If None, pip bin directory will be used.
     idrac_script_dir_file: Optional[str] = None
+
+    # Disable progress bars if True
+    ci_mode: bool = flag(default=False)
 
 
     def __post_init__(self):
@@ -290,7 +296,7 @@ def deploy_server(bmc_info: BMCInfo, wait_time_mins: int, idrac_script_dir: Path
         run_func(
             f"GetSetPowerStateREDFISH.py {cli_creds} -p {bmc_info.password} --set GracefulShutdown",
         )
-        for i in tqdm.tqdm(range(int(60)), disable=None):
+        for i in tqdm.tqdm(range(int(60)), disable=DISPLAY_PROGRESS_BAR):
             time.sleep(1)
 
         log.info(
@@ -313,7 +319,7 @@ def deploy_server(bmc_info: BMCInfo, wait_time_mins: int, idrac_script_dir: Path
             f"GetSetPowerStateREDFISH.py {cli_creds} -p {bmc_info.password} --set On",
         )
         # Waiting to make sure the machine gets back to a steady state, so that next reboot is done consistently
-        for i in tqdm.tqdm(range(int(90)),disable=None):
+        for i in tqdm.tqdm(range(int(90)),disable=DISPLAY_PROGRESS_BAR):
             time.sleep(1)
 
         log.info("Setting next boot device to virtual floppy, and restarting")
@@ -342,7 +348,7 @@ def deploy_server(bmc_info: BMCInfo, wait_time_mins: int, idrac_script_dir: Path
         log.info(
             f"Machine booting. Checking on SetupOS completion periodically. Timeout (mins): {wait_time_mins}"
         )
-        for i in tqdm.tqdm(range(int(60 * (wait_time_mins / timeout_secs))),disable=None):
+        for i in tqdm.tqdm(range(int(60 * (wait_time_mins / timeout_secs))),disable=DISPLAY_PROGRESS_BAR):
             if iterate_func():
                 break
 
@@ -481,6 +487,8 @@ def get_idrac_script_dir(idrac_script_dir_file: Optional[str]) -> Path:
 def main():
     print(sys.argv)
     args: Args = parse(Args, add_config_path_arg=True) # Parse from config file too
+
+    DISPLAY_PROGRESS_BAR = not args.ci_mode
 
     network_image_url: str = (
         f"{args.file_share_url}:{args.file_share_dir}/{args.file_share_image_filename}"
