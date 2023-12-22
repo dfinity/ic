@@ -18,9 +18,8 @@ fi
 
 usage() {
     cat <<EOF
-Usage: $0 -h | --help, -f | --full, -c <dir> | --cache-dir <dir>
+Usage: $0 -h | --help, -c <dir> | --cache-dir <dir>
 
-    -f | --full             Use full container image (dfinity/ic-build-legacy)
     -c | --cache-dir <dir>  Bind-mount custom cache dir instead of '~/.cache'
     -h | --help             Print help
 
@@ -47,14 +46,6 @@ while test $# -gt $CTR; do
                 usage && exit 1
             fi
             shift
-            shift
-            ;;
-        -f | --full)
-            echo """Legacy image will be deprecated by 2023-12-31. Please use the main image and report any issues to IDX if your task does not work with the main image."""
-            read -p "Continue anyway? (Y/N): " confirm && [[ $confirm == [yY] || $confirm == [yY][eE][sS] ]] || exit 1
-            IMAGE="docker.io/dfinity/ic-build-legacy"
-            BUILD_ARGS=()
-            echo "Using docker.io/dfinity/ic-build-legacy image."
             shift
             ;;
         *) let CTR=CTR+1 ;;
