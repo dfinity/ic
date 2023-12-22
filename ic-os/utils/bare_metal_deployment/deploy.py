@@ -180,7 +180,7 @@ def assert_ssh_connectivity(target_url: str, ssh_key_file: Optional[Path]):
     ssh_opts = "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
     result = invoke.run(f"ssh {ssh_opts} {ssh_key_arg} {target_url} 'echo Testing connection'", warn=True)
     assert result and result.ok, \
-        f"SSH connection test failed: {result.stderr.strip().splitlines()}"
+        f"SSH connection test failed: {result.stderr.strip()}"
 
 
 def get_url_content(url: str) -> Optional[str]:
