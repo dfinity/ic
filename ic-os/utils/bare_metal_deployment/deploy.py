@@ -196,13 +196,7 @@ def get_url_content(url: str) -> Optional[str]:
 
 
 def check_guestos_connectivity(ip_address: IPv6Address, timeout_secs: int) -> bool:
-    # Ping target with count of 1, STRICT timeout of `timeout_secs`.
-    # This will break if latency is > `timeout_secs`.
-    result = icmplib.ping(str(ip_address), count=1, timeout=timeout_secs, privileged=False)
-    if not result.is_alive:
-        return False
-
-    log.info("Got ping result from GuestOS. Attempting metrics endpoint...")
+    log.info("Attempting to curl metrics endpoint...")
     metrics_endpoint = f"https://[{ip_address.exploded}]:9100/metrics"
     metrics_output = get_url_content(metrics_endpoint)
     if not metrics_output:
