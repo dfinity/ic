@@ -11,17 +11,18 @@
 //! the returned receiver should be cloned.
 //!
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::HashMap,
     net::{IpAddr, SocketAddr},
     sync::Arc,
     time::Duration,
 };
 
-use ic_base_types::{NodeId, RegistryVersion, SubnetId};
+use ic_base_types::{RegistryVersion, SubnetId};
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use ic_quic_transport::SubnetTopology;
 use ic_registry_client_helpers::subnet::SubnetTransportRegistry;
 use metrics::PeerManagerMetrics;
 use tokio::{
@@ -164,56 +165,10 @@ impl PeerManager {
                 }
             }
         }
-        SubnetTopology {
+        SubnetTopology::new(
             subnet_nodes,
             earliest_registry_version,
             latest_registry_version,
-        }
-    }
-}
-
-/// Holds socket addresses of all peers in a subnet.
-#[derive(Clone, Debug, Eq, PartialEq, Default)]
-pub struct SubnetTopology {
-    subnet_nodes: HashMap<NodeId, SocketAddr>,
-    earliest_registry_version: RegistryVersion,
-    latest_registry_version: RegistryVersion,
-}
-
-impl SubnetTopology {
-    pub fn new<T: IntoIterator<Item = (NodeId, SocketAddr)>>(
-        subnet_nodes: T,
-        earliest_registry_version: RegistryVersion,
-        latest_registry_version: RegistryVersion,
-    ) -> Self {
-        Self {
-            subnet_nodes: HashMap::from_iter(subnet_nodes),
-            earliest_registry_version,
-            latest_registry_version,
-        }
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = (&NodeId, &SocketAddr)> {
-        self.subnet_nodes.iter()
-    }
-
-    pub fn is_member(&self, node: &NodeId) -> bool {
-        self.subnet_nodes.contains_key(node)
-    }
-
-    pub fn get_addr(&self, node: &NodeId) -> Option<SocketAddr> {
-        self.subnet_nodes.get(node).copied()
-    }
-
-    pub fn latest_registry_version(&self) -> RegistryVersion {
-        self.latest_registry_version
-    }
-
-    pub fn earliest_registry_version(&self) -> RegistryVersion {
-        self.earliest_registry_version
-    }
-
-    pub fn get_subnet_nodes(&self) -> BTreeSet<NodeId> {
-        self.subnet_nodes.keys().copied().collect()
+        )
     }
 }

@@ -12,12 +12,12 @@ use ic_icos_sev::Sev;
 use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
-use ic_peer_manager::{start_peer_manager, SubnetTopology};
+use ic_peer_manager::start_peer_manager;
 use ic_protobuf::registry::{
     node::v1::{ConnectionEndpoint, NodeRecord},
     subnet::v1::SubnetRecord,
 };
-use ic_quic_transport::{ConnId, DummyUdpSocket, QuicTransport, Transport};
+use ic_quic_transport::{ConnId, DummyUdpSocket, QuicTransport, SubnetTopology, Transport};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_node_record_key;
 use ic_registry_local_registry::LocalRegistry;

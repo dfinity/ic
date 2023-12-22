@@ -29,7 +29,7 @@
 //!
 //!
 use std::{
-    collections::HashMap,
+    collections::{BTreeSet, HashMap},
     fmt::Debug,
     net::SocketAddr,
     sync::{Arc, RwLock},
@@ -40,13 +40,12 @@ use axum::Router;
 use bytes::Bytes;
 use either::Either;
 use http::{Request, Response};
-use ic_base_types::NodeId;
+use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::{TlsConfig, TlsStream};
 use ic_icos_sev::ValidateAttestedStream;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_peer_manager::SubnetTopology;
 use phantom_newtype::AmountOf;
 use quinn::AsyncUdpSocket;
 use thiserror::Error;
@@ -205,5 +204,51 @@ impl AsyncUdpSocket for DummyUdpSocket {
     }
     fn may_fragment(&self) -> bool {
         todo!()
+    }
+}
+
+/// Holds socket addresses of all peers in a subnet.
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
+pub struct SubnetTopology {
+    subnet_nodes: HashMap<NodeId, SocketAddr>,
+    earliest_registry_version: RegistryVersion,
+    latest_registry_version: RegistryVersion,
+}
+
+impl SubnetTopology {
+    pub fn new<T: IntoIterator<Item = (NodeId, SocketAddr)>>(
+        subnet_nodes: T,
+        earliest_registry_version: RegistryVersion,
+        latest_registry_version: RegistryVersion,
+    ) -> Self {
+        Self {
+            subnet_nodes: HashMap::from_iter(subnet_nodes),
+            earliest_registry_version,
+            latest_registry_version,
+        }
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&NodeId, &SocketAddr)> {
+        self.subnet_nodes.iter()
+    }
+
+    pub fn is_member(&self, node: &NodeId) -> bool {
+        self.subnet_nodes.contains_key(node)
+    }
+
+    pub fn get_addr(&self, node: &NodeId) -> Option<SocketAddr> {
+        self.subnet_nodes.get(node).copied()
+    }
+
+    pub fn latest_registry_version(&self) -> RegistryVersion {
+        self.latest_registry_version
+    }
+
+    pub fn earliest_registry_version(&self) -> RegistryVersion {
+        self.earliest_registry_version
+    }
+
+    pub fn get_subnet_nodes(&self) -> BTreeSet<NodeId> {
+        self.subnet_nodes.keys().copied().collect()
     }
 }
