@@ -45,13 +45,12 @@ if [ ! -z "$CANDID_ARGS" ]; then
     ENCODED_ARGS_FILE=$(encode_candid_args_in_file "$CANDID_ARGS")
 fi
 
+# Due to open call contexts being restored with mainnet state that point to a subnet not existing in subnets,
+# we need to skip stopping the canister if we are upgrading cycles-minting.  This should be safe because the
+# responses to those requests will never happen.  This test may cause a
+# false failure, but not a false success, which is okay for this use case.
 if [ "$CANISTER_NAME" == "cycles-minting" ]; then
-    ensure_variable_set XRC_MOCK_CANISTER || (
-        print_red "XRC_MOCK_CANISTER must be set as env variable for CMC upgrade"
-        help
-    )
-    point_cycles_minting_canister_to_mock_exchange_rate_canister \
-        "$XRC_MOCK_CANISTER" "$NNS_URL" "$NEURON_ID" "$PEM"
+    export SKIP_STOPPING=yes
 fi
 
 propose_upgrade_canister_to_version_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_NAME" "$VERSION" "$ENCODED_ARGS_FILE"
