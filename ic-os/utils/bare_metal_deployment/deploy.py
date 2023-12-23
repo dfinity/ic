@@ -34,7 +34,7 @@ DEFAULT_SETUPOS_WAIT_TIME_MINS = 20
 
 BMC_INFO_ENV_VAR = "BMC_INFO_CSV_FILENAME"
 
-DISPLAY_PROGRESS_BAR = True
+DISABLE_PROGRESS_BAR = True
 
 
 @dataclass
@@ -95,7 +95,6 @@ class Args:
 
     # Disable progress bars if True
     ci_mode: bool = flag(default=False)
-
 
     def __post_init__(self):
         assert self.upload_img is None or self.upload_img.endswith(
@@ -201,7 +200,18 @@ def get_url_content(url: str, timeout_secs: int = 1) -> Optional[str]:
         return None
 
 
-def check_guestos_connectivity(ip_address: IPv6Address, timeout_secs: int) -> bool:
+def check_guestos_ping_connectivity(ip_address: IPv6Address, timeout_secs: int) -> bool:
+    # Ping target with count of 1, STRICT timeout of `timeout_secs`. 
+    # This will break if latency is > `timeout_secs`.
+    result = invoke.run(f"ping6 -c1 -w{timeout_secs} {ip_address}", warn=True, hide=True)
+    if not result or not result.ok:
+        return False
+    
+    log.info("Ping success.")
+    return True
+
+
+def check_guestos_metrics_version(ip_address: IPv6Address, timeout_secs: int) -> bool:
     log.info("Attempting to curl metrics endpoint...")
     metrics_endpoint = f"https://[{ip_address.exploded}]:9100/metrics"
     metrics_output = get_url_content(metrics_endpoint, timeout_secs)
@@ -250,7 +260,7 @@ def gen_failure(result: invoke.Result, bmc_info: BMCInfo) -> DeploymentError:
 def run_script(idrac_script_dir: Path,
                bmc_info: BMCInfo,
                script_and_args: str,
-               quiet: bool = True) -> None:
+               quiet: bool = False) -> None:
     """Run a given script from the given bin dir and raise an exception if anything went wrong"""
     command = f"python3 {idrac_script_dir}/{script_and_args}"
     result = invoke.run(command, hide="stdout" if quiet else None)
@@ -294,9 +304,9 @@ def deploy_server(bmc_info: BMCInfo, wait_time_mins: int, idrac_script_dir: Path
         # Get a reference point
         log.info("Turning off machine")
         run_func(
-            f"GetSetPowerStateREDFISH.py {cli_creds} -p {bmc_info.password} --set GracefulShutdown",
+            f"GetSetPowerStateREDFISH.py {cli_creds} -p {bmc_info.password} --set ForceOff",
         )
-        for i in tqdm.tqdm(range(int(60)), disable=DISPLAY_PROGRESS_BAR):
+        for i in tqdm.tqdm(range(int(60)), disable=DISABLE_PROGRESS_BAR):
             time.sleep(1)
 
         log.info(
@@ -314,22 +324,19 @@ def deploy_server(bmc_info: BMCInfo, wait_time_mins: int, idrac_script_dir: Path
         )
         network_image_attached = True
 
+        log.info("Setting next boot device to virtual floppy, and restarting")
+        run_func(
+            f"SetNextOneTimeBootVirtualMediaDeviceOemREDFISH.py {cli_creds} --device 2"
+        ) # Device 2 for virtual Floppy
+
         log.info("Turning on machine")
         run_func(
             f"GetSetPowerStateREDFISH.py {cli_creds} -p {bmc_info.password} --set On",
         )
-        # Waiting to make sure the machine gets back to a steady state, so that next reboot is done consistently
-        for i in tqdm.tqdm(range(int(90)),disable=DISPLAY_PROGRESS_BAR):
-            time.sleep(1)
-
-        log.info("Setting next boot device to virtual floppy, and restarting")
-        run_func(
-            f"SetNextOneTimeBootVirtualMediaDeviceOemREDFISH.py {cli_creds} --device 2 --reboot",  # Device 2 for virtual Floppy
-        )
 
         # If guestos ipv6 address is present, loop on checking connectivity.
         # Otherwise, just wait.
-        timeout_secs = 2
+        timeout_secs = 5
 
         def wait_func() -> bool:
             wait(timeout_secs)
@@ -337,7 +344,9 @@ def deploy_server(bmc_info: BMCInfo, wait_time_mins: int, idrac_script_dir: Path
 
         def check_connectivity_func() -> bool:
             assert bmc_info.guestos_ipv6_address is not None, "Logic error"
-            return check_guestos_connectivity(
+            return check_guestos_ping_connectivity(
+                bmc_info.guestos_ipv6_address, timeout_secs
+            ) and check_guestos_metrics_version(
                 bmc_info.guestos_ipv6_address, timeout_secs
             )
 
@@ -348,7 +357,7 @@ def deploy_server(bmc_info: BMCInfo, wait_time_mins: int, idrac_script_dir: Path
         log.info(
             f"Machine booting. Checking on SetupOS completion periodically. Timeout (mins): {wait_time_mins}"
         )
-        for i in tqdm.tqdm(range(int(60 * (wait_time_mins / timeout_secs))),disable=DISPLAY_PROGRESS_BAR):
+        for i in tqdm.tqdm(range(int(60 * (wait_time_mins / timeout_secs))),disable=DISABLE_PROGRESS_BAR):
             if iterate_func():
                 break
 
@@ -425,10 +434,12 @@ def upload_to_file_share(
         upload_img_filename = upload_img.name
         # Decompress in place. disk.img should appear in the same directory
         conn.run(f"tar --extract --zstd --file {tmp_dir}/{upload_img_filename} --directory {tmp_dir}", echo=True)
+        image_destination = f"/{file_share_dir}/{file_share_image_name}"
         conn.run(
-            f"mv {tmp_dir}/disk.img /{file_share_dir}/{file_share_image_name}",
+            f"mv {tmp_dir}/disk.img {image_destination}",
             echo=True
         )
+        conn.run(f"chmod a+r {image_destination}", echo=True)
     finally:
         # Clean up remote dir
         if tmp_dir:
@@ -488,7 +499,7 @@ def main():
     print(sys.argv)
     args: Args = parse(Args, add_config_path_arg=True) # Parse from config file too
 
-    DISPLAY_PROGRESS_BAR = not args.ci_mode
+    DISABLE_PROGRESS_BAR = args.ci_mode
 
     network_image_url: str = (
         f"{args.file_share_url}:{args.file_share_dir}/{args.file_share_image_filename}"
