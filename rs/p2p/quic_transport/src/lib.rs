@@ -47,11 +47,12 @@ use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use phantom_newtype::AmountOf;
-use quinn::AsyncUdpSocket;
+use quinn::{AsyncUdpSocket, ConnectionError, WriteError};
 use thiserror::Error;
+use tokio::sync::{watch, Mutex};
 
 use crate::connection_handle::ConnectionHandle;
-use crate::connection_manager::start_connection_manager;
+use crate::connection_manager::{start_connection_manager, ShutdownHandle};
 
 mod connection_handle;
 mod connection_manager;
@@ -60,20 +61,26 @@ mod request_handler;
 mod utils;
 
 #[derive(Clone)]
-pub struct QuicTransport(Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>);
+pub struct QuicTransport {
+    conn_handles: Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>,
+    conn_manager_shutdown_handle: Arc<Mutex<ShutdownHandle>>,
+}
 
+/// This is the main transport handle used for communication between peers.
+/// The handler can safely be shared across threads and tasks.
+///
+/// Instead of the common `connect` and `disconnect`` methods the implementation
+/// listens for changes of the topology using a watcher.
+/// (The watcher matches better the semantics of peer discovery in the IC).
+///
+/// This enables complete separation between peer discovery and the core P2P
+/// protocols that use `QuicTransport`.
+/// For example, "P2P for consensus" implements a generic replication protocol which is
+/// agnostic to the subnet membership logic required by the consensus algorithm.
+/// This makes "P2P for consensus" a generic implementation that potentially can be used
+/// not only by the consensus protocol of the IC.
 impl QuicTransport {
-    /// This is the entry point for creating and starting the quic transport.
-    ///
-    /// Instead of the common `connect` and `disconnect`` methods the implementation
-    /// listens for changes of the topology using a watcher.
-    ///
-    /// This allows is to have complete separation between peer discovery and the core P2P
-    /// protocols that use `QuicTransport`.
-    /// For example, "P2P for consensus" implements a generic replication protocol which is
-    /// agnostic to the subnet membership logic required by the consensus algorithm.
-    /// This makes "P2P for consensus" a generic implementation that potentially can be used
-    /// not only by the consensus protocol of the IC.
+    /// This is the entry point for creating (e.g. binding) and starting the quic transport.
     pub fn start(
         log: &ReplicaLogger,
         metrics_registry: &MetricsRegistry,
@@ -82,16 +89,16 @@ impl QuicTransport {
         registry_client: Arc<dyn RegistryClient>,
         sev_handshake: Arc<dyn ValidateAttestedStream<Box<dyn TlsStream>> + Send + Sync>,
         node_id: NodeId,
-        topology_watcher: tokio::sync::watch::Receiver<SubnetTopology>,
+        topology_watcher: watch::Receiver<SubnetTopology>,
         udp_socket: Either<SocketAddr, impl AsyncUdpSocket>,
         // Make sure this is respected https://docs.rs/axum/latest/axum/struct.Router.html#a-note-about-performance
         router: Router,
     ) -> QuicTransport {
         info!(log, "Starting Quic transport.");
 
-        let peer_map = Arc::new(RwLock::new(HashMap::new()));
+        let conn_handles = Arc::new(RwLock::new(HashMap::new()));
 
-        start_connection_manager(
+        let conn_manager_shutdown_handle = start_connection_manager(
             log,
             metrics_registry,
             rt,
@@ -99,24 +106,37 @@ impl QuicTransport {
             registry_client,
             sev_handshake,
             node_id,
-            peer_map.clone(),
+            conn_handles.clone(),
             topology_watcher,
             udp_socket,
             router,
         );
 
-        QuicTransport(peer_map)
+        QuicTransport {
+            conn_handles,
+            conn_manager_shutdown_handle: Arc::new(Mutex::new(conn_manager_shutdown_handle)),
+        }
+    }
+
+    pub async fn shutdown(&self) {
+        // If an error is returned it means the conn manager is already stopped.
+        let _ = self
+            .conn_manager_shutdown_handle
+            .lock()
+            .await
+            .shutdown()
+            .await;
     }
 
     pub(crate) fn get_conn_handle(&self, peer_id: &NodeId) -> Result<ConnectionHandle, SendError> {
         let conn = self
-            .0
+            .conn_handles
             .read()
             .unwrap()
             .get(peer_id)
-            .ok_or(SendError::ConnectionNotFound {
-                reason: "Currently not connected to this peer".to_string(),
-            })?
+            .ok_or(SendError::ConnectionUnavailable(
+                "Currently not connected to this peer".to_string(),
+            ))?
             .clone();
         Ok(conn)
     }
@@ -139,7 +159,7 @@ impl Transport for QuicTransport {
     }
 
     fn peers(&self) -> Vec<(NodeId, ConnId)> {
-        self.0
+        self.conn_handles
             .read()
             .unwrap()
             .iter()
@@ -150,12 +170,27 @@ impl Transport for QuicTransport {
 
 #[derive(Debug, Error)]
 pub enum SendError {
-    #[error("No connection to peer: {reason:?}")]
-    ConnectionNotFound { reason: String },
-    #[error("Sending a request failed: `{reason:?}")]
-    SendRequestFailed { reason: String },
-    #[error("Receiving a response failed: {reason:?}")]
-    RecvResponseFailed { reason: String },
+    #[error("the connection to peer `{0}` is unavailable")]
+    ConnectionUnavailable(String),
+    // This serves as catch-all error for invariant breaking errors.
+    // E.g. failing to serialize, peer closing connections unexpectedly, etc.
+    #[error("internal error `{0}`")]
+    Internal(String),
+}
+
+impl From<ConnectionError> for SendError {
+    fn from(conn_err: ConnectionError) -> Self {
+        SendError::Internal(conn_err.to_string())
+    }
+}
+
+impl From<WriteError> for SendError {
+    fn from(write_err: WriteError) -> Self {
+        match write_err {
+            WriteError::ConnectionLost(conn_err) => conn_err.into(),
+            _ => SendError::Internal(write_err.to_string()),
+        }
+    }
 }
 
 #[async_trait]
