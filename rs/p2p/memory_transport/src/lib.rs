@@ -282,7 +282,9 @@ impl Transport for PeerTransport {
         mut request: Request<Bytes>,
     ) -> Result<Response<Bytes>, SendError> {
         if peer_id == &self.node_id {
-            panic!("Should not happen");
+            return Err(SendError::ConnectionUnavailable(
+                "Can't connect to self".to_string(),
+            ));
         }
 
         let (oneshot_tx, oneshot_rx) = oneshot::channel();
@@ -292,15 +294,15 @@ impl Transport for PeerTransport {
             .send((request, *peer_id, oneshot_tx))
             .is_err()
         {
-            return Err(SendError::SendRequestFailed {
-                reason: String::from("router channel closed"),
-            });
+            return Err(SendError::ConnectionUnavailable(String::from(
+                "router channel closed",
+            )));
         }
         match oneshot_rx.await {
             Ok(r) => Ok(r),
-            Err(_) => Err(SendError::RecvResponseFailed {
-                reason: "channel closed".to_owned(),
-            }),
+            Err(_) => Err(SendError::ConnectionUnavailable(String::from(
+                "channel closed",
+            ))),
         }
     }
 

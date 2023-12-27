@@ -56,10 +56,13 @@ use quinn::{
     EndpointConfig, RecvStream, SendStream, VarInt,
 };
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
+use thiserror::Error;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     runtime::Handle,
     select,
+    sync::mpsc::{channel, Receiver, Sender},
+    sync::oneshot,
     task::JoinSet,
 };
 use tokio_util::time::DelayQueue;
@@ -122,6 +125,8 @@ struct ConnectionManager {
     /// JoinMap that stores active connection handlers keyed by peer id.
     active_connections: JoinMap<NodeId, ()>,
 
+    /// The channel is used for graceful shutdown of the connection manager.
+    shutdown_rx: Receiver<oneshot::Sender<()>>,
     /// Endpoint config
     endpoint: Endpoint,
     transport_config: Arc<quinn::TransportConfig>,
@@ -188,6 +193,24 @@ impl std::fmt::Display for ConnectionEstablishError {
     }
 }
 
+#[derive(Error, Debug)]
+#[error("ShutdownError")]
+pub(crate) struct ShutdownError;
+pub(crate) struct ShutdownHandle(Sender<oneshot::Sender<()>>);
+
+impl ShutdownHandle {
+    fn new() -> (Self, Receiver<oneshot::Sender<()>>) {
+        let (shutdown_tx, shutdown_rx) = channel(10);
+        (ShutdownHandle(shutdown_tx), shutdown_rx)
+    }
+
+    pub(crate) async fn shutdown(&mut self) -> Result<(), ShutdownError> {
+        let (wait_tx, wait_rx) = oneshot::channel();
+        self.0.send(wait_tx).await.map_err(|_| ShutdownError)?;
+        wait_rx.await.map_err(|_| ShutdownError)
+    }
+}
+
 pub(crate) fn start_connection_manager(
     log: &ReplicaLogger,
     metrics_registry: &MetricsRegistry,
@@ -200,7 +223,7 @@ pub(crate) fn start_connection_manager(
     watcher: tokio::sync::watch::Receiver<SubnetTopology>,
     socket: Either<SocketAddr, impl AsyncUdpSocket>,
     router: Router,
-) {
+) -> ShutdownHandle {
     let topology = watcher.borrow().clone();
 
     let metrics = QuicTransportMetrics::new(metrics_registry);
@@ -294,6 +317,8 @@ pub(crate) fn start_connection_manager(
         .expect("Failed to create endpoint"),
     };
 
+    let (shutdown_handler, shutdown_rx) = ShutdownHandle::new();
+
     let manager = ConnectionManager {
         log: log.clone(),
         rt: rt.clone(),
@@ -311,10 +336,12 @@ pub(crate) fn start_connection_manager(
         outbound_connecting: JoinMap::new(),
         inbound_connecting: JoinSet::new(),
         active_connections: JoinMap::new(),
+        shutdown_rx,
         router,
     };
 
     rt.spawn(manager.run());
+    shutdown_handler
 }
 
 impl ConnectionManager {
@@ -323,8 +350,11 @@ impl ConnectionManager {
     }
 
     pub async fn run(mut self) {
-        loop {
+        let shutdown_notifier = loop {
             select! {
+                shutdown_notifier = self.shutdown_rx.recv() => {
+                    break shutdown_notifier;
+                }
                 Some(reconnect) = self.connect_queue.next() => {
                     self.handle_dial(reconnect.into_inner())
                 }
@@ -334,8 +364,13 @@ impl ConnectionManager {
                             self.handle_topology_change();
                         },
                         Err(_) => {
-                            error!(self.log, "Transport disconnected from peer manager. Shutting down.");
-                            break
+                            // If this happens it means that peer discovery is not working anymore.
+                            // There are few options in this case
+                            //   1. continue working with the existing set of connections (preferred)
+                            //   2. panic
+                            //   3. do a graceful shutdown and rely on clients of transport to handle this fallout
+                            //      (least preferred because this is not recoverable error)
+                            error!(self.log, "Transport disconnected from peer manager.");
                         }
                     }
                 },
@@ -343,9 +378,9 @@ impl ConnectionManager {
                     if let Some(connecting) = connecting {
                         self.handle_inbound(connecting);
                     } else {
-                        info!(self.log, "Quic endpoint closed. Stopping transport.");
-                        // Endpoint is closed. This indicates a shutdown.
-                        break;
+                        error!(self.log, "Quic endpoint closed. Stopping transport.");
+                        // Endpoint is closed. This indicates NOT graceful shutdown.
+                        break None;
                     }
                 },
                 Some(conn_res) = self.outbound_connecting.join_next() => {
@@ -392,13 +427,23 @@ impl ConnectionManager {
             self.metrics
                 .delay_queue_size
                 .set(self.connect_queue.len() as i64);
-        }
-        // This point is reached only in two cases - replica gracefully shutting down or
-        // bug which makes the peer manager unavailable.
-        // If the peer manager is unavailable, the replica needs must exist that's why
-        // the endpoint is closed proactively.
-        self.endpoint.close(0u8.into(), b"shutting down");
+        };
+        self.shutdown().await;
+        // The send can fail iff the shutdown handler was dropped already.
+        let _ = shutdown_notifier
+            .expect("Transport 't stop unexpectedly. This is serious unrecoverable bug. It is better to crash.")
+            .send(());
+    }
 
+    // TODO: maybe unbind the port so we can start another transport on the same port after shutdown.
+    async fn shutdown(mut self) {
+        self.peer_map.write().unwrap().clear();
+        self.endpoint
+            .close(VarInt::from_u32(0), b"graceful shutdown of endpoint");
+        self.connect_queue.clear();
+        self.inbound_connecting.shutdown().await;
+        self.outbound_connecting.shutdown().await;
+        self.active_connections.shutdown().await;
         self.endpoint.wait_idle().await;
     }
 

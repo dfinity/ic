@@ -20,10 +20,10 @@ use axum::{
 use bincode::Options;
 use bytes::{Buf, BufMut, Bytes};
 use http::{Request, Response, StatusCode, Uri};
-use quinn::{RecvStream, SendStream};
+use quinn::{ReadError, ReadToEndError, RecvStream, SendStream};
 use serde::{Deserialize, Serialize};
 
-use crate::metrics::QuicTransportMetrics;
+use crate::{metrics::QuicTransportMetrics, SendError};
 
 #[derive(Debug)]
 pub(crate) enum RecvError {
@@ -76,19 +76,23 @@ pub(crate) async fn read_request(mut recv_stream: RecvStream) -> Result<Request<
     Ok(request)
 }
 
-pub(crate) async fn read_response(mut recv_stream: RecvStream) -> Result<Response<Bytes>, String> {
+pub(crate) async fn read_response(
+    mut recv_stream: RecvStream,
+) -> Result<Response<Bytes>, SendError> {
     let raw_msg = recv_stream
         .read_to_end(MAX_MESSAGE_SIZE_BYTES)
         .await
-        .map_err(|_| {
-            format!(
+        .map_err(|err| match err {
+            ReadToEndError::Read(ReadError::ConnectionLost(conn_err)) => conn_err.into(),
+            ReadToEndError::TooLong => SendError::Internal(format!(
                 "Recv stream for response contains more than {} bytes",
                 MAX_MESSAGE_SIZE_BYTES
-            )
+            )),
+            _ => SendError::Internal(err.to_string()),
         })?;
     let msg: WireResponse = bincode_config()
         .deserialize(&raw_msg)
-        .map_err(|err| format!("Deserializing response failed: {}", err))?;
+        .map_err(|err| SendError::Internal(format!("Deserializing response failed: {}", err)))?;
 
     let mut response = Response::new(Bytes::copy_from_slice(msg.body));
     let _ = std::mem::replace(response.status_mut(), msg.status);
@@ -98,7 +102,7 @@ pub(crate) async fn read_response(mut recv_stream: RecvStream) -> Result<Respons
 pub(crate) async fn write_request(
     send_stream: &mut SendStream,
     request: Request<Bytes>,
-) -> Result<(), String> {
+) -> Result<(), SendError> {
     let (parts, body) = request.into_parts();
 
     let msg = WireRequest {
@@ -108,11 +112,8 @@ pub(crate) async fn write_request(
 
     let res = bincode_config()
         .serialize(&msg)
-        .map_err(|err| err.to_string())?;
-    send_stream
-        .write_all(&res)
-        .await
-        .map_err(|err| err.to_string())
+        .map_err(|err| SendError::Internal(err.to_string()))?;
+    Ok(send_stream.write_all(&res).await?)
 }
 
 pub(crate) async fn write_response(

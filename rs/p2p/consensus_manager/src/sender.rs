@@ -536,11 +536,7 @@ mod tests {
             mock_transport
                 .expect_push()
                 .times(5)
-                .returning(move |_, _| {
-                    Err(SendError::ConnectionNotFound {
-                        reason: String::new(),
-                    })
-                })
+                .returning(move |_, _| Err(SendError::ConnectionUnavailable(String::new())))
                 .in_sequence(&mut seq);
             mock_transport
                 .expect_push()
