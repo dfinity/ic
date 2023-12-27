@@ -1,5 +1,5 @@
 use crate::{
-    CheckpointError, CheckpointMetrics, TipRequest,
+    pagemaptypes_with_num_pages, CheckpointError, CheckpointMetrics, TipRequest,
     CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use crossbeam_channel::{unbounded, Sender};
@@ -90,11 +90,12 @@ pub(crate) fn make_checkpoint(
             })
             .unwrap();
         let cp = recv.recv().unwrap()?;
-        // With lsmt storage, this happens later (after manifest)
+        // With lsmt storage, ResetTipAndMerge happens later (after manifest).
         if lsmt_storage == FlagStatus::Disabled {
             tip_channel
-                .send(TipRequest::ResetTipTo {
+                .send(TipRequest::ResetTipAndMerge {
                     checkpoint_layout: cp.clone(),
+                    pagemaptypes_with_num_pages: pagemaptypes_with_num_pages(state),
                 })
                 .unwrap();
         }
