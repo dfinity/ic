@@ -11,6 +11,7 @@ use axum::{
     routing::any,
     Extension, Router,
 };
+use backoff::{backoff::Backoff, ExponentialBackoffBuilder};
 use bytes::Bytes;
 use crossbeam_channel::Sender as CrossbeamSender;
 use ic_interfaces::p2p::consensus::{PriorityFnAndFilterProducer, ValidatedPoolReader};
@@ -36,7 +37,8 @@ use tokio::{
     time::{self, sleep_until, timeout_at, Instant, MissedTickBehavior},
 };
 
-const ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(5);
+const MIN_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(5);
+const MAX_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(120);
 const PRIORITY_FUNCTION_UPDATE_INTERVAL: Duration = Duration::from_secs(3);
 
 type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + Sync>>;
@@ -504,6 +506,12 @@ where
         )
         .await?;
 
+        let mut artifact_download_timeout = ExponentialBackoffBuilder::new()
+            .with_initial_interval(MIN_ARTIFACT_RPC_TIMEOUT)
+            .with_max_interval(MAX_ARTIFACT_RPC_TIMEOUT)
+            .with_max_elapsed_time(None)
+            .build();
+
         match artifact {
             // Artifact was pushed by peer. In this case we don't need check that the artifact ID corresponds
             // to the artifact because we earlier derived the ID from the artifact.
@@ -527,7 +535,14 @@ where
                         .body(bytes)
                         .unwrap();
 
-                    let next_request_at = Instant::now() + ARTIFACT_RPC_TIMEOUT;
+                    if peer_rx.has_changed().unwrap_or(false) {
+                        artifact_download_timeout.reset();
+                    }
+
+                    let next_request_at = Instant::now()
+                        + artifact_download_timeout
+                            .next_backoff()
+                            .unwrap_or(MAX_ARTIFACT_RPC_TIMEOUT);
                     match timeout_at(next_request_at, transport.rpc(&peer, request)).await {
                         Ok(Ok(response)) if response.status() == StatusCode::OK => {
                             let body = response.into_body();
