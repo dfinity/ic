@@ -242,8 +242,17 @@ pub(super) fn resolve_destination(
         }
         Ok(Ic00Method::DeleteChunks) => Err(ResolveDestinationError::UserError(UserError::new(
             ic_error_types::ErrorCode::CanisterRejectedMessage,
-            "Chunked upload API is not yet implemented",
+            "Delete chunks API is not yet implemented",
         ))),
+        Ok(Ic00Method::TakeCanisterSnapshot)
+        | Ok(Ic00Method::LoadCanisterSnapshot)
+        | Ok(Ic00Method::ListCanisterSnapshots)
+        | Ok(Ic00Method::DeleteCanisterSnapshot) => {
+            Err(ResolveDestinationError::UserError(UserError::new(
+                ic_error_types::ErrorCode::CanisterRejectedMessage,
+                "Snapshotting API is not yet implemented",
+            )))
+        }
         Err(_) => Err(ResolveDestinationError::MethodNotFound(
             method_name.to_string(),
         )),

@@ -2157,7 +2157,7 @@ pub fn check_ingress_status(ingress_status: IngressStatus) -> Result<WasmResult,
     }
 }
 
-fn get_output_messages(state: &mut ReplicatedState) -> Vec<(CanisterId, RequestOrResponse)> {
+pub fn get_output_messages(state: &mut ReplicatedState) -> Vec<(CanisterId, RequestOrResponse)> {
     let mut output: Vec<(CanisterId, RequestOrResponse)> = vec![];
     let output_iter = state.output_into_iter();
 
