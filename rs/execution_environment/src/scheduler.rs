@@ -2305,7 +2305,11 @@ fn get_instructions_limits_for_subnet_message(
             | UploadChunk
             | StoredChunks
             | DeleteChunks
-            | ClearChunkStore => default_limits,
+            | ClearChunkStore
+            | TakeCanisterSnapshot
+            | LoadCanisterSnapshot
+            | ListCanisterSnapshots
+            | DeleteCanisterSnapshot => default_limits,
             InstallCode | InstallChunkedCode => InstructionLimits::new(
                 dts,
                 config.max_instructions_per_install_code,

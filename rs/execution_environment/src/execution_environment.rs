@@ -1088,6 +1088,17 @@ impl ExecutionEnvironment {
                 )),
                 msg.take_cycles(),
             )),
+
+            Ok(Ic00Method::TakeCanisterSnapshot)
+            | Ok(Ic00Method::LoadCanisterSnapshot)
+            | Ok(Ic00Method::ListCanisterSnapshots)
+            | Ok(Ic00Method::DeleteCanisterSnapshot) => Some((
+                Err(UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    "Canister snapshotting API is not yet implemented.",
+                )),
+                msg.take_cycles(),
+            )),
             Err(ParseError::VariantNotFound) => {
                 let res = Err(UserError::new(
                     ErrorCode::CanisterMethodNotFound,

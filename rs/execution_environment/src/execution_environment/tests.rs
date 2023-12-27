@@ -23,7 +23,8 @@ use ic_replicated_state::{
 };
 use ic_test_utilities::{assert_utils::assert_balance_equals, mock_time};
 use ic_test_utilities_execution_environment::{
-    assert_empty_reply, check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
+    assert_empty_reply, check_ingress_status, get_output_messages, get_reply, ExecutionTest,
+    ExecutionTestBuilder,
 };
 use ic_test_utilities_metrics::{fetch_histogram_vec_count, fetch_int_counter, metric_vec};
 use ic_types::canister_http::Transform;
@@ -3021,4 +3022,37 @@ fn output_requests_on_application_subnets_update_subnet_available_memory_reserve
         subnet_message_memory
     );
     assert_correct_request(system_state, canister_id);
+}
+
+#[test]
+fn snapshotting_api_not_implemented() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_manual_execution()
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    // Inject a take_canister_snapshot request.
+    test.inject_call_to_ic00(
+        Method::TakeCanisterSnapshot,
+        Encode!().unwrap(),
+        Cycles::new(1_000_000_000),
+    );
+
+    test.execute_subnet_message();
+
+    let (receiver, response) = &get_output_messages(test.state_mut()).pop().unwrap();
+    assert_matches!(response, RequestOrResponse::Response(_));
+    if let RequestOrResponse::Response(res) = response {
+        assert_eq!(res.originator, *receiver);
+        assert_eq!(
+            res.response_payload,
+            Payload::Reject(RejectContext::new(
+                RejectCode::CanisterReject,
+                "Canister snapshotting API is not yet implemented."
+            ))
+        );
+    }
 }
