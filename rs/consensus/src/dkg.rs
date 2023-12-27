@@ -1539,6 +1539,7 @@ pub fn make_registry_cup_from_cup_contents(
             HashedBlock::new(crypto_hash, block),
             HashedRandomBeacon::new(crypto_hash, random_beacon),
             Id::from(CryptoHash(cup_contents.state_hash)),
+            /* oldest_registry_version_in_use_by_replicated_state */ None,
         ),
         signature: ThresholdSignature {
             signer: high_dkg_id,
@@ -3590,7 +3591,8 @@ mod tests {
             );
 
             // Get the latest summary block, which is the genesis block
-            let dkg_block = PoolReader::new(&pool).get_highest_summary_block();
+            let cup = PoolReader::new(&pool).get_highest_catch_up_package();
+            let dkg_block = cup.content.block.as_ref();
             assert_eq!(
                 dkg_block.context.registry_version,
                 RegistryVersion::from(5),
@@ -3601,7 +3603,7 @@ mod tests {
             assert_eq!(dkg_summary.registry_version, RegistryVersion::from(5));
             assert_eq!(dkg_summary.height, Height::from(0));
             assert_eq!(
-                summary.get_oldest_registry_version_in_use(),
+                cup.get_oldest_registry_version_in_use(),
                 RegistryVersion::from(5)
             );
             for tag in TAGS.iter() {
@@ -3640,7 +3642,8 @@ mod tests {
             // Skip till the next DKG summary and make sure the new summary block contains
             // correct data.
             pool.advance_round_normal_operation_n(dkg_interval_length);
-            let dkg_block = PoolReader::new(&pool).get_highest_summary_block();
+            let cup = PoolReader::new(&pool).get_highest_catch_up_package();
+            let dkg_block = cup.content.block.as_ref();
             assert_eq!(
                 dkg_block.context.registry_version,
                 RegistryVersion::from(6),
@@ -3653,7 +3656,7 @@ mod tests {
             assert_eq!(dkg_summary.registry_version, RegistryVersion::from(5));
             assert_eq!(dkg_summary.height, Height::from(5));
             assert_eq!(
-                summary.get_oldest_registry_version_in_use(),
+                cup.get_oldest_registry_version_in_use(),
                 RegistryVersion::from(5)
             );
             for tag in TAGS.iter() {
@@ -3694,7 +3697,8 @@ mod tests {
             // Skip till the next DKG summary and make sure the new summary block contains
             // correct data.
             pool.advance_round_normal_operation_n(dkg_interval_length);
-            let dkg_block = PoolReader::new(&pool).get_highest_summary_block();
+            let cup = PoolReader::new(&pool).get_highest_catch_up_package();
+            let dkg_block = cup.content.block.as_ref();
             assert_eq!(
                 dkg_block.context.registry_version,
                 RegistryVersion::from(10),
@@ -3707,7 +3711,7 @@ mod tests {
             assert_eq!(dkg_summary.registry_version, RegistryVersion::from(6));
             assert_eq!(dkg_summary.height, Height::from(10));
             assert_eq!(
-                summary.get_oldest_registry_version_in_use(),
+                cup.get_oldest_registry_version_in_use(),
                 RegistryVersion::from(5)
             );
             for tag in TAGS.iter() {
@@ -3733,7 +3737,8 @@ mod tests {
 
             // Skip till the next DKG round
             pool.advance_round_normal_operation_n(dkg_interval_length + 1);
-            let dkg_block = PoolReader::new(&pool).get_highest_summary_block();
+            let cup = PoolReader::new(&pool).get_highest_catch_up_package();
+            let dkg_block = cup.content.block.as_ref();
             assert_eq!(
                 dkg_block.context.registry_version,
                 RegistryVersion::from(10),
@@ -3746,7 +3751,7 @@ mod tests {
             assert_eq!(dkg_summary.registry_version, RegistryVersion::from(10));
             assert_eq!(dkg_summary.height, Height::from(15));
             assert_eq!(
-                summary.get_oldest_registry_version_in_use(),
+                cup.get_oldest_registry_version_in_use(),
                 RegistryVersion::from(6)
             );
             for tag in TAGS.iter() {
@@ -3770,7 +3775,8 @@ mod tests {
 
             // Skip till the next DKG round
             pool.advance_round_normal_operation_n(dkg_interval_length + 1);
-            let dkg_block = PoolReader::new(&pool).get_highest_summary_block();
+            let cup = PoolReader::new(&pool).get_highest_catch_up_package();
+            let dkg_block = cup.content.block.as_ref();
             assert_eq!(
                 dkg_block.context.registry_version,
                 RegistryVersion::from(10),
@@ -3783,7 +3789,7 @@ mod tests {
             assert_eq!(dkg_summary.registry_version, RegistryVersion::from(10));
             assert_eq!(dkg_summary.height, Height::from(20));
             assert_eq!(
-                summary.get_oldest_registry_version_in_use(),
+                cup.get_oldest_registry_version_in_use(),
                 RegistryVersion::from(10)
             );
             for tag in TAGS.iter() {

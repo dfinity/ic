@@ -324,14 +324,7 @@ pub trait ConsensusPoolCache: Send + Sync {
     /// between the one returned from this function and the current
     /// `RegistryVersion`.
     fn get_oldest_registry_version_in_use(&self) -> RegistryVersion {
-        self.catch_up_package()
-            .content
-            .block
-            .get_value()
-            .payload
-            .as_ref()
-            .as_summary()
-            .get_oldest_registry_version_in_use()
+        self.catch_up_package().get_oldest_registry_version_in_use()
     }
 
     /// The target height that the StateManager should start at given

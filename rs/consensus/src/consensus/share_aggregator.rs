@@ -207,7 +207,7 @@ mod tests {
         },
         crypto::{CryptoHash, CryptoHashOf},
         signature::ThresholdSignatureShare,
-        NodeId,
+        NodeId, RegistryVersion,
     };
     use std::sync::Arc;
 
@@ -330,6 +330,7 @@ mod tests {
                             random_beacon.clone(),
                         ),
                         state_hash,
+                        Some(RegistryVersion::from(1234)),
                     ))
                         .into(),
                     signature: ThresholdSignatureShare::fake(node_id),
