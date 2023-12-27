@@ -144,6 +144,7 @@ message PreSignatureQuadrupleRef {
   MaskedTranscript lambda_masked_ref = 2;
   MaskedTranscript kappa_times_lambda_ref = 3;
   MaskedTranscript key_times_lambda_ref = 4;
+  UnmaskedTranscript key_unmasked_ref = 5;
 }
 
 message ThresholdEcdsaSigInputsRef {

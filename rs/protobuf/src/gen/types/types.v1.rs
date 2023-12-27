@@ -595,6 +595,8 @@ pub struct PreSignatureQuadrupleRef {
     pub kappa_times_lambda_ref: ::core::option::Option<MaskedTranscript>,
     #[prost(message, optional, tag = "4")]
     pub key_times_lambda_ref: ::core::option::Option<MaskedTranscript>,
+    #[prost(message, optional, tag = "5")]
+    pub key_unmasked_ref: ::core::option::Option<UnmaskedTranscript>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
