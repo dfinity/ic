@@ -576,7 +576,7 @@ where
                     .await?;
                 }
 
-                timer.stop_and_discard();
+                timer.stop_and_record();
 
                 result
             }
