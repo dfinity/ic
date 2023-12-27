@@ -127,7 +127,7 @@ impl TransportRouter {
     pub fn add_peer(
         &mut self,
         node_id: NodeId,
-        mut router: Router,
+        router: Router,
         latency: Duration,
         capacity: usize,
     ) -> PeerTransport {
@@ -151,15 +151,19 @@ impl TransportRouter {
                 parts.extensions.insert(ConnId::from(u64::MAX));
                 let req = Request::from_parts(parts, Body::from(body));
 
-                // Call request handler
-                let resp = router.ready().await.unwrap().call(req).await.unwrap();
+                let router_resp_tx = router_resp_tx.clone();
+                let mut router = router.clone();
+                tokio::spawn(async move {
+                    // Call request handler
+                    let resp = router.ready().await.unwrap().call(req).await.unwrap();
 
-                // Transform request back to `Request<Bytes>` and attach this node in the extension map.
-                let (mut parts, body) = resp.into_parts();
-                let body = to_bytes(body).await.unwrap();
-                parts.extensions.insert(this_node_id);
-                let resp = Response::from_parts(parts, body);
-                let _ = router_resp_tx.send((resp, origin_id, oneshot_tx));
+                    // Transform request back to `Request<Bytes>` and attach this node in the extension map.
+                    let (mut parts, body) = resp.into_parts();
+                    let body = to_bytes(body).await.unwrap();
+                    parts.extensions.insert(this_node_id);
+                    let resp = Response::from_parts(parts, body);
+                    let _ = router_resp_tx.send((resp, origin_id, oneshot_tx));
+                });
             }
         });
 
