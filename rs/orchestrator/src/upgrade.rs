@@ -533,8 +533,7 @@ fn should_node_become_unassigned(
     subnet_id: SubnetId,
     cup: &CatchUpPackage,
 ) -> bool {
-    let summary = &cup.content.block.get_value().payload.as_ref().as_summary();
-    let oldest_relevant_version = summary.get_oldest_registry_version_in_use().get();
+    let oldest_relevant_version = cup.get_oldest_registry_version_in_use().get();
     let latest_registry_version = registry.get_latest_version().get();
     // Make sure that if the latest registry version is for some reason violating
     // the assumption that it's higher/equal than any other version used in the
@@ -850,6 +849,7 @@ mod tests {
                     )),
                 ),
                 CryptoHashOf::from(CryptoHash(Vec::new())),
+                None,
             ),
             signature: ThresholdSignature::fake(),
         }

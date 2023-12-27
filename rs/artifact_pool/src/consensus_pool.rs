@@ -1307,6 +1307,7 @@ mod tests {
                         }),
                     ),
                     CryptoHashOf::from(CryptoHash(vec![])),
+                    None,
                 ))
                 .into_message(),
             );

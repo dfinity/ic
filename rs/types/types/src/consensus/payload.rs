@@ -36,7 +36,9 @@ impl SummaryPayload {
     /// P2P should keep up connections to all nodes registered in any registry
     /// between the one returned from this function and the current
     /// `RegistryVersion`.
-    pub fn get_oldest_registry_version_in_use(&self) -> RegistryVersion {
+    ///
+    /// Note that this function should generally be called on the CUP instead.
+    pub(crate) fn get_oldest_registry_version_in_use(&self) -> RegistryVersion {
         let dkg_version = self.dkg.get_oldest_registry_version_in_use();
         if let Some(ecdsa_version) = self
             .ecdsa
