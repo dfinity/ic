@@ -139,4 +139,4 @@ To make the mono repository a success, there needs to be some basic rules in ord
 2. Do not depend on unmaintained crates.
 3. Keep the rust-lang up-to-date.
 5. It is everyones responsibility to adhere to this policy. 
-6. As with any rules there are expections. 
+6. As with any rules there are exceptions in some circumstances. 
