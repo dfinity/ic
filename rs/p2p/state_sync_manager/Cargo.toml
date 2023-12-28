@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-axum = "0.6.12"
+axum = { workspace = true }
 base64 = { workspace = true }
 bytes = { workspace = true }
 futures = { workspace = true }
@@ -33,4 +33,5 @@ ic-p2p-test-utils = { path = "../test_utils" }
 ic-state-manager = { path = "../../state_manager" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
-turmoil = "0.5"
+turmoil = { workspace = true }
+

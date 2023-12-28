@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 async-trait = "0.1.36"
-axum = "0.6.12"
+axum = { workspace = true }
 bincode = "1.2.1"
 bytes = { workspace = true }
 either = "1.6.0"
@@ -22,7 +22,6 @@ ic-base-types = { path = "../../types/base_types" }
 ic-icos-sev = { path = "../../ic_os/sev" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
-ic-registry-client-helpers = { path = "../../registry/helpers" }
 phantom_newtype = { path = "../../phantom_newtype" }
 prometheus = { workspace = true }
 quinn = { version = "0.10.2", features = ["ring"] }
@@ -34,7 +33,7 @@ thiserror = "1.0.50"
 tokio = { workspace = true }
 tokio-metrics = "0.3.0"
 tokio-rustls = "0.24.0"
-tokio-util = { version = "0.7.4", features = ["codec", "time"] }
+tokio-util = { workspace = true }
 tower = { workspace = true }
 
 [dev-dependencies]
@@ -42,4 +41,5 @@ criterion = { version = "0.5", features = ["async_tokio"] }
 ic-p2p-test-utils = { path = "../test_utils" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
-turmoil = "0.5"
+turmoil = { workspace = true }
+

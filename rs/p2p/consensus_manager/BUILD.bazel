@@ -7,7 +7,6 @@ package(default_visibility = [
 
 DEPENDENCIES = [
     "//rs/async_utils",
-    "//rs/artifact_pool",
     "//rs/interfaces",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
