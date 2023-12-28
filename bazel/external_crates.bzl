@@ -839,7 +839,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "predicates": crate.spec(
-                version = "^1.0.1",
+                version = "^3.0.4",
             ),
             "pretty-bytes": crate.spec(
                 version = "^0.2.2",
@@ -1060,7 +1060,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.14.0",
             ),
             "serde_yaml": crate.spec(
-                version = "^0.8.24",
+                version = "^0.9.29",
             ),
             "sev": crate.spec(
                 version = "^2.0.2",

@@ -1,5 +1,5 @@
 {
-  "checksum": "9efa9b29a76e35b73d100a386b0180303f119dc3072042add9373a58bf5e3e3d",
+  "checksum": "cba4ade67c21c8424180b713cdef2c7067c3e467fa94eaafc4fecc8d4ec5a0e1",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -14599,42 +14599,6 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "difference 2.0.0": {
-      "name": "difference",
-      "version": "2.0.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/difference/2.0.0/download",
-          "sha256": "524cbf6897b527295dff137cec09ecf3a05f4fddffd7dfcd1585403449e74198"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "difference",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "difference",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default"
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "2.0.0"
-      },
-      "license": "MIT"
-    },
     "difflib 0.4.0": {
       "name": "difflib",
       "version": "0.4.0",
@@ -15550,7 +15514,7 @@
               "target": "pprof"
             },
             {
-              "id": "predicates 1.0.8",
+              "id": "predicates 3.0.4",
               "target": "predicates"
             },
             {
@@ -15762,7 +15726,7 @@
               "target": "serde_with"
             },
             {
-              "id": "serde_yaml 0.8.26",
+              "id": "serde_yaml 0.9.29",
               "target": "serde_yaml"
             },
             {
@@ -19271,53 +19235,6 @@
         "version": "1.0.28"
       },
       "license": "MIT OR Apache-2.0"
-    },
-    "float-cmp 0.8.0": {
-      "name": "float-cmp",
-      "version": "0.8.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/float-cmp/0.8.0/download",
-          "sha256": "e1267f4ac4f343772758f7b1bdcbe767c218bbab93bb432acbf5162bbf85a6c4"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "float_cmp",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "float_cmp",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "num-traits",
-            "ratio"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "num-traits 0.2.17",
-              "target": "num_traits"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.8.0"
-      },
-      "license": "MIT"
     },
     "float-cmp 0.9.0": {
       "name": "float-cmp",
@@ -28732,7 +28649,7 @@
               "target": "serde_json"
             },
             {
-              "id": "serde_yaml 0.9.27",
+              "id": "serde_yaml 0.9.29",
               "target": "serde_yaml"
             },
             {
@@ -40211,71 +40128,6 @@
       },
       "license": "MIT"
     },
-    "predicates 1.0.8": {
-      "name": "predicates",
-      "version": "1.0.8",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/predicates/1.0.8/download",
-          "sha256": "f49cfaf7fdaa3bfacc6fa3e7054e65148878354a5cfddcf661df4c851f8021df"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "predicates",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "predicates",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "difference",
-            "float-cmp",
-            "normalize-line-endings",
-            "regex"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "difference 2.0.0",
-              "target": "difference"
-            },
-            {
-              "id": "float-cmp 0.8.0",
-              "target": "float_cmp"
-            },
-            {
-              "id": "normalize-line-endings 0.3.0",
-              "target": "normalize_line_endings"
-            },
-            {
-              "id": "predicates-core 1.0.6",
-              "target": "predicates_core"
-            },
-            {
-              "id": "regex 1.10.2",
-              "target": "regex"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "1.0.8"
-      },
-      "license": "MIT/Apache-2.0"
-    },
     "predicates 2.1.5": {
       "name": "predicates",
       "version": "2.1.5",
@@ -40372,7 +40224,12 @@
         ],
         "crate_features": {
           "common": [
-            "diff"
+            "color",
+            "default",
+            "diff",
+            "float-cmp",
+            "normalize-line-endings",
+            "regex"
           ],
           "selects": {}
         },
@@ -40387,12 +40244,24 @@
               "target": "difflib"
             },
             {
+              "id": "float-cmp 0.9.0",
+              "target": "float_cmp"
+            },
+            {
               "id": "itertools 0.11.0",
               "target": "itertools"
             },
             {
+              "id": "normalize-line-endings 0.3.0",
+              "target": "normalize_line_endings"
+            },
+            {
               "id": "predicates-core 1.0.6",
               "target": "predicates_core"
+            },
+            {
+              "id": "regex 1.10.2",
+              "target": "regex"
             }
           ],
           "selects": {}
@@ -49916,13 +49785,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "serde_yaml 0.9.27": {
+    "serde_yaml 0.9.29": {
       "name": "serde_yaml",
-      "version": "0.9.27",
+      "version": "0.9.29",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/serde_yaml/0.9.27/download",
-          "sha256": "3cc7a1570e38322cfe4154732e5110f887ea57e22b76f4bfd32b5bdd3368666c"
+          "url": "https://crates.io/api/v1/crates/serde_yaml/0.9.29/download",
+          "sha256": "a15e0ef66bf939a7c890a0bf6d5a733c70202225f9888a89ed5c62298b019129"
         }
       },
       "targets": [
@@ -49960,14 +49829,14 @@
               "target": "serde"
             },
             {
-              "id": "unsafe-libyaml 0.2.9",
+              "id": "unsafe-libyaml 0.2.10",
               "target": "unsafe_libyaml"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.9.27"
+        "version": "0.9.29"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -58689,13 +58558,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "unsafe-libyaml 0.2.9": {
+    "unsafe-libyaml 0.2.10": {
       "name": "unsafe-libyaml",
-      "version": "0.2.9",
+      "version": "0.2.10",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/unsafe-libyaml/0.2.9/download",
-          "sha256": "f28467d3e1d3c6586d8f25fa243f544f5800fec42d97032474e17222c2b75cfa"
+          "url": "https://crates.io/api/v1/crates/unsafe-libyaml/0.2.10/download",
+          "sha256": "ab4c90930b95a82d00dc9e9ac071b4991924390d46cbd0dfe566148667605e4b"
         }
       },
       "targets": [
@@ -58715,7 +58584,7 @@
           "**"
         ],
         "edition": "2021",
-        "version": "0.2.9"
+        "version": "0.2.10"
       },
       "license": "MIT"
     },
