@@ -1897,6 +1897,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_snapshots(mut self, status: FlagStatus) -> Self {
+        self.execution_config.canister_snapshots = status;
+        self
+    }
+
     pub fn with_time(mut self, time: Time) -> Self {
         self.time = time;
         self

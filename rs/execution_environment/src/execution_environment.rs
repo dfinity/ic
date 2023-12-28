@@ -1088,17 +1088,82 @@ impl ExecutionEnvironment {
                 )),
                 msg.take_cycles(),
             )),
-
-            Ok(Ic00Method::TakeCanisterSnapshot)
-            | Ok(Ic00Method::LoadCanisterSnapshot)
-            | Ok(Ic00Method::ListCanisterSnapshots)
-            | Ok(Ic00Method::DeleteCanisterSnapshot) => Some((
-                Err(UserError::new(
-                    ErrorCode::CanisterRejectedMessage,
-                    "Canister snapshotting API is not yet implemented.",
-                )),
-                msg.take_cycles(),
-            )),
+            Ok(Ic00Method::TakeCanisterSnapshot) => match self.config.canister_snapshots {
+                FlagStatus::Enabled => {
+                    // TODO(EXC-1529): Implement take_canister_snapshot.
+                    Some((
+                        Err(UserError::new(
+                            ErrorCode::CanisterRejectedMessage,
+                            "Canister snapshotting API is not yet implemented.",
+                        )),
+                        msg.take_cycles(),
+                    ))
+                }
+                FlagStatus::Disabled => {
+                    let err = Err(UserError::new(
+                        ErrorCode::CanisterContractViolation,
+                        "This API is not enabled on this subnet".to_string(),
+                    ));
+                    Some((err, msg.take_cycles()))
+                }
+            },
+            Ok(Ic00Method::LoadCanisterSnapshot) => match self.config.canister_snapshots {
+                FlagStatus::Enabled => {
+                    // TODO(EXC-1530): Implement load_canister_snapshot.
+                    Some((
+                        Err(UserError::new(
+                            ErrorCode::CanisterRejectedMessage,
+                            "Canister snapshotting API is not yet implemented.",
+                        )),
+                        msg.take_cycles(),
+                    ))
+                }
+                FlagStatus::Disabled => {
+                    let err = Err(UserError::new(
+                        ErrorCode::CanisterContractViolation,
+                        "This API is not enabled on this subnet".to_string(),
+                    ));
+                    Some((err, msg.take_cycles()))
+                }
+            },
+            Ok(Ic00Method::ListCanisterSnapshots) => match self.config.canister_snapshots {
+                FlagStatus::Enabled => {
+                    // TODO(EXC-1531): Implement list_canister_snapshot.
+                    Some((
+                        Err(UserError::new(
+                            ErrorCode::CanisterRejectedMessage,
+                            "Canister snapshotting API is not yet implemented.",
+                        )),
+                        msg.take_cycles(),
+                    ))
+                }
+                FlagStatus::Disabled => {
+                    let err = Err(UserError::new(
+                        ErrorCode::CanisterContractViolation,
+                        "This API is not enabled on this subnet".to_string(),
+                    ));
+                    Some((err, msg.take_cycles()))
+                }
+            },
+            Ok(Ic00Method::DeleteCanisterSnapshot) => match self.config.canister_snapshots {
+                FlagStatus::Enabled => {
+                    // TODO(EXC-1532): Implement delete_canister_snapshot.
+                    Some((
+                        Err(UserError::new(
+                            ErrorCode::CanisterRejectedMessage,
+                            "Canister snapshotting API is not yet implemented.",
+                        )),
+                        msg.take_cycles(),
+                    ))
+                }
+                FlagStatus::Disabled => {
+                    let err = Err(UserError::new(
+                        ErrorCode::CanisterContractViolation,
+                        "This API is not enabled on this subnet".to_string(),
+                    ));
+                    Some((err, msg.take_cycles()))
+                }
+            },
             Err(ParseError::VariantNotFound) => {
                 let res = Err(UserError::new(
                     ErrorCode::CanisterMethodNotFound,
