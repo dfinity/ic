@@ -101,6 +101,5 @@ path = "src/main.rs"
 profiler = ["thread_profiler/thread_profiler", "pprof"]
 malicious_code = [
   "ic-consensus/malicious_code",
-  "ic-http-endpoints-public/malicious_code",
   "ic-state-manager/malicious_code",
 ]
