@@ -199,7 +199,7 @@ impl RegistryCanister {
         pre_conditions: Vec<Precondition>,
     ) -> Result<u64, Vec<Error>> {
         let payload = serialize_atomic_mutate_request(mutations, pre_conditions);
-        let nonce = format!("{}", chrono::Utc::now().timestamp_nanos())
+        let nonce = format!("{}", chrono::Utc::now().timestamp_nanos_opt().unwrap())
             .as_bytes()
             .to_vec();
         match self

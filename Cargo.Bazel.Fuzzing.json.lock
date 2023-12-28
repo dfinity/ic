@@ -1,5 +1,5 @@
 {
-  "checksum": "cba4ade67c21c8424180b713cdef2c7067c3e467fa94eaafc4fecc8d4ec5a0e1",
+  "checksum": "5c46cb1366840ad775bc0828fa3a6c71fb18ffd807374b07321da4a72d678b89",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1573,6 +1573,36 @@
         },
         "edition": "2018",
         "version": "0.2.16"
+      },
+      "license": "MIT OR Apache-2.0"
+    },
+    "android-tzdata 0.1.1": {
+      "name": "android-tzdata",
+      "version": "0.1.1",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/android-tzdata/0.1.1/download",
+          "sha256": "e999941b234f3131b00bc13c22d06e8c5ff726d1b6318ac7eb276997bbb4fef0"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "android_tzdata",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "android_tzdata",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "0.1.1"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -9066,7 +9096,7 @@
               "target": "base64_url"
             },
             {
-              "id": "chrono 0.4.23",
+              "id": "chrono 0.4.31",
               "target": "chrono"
             },
             {
@@ -9390,13 +9420,13 @@
       },
       "license": "Apache-2.0 OR MIT"
     },
-    "chrono 0.4.23": {
+    "chrono 0.4.31": {
       "name": "chrono",
-      "version": "0.4.23",
+      "version": "0.4.31",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/chrono/0.4.23/download",
-          "sha256": "16b0a3d9ed01224b22057780a37bb8c5dbfe1be8ba48678e7bf57ec4b385411f"
+          "url": "https://crates.io/api/v1/crates/chrono/0.4.31/download",
+          "sha256": "7f2c685bad3eb3d45a01354cedb7d5faa66194d1d58ba6e267a8de788f79db38"
         }
       },
       "targets": [
@@ -9418,6 +9448,7 @@
         "crate_features": {
           "common": [
             "alloc",
+            "android-tzdata",
             "clock",
             "default",
             "iana-time-zone",
@@ -9425,23 +9456,15 @@
             "oldtime",
             "serde",
             "std",
-            "time",
             "wasm-bindgen",
             "wasmbind",
-            "winapi"
+            "winapi",
+            "windows-targets"
           ],
           "selects": {}
         },
         "deps": {
           "common": [
-            {
-              "id": "iana-time-zone 0.1.58",
-              "target": "iana_time_zone"
-            },
-            {
-              "id": "num-integer 0.1.45",
-              "target": "num_integer"
-            },
             {
               "id": "num-traits 0.2.17",
               "target": "num_traits"
@@ -9449,10 +9472,6 @@
             {
               "id": "serde 1.0.190",
               "target": "serde"
-            },
-            {
-              "id": "time 0.1.45",
-              "target": "time"
             }
           ],
           "selects": {
@@ -9466,18 +9485,30 @@
                 "target": "wasm_bindgen"
               }
             ],
+            "cfg(target_os = \"android\")": [
+              {
+                "id": "android-tzdata 0.1.1",
+                "target": "android_tzdata"
+              }
+            ],
+            "cfg(unix)": [
+              {
+                "id": "iana-time-zone 0.1.58",
+                "target": "iana_time_zone"
+              }
+            ],
             "cfg(windows)": [
               {
-                "id": "winapi 0.3.9",
-                "target": "winapi"
+                "id": "windows-targets 0.48.5",
+                "target": "windows_targets"
               }
             ]
           }
         },
-        "edition": "2018",
-        "version": "0.4.23"
+        "edition": "2021",
+        "version": "0.4.31"
       },
-      "license": "MIT/Apache-2.0"
+      "license": "MIT OR Apache-2.0"
     },
     "chunked_transfer 1.4.1": {
       "name": "chunked_transfer",
@@ -10379,7 +10410,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "chrono 0.4.23",
+              "id": "chrono 0.4.31",
               "target": "chrono"
             },
             {
@@ -14947,7 +14978,7 @@
               "target": "chacha20poly1305"
             },
             {
-              "id": "chrono 0.4.23",
+              "id": "chrono 0.4.31",
               "target": "chrono"
             },
             {
@@ -18150,7 +18181,7 @@
               "target": "bytes"
             },
             {
-              "id": "chrono 0.4.23",
+              "id": "chrono 0.4.31",
               "target": "chrono"
             },
             {
@@ -28284,7 +28315,7 @@
               "target": "bytes"
             },
             {
-              "id": "chrono 0.4.23",
+              "id": "chrono 0.4.31",
               "target": "chrono"
             },
             {
@@ -28569,7 +28600,7 @@
               "target": "bytes"
             },
             {
-              "id": "chrono 0.4.23",
+              "id": "chrono 0.4.31",
               "target": "chrono"
             },
             {
@@ -28726,7 +28757,7 @@
         "deps": {
           "common": [
             {
-              "id": "chrono 0.4.23",
+              "id": "chrono 0.4.31",
               "target": "chrono"
             },
             {
@@ -41539,7 +41570,7 @@
         "deps": {
           "common": [
             {
-              "id": "chrono 0.4.23",
+              "id": "chrono 0.4.31",
               "target": "chrono"
             },
             {
@@ -45937,7 +45968,7 @@
         "deps": {
           "common": [
             {
-              "id": "chrono 0.4.23",
+              "id": "chrono 0.4.31",
               "target": "chrono"
             }
           ],
@@ -62529,12 +62560,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "default"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
             {
