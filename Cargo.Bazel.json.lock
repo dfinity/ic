@@ -1,5 +1,5 @@
 {
-  "checksum": "5fc36aef44bd7785f66a5d1af4ce8f9a1d31cb8beb59f1bd8f8df1ed641d7d65",
+  "checksum": "190ee4347a9215eaf2ae37fe0cc03373151e8c025f53ac8e3d6f087aef430d4b",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -186,11 +186,11 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.8",
+              "id": "tokio-util 0.7.10",
               "target": "tokio_util"
             },
             {
@@ -357,11 +357,11 @@
               "target": "smallvec"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.8",
+              "id": "tokio-util 0.7.10",
               "target": "tokio_util"
             },
             {
@@ -534,7 +534,7 @@
               "target": "futures_core"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             }
           ],
@@ -608,7 +608,7 @@
               "target": "futures_util"
             },
             {
-              "id": "mio 0.8.8",
+              "id": "mio 0.8.10",
               "target": "mio"
             },
             {
@@ -620,7 +620,7 @@
               "target": "socket2"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
@@ -3100,7 +3100,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
@@ -3620,7 +3620,7 @@
               "target": "pin_project"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             }
           ],
@@ -3663,7 +3663,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             }
           ],
@@ -4357,7 +4357,7 @@
               "target": "sync_wrapper"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
@@ -4535,7 +4535,7 @@
               "target": "sync_wrapper"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
@@ -5102,7 +5102,7 @@
               "target": "rustls_pemfile"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
@@ -5214,7 +5214,7 @@
               "target": "pin_project"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             }
           ],
@@ -12214,7 +12214,7 @@
               "target": "tinytemplate"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
@@ -12727,7 +12727,7 @@
                 "target": "libc"
               },
               {
-                "id": "mio 0.8.8",
+                "id": "mio 0.8.10",
                 "target": "mio"
               },
               {
@@ -13859,7 +13859,7 @@
               "target": "retain_mut"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             }
           ],
@@ -15675,7 +15675,7 @@
               "target": "slog_term"
             },
             {
-              "id": "socket2 0.5.3",
+              "id": "socket2 0.5.5",
               "target": "socket2"
             },
             {
@@ -15751,7 +15751,7 @@
               "target": "tiny_http"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
@@ -15759,7 +15759,7 @@
               "target": "tokio_io_timeout"
             },
             {
-              "id": "tokio-metrics 0.3.0",
+              "id": "tokio-metrics 0.3.1",
               "target": "tokio_metrics"
             },
             {
@@ -15779,7 +15779,7 @@
               "target": "tokio_test"
             },
             {
-              "id": "tokio-util 0.7.8",
+              "id": "tokio-util 0.7.10",
               "target": "tokio_util"
             },
             {
@@ -15835,7 +15835,7 @@
               "target": "trust_dns_resolver"
             },
             {
-              "id": "turmoil 0.5.6",
+              "id": "turmoil 0.6.0",
               "target": "turmoil"
             },
             {
@@ -21497,11 +21497,11 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.8",
+              "id": "tokio-util 0.7.10",
               "target": "tokio_util"
             },
             {
@@ -21576,11 +21576,11 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.8",
+              "id": "tokio-util 0.7.10",
               "target": "tokio_util"
             },
             {
@@ -23220,7 +23220,7 @@
               "target": "serde_urlencoded"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             }
           ],
@@ -23435,7 +23435,7 @@
               "target": "socket2"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
@@ -23537,7 +23537,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
@@ -23707,7 +23707,7 @@
               "target": "rustls_native_certs"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
@@ -23796,7 +23796,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             }
           ],
@@ -23843,7 +23843,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
@@ -23927,11 +23927,11 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "socket2 0.5.3",
+              "id": "socket2 0.5.5",
               "target": "socket2"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
@@ -24255,7 +24255,7 @@
                 "target": "webpki"
               },
               {
-                "id": "tokio 1.32.0",
+                "id": "tokio 1.35.1",
                 "target": "tokio"
               }
             ]
@@ -27157,7 +27157,7 @@
           "selects": {
             "cfg(windows)": [
               {
-                "id": "socket2 0.5.3",
+                "id": "socket2 0.5.5",
                 "target": "socket2"
               },
               {
@@ -28598,7 +28598,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
@@ -28606,7 +28606,7 @@
               "target": "tokio_tungstenite"
             },
             {
-              "id": "tokio-util 0.7.8",
+              "id": "tokio-util 0.7.10",
               "target": "tokio_util"
             },
             {
@@ -28849,11 +28849,11 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.8",
+              "id": "tokio-util 0.7.10",
               "target": "tokio_util"
             },
             {
@@ -32202,7 +32202,7 @@
               "target": "simple_logger"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
@@ -32704,13 +32704,13 @@
       },
       "license": "MIT"
     },
-    "mio 0.8.8": {
+    "mio 0.8.10": {
       "name": "mio",
-      "version": "0.8.8",
+      "version": "0.8.10",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/mio/0.8.8/download",
-          "sha256": "927a765cd3fc26206e66b296465fa9d3e5ab003e651c1b3c060e7956d96b19d2"
+          "url": "https://crates.io/api/v1/crates/mio/0.8.10/download",
+          "sha256": "8f3d0b296e374a4e6f3c7b0a1f5a51d748a0d34c85e7dc48fc3fa9a87657fe09"
         }
       },
       "targets": [
@@ -32772,7 +32772,7 @@
           }
         },
         "edition": "2018",
-        "version": "0.8.8"
+        "version": "0.8.10"
       },
       "license": "MIT"
     },
@@ -33149,7 +33149,7 @@
               "target": "similar"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             }
           ],
@@ -36727,7 +36727,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
@@ -42348,7 +42348,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
@@ -42491,7 +42491,7 @@
               "target": "libc"
             },
             {
-              "id": "socket2 0.5.3",
+              "id": "socket2 0.5.5",
               "target": "socket2"
             },
             {
@@ -44929,7 +44929,7 @@
                 "target": "rustls_pemfile"
               },
               {
-                "id": "tokio 1.32.0",
+                "id": "tokio 1.35.1",
                 "target": "tokio"
               },
               {
@@ -44937,7 +44937,7 @@
                 "target": "tokio_rustls"
               },
               {
-                "id": "tokio-util 0.7.8",
+                "id": "tokio-util 0.7.10",
                 "target": "tokio_util"
               },
               {
@@ -50325,7 +50325,7 @@
               "alias": "mio_0_7"
             },
             {
-              "id": "mio 0.8.8",
+              "id": "mio 0.8.10",
               "target": "mio",
               "alias": "mio_0_8"
             },
@@ -51546,13 +51546,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "socket2 0.5.3": {
+    "socket2 0.5.5": {
       "name": "socket2",
-      "version": "0.5.3",
+      "version": "0.5.5",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/socket2/0.5.3/download",
-          "sha256": "2538b18701741680e0322a2302176d3253a35388e2e62f172f64f4f16605f877"
+          "url": "https://crates.io/api/v1/crates/socket2/0.5.5/download",
+          "sha256": "7b5fac59a5cb5dd637972e5fca70daf0523c9067fcdc4842f053dae04a18f8e9"
         }
       },
       "targets": [
@@ -51595,7 +51595,7 @@
           }
         },
         "edition": "2021",
-        "version": "0.5.3"
+        "version": "0.5.5"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -52503,7 +52503,7 @@
               "target": "rand"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             }
           ],
@@ -53572,7 +53572,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
@@ -53580,7 +53580,7 @@
               "target": "tokio_serde"
             },
             {
-              "id": "tokio-util 0.7.8",
+              "id": "tokio-util 0.7.10",
               "target": "tokio_util"
             },
             {
@@ -54957,13 +54957,13 @@
       },
       "license": "MIT OR Apache-2.0 OR Zlib"
     },
-    "tokio 1.32.0": {
+    "tokio 1.35.1": {
       "name": "tokio",
-      "version": "1.32.0",
+      "version": "1.35.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tokio/1.32.0/download",
-          "sha256": "17ed6077ed6cd6c74735e21f37eb16dc3935f96878b1fe961074089cc80893f9"
+          "url": "https://crates.io/api/v1/crates/tokio/1.35.1/download",
+          "sha256": "c89b4efa943be685f629b149f53829423f8f5531ea21249408e8e2f8671ec104"
         }
       },
       "targets": [
@@ -55002,7 +55002,6 @@
             "signal",
             "signal-hook-registry",
             "socket2",
-            "stats",
             "sync",
             "test-util",
             "time",
@@ -55027,7 +55026,7 @@
               "target": "bytes"
             },
             {
-              "id": "mio 0.8.8",
+              "id": "mio 0.8.10",
               "target": "mio"
             },
             {
@@ -55046,7 +55045,7 @@
           "selects": {
             "cfg(not(target_family = \"wasm\"))": [
               {
-                "id": "socket2 0.5.3",
+                "id": "socket2 0.5.5",
                 "target": "socket2"
               }
             ],
@@ -55078,13 +55077,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "tokio-macros 2.1.0",
+              "id": "tokio-macros 2.2.0",
               "target": "tokio_macros"
             }
           ],
           "selects": {}
         },
-        "version": "1.32.0"
+        "version": "1.35.1"
       },
       "license": "MIT"
     },
@@ -55120,7 +55119,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             }
           ],
@@ -55131,13 +55130,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "tokio-macros 2.1.0": {
+    "tokio-macros 2.2.0": {
       "name": "tokio-macros",
-      "version": "2.1.0",
+      "version": "2.2.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tokio-macros/2.1.0/download",
-          "sha256": "630bdcf245f78637c13ec01ffae6187cca34625e8c63150d424b59e55af2675e"
+          "url": "https://crates.io/api/v1/crates/tokio-macros/2.2.0/download",
+          "sha256": "5b8a1e28f2deaa14e508979454cb3a223b10b938b45af148bc0986de36f1923b"
         }
       },
       "targets": [
@@ -55173,18 +55172,18 @@
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "2.1.0"
+        "edition": "2021",
+        "version": "2.2.0"
       },
       "license": "MIT"
     },
-    "tokio-metrics 0.3.0": {
+    "tokio-metrics 0.3.1": {
       "name": "tokio-metrics",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tokio-metrics/0.3.0/download",
-          "sha256": "d4b2fc67d5dec41db679b9b052eb572269616926040b7831e32c8a152df77b84"
+          "url": "https://crates.io/api/v1/crates/tokio-metrics/0.3.1/download",
+          "sha256": "eace09241d62c98b7eeb1107d4c5c64ca3bd7da92e8c218c153ab3a78f9be112"
         }
       },
       "targets": [
@@ -55222,7 +55221,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
@@ -55233,7 +55232,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.3.0"
+        "version": "0.3.1"
       },
       "license": "MIT"
     },
@@ -55278,7 +55277,7 @@
               "target": "rustls"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             }
           ],
@@ -55413,7 +55412,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             }
           ],
@@ -55467,7 +55466,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             }
           ],
@@ -55518,7 +55517,7 @@
               "target": "futures_core"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
@@ -55578,7 +55577,7 @@
               "target": "log"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
@@ -55593,13 +55592,13 @@
       },
       "license": "MIT"
     },
-    "tokio-util 0.7.8": {
+    "tokio-util 0.7.10": {
       "name": "tokio-util",
-      "version": "0.7.8",
+      "version": "0.7.10",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tokio-util/0.7.8/download",
-          "sha256": "806fe8c2c87eccc8b3267cbae29ed3ab2d0bd37fca70ab622e46aaa9375ddb7d"
+          "url": "https://crates.io/api/v1/crates/tokio-util/0.7.10/download",
+          "sha256": "5419f34732d9eb6ee4c3578b7989078579b7f039cbbb9ca2c4da015749371e15"
         }
       },
       "targets": [
@@ -55659,7 +55658,7 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
@@ -55670,14 +55669,14 @@
           "selects": {
             "cfg(tokio_unstable)": [
               {
-                "id": "hashbrown 0.12.3",
+                "id": "hashbrown 0.14.2",
                 "target": "hashbrown"
               }
             ]
           }
         },
         "edition": "2021",
-        "version": "0.7.8"
+        "version": "0.7.10"
       },
       "license": "MIT"
     },
@@ -55895,7 +55894,7 @@
               "target": "prost"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
@@ -56095,11 +56094,11 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.8",
+              "id": "tokio-util 0.7.10",
               "target": "tokio_util"
             },
             {
@@ -56219,11 +56218,11 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.8",
+              "id": "tokio-util 0.7.10",
               "target": "tokio_util"
             },
             {
@@ -56321,7 +56320,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
@@ -56491,7 +56490,7 @@
               "target": "pin_project"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
@@ -56574,7 +56573,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
@@ -57338,7 +57337,7 @@
               "target": "tinyvec"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
@@ -57441,7 +57440,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
@@ -57587,13 +57586,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "turmoil 0.5.6": {
+    "turmoil 0.6.0": {
       "name": "turmoil",
-      "version": "0.5.6",
+      "version": "0.6.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/turmoil/0.5.6/download",
-          "sha256": "3d480a6336949f5dc88332df0bffdc60a91363eb2b310fe9d9d083b0789a6f70"
+          "url": "https://crates.io/api/v1/crates/turmoil/0.6.0/download",
+          "sha256": "181ee1366231313f06f613c278fe595e7369a1714bd3dae0b2cb1c9c0ab9ae69"
         }
       },
       "targets": [
@@ -57645,7 +57644,7 @@
               "target": "scoped_tls"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
@@ -57657,7 +57656,7 @@
               "target": "tokio_test"
             },
             {
-              "id": "tokio-util 0.7.8",
+              "id": "tokio-util 0.7.10",
               "target": "tokio_util"
             },
             {
@@ -57672,7 +57671,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.5.6"
+        "version": "0.6.0"
       },
       "license": "MIT"
     },
@@ -59519,7 +59518,7 @@
               "target": "serde_urlencoded"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             },
             {
@@ -59535,7 +59534,7 @@
               "target": "tokio_tungstenite"
             },
             {
-              "id": "tokio-util 0.7.8",
+              "id": "tokio-util 0.7.10",
               "target": "tokio_util"
             },
             {
@@ -64096,7 +64095,7 @@
               "target": "serde_json"
             },
             {
-              "id": "tokio 1.32.0",
+              "id": "tokio 1.35.1",
               "target": "tokio"
             }
           ],
