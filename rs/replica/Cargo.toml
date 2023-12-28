@@ -70,7 +70,6 @@ slog = { workspace = true }
 slog-async = "2.5.0"
 static_assertions = "0.3.4"
 tempfile = "3.1.0"
-thread_profiler = { version = "0.3", optional = true }
 tokio = { workspace = true }
 tracing = "0.1.13"
 tower = { workspace = true }
@@ -98,7 +97,7 @@ name = "replica"
 path = "src/main.rs"
 
 [features]
-profiler = ["thread_profiler/thread_profiler", "pprof"]
+profiler = ["pprof"]
 malicious_code = [
   "ic-consensus/malicious_code",
   "ic-state-manager/malicious_code",
