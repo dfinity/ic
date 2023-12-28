@@ -1,5 +1,6 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
+use ic_config::flag_status::FlagStatus;
 use ic_registry_routing_table::RoutingTable;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_replicated_state::ReplicatedState;
@@ -3025,7 +3026,41 @@ fn output_requests_on_application_subnets_update_subnet_available_memory_reserve
 }
 
 #[test]
-fn snapshotting_api_not_implemented() {
+fn test_request_snapshot_rejected_because_feature_is_enabled() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_manual_execution()
+        .with_snapshots(FlagStatus::Enabled)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    // Inject a take_canister_snapshot request.
+    test.inject_call_to_ic00(
+        Method::TakeCanisterSnapshot,
+        Encode!().unwrap(),
+        Cycles::new(1_000_000_000),
+    );
+
+    test.execute_subnet_message();
+
+    let (receiver, response) = &get_output_messages(test.state_mut()).pop().unwrap();
+    assert_matches!(response, RequestOrResponse::Response(_));
+    if let RequestOrResponse::Response(res) = response {
+        assert_eq!(res.originator, *receiver);
+        assert_eq!(
+            res.response_payload,
+            Payload::Reject(RejectContext::new(
+                RejectCode::CanisterReject,
+                "Canister snapshotting API is not yet implemented."
+            ))
+        );
+    }
+}
+
+#[test]
+fn test_request_snapshot_rejected_because_feature_is_disabled() {
     let own_subnet = subnet_test_id(1);
     let caller_canister = canister_test_id(1);
     let mut test = ExecutionTestBuilder::new()
@@ -3050,9 +3085,38 @@ fn snapshotting_api_not_implemented() {
         assert_eq!(
             res.response_payload,
             Payload::Reject(RejectContext::new(
-                RejectCode::CanisterReject,
-                "Canister snapshotting API is not yet implemented."
+                RejectCode::CanisterError,
+                "This API is not enabled on this subnet"
             ))
         );
+    }
+}
+
+#[test]
+fn test_ingress_snapshot_rejected_because_feature_is_disabled() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_snapshots(FlagStatus::Disabled)
+        .build();
+    let uni = test.universal_canister().unwrap();
+
+    let snapshot_methods = [
+        Method::TakeCanisterSnapshot,
+        Method::LoadCanisterSnapshot,
+        Method::DeleteCanisterSnapshot,
+        Method::ListCanisterSnapshots,
+    ];
+    for method in snapshot_methods {
+        let call = wasm()
+            .call_simple(
+                ic00::IC_00,
+                method,
+                call_args()
+                    .other_side(vec![])
+                    .on_reject(wasm().reject_message().reject()),
+            )
+            .build();
+        let result = test.ingress(uni, "update", call).unwrap();
+        let expected_result = WasmResult::Reject(format!("Unable to route management canister request {}: UserError(UserError {{ code: CanisterRejectedMessage, description: {} }})", method, "\"Snapshotting API is not yet implemented\""));
+        assert_eq!(result, expected_result);
     }
 }
