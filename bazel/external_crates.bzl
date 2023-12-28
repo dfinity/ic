@@ -1194,9 +1194,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "thousands": crate.spec(
                 version = "^0.2.0",
             ),
-            "thread_profiler": crate.spec(
-                version = "^0.3",
-            ),
             "threadpool": crate.spec(
                 version = "^1.8.1",
             ),

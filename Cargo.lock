@@ -198,7 +198,7 @@ dependencies = [
  "serde_urlencoded",
  "smallvec",
  "socket2 0.4.9",
- "time 0.3.22",
+ "time",
  "url",
 ]
 
@@ -530,7 +530,7 @@ dependencies = [
  "num-traits",
  "rusticata-macros",
  "thiserror",
- "time 0.3.22",
+ "time",
 ]
 
 [[package]]
@@ -2142,7 +2142,7 @@ dependencies = [
  "lazy_static",
  "libc",
  "mach",
- "time 0.3.22",
+ "time",
  "winapi",
 ]
 
@@ -2350,7 +2350,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e859cd57d0710d9e06c381b550c06e76992472a8c6d527aecd2fc673dcc231fb"
 dependencies = [
  "percent-encoding 2.3.0",
- "time 0.3.22",
+ "time",
  "version_check",
 ]
 
@@ -5013,7 +5013,7 @@ dependencies = [
  "sha2 0.10.8",
  "simple_asn1",
  "thiserror",
- "time 0.3.22",
+ "time",
  "tokio",
  "url",
 ]
@@ -5913,7 +5913,7 @@ dependencies = [
  "num-traits",
  "serde",
  "serde_json",
- "time 0.3.22",
+ "time",
 ]
 
 [[package]]
@@ -6014,7 +6014,7 @@ dependencies = [
  "strum_macros 0.25.3",
  "thiserror",
  "thousands",
- "time 0.3.22",
+ "time",
 ]
 
 [[package]]
@@ -6632,7 +6632,7 @@ dependencies = [
  "tarpc",
  "tempfile",
  "thiserror",
- "time 0.3.22",
+ "time",
  "tokio",
  "tokio-serde",
  "tokio-util",
@@ -6851,7 +6851,7 @@ dependencies = [
  "rcgen",
  "serde",
  "serde_cbor",
- "time 0.3.22",
+ "time",
  "x509-parser 0.15.1",
  "zeroize",
 ]
@@ -7254,7 +7254,7 @@ dependencies = [
  "pkcs8",
  "rand 0.8.5",
  "signature",
- "time 0.3.22",
+ "time",
  "tokio",
  "tokio-rustls",
  "x509-cert",
@@ -10310,7 +10310,6 @@ dependencies = [
  "slog-async",
  "static_assertions 0.3.4",
  "tempfile",
- "thread_profiler",
  "tokio",
  "tower",
  "tracing",
@@ -11818,7 +11817,7 @@ dependencies = [
  "strum 0.24.1",
  "strum_macros 0.24.3",
  "thiserror",
- "time 0.3.22",
+ "time",
 ]
 
 [[package]]
@@ -15100,7 +15099,7 @@ dependencies = [
  "serde_json",
  "sha2 0.9.9",
  "tempfile",
- "time 0.3.22",
+ "time",
  "tokio",
  "tower-http 0.4.4",
  "tracing",
@@ -15415,7 +15414,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "time 0.3.22",
+ "time",
  "url",
 ]
 
@@ -15991,7 +15990,7 @@ checksum = "4954fbc00dcd4d8282c987710e50ba513d351400dbdd00e803a05172a90d8976"
 dependencies = [
  "pem 2.0.1",
  "ring",
- "time 0.3.22",
+ "time",
  "yasna",
  "zeroize",
 ]
@@ -17378,7 +17377,7 @@ dependencies = [
  "num-bigint 0.4.4",
  "num-traits",
  "thiserror",
- "time 0.3.22",
+ "time",
 ]
 
 [[package]]
@@ -17474,7 +17473,7 @@ dependencies = [
  "serde",
  "serde_json",
  "slog",
- "time 0.3.22",
+ "time",
 ]
 
 [[package]]
@@ -17509,7 +17508,7 @@ dependencies = [
  "slog",
  "term 0.7.0",
  "thread_local",
- "time 0.3.22",
+ "time",
 ]
 
 [[package]]
@@ -18254,7 +18253,7 @@ dependencies = [
  "ssh2",
  "tempfile",
  "thiserror",
- "time 0.3.22",
+ "time",
  "tokio",
  "tree-deserializer",
  "url",
@@ -18327,34 +18326,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "thread_profiler"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71b370904e74ab0a4264c6618d728a701c98bd4cd665eb4b4cc63d2c38034a0d"
-dependencies = [
- "lazy_static",
- "serde_json",
- "time 0.1.45",
-]
-
-[[package]]
 name = "threadpool"
 version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d050e60b33d41c19108b32cea32164033a9013fe3b46cbd4457559bfbf77afaa"
 dependencies = [
  "num_cpus",
-]
-
-[[package]]
-name = "time"
-version = "0.1.45"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b797afad3f312d1c66a56d11d0316f916356d11bd158fbc6ca6389ff6bf805a"
-dependencies = [
- "libc",
- "wasi 0.10.0+wasi-snapshot-preview1",
- "winapi",
 ]
 
 [[package]]
@@ -18404,7 +18381,7 @@ dependencies = [
  "ascii",
  "chunked_transfer",
  "log",
- "time 0.3.22",
+ "time",
  "url",
 ]
 
@@ -18787,7 +18764,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09d48f71a791638519505cefafe162606f706c25592e4bde4d97600c0195312e"
 dependencies = [
  "crossbeam-channel",
- "time 0.3.22",
+ "time",
  "tracing-subscriber",
 ]
 
@@ -19448,12 +19425,6 @@ name = "wasi"
 version = "0.9.0+wasi-snapshot-preview1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cccddf32554fecc6acb585f82a32a72e28b48f8c4c1883ddfeeeaa96f7d8e519"
-
-[[package]]
-name = "wasi"
-version = "0.10.0+wasi-snapshot-preview1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a143597ca7c7793eff794def352d41792a93c481eb1042423ff7ff72ba2c31f"
 
 [[package]]
 name = "wasi"
@@ -20236,7 +20207,7 @@ dependencies = [
  "oid-registry",
  "rusticata-macros",
  "thiserror",
- "time 0.3.22",
+ "time",
 ]
 
 [[package]]
@@ -20254,7 +20225,7 @@ dependencies = [
  "ring",
  "rusticata-macros",
  "thiserror",
- "time 0.3.22",
+ "time",
 ]
 
 [[package]]
@@ -20318,7 +20289,7 @@ version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e17bb3549cc1321ae1296b9cdc2698e2b6cb1992adfa19a8c72e5b7a738f44cd"
 dependencies = [
- "time 0.3.22",
+ "time",
 ]
 
 [[package]]

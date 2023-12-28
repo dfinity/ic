@@ -1,5 +1,5 @@
 {
-  "checksum": "0afd8cc75b0af3714ab4d4299902b2efa42b9bc3cd3a7a43652fdc55c056902d",
+  "checksum": "0ca3dc5265ed7683eca88e911a421564a604e0a3643d0c6301521610881f3fb3",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -15880,10 +15880,6 @@
             {
               "id": "thousands 0.2.0",
               "target": "thousands"
-            },
-            {
-              "id": "thread_profiler 0.3.0",
-              "target": "thread_profiler"
             },
             {
               "id": "threadpool 1.8.1",
@@ -54679,53 +54675,6 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "thread_profiler 0.3.0": {
-      "name": "thread_profiler",
-      "version": "0.3.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/thread_profiler/0.3.0/download",
-          "sha256": "71b370904e74ab0a4264c6618d728a701c98bd4cd665eb4b4cc63d2c38034a0d"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "thread_profiler",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "thread_profiler",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "lazy_static 1.4.0",
-              "target": "lazy_static"
-            },
-            {
-              "id": "serde_json 1.0.107",
-              "target": "serde_json"
-            },
-            {
-              "id": "time 0.1.45",
-              "target": "time"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.3.0"
-      },
-      "license": "Apache-2.0/MIT"
-    },
     "threadpool 1.8.1": {
       "name": "threadpool",
       "version": "1.8.1",
@@ -54762,58 +54711,6 @@
         },
         "edition": "2015",
         "version": "1.8.1"
-      },
-      "license": "MIT/Apache-2.0"
-    },
-    "time 0.1.45": {
-      "name": "time",
-      "version": "0.1.45",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/time/0.1.45/download",
-          "sha256": "1b797afad3f312d1c66a56d11d0316f916356d11bd158fbc6ca6389ff6bf805a"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "time",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "time",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "libc 0.2.149",
-              "target": "libc"
-            }
-          ],
-          "selects": {
-            "cfg(target_os = \"wasi\")": [
-              {
-                "id": "wasi 0.10.0+wasi-snapshot-preview1",
-                "target": "wasi"
-              }
-            ],
-            "cfg(windows)": [
-              {
-                "id": "winapi 0.3.9",
-                "target": "winapi"
-              }
-            ]
-          }
-        },
-        "edition": "2015",
-        "version": "0.1.45"
       },
       "license": "MIT/Apache-2.0"
     },
@@ -59814,43 +59711,6 @@
       },
       "license": "MIT"
     },
-    "wasi 0.10.0+wasi-snapshot-preview1": {
-      "name": "wasi",
-      "version": "0.10.0+wasi-snapshot-preview1",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/wasi/0.10.0+wasi-snapshot-preview1/download",
-          "sha256": "1a143597ca7c7793eff794def352d41792a93c481eb1042423ff7ff72ba2c31f"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wasi",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "wasi",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "std"
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.10.0+wasi-snapshot-preview1"
-      },
-      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT"
-    },
     "wasi 0.11.0+wasi-snapshot-preview1": {
       "name": "wasi",
       "version": "0.11.0+wasi-snapshot-preview1",
@@ -62310,7 +62170,6 @@
             "std",
             "synchapi",
             "sysinfoapi",
-            "timezoneapi",
             "winbase",
             "wincon",
             "windef",
