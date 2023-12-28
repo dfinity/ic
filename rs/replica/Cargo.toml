@@ -86,7 +86,7 @@ criterion = "0.5"
 ic-ic00-types = { path = "../types/ic00_types" }
 ic-interfaces-registry-mocks = { path = "../interfaces/registry/mocks" }
 ic-test-utilities = { path = "../test_utilities" }
-predicates = "1.0.1"
+predicates = "3.0.4"
 wat = "1.0.52"
 
 [[bench]]

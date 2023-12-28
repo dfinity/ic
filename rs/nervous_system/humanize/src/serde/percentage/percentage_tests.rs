@@ -30,7 +30,7 @@ fn test_round_trip() {
 
         assert_eq!(
             serde_yaml::to_string(&t).unwrap(),
-            format!("---\nhomelessness_rate: {}\n", expected_formatted_str),
+            format!("homelessness_rate: {}\n", expected_formatted_str),
             "original_percentage_str = {:?}",
             original_percentage_str,
         );

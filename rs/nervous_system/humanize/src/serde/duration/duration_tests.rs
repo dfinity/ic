@@ -30,7 +30,7 @@ fn test_round_trip() {
 
         assert_eq!(
             serde_yaml::to_string(&t).unwrap(),
-            format!("---\nduration: {}\n", expected_formatted_str),
+            format!("duration: {}\n", expected_formatted_str),
             "original_duration_str = {:?}",
             original_duration_str,
         );
