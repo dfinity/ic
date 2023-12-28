@@ -41,4 +41,5 @@ serde = "1.0.99"
 slog = { workspace = true }
 tempfile = "3.0"
 tokio = { workspace = true }
-turmoil = "0.5"
+turmoil = { workspace = true }
+
