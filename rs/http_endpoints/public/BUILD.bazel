@@ -105,7 +105,6 @@ rust_library(
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_features = select({
-        "//bazel:malicious_code_enabled": ["malicious_code"],
         "//bazel:fuzzing_code_enabled": ["fuzzing_code"],
         "//conditions:default": [],
     }),
