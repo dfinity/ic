@@ -4,8 +4,8 @@
 //! The `ConnectionHandle` implements `rpc` and `push` methods for the given
 //! connection.
 //!
+use axum::http::{Request, Response};
 use bytes::Bytes;
-use http::{Request, Response};
 use ic_base_types::NodeId;
 use quinn::Connection;
 
