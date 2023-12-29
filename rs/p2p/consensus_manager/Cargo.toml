@@ -6,13 +6,22 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+async-trait = "0.1.36"
+either = "1.6.0"
+clap = { version = "4", features = ["derive"] }
 axum = { workspace = true }
+hex = "0.4.2"
 backoff = { workspace = true }
 bytes = { workspace = true }
 crossbeam-channel = { workspace = true }
 futures = { workspace = true }
+ic-artifact-manager = { path = "../../artifact_manager" }
+ic-config = { path = "../../config" }
 ic-async-utils = { path = "../../async_utils" }
 ic-interfaces = { path = "../../interfaces" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
+ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
+ic-icos-sev = { path = "../../ic_os/sev" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-protobuf = { path = "../../protobuf" }
 ic-metrics = { path = "../../monitoring/metrics" }
@@ -21,8 +30,11 @@ ic-types = { path = "../../types/types" }
 phantom_newtype = { path = "../../phantom_newtype" }
 prometheus = { workspace = true }
 rand = "0.8.5"
+rand_chacha = "0.4"
 slog = { workspace = true }
 tokio = { workspace = true }
+ic-crypto-test-utils-tls = { path = "../../crypto/test_utils/tls" }
+tokio-rustls = { version = "0.24.0", features = ["dangerous_configuration"] }
 
 [dev-dependencies]
 ic-p2p-test-utils = { path = "../test_utils" }

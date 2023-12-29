@@ -74,7 +74,7 @@ impl Default for Config {
         Self {
             node_id: 100,
             dc_id: 200,
-            level: Level::Debug,
+            level: Level::Info,
             format: LogFormat::TextFull,
             debug_overrides: vec![],
             sampling_rates: HashMap::new(),
