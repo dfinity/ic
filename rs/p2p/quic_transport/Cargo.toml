@@ -7,13 +7,12 @@ edition = "2021"
 
 [dependencies]
 async-trait = "0.1.36"
-axum = { workspace = true }
+axum = "0.7.0"
 bincode = "1.2.1"
 bytes = { workspace = true }
 either = "1.6.0"
 futures = { workspace = true }
-http = "0.2.9"
-http-serde = "1.1.2"
+http-serde = "2.0.0"
 ic-async-utils = { path = "../../async_utils" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-crypto-utils-tls = { path = "../../crypto/utils/tls" }

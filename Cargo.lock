@@ -785,6 +785,8 @@ dependencies = [
  "http 1.0.0",
  "http-body 1.0.0",
  "http-body-util",
+ "hyper 1.0.1",
+ "hyper-util",
  "itoa",
  "matchit",
  "memchr",
@@ -793,7 +795,11 @@ dependencies = [
  "pin-project-lite",
  "rustversion",
  "serde",
+ "serde_json",
+ "serde_path_to_error",
+ "serde_urlencoded",
  "sync_wrapper",
+ "tokio",
  "tower",
  "tower-layer",
  "tower-service",
@@ -4627,11 +4633,11 @@ checksum = "0bfe8eed0a9285ef776bb792479ea3834e8b94e13d615c2f66d03dd50a435a29"
 
 [[package]]
 name = "http-serde"
-version = "1.1.2"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e272971f774ba29341db2f686255ff8a979365a26fb9e4277f6b6d9ec0cdd5e"
+checksum = "7fb7239a6d49eda628c2dfdd7e982c59b0c3f0fb99ce45c4237f02a520030688"
 dependencies = [
- "http 0.2.9",
+ "http 1.0.0",
  "serde",
 ]
 
@@ -4827,6 +4833,26 @@ dependencies = [
  "pin-project-lite",
  "tokio",
  "tokio-io-timeout",
+]
+
+[[package]]
+name = "hyper-util"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ca339002caeb0d159cc6e023dff48e199f081e42fa039895c7c6f38b37f2e9d"
+dependencies = [
+ "bytes",
+ "futures-channel",
+ "futures-util",
+ "http 1.0.0",
+ "http-body 1.0.0",
+ "hyper 1.0.1",
+ "pin-project-lite",
+ "socket2 0.5.5",
+ "tokio",
+ "tower",
+ "tower-service",
+ "tracing",
 ]
 
 [[package]]
@@ -6104,7 +6130,7 @@ dependencies = [
 name = "ic-consensus-manager"
 version = "0.1.0"
 dependencies = [
- "axum 0.6.20",
+ "axum 0.7.2",
  "backoff",
  "bytes",
  "crossbeam-channel",
@@ -8691,10 +8717,9 @@ name = "ic-memory-transport"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "axum 0.6.20",
+ "axum 0.7.2",
  "bytes",
  "futures",
- "http 0.2.9",
  "ic-quic-transport",
  "ic-types",
  "prost",
@@ -9582,7 +9607,7 @@ name = "ic-p2p-test-utils"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "axum 0.6.20",
+ "axum 0.7.2",
  "bytes",
  "crossbeam-channel",
  "either",
@@ -9819,13 +9844,12 @@ name = "ic-quic-transport"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "axum 0.6.20",
+ "axum 0.7.2",
  "bincode",
  "bytes",
  "criterion",
  "either",
  "futures",
- "http 0.2.9",
  "http-serde",
  "ic-async-utils",
  "ic-base-types",
@@ -11255,7 +11279,7 @@ dependencies = [
 name = "ic-state-sync-manager"
 version = "0.1.0"
 dependencies = [
- "axum 0.6.20",
+ "axum 0.7.2",
  "base64 0.13.1",
  "bytes",
  "futures",
@@ -16907,9 +16931,9 @@ dependencies = [
 
 [[package]]
 name = "serde"
-version = "1.0.190"
+version = "1.0.193"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91d3c334ca1ee894a2c6f6ad698fe8c435b76d504b13d436f0685d648d6d96f7"
+checksum = "25dd9975e68d0cb5aa1120c288333fc98731bd1dd12f561e468ea4728c042b89"
 dependencies = [
  "serde_derive",
 ]
@@ -16976,9 +17000,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.190"
+version = "1.0.193"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67c5609f394e5c2bd7fc51efda478004ea80ef42fee983d5c67a65e34f32c0e3"
+checksum = "43576ca501357b9b071ac53cdc7da8ef0cbd9493d8df094cd821777ea6e894d3"
 dependencies = [
  "proc-macro2 1.0.70",
  "quote 1.0.31",
