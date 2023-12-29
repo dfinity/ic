@@ -10,7 +10,7 @@ use service_discovery::{job_types::JobType, TargetGroup};
 use crate::builders::vector_config_enriched::VectorSource;
 use crate::builders::vector_config_enriched::VectorTransform;
 use crate::builders::ConfigBuilder;
-use crate::contracts::TargetDto;
+use crate::contracts::target::TargetDto;
 
 use super::vector_config_enriched::VectorConfigEnriched;
 
@@ -113,9 +113,9 @@ impl VectorSource for VectorSystemdGatewayJournaldSource {
 #[derive(Debug, Serialize, Clone)]
 pub struct VectorRemapTransform {
     #[serde(rename = "type")]
-    _type: String,
-    inputs: Vec<String>,
-    source: String,
+    pub _type: String,
+    pub inputs: Vec<String>,
+    pub source: String,
 }
 
 impl VectorTransform for VectorRemapTransform {
@@ -209,7 +209,7 @@ mod tests {
 
     use super::VectorConfigBuilderImpl;
     use crate::builders::ConfigBuilder;
-    use crate::contracts::TargetDto;
+    use crate::contracts::target::TargetDto;
 
     fn convert_ipv6_to_array(ipv6: &str) -> [u16; 8] {
         let mut array = [0u16; 8];

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use ic_types::PrincipalId;
 use serde::Serialize;
 
-use crate::contracts::TargetDto;
+use crate::contracts::target::TargetDto;
 
 use super::{
     log_vector_config_structure::{handle_ip, VectorRemapTransform},
@@ -24,7 +24,7 @@ pub struct ExecLogConfigBuilderImpl {
 impl ConfigBuilder for ExecLogConfigBuilderImpl {
     fn build(
         &self,
-        target_groups: std::collections::BTreeSet<crate::contracts::TargetDto>,
+        target_groups: std::collections::BTreeSet<crate::contracts::target::TargetDto>,
     ) -> String {
         let mut config = VectorConfigEnriched::new();
         let mut edited_records: Vec<TargetDto> = vec![];
@@ -56,7 +56,6 @@ impl ConfigBuilder for ExecLogConfigBuilderImpl {
                 let source = VectorExecSource {
                     _type: "exec".to_string(),
                     command: vec![
-                        "python3.8",
                         self.script_path.as_str(),
                         "--url",
                         format!(
@@ -68,6 +67,8 @@ impl ConfigBuilder for ExecLogConfigBuilderImpl {
                             }
                         )
                         .as_str(),
+                        "--name",
+                        key.as_str(),
                         "--cursor-path",
                         format!("{}/{}/checkpoint.txt", self.cursor_folder, key).as_str(),
                     ]

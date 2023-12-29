@@ -1,4 +1,4 @@
-use crate::{contracts::TargetDto, filters::TargetGroupFilter};
+use crate::{contracts::DataContract, filters::TargetGroupFilter};
 use ic_types::PrincipalId;
 use regex::Regex;
 
@@ -21,11 +21,11 @@ impl NodeIDRegexFilter {
 }
 
 impl TargetGroupFilter for NodeIDRegexFilter {
-    fn filter(&self, target_group: &TargetDto) -> bool {
-        if target_group.node_id == self.bn_principal_placeholder.into() {
-            return self.regex.is_match(&target_group.name.to_string());
+    fn filter(&self, target_group: &dyn DataContract) -> bool {
+        if target_group.get_id() == self.bn_principal_placeholder.to_string() {
+            return self.regex.is_match(&target_group.get_name().to_string());
         }
 
-        self.regex.is_match(&target_group.node_id.to_string())
+        self.regex.is_match(&target_group.get_id())
     }
 }

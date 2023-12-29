@@ -14325,9 +14325,9 @@ checksum = "ff011a302c396a5197692431fc1948019154afc178baf7d8e37367442a4601cf"
 
 [[package]]
 name = "openssl-sys"
-version = "0.9.97"
+version = "0.9.98"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3eaad34cdd97d81de97964fc7f29e2d104f483840d906ef56daa1912338460b"
+checksum = "c1665caf8ab2dc9aef43d1c0023bd904633a6a05cb30b0ad59bec2ae986e57a7"
 dependencies = [
  "cc",
  "libc",
@@ -17568,6 +17568,30 @@ dependencies = [
  "anyhow",
  "clap 3.2.25",
  "sev",
+]
+
+[[package]]
+name = "sns_downloader"
+version = "0.1.0"
+dependencies = [
+ "clap 4.4.6",
+ "crossbeam",
+ "crossbeam-channel",
+ "futures-util",
+ "humantime",
+ "ic-async-utils",
+ "ic-types",
+ "multiservice_discovery_shared",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "service-discovery",
+ "slog",
+ "slog-async",
+ "slog-term",
+ "tokio",
+ "url",
 ]
 
 [[package]]
