@@ -2,11 +2,11 @@ use crate::{contracts::DataContract, filters::TargetGroupFilter};
 use regex::Regex;
 
 #[derive(Debug, Clone)]
-pub struct IcNameRegexFilter {
+pub struct SnsNameRegexFilter {
     regex: Regex,
 }
 
-impl IcNameRegexFilter {
+impl SnsNameRegexFilter {
     pub fn new(regex: Regex) -> Self {
         Self { regex }
     }
@@ -15,7 +15,7 @@ impl IcNameRegexFilter {
     }
 }
 
-impl TargetGroupFilter for IcNameRegexFilter {
+impl TargetGroupFilter for SnsNameRegexFilter {
     fn filter(&self, target_group: &dyn DataContract) -> bool {
         self.regex.is_match(&target_group.get_name())
     }
