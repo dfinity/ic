@@ -10,7 +10,7 @@ documentation.workspace = true
 async-trait = "0.1.41"
 base64 = { workspace = true }
 bincode = "1.2"
-bytes = "1.5"
+bytes = { workspace = true }
 educe = "0.4"
 hex = "0.4.2"
 ic-adapter-metrics = { path = "../../../monitoring/adapter_metrics" }
@@ -59,7 +59,7 @@ time = "0.3.20"
 thiserror = "1.0.26"
 tokio = { workspace = true }
 tokio-serde = { version = "0.8", features = ["json", "bincode"] }
-tokio-util = { version = "0.7.4", features = ["codec"] }
+tokio-util = { workspace = true }
 x509-parser = { version = "0.15.1", features = ["verify"] }
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 

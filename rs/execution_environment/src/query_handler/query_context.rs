@@ -326,7 +326,7 @@ impl<'a> QueryContext<'a> {
             match msg {
                 RequestOrResponse::Request(msg) => {
                     let call_origin = call_context_manager
-                        .peek_callback(msg.sender_reply_callback)
+                        .callback(msg.sender_reply_callback)
                         .and_then(|x| call_context_manager.call_origin(x.call_context_id));
 
                     match call_origin {

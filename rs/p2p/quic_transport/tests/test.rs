@@ -1,13 +1,14 @@
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use crate::common::{PeerRestrictedSevHandshake, PeerRestrictedTlsConfig};
+use axum::http::Request;
 use bytes::Bytes;
 use either::Either;
 use futures::FutureExt;
-use http::Request;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_icos_sev::Sev;
 use ic_logger::info;
+use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::{
     create_peer_manager_and_registry_handle, temp_crypto_component_with_tls_keys,
@@ -17,16 +18,17 @@ use ic_p2p_test_utils::{
     },
     ConnectivityChecker,
 };
+use ic_quic_transport::SendError;
 use ic_quic_transport::{DummyUdpSocket, QuicTransport, Transport};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, SUBNET_1};
-use tokio::sync::Notify;
+use tokio::{sync::Notify, time::timeout};
 use turmoil::Builder;
 
 mod common;
 
 #[test]
-fn ping_pong() {
+fn test_ping_pong() {
     with_test_replica_logger(|log| {
         info!(log, "Starting test");
 
@@ -84,6 +86,100 @@ fn ping_pong() {
 
         exit_notify.notify_waiters();
         sim.run().unwrap();
+    })
+}
+
+#[test]
+fn test_graceful_shutdown() {
+    with_test_replica_logger(|log| {
+        info!(log, "Starting test");
+        let rt = tokio::runtime::Runtime::new().unwrap();
+
+        let (_jh, topology_watcher, mut registry_handler) =
+            create_peer_manager_and_registry_handle(rt.handle(), log.clone());
+
+        let node_crypto_1 = temp_crypto_component_with_tls_keys(&registry_handler, NODE_1);
+        let sev_handshake_1 = Arc::new(Sev::new(
+            NODE_1,
+            SUBNET_1,
+            registry_handler.registry_client.clone(),
+            no_op_logger(),
+        ));
+        let node_crypto_2 = temp_crypto_component_with_tls_keys(&registry_handler, NODE_2);
+        let sev_handshake_2 = Arc::new(Sev::new(
+            NODE_2,
+            SUBNET_1,
+            registry_handler.registry_client.clone(),
+            no_op_logger(),
+        ));
+        registry_handler.registry_client.update_to_latest_version();
+
+        let socket_1: SocketAddr = "127.0.10.1:4100".parse().unwrap();
+        let socket_2: SocketAddr = "127.0.11.1:4100".parse().unwrap();
+
+        let transport_1 = Arc::new(QuicTransport::start(
+            &log,
+            &MetricsRegistry::default(),
+            rt.handle(),
+            node_crypto_1,
+            registry_handler.registry_client.clone(),
+            sev_handshake_1,
+            NODE_1,
+            topology_watcher.clone(),
+            Either::Left::<_, DummyUdpSocket>(socket_1),
+            ConnectivityChecker::router(),
+        ));
+
+        let mut transport_2 = Arc::new(QuicTransport::start(
+            &log,
+            &MetricsRegistry::default(),
+            rt.handle(),
+            node_crypto_2,
+            registry_handler.registry_client.clone(),
+            sev_handshake_2,
+            NODE_2,
+            topology_watcher,
+            Either::Left::<_, DummyUdpSocket>(socket_2),
+            ConnectivityChecker::router(),
+        ));
+
+        registry_handler.add_node(
+            RegistryVersion::from(2),
+            NODE_1,
+            Some(&socket_1.ip().to_string()),
+        );
+        registry_handler.add_node(
+            RegistryVersion::from(3),
+            NODE_2,
+            Some(&socket_2.ip().to_string()),
+        );
+        registry_handler.registry_client.reload();
+        registry_handler.registry_client.update_to_latest_version();
+
+        let succesful_ping_pong_fut = async {
+            loop {
+                tokio::time::sleep(Duration::from_millis(250)).await;
+
+                let request = Request::builder().uri("/Ping").body(Bytes::new()).unwrap();
+                let node_1_reachable_from_node_2 = transport_2.push(&NODE_1, request).await.is_ok();
+                let request = Request::builder().uri("/Ping").body(Bytes::new()).unwrap();
+                let node_2_reachable_from_node_1 = transport_1.push(&NODE_2, request).await.is_ok();
+                if node_2_reachable_from_node_1 && node_1_reachable_from_node_2 {
+                    break;
+                }
+            }
+        };
+        rt.block_on(async move { timeout(Duration::from_secs(10), succesful_ping_pong_fut).await })
+            .unwrap();
+
+        rt.block_on(async move {
+            Arc::get_mut(&mut transport_2).unwrap().shutdown().await;
+            let request = Request::builder().uri("/Ping").body(Bytes::new()).unwrap();
+            assert!(matches!(
+                transport_2.push(&NODE_1, request).await,
+                Err(SendError::ConnectionUnavailable(_))
+            ));
+        });
     })
 }
 

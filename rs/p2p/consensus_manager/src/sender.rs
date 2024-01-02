@@ -204,7 +204,15 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
                     // spawn task for peers with higher conn id or not in completed transmissions.
                     // add task to join map
                     for (peer, connection_id) in transport.peers() {
-                        let is_initiated = initiated_transmissions.get(&peer).is_some_and(|c| *c == connection_id);
+                        let is_initiated = initiated_transmissions.get(&peer).is_some_and(|c| {
+                            if *c == connection_id {
+                                true
+                            } else {
+                                metrics.send_view_resend_reconnect_total.inc();
+                                false
+                            }
+                        });
+
 
                         if !is_initiated {
                             metrics.send_view_send_to_peer_total.inc();
@@ -528,11 +536,7 @@ mod tests {
             mock_transport
                 .expect_push()
                 .times(5)
-                .returning(move |_, _| {
-                    Err(SendError::ConnectionNotFound {
-                        reason: String::new(),
-                    })
-                })
+                .returning(move |_, _| Err(SendError::ConnectionUnavailable(String::new())))
                 .in_sequence(&mut seq);
             mock_transport
                 .expect_push()

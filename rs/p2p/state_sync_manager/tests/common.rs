@@ -14,11 +14,12 @@ use ic_logger::ReplicaLogger;
 use ic_memory_transport::TransportRouter;
 use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::mocks::{MockChunkable, MockStateSync};
+use ic_state_manager::state_sync::types::{Manifest, MetaManifest, StateSyncMessage};
 use ic_types::{
     artifact::StateSyncArtifactId,
     chunkable::{ArtifactErrorCode, Chunk, ChunkId, Chunkable},
     crypto::CryptoHash,
-    state_sync::{Manifest, MetaManifest, StateSyncMessage, StateSyncVersion},
+    state_sync::StateSyncVersion,
     CryptoHashOfState, Height, NodeId, PrincipalId,
 };
 use tokio::{runtime::Handle, task::JoinHandle};

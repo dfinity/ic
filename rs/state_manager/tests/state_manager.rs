@@ -23,7 +23,13 @@ use ic_replicated_state::{
 use ic_state_layout::{CheckpointLayout, ReadOnly, StateLayout, SYSTEM_METADATA_FILE};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_state_manager::manifest::{build_meta_manifest, manifest_from_path, validate_manifest};
-use ic_state_manager::{DirtyPageMap, PageMapType, StateManagerImpl};
+use ic_state_manager::{
+    state_sync::types::{
+        DEFAULT_CHUNK_SIZE, FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET,
+        META_MANIFEST_CHUNK,
+    },
+    DirtyPageMap, PageMapType, StateManagerImpl,
+};
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::{
     consensus::fake::FakeVerifier,
@@ -47,7 +53,6 @@ use ic_types::{
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::CallbackId,
-    state_sync::{FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, META_MANIFEST_CHUNK},
     time::Time,
     xnet::{StreamIndex, StreamIndexedQueue},
     CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, NumBytes, PrincipalId,
@@ -126,6 +131,38 @@ fn wasm_chunk_store_size(canister_layout: &ic_state_layout::CanisterLayout<ReadO
     }
 }
 
+/// Whether the base file for vmemory0 exists.
+fn vmemory0_base_exists(
+    state_manager: &StateManagerImpl,
+    canister_id: &CanisterId,
+    height: Height,
+) -> bool {
+    state_manager
+        .state_layout()
+        .checkpoint(height)
+        .unwrap()
+        .canister(canister_id)
+        .unwrap()
+        .vmemory_0()
+        .exists()
+}
+
+/// Number of overlays for vmemory0.
+fn vmemory0_num_overlays(
+    state_manager: &StateManagerImpl,
+    canister_id: &CanisterId,
+    height: Height,
+) -> usize {
+    state_manager
+        .state_layout()
+        .checkpoint(height)
+        .unwrap()
+        .canister(canister_id)
+        .unwrap()
+        .vmemory_0_overlays()
+        .unwrap()
+        .len()
+}
 /// This is a canister that keeps a counter on the heap and allows to increment it.
 /// The counter can also be read and persisted to and loaded from stable memory.
 const TEST_CANISTER: &str = r#"
@@ -193,7 +230,28 @@ const TEST_CANISTER: &str = r#"
     (call $msg_reply)
     )
 
-
+    (func $write (param $address i32) (param $end i32) (param $step i32)
+            ;; Precondition: (end - address) % step == 0
+            ;; let value = *address + 1;
+            ;; while (address != end) {
+            ;;   *address = value;
+            ;;   address += step;
+            ;; }
+            (local $value i64)
+            (local.set $value (i64.load (local.get $address)))
+            (local.set $value (i64.add (local.get $value) (i64.const 1)))
+            (loop $loop
+                    (i64.store (local.get $address) (local.get $value))
+                    (local.tee $address (i32.add (local.get $address) (local.get $step)))
+                    (local.get $end)
+                    (i32.ne)
+                    (br_if $loop)
+            )
+    )
+    (func (export "canister_update write_heap_64k")
+        (call $write (i32.const 0) (i32.const 65536) (i32.const 4096))
+	(call $msg_reply)
+    )
     (memory $memory 1)
     (export "memory" (memory $memory))
     (export "canister_update inc" (func $inc))
@@ -216,6 +274,81 @@ fn read_and_assert_eq(env: &StateMachine, canister_id: CanisterId, expected: i32
         ),
         expected
     );
+}
+
+#[test]
+fn merge_overhead() {
+    fn checkpoint_size(checkpoint: &CheckpointLayout<ReadOnly>) -> f64 {
+        let mut size = 0.0;
+        for canister_id in checkpoint.canister_ids().unwrap() {
+            let canister = checkpoint.canister(&canister_id).unwrap();
+            for entry in std::fs::read_dir(canister.raw_path()).unwrap() {
+                size += std::fs::metadata(entry.unwrap().path()).unwrap().len() as f64;
+            }
+        }
+        size
+    }
+    fn last_checkpoint_size(env: &StateMachine) -> f64 {
+        let state_layout = env.state_manager.state_layout();
+        let checkpoint_heights = state_layout.checkpoint_heights().unwrap();
+        if checkpoint_heights.is_empty() {
+            return 0.0;
+        }
+        let last_height = *checkpoint_heights.last().unwrap();
+        checkpoint_size(&state_layout.checkpoint(last_height).unwrap())
+    }
+    fn tip_size(env: &StateMachine) -> f64 {
+        checkpoint_size(
+            &CheckpointLayout::new_untracked(
+                env.state_manager.state_layout().raw_path().join("tip"),
+                height(0),
+            )
+            .unwrap(),
+        )
+    }
+    fn state_in_memory(env: &StateMachine) -> f64 {
+        env.metrics_registry()
+            .prometheus_registry()
+            .gather()
+            .into_iter()
+            .filter(|x| x.get_name() == "canister_memory_usage_bytes")
+            .map(|x| x.get_metric()[0].get_gauge().get_value())
+            .next()
+            .unwrap()
+    }
+
+    let env = StateMachineBuilder::new()
+        .with_lsmt_override(Some(FlagStatus::Enabled))
+        .build();
+
+    let canister_ids = (0..10)
+        .map(|_| env.install_canister_wat(TEST_CANISTER, vec![], None))
+        .collect::<Vec<_>>();
+    for i in 0..30 {
+        env.set_checkpoints_enabled(false);
+        for canister_id in &canister_ids {
+            env.execute_ingress(*canister_id, "write_heap_64k", vec![])
+                .unwrap();
+        }
+        env.set_checkpoints_enabled(true);
+        env.tick();
+        env.state_manager.flush_tip_channel();
+        // We should merge when overhead reaches 2.5 and stop merging the moment we go under 2.5.
+        if i >= 3 {
+            assert_ne!(tip_size(&env), 0.0);
+            assert_ne!(state_in_memory(&env), 0.0);
+            assert!(tip_size(&env) / state_in_memory(&env) > 2.0);
+            assert!(tip_size(&env) / state_in_memory(&env) <= 2.5);
+        }
+    }
+    // Create a checkpoint from the tip without writing any more data. As we merge in tip, the
+    // result is visible at the next checkpoint.
+    env.tick();
+    env.state_manager.flush_tip_channel();
+    assert_ne!(last_checkpoint_size(&env), 0.0);
+    assert_ne!(state_in_memory(&env), 0.0);
+    assert!(last_checkpoint_size(&env) / state_in_memory(&env) > 2.0);
+    assert!(last_checkpoint_size(&env) / state_in_memory(&env) <= 2.5);
 }
 
 #[test]
@@ -1070,9 +1203,19 @@ fn missing_manifests_are_recomputed() {
     });
 }
 
+fn any_manifest_was_incremental(metrics: &MetricsRegistry) -> bool {
+    // We detect that the manifest computation was incremental by checking that at least some bytes
+    // are either "reused" or "hashed_and_compared"
+    let chunk_bytes = fetch_int_counter_vec(metrics, "state_manager_manifest_chunk_bytes");
+    let reused_key = maplit::btreemap! {"type".to_string() => "reused".to_string()};
+    let hashed_and_compared_key =
+        maplit::btreemap! {"type".to_string() => "hashed_and_compared".to_string()};
+    chunk_bytes[&reused_key] + chunk_bytes[&hashed_and_compared_key] != 0
+}
+
 #[test]
 fn first_manifest_after_restart_is_incremental() {
-    state_manager_restart_test_with_metrics(|_metrics, state_manager, restart_fn| {
+    state_manager_restart_test_with_metrics(|metrics, state_manager, restart_fn| {
         let (_height, mut state) = state_manager.take_tip();
 
         // We need at least one canister, as incremental manifest computation only considers
@@ -1094,6 +1237,7 @@ fn first_manifest_after_restart_is_incremental() {
 
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
         wait_for_checkpoint(&state_manager, height(1));
+        assert!(!any_manifest_was_incremental(metrics));
 
         let (metrics, state_manager) = restart_fn(state_manager, None);
 
@@ -1102,16 +1246,7 @@ fn first_manifest_after_restart_is_incremental() {
         state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
         wait_for_checkpoint(&state_manager, height(2));
 
-        // We detect that the manifest computation was incremental by checking that at least some bytes
-        // are either "reused" or "hashed_and_compared"
-        let chunk_bytes = fetch_int_counter_vec(&metrics, "state_manager_manifest_chunk_bytes");
-        let reused_key = maplit::btreemap! {"type".to_string() => "reused".to_string()};
-        let hashed_and_compared_key =
-            maplit::btreemap! {"type".to_string() => "hashed_and_compared".to_string()};
-        assert_ne!(
-            0,
-            chunk_bytes[&reused_key] + chunk_bytes[&hashed_and_compared_key]
-        );
+        assert!(any_manifest_was_incremental(&metrics));
     });
 }
 
@@ -2754,7 +2889,6 @@ fn can_state_sync_based_on_old_checkpoint() {
 #[test]
 fn can_recover_from_corruption_on_state_sync() {
     use ic_state_layout::{CheckpointLayout, RwPolicy};
-    use ic_state_manager::manifest::DEFAULT_CHUNK_SIZE;
 
     let pages_per_chunk = DEFAULT_CHUNK_SIZE as u64 / PAGE_SIZE as u64;
     assert_eq!(DEFAULT_CHUNK_SIZE as usize % PAGE_SIZE, 0);
@@ -3235,7 +3369,7 @@ fn can_get_dirty_pages() {
 
 #[test]
 fn can_reuse_chunk_hashes_when_computing_manifest() {
-    use ic_state_manager::manifest::{compute_manifest, validate_manifest, DEFAULT_CHUNK_SIZE};
+    use ic_state_manager::manifest::{compute_manifest, validate_manifest};
     use ic_state_manager::ManifestMetrics;
     use ic_types::state_sync::CURRENT_STATE_SYNC_VERSION;
 
@@ -4886,30 +5020,93 @@ fn checkpoints_are_readonly() {
 }
 
 #[test]
+fn can_downgrade_from_lsmt() {
+    state_manager_restart_test_with_lsmt(
+        FlagStatus::Enabled,
+        |metrics, state_manager, restart_fn| {
+            let (_height, mut state) = state_manager.take_tip();
+
+            insert_dummy_canister(&mut state, canister_test_id(1));
+            let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
+            let execution_state = canister_state.execution_state.as_mut().unwrap();
+
+            const NEW_WASM_PAGE: u64 = 100;
+
+            fn verify_page_map(page_map: &PageMap, value: u8) {
+                assert_eq!(page_map.get_page(PageIndex::new(0)), &[1u8; PAGE_SIZE]);
+                for i in 1..NEW_WASM_PAGE {
+                    assert_eq!(page_map.get_page(PageIndex::new(i)), &[0u8; PAGE_SIZE]);
+                }
+                assert_eq!(
+                    page_map.get_page(PageIndex::new(NEW_WASM_PAGE)),
+                    &[value; PAGE_SIZE]
+                );
+            }
+
+            execution_state.wasm_memory.page_map.update(&[
+                (PageIndex::new(0), &[1u8; PAGE_SIZE]),
+                (PageIndex::new(NEW_WASM_PAGE), &[2u8; PAGE_SIZE]),
+            ]);
+
+            verify_page_map(&execution_state.wasm_memory.page_map, 2u8);
+
+            state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+            wait_for_checkpoint(&state_manager, height(1));
+
+            assert!(!vmemory0_base_exists(
+                &state_manager,
+                &canister_test_id(1),
+                height(1)
+            ));
+            assert_eq!(
+                vmemory0_num_overlays(&state_manager, &canister_test_id(1), height(1)),
+                1
+            );
+
+            let (_height, mut state) = state_manager.take_tip();
+            let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
+            let execution_state = canister_state.execution_state.as_mut().unwrap();
+            verify_page_map(&execution_state.wasm_memory.page_map, 2u8);
+
+            assert_error_counters(metrics);
+
+            // restart the state_manager
+            let (metrics, state_manager) = restart_fn(state_manager, None, FlagStatus::Disabled);
+
+            let (_height, mut state) = state_manager.take_tip();
+            let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
+            let execution_state = canister_state.execution_state.as_mut().unwrap();
+            verify_page_map(&execution_state.wasm_memory.page_map, 2u8);
+
+            state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+            wait_for_checkpoint(&state_manager, height(2));
+
+            assert!(vmemory0_base_exists(
+                &state_manager,
+                &canister_test_id(1),
+                height(2)
+            ));
+            assert_eq!(
+                vmemory0_num_overlays(&state_manager, &canister_test_id(1), height(2)),
+                0
+            );
+            assert!(!any_manifest_was_incremental(&metrics));
+
+            let (_height, mut state) = state_manager.take_tip();
+            let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
+            let execution_state = canister_state.execution_state.as_mut().unwrap();
+            verify_page_map(&execution_state.wasm_memory.page_map, 2u8);
+
+            state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+            wait_for_checkpoint(&state_manager, height(3));
+            assert!(any_manifest_was_incremental(&metrics));
+            assert_error_counters(&metrics);
+        },
+    );
+}
+
+#[test]
 fn can_upgrade_to_lsmt() {
-    fn vmemory0_exists(state_manager: &StateManagerImpl, height: Height) -> bool {
-        state_manager
-            .state_layout()
-            .checkpoint(height)
-            .unwrap()
-            .canister(&canister_test_id(1))
-            .unwrap()
-            .vmemory_0()
-            .exists()
-    }
-
-    fn num_overlays(state_manager: &StateManagerImpl, height: Height) -> usize {
-        state_manager
-            .state_layout()
-            .checkpoint(height)
-            .unwrap()
-            .canister(&canister_test_id(1))
-            .unwrap()
-            .vmemory_0_overlays()
-            .unwrap()
-            .len()
-    }
-
     state_manager_restart_test_with_lsmt(
         FlagStatus::Disabled,
         |metrics, state_manager, restart_fn| {
@@ -4942,8 +5139,15 @@ fn can_upgrade_to_lsmt() {
             state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
             wait_for_checkpoint(&state_manager, height(1));
 
-            assert!(vmemory0_exists(&state_manager, height(1)));
-            assert_eq!(num_overlays(&state_manager, height(1)), 0);
+            assert!(vmemory0_base_exists(
+                &state_manager,
+                &canister_test_id(1),
+                height(1)
+            ));
+            assert_eq!(
+                vmemory0_num_overlays(&state_manager, &canister_test_id(1), height(1)),
+                0
+            );
 
             let (_height, mut state) = state_manager.take_tip();
             let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
@@ -4963,8 +5167,15 @@ fn can_upgrade_to_lsmt() {
             let execution_state = canister_state.execution_state.as_mut().unwrap();
             verify_page_map(&execution_state.wasm_memory.page_map, 3u8);
 
-            assert!(vmemory0_exists(&state_manager, height(2)));
-            assert_eq!(num_overlays(&state_manager, height(2)), 0);
+            assert!(vmemory0_base_exists(
+                &state_manager,
+                &canister_test_id(1),
+                height(2)
+            ));
+            assert_eq!(
+                vmemory0_num_overlays(&state_manager, &canister_test_id(1), height(2)),
+                0
+            );
 
             assert_error_counters(metrics);
 
@@ -4976,8 +5187,15 @@ fn can_upgrade_to_lsmt() {
             let execution_state = canister_state.execution_state.as_mut().unwrap();
             verify_page_map(&execution_state.wasm_memory.page_map, 3u8);
 
-            assert!(vmemory0_exists(&state_manager, height(2)));
-            assert_eq!(num_overlays(&state_manager, height(2)), 0);
+            assert!(vmemory0_base_exists(
+                &state_manager,
+                &canister_test_id(1),
+                height(2)
+            ));
+            assert_eq!(
+                vmemory0_num_overlays(&state_manager, &canister_test_id(1), height(2)),
+                0
+            );
 
             execution_state.wasm_memory.page_map.update(&[
                 (PageIndex::new(0), &[1u8; PAGE_SIZE]),
@@ -4992,8 +5210,15 @@ fn can_upgrade_to_lsmt() {
             let execution_state = canister_state.execution_state.as_mut().unwrap();
             verify_page_map(&execution_state.wasm_memory.page_map, 4u8);
 
-            assert!(vmemory0_exists(&state_manager, height(3)));
-            assert_eq!(num_overlays(&state_manager, height(3)), 1);
+            assert!(vmemory0_base_exists(
+                &state_manager,
+                &canister_test_id(1),
+                height(3)
+            ));
+            assert_eq!(
+                vmemory0_num_overlays(&state_manager, &canister_test_id(1), height(3)),
+                1
+            );
 
             state_manager.commit_and_certify(state, height(4), CertificationScope::Full);
             wait_for_checkpoint(&state_manager, height(4));

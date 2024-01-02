@@ -13,17 +13,17 @@
 //! Response encoding Response<Bytes>:
 //!     - Same as request expect that the header contains a HeaderMap and a Statuscode.
 use axum::{
-    body::{Body, BoxBody, HttpBody},
+    body::{Body, HttpBody},
     extract::State,
+    http::{Request, Response, StatusCode, Uri},
     middleware::Next,
 };
 use bincode::Options;
-use bytes::{Buf, BufMut, Bytes};
-use http::{Request, Response, StatusCode, Uri};
-use quinn::{RecvStream, SendStream};
+use bytes::Bytes;
+use quinn::{ReadError, ReadToEndError, RecvStream, SendStream};
 use serde::{Deserialize, Serialize};
 
-use crate::metrics::QuicTransportMetrics;
+use crate::{metrics::QuicTransportMetrics, SendError};
 
 #[derive(Debug)]
 pub(crate) enum RecvError {
@@ -76,19 +76,23 @@ pub(crate) async fn read_request(mut recv_stream: RecvStream) -> Result<Request<
     Ok(request)
 }
 
-pub(crate) async fn read_response(mut recv_stream: RecvStream) -> Result<Response<Bytes>, String> {
+pub(crate) async fn read_response(
+    mut recv_stream: RecvStream,
+) -> Result<Response<Bytes>, SendError> {
     let raw_msg = recv_stream
         .read_to_end(MAX_MESSAGE_SIZE_BYTES)
         .await
-        .map_err(|_| {
-            format!(
+        .map_err(|err| match err {
+            ReadToEndError::Read(ReadError::ConnectionLost(conn_err)) => conn_err.into(),
+            ReadToEndError::TooLong => SendError::Internal(format!(
                 "Recv stream for response contains more than {} bytes",
                 MAX_MESSAGE_SIZE_BYTES
-            )
+            )),
+            _ => SendError::Internal(err.to_string()),
         })?;
     let msg: WireResponse = bincode_config()
         .deserialize(&raw_msg)
-        .map_err(|err| format!("Deserializing response failed: {}", err))?;
+        .map_err(|err| SendError::Internal(format!("Deserializing response failed: {}", err)))?;
 
     let mut response = Response::new(Bytes::copy_from_slice(msg.body));
     let _ = std::mem::replace(response.status_mut(), msg.status);
@@ -98,7 +102,7 @@ pub(crate) async fn read_response(mut recv_stream: RecvStream) -> Result<Respons
 pub(crate) async fn write_request(
     send_stream: &mut SendStream,
     request: Request<Bytes>,
-) -> Result<(), String> {
+) -> Result<(), SendError> {
     let (parts, body) = request.into_parts();
 
     let msg = WireRequest {
@@ -108,21 +112,18 @@ pub(crate) async fn write_request(
 
     let res = bincode_config()
         .serialize(&msg)
-        .map_err(|err| err.to_string())?;
-    send_stream
-        .write_all(&res)
-        .await
-        .map_err(|err| err.to_string())
+        .map_err(|err| SendError::Internal(err.to_string()))?;
+    Ok(send_stream.write_all(&res).await?)
 }
 
 pub(crate) async fn write_response(
     send_stream: &mut SendStream,
-    response: Response<BoxBody>,
+    response: Response<Body>,
 ) -> Result<(), RecvError> {
     let (parts, body) = response.into_parts();
     // Check for axum error in body
     // TODO: Think about this. What is the error that can happen here?
-    let b = to_bytes(body)
+    let b = axum::body::to_bytes(body, MAX_MESSAGE_SIZE_BYTES)
         .await
         .map_err(|err| RecvError::SendResponseFailed {
             reason: err.to_string(),
@@ -162,10 +163,10 @@ struct WireRequest<'a> {
 }
 
 /// Axum middleware to collect metrics
-pub(crate) async fn collect_metrics<B: HttpBody>(
+pub(crate) async fn collect_metrics(
     State(state): State<QuicTransportMetrics>,
-    request: Request<B>,
-    next: Next<B>,
+    request: Request<Body>,
+    next: Next,
 ) -> axum::response::Response {
     state
         .request_handle_bytes_received_total
@@ -181,45 +182,4 @@ pub(crate) async fn collect_metrics<B: HttpBody>(
     let response = next.run(request).await;
     out_counter.inc_by(response.body().size_hint().lower());
     response
-}
-
-// Copied from hyper. Used to transform `BoxBodyBytes` to `Bytes`.
-// It might look slow but since in our case the data is fully available
-// the first data() call will immediately return everything.
-// With hyper 1.0 etc. this situation will improve.
-async fn to_bytes<T>(body: T) -> Result<Bytes, T::Error>
-where
-    T: HttpBody + Unpin,
-{
-    futures::pin_mut!(body);
-
-    // If there's only 1 chunk, we can just return Buf::to_bytes()
-    let mut first = if let Some(buf) = body.data().await {
-        buf?
-    } else {
-        return Ok(Bytes::new());
-    };
-
-    let second = if let Some(buf) = body.data().await {
-        buf?
-    } else {
-        return Ok(first.copy_to_bytes(first.remaining()));
-    };
-
-    // Don't pre-emptively reserve *too* much.
-    let rest = (body.size_hint().lower() as usize).min(1024 * 16);
-    let cap = first
-        .remaining()
-        .saturating_add(second.remaining())
-        .saturating_add(rest);
-    // With more than 1 buf, we gotta flatten into a Vec first.
-    let mut vec = Vec::with_capacity(cap);
-    vec.put(first);
-    vec.put(second);
-
-    while let Some(buf) = body.data().await {
-        vec.put(buf?);
-    }
-
-    Ok(vec.into())
 }

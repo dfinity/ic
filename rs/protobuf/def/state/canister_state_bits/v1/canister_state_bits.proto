@@ -30,7 +30,7 @@ message CallContext {
   bool responded = 5;
   state.queues.v1.Funds available_funds = 6;
   bool deleted = 8;
-  optional uint64 time_nanos = 9;
+  uint64 time_nanos = 9;
   uint64 instructions_executed = 10;
 }
 

@@ -27,6 +27,3 @@ ic-crypto-test-utils-root-of-trust = { path = "../crypto/test_utils/root_of_trus
 ic-test-utilities = { path = "../test_utilities" }
 mockall = "0.11.4"
 rand = "0.8"
-
-[features]
-malicious_code = []

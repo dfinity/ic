@@ -348,9 +348,18 @@ impl<V: ExhaustiveSet + CryptoHashable> ExhaustiveSet for Hashed<CryptoHashOf<V>
 
 impl ExhaustiveSet for CatchUpContent {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        let registry_versions = Option::<RegistryVersion>::exhaustive_set(rng);
         <(HashedBlock, HashedRandomBeacon, CryptoHashOfState)>::exhaustive_set(rng)
             .into_iter()
-            .map(|tuple| Self::new(tuple.0, tuple.1, tuple.2))
+            .enumerate()
+            .map(|(i, tuple)| {
+                Self::new(
+                    tuple.0,
+                    tuple.1,
+                    tuple.2,
+                    registry_versions[i % registry_versions.len()],
+                )
+            })
             .collect()
     }
 }

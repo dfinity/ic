@@ -1682,25 +1682,6 @@ impl Governance {
             ));
         }
 
-        // Make sure that subaccounts are not repeated across neurons.
-        let mut subaccounts = HashSet::new();
-        // TODO(NNS1-2411): This should be migrated to using subaccount index before migrating any neuron to stable storage.
-
-        for n in self.neuron_store.heap_neurons().values() {
-            // For now expect that neurons have pre-assigned ids, since
-            // we add them only at genesis.
-            let _ =
-                n.id.as_ref()
-                    .expect("Currently neurons must have been pre-assigned an id.");
-            let subaccount = n.subaccount()?;
-            if !subaccounts.insert(subaccount) {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::PreconditionFailed,
-                    "There are two neurons with the same subaccount",
-                ));
-            }
-        }
-
         self.validate_default_followees(&self.heap_data.default_followees)?;
 
         Ok(())

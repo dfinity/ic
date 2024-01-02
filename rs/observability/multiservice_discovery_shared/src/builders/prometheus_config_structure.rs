@@ -5,7 +5,7 @@ use serde::{Serialize, Serializer};
 use service_discovery::job_types::JobType;
 use service_discovery::jobs::Job;
 
-use crate::{builders::ConfigBuilder, contracts::TargetDto};
+use crate::{builders::ConfigBuilder, contracts::target::TargetDto};
 
 #[derive(Serialize, Debug, Clone, PartialEq, PartialOrd, Ord, Eq)]
 pub struct PrometheusStaticConfig {

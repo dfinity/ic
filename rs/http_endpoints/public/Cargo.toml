@@ -78,5 +78,3 @@ proptest = "1.0.0"
 serde_bytes = { workspace = true }
 tower-test = "0.4.0"
 
-[features]
-malicious_code = ["ic-validator/malicious_code"]

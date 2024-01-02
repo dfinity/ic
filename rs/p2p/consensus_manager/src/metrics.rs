@@ -41,6 +41,7 @@ pub(crate) struct ConsensusManagerMetrics {
     pub send_view_consensus_dup_purge_total: IntCounter,
     pub send_view_send_to_peer_total: IntCounter,
     pub send_view_send_to_peer_delivered_total: IntCounter,
+    pub send_view_resend_reconnect_total: IntCounter,
 
     // Slot manager
     pub slot_manager_used_slots: IntGauge,
@@ -236,6 +237,14 @@ impl ConsensusManagerMetrics {
                 IntCounter::with_opts(opts!(
                     "ic_consensus_manager_send_view_send_to_peer_delivered_total",
                     "Slot updates delivered to peers.",
+                    const_labels.clone(),
+                ))
+                .unwrap(),
+            ),
+            send_view_resend_reconnect_total: metrics_registry.register(
+                IntCounter::with_opts(opts!(
+                    "ic_consensus_manager_send_view_resend_reconnect_total",
+                    "Artifact was sent again due to reconnection.",
                     const_labels.clone(),
                 ))
                 .unwrap(),

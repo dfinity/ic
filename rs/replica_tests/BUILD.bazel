@@ -58,7 +58,6 @@ DEV_DEPENDENCIES = [
     "@crate_index//:assert_matches",
     "@crate_index//:candid",
     "@crate_index//:maplit",
-    "@crate_index//:predicates",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

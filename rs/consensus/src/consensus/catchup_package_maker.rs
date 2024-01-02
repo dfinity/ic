@@ -212,6 +212,8 @@ impl CatchUpPackageMaker {
                     HashedBlock::new(ic_types::crypto::crypto_hash, start_block),
                     HashedRandomBeacon::new(ic_types::crypto::crypto_hash, random_beacon),
                     state_hash,
+                    //TODO(CON-1192): Fill with oldest version used by quadruples matched to ongoing tECDSA requests
+                    None,
                 );
                 let share_content = CatchUpShareContent::from(&content);
                 if let Some(transcript) = active_high_threshold_transcript(pool.as_cache(), height)

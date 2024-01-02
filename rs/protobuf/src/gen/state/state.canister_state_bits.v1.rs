@@ -7,8 +7,8 @@ pub struct CallContext {
     pub available_funds: ::core::option::Option<super::super::queues::v1::Funds>,
     #[prost(bool, tag = "8")]
     pub deleted: bool,
-    #[prost(uint64, optional, tag = "9")]
-    pub time_nanos: ::core::option::Option<u64>,
+    #[prost(uint64, tag = "9")]
+    pub time_nanos: u64,
     #[prost(uint64, tag = "10")]
     pub instructions_executed: u64,
     #[prost(oneof = "call_context::CallOrigin", tags = "1, 2, 3, 4, 7")]

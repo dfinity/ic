@@ -9,7 +9,7 @@
 
 use crate::consensus_pool::{MutablePoolSection, PoolSectionOp, PoolSectionOps};
 use ic_interfaces::consensus_pool::{
-    HeightIndexedPool, HeightRange, PoolSection, ValidatedConsensusArtifact,
+    HeightIndexedPool, HeightRange, PoolSection, PurgeableArtifactType, ValidatedConsensusArtifact,
 };
 use ic_logger::ReplicaLogger;
 use ic_test_utilities::{
@@ -222,7 +222,8 @@ where
             );
 
             let mut ops = PoolSectionOps::new();
-            ops.purge_shares_below(finalized_height);
+            ops.purge_type_below(PurgeableArtifactType::NotarizationShare, finalized_height);
+            ops.purge_type_below(PurgeableArtifactType::FinalizationShare, finalized_height);
             let purged = pool.mutate(ops);
 
             assert_eq!(expected_to_be_purged.len(), purged.len());
@@ -544,7 +545,7 @@ fn random_beacon_share_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
     ops
 }
 
-fn notarization_share_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
+pub(crate) fn notarization_share_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
     let mut ops = PoolSectionOps::new();
     for i in 4..16 {
         let height = Height::from(i);

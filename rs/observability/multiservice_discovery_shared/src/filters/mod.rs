@@ -1,12 +1,13 @@
 use std::fmt::Debug;
 
-use crate::contracts::TargetDto;
+use crate::contracts::DataContract;
 
 pub mod ic_name_regex_filter;
 pub mod node_regex_id_filter;
+pub mod sns_name_regex_filter;
 
 pub trait TargetGroupFilter: Send + Sync + Debug {
-    fn filter(&self, target_groups: &TargetDto) -> bool;
+    fn filter(&self, target_groups: &dyn DataContract) -> bool;
 }
 
 #[derive(Debug)]
@@ -25,7 +26,7 @@ impl TargetGroupFilterList {
 }
 
 impl TargetGroupFilter for TargetGroupFilterList {
-    fn filter(&self, target_group: &TargetDto) -> bool {
+    fn filter(&self, target_group: &dyn DataContract) -> bool {
         // If the group is empty, consider that as having no filter, thus always accept the element
         if self.filters.is_empty() {
             true

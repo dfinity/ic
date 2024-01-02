@@ -12,14 +12,15 @@ pub fn timestamp_to_iso8601(ts: TimeStamp) -> String {
     let secs = (ts.as_nanos_since_unix_epoch() / 1_000_000_000) as i64;
     let nsecs = (ts.as_nanos_since_unix_epoch() % 1_000_000_000) as u32;
     let datetime = chrono::NaiveDateTime::from_timestamp_opt(secs, nsecs).unwrap();
-    chrono::DateTime::<chrono::Utc>::from_utc(datetime, chrono::Utc).to_rfc3339()
+    chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(datetime, chrono::Utc).to_rfc3339()
 }
 
 pub fn iso8601_to_timestamp(s: String) -> TimeStamp {
     let nanos = chrono::DateTime::<chrono::FixedOffset>::parse_from_rfc3339(&s)
         .unwrap_or_else(|e| panic!("Unable to parse timestamp from rfc3339 {}: {}", s, e))
         .with_timezone(&chrono::Utc)
-        .timestamp_nanos() as u64;
+        .timestamp_nanos_opt()
+        .unwrap() as u64;
     TimeStamp::from_nanos_since_unix_epoch(nanos)
 }
 

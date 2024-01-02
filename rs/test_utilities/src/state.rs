@@ -306,7 +306,7 @@ impl CanisterStateBuilder {
             let call_context_id = call_context_manager.new_call_context(
                 call_context.call_origin().clone(),
                 call_context.available_cycles(),
-                call_context.time().unwrap(),
+                call_context.time(),
             );
 
             let call_context_in_call_context_manager = call_context_manager

@@ -26,5 +26,3 @@ ic-protobuf = { path = "../protobuf" }
 ic-test-utilities = { path = "../test_utilities" }
 assert_matches = "1.3.0"
 
-[features]
-malicious_code = []

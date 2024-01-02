@@ -40,6 +40,8 @@ scoped_threadpool = "0.1.*"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 slog = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
 tempfile = "3.1.0"
 tree-deserializer = { path = "../tree_deserializer" }
 uuid = { version = "1.2.1", features = ["v4", "serde"] }

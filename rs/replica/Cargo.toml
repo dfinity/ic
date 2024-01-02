@@ -70,7 +70,6 @@ slog = { workspace = true }
 slog-async = "2.5.0"
 static_assertions = "0.3.4"
 tempfile = "3.1.0"
-thread_profiler = { version = "0.3", optional = true }
 tokio = { workspace = true }
 tracing = "0.1.13"
 tower = { workspace = true }
@@ -86,7 +85,7 @@ criterion = "0.5"
 ic-ic00-types = { path = "../types/ic00_types" }
 ic-interfaces-registry-mocks = { path = "../interfaces/registry/mocks" }
 ic-test-utilities = { path = "../test_utilities" }
-predicates = "1.0.1"
+predicates = "3.0.4"
 wat = "1.0.52"
 
 [[bench]]
@@ -98,9 +97,8 @@ name = "replica"
 path = "src/main.rs"
 
 [features]
-profiler = ["thread_profiler/thread_profiler", "pprof"]
+profiler = ["pprof"]
 malicious_code = [
   "ic-consensus/malicious_code",
-  "ic-http-endpoints-public/malicious_code",
   "ic-state-manager/malicious_code",
 ]

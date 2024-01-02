@@ -36,6 +36,7 @@ message CatchUpPackageShare {
   bytes random_beacon_hash = 5;
   bytes signature = 6;
   NodeId signer = 7;
+  optional uint64 oldest_registry_version_in_use_by_replicated_state = 8;
 }
 
 message CatchUpContent {
@@ -44,6 +45,7 @@ message CatchUpContent {
   bytes state_hash = 3;
   bytes block_hash = 4;
   bytes random_beacon_hash = 5;
+  optional uint64 oldest_registry_version_in_use_by_replicated_state = 6;
 }
 
 message Block {

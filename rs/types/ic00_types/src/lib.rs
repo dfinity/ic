@@ -87,6 +87,12 @@ pub enum Method {
     StoredChunks,
     DeleteChunks,
     ClearChunkStore,
+
+    // Support for canister snapshots.
+    TakeCanisterSnapshot,
+    LoadCanisterSnapshot,
+    ListCanisterSnapshots,
+    DeleteCanisterSnapshot,
 }
 
 fn candid_error_to_user_error(err: candid::Error) -> UserError {

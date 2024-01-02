@@ -98,9 +98,9 @@ fn finalize_swap(env: TestEnv) {
     ));
 }
 
-/// This test is similar to //rs/tests/nns/sns:payment_flow_test, except it also finalizes the swap.
-/// A load test is currently not possible because finalization is too slow. This will be fixed during
-/// one-proposal, so a load test will be added then.
+/// Creates an SNS and participates it enough to close the swap, then checks that the swap
+/// finalizes as expected.
+/// A load test that includes finalization is currently not possible because finalization is too slow.
 ///
 /// Runbook:
 /// 1. Install NNS (with N users, each with X ICP) and SNS

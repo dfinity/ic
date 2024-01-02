@@ -1,5 +1,5 @@
 use std::fs;
-use std::net::{IpAddr, Ipv6Addr};
+use std::net::{IpAddr, Ipv6Addr, TcpStream};
 use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::Duration;
@@ -89,6 +89,37 @@ pub fn get_interface_name(interface_path: &PathBuf) -> Result<String> {
             "Error getting filename from path: {:?}",
             interface_path
         ))
+}
+
+pub fn has_ipv4_connectivity() -> bool {
+    let wait_duration_secs: Duration = Duration::from_secs(2);
+    let dns_servers = ["1.1.1.1", "1.0.0.1"];
+    let result = retry(10, || {
+        eprintln!(
+            "Waiting for {} seconds before attempting a TCP connection with the following DNS servers: {:?}",
+            wait_duration_secs.as_secs(),
+            dns_servers
+        );
+        sleep(wait_duration_secs);
+
+        for &server in &dns_servers {
+            let connection_target_with_port = format!("{}:80", server);
+            match TcpStream::connect(&connection_target_with_port) {
+                Ok(_) => {
+                    eprintln!("Successfully connected to {}", connection_target_with_port);
+                    return Ok(true);
+                }
+                Err(e) => {
+                    eprintln!(
+                        "Failed to connect to {}: {}",
+                        connection_target_with_port, e
+                    );
+                }
+            }
+        }
+        Err(anyhow::Error::msg("All connection attempts failed"))
+    });
+    matches!(result, Ok(true))
 }
 
 /// Return vec of Interface's which:

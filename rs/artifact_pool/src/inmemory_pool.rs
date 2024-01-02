@@ -3,7 +3,9 @@ use crate::{
     height_index::{HeightIndex, Indexes, SelectIndex},
     HasTimestamp, IntoInner,
 };
-use ic_interfaces::consensus_pool::{HeightIndexedPool, HeightRange, OnlyError, PoolSection};
+use ic_interfaces::consensus_pool::{
+    HeightIndexedPool, HeightRange, OnlyError, PoolSection, PurgeableArtifactType,
+};
 use ic_logger::{warn, ReplicaLogger};
 use ic_types::{
     artifact::ConsensusMessageId,
@@ -39,9 +41,17 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<
         self.remove_by_hash(msg_id.hash.digest())
     }
 
-    /// Purge all artifacts or only shares below the given [`Height`].
+    /// Purge artifacts below the given [`Height`].
+    ///
+    /// If `artifact_type` is provided, we will purge only artifacts of the given type. Otherwise we
+    /// will purge *all* artifacts.
+    ///
     /// Return [`ConsensusMessageId`]s of deleted artifacts.
-    fn purge_below(&mut self, height: Height, only_shares: bool) -> Vec<ConsensusMessageId> {
+    fn purge_below(
+        &mut self,
+        height: Height,
+        artifact_type: Option<PurgeableArtifactType>,
+    ) -> Vec<ConsensusMessageId> {
         let mut purged = Vec::new();
 
         macro_rules! purge {
@@ -61,14 +71,22 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<
             };
         }
 
-        purge!(finalization_share, FinalizationShare);
-        purge!(notarization_share, NotarizationShare);
-
-        if !only_shares {
+        if let Some(artifact_type) = artifact_type {
+            match artifact_type {
+                PurgeableArtifactType::NotarizationShare => {
+                    purge!(notarization_share, NotarizationShare);
+                }
+                PurgeableArtifactType::FinalizationShare => {
+                    purge!(finalization_share, FinalizationShare);
+                }
+            }
+        } else {
             purge!(random_beacon, RandomBeacon);
             purge!(random_beacon_share, RandomBeaconShare);
             purge!(finalization, Finalization);
+            purge!(finalization_share, FinalizationShare);
             purge!(notarization, Notarization);
+            purge!(notarization_share, NotarizationShare);
             purge!(block_proposal, BlockProposal);
             purge!(random_tape, RandomTape);
             purge!(random_tape_share, RandomTapeShare);
@@ -264,10 +282,10 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> MutablePoolSection<T
                     }
                 }
                 PoolSectionOp::PurgeBelow(height) => {
-                    purged.append(&mut self.purge_below(height, /*only_shares=*/ false))
+                    purged.append(&mut self.purge_below(height, None))
                 }
-                PoolSectionOp::PurgeSharesBelow(height) => {
-                    purged.append(&mut self.purge_below(height, /*only_shares=*/ true))
+                PoolSectionOp::PurgeTypeBelow(artifact_type, height) => {
+                    purged.append(&mut self.purge_below(height, Some(artifact_type)))
                 }
             }
         }
@@ -346,7 +364,8 @@ pub mod test {
                 pool.insert(make_artifact(fake_random_beacon(Height::from(30))));
 
                 let mut ops = PoolSectionOps::new();
-                ops.purge_shares_below(Height::from(20));
+                ops.purge_type_below(PurgeableArtifactType::NotarizationShare, Height::from(20));
+                ops.purge_type_below(PurgeableArtifactType::FinalizationShare, Height::from(20));
                 let result = pool.mutate(ops);
                 assert!(result.is_empty());
 

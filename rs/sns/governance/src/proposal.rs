@@ -587,6 +587,10 @@ fn validate_canister_id(
     }
 }
 
+impl ValidGenericNervousSystemFunction {
+    pub const MIN_ID: u64 = 1000;
+}
+
 impl TryFrom<&NervousSystemFunction> for ValidGenericNervousSystemFunction {
     type Error = String;
 
@@ -611,8 +615,11 @@ impl TryFrom<&NervousSystemFunction> for ValidGenericNervousSystemFunction {
 
         let mut defects = vec![];
 
-        if *id < 1000 {
-            defects.push("NervousSystemFunction's must have ids starting at 1000".to_string());
+        if *id < Self::MIN_ID {
+            defects.push(format!(
+                "NervousSystemFunction's must have ids starting at {}",
+                Self::MIN_ID,
+            ));
         }
 
         if name.is_empty() || name.len() > 256 {

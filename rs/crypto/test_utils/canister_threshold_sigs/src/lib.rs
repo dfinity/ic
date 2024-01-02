@@ -1,9 +1,12 @@
 //! Utilities for testing IDkg and canister threshold signature operations.
 
 use crate::node::{Node, Nodes};
-use ic_crypto_internal_threshold_sig_ecdsa::test_utils::corrupt_dealing;
-use ic_crypto_internal_threshold_sig_ecdsa::{IDkgDealingInternal, NodeIndex, Seed};
+use ic_crypto_internal_threshold_sig_ecdsa::test_utils::{corrupt_dealing, ComplaintCorrupter};
+use ic_crypto_internal_threshold_sig_ecdsa::{
+    EccScalar, IDkgComplaintInternal, IDkgDealingInternal, MEGaCiphertext, NodeIndex, Seed,
+};
 use ic_crypto_temp_crypto::{TempCryptoComponent, TempCryptoComponentGeneric};
+use ic_interfaces::crypto::IDkgProtocol;
 use ic_interfaces::crypto::{
     BasicSigner, KeyManager, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
 };
@@ -12,8 +15,8 @@ use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, IDkgComplaint, IDkgDealers, IDkgDealing, IDkgMaskedTranscriptOrigin,
-    IDkgReceivers, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
-    IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
+    IDkgOpening, IDkgReceivers, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation,
+    IDkgTranscriptParams, IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::{
     ExtendedDerivationPath, PreSignatureQuadruple, ThresholdEcdsaSigShare,
@@ -2010,4 +2013,164 @@ impl IntoBuilder for IDkgTranscript {
             internal_transcript_raw: self.internal_transcript_raw,
         }
     }
+}
+
+/// Creates a clone of `complaint` and corrupts it using `complaint_corrupter`.
+pub fn to_corrupt_complaint(
+    complaint: &IDkgComplaint,
+    complaint_corrupter: &ComplaintCorrupter,
+) -> IDkgComplaint {
+    let internal_complaint =
+        IDkgComplaintInternal::deserialize(complaint.internal_complaint_raw.as_slice())
+            .expect("failed to deserialize internal complaint");
+    let corrupt_internal_complaint = complaint_corrupter
+        .clone_and_corrupt_complaint(&internal_complaint)
+        .expect("failed to corrupt internal complaint");
+    IDkgComplaint {
+        internal_complaint_raw: corrupt_internal_complaint
+            .serialize()
+            .expect("failed to serialize internal complaint"),
+        ..complaint.clone()
+    }
+}
+
+pub fn corrupt_single_dealing_and_generate_complaint<'a, R: RngCore + CryptoRng>(
+    transcript: &mut IDkgTranscript,
+    params: &'a IDkgTranscriptParams,
+    env: &'a CanisterThresholdSigTestEnvironment,
+    rng: &mut R,
+) -> (&'a Node, IDkgComplaint) {
+    let (complainer, _, mut complaints) =
+        corrupt_dealings_and_generate_complaints(transcript, 1, params, env, rng);
+    (
+        complainer,
+        complaints.pop().expect("expected one complaint"),
+    )
+}
+
+pub fn corrupt_dealings_and_generate_complaints<'a, R: RngCore + CryptoRng>(
+    transcript: &mut IDkgTranscript,
+    number_of_complaints: usize,
+    params: &'a IDkgTranscriptParams,
+    env: &'a CanisterThresholdSigTestEnvironment,
+    rng: &mut R,
+) -> (&'a Node, Vec<NodeIndex>, Vec<IDkgComplaint>) {
+    assert!(
+        number_of_complaints > 0,
+        "should generate at least one complaint"
+    );
+    assert!(
+        number_of_complaints <= transcript.verified_dealings.len(),
+        "cannot generate {} complaints because there are only {} dealings",
+        number_of_complaints,
+        transcript.verified_dealings.len()
+    );
+
+    let dealing_indices_to_corrupt = transcript
+        .verified_dealings
+        .keys()
+        .copied()
+        .choose_multiple(rng, number_of_complaints);
+    assert_eq!(dealing_indices_to_corrupt.len(), number_of_complaints);
+
+    let complainer = env.nodes.random_receiver(params.receivers(), rng);
+    let complainer_index = params
+        .receiver_index(complainer.id())
+        .unwrap_or_else(|| panic!("Missing receiver {:?}", complainer));
+    dealing_indices_to_corrupt
+        .iter()
+        .for_each(|index_to_corrupt| {
+            corrupt_signed_dealing_for_one_receiver(
+                *index_to_corrupt,
+                &mut transcript.verified_dealings,
+                complainer_index,
+            )
+        });
+
+    let complaints = {
+        let complaints = complainer
+            .load_transcript(transcript)
+            .expect("expected complaints");
+        assert_eq!(complaints.len(), number_of_complaints);
+        complaints
+    };
+
+    (complainer, dealing_indices_to_corrupt, complaints)
+}
+
+pub fn generate_and_verify_openings_for_complaint(
+    number_of_openings: usize,
+    transcript: &IDkgTranscript,
+    env: &CanisterThresholdSigTestEnvironment,
+    complainer: &Node,
+    complaint: IDkgComplaint,
+) -> BTreeMap<IDkgComplaint, BTreeMap<NodeId, IDkgOpening>> {
+    let openers = env
+        .nodes
+        .receivers(&transcript)
+        .filter(|node| *node != complainer);
+    let openings: BTreeMap<_, _> = openers
+        .take(number_of_openings)
+        .map(|opener| {
+            let opening = generate_and_verify_opening(opener, complainer, transcript, &complaint);
+            (opener.id(), opening)
+        })
+        .collect();
+    assert_eq!(openings.values().len(), number_of_openings);
+
+    let mut complaint_with_openings = BTreeMap::new();
+    complaint_with_openings.insert(complaint, openings);
+    complaint_with_openings
+}
+
+fn generate_and_verify_opening(
+    opener: &Node,
+    complainer: &Node,
+    transcript: &IDkgTranscript,
+    complaint: &IDkgComplaint,
+) -> IDkgOpening {
+    let opening = opener
+        .open_transcript(transcript, complainer.id(), complaint)
+        .expect("failed creating opening");
+    assert_eq!(
+        complainer.verify_opening(transcript, opener.id(), &opening, complaint),
+        Ok(())
+    );
+    opening
+}
+
+fn corrupt_signed_dealing_for_one_receiver(
+    dealing_index_to_corrupt: NodeIndex,
+    dealings: &mut BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+    receiver_index: NodeIndex,
+) {
+    let signed_dealing = dealings
+        .get_mut(&dealing_index_to_corrupt)
+        .unwrap_or_else(|| panic!("Missing dealing at index {:?}", dealing_index_to_corrupt));
+    let invalidated_internal_dealing_raw = {
+        let mut internal_dealing =
+            IDkgDealingInternal::deserialize(&signed_dealing.idkg_dealing().internal_dealing_raw)
+                .expect("failed to deserialize internal dealing");
+        match internal_dealing.ciphertext {
+            MEGaCiphertext::Single(ref mut ctext) => {
+                let corrupted_ctext = corrupt_ecc_scalar(&ctext.ctexts[receiver_index as usize]);
+                ctext.ctexts[receiver_index as usize] = corrupted_ctext;
+            }
+            MEGaCiphertext::Pairs(ref mut ctext) => {
+                let (ctext_1, ctext_2) = ctext.ctexts[receiver_index as usize].clone();
+                let corrupted_ctext_1 = corrupt_ecc_scalar(&ctext_1);
+                ctext.ctexts[receiver_index as usize] = (corrupted_ctext_1, ctext_2);
+            }
+        };
+        internal_dealing
+            .serialize()
+            .expect("failed to serialize internal dealing")
+    };
+    signed_dealing.content.content.internal_dealing_raw = invalidated_internal_dealing_raw;
+}
+
+fn corrupt_ecc_scalar(value: &EccScalar) -> EccScalar {
+    value
+        .add(&EccScalar::one(value.curve_type()))
+        .expect("Corruption for testing failed")
 }

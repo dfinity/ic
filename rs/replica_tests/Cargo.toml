@@ -61,4 +61,3 @@ ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist"
 ic-sys = { path = "../sys" }
 ic-test-utilities = { path = "../test_utilities" }
 maplit = "1.0.2"
-predicates = "1.0.1"

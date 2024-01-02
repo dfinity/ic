@@ -2,6 +2,7 @@ use crate::consensus_pool::{InitializablePoolSection, PoolSectionOp, PoolSection
 use crate::lmdb_iterator::{LMDBEcdsaIterator, LMDBIterator};
 use crate::metrics::EcdsaPoolMetrics;
 use ic_config::artifact_pool::LMDBConfig;
+use ic_interfaces::consensus_pool::PurgeableArtifactType;
 use ic_interfaces::{
     consensus_pool::{
         HeightIndexedPool, HeightRange, OnlyError, PoolSection, ValidatedConsensusArtifact,
@@ -768,8 +769,6 @@ const CONSENSUS_KEYS: [TypeKey; 12] = [
     CATCH_UP_PACKAGE_SHARE_KEY,
 ];
 
-const CONSENSUS_SHARE_KEYS: [TypeKey; 2] = [NOTARIZATION_SHARE_KEY, FINALIZATION_SHARE_KEY];
-
 impl HasTypeKey for RandomBeacon {
     fn type_key() -> TypeKey {
         RANDOM_BEACON_KEY
@@ -1066,22 +1065,25 @@ impl PersistentHeightIndexedPool<ConsensusMessage> {
                             }),
                     );
                 }
-                PoolSectionOp::PurgeSharesBelow(height) => {
+                PoolSectionOp::PurgeTypeBelow(artifact_type, height) => {
                     let height_key = HeightKey::from(height);
-                    for type_key in CONSENSUS_SHARE_KEYS {
-                        purged.extend(
-                            self.tx_purge_type_below(&mut tx, type_key, height_key)?
-                                .into_iter()
-                                .map(ConsensusMessageId::try_from)
-                                .flat_map(|r| {
-                                    log_err!(
-                                        r,
-                                        self.log,
-                                        "ConsensusMessage::tx_mutate PurgeSharesBelow"
-                                    )
-                                }),
-                        );
-                    }
+                    let type_key = match artifact_type {
+                        PurgeableArtifactType::NotarizationShare => NOTARIZATION_SHARE_KEY,
+                        PurgeableArtifactType::FinalizationShare => FINALIZATION_SHARE_KEY,
+                    };
+
+                    purged.extend(
+                        self.tx_purge_type_below(&mut tx, type_key, height_key)?
+                            .into_iter()
+                            .map(ConsensusMessageId::try_from)
+                            .flat_map(|r| {
+                                log_err!(
+                                    r,
+                                    self.log,
+                                    "ConsensusMessage::tx_mutate PurgeSharesBelow"
+                                )
+                            }),
+                    );
                 }
             }
         }
@@ -1885,7 +1887,8 @@ mod tests {
     use crate::{
         consensus_pool::MutablePoolSection,
         test_utils::{
-            fake_random_beacon, finalization_share_ops, random_beacon_ops, PoolTestHelper,
+            fake_random_beacon, finalization_share_ops, notarization_share_ops, random_beacon_ops,
+            PoolTestHelper,
         },
     };
     use ic_test_utilities_logger::with_test_replica_logger;
@@ -2019,36 +2022,52 @@ mod tests {
     #[test]
     fn test_purge_shares_survives_reboot() {
         run_persistent_pool_test("test_purge_shares_survives_reboot", |config, log| {
-            // create a pool and purge at height 10
+            // create a pool and purge finalization shares at height 10 and notarization shares at
+            // height 13;
             let height10 = Height::from(10);
+            let height13 = Height::from(13);
             {
                 let mut pool = PersistentHeightIndexedPool::new_consensus_pool(
                     config.clone(),
                     false,
                     log.clone(),
                 );
-                // insert random beacons and finalization shares
+                // insert random beacons, notarization shares, and finalization shares
                 let fs_ops = finalization_share_ops();
                 pool.mutate(fs_ops.clone());
+                let ns_ops = notarization_share_ops();
+                pool.mutate(ns_ops.clone());
                 pool.mutate(random_beacon_ops());
-                // min height should be less than 10
+                // min height of finalization shares should be less than 10
                 assert!(pool.finalization_share().height_range().map(|r| r.min) < Some(height10));
+                // min height of notarization shares should be less than 13
+                assert!(pool.notarization_share().height_range().map(|r| r.min) < Some(height13));
 
                 let iter = pool.finalization_share().get_all();
                 let shares_from_pool = iter.count();
                 assert_eq!(shares_from_pool, fs_ops.ops.len());
+                let iter = pool.notarization_share().get_all();
+                let shares_from_pool = iter.count();
+                assert_eq!(shares_from_pool, ns_ops.ops.len());
                 assert_consistency(&pool);
                 let iter = pool.random_beacon().get_all();
                 let messages_from_pool = iter.count();
 
-                // purge at height 10
+                // purge finalization shares at height 10
                 let mut purge_ops = PoolSectionOps::new();
-                purge_ops.purge_shares_below(height10);
+                purge_ops.purge_type_below(PurgeableArtifactType::FinalizationShare, height10);
+                // purge notarization shares at height 13
+                purge_ops.purge_type_below(PurgeableArtifactType::NotarizationShare, height13);
                 pool.mutate(purge_ops);
-                // min height should be 10
+                // min height of finalization shares should be 10
                 assert_eq!(
                     pool.finalization_share().height_range().map(|r| r.min),
                     Some(height10)
+                );
+                // min height of notarization shares should be 13
+                assert_eq!(
+                    pool.notarization_share().height_range().map(|r| r.min),
+                    Some(height13)
                 );
                 // full beacon count should be unchanged
                 assert_eq!(pool.random_beacon().get_all().count(), messages_from_pool);
@@ -2060,6 +2079,10 @@ mod tests {
                 assert_eq!(
                     pool.finalization_share().height_range().map(|r| r.min),
                     Some(height10)
+                );
+                assert_eq!(
+                    pool.notarization_share().height_range().map(|r| r.min),
+                    Some(height13)
                 );
                 assert_consistency(&pool);
             }

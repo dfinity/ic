@@ -11,7 +11,7 @@ use warp::reply::Reply;
 use crate::definition::Definition;
 use multiservice_discovery_shared::{
     builders::prometheus_config_structure::{map_target_group, PrometheusStaticConfig},
-    contracts::TargetDto,
+    contracts::target::TargetDto,
 };
 
 use super::WebResult;

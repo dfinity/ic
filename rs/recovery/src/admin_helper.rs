@@ -41,7 +41,7 @@ impl AdminHelper {
         }
     }
 
-    pub fn get_ic_admin_cmd_base(&self, neuron_args: &Option<NeuronArgs>) -> IcAdmin {
+    pub fn get_ic_admin_cmd_base(&self) -> IcAdmin {
         let mut ica = self.binary.clone();
         ica.push("ic-admin");
         let mut ic_admin = vec![ica.display().to_string()];
@@ -50,7 +50,7 @@ impl AdminHelper {
 
         // Existence of [NeuronArgs] implies no testing mode. Add hsm parameters to
         // base.
-        if let Some(args) = neuron_args {
+        if let Some(args) = &self.neuron_args {
             ic_admin
                 .add_positional_argument("--use-hsm")
                 .add_argument("slot", &args.slot)
@@ -61,22 +61,18 @@ impl AdminHelper {
         ic_admin
     }
 
-    pub fn add_propose_to_update_subnet_base(
-        ic_admin: &mut IcAdmin,
-        neuron_args: &Option<NeuronArgs>,
-        subnet_id: SubnetId,
-    ) {
+    pub fn add_propose_to_update_subnet_base(&self, ic_admin: &mut IcAdmin, subnet_id: SubnetId) {
         ic_admin
             .add_positional_argument("propose-to-update-subnet")
             .add_argument("subnet", subnet_id);
 
-        AdminHelper::add_proposer_args(ic_admin, neuron_args);
+        self.add_proposer_args(ic_admin);
     }
 
     // Existence of [NeuronArgs] implies no testing mode. Add proposer neuron id,
     // else add test neuron proposer.
-    pub fn add_proposer_args(ic_admin: &mut IcAdmin, neuron_args: &Option<NeuronArgs>) {
-        if let Some(args) = neuron_args {
+    pub fn add_proposer_args(&self, ic_admin: &mut IcAdmin) {
+        if let Some(args) = &self.neuron_args {
             ic_admin.add_argument("proposer", &args.neuron_id);
         } else {
             ic_admin.add_positional_argument("--test-neuron-proposer");
@@ -89,8 +85,8 @@ impl AdminHelper {
         is_halted: bool,
         keys: &[String],
     ) -> IcAdmin {
-        let mut ic_admin = self.get_ic_admin_cmd_base(&self.neuron_args);
-        AdminHelper::add_propose_to_update_subnet_base(&mut ic_admin, &self.neuron_args, subnet_id);
+        let mut ic_admin = self.get_ic_admin_cmd_base();
+        self.add_propose_to_update_subnet_base(&mut ic_admin, subnet_id);
 
         ic_admin.add_argument("is-halted", is_halted);
         if !keys.is_empty() {
@@ -114,7 +110,7 @@ impl AdminHelper {
         upgrade_url: &Url,
         sha256: String,
     ) -> IcAdmin {
-        let mut ic_admin = self.get_ic_admin_cmd_base(&self.neuron_args);
+        let mut ic_admin = self.get_ic_admin_cmd_base();
 
         ic_admin
             .add_positional_argument("propose-to-update-elected-replica-versions")
@@ -129,7 +125,8 @@ impl AdminHelper {
                 )),
             );
 
-        AdminHelper::add_proposer_args(&mut ic_admin, &self.neuron_args);
+        self.add_proposer_args(&mut ic_admin);
+
         ic_admin
     }
 
@@ -138,7 +135,7 @@ impl AdminHelper {
         subnet_id: SubnetId,
         upgrade_version: &ReplicaVersion,
     ) -> IcAdmin {
-        let mut ic_admin = self.get_ic_admin_cmd_base(&self.neuron_args);
+        let mut ic_admin = self.get_ic_admin_cmd_base();
 
         ic_admin
             .add_positional_argument("propose-to-update-subnet-replica-version")
@@ -149,7 +146,8 @@ impl AdminHelper {
                 quote(format!("Upgrade replica version of subnet {}.", subnet_id)),
             );
 
-        AdminHelper::add_proposer_args(&mut ic_admin, &self.neuron_args);
+        self.add_proposer_args(&mut ic_admin);
+
         ic_admin
     }
 
@@ -164,7 +162,7 @@ impl AdminHelper {
         ecdsa_subnet_id: Option<SubnetId>,
         time: SystemTime,
     ) -> IcAdmin {
-        let mut ic_admin = self.get_ic_admin_cmd_base(&self.neuron_args);
+        let mut ic_admin = self.get_ic_admin_cmd_base();
 
         ic_admin
             .add_positional_argument("propose-to-update-recovery-cup")
@@ -204,7 +202,8 @@ impl AdminHelper {
             .expect("Time went backwards");
         ic_admin.add_argument("time-ns", since_the_epoch.as_nanos());
 
-        AdminHelper::add_proposer_args(&mut ic_admin, &self.neuron_args);
+        self.add_proposer_args(&mut ic_admin);
+
         ic_admin
     }
 
@@ -215,7 +214,7 @@ impl AdminHelper {
         replica_version: ReplicaVersion,
         node_ids: &[NodeId],
     ) -> IcAdmin {
-        let mut ic_admin = self.get_ic_admin_cmd_base(&self.neuron_args);
+        let mut ic_admin = self.get_ic_admin_cmd_base();
 
         ic_admin
             .add_positional_argument("propose-to-create-subnet")
@@ -235,7 +234,8 @@ impl AdminHelper {
             ic_admin.add_positional_argument(node_id);
         }
 
-        AdminHelper::add_proposer_args(&mut ic_admin, &self.neuron_args);
+        self.add_proposer_args(&mut ic_admin);
+
         ic_admin
     }
 

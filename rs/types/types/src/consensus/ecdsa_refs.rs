@@ -1244,13 +1244,15 @@ impl IDkgTranscriptParamsRef {
 
 /// Counterpart of PreSignatureQuadruple that holds transcript references,
 /// instead of the transcripts.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct PreSignatureQuadrupleRef {
     pub kappa_unmasked_ref: UnmaskedTranscript,
     pub lambda_masked_ref: MaskedTranscript,
     pub kappa_times_lambda_ref: MaskedTranscript,
     pub key_times_lambda_ref: MaskedTranscript,
+    // TODO(CON-1193): remove `Option`
+    pub key_unmasked_ref: Option<UnmaskedTranscript>,
 }
 
 #[derive(Clone, Debug)]
@@ -1268,12 +1270,15 @@ impl PreSignatureQuadrupleRef {
         lambda_masked_ref: MaskedTranscript,
         kappa_times_lambda_ref: MaskedTranscript,
         key_times_lambda_ref: MaskedTranscript,
+        // TODO(CON-1193): remove `Option`
+        key_unmasked_ref: Option<UnmaskedTranscript>,
     ) -> Self {
         Self {
             kappa_unmasked_ref,
             lambda_masked_ref,
             kappa_times_lambda_ref,
             key_times_lambda_ref,
+            key_unmasked_ref,
         }
     }
 
@@ -1310,6 +1315,7 @@ impl PreSignatureQuadrupleRef {
             *self.lambda_masked_ref.as_ref(),
             *self.kappa_times_lambda_ref.as_ref(),
             *self.key_times_lambda_ref.as_ref(),
+            // TODO(CON-1193): return key_unmasked_ref
         ]
     }
 
@@ -1319,6 +1325,7 @@ impl PreSignatureQuadrupleRef {
         self.lambda_masked_ref.as_mut().update(height);
         self.kappa_times_lambda_ref.as_mut().update(height);
         self.key_times_lambda_ref.as_mut().update(height);
+        // TODO(CON-1193): update key_unmasked_ref
     }
 
     /// Returns the refs held and updates the height if specified
@@ -1328,7 +1335,22 @@ impl PreSignatureQuadrupleRef {
             self.lambda_masked_ref.as_mut().get_and_update(height),
             self.kappa_times_lambda_ref.as_mut().get_and_update(height),
             self.key_times_lambda_ref.as_mut().get_and_update(height),
+            // TODO(CON-1193): get and update key_unmasked_ref
         ]
+    }
+}
+
+// TODO(CON-1193): remove once `key_unmasked_ref` is no longer optional
+impl Hash for PreSignatureQuadrupleRef {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.kappa_unmasked_ref.hash(state);
+        self.lambda_masked_ref.hash(state);
+        self.kappa_times_lambda_ref.hash(state);
+        self.key_times_lambda_ref.hash(state);
+
+        if let Some(key_ref) = &self.key_unmasked_ref {
+            key_ref.hash(state);
+        }
     }
 }
 
@@ -1339,6 +1361,7 @@ impl From<&PreSignatureQuadrupleRef> for pb::PreSignatureQuadrupleRef {
             lambda_masked_ref: Some((&quadruple.lambda_masked_ref).into()),
             kappa_times_lambda_ref: Some((&quadruple.kappa_times_lambda_ref).into()),
             key_times_lambda_ref: Some((&quadruple.key_times_lambda_ref).into()),
+            key_unmasked_ref: None,
         }
     }
 }
@@ -1366,11 +1389,18 @@ impl TryFrom<&pb::PreSignatureQuadrupleRef> for PreSignatureQuadrupleRef {
             "PreSignatureQuadrupleRef::quadruple::key_times_lamdba_ref",
         )?;
 
+        let key_unmasked_ref = quadruple
+            .key_unmasked_ref
+            .as_ref()
+            .map(UnmaskedTranscript::try_from)
+            .transpose()?;
+
         Ok(Self::new(
             kappa_unmasked_ref,
             lambda_masked_ref,
             kappa_times_lambda_ref,
             key_times_lambda_ref,
+            key_unmasked_ref,
         ))
     }
 }

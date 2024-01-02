@@ -9,7 +9,7 @@ use multiservice_discovery_shared::{
         log_vector_config_structure::VectorConfigBuilderImpl,
         prometheus_config_structure::PrometheusConfigBuilder, ConfigBuilder,
     },
-    contracts::TargetDto,
+    contracts::target::TargetDto,
 };
 use service_discovery::job_types::{JobType, NodeOS};
 use slog::{debug, info, warn, Logger};

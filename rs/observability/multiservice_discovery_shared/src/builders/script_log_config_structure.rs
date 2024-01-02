@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use ic_types::PrincipalId;
 use serde::Serialize;
 
-use crate::contracts::TargetDto;
+use crate::contracts::target::TargetDto;
 
 use super::{
     log_vector_config_structure::{handle_ip, VectorRemapTransform},
@@ -25,7 +25,7 @@ pub struct ScriptLogConfigBuilderImpl {
 impl ConfigBuilder for ScriptLogConfigBuilderImpl {
     fn build(
         &self,
-        target_groups: std::collections::BTreeSet<crate::contracts::TargetDto>,
+        target_groups: std::collections::BTreeSet<crate::contracts::target::TargetDto>,
     ) -> String {
         let mut config = VectorConfigEnriched::new();
         let mut edited_records: Vec<TargetDto> = vec![];

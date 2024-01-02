@@ -10,6 +10,11 @@ mod tests {
 use super::CheckpointError;
 use crate::{
     manifest::hash::{meta_manifest_hasher, sub_manifest_hasher},
+    state_sync::types::{
+        encode_manifest, ChunkInfo, FileGroupChunks, FileInfo, Manifest, MetaManifest,
+        DEFAULT_CHUNK_SIZE, FILE_CHUNK_ID_OFFSET, FILE_GROUP_CHUNK_ID_OFFSET,
+        MAX_SUPPORTED_STATE_SYNC_VERSION,
+    },
     BundledManifest, DirtyPages, ManifestMetrics, CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS,
     CRITICAL_ERROR_REUSED_CHUNK_HASH, LABEL_VALUE_HASHED, LABEL_VALUE_HASHED_AND_COMPARED,
     LABEL_VALUE_REUSED, NUMBER_OF_CHECKPOINT_THREADS,
@@ -23,15 +28,7 @@ use ic_metrics::MetricsRegistry;
 use ic_replicated_state::PageIndex;
 use ic_state_layout::{CheckpointLayout, ReadOnly, CANISTER_FILE};
 use ic_sys::{mmap::ScopedMmap, PAGE_SIZE};
-use ic_types::{
-    crypto::CryptoHash,
-    state_sync::{
-        encode_manifest, ChunkInfo, FileGroupChunks, FileInfo, Manifest, MetaManifest,
-        StateSyncVersion, FILE_CHUNK_ID_OFFSET, FILE_GROUP_CHUNK_ID_OFFSET,
-        MAX_SUPPORTED_STATE_SYNC_VERSION,
-    },
-    CryptoHashOfState, Height,
-};
+use ic_types::{crypto::CryptoHash, state_sync::StateSyncVersion, CryptoHashOfState, Height};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -39,8 +36,6 @@ use std::fmt;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, Weak};
-
-pub use ic_types::state_sync::DEFAULT_CHUNK_SIZE;
 
 /// When computing a manifest, we recompute the hash of every
 /// `REHASH_EVERY_NTH_CHUNK` chunk, even if we know it to be unchanged and

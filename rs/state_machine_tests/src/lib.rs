@@ -590,6 +590,7 @@ pub struct StateMachineBuilder {
     features: SubnetFeatures,
     runtime: Option<Arc<Runtime>>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
+    lsmt_override: Option<FlagStatus>,
 }
 
 impl StateMachineBuilder {
@@ -620,6 +621,14 @@ impl StateMachineBuilder {
             },
             runtime: None,
             registry_data_provider: Arc::new(ProtoRegistryDataProvider::new()),
+            lsmt_override: None,
+        }
+    }
+
+    pub fn with_lsmt_override(self, lsmt_override: Option<FlagStatus>) -> Self {
+        Self {
+            lsmt_override,
+            ..self
         }
     }
 
@@ -792,6 +801,7 @@ impl StateMachineBuilder {
             }),
             registry_version,
             self.registry_data_provider,
+            self.lsmt_override,
         )
     }
 
@@ -985,6 +995,7 @@ impl StateMachine {
         runtime: Arc<Runtime>,
         registry_version: RegistryVersion,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
+        lsmt_override: Option<FlagStatus>,
     ) -> Self {
         let replica_logger = replica_logger();
 
@@ -1006,7 +1017,10 @@ impl StateMachine {
             registry_data_provider.clone(),
         );
 
-        let sm_config = ic_config::state_manager::Config::new(state_dir.path().to_path_buf());
+        let mut sm_config = ic_config::state_manager::Config::new(state_dir.path().to_path_buf());
+        if let Some(lsmt_override) = lsmt_override {
+            sm_config.lsmt_storage = lsmt_override;
+        }
 
         if !(std::env::var("SANDBOX_BINARY").is_ok() && std::env::var("LAUNCHER_BINARY").is_ok()) {
             hypervisor_config.canister_sandboxing_flag = FlagStatus::Disabled;

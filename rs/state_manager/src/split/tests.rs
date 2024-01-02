@@ -1,7 +1,9 @@
 use super::*;
 use crate::{
-    checkpoint::make_checkpoint, tip::spawn_tip_thread, CheckpointMetrics, ManifestMetrics,
-    StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS,
+    checkpoint::make_checkpoint,
+    state_sync::types::{FileInfo, Manifest},
+    tip::spawn_tip_thread,
+    CheckpointMetrics, ManifestMetrics, StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use assert_matches::assert_matches;
 use ic_base_types::{subnet_id_try_from_protobuf, CanisterId, NumSeconds};
@@ -29,11 +31,11 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_tmpdir::tmpdir;
+use ic_types::state_sync::CURRENT_STATE_SYNC_VERSION;
 use ic_types::{
     ingress::{IngressState, IngressStatus},
     malicious_flags::MaliciousFlags,
     messages::MessageId,
-    state_sync::{FileInfo, Manifest, CURRENT_STATE_SYNC_VERSION},
     Cycles, Height,
 };
 use std::{path::Path, sync::Arc, time::Duration};

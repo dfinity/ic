@@ -1,7 +1,10 @@
 use crate::{
-    compute_bundled_manifest, release_lock_and_persist_metadata, CheckpointError, PageMapType,
-    SharedState, StateManagerMetrics, CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS,
-    NUMBER_OF_CHECKPOINT_THREADS,
+    compute_bundled_manifest, release_lock_and_persist_metadata,
+    state_sync::types::{
+        FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, MAX_SUPPORTED_STATE_SYNC_VERSION,
+    },
+    CheckpointError, PageMapType, SharedState, StateManagerMetrics,
+    CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::subnet_id_into_protobuf;
@@ -11,18 +14,17 @@ use ic_protobuf::state::{
     stats::v1::Stats,
     system_metadata::v1::{SplitFrom, SystemMetadata},
 };
-use ic_replicated_state::page_map::{PersistDestination, StorageMetrics};
+use ic_replicated_state::page_map::{
+    MergeCandidate, PersistDestination, PersistenceError, StorageMetrics, MAX_NUMBER_OF_FILES,
+};
 #[allow(unused)]
 use ic_replicated_state::{
-    canister_state::execution_state::SandboxMemory, CanisterState, NumWasmPages, PageMap,
-    ReplicatedState,
+    canister_state::execution_state::SandboxMemory, page_map::PAGE_SIZE, CanisterState,
+    NumWasmPages, PageMap, ReplicatedState,
 };
 use ic_state_layout::{
     error::LayoutError, CanisterStateBits, CheckpointLayout, ExecutionStateBits, ReadOnly,
     RwPolicy, StateLayout, TipHandler,
-};
-use ic_types::state_sync::{
-    FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, MAX_SUPPORTED_STATE_SYNC_VERSION,
 };
 use ic_types::{malicious_flags::MaliciousFlags, CanisterId, Height};
 use ic_utils::fs::defrag_file_partially;
@@ -42,9 +44,11 @@ const DEFRAG_SIZE: u64 = 1 << 29; // 500 MB
 const DEFRAG_SAMPLE: usize = 100;
 
 /// Tip directory can be in following states:
-///    Empty: no data available. The only possible request is ResetTipTo to populate it
+///    Empty: no data available. The only possible request is ResetTipAndMerge to populate it
 ///    ReadyForPageDeltas(height): ready to write page deltas. We keep track of height to make sure
 ///    it never decreases.
+///    Serialized(height): all the data for the height `height` is flushed to tip, we can rename it
+///    to checkpoint.
 /// Height(0) is special, it has no corresponding checkpoint to write on top of. That's why the
 /// state of a freshly created TipRequest with empty tip directory is ReadyForPageDeltas(0).
 #[derive(Debug, Eq, PartialEq)]
@@ -83,20 +87,22 @@ pub(crate) enum TipRequest {
         pagemaps: Vec<PageMapToFlush>,
     },
     /// Reset tip folder to the checkpoint with given height.
+    /// Merge overlays in tip folder if necessary.
     /// State: * -> ReadyForPageDeltas(checkpoint_layout.height())
-    ResetTipTo {
+    ResetTipAndMerge {
         checkpoint_layout: CheckpointLayout<ReadOnly>,
-    },
-    /// State: ReadyForPageDeltas(h) -> Serialized(height), height >= h
-    SerializeToTip {
-        height: Height,
-        replicated_state: Box<ReplicatedState>,
+        pagemaptypes_with_num_pages: Vec<(PageMapType, usize)>,
     },
     /// Run one round of tip defragmentation.
     /// State: ReadyForPageDeltas(h) -> ReadyForPageDeltas(height), height >= h
     DefragTip {
         height: Height,
         page_map_types: Vec<PageMapType>,
+    },
+    /// State: ReadyForPageDeltas(h) -> Serialized(height), height >= h
+    SerializeToTip {
+        height: Height,
+        replicated_state: Box<ReplicatedState>,
     },
     /// Compute manifest, store result into states and persist metadata as result.
     /// State: *
@@ -150,6 +156,20 @@ fn page_map_paths(
     })
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum DowngradeState {
+    /// We don't know whether we need to downgrade.
+    Unknown,
+    /// We have discovered we need to downgrade and did the first step: merge all the overlays into
+    /// base files in Tip.
+    DowngradedTip,
+    /// We have created a first checkpoint without overlays.
+    DowngradedCheckpoint,
+    /// We don't need to downgrade. Either we have LSMT on or we have successfully created a
+    /// first downgraded checkpoint and recomputed full Manifest.
+    NotNeeded,
+}
+
 pub(crate) fn spawn_tip_thread(
     log: ReplicaLogger,
     mut tip_handler: TipHandler,
@@ -164,6 +184,11 @@ pub(crate) fn spawn_tip_thread(
     // On top of tip state transitions, we enforce that each checkpoint gets manifest before we
     // create next one. Height(0) doesn't need manifest, so original state is true.
     let mut have_latest_manifest = true;
+    let mut downgrade_state = if lsmt_storage == FlagStatus::Enabled {
+        DowngradeState::NotNeeded
+    } else {
+        DowngradeState::Unknown
+    };
     let tip_handle = JoinOnDrop::new(
         std::thread::Builder::new()
             .name("TipThread".to_string())
@@ -219,6 +244,9 @@ pub(crate) fn spawn_tip_thread(
                                         }
                                     }
                                 }
+                            }
+                            if downgrade_state == DowngradeState::DowngradedTip {
+                                downgrade_state = DowngradeState::DowngradedCheckpoint;
                             }
                         }
 
@@ -321,9 +349,13 @@ pub(crate) fn spawn_tip_thread(
                                 fatal!(log, "Failed to serialize to tip @{}: {}", height, err);
                             });
                         }
-                        TipRequest::ResetTipTo { checkpoint_layout } => {
+                        TipRequest::ResetTipAndMerge {
+                            checkpoint_layout,
+                            pagemaptypes_with_num_pages,
+                        } => {
                             let _timer = request_timer(&metrics, "reset_tip_to");
-                            tip_state = TipState::ReadyForPageDeltas(checkpoint_layout.height());
+                            let height = checkpoint_layout.height();
+                            tip_state = TipState::ReadyForPageDeltas(height);
                             tip_handler
                                 .reset_tip_to(
                                     &state_layout,
@@ -335,10 +367,36 @@ pub(crate) fn spawn_tip_thread(
                                     fatal!(
                                         log,
                                         "Failed to reset tip to height @{}: {}",
-                                        checkpoint_layout.height(),
+                                        height,
                                         err
                                     );
                                 });
+                            match lsmt_storage {
+                                FlagStatus::Enabled => merge(
+                                    &mut tip_handler,
+                                    &pagemaptypes_with_num_pages,
+                                    height,
+                                    &mut thread_pool,
+                                    &log,
+                                    &metrics,
+                                ),
+                                FlagStatus::Disabled => {
+                                    if downgrade_state == DowngradeState::Unknown {
+                                        if merge_full(
+                                            &mut tip_handler,
+                                            &pagemaptypes_with_num_pages,
+                                            height,
+                                            &mut thread_pool,
+                                            &log,
+                                            &metrics,
+                                        ) {
+                                            downgrade_state = DowngradeState::DowngradedTip;
+                                        } else {
+                                            downgrade_state = DowngradeState::NotNeeded;
+                                        }
+                                    }
+                                }
+                            };
                         }
                         TipRequest::DefragTip {
                             height,
@@ -373,6 +431,13 @@ pub(crate) fn spawn_tip_thread(
                             persist_metadata_guard,
                         } => {
                             let _timer = request_timer(&metrics, "compute_manifest");
+                            // If we are downgrading, do a full manifest computation
+                            let manifest_delta =
+                                if downgrade_state == DowngradeState::DowngradedCheckpoint {
+                                    None
+                                } else {
+                                    manifest_delta
+                                };
                             handle_compute_manifest_request(
                                 &mut thread_pool,
                                 &metrics,
@@ -385,6 +450,9 @@ pub(crate) fn spawn_tip_thread(
                                 &malicious_flags,
                             );
                             have_latest_manifest = true;
+                            if downgrade_state == DowngradeState::DowngradedCheckpoint {
+                                downgrade_state = DowngradeState::NotNeeded;
+                            }
                         }
                         TipRequest::Noop => {}
                     }
@@ -393,6 +461,295 @@ pub(crate) fn spawn_tip_thread(
             .expect("failed to spawn tip thread"),
     );
     (tip_handle, tip_sender)
+}
+
+#[derive(Clone, Debug)]
+struct MergeCandidateAndMetrics {
+    // Merge candidate if any merge is applicable.
+    merge_candidate: Option<MergeCandidate>,
+
+    // Number of files for the page map currently (before merge).
+    num_files_before: usize,
+
+    // Storage size on disk currently (before merge) and an estimate of it for after the merge.
+    storage_size_bytes_before: usize,
+    storage_size_bytes_after: usize,
+
+    // Page map size in RAM.
+    page_map_size_bytes: usize,
+
+    // Estimate how much is necessary to flush to disk to apply the merge.
+    write_size_bytes: usize,
+}
+
+impl MergeCandidateAndMetrics {
+    fn new(
+        merge_candidate: Option<MergeCandidate>,
+        base_path: &Path,
+        existing_overlays: &[PathBuf],
+        page_map_num_pages: usize,
+    ) -> Result<Self, PersistenceError> {
+        let merge_all = merge_candidate
+            .as_ref()
+            .map_or(false, |m| m.is_full_merge());
+        let existing_base = if base_path.exists() {
+            Some(base_path.to_path_buf())
+        } else {
+            None
+        };
+        let existing_files = existing_base.iter().chain(existing_overlays.iter());
+        let existing_files_lengths: Vec<u64> = existing_files
+            .map(|f| std::fs::metadata(f).unwrap().len())
+            .collect();
+        let num_files_before = existing_files_lengths.len();
+
+        let page_map_size_bytes = page_map_num_pages * PAGE_SIZE;
+        let storage_size_bytes_before = existing_files_lengths.iter().sum::<u64>() as usize;
+        // If we do partial merges, in the worst case scenario all the overlays contain
+        // non-overlapping pages and we don't save space. We do these merges to maintain a pyramid
+        // shape of file sizes and to cap number of files.
+        let storage_size_bytes_after = if merge_all {
+            page_map_size_bytes
+        } else {
+            storage_size_bytes_before
+        };
+        let merge_input_bytes = match merge_candidate.as_ref() {
+            None => 0,
+            Some(m) => m.input_size_bytes()?,
+        };
+        let write_size_bytes = std::cmp::min(page_map_size_bytes, merge_input_bytes as usize);
+        Ok(MergeCandidateAndMetrics {
+            merge_candidate,
+            num_files_before,
+            storage_size_bytes_before,
+            storage_size_bytes_after,
+            page_map_size_bytes,
+            write_size_bytes,
+        })
+    }
+}
+
+/// Merge excessive overlays.
+///
+/// We want to achieve two metrics:
+///     1) Total overhead, that is total_size_on_disk / total_size_of_pages_in_pagemaps to be at
+///        most 2.5
+///     We don't cap overhead of an individual pagemap.
+///     2) Number of files in each pagemap to be not too high.
+/// Moreover, we don't want to throttle execution. For example, if we have exactly the same load
+/// pattern in many canisters, we don't want to merge all the data for all the canisters in the
+/// same checkpoint interval but rather to spread the load. The heaviest operation for the system
+/// is flushing data to disk, so we try to cap it.
+/// We need the merge to be deterministic, i.e. any two instances of the subnet must have exactly
+/// the same layout for all pagemaps.
+///
+///
+/// First, sort the vector of MergeCandidates by decreasing `num_files_before`. Schedule for
+/// merging the head of the sorted vector, which contains either all MergeCandidates with more than
+/// Storage::MAX_NUMBER_OF_FILES or top ones till accumulated write_size_bytes is more than one
+/// quarter of `sum(storage_size_bytes_before)`. This way we iterate through all page maps with more
+/// than MAX_NUMBER_OF_FILES at most in 4 checkpoint intervals. Since we produce at most 2 overlays
+/// per checkpoint per `PageMap`, we have a cap of `MAX_NUMBER_OF_FILES` + 2 * 4 files per `PageMap`
+/// at any checkpoint.
+///
+/// Then we need to take care of storage overhead. Storage overhead is the ratio
+/// `sum(storage_size_bytes_after)` / `sum(page_map_size_bytes)`. In other words, we need
+/// `sum(storage_size_bytes_after)` to become <= 2.5 * `sum(page_map_size_bytes)`.
+/// Note, that after applying merge any `PageMap` reaches overhead of at most 2.0. This is
+/// guaranteed by the `MergeCandidate::new` logic. So we need to schedule enough merge candidates
+/// till our overhead goal is met.
+/// We already have some merges scheduled that potentially reduce overhead. We calculate the
+/// storage size that is going to be after we apply them. If it's more than
+/// 2.5 * `sum(page_map_size_bytes)` we extend our list of scheduled merges starting with lowest
+/// hanging fruits, that is MergeCandidates with highest
+/// (`storage_size_bytes_before` - `storage_size_bytes_after`) / `write_size_bytes`.
+///
+/// Write size calculation.
+/// The merges for number of files are at most 1/4 of allowed state size.
+/// Merges for overhead have input with overhead >= 2.5 and output being == 1.0. Meaning by writing
+/// 1 MiB to disk during merge, we replace what used to be >= 2.5 MiB on disk with 1 MiB.
+/// In other words, 1 MiB of write during merge reduces storage by at least 1.5 MiB.
+/// Let's say last checkpoint was 100 GiB of state size with the max overhead, meaning storage size
+/// is 250 GiB. During the checkpoint interval we flushed 60 GiB of page delta, now the state size is
+/// 310 GiB and the overhead is 3.1. We need to reduce the storage by 60 GiB. We need to write at
+/// most 60 GiB / 1.5 = 40 GiB in order to achieve it, with some round off error for a canister
+/// size.
+/// For a more general estimate, the data written to disk during checkpoint interval is at most
+/// max_dirty_pages, meaning we need to write max_dirty_pages / 1.5 + one canister size to reduce
+/// the overhead under 2.5 again.
+/// The total write is at most 1/4 state size + 2/3 * max_dirty_pages + the size of the last
+/// `PageMap`. Note that if canisters are removed, upgraded, or otherwise delete data, this can
+/// further increase the amount of data written in order to enforce the storage overhead.
+fn merge(
+    tip_handler: &mut TipHandler,
+    pagemaptypes_with_num_pages: &Vec<(PageMapType, usize)>,
+    height: Height,
+    thread_pool: &mut scoped_threadpool::Pool,
+    log: &ReplicaLogger,
+    metrics: &StateManagerMetrics,
+) {
+    let merges_with_metrics = parallel_map(
+        thread_pool,
+        pagemaptypes_with_num_pages
+            .iter()
+            .map(|(page_map_type, num_pages)| {
+                (
+                    *num_pages,
+                    page_map_paths(tip_handler, height, page_map_type).unwrap_or_else(|err| {
+                        fatal!(log, "Failed to get page map paths: {}", err);
+                    }),
+                )
+            }),
+        |(
+            num_pages,
+            PageMapPaths {
+                base_file_path,
+                existing_overlays,
+                next_overlay_path,
+            },
+        )| {
+            let m = MergeCandidate::new(
+                base_file_path,
+                next_overlay_path,
+                base_file_path,
+                existing_overlays,
+            )
+            .unwrap_or_else(|err| {
+                fatal!(log, "Failed to get MergeCandidate: {}", err);
+            });
+            MergeCandidateAndMetrics::new(m, base_file_path, existing_overlays, *num_pages)
+                .unwrap_or_else(|err| {
+                    fatal!(log, "Failed to get metrics for MergeCandidate: {}", err);
+                })
+        },
+    );
+
+    let pm_size: usize = merges_with_metrics
+        .iter()
+        .map(|m| m.page_map_size_bytes)
+        .sum();
+    let storage_size: usize = merges_with_metrics
+        .iter()
+        .map(|m| m.storage_size_bytes_before)
+        .sum();
+    // Max 2.5 overhead
+    let max_storage = pm_size * 2 + pm_size / 2;
+
+    // Discard ones where no merge is applicable.
+    // These have number of files less or equal to Storage::MAX_NUMBER_OF_FILES and at most 2.0
+    // overhead.
+    let mut merges_with_metrics: Vec<MergeCandidateAndMetrics> = merges_with_metrics
+        .into_iter()
+        .filter(|m| m.merge_candidate.is_some())
+        .collect();
+
+    merges_with_metrics.sort_by_key(|m| -(m.num_files_before as i64));
+    let storage_to_merge_for_filenum = pm_size / 4;
+    let merges_by_filenum = merges_with_metrics
+        .iter()
+        .scan(0, |state, m| {
+            if *state >= storage_to_merge_for_filenum || m.num_files_before < MAX_NUMBER_OF_FILES {
+                None
+            } else {
+                *state += m.page_map_size_bytes;
+                Some(())
+            }
+        })
+        .count();
+
+    // [0; merges_by_filenum) are already scheduled, some of the rest may be necessary to achieve
+    // low enough overhead.
+    let mut scheduled_merges = merges_with_metrics;
+    let mut merges_with_metrics = scheduled_merges.split_off(merges_by_filenum);
+
+    // Sort by ratio of saved bytes to write size.
+    merges_with_metrics.sort_by_key(|m| {
+        if m.write_size_bytes != 0 {
+            // Fixed point to compute overhead ratio for sort.
+            -1000i64 * (m.storage_size_bytes_before as i64 - m.storage_size_bytes_after as i64)
+                / m.write_size_bytes as i64
+        } else {
+            0
+        }
+    });
+    let storage_to_save = if max_storage < storage_size {
+        storage_size - max_storage
+    } else {
+        0
+    };
+    // For a full merge the resulting base file can be larger than sum of the overlays,
+    // so we need a signed accumulator.
+    let mut storage_saved: i64 = scheduled_merges
+        .iter()
+        .map(|m| m.storage_size_bytes_before as i64 - m.storage_size_bytes_after as i64)
+        .sum();
+    for m in merges_with_metrics.into_iter() {
+        if storage_saved >= storage_to_save as i64 {
+            break;
+        }
+
+        storage_saved += m.storage_size_bytes_before as i64 - m.storage_size_bytes_after as i64;
+        // Only full merges reduce overhead, and there should be enough of them to reach
+        // `storage_to_save` before tapping into partial merges.
+        debug_assert!(m.merge_candidate.as_ref().unwrap().is_full_merge());
+        scheduled_merges.push(m);
+    }
+    info!(
+        log,
+        "Merging {} files out of {}; pm_size: {}; storage_size: {}; max_storage: {}, storage_saves: {}, merges_by_filenum: {}",
+        scheduled_merges.len(),
+        pagemaptypes_with_num_pages.len(),
+        pm_size,
+        storage_size,
+        max_storage,
+        storage_saved,
+        merges_by_filenum,
+    );
+
+    parallel_map(thread_pool, scheduled_merges.iter(), |m| {
+        m.merge_candidate
+            .as_ref()
+            .unwrap()
+            .apply(&metrics.storage_metrics)
+    });
+}
+
+/// Merge all the overlays (if any) into bases.
+/// Return true if any merge was done.
+fn merge_full(
+    tip_handler: &mut TipHandler,
+    pagemaptypes_with_num_pages: &[(PageMapType, usize)],
+    height: Height,
+    thread_pool: &mut scoped_threadpool::Pool,
+    log: &ReplicaLogger,
+    metrics: &StateManagerMetrics,
+) -> bool {
+    let rewritten = parallel_map(
+        thread_pool,
+        pagemaptypes_with_num_pages
+            .iter()
+            .map(|(page_map_type, _)| {
+                page_map_paths(tip_handler, height, page_map_type).unwrap_or_else(|err| {
+                    fatal!(log, "Failed to merge page map: {}", err);
+                })
+            }),
+        |PageMapPaths {
+             base_file_path,
+             existing_overlays,
+             next_overlay_path: _,
+         }| {
+            let merge_candidate =
+                MergeCandidate::full_merge(base_file_path, base_file_path, existing_overlays);
+            if let Some(m) = merge_candidate.as_ref() {
+                m.apply(&metrics.storage_metrics).unwrap_or_else(|err| {
+                    fatal!(log, "Failed to apply MergeCandidate for downgrade: {}", err);
+                });
+            }
+            merge_candidate.is_some()
+        },
+    );
+
+    return rewritten.iter().any(|b| *b);
 }
 
 fn serialize_to_tip(
@@ -744,7 +1101,7 @@ fn handle_compute_manifest_request(
         log,
         state_sync_version,
         checkpoint_layout,
-        crate::manifest::DEFAULT_CHUNK_SIZE,
+        crate::state_sync::types::DEFAULT_CHUNK_SIZE,
         manifest_delta,
     )
     .unwrap_or_else(|err| {

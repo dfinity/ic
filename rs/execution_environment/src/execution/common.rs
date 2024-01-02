@@ -360,8 +360,8 @@ pub fn get_call_context_and_callback(
 
     let callback_id = response.originator_reply_callback;
 
-    debug_assert!(call_context_manager.peek_callback(callback_id).is_some());
-    let callback = match call_context_manager.peek_callback(callback_id) {
+    debug_assert!(call_context_manager.callback(callback_id).is_some());
+    let callback = match call_context_manager.callback(callback_id) {
         Some(callback) => callback.clone(),
         None => {
             // Received an unknown callback ID. Nothing to do.

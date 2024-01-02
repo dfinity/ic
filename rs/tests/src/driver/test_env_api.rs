@@ -384,7 +384,7 @@ impl TopologySnapshot {
         Box::new(
             self.local_registry
                 .get_subnet_ids(registry_version)
-                .unwrap_result()
+                .unwrap_result(registry_version, "subnet_ids")
                 .into_iter()
                 .map(|subnet_id| SubnetSnapshot {
                     subnet_id,
@@ -411,12 +411,15 @@ impl TopologySnapshot {
         let assigned_nodes: HashSet<_> = self
             .local_registry
             .get_subnet_ids(registry_version)
-            .unwrap_result()
+            .unwrap_result(registry_version, "subnet_ids")
             .into_iter()
             .flat_map(|subnet_id| {
                 self.local_registry
                     .get_node_ids_on_subnet(subnet_id, registry_version)
-                    .unwrap_result()
+                    .unwrap_result(
+                        registry_version,
+                        &format!("node_ids_on_subnet(subnet_id={})", subnet_id),
+                    )
             })
             .collect();
 
@@ -605,7 +608,10 @@ impl SubnetSnapshot {
     pub fn raw_subnet_record(&self) -> pb_subnet::SubnetRecord {
         self.local_registry
             .get_subnet_record(self.subnet_id, self.registry_version)
-            .unwrap_result()
+            .unwrap_result(
+                self.registry_version,
+                &format!("subnet_record(subnet_id={})", self.subnet_id),
+            )
     }
 }
 
@@ -642,7 +648,10 @@ impl IcNodeSnapshot {
     fn raw_node_record(&self) -> pb_node::NodeRecord {
         self.local_registry
             .get_node_record(self.node_id, self.registry_version)
-            .unwrap_result()
+            .unwrap_result(
+                self.registry_version,
+                &format!("node_record(node_id={})", self.node_id),
+            )
     }
 
     fn http_endpoint_to_url(http: &pb_node::ConnectionEndpoint) -> Url {
@@ -686,12 +695,15 @@ impl IcNodeSnapshot {
         let registry_version = self.registry_version;
         self.local_registry
             .get_subnet_ids(registry_version)
-            .unwrap_result()
+            .unwrap_result(registry_version, "subnet_ids")
             .into_iter()
             .find(|subnet_id| {
                 self.local_registry
                     .get_node_ids_on_subnet(*subnet_id, registry_version)
-                    .unwrap_result()
+                    .unwrap_result(
+                        registry_version,
+                        &format!("node_ids_on_subnet(subnet_id={})", subnet_id),
+                    )
                     .contains(&self.node_id)
             })
     }
@@ -899,7 +911,7 @@ fn get_root_subnet_id_from_snapshot<T: HasTopologySnapshot>(env: &T) -> SubnetId
     let ts = env.topology_snapshot();
     ts.local_registry
         .get_root_subnet_id(ts.registry_version)
-        .unwrap_result()
+        .unwrap_result(ts.registry_version, "root_subnet_id")
 }
 pub trait HasRegistryLocalStore {
     fn registry_local_store_path(&self, name: &str) -> Option<PathBuf>;
@@ -1807,7 +1819,10 @@ impl IcNodeContainer for SubnetSnapshot {
         let node_ids = self
             .local_registry
             .get_node_ids_on_subnet(self.subnet_id, registry_version)
-            .unwrap_result();
+            .unwrap_result(
+                registry_version,
+                &format!("node_ids_on_subnet(subnet_id={})", self.subnet_id),
+            );
 
         Box::new(
             node_ids
@@ -1999,14 +2014,23 @@ pub fn secs(sec: u64) -> Duration {
 }
 
 impl<T> RegistryResultHelper<T> for RegistryClientResult<T> {
-    fn unwrap_result(self) -> T {
-        self.expect("registry error!")
-            .expect("registry value not present")
+    fn unwrap_result(self, registry_version: RegistryVersion, key_name: &str) -> T {
+        match self {
+            Ok(value) => value.unwrap_or_else(|| {
+                panic!(
+                    "registry (v.{}) does not have value for key `{}`",
+                    registry_version, key_name
+                )
+            }),
+            Err(err) => {
+                panic!("registry (v.{}) error: {}", registry_version, err)
+            }
+        }
     }
 }
 
 trait RegistryResultHelper<T> {
-    fn unwrap_result(self) -> T;
+    fn unwrap_result(self, registry_version: RegistryVersion, key_name: &str) -> T;
 }
 
 /// How many ICP should TEST_USER1 have after ICP ledger initialization.

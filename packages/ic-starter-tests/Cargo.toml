@@ -11,4 +11,4 @@ anyhow = "1.0.58"
 ic-agent = { workspace = true }
 reqwest = { workspace = true }
 tempfile = "3.3.0"
-tokio = "1.20.1"
+tokio = { workspace = true }

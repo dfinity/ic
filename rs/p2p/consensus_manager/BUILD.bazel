@@ -7,16 +7,14 @@ package(default_visibility = [
 
 DEPENDENCIES = [
     "//rs/async_utils",
-    "//rs/artifact_pool",
     "//rs/interfaces",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/phantom_newtype",
     "//rs/protobuf",
-    "//rs/p2p/peer_manager",
     "//rs/p2p/quic_transport",
     "//rs/types/types",
-    "@crate_index//:axum",
+    "@crate_index//:axum_0_7_0",
     "@crate_index//:backoff",
     "@crate_index//:bytes",
     "@crate_index//:crossbeam-channel",

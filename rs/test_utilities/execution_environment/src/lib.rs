@@ -455,7 +455,7 @@ impl ExecutionTest {
                     .call_context_manager()
                     .unwrap();
                 let callback = call_context_manager
-                    .callback(&callback_id)
+                    .callback(callback_id)
                     .expect("Unknown callback id.");
                 call_context_manager
                     .call_context(callback.call_context_id)
@@ -1897,6 +1897,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_snapshots(mut self, status: FlagStatus) -> Self {
+        self.execution_config.canister_snapshots = status;
+        self
+    }
+
     pub fn with_time(mut self, time: Time) -> Self {
         self.time = time;
         self
@@ -2157,7 +2162,7 @@ pub fn check_ingress_status(ingress_status: IngressStatus) -> Result<WasmResult,
     }
 }
 
-fn get_output_messages(state: &mut ReplicatedState) -> Vec<(CanisterId, RequestOrResponse)> {
+pub fn get_output_messages(state: &mut ReplicatedState) -> Vec<(CanisterId, RequestOrResponse)> {
     let mut output: Vec<(CanisterId, RequestOrResponse)> = vec![];
     let output_iter = state.output_into_iter();
 
