@@ -21,7 +21,7 @@ use std::convert::TryFrom;
 /// [`CatchUpContent`] contains all necessary data to bootstrap a subnet's participant.
 pub type CatchUpContent = CatchUpContentT<HashedBlock>;
 
-/// A generic struct shared between [`CatchUpContent`] and [`CatchUpContentShare`].
+/// A generic struct shared between [`CatchUpContent`] and [`CatchUpShareContent`].
 /// Consists of objects all occurring at a specific height which we will refer to
 /// as the catch up height.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord, Hash)]
@@ -35,6 +35,9 @@ pub struct CatchUpContentT<T> {
     /// Hash of the subnet execution state that has been fully computed at the
     /// catchup height.
     pub state_hash: CryptoHashOfState,
+    /// The oldest registry version that is still referenced by
+    /// structures in replicated state.
+    pub oldest_registry_version_in_use_by_replicated_state: Option<RegistryVersion>,
 }
 
 impl CatchUpContent {
@@ -43,12 +46,14 @@ impl CatchUpContent {
         block: HashedBlock,
         random_beacon: HashedRandomBeacon,
         state_hash: CryptoHashOfState,
+        oldest_registry_version_in_use_by_replicated_state: Option<RegistryVersion>,
     ) -> Self {
         Self {
             version: block.version().clone(),
             block,
             random_beacon,
             state_hash,
+            oldest_registry_version_in_use_by_replicated_state,
         }
     }
 
@@ -64,7 +69,7 @@ impl CatchUpContent {
             .registry_version
     }
 
-    /// Creates a [`CatchupContent`] from a [`CatchUpShareContent`].
+    /// Creates a [`CatchUpContent`] from a [`CatchUpShareContent`].
     pub fn from_share_content(share: CatchUpShareContent, block: Block) -> Self {
         Self {
             version: share.version,
@@ -74,6 +79,8 @@ impl CatchUpContent {
             },
             random_beacon: share.random_beacon,
             state_hash: share.state_hash,
+            oldest_registry_version_in_use_by_replicated_state: share
+                .oldest_registry_version_in_use_by_replicated_state,
         }
     }
 }
@@ -86,6 +93,9 @@ impl From<&CatchUpContent> for pb::CatchUpContent {
             block_hash: content.block.get_hash().clone().get().0,
             random_beacon_hash: content.random_beacon.get_hash().clone().get().0,
             state_hash: content.state_hash.clone().get().0,
+            oldest_registry_version_in_use_by_replicated_state: content
+                .oldest_registry_version_in_use_by_replicated_state
+                .map(|v| v.get()),
         }
     }
 }
@@ -113,6 +123,9 @@ impl TryFrom<pb::CatchUpContent> for CatchUpContent {
                 value: random_beacon,
             },
             CryptoHashOf::from(CryptoHash(content.state_hash)),
+            content
+                .oldest_registry_version_in_use_by_replicated_state
+                .map(RegistryVersion::from),
         ))
     }
 }
@@ -151,6 +164,30 @@ impl CatchUpPackage {
     /// This is `false` for Genesis and recovery CUPs.
     pub fn is_signed(&self) -> bool {
         !self.signature.signature.as_ref().0.is_empty()
+    }
+
+    /// Return the oldest registry version that is still referenced by
+    /// parts of the summary block, or structures in replicated state.
+    ///
+    /// P2P should keep up connections to all nodes registered in any registry
+    /// between the one returned from this function and the current
+    /// `RegistryVersion`.
+    pub fn get_oldest_registry_version_in_use(&self) -> RegistryVersion {
+        let summary_version = self
+            .content
+            .block
+            .get_value()
+            .payload
+            .as_ref()
+            .as_summary()
+            .get_oldest_registry_version_in_use();
+        let Some(cup_version) = self
+            .content
+            .oldest_registry_version_in_use_by_replicated_state
+        else {
+            return summary_version;
+        };
+        cup_version.min(summary_version)
     }
 }
 
@@ -206,6 +243,8 @@ impl From<&CatchUpContent> for CatchUpShareContent {
             block: content.block.get_hash().clone(),
             random_beacon: content.random_beacon.clone(),
             state_hash: content.state_hash.clone(),
+            oldest_registry_version_in_use_by_replicated_state: content
+                .oldest_registry_version_in_use_by_replicated_state,
         }
     }
 }
@@ -223,6 +262,10 @@ impl From<&CatchUpPackageShare> for pb::CatchUpPackageShare {
             random_beacon_hash: cup_share.content.random_beacon.hash.clone().get().0,
             signature: cup_share.signature.signature.clone().get().0,
             signer: Some(node_id_into_protobuf(cup_share.signature.signer)),
+            oldest_registry_version_in_use_by_replicated_state: cup_share
+                .content
+                .oldest_registry_version_in_use_by_replicated_state
+                .map(|v| v.get()),
         }
     }
 }
@@ -242,6 +285,9 @@ impl TryFrom<pb::CatchUpPackageShare> for CatchUpPackageShare {
                     )?,
                 ),
                 state_hash: CryptoHashOf::from(CryptoHash(cup_share.state_hash)),
+                oldest_registry_version_in_use_by_replicated_state: cup_share
+                    .oldest_registry_version_in_use_by_replicated_state
+                    .map(RegistryVersion::from),
             },
             signature: ThresholdSignatureShare {
                 signature: ThresholdSigShareOf::new(ThresholdSigShare(cup_share.signature)),

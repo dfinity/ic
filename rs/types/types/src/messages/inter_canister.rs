@@ -143,7 +143,11 @@ impl Request {
                 Ok(record) => Some(record.get_canister_id()),
                 Err(_) => None,
             },
-            Ok(Method::DeleteChunks) => None,
+            Ok(Method::DeleteChunks)
+            | Ok(Method::TakeCanisterSnapshot)
+            | Ok(Method::LoadCanisterSnapshot)
+            | Ok(Method::ListCanisterSnapshots)
+            | Ok(Method::DeleteCanisterSnapshot) => None,
             Ok(Method::CreateCanister)
             | Ok(Method::SetupInitialDKG)
             | Ok(Method::HttpRequest)

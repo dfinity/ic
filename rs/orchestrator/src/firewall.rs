@@ -163,15 +163,7 @@ impl Firewall {
             .catchup_package_provider
             .get_local_cup()
             .map(|latest_cup| {
-                let summary = &latest_cup
-                    .content
-                    .block
-                    .get_value()
-                    .payload
-                    .as_ref()
-                    .as_summary();
-
-                let cup_registry_version = summary.get_oldest_registry_version_in_use();
+                let cup_registry_version = latest_cup.get_oldest_registry_version_in_use();
 
                 // Iterate:
                 // - from   min(cup_registry_version, registry_version)

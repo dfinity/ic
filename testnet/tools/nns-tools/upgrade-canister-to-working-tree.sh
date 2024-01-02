@@ -39,12 +39,7 @@ if [ ! -z "$CANDID_ARGS" ]; then
 fi
 
 if [ "$CANISTER_NAME" == "cycles-minting" ]; then
-    ensure_variable_set XRC_MOCK_CANISTER || (
-        print_red "XRC_MOCK_CANISTER must be set as env variable for CMC upgrade"
-        help
-    )
-    point_cycles_minting_canister_to_mock_exchange_rate_canister \
-        "$XRC_MOCK_CANISTER" "$NNS_URL" "$NEURON_ID" "$PEM"
+    export SKIP_STOPPING=yes
 fi
 
 build_canister_and_propose_upgrade_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_NAME" "$ENCODED_ARGS_FILE"

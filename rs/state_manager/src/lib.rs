@@ -12,7 +12,10 @@ pub mod tree_hash;
 
 use crate::{
     manifest::compute_bundled_manifest,
-    state_sync::chunkable::cache::StateSyncCache,
+    state_sync::{
+        chunkable::cache::StateSyncCache,
+        types::{FileGroupChunks, Manifest, MetaManifest},
+    },
     tip::{spawn_tip_thread, PageMapToFlush, TipRequest},
 };
 use crossbeam_channel::{unbounded, Sender};
@@ -49,7 +52,7 @@ use ic_types::{
     consensus::certification::Certification,
     crypto::CryptoHash,
     malicious_flags::MaliciousFlags,
-    state_sync::{FileGroupChunks, Manifest, MetaManifest, CURRENT_STATE_SYNC_VERSION},
+    state_sync::CURRENT_STATE_SYNC_VERSION,
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
     CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
 };
@@ -859,9 +862,22 @@ fn initialize_tip(
     info!(log, "Recovering checkpoint @{} as tip", snapshot.height);
 
     tip_channel
-        .send(TipRequest::ResetTipTo { checkpoint_layout })
+        .send(TipRequest::ResetTipAndMerge {
+            checkpoint_layout,
+            pagemaptypes_with_num_pages: pagemaptypes_with_num_pages(&snapshot.state),
+        })
         .unwrap();
     ReplicatedState::clone(&snapshot.state)
+}
+
+fn pagemaptypes_with_num_pages(state: &ReplicatedState) -> Vec<(PageMapType, usize)> {
+    let mut result = Vec::new();
+    for entry in PageMapType::list_all(state) {
+        if let Some(page_map) = entry.get(state) {
+            result.push((entry, page_map.num_host_pages()));
+        }
+    }
+    result
 }
 
 /// Return duration since path creation (or modification, if no creation)
@@ -2439,10 +2455,11 @@ impl StateManagerImpl {
                 .start_timer();
             let checkpoint_layout = self.state_layout.checkpoint(height).unwrap();
             // With lsmt, we do not need the defrag.
-            // Without lsmt, the ResetTipTo happens earlier in make_checkpoint.
+            // Without lsmt, the ResetTipAndMerge happens earlier in make_checkpoint.
             let tip_requests = if self.lsmt_storage == FlagStatus::Enabled {
-                vec![TipRequest::ResetTipTo {
+                vec![TipRequest::ResetTipAndMerge {
                     checkpoint_layout: checkpoint_layout.clone(),
+                    pagemaptypes_with_num_pages: pagemaptypes_with_num_pages(state),
                 }]
             } else {
                 vec![TipRequest::DefragTip {
@@ -2455,7 +2472,7 @@ impl StateManagerImpl {
                 tip_requests,
                 checkpointed_state,
                 state_metadata: StateMetadata {
-                    checkpoint_layout: Some(self.state_layout.checkpoint(height).unwrap()),
+                    checkpoint_layout: Some(checkpoint_layout),
                     bundled_manifest: None,
                     state_sync_file_group: None,
                 },

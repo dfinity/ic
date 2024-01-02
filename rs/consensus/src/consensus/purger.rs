@@ -21,7 +21,7 @@
 use crate::consensus::metrics::PurgerMetrics;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::{
-    consensus_pool::{ChangeAction, ChangeSet, HeightRange},
+    consensus_pool::{ChangeAction, ChangeSet, HeightRange, PurgeableArtifactType},
     messaging::MessageRouting,
 };
 use ic_interfaces_state_manager::StateManager;
@@ -248,7 +248,14 @@ impl Purger {
         changeset: &mut ChangeSet,
     ) -> bool {
         if let Some(height) = self.update_finalized_height(pool_reader) {
-            changeset.push(ChangeAction::PurgeValidatedSharesBelow(height));
+            changeset.push(ChangeAction::PurgeValidatedOfGivenTypeBelow(
+                PurgeableArtifactType::NotarizationShare,
+                height,
+            ));
+            changeset.push(ChangeAction::PurgeValidatedOfGivenTypeBelow(
+                PurgeableArtifactType::FinalizationShare,
+                height,
+            ));
             trace!(self.log, "Purge validated shares below {height:?}");
             true
         } else {
@@ -408,7 +415,12 @@ mod tests {
                     ChangeAction::PurgeUnvalidatedBelow(
                         expected_batch_height.read().unwrap().decrement()
                     ),
-                    ChangeAction::PurgeValidatedSharesBelow(
+                    ChangeAction::PurgeValidatedOfGivenTypeBelow(
+                        PurgeableArtifactType::NotarizationShare,
+                        expected_batch_height.read().unwrap().decrement()
+                    ),
+                    ChangeAction::PurgeValidatedOfGivenTypeBelow(
+                        PurgeableArtifactType::FinalizationShare,
                         expected_batch_height.read().unwrap().decrement()
                     )
                 ]
@@ -440,7 +452,14 @@ mod tests {
                         expected_batch_height.read().unwrap().decrement()
                     ),
                     ChangeAction::PurgeValidatedBelow(get_purge_height(&pool_reader).unwrap()),
-                    ChangeAction::PurgeValidatedSharesBelow(pool_reader.get_finalized_height()),
+                    ChangeAction::PurgeValidatedOfGivenTypeBelow(
+                        PurgeableArtifactType::NotarizationShare,
+                        pool_reader.get_finalized_height()
+                    ),
+                    ChangeAction::PurgeValidatedOfGivenTypeBelow(
+                        PurgeableArtifactType::FinalizationShare,
+                        pool_reader.get_finalized_height()
+                    ),
                 ]
             );
 

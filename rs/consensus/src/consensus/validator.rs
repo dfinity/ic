@@ -1727,6 +1727,7 @@ pub mod test {
                         block_hash,
                         random_beacon_hash,
                         state_hash.clone(),
+                        Some(RegistryVersion::from(1234)),
                     )),
                     signature: ThresholdSignatureShare::fake(node_test_id(0)),
                 }

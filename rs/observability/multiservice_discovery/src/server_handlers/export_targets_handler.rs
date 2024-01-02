@@ -10,7 +10,7 @@ use warp::reply::Reply;
 use crate::definition::Definition;
 
 use super::WebResult;
-use multiservice_discovery_shared::contracts::{map_to_target_dto, TargetDto};
+use multiservice_discovery_shared::contracts::target::{map_to_target_dto, TargetDto};
 use tokio::sync::Mutex;
 
 pub struct ExportTargetsBinding {

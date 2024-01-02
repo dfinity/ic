@@ -31,7 +31,7 @@ fn test_round_trip() {
 
         assert_eq!(
             serde_yaml::to_string(&t).unwrap(),
-            format!("---\namount: {}\n", expected_formatted_str),
+            format!("amount: {}\n", expected_formatted_str),
             "original_amount_str = {:?}",
             original_amount_str,
         );

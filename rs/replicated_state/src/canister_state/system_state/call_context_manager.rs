@@ -40,10 +40,8 @@ pub struct CallContext {
     /// Cycles that were sent in the request that created the `CallContext`.
     available_cycles: Cycles,
 
-    /// Point in time at which the `CallContext` was created. This field is only
-    /// optional to accommodate contexts that were created before this field was
-    /// added.
-    time: Option<Time>,
+    /// Point in time at which the `CallContext` was created.
+    time: Time,
 
     /// The total number of instructions executed in the given call context.
     /// This value is used for the `ic0.performance_counter` type 1.
@@ -63,7 +61,7 @@ impl CallContext {
             responded,
             deleted,
             available_cycles,
-            time: Some(time),
+            time,
             instructions_executed: NumInstructions::default(),
         }
     }
@@ -113,7 +111,7 @@ impl CallContext {
     }
 
     /// The point in time at which the call context was created.
-    pub fn time(&self) -> Option<Time> {
+    pub fn time(&self) -> Time {
         self.time
     }
 
@@ -132,7 +130,7 @@ impl From<&CallContext> for pb::CallContext {
             responded: item.responded,
             deleted: item.deleted,
             available_funds: Some((&funds).into()),
-            time_nanos: item.time.map(|t| t.as_nanos_since_unix_epoch()),
+            time_nanos: item.time.as_nanos_since_unix_epoch(),
             instructions_executed: item.instructions_executed.get(),
         }
     }
@@ -149,7 +147,7 @@ impl TryFrom<pb::CallContext> for CallContext {
             responded: value.responded,
             deleted: value.deleted,
             available_cycles: funds.cycles(),
-            time: value.time_nanos.map(Time::from_nanos_since_unix_epoch),
+            time: Time::from_nanos_since_unix_epoch(value.time_nanos),
             instructions_executed: value.instructions_executed.into(),
         })
     }
@@ -335,7 +333,7 @@ impl CallContextManager {
                 responded: false,
                 deleted: false,
                 available_cycles: cycles,
-                time: Some(time),
+                time,
                 instructions_executed: NumInstructions::default(),
             },
         );
@@ -368,8 +366,8 @@ impl CallContextManager {
     }
 
     /// Returns a reference to the callback with `callback_id`.
-    pub fn callback(&self, callback_id: &CallbackId) -> Option<&Callback> {
-        self.callbacks.get(callback_id)
+    pub fn callback(&self, callback_id: CallbackId) -> Option<&Callback> {
+        self.callbacks.get(&callback_id)
     }
 
     /// Validates the given response before inducting it into the queue.
@@ -379,7 +377,7 @@ impl CallContextManager {
     /// Returns a `StateError::NonMatchingResponse` if the `callback_id` was not found
     /// or if the response is not valid.
     pub(crate) fn validate_response(&self, response: &Response) -> Result<(), StateError> {
-        match self.callback(&response.originator_reply_callback) {
+        match self.callback(response.originator_reply_callback) {
             Some(callback) => {
                 // (EXC-877) Once this is deployed in production,
                 // it's safe to make `respondent` and `originator` non-optional.
@@ -529,11 +527,6 @@ impl CallContextManager {
         callback_id
     }
 
-    /// Returns a copy of the callback for the given `callback_id`.
-    pub fn peek_callback(&self, callback_id: CallbackId) -> Option<&Callback> {
-        self.callbacks.get(&callback_id)
-    }
-
     /// If we get a response for one of the outstanding calls, we unregister
     /// the callback and return it.
     pub fn unregister_callback(&mut self, callback_id: CallbackId) -> Option<Callback> {
@@ -581,15 +574,10 @@ impl CallContextManager {
         // context that isn't old enough.
         self.call_contexts
             .iter()
-            .take_while(|(_, call_context)| match call_context.time() {
-                Some(context_time) => context_time + age <= current_time,
-                None => true,
-            })
+            .take_while(|(_, call_context)| call_context.time() + age <= current_time)
             .filter_map(|(_, call_context)| {
-                if let Some(time) = call_context.time() {
-                    if !call_context.is_deleted() {
-                        return Some((call_context.call_origin(), time));
-                    }
+                if !call_context.is_deleted() {
+                    return Some((call_context.call_origin(), call_context.time()));
                 }
                 None
             })

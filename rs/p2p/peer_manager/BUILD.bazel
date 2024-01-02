@@ -7,6 +7,7 @@ package(default_visibility = [
 
 DEPENDENCIES = [
     "//rs/interfaces",
+    "//rs/p2p/quic_transport",
     "//rs/interfaces/registry",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",

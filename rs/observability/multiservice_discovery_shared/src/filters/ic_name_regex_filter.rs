@@ -1,4 +1,4 @@
-use crate::{contracts::TargetDto, filters::TargetGroupFilter};
+use crate::{contracts::DataContract, filters::TargetGroupFilter};
 use regex::Regex;
 
 #[derive(Debug, Clone)]
@@ -16,7 +16,7 @@ impl IcNameRegexFilter {
 }
 
 impl TargetGroupFilter for IcNameRegexFilter {
-    fn filter(&self, target_group: &TargetDto) -> bool {
-        self.regex.is_match(&target_group.ic_name.to_string())
+    fn filter(&self, target_group: &dyn DataContract) -> bool {
+        self.regex.is_match(&target_group.get_name())
     }
 }
