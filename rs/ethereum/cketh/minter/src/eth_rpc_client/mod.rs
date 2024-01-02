@@ -31,14 +31,13 @@ mod tests;
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 pub trait RpcTransport: Debug {
-    fn get_subnet_size() -> u32;
-
     fn resolve_api(provider: &RpcService) -> Result<RpcApi, ProviderError>;
 
     async fn http_request(
         provider: &RpcService,
+        method: &str,
         request: CanisterHttpRequestArgument,
-        cycles: u128,
+        effective_size_estimate: u64,
     ) -> Result<HttpResponse, RpcError>;
 }
 
@@ -49,18 +48,15 @@ pub struct DefaultTransport;
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 impl RpcTransport for DefaultTransport {
-    fn get_subnet_size() -> u32 {
-        unimplemented!()
-    }
-
     fn resolve_api(_provider: &RpcService) -> Result<RpcApi, ProviderError> {
         unimplemented!()
     }
 
     async fn http_request(
         _provider: &RpcService,
+        _method: &str,
         _request: CanisterHttpRequestArgument,
-        _cycles: u128,
+        _effective_size_estimate: u64,
     ) -> Result<HttpResponse, RpcError> {
         unimplemented!()
     }

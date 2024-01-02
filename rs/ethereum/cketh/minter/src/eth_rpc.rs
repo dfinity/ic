@@ -833,15 +833,7 @@ where
             )),
         };
 
-        // Details of the values used in the following lines can be found here:
-        // https://internetcomputer.org/docs/current/developer-docs/production/computation-and-storage-costs
-        let base_cycles = 400_000_000u128 + 100_000u128 * (2 * effective_size_estimate as u128);
-
-        const BASE_SUBNET_SIZE: u128 = 13;
-        let subnet_size = T::get_subnet_size() as u128;
-        let cycles = base_cycles * subnet_size / BASE_SUBNET_SIZE;
-
-        let response = match T::http_request(provider, request, cycles).await {
+        let response = match T::http_request(provider, &eth_method, request, effective_size_estimate).await {
             Err(RpcError::HttpOutcallError(HttpOutcallError::IcError { code, message }))
                 if is_response_too_large(&code, &message) =>
             {
