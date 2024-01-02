@@ -16,7 +16,6 @@ from tempfile import mkdtemp
 from typing import Any, List, Optional
 
 import fabric
-import icmplib
 import invoke
 import requests
 import tqdm
@@ -201,12 +200,12 @@ def get_url_content(url: str, timeout_secs: int = 1) -> Optional[str]:
 
 
 def check_guestos_ping_connectivity(ip_address: IPv6Address, timeout_secs: int) -> bool:
-    # Ping target with count of 1, STRICT timeout of `timeout_secs`. 
+    # Ping target with count of 1, STRICT timeout of `timeout_secs`.
     # This will break if latency is > `timeout_secs`.
     result = invoke.run(f"ping6 -c1 -w{timeout_secs} {ip_address}", warn=True, hide=True)
     if not result or not result.ok:
         return False
-    
+
     log.info("Ping success.")
     return True
 
