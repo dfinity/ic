@@ -3,9 +3,9 @@
 # Build a container image and extract the single flattened filesystem into a tar file.
 from __future__ import annotations
 
+import os
 import pathlib
 import sys
-import os
 import time
 import uuid
 from typing import Callable, List, TypeVar

@@ -159,8 +159,8 @@ fi
 # Create dynamic subuid/subgid files for the user to run nested containers
 SUBUID_FILE=$(mktemp)
 SUBGID_FILE=$(mktemp)
-echo "$(id -u):100000:65536" > $SUBUID_FILE
-echo "$(id -u):100000:65536" > $SUBGID_FILE
+echo "$(id -u):100000:65536" >$SUBUID_FILE
+echo "$(id -u):100000:65536" >$SUBGID_FILE
 PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${SUBUID_FILE}",target="/etc/subuid"
     --mount type=bind,source="${SUBGID_FILE}",target="/etc/subgid"
