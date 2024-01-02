@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import pathlib
 import sys
+import os
 import time
 import uuid
 from typing import Callable, List, TypeVar
@@ -66,10 +67,7 @@ def build_container(build_args: List[str],
     cmd += f"{context_dir}"
     print(cmd)
     def build_func():
-        # NOTE: /usr/bin/nsenter is required to be on $PATH for this version of
-        # podman (no longer in latest version). bazel strips this out - add it
-        # back manually, for now.
-        invoke.run(cmd, env={'PATH':'/usr/bin'})   # Throws on failure
+        invoke.run(cmd)   # Throws on failure
     retry(build_func)
     return image_tag
 
@@ -80,17 +78,14 @@ def export_container_filesystem(image_tag: str,
     Creates container - but does not start it, avoiding timestamp and other determinism issues.
     """
     container_name = image_tag + "_container"
-    # NOTE: /usr/bin/nsenter is required to be on $PATH for this version of
-    # podman (no longer in latest version). bazel strips this out - add it back
-    # manually, for now.
-    invoke.run(f"{CONTAINER_COMMAND} create --name {container_name} {image_tag}", env={'PATH':'/usr/bin'})
-    invoke.run(f"{CONTAINER_COMMAND} export -o {destination_tar_filename} {container_name}", env={'PATH':'/usr/bin'})
+    invoke.run(f"{CONTAINER_COMMAND} create --name {container_name} {image_tag}")
+    invoke.run(f"{CONTAINER_COMMAND} export -o {destination_tar_filename} {container_name}")
     invoke.run("sync")
-    invoke.run(f"{CONTAINER_COMMAND} container rm {container_name}", env={'PATH':'/usr/bin'})
+    invoke.run(f"{CONTAINER_COMMAND} container rm {container_name}")
 
 
 def remove_image(image_tag: str):
-    invoke.run(f"{CONTAINER_COMMAND} image rm -f {image_tag}", env={'PATH':'/usr/bin'})
+    invoke.run(f"{CONTAINER_COMMAND} image rm -f {image_tag}")
 
 
 def resolve_file_args(context_dir: str, file_build_args: List[str]) -> List[str]:
@@ -175,6 +170,11 @@ def main():
 
     destination_tar_filename = args.output
     build_args = list(args.build_args or [])
+
+    # NOTE: /usr/bin/nsenter is required to be on $PATH for this version of
+    # podman (no longer in latest version). bazel strips this out - add it back
+    # manually, for now.
+    os.environ["PATH"] = ":".join([x for x in [os.environ.get("PATH"), "/usr/bin"] if x is not None])
 
     image_tag = str(uuid.uuid4()).split('-')[0]
     context_dir = args.context_dir
