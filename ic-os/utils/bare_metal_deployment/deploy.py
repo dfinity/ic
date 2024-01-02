@@ -498,7 +498,7 @@ def main():
     print(sys.argv)
     args: Args = parse(Args, add_config_path_arg=True) # Parse from config file too
 
-    DISABLE_PROGRESS_BAR = args.ci_mode
+    DISABLE_PROGRESS_BAR = args.ci_mode # noqa - ruff format wants to erroneously delete this
 
     network_image_url: str = (
         f"{args.file_share_url}:{args.file_share_dir}/{args.file_share_image_filename}"
