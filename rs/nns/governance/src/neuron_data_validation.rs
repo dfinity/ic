@@ -1018,10 +1018,13 @@ mod tests {
         // Make the neuron active while it's still in stable storage, to cause the issue with stable neuron store validation.
         with_stable_neuron_store_mut(|stable_neuron_store| {
             stable_neuron_store
-                .update(Neuron {
-                    cached_neuron_stake_e8s: 1,
-                    ..neuron
-                })
+                .update(
+                    &neuron,
+                    Neuron {
+                        cached_neuron_stake_e8s: 1,
+                        ..neuron.clone()
+                    },
+                )
                 .unwrap()
         });
 
