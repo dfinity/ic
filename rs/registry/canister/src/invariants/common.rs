@@ -14,7 +14,8 @@ use ic_protobuf::registry::{
     hostos_version::v1::HostosVersionRecord, node::v1::NodeRecord, subnet::v1::SubnetListRecord,
 };
 use ic_registry_keys::{
-    get_api_boundary_node_record_node_id, get_node_record_node_id, make_subnet_list_record_key,
+    get_api_boundary_node_record_node_id, get_node_record_node_id,
+    make_api_boundary_node_record_key, make_node_record_key, make_subnet_list_record_key,
     ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX, HOSTOS_VERSION_KEY_PREFIX,
 };
 
@@ -133,6 +134,64 @@ pub(crate) fn get_api_boundary_node_records_from_snapshot(
         }
     }
     result
+}
+
+/// Returns an all api boundary node ids record from the registry snapshot.
+pub(crate) fn get_api_boundary_node_ids_from_snapshot(
+    snapshot: &RegistrySnapshot,
+) -> Result<Vec<NodeId>, InvariantCheckError> {
+    let api_bn_ids: Result<Vec<NodeId>, InvariantCheckError> = snapshot
+        .keys()
+        .cloned()
+        .map(|key| {
+            String::from_utf8(key).map_err(|_| InvariantCheckError {
+                msg: "Failed to decode keys from the RegistrySnapshot".to_string(),
+                source: None,
+            })
+        })
+        .collect::<Result<Vec<String>, InvariantCheckError>>()
+        .map(|keys| {
+            keys.into_iter()
+                .filter_map(|key_str| get_api_boundary_node_record_node_id(&key_str))
+                .map(NodeId::from)
+                .collect()
+        });
+
+    api_bn_ids
+}
+
+/// Returns api boundary node record from the snapshot corresponding to a key.
+pub(crate) fn get_api_boundary_node_record_from_snapshot(
+    key: NodeId,
+    snapshot: &RegistrySnapshot,
+) -> Result<Option<ApiBoundaryNodeRecord>, InvariantCheckError> {
+    let key = make_api_boundary_node_record_key(key);
+    let value = snapshot.get(key.as_bytes());
+    value
+        .map(|bytes| {
+            ApiBoundaryNodeRecord::decode(bytes.as_slice()).map_err(|err| InvariantCheckError {
+                msg: format!("Deserialize registry value failed with {}", err),
+                source: None,
+            })
+        })
+        .transpose()
+}
+
+/// Returns node record from the snapshot corresponding to a key.
+pub(crate) fn get_node_record_from_snapshot(
+    key: NodeId,
+    snapshot: &RegistrySnapshot,
+) -> Result<Option<NodeRecord>, InvariantCheckError> {
+    let key = make_node_record_key(key);
+    let value = snapshot.get(key.as_bytes());
+    value
+        .map(|bytes| {
+            NodeRecord::decode(bytes.as_slice()).map_err(|err| InvariantCheckError {
+                msg: format!("Deserialize registry value failed with {}", err),
+                source: None,
+            })
+        })
+        .transpose()
 }
 
 pub(crate) fn get_subnet_ids_from_snapshot(snapshot: &RegistrySnapshot) -> Vec<SubnetId> {
