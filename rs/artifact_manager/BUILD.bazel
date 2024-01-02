@@ -34,10 +34,6 @@ rust_library(
     name = "artifact_manager",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
-    crate_features = select({
-        "//bazel:malicious_code_enabled": ["malicious_code"],
-        "//conditions:default": [],
-    }),
     crate_name = "ic_artifact_manager",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",

@@ -242,11 +242,14 @@ pub struct Config {
     /// Length of an epoch for query stats collection.
     pub query_stats_epoch_length: u64,
 
-    /// Indicate whether the Wasm chunk store feature has been enabled or not.
+    /// Indicates whether the Wasm chunk store feature has been enabled or not.
     pub wasm_chunk_store: FlagStatus,
 
     /// The duration a stop_canister has to stop the canister before timing out.
     pub stop_canister_timeout_duration: Duration,
+
+    /// Indicates whether canister backup and restore feature is enabled or not.
+    pub canister_snapshots: FlagStatus,
 }
 
 impl Default for Config {
@@ -315,6 +318,7 @@ impl Default for Config {
             query_stats_epoch_length: QUERY_STATS_EPOCH_LENGTH,
             wasm_chunk_store: FlagStatus::Disabled,
             stop_canister_timeout_duration: STOP_CANISTER_TIMEOUT_DURATION,
+            canister_snapshots: FlagStatus::Disabled,
         }
     }
 }

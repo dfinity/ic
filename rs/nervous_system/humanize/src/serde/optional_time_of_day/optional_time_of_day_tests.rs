@@ -39,7 +39,7 @@ fn test_round_trip() {
         assert_eq!(
             serde_yaml::to_string(&t).unwrap(),
             format!(
-                "---\nlunchtime: \"{}\"\nmeaning_of_life: 42\n",
+                "lunchtime: {}\nmeaning_of_life: 42\n",
                 expected_formatted_str
             ),
             "original_time_of_day_str = {:?}",
@@ -59,7 +59,7 @@ fn test_round_trip() {
 #[test]
 fn test_none() {
     // Case 1: lunchtime is explicitly null.
-    let yaml = "---\nlunchtime: ~\nmeaning_of_life: 42\n";
+    let yaml = "lunchtime: null\nmeaning_of_life: 42\n";
     let t: T = serde_yaml::from_str(yaml).unwrap();
     assert_eq!(
         t,

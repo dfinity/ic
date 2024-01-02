@@ -629,6 +629,26 @@ impl MergeCandidate {
         }))
     }
 
+    pub fn full_merge(
+        dst_base: &Path,
+        existing_base: &Path,
+        existing_overlays: &[PathBuf],
+    ) -> Option<MergeCandidate> {
+        if dst_base == existing_base && existing_overlays.is_empty() {
+            None
+        } else {
+            Some(MergeCandidate {
+                overlays: existing_overlays.to_vec(),
+                base: if existing_base.exists() {
+                    Some(existing_base.to_path_buf())
+                } else {
+                    None
+                },
+                dst: PersistDestination::BaseFile(dst_base.to_path_buf()),
+            })
+        }
+    }
+
     /// Merge data from `overlays` and `base` into `dst` and remove the input files.
     pub fn apply(&self, metrics: &StorageMetrics) -> Result<(), PersistenceError> {
         let _timer = metrics
@@ -664,6 +684,27 @@ impl MergeCandidate {
             })?;
         }
         Self::merge_impl(&self.dst, base, &overlays, metrics)
+    }
+
+    pub fn is_full_merge(&self) -> bool {
+        matches!(self.dst, PersistDestination::BaseFile(..))
+    }
+
+    pub fn input_size_bytes(&self) -> Result<u64, PersistenceError> {
+        let mut sum = 0;
+        for f in self.base.iter().chain(self.overlays.iter()) {
+            match std::fs::metadata(f) {
+                Err(err) => {
+                    return Err(PersistenceError::FileSystemError {
+                        path: f.display().to_string(),
+                        context: "Failed to retrieve file metadata".to_string(),
+                        internal_error: err.to_string(),
+                    })
+                }
+                Ok(metadata) => sum += metadata.len(),
+            }
+        }
+        Ok(sum)
     }
 
     fn merge_impl(

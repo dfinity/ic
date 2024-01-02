@@ -290,7 +290,12 @@ EOF
         /opt/ic/bin/get-sev-certs.sh
     fi
 
-    tar cf "${OUT_FILE}" -C "${BOOTSTRAP_TMPDIR}" .
+    tar cf "${OUT_FILE}" \
+        --sort=name \
+        --owner=root:0 \
+        --group=root:0 \
+        --mtime="UTC 1970-01-01 00:00:00" \
+        -C "${BOOTSTRAP_TMPDIR}" .
 
     rm -rf "${BOOTSTRAP_TMPDIR}"
 }

@@ -18,6 +18,7 @@ use dfn_core::{
 };
 use ic_base_types::CanisterId;
 use ic_canister_log::log;
+use ic_canister_profiler::{measure_span, measure_span_async};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_clients::canister_status::CanisterStatusResultV2;
 use ic_nervous_system_common::{
@@ -538,9 +539,13 @@ fn manage_neuron() {
 /// Internal method for calling manage_neuron.
 #[candid_method(update, rename = "manage_neuron")]
 async fn manage_neuron_(manage_neuron: ManageNeuron) -> ManageNeuronResponse {
-    governance_mut()
-        .manage_neuron(&manage_neuron, &caller())
-        .await
+    let governance = governance_mut();
+    measure_span_async(
+        governance.profiling_information,
+        "manage_neuron",
+        governance.manage_neuron(&manage_neuron, &caller()),
+    )
+    .await
 }
 
 #[cfg(feature = "test")]
@@ -555,7 +560,10 @@ fn update_neuron() {
 #[candid_method(update, rename = "update_neuron")]
 /// Internal method for calling update_neuron.
 fn update_neuron_(neuron: Neuron) -> Option<GovernanceError> {
-    governance_mut().update_neuron(neuron).err()
+    let governance = governance_mut();
+    measure_span(governance.profiling_information, "update_neuron", || {
+        governance.update_neuron(neuron).err()
+    })
 }
 
 /// Returns the full neuron corresponding to the neuron with ID `neuron_id`.
@@ -758,7 +766,12 @@ fn claim_swap_neurons() {
 fn claim_swap_neurons_(
     claim_swap_neurons_request: ClaimSwapNeuronsRequest,
 ) -> ClaimSwapNeuronsResponse {
-    governance_mut().claim_swap_neurons(claim_swap_neurons_request, caller())
+    let governance = governance_mut();
+    measure_span(
+        governance.profiling_information,
+        "claim_swap_neurons",
+        || governance.claim_swap_neurons(claim_swap_neurons_request, caller()),
+    )
 }
 
 /// This is not really useful to the public. It is, however, useful to integration tests.
@@ -773,7 +786,12 @@ fn get_maturity_modulation() {
 fn get_maturity_modulation_(
     request: GetMaturityModulationRequest,
 ) -> GetMaturityModulationResponse {
-    governance().get_maturity_modulation(request)
+    let governance = governance_mut();
+    measure_span(
+        governance.profiling_information,
+        "get_maturity_modulation",
+        || governance.get_maturity_modulation(request),
+    )
 }
 
 /// The canister's heartbeat.

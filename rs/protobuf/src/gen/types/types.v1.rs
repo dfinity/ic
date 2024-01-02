@@ -595,6 +595,8 @@ pub struct PreSignatureQuadrupleRef {
     pub kappa_times_lambda_ref: ::core::option::Option<MaskedTranscript>,
     #[prost(message, optional, tag = "4")]
     pub key_times_lambda_ref: ::core::option::Option<MaskedTranscript>,
+    #[prost(message, optional, tag = "5")]
+    pub key_unmasked_ref: ::core::option::Option<UnmaskedTranscript>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -901,6 +903,8 @@ pub struct CatchUpPackageShare {
     pub signature: ::prost::alloc::vec::Vec<u8>,
     #[prost(message, optional, tag = "7")]
     pub signer: ::core::option::Option<NodeId>,
+    #[prost(uint64, optional, tag = "8")]
+    pub oldest_registry_version_in_use_by_replicated_state: ::core::option::Option<u64>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -916,6 +920,8 @@ pub struct CatchUpContent {
     pub block_hash: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "5")]
     pub random_beacon_hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(uint64, optional, tag = "6")]
+    pub oldest_registry_version_in_use_by_replicated_state: ::core::option::Option<u64>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]

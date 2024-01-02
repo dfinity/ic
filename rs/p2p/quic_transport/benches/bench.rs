@@ -4,6 +4,7 @@ use std::{
     time::Duration,
 };
 
+use axum::http::Request;
 use axum::{routing::any, Router};
 use bytes::Bytes;
 use criterion::{
@@ -11,7 +12,6 @@ use criterion::{
     Throughput,
 };
 use either::Either;
-use http::Request;
 use ic_base_types::NodeId;
 use ic_icos_sev::Sev;
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};

@@ -31,7 +31,7 @@ fn test_round_trip() {
 
         assert_eq!(
             serde_yaml::to_string(&t).unwrap(),
-            format!("---\nlunchtime: \"{}\"\n", expected_formatted_str),
+            format!("lunchtime: {}\n", expected_formatted_str),
             "original_time_of_day_str = {:?}",
             original_time_of_day_str,
         );

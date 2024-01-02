@@ -180,20 +180,16 @@ impl TestConsensus<U64Artifact> {
 
     pub fn push_advert(&self, id: u64) {
         let mut inner = self.inner.lock().unwrap();
-        inner
-            .peer_pool
-            .entry(self.node_id)
-            .and_modify(|p| p.insert(id));
+        let my_pool = inner.peer_pool.get_mut(&self.node_id).unwrap();
+        my_pool.insert(id);
 
         inner.adverts.push_back(id);
     }
 
     pub fn push_purge(&self, id: u64) {
         let mut inner = self.inner.lock().unwrap();
-        inner
-            .peer_pool
-            .entry(self.node_id)
-            .and_modify(|p| p.remove(id));
+        let my_pool = inner.peer_pool.get_mut(&self.node_id).unwrap();
+        my_pool.remove(id);
 
         inner.purge.push_back(id);
     }
