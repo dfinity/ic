@@ -8462,6 +8462,7 @@ dependencies = [
  "ic-types",
  "ic-utils 0.9.0",
  "ic-wasm-types",
+ "phantom_newtype",
  "proptest",
  "prost",
  "rand 0.8.5",
