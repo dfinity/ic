@@ -2718,6 +2718,8 @@ impl Governance {
         )
         .await?;
 
+        // If this operation takes 5 minutes, there is very likely a real failure, and other intervention will
+        // be required
         let mark_failed_at_seconds = self.env.now() + 5 * 60;
 
         loop {
@@ -2728,7 +2730,7 @@ impl Governance {
                     candid::encode_one(
                         CanisterInfoRequest::new(
                             ledger_canister_id,
-                            Some(20),
+                            Some(20), // Get enough to ensure we did not miss the relevant change
                         )
                     ).map_err(|e| GovernanceError::new_with_message(ErrorType::External, format!("Could not check if ledger upgrade succeeded. Error encoding canister_info request.\n{}", e)))?
                 )
