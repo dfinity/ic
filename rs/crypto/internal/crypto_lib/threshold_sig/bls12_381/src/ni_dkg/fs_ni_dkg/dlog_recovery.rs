@@ -117,7 +117,8 @@ impl std::hash::BuildHasher for BuildShiftXorHasher {
 
 struct BabyStepGiantStepTable {
     // Table storing the baby steps
-    table: std::collections::HashMap<[u8; Self::GT_REPR_SIZE], usize, BuildShiftXorHasher>,
+    table: Vec<([u8; Self::GT_REPR_SIZE], usize)>,
+    prefix_set: std::collections::HashSet<[u8; Self::GT_REPR_PREFIX_SIZE], BuildShiftXorHasher>,
 }
 
 /// The table for storing the baby steps of BSGS
@@ -125,9 +126,19 @@ struct BabyStepGiantStepTable {
 /// TODO(CRP-2308) use a better data structure than HashMap here.
 impl BabyStepGiantStepTable {
     const GT_REPR_SIZE: usize = 28;
+    const GT_REPR_PREFIX_SIZE: usize = 5;
 
-    fn hash_gt(gt: &Gt) -> [u8; Self::GT_REPR_SIZE] {
-        ic_crypto_sha2::Sha224::hash(&gt.tag())
+    fn hash_gt(gt: &Gt) -> ([u8; Self::GT_REPR_PREFIX_SIZE], [u8; Self::GT_REPR_SIZE]) {
+        let hash = ic_crypto_sha2::Sha224::hash(&gt.tag());
+        let prefix =
+            <[u8; Self::GT_REPR_PREFIX_SIZE]>::try_from(&hash[0..Self::GT_REPR_PREFIX_SIZE])
+                .unwrap_or_else(|_| {
+                    panic!(
+                        "hash should always be larger than {}B",
+                        Self::GT_REPR_PREFIX_SIZE
+                    )
+                });
+        (prefix, hash)
     }
 
     /// Return a table size appropriate for solving BSGS in [0,range) while
@@ -161,22 +172,35 @@ impl BabyStepGiantStepTable {
 
     /// Returns the table plus the giant step
     fn new(base: &Gt, table_size: usize) -> (Self, Gt) {
-        let mut table =
-            std::collections::HashMap::with_capacity_and_hasher(table_size, BuildShiftXorHasher);
+        let mut table = Vec::with_capacity(table_size);
+        let mut prefix_set =
+            std::collections::HashSet::with_capacity_and_hasher(table_size, BuildShiftXorHasher);
         let mut accum = Gt::identity();
 
         for i in 0..table_size {
-            let hash = Self::hash_gt(&accum);
-            table.insert(hash, i);
+            let (prefix, hash) = Self::hash_gt(&accum);
+            table.push((hash, i));
+            // we are not checking the return value of `insert` because
+            // duplicate prefixes do not affect the correctness
+            prefix_set.insert(prefix);
             accum += base;
         }
+        table.sort_unstable();
 
-        (Self { table }, accum.neg())
+        (Self { table, prefix_set }, accum.neg())
     }
 
     /// Return the value if gt exists in this table
     fn get(&self, gt: &Gt) -> Option<usize> {
-        self.table.get(&Self::hash_gt(gt)).copied()
+        let (prefix, hash) = Self::hash_gt(gt);
+        if self.prefix_set.contains(&prefix) {
+            match self.table.binary_search_by_key(&hash, |&(key, _value)| key) {
+                Ok(i) => Some(self.table[i].1),
+                _ => None,
+            }
+        } else {
+            None
+        }
     }
 }
 
