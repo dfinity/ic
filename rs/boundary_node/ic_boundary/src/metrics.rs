@@ -30,7 +30,6 @@ use prometheus::{
     register_int_gauge_with_registry, Encoder, HistogramOpts, HistogramVec, IntCounterVec,
     IntGauge, IntGaugeVec, Registry, TextEncoder,
 };
-use rayon::prelude::*;
 use tokio::sync::RwLock;
 use tower_http::request_id::RequestId;
 use tracing::info;
@@ -54,6 +53,7 @@ const PROMETHEUS_CONTENT_TYPE: &str = "text/plain; version=0.0.4";
 
 const NODE_ID_LABEL: &str = "node_id";
 const SUBNET_ID_LABEL: &str = "subnet_id";
+const SUBNET_ID_UNKNOWN: &str = "unknown";
 
 pub struct MetricsCache {
     buffer: Vec<u8>,
@@ -75,7 +75,7 @@ fn remove_stale_metrics(
     snapshot: Arc<RegistrySnapshot>,
     mut mfs: Vec<MetricFamily>,
 ) -> Vec<MetricFamily> {
-    mfs.par_iter_mut().for_each(|mf| {
+    mfs.iter_mut().for_each(|mf| {
         // Iterate over the metrics in the metric family
         let metrics = mf
             .take_metric()
@@ -107,10 +107,13 @@ fn remove_stale_metrics(
                     // If there's only subnet_id label - check if this subnet exists
                     // TODO create a hashmap of subnets in snapshot for faster lookup, currently complexity is O(n)
                     // but since we have very few subnets currently (<40) probably it's Ok
-                    (None, Some(subnet_id)) => snapshot
-                        .subnets
-                        .iter()
-                        .any(|x| x.id.to_string() == subnet_id),
+                    (None, Some(subnet_id)) => {
+                        subnet_id == SUBNET_ID_UNKNOWN
+                            || snapshot
+                                .subnets
+                                .iter()
+                                .any(|x| x.id.to_string() == subnet_id)
+                    }
 
                     // Otherwise just pass this metric through
                     _ => true,
@@ -632,14 +635,14 @@ pub async fn metrics_middleware(
     // Extract extensions
     let ctx = response
         .extensions()
-        .get::<RequestContext>()
+        .get::<Arc<RequestContext>>()
         .cloned()
         .unwrap_or_default();
 
     let error_cause = response.extensions().get::<ErrorCause>().cloned();
     let retry_result = response.extensions().get::<RetryResult>().cloned();
     let canister_id = response.extensions().get::<CanisterId>().cloned();
-    let node = response.extensions().get::<Node>().cloned();
+    let node = response.extensions().get::<Arc<Node>>().cloned();
     let cache_status = response
         .extensions()
         .get::<CacheStatus>()
@@ -681,7 +684,7 @@ pub async fn metrics_middleware(
         // Prepare labels
         // Otherwise "temporary value dropped" error occurs
         let error_cause_lbl = error_cause.clone().unwrap_or("none".to_string());
-        let subnet_id_lbl = subnet_id.clone().unwrap_or("unknown".to_string());
+        let subnet_id_lbl = subnet_id.clone().unwrap_or(SUBNET_ID_UNKNOWN.to_string());
         let cache_status_lbl = &cache_status.to_string();
         let cache_bypass_reason_lbl = cache_bypass_reason.clone().unwrap_or("none".to_string());
         let retry_lbl =

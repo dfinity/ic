@@ -21,6 +21,7 @@ fn gen_req(canister_id: CanisterId, network: BitcoinNetwork, method: String) -> 
         arg: Encode!(&network).ok(),
         ..Default::default()
     };
+    let ctx = Arc::new(ctx);
 
     req.extensions_mut().insert(ctx);
     req.extensions_mut().insert(canister_id);
@@ -102,6 +103,7 @@ fn gen_req_ledger(method: String) -> Request<Body> {
         arg: None,
         ..Default::default()
     };
+    let ctx = Arc::new(ctx);
 
     req.extensions_mut().insert(ctx);
     req.extensions_mut().insert(*LEDGER_CANISTER_ID);
