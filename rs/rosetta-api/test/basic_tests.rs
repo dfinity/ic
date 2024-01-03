@@ -202,7 +202,11 @@ async fn smoke_test() {
     let res = req_handler.construction_derive(msg);
     assert!(res.is_err(), "This pk should not have been accepted");
 
-    let msg = ConstructionMetadataRequest::new(req_handler.network_id());
+    let msg = ConstructionMetadataRequest {
+        network_identifier: req_handler.network_id().into(),
+        options: None,
+        public_keys: None,
+    };
     let res = req_handler.construction_metadata(msg).await;
     assert_eq!(
         res,

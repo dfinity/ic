@@ -209,6 +209,7 @@ where
         suggested_fee.pop().unwrap()
     });
 
+    let metadata = ConstructionPayloadsRequestMetadata::try_from(metadata_res.metadata)?;
     // The fee reported here should be the same as the one we got from dry run
     assert_eq!(suggested_fee, dry_run_suggested_fee);
 
@@ -217,7 +218,7 @@ where
             memo: Some(0),
             ingress_end,
             created_at_time,
-            ..metadata_res.metadata
+            ..metadata
         }),
         all_ops,
         Some(all_sender_pks),

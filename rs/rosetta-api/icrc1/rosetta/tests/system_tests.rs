@@ -12,7 +12,7 @@ use ic_icrc_rosetta::{
         types::{ApproveMetadata, OperationType},
         utils::utils::icrc1_account_to_rosetta_accountidentifier,
     },
-    construction_api::types::MetadataOptions,
+    construction_api::types::ConstructionMetadataRequestOptions,
     Metadata,
 };
 use ic_icrc_rosetta_client::RosettaClient;
@@ -739,7 +739,7 @@ async fn test_construction_preprocess() {
         .expect("Unable to call Construction Preprocess");
     let expected = ConstructionPreprocessResponse {
         options: Some(
-            MetadataOptions {
+            ConstructionMetadataRequestOptions {
                 suggested_fee: true,
             }
             .into(),
