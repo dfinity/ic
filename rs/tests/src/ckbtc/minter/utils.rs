@@ -524,7 +524,7 @@ pub async fn assert_mint_transaction(
     .await
     .expect("Error while getting ledger transaction");
     assert_eq!(1, res.transactions.len(), "Expecting one transaction");
-    let transaction = res.transactions.get(0).unwrap();
+    let transaction = res.transactions.first().unwrap();
     assert_eq!("mint", transaction.kind);
     let mint = transaction
         .mint
@@ -561,7 +561,7 @@ pub async fn assert_burn_transaction(
     .await
     .expect("Error while getting ledger transaction");
     assert_eq!(1, res.transactions.len(), "Expecting one transaction");
-    let transaction = res.transactions.get(0).unwrap();
+    let transaction = res.transactions.first().unwrap();
     assert_eq!("burn", transaction.kind);
     let burn = transaction
         .burn

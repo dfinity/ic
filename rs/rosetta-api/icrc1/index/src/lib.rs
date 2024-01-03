@@ -398,11 +398,11 @@ pub async fn get_account_transactions(args: GetAccountTransactionsArgs) -> GetTr
                         id: Nat::from(*txid),
                         transaction: tx,
                     })
-                } else if let Some(archive) = res.archived_transactions.get(0) {
+                } else if let Some(archive) = res.archived_transactions.first() {
                     match get_transactions_from_archive(archive).await {
                         Ok(res) if !res.transactions.is_empty() => txs.push(TransactionWithId {
                             id: Nat::from(*txid),
-                            transaction: res.transactions.get(0).unwrap().clone(),
+                            transaction: res.transactions.first().unwrap().clone(),
                         }),
                         Ok(_) => {
                             let message = format!("Error fetching transaction {} from archive {}: archive didn't   return the transaction!", txid, archive.callback.canister_id);

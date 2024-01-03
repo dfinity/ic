@@ -342,23 +342,23 @@ mod tests {
 
         // The first neuron (for each account) should have dissolve delay 0
         assert_eq!(
-            account_a_neurons.get(0).unwrap().dissolve_delay_seconds(0),
+            account_a_neurons.first().unwrap().dissolve_delay_seconds(0),
             0
         );
         assert_eq!(
-            account_b_neurons.get(0).unwrap().dissolve_delay_seconds(0),
+            account_b_neurons.first().unwrap().dissolve_delay_seconds(0),
             0
         );
         assert_eq!(
             account_a_neurons
-                .get(0)
+                .first()
                 .unwrap()
                 .aging_since_timestamp_seconds,
             12345678
         );
         assert_eq!(
             account_b_neurons
-                .get(0)
+                .first()
                 .unwrap()
                 .aging_since_timestamp_seconds,
             87654321

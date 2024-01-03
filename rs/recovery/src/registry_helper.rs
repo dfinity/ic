@@ -227,7 +227,7 @@ fn download_nns_pem(nns_url: &Url, nns_pem_path: &Path, logger: &Logger) -> Reco
         RecoveryError::RegistryError(format!("Error decoding subnet list from registry: {}", e))
     })?;
 
-    let maybe_id = list.subnets.get(0).map(|x| {
+    let maybe_id = list.subnets.first().map(|x| {
         SubnetId::from(
             PrincipalId::try_from(x.clone().as_slice()).expect("failed parsing principal id"),
         )

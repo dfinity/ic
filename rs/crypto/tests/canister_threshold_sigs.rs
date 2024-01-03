@@ -850,7 +850,7 @@ mod verify_complaint {
             );
             let complainer_id = complainer.id();
 
-            let mut complaint_1 = complaints.get(0).unwrap().clone();
+            let mut complaint_1 = complaints.first().unwrap().clone();
             let mut complaint_2 = complaints.get(1).unwrap().clone();
             std::mem::swap(&mut complaint_1.dealer_id, &mut complaint_2.dealer_id);
 
@@ -903,7 +903,7 @@ mod verify_complaint {
             );
             let complainer_id = complainer.id();
 
-            let mut complaint_1 = complaints.get(0).unwrap().clone();
+            let mut complaint_1 = complaints.first().unwrap().clone();
             let mut complaint_2 = complaints.get(1).unwrap().clone();
             std::mem::swap(
                 &mut complaint_1.internal_complaint_raw,

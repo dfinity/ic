@@ -163,7 +163,7 @@ mod tests {
         let registry = invariant_compliant_registry(0);
 
         let list = registry.get_subnet_list_record();
-        let nns_id = SubnetId::from(PrincipalId::try_from(list.subnets.get(0).unwrap()).unwrap());
+        let nns_id = SubnetId::from(PrincipalId::try_from(list.subnets.first().unwrap()).unwrap());
         let mut subnet = registry.get_subnet_or_panic(nns_id);
         subnet.replica_version_id = "unelected".into();
 

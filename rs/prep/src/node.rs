@@ -380,7 +380,7 @@ mod node_configuration {
             chip_id: None,
         };
 
-        let got = pbNodeRecord::try_from(node_configuration).unwrap();
+        let got = pbNodeRecord::from(node_configuration);
 
         let want = pbNodeRecord {
             node_operator_id: vec![],

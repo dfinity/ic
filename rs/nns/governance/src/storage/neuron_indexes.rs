@@ -338,11 +338,7 @@ fn following_index_add_neuron(
     let already_present_topic_followee_pairs = add_neuron_followees(
         index,
         &neuron_id,
-        new_neuron
-            .topic_followee_pairs()
-            .into_iter()
-            .map(|(topic, followee)| (topic, followee))
-            .collect(),
+        new_neuron.topic_followee_pairs().into_iter().collect(),
     );
 
     already_present_topic_followee_pairs_to_result(already_present_topic_followee_pairs, neuron_id)
@@ -357,11 +353,7 @@ fn following_index_remove_neuron(
     let already_absent_topic_followee_pairs = remove_neuron_followees(
         index,
         &neuron_id,
-        existing_neuron
-            .topic_followee_pairs()
-            .into_iter()
-            .map(|(topic, followee)| (topic, followee))
-            .collect(),
+        existing_neuron.topic_followee_pairs().into_iter().collect(),
     );
 
     already_absent_topic_followee_pairs_to_result(already_absent_topic_followee_pairs, neuron_id)

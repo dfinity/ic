@@ -716,7 +716,7 @@ impl IcNodeSnapshot {
                     .get_subnet_canister_ranges(self.registry_version, subnet_id)
                     .expect("Could not deserialize optional routing table from local registry.")
                     .expect("Optional routing table is None in local registry.");
-                match canister_ranges.get(0) {
+                match canister_ranges.first() {
                     Some(range) => range.start.get(),
                     None => PrincipalId::default(),
                 }

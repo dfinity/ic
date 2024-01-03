@@ -577,7 +577,7 @@ impl TryFrom<pb::Artifact> for Artifact {
             Kind::Dkg(x) => Artifact::DkgMessage(x.try_into()?),
             Kind::Ecdsa(x) => Artifact::EcdsaMessage(x.try_into()?),
             Kind::HttpShare(x) => Artifact::CanisterHttpMessage(x.try_into()?),
-            Kind::FileTreeSync(x) => Artifact::FileTreeSync(x.try_into()?),
+            Kind::FileTreeSync(x) => Artifact::FileTreeSync(x.into()),
         })
     }
 }

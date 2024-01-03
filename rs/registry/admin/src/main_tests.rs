@@ -132,10 +132,10 @@ fn convert_from_flags_to_create_service_nervous_system() {
             ],
             dapp_canisters: vec![
                 nervous_system_pb::Canister {
-                    id: Some(PrincipalId::try_from(CanisterId::from_u64(800_219)).unwrap()),
+                    id: Some(PrincipalId::from(CanisterId::from_u64(800_219))),
                 },
                 nervous_system_pb::Canister {
-                    id: Some(PrincipalId::try_from(CanisterId::from_u64(800_220)).unwrap())
+                    id: Some(PrincipalId::from(CanisterId::from_u64(800_220)))
                 }
             ],
             swap_parameters: Some(SwapParameters {

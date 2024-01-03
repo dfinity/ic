@@ -860,7 +860,7 @@ async fn make_router(
         svc_per_conn
             .oneshot(req)
             .await
-            .unwrap_or_else(|err| map_box_error_to_response(err)),
+            .unwrap_or_else(map_box_error_to_response),
         timer,
     )
 }

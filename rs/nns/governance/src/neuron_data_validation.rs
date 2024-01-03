@@ -678,7 +678,7 @@ impl ValidationTask for StableNeuronStoreValidator {
         self.next_neuron_id = neuron_id_for_next_batch;
         invalid_neuron_ids
             .into_iter()
-            .map(|neuron_id| ValidationIssue::ActiveNeuronInStableStorage(neuron_id))
+            .map(ValidationIssue::ActiveNeuronInStableStorage)
             .collect()
     }
 }

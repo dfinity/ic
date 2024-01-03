@@ -778,7 +778,7 @@ fn test_query_archived_blocks() {
         start,
         length,
         callback,
-    } = res.archived_blocks.get(0).unwrap();
+    } = res.archived_blocks.first().unwrap();
     // query the archive
     let block_range = Decode!(
         &env.query(

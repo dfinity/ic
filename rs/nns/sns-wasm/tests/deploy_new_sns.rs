@@ -69,7 +69,7 @@ fn test_canisters_are_created_and_installed_legacy() {
                 .unwrap(),
         );
         let system_subnet_id = SubnetId::new(
-            PrincipalId::try_from(subnet_list_record.subnets.get(0).unwrap()).unwrap(),
+            PrincipalId::try_from(subnet_list_record.subnets.first().unwrap()).unwrap(),
         );
 
         let nns_init_payload = NnsInitPayloadsBuilder::new()

@@ -164,7 +164,7 @@ impl LabelLike for CanisterId {
     }
 
     fn from_label(label: &[u8]) -> Option<Self> {
-        PrincipalId::from_label(label).map(|principal| Self::unchecked_from_principal(principal))
+        PrincipalId::from_label(label).map(Self::unchecked_from_principal)
     }
 }
 

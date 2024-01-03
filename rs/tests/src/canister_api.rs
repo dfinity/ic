@@ -631,7 +631,7 @@ pub struct Icrc1RequestProvider {
 impl Icrc1RequestProvider {
     pub fn new_icp_ledger_request_provider() -> Self {
         Self {
-            icrc1_canister: Principal::try_from(LEDGER_CANISTER_ID.get()).unwrap(),
+            icrc1_canister: Principal::from(LEDGER_CANISTER_ID.get()),
         }
     }
 
