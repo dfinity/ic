@@ -520,10 +520,13 @@ fn test_batch_validate_neurons_in_stable_store_are_inactive_invalid() {
     // Step 1.4: modify the inactive in stable neuron store to make it actually active.
     with_stable_neuron_store_mut(|stable_neuron_store| {
         stable_neuron_store
-            .update(Neuron {
-                cached_neuron_stake_e8s: 1,
-                ..neuron
-            })
+            .update(
+                &neuron,
+                Neuron {
+                    cached_neuron_stake_e8s: 1,
+                    ..neuron.clone()
+                },
+            )
             .unwrap()
     });
 

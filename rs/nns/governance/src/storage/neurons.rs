@@ -220,7 +220,11 @@ where
     /// Changes an existing entry.
     ///
     /// If the entry does not already exist, returns a NotFound Err.
-    pub fn update(&mut self, neuron: Neuron) -> Result<(), NeuronStoreError> {
+    pub fn update(
+        &mut self,
+        old_neuron: &Neuron,
+        new_neuron: Neuron,
+    ) -> Result<(), NeuronStoreError> {
         let DecomposedNeuron {
             // The original neuron is consumed near the end of this
             // statement. This abridged one takes its place.
@@ -233,7 +237,7 @@ where
 
             known_neuron_data,
             transfer,
-        } = DecomposedNeuron::try_from(neuron)?;
+        } = DecomposedNeuron::try_from(new_neuron)?;
 
         validate_recent_ballots(&recent_ballots)?;
 
@@ -259,16 +263,26 @@ where
         // Auxiliary Data
         // --------------
 
-        update_repeated_field(neuron_id, hot_keys, &mut self.hot_keys_map);
-        update_repeated_field(neuron_id, recent_ballots, &mut self.recent_ballots_map);
-        self.update_followees(neuron_id, followees);
+        if hot_keys != old_neuron.hot_keys {
+            update_repeated_field(neuron_id, hot_keys, &mut self.hot_keys_map);
+        }
+        if recent_ballots != old_neuron.recent_ballots {
+            update_repeated_field(neuron_id, recent_ballots, &mut self.recent_ballots_map);
+        }
+        if followees != old_neuron.followees {
+            self.update_followees(neuron_id, followees);
+        }
 
-        update_singleton_field(
-            neuron_id,
-            known_neuron_data,
-            &mut self.known_neuron_data_map,
-        );
-        update_singleton_field(neuron_id, transfer, &mut self.transfer_map);
+        if known_neuron_data != old_neuron.known_neuron_data {
+            update_singleton_field(
+                neuron_id,
+                known_neuron_data,
+                &mut self.known_neuron_data_map,
+            );
+        }
+        if transfer != old_neuron.transfer {
+            update_singleton_field(neuron_id, transfer, &mut self.transfer_map);
+        }
 
         Ok(())
     }

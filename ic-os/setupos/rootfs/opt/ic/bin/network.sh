@@ -17,6 +17,9 @@ function read_variables() {
             "ipv6_prefix") ipv6_prefix="${value}" ;;
             "ipv6_subnet") ipv6_subnet="${value}" ;;
             "ipv6_gateway") ipv6_gateway="${value}" ;;
+            "ipv4_address") ipv4_address="${value}" ;;
+            "ipv4_prefix_length") ipv4_prefix_length="${value}" ;;
+            "ipv4_gateway") ipv4_gateway="${value}" ;;
         esac
     done <"${CONFIG}"
 }
@@ -26,17 +29,17 @@ function get_network_settings() {
     retry=0
 
     ipv6_address_system_full=$(ip -6 a s | awk '(/inet6/) && (! / fe80| ::1/) { print $2 }')
-    log_and_reboot_on_error "${?}" "Unable to get full system's IPv6 address."
+    log_and_reboot_on_error "${?}" "System network configuration failed."
 
     while [ -z "${ipv6_address_system_full}" ]; do
         let retry=retry+1
         if [ ${retry} -ge 3 ]; then
-            log_and_reboot_on_error "1" "Unable to get full system's IPv6 address."
+            log_and_reboot_on_error "1" "System network configuration failed."
             break
         else
             sleep 1
             ipv6_address_system_full=$(ip -6 a s | awk '(/inet6/) && (! /fe80|::1/) { print $2 }')
-            log_and_reboot_on_error "${?}" "Unable to get full system's IPv6 address."
+            log_and_reboot_on_error "${?}" "System network configuration failed."
         fi
     done
 
@@ -121,6 +124,11 @@ function print_network_settings() {
     echo "  IPv6 Prefix : ${ipv6_prefix}"
     echo "  IPv6 Subnet : ${ipv6_subnet}"
     echo "  IPv6 Gateway: ${ipv6_gateway}"
+    if [[ -n ${ipv4_address} && -n ${ipv4_prefix_length} && -n ${ipv4_gateway} ]]; then
+        echo "  IPv4 Address: ${ipv4_address}"
+        echo "  IPv4 Prefix Length: ${ipv4_prefix_length}"
+        echo "  IPv4 Gateway: ${ipv4_gateway}"
+    fi
     echo " "
 
     echo "* Printing system's network settings..."
@@ -134,6 +142,25 @@ function print_network_settings() {
     echo "  HostOS : ${HOSTOS_IPV6_ADDRESS}"
     echo "  GuestOS: ${GUESTOS_IPV6_ADDRESS}"
     echo " "
+}
+
+function setup_ipv4_network() {
+    echo "* Setting up IPv4 network..."
+
+    ip addr add ${ipv4_address}/${ipv4_prefix_length} dev 'br6'
+    log_and_reboot_on_error "${?}" "Unable to add IPv4 address to interface."
+
+    ip route add default via ${ipv4_gateway}
+    log_and_reboot_on_error "${?}" "Unable to set default route in IPv4 network configuration."
+}
+
+function ping_ipv4_gateway() {
+    echo "* Pinging IPv4 gateway..."
+    # wait 20 seconds maximum for any network changes to settle.
+    ping4 -c 2 -w 20 ${ipv4_gateway} >/dev/null 2>&1
+    log_and_reboot_on_error "${?}" "Unable to ping IPv4 gateway."
+
+    echo "  success"
 }
 
 function ping_ipv6_gateway() {
@@ -187,6 +214,12 @@ main() {
     read_variables
     get_network_settings
     print_network_settings
+
+    if [[ -n ${ipv4_address} && -n ${ipv4_prefix_length} && -n ${ipv4_gateway} ]]; then
+        setup_ipv4_network
+        ping_ipv4_gateway
+    fi
+
     ping_ipv6_gateway
     assemble_nns_nodes_list
     query_nns_nodes

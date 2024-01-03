@@ -91,6 +91,9 @@ function read_variables() {
             "ipv6_prefix") ipv6_prefix="${value}" ;;
             "ipv6_subnet") ipv6_subnet="${value}" ;;
             "ipv6_gateway") ipv6_gateway="${value}" ;;
+            "ipv4_address") ipv4_address="${value}" ;;
+            "ipv4_prefix_length") ipv4_prefix_length="${value}" ;;
+            "ipv4_gateway") ipv4_gateway="${value}" ;;
         esac
     done <"${CONFIG}"
 }
@@ -102,6 +105,10 @@ function assemble_config_media() {
     cmd+=(--ipv6_address "$(/opt/ic/bin/hostos_tool generate-ipv6-address --node-type GuestOS)")
     cmd+=(--ipv6_gateway "${ipv6_gateway}")
     cmd+=(--ipv6_name_servers "$(/opt/ic/bin/fetch-property.sh --key=.dns.name_servers --metric=hostos_ipv6_dns_name_servers --config=${DEPLOYMENT})")
+    if [[ -n "$ipv4_address" && -n "$ipv4_prefix_length" && -n "$ipv4_gateway" ]]; then
+        cmd+=(--ipv4_address "${ipv4_address}/${ipv4_prefix_length}")
+        cmd+=(--ipv4_gateway "${ipv4_gateway}")
+    fi
     cmd+=(--ipv4_name_servers "$(/opt/ic/bin/fetch-property.sh --key=.dns.ipv4_name_servers --metric=hostos_ipv4_dns_name_servers --config=${DEPLOYMENT})")
     cmd+=(--hostname "guest-$(/opt/ic/bin/fetch-mgmt-mac.sh | sed 's/://g')")
     cmd+=(--nns_url "$(/opt/ic/bin/fetch-property.sh --key=.nns.url --metric=hostos_nns_url --config=${DEPLOYMENT})")
