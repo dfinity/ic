@@ -35,7 +35,9 @@ use ic_sns_governance::pb::v1::{
     MintTokensResponse, Neuron,
 };
 use ic_sns_governance::{
-    governance::{log_prefix, Governance, TimeWarp, ValidGovernanceProto},
+    governance::{
+        log_prefix, Governance, TimeWarp, ValidGovernanceProto, MATURITY_DISBURSEMENT_DELAY_SECONDS,
+    },
     ledger::LedgerCanister,
     logs::{ERROR, INFO},
     pb::v1::{
@@ -281,6 +283,9 @@ fn canister_post_upgrade() {
             // TODO(NNS1-2731): Delete this once it's been released.
             settle_proposals_if_reward_rates_are_zero(now, &mut governance_proto);
 
+            // TODO: Delete this once it's been released.
+            populate_finalize_disbursement_timestamp_seconds(&mut governance_proto);
+
             canister_init_(governance_proto);
             Ok(())
         }
@@ -457,6 +462,17 @@ fn settle_proposals_if_reward_rates_are_zero(now: u64, governance_proto: &mut Go
                     proposal,
                 );
             }
+        }
+    }
+}
+
+fn populate_finalize_disbursement_timestamp_seconds(governance_proto: &mut GovernanceProto) {
+    for neuron in governance_proto.neurons.values_mut() {
+        for disbursement in neuron.disburse_maturity_in_progress.iter_mut() {
+            disbursement.finalize_disbursement_timestamp_seconds = Some(
+                disbursement.timestamp_of_disbursement_seconds
+                    + MATURITY_DISBURSEMENT_DELAY_SECONDS,
+            );
         }
     }
 }
@@ -978,7 +994,9 @@ fn check_governance_candid_file() {
 mod tests {
     use super::*;
     use ic_nervous_system_common::START_OF_2022_TIMESTAMP_SECONDS;
-    use ic_sns_governance::pb::v1::{Ballot, VotingRewardsParameters};
+    use ic_sns_governance::pb::v1::{
+        Ballot, DisburseMaturityInProgress, Neuron, VotingRewardsParameters,
+    };
     use maplit::btreemap;
     use strum::IntoEnumIterator;
 
@@ -1164,5 +1182,57 @@ mod tests {
 
         // Step 3b: Inspect results.
         assert_eq!(governance_proto, original_governance_proto);
+    }
+
+    #[test]
+    fn test_populate_finalize_disbursement_timestamp_seconds() {
+        // Step 1: prepare a neuron with 2 in progress disbursement, one with
+        // finalize_disbursement_timestamp_seconds as None, and the other has incorrect timestamp.
+        let mut governance_proto = GovernanceProto {
+            neurons: btreemap! {
+                "1".to_string() => Neuron {
+                    disburse_maturity_in_progress: vec![
+                        DisburseMaturityInProgress {
+                            timestamp_of_disbursement_seconds: 1,
+                            finalize_disbursement_timestamp_seconds: None,
+                            ..Default::default()
+                        },
+                        DisburseMaturityInProgress {
+                            timestamp_of_disbursement_seconds: 2,
+                            finalize_disbursement_timestamp_seconds: Some(3),
+                            ..Default::default()
+                        }
+                    ],
+                    ..Default::default()
+                },
+            },
+            ..Default::default()
+        };
+
+        // Step 2: populates the timestamps.
+        populate_finalize_disbursement_timestamp_seconds(&mut governance_proto);
+
+        // Step 3: verifies that both disbursements have the correct finalization timestamps.
+        let expected_governance_proto = GovernanceProto {
+            neurons: btreemap! {
+                "1".to_string() => Neuron {
+                    disburse_maturity_in_progress: vec![
+                        DisburseMaturityInProgress {
+                            timestamp_of_disbursement_seconds: 1,
+                            finalize_disbursement_timestamp_seconds: Some(1 + MATURITY_DISBURSEMENT_DELAY_SECONDS),
+                            ..Default::default()
+                        },
+                        DisburseMaturityInProgress {
+                            timestamp_of_disbursement_seconds: 2,
+                            finalize_disbursement_timestamp_seconds: Some(2 + MATURITY_DISBURSEMENT_DELAY_SECONDS),
+                            ..Default::default()
+                        },
+                    ],
+                    ..Default::default()
+                },
+            },
+            ..Default::default()
+        };
+        assert_eq!(governance_proto, expected_governance_proto);
     }
 }

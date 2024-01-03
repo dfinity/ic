@@ -40,6 +40,8 @@ pub struct DisburseMaturityInProgress {
     pub timestamp_of_disbursement_seconds: u64,
     #[prost(message, optional, tag = "3")]
     pub account_to_disburse_to: ::core::option::Option<Account>,
+    #[prost(uint64, optional, tag = "4")]
+    pub finalize_disbursement_timestamp_seconds: ::core::option::Option<u64>,
 }
 /// A neuron in the governance system.
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
