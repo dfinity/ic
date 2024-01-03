@@ -30,7 +30,7 @@ ic-types = { path = "../../types/types" }
 phantom_newtype = { path = "../../phantom_newtype" }
 prometheus = { workspace = true }
 rand = "0.8.5"
-rand_chacha = "0.4"
+rand_chacha = "0.3"
 slog = { workspace = true }
 tokio = { workspace = true }
 ic-crypto-test-utils-tls = { path = "../../crypto/test_utils/tls" }
@@ -43,3 +43,7 @@ ic-types-test-utils = { path = "../../types/types_test_utils" }
 mockall = { workspace = true }
 tokio-util = { workspace = true }
 turmoil = { workspace = true }
+
+[[bin]]
+name = "aws"
+path = "src/aws.rs"
