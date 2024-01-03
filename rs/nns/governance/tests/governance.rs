@@ -5418,18 +5418,15 @@ fn test_neuron_spawn() {
 
     // An attempt to spawn a neuron should simply return an error and
     // change nothing.
-    let spawn_res = gov
-        .spawn_neuron(
-            &id,
-            &from,
-            &Spawn {
-                new_controller: Some(child_controller),
-                nonce: None,
-                percentage_to_spawn: None,
-            },
-        )
-        .now_or_never()
-        .unwrap();
+    let spawn_res = gov.spawn_neuron(
+        &id,
+        &from,
+        &Spawn {
+            new_controller: Some(child_controller),
+            nonce: None,
+            percentage_to_spawn: None,
+        },
+    );
     assert_matches!(
         spawn_res,
         Err(GovernanceError{error_type: code, error_message: msg})
@@ -5466,8 +5463,6 @@ fn test_neuron_spawn() {
                 percentage_to_spawn: None,
             },
         )
-        .now_or_never()
-        .unwrap()
         .unwrap();
 
     // We should now have 2 neurons.
@@ -5596,18 +5591,15 @@ fn test_neuron_spawn_with_subaccount() {
 
     // An attempt to spawn a neuron should simply return an error and
     // change nothing.
-    let spawn_res = gov
-        .spawn_neuron(
-            &id,
-            &from,
-            &Spawn {
-                new_controller: Some(child_controller),
-                nonce: None,
-                percentage_to_spawn: None,
-            },
-        )
-        .now_or_never()
-        .unwrap();
+    let spawn_res = gov.spawn_neuron(
+        &id,
+        &from,
+        &Spawn {
+            new_controller: Some(child_controller),
+            nonce: None,
+            percentage_to_spawn: None,
+        },
+    );
     assert_matches!(
         spawn_res,
         Err(GovernanceError{error_type: code, error_message: msg})
@@ -5645,8 +5637,6 @@ fn test_neuron_spawn_with_subaccount() {
                 percentage_to_spawn: None,
             },
         )
-        .now_or_never()
-        .unwrap()
         .unwrap();
 
     let creation_timestamp = driver.now();
@@ -5803,8 +5793,6 @@ fn assert_neuron_spawn_partial(
                 percentage_to_spawn: Some(percentage),
             },
         )
-        .now_or_never()
-        .unwrap()
         .unwrap();
 
     let creation_timestamp = driver.now();
@@ -5900,18 +5888,15 @@ fn test_neuron_with_non_self_authenticating_controller_cannot_be_spawned() {
 
     let non_self_authenticating_principal_id = PrincipalId::new_user_test_id(144);
 
-    let result: Result<NeuronId, GovernanceError> = gov
-        .spawn_neuron(
-            &id,
-            &from,
-            &Spawn {
-                new_controller: Some(non_self_authenticating_principal_id),
-                nonce: None,
-                percentage_to_spawn: None,
-            },
-        )
-        .now_or_never()
-        .unwrap();
+    let result: Result<NeuronId, GovernanceError> = gov.spawn_neuron(
+        &id,
+        &from,
+        &Spawn {
+            new_controller: Some(non_self_authenticating_principal_id),
+            nonce: None,
+            percentage_to_spawn: None,
+        },
+    );
 
     assert_matches!(
         result,
