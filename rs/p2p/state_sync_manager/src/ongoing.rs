@@ -20,15 +20,10 @@ use crate::metrics::OngoingStateSyncMetrics;
 use crate::routes::{build_chunk_handler_request, parse_chunk_handler_response};
 
 use ic_async_utils::JoinMap;
-use ic_interfaces::p2p::state_sync::StateSyncClient;
+use ic_interfaces::p2p::state_sync::{ArtifactErrorCode, ChunkId, Chunkable, StateSyncClient};
 use ic_logger::{error, info, ReplicaLogger};
 use ic_quic_transport::Transport;
-use ic_types::{
-    artifact::StateSyncArtifactId,
-    chunkable::ChunkId,
-    chunkable::{ArtifactErrorCode, Chunkable},
-    NodeId,
-};
+use ic_types::{artifact::StateSyncArtifactId, NodeId};
 use rand::{
     distributions::{Distribution, WeightedIndex},
     rngs::SmallRng,

@@ -79,12 +79,10 @@
 //!   table only and does not include a version number.
 pub mod proto;
 
+use ic_interfaces::p2p::state_sync::{Chunk, ChunkId};
 use ic_protobuf::{proxy::ProtoProxy, state::sync::v1 as pb};
 use ic_types::state_sync::StateSyncVersion;
-use ic_types::{
-    chunkable::{Chunk, ChunkId},
-    CryptoHashOfState, Height,
-};
+use ic_types::{CryptoHashOfState, Height};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,

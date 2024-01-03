@@ -67,7 +67,6 @@ pub mod artifact;
 pub mod artifact_kind;
 pub mod batch;
 pub mod canister_http;
-pub mod chunkable;
 pub mod consensus;
 pub mod crypto;
 pub mod filetree_sync;
