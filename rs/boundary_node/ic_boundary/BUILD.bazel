@@ -56,7 +56,6 @@ DEPENDENCIES = [
     "@crate_index//:prometheus",
     "@crate_index//:rand",
     "@crate_index//:ratelimit",
-    "@crate_index//:rayon",
     "@crate_index//:rcgen",
     "@crate_index//:regex",
     "@crate_index//:reqwest",

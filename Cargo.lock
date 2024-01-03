@@ -5305,7 +5305,6 @@ dependencies = [
  "prometheus",
  "rand 0.8.5",
  "ratelimit",
- "rayon",
  "rcgen",
  "regex",
  "reqwest",

@@ -22,7 +22,7 @@ use crate::{
     test_utils::setup_test_router,
 };
 
-pub fn test_node(id: u64) -> Node {
+pub fn test_node(id: u64) -> Arc<Node> {
     node(id, Principal::from_text("f7crg-kabae").unwrap())
 }
 
@@ -68,7 +68,7 @@ impl Proxy for ProxyRouter {
         &self,
         request_type: RequestType,
         _request: Request<Body>,
-        _node: Node,
+        _node: Arc<Node>,
         _canister_id: CanisterId,
     ) -> Result<Response, ErrorCause> {
         let mut resp = "test_response".into_response();
@@ -317,7 +317,7 @@ async fn test_status() -> Result<(), Error> {
 
 #[tokio::test]
 async fn test_all_call_types() -> Result<(), Error> {
-    let (mut app, subnets) = setup_test_router(false, 10, 1);
+    let (mut app, subnets) = setup_test_router(false, 10, 1, 1024);
     let node = subnets[0].nodes[0].clone();
 
     let sender = Principal::from_text("sqjm4-qahae-aq").unwrap();
