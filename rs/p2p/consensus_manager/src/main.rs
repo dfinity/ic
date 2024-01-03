@@ -59,10 +59,11 @@ impl ArtifactKind for TestArtifact {
     type PbMessageError = Infallible;
     type PbAttributeError = Infallible;
     type PbFilterError = Infallible;
+    type PbAttribute = ();
+
     type Message = Vec<u8>;
     type PbId = u64;
     type Id = u64;
-    type PbAttribute = ();
     type Attribute = ();
     type PbFilter = ();
     type Filter = ();
@@ -82,7 +83,7 @@ impl ArtifactKind for TestArtifact {
 
 impl ValidatedPoolReader<TestArtifact> for TestConsensus {
     fn contains(&self, id: &<TestArtifact as ArtifactKind>::Id) -> bool {
-        todo!()
+        unimplemented!("Contains is not needed.")
     }
     fn get_validated_by_identifier(
         &self,
@@ -311,7 +312,7 @@ where
     async fn perform_attestation_validation(
         &self,
         stream: S,
-        peer: NodeId,
+        _peer: NodeId,
         _registry_version: RegistryVersion,
     ) -> Result<S, ValidateAttestationError> {
         Ok(stream)
@@ -326,14 +327,14 @@ struct TlsConfigImpl {
 impl TlsConfig for TlsConfigImpl {
     fn server_config_without_client_auth(
         &self,
-        registry_version: ic_types::RegistryVersion,
+        _registry_version: ic_types::RegistryVersion,
     ) -> Result<ServerConfig, ic_crypto_tls_interfaces::TlsConfigError> {
         todo!()
     }
     fn server_config(
         &self,
-        allowed_clients: ic_crypto_tls_interfaces::SomeOrAllNodes,
-        registry_version: ic_types::RegistryVersion,
+        _allowed_clients: ic_crypto_tls_interfaces::SomeOrAllNodes,
+        _registry_version: ic_types::RegistryVersion,
     ) -> Result<ServerConfig, ic_crypto_tls_interfaces::TlsConfigError> {
         Ok(ServerConfig::builder()
             .with_safe_defaults()
@@ -343,8 +344,8 @@ impl TlsConfig for TlsConfigImpl {
     }
     fn client_config(
         &self,
-        server: NodeId,
-        registry_version: ic_types::RegistryVersion,
+        _server: NodeId,
+        _registry_version: ic_types::RegistryVersion,
     ) -> Result<ClientConfig, ic_crypto_tls_interfaces::TlsConfigError> {
         Ok(ClientConfig::builder()
             .with_safe_defaults()
@@ -368,9 +369,9 @@ impl ClientCertVerifier for NoClientAuth {
     }
     fn verify_client_cert(
         &self,
-        end_entity: &tokio_rustls::rustls::Certificate,
-        intermediates: &[tokio_rustls::rustls::Certificate],
-        now: std::time::SystemTime,
+        _end_entity: &tokio_rustls::rustls::Certificate,
+        _intermediates: &[tokio_rustls::rustls::Certificate],
+        _now: std::time::SystemTime,
     ) -> Result<tokio_rustls::rustls::server::ClientCertVerified, tokio_rustls::rustls::Error> {
         Ok(ClientCertVerified::assertion())
     }
@@ -381,12 +382,12 @@ struct NoServerAuth;
 impl ServerCertVerifier for NoServerAuth {
     fn verify_server_cert(
         &self,
-        end_entity: &Certificate,
-        intermediates: &[Certificate],
-        server_name: &tokio_rustls::rustls::ServerName,
-        scts: &mut dyn Iterator<Item = &[u8]>,
-        ocsp_response: &[u8],
-        now: std::time::SystemTime,
+        _end_entity: &Certificate,
+        _intermediates: &[Certificate],
+        _server_name: &tokio_rustls::rustls::ServerName,
+        _scts: &mut dyn Iterator<Item = &[u8]>,
+        _ocsp_response: &[u8],
+        _now: std::time::SystemTime,
     ) -> Result<tokio_rustls::rustls::client::ServerCertVerified, tokio_rustls::rustls::Error> {
         Ok(ServerCertVerified::assertion())
     }
@@ -400,28 +401,28 @@ impl RegistryClient for MockReg {
     }
     fn get_versioned_value(
         &self,
-        key: &str,
-        version: ic_types::RegistryVersion,
+        _key: &str,
+        _version: ic_types::RegistryVersion,
     ) -> ic_interfaces_registry::RegistryClientVersionedResult<Vec<u8>> {
         todo!()
     }
     fn get_key_family(
         &self,
-        key_prefix: &str,
-        version: ic_types::RegistryVersion,
+        _key_prefix: &str,
+        _version: ic_types::RegistryVersion,
     ) -> Result<Vec<String>, ic_types::registry::RegistryClientError> {
         todo!()
     }
     fn get_value(
         &self,
-        key: &str,
-        version: ic_types::RegistryVersion,
+        _key: &str,
+        _version: ic_types::RegistryVersion,
     ) -> ic_interfaces_registry::RegistryClientResult<Vec<u8>> {
         todo!()
     }
     fn get_version_timestamp(
         &self,
-        registry_version: ic_types::RegistryVersion,
+        _registry_version: ic_types::RegistryVersion,
     ) -> Option<ic_types::Time> {
         todo!()
     }
