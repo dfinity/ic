@@ -125,7 +125,7 @@ fn forward_uri<B>(proxy_url: Uri, req: &Request<B>) -> Result<Uri, anyhow::Error
         )
         .as_str(),
     )
-    .map_or(req_uri_path_and_query, |p| Some(p));
+    .map_or(req_uri_path_and_query, Some);
     Ok(Uri::from_parts(parts)?)
 }
 

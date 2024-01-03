@@ -122,7 +122,7 @@ fn bench_transport(criterion: &mut Criterion) {
         ))
         .unwrap();
 
-    let test_transport = transports.get(0).unwrap().0.clone();
+    let test_transport = transports.first().unwrap().0.clone();
     let peers: Vec<NodeId> = transports
         .iter()
         .skip(1)

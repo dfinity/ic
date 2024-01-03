@@ -209,7 +209,7 @@ impl Storage {
             overlays: serialized_storage
                 .overlays
                 .into_iter()
-                .map(|o| OverlayFile::deserialize(o))
+                .map(OverlayFile::deserialize)
                 .collect::<Result<Vec<_>, _>>()?,
         })
     }

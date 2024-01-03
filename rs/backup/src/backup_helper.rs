@@ -175,7 +175,7 @@ impl BackupHelper {
                 Ok(nodes) => {
                     // fetch the ic.json5 file from the first node
                     // TODO: fetch from another f nodes and compare them
-                    if let Some(node_ip) = nodes.get(0) {
+                    if let Some(node_ip) = nodes.first() {
                         self.rsync_config(node_ip, replica_version);
                         Ok(())
                     } else {

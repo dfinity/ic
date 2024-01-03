@@ -613,37 +613,6 @@ mod tests {
 
         assert_eq!(get("C", 7).unwrap(), Some(value(7)));
     }
-    #[cfg(test)]
-    mod metrics {
-        use ic_test_utilities_metrics::fetch_int_gauge;
-
-        use super::*;
-
-        #[test]
-        fn ic_registry_client_registry_version_updates() {
-            let data_provider = Arc::new(ProtoRegistryDataProvider::new());
-            let metrics_registry = MetricsRegistry::new();
-            let registry = RegistryClientImpl::new(data_provider.clone(), Some(&metrics_registry));
-
-            data_provider.add("A", v(1), Some(value(1))).unwrap();
-
-            registry.poll_once().unwrap();
-            assert_eq!(registry.get_latest_version(), v(1));
-            assert_eq!(
-                fetch_int_gauge(&metrics_registry, "ic_registry_client_registry_version"),
-                Some(1)
-            );
-
-            data_provider.add("A", v(3), Some(value(3))).unwrap();
-
-            registry.poll_once().unwrap();
-            assert_eq!(registry.get_latest_version(), v(3));
-            assert_eq!(
-                fetch_int_gauge(&metrics_registry, "ic_registry_client_registry_version"),
-                Some(3)
-            );
-        }
-    }
 
     fn v(v: u64) -> RegistryVersion {
         RegistryVersion::new(v)
@@ -692,6 +661,37 @@ mod tests {
             let mut res = self.data_provider.get_updates_since(version)?;
             res.retain(|r| r.version <= version + self.changelog_size);
             Ok(res)
+        }
+    }
+    #[cfg(test)]
+    mod metrics {
+        use ic_test_utilities_metrics::fetch_int_gauge;
+
+        use super::*;
+
+        #[test]
+        fn ic_registry_client_registry_version_updates() {
+            let data_provider = Arc::new(ProtoRegistryDataProvider::new());
+            let metrics_registry = MetricsRegistry::new();
+            let registry = RegistryClientImpl::new(data_provider.clone(), Some(&metrics_registry));
+
+            data_provider.add("A", v(1), Some(value(1))).unwrap();
+
+            registry.poll_once().unwrap();
+            assert_eq!(registry.get_latest_version(), v(1));
+            assert_eq!(
+                fetch_int_gauge(&metrics_registry, "ic_registry_client_registry_version"),
+                Some(1)
+            );
+
+            data_provider.add("A", v(3), Some(value(3))).unwrap();
+
+            registry.poll_once().unwrap();
+            assert_eq!(registry.get_latest_version(), v(3));
+            assert_eq!(
+                fetch_int_gauge(&metrics_registry, "ic_registry_client_registry_version"),
+                Some(3)
+            );
         }
     }
 }

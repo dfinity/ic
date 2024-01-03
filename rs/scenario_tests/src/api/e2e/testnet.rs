@@ -204,7 +204,7 @@ impl TestnetT for Testnet {
                     .filter(|(_, sub_id)| sub_id.get() == sub.get())
                     .map(|(ran, _)| *ran)
                     .collect();
-                match canister_ranges.get(0) {
+                match canister_ranges.first() {
                     Some(range) => range.start.get(),
                     None => PrincipalId::default(),
                 }

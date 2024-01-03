@@ -979,6 +979,7 @@ impl StateMachine {
 
     /// Constructs and initializes a new state machine that uses the specified
     /// directory for storing states.
+    #[allow(clippy::too_many_arguments)]
     fn setup_from_dir(
         state_dir: TempDir,
         nonce: u64,
@@ -1165,7 +1166,7 @@ impl StateMachine {
 
         Self {
             subnet_id,
-            secret_key: secret_key_bytes.get(0).unwrap().clone(),
+            secret_key: secret_key_bytes.first().unwrap().clone(),
             public_key,
             ecdsa_secret_key,
             registry_data_provider,

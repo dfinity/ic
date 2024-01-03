@@ -113,7 +113,7 @@ pub(crate) fn grouped_shares_meet_divergence_criteria(
         .map(|(_, shares)| shares.iter().map(|share| share.signature.signer).collect())
         .collect();
     share_for_content_signers.sort_by_key(|b| core::cmp::Reverse(b.len()));
-    if let Some(largest_signers) = share_for_content_signers.get(0) {
+    if let Some(largest_signers) = share_for_content_signers.first() {
         let mut non_largest_signers = BTreeSet::new();
         for signer_group in share_for_content_signers.iter().skip(1) {
             for signer in signer_group.iter() {

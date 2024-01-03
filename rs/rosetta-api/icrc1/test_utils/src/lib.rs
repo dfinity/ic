@@ -916,27 +916,6 @@ pub fn metadata_strategy() -> impl Strategy<Value = Vec<(String, MetadataValue)>
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::{minter_identity, valid_transactions_strategy};
-    use proptest::{
-        strategy::{Strategy, ValueTree},
-        test_runner::TestRunner,
-    };
-    use std::time::SystemTime;
-
-    #[test]
-    fn test_valid_transactions_strategy_generates_transaction() {
-        let size = 10;
-        let strategy =
-            valid_transactions_strategy(minter_identity(), 10_000, size, SystemTime::now());
-        let tree = strategy
-            .new_tree(&mut TestRunner::default())
-            .expect("Unable to run valid_transactions_strategy");
-        assert_eq!(tree.current().len(), size)
-    }
-}
-
 pub fn arb_account() -> impl Strategy<Value = Account> {
     (
         proptest::collection::vec(any::<u8>(), 28),
@@ -1081,4 +1060,25 @@ where
                 fee_collector_block_index: fee_col_block,
             },
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{minter_identity, valid_transactions_strategy};
+    use proptest::{
+        strategy::{Strategy, ValueTree},
+        test_runner::TestRunner,
+    };
+    use std::time::SystemTime;
+
+    #[test]
+    fn test_valid_transactions_strategy_generates_transaction() {
+        let size = 10;
+        let strategy =
+            valid_transactions_strategy(minter_identity(), 10_000, size, SystemTime::now());
+        let tree = strategy
+            .new_tree(&mut TestRunner::default())
+            .expect("Unable to run valid_transactions_strategy");
+        assert_eq!(tree.current().len(), size)
+    }
 }

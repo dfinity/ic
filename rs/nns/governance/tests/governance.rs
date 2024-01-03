@@ -807,7 +807,7 @@ async fn test_cascade_following_new() {
             proposal_id: Some(ProposalId { id: 1 }),
             vote: Vote::Yes as i32
         },
-        nns.get_neuron(&id).recent_ballots.get(0).unwrap()
+        nns.get_neuron(&id).recent_ballots.first().unwrap()
     );
     // Check that the vote is registered in the proposal
     assert_eq!(
@@ -1022,7 +1022,7 @@ async fn test_cascade_following_new() {
         },
         nns.get_neuron(&NeuronId { id: 2 })
             .recent_ballots
-            .get(0)
+            .first()
             .unwrap()
     );
     // The proposal should now be accepted and executed.
@@ -1249,7 +1249,7 @@ async fn test_cascade_following() {
             .get(&1)
             .unwrap()
             .recent_ballots
-            .get(0)
+            .first()
             .unwrap()
     );
     // Check that the vote is registered in the proposal
@@ -1299,7 +1299,7 @@ async fn test_cascade_following() {
             .get(&2)
             .unwrap()
             .recent_ballots
-            .get(0)
+            .first()
             .unwrap()
     );
     // The proposal should now be accepted and executed.
@@ -2277,7 +2277,7 @@ async fn test_manage_neuron() {
                     .get(&(Topic::NeuronManagement as i32))
                     .unwrap()
                     .followees
-                    .get(0)
+                    .first()
                     .unwrap()
                     .id
             })
@@ -9771,7 +9771,7 @@ fn test_update_node_provider() {
     assert_eq!(
         gov.heap_data
             .node_providers
-            .get(0)
+            .first()
             .unwrap()
             .reward_account
             .as_ref()

@@ -1801,14 +1801,12 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
 
         let cycles_debit = value
             .cycles_debit
-            .map(|c| c.try_into())
-            .transpose()?
+            .map(|c| c.into())
             .unwrap_or_else(Cycles::zero);
 
         let reserved_balance = value
             .reserved_balance
-            .map(|c| c.try_into())
-            .transpose()?
+            .map(|c| c.into())
             .unwrap_or_else(Cycles::zero);
 
         let task_queue = value

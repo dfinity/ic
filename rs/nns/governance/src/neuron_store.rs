@@ -455,10 +455,7 @@ impl NeuronStore {
         &self,
         neuron_id: NeuronId,
     ) -> Result<(Cow<Neuron>, StorageLocation), NeuronStoreError> {
-        let heap_neuron = self
-            .heap_neurons
-            .get(&neuron_id.id)
-            .map(|neuron| Cow::Borrowed(neuron));
+        let heap_neuron = self.heap_neurons.get(&neuron_id.id).map(Cow::Borrowed);
 
         if let Some(heap_neuron) = heap_neuron.clone() {
             // If the neuron is active on heap, return early to avoid any operation on stable
@@ -470,10 +467,7 @@ impl NeuronStore {
         }
 
         let stable_neuron = with_stable_neuron_store(|stable_neuron_store| {
-            stable_neuron_store
-                .read(neuron_id)
-                .ok()
-                .map(|neuron| Cow::Owned(neuron))
+            stable_neuron_store.read(neuron_id).ok().map(Cow::Owned)
         });
         match (stable_neuron, heap_neuron) {
             (Some(stable), Some(_)) => {
