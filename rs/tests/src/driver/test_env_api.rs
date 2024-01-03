@@ -173,7 +173,7 @@ use ic_utils::interfaces::ManagementCanister;
 use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayload, Tokens};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use slog::{info, warn, Logger};
+use slog::{error, info, warn, Logger};
 use ssh2::Session;
 use std::cmp::max;
 use std::collections::{HashMap, HashSet};
@@ -1111,7 +1111,7 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     fn get_mainnet_ic_os_img_sha256(&self) -> Result<String> {
         let mainnet_version: String =
             self.read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
-        fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img"), "disk-img.tar.zst")
+        fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img"), "disk-img.tar.zst", self.test_env().logger())
     }
 
     fn get_mainnet_ic_os_update_img_url(&self) -> Result<Url> {
@@ -1123,7 +1123,7 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     fn get_mainnet_ic_os_update_img_sha256(&self) -> Result<String> {
         let mainnet_version: String =
             self.read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
-        fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img"), "update-img.tar.zst")
+        fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img"), "update-img.tar.zst", self.test_env().logger())
     }
 
     fn get_canister_http_test_ca_cert(&self) -> Result<String> {
@@ -1151,10 +1151,20 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     }
 }
 
-fn fetch_sha256(base_url: String, file: &str) -> Result<String> {
+fn fetch_sha256(base_url: String, file: &str, logger: Logger) -> Result<String> {
     let sha256sums_url = format!("{base_url}/SHA256SUMS");
 
-    let body = reqwest::blocking::get(sha256sums_url)?.text()?;
+    let response = reqwest::blocking::get(sha256sums_url)?;
+    if !response.status().is_success() {
+        error!(
+            logger,
+            "Failed to fetch sha256. Remote address: {:?}, Headers: {:?}",
+            response.remote_addr(),
+            response.headers()
+        );
+        return Err(anyhow!("Failed to fetch sha256"));
+    }
+    let body = response.text()?;
 
     // body should look like:
     // eb2bd3cc9db26427dcee039b0e696a4127c2466e2e487d8628c4a7b2d3ecdbd3 *disk-img.tar.gz
