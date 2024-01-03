@@ -18,6 +18,7 @@ DEPENDENCIES = [
     "//rs/phantom_newtype",
     "//rs/protobuf",
     "//rs/p2p/quic_transport",
+    "//rs/p2p/test_utils",
     "//rs/types/types",
     "//rs/crypto/test_utils/tls",
     "//rs/types/types_test_utils",
@@ -39,7 +40,6 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
-    "//rs/p2p/test_utils",
     "//rs/test_utilities/logger",
     "@crate_index//:mockall",
     "@crate_index//:turmoil",
