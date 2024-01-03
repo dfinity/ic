@@ -1,4 +1,4 @@
-use super::types::MetadataOptions;
+use super::types::ConstructionMetadataRequestOptions;
 use crate::common::{types::Error, utils::utils::icrc1_account_to_rosetta_accountidentifier};
 use ic_base_types::PrincipalId;
 use icrc_ledger_types::icrc1::account::Account;
@@ -20,7 +20,7 @@ pub fn construction_derive(public_key: PublicKey) -> Result<ConstructionDeriveRe
 pub fn construction_preprocess() -> ConstructionPreprocessResponse {
     ConstructionPreprocessResponse {
         options: Some(
-            MetadataOptions {
+            ConstructionMetadataRequestOptions {
                 suggested_fee: true,
             }
             .into(),

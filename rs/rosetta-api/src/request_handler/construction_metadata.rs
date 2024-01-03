@@ -1,7 +1,8 @@
 use crate::errors::ApiError;
 use crate::models::amount::tokens_to_amount;
 use crate::models::{
-    ConstructionMetadataRequest, ConstructionMetadataResponse, ConstructionPayloadsRequestMetadata,
+    ConstructionMetadataRequest, ConstructionMetadataRequestOptions, ConstructionMetadataResponse,
+    ConstructionPayloadsRequestMetadata,
 };
 use crate::request_handler::{verify_network_id, RosettaRequestHandler};
 use crate::request_types::RequestType;
@@ -13,10 +14,13 @@ impl RosettaRequestHandler {
         &self,
         msg: ConstructionMetadataRequest,
     ) -> Result<ConstructionMetadataResponse, ApiError> {
-        verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
+        verify_network_id(
+            self.ledger.ledger_canister_id(),
+            &msg.network_identifier.into(),
+        )?;
         let suggested_fee = match msg.options {
             Some(opts)
-                if opts
+                if ConstructionMetadataRequestOptions::try_from(opts.clone())?
                     .request_types
                     .iter()
                     .all(RequestType::is_neuron_management) =>
@@ -32,7 +36,7 @@ impl RosettaRequestHandler {
             }
         };
         Ok(ConstructionMetadataResponse {
-            metadata: ConstructionPayloadsRequestMetadata::default(),
+            metadata: ConstructionPayloadsRequestMetadata::default().into(),
             suggested_fee,
         })
     }

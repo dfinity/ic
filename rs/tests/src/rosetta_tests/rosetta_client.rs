@@ -247,8 +247,8 @@ impl RosettaApiClient {
         public_keys: Option<Vec<PublicKey>>,
     ) -> Result<Result<ConstructionMetadataResponse, Error>, String> {
         let req = ConstructionMetadataRequest {
-            network_identifier: ic_rosetta_api::models::NetworkIdentifier(self.network_id()),
-            options,
+            network_identifier: ic_rosetta_api::models::NetworkIdentifier(self.network_id()).into(),
+            options: options.map(|op| op.into()),
             public_keys,
         };
         to_rosetta_response::<ConstructionMetadataResponse>(
