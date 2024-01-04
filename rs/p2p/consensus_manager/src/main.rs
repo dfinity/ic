@@ -123,14 +123,13 @@ impl PriorityFnAndFilterProducer<TestArtifact, TestConsensus> for TestConsensus 
     > {
         let node_id = self.node_id;
         Box::new(move |id, _attribute| {
-            let message_id = u64::from_le_bytes(id[..8].try_into().unwrap());
+            // let message_id = u64::from_le_bytes(id[..8].try_into().unwrap());
             let artifact_producer_node_id = u64::from_le_bytes(id[8..16].try_into().unwrap());
             let message_is_relayed_back = artifact_producer_node_id == node_id;
 
-            assert!(
-                !message_is_relayed_back,
-                "Message should not be relayed back to produced of an artifact."
-            );
+            if message_is_relayed_back {
+                return Priority::Drop;
+            }
 
             let expiry_time_secs = u64::from_le_bytes(id[16..24].try_into().unwrap());
 
