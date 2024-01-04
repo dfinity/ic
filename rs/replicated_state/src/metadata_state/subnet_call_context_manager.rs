@@ -193,6 +193,8 @@ impl CanisterManagementCalls {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SubnetCallContextManager {
+    /// Should increase monotonically. This property is used to determine if a request
+    /// corresponds to a future state.
     next_callback_id: u64,
     pub setup_initial_dkg_contexts: BTreeMap<CallbackId, SetupInitialDkgContext>,
     pub sign_with_ecdsa_contexts: BTreeMap<CallbackId, SignWithEcdsaContext>,
@@ -206,6 +208,10 @@ pub struct SubnetCallContextManager {
 }
 
 impl SubnetCallContextManager {
+    pub fn next_callback_id(&self) -> CallbackId {
+        CallbackId::from(self.next_callback_id)
+    }
+
     pub fn push_context(&mut self, context: SubnetCallContext) -> CallbackId {
         let callback_id = CallbackId::new(self.next_callback_id);
         self.next_callback_id += 1;
