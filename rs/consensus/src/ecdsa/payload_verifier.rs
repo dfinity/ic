@@ -570,12 +570,7 @@ mod test {
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_ic00_types::EcdsaKeyId;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_replicated_state::metadata_state::subnet_call_context_manager::*;
-    use ic_test_utilities::{
-        crypto::CryptoReturningOk,
-        mock_time,
-        types::{ids::subnet_test_id, messages::RequestBuilder},
-    };
+    use ic_test_utilities::{crypto::CryptoReturningOk, types::ids::subnet_test_id};
     use ic_types::{
         consensus::ecdsa::TranscriptAttributes, crypto::AlgorithmId, messages::CallbackId, Height,
     };
@@ -830,25 +825,11 @@ mod test {
         let max_ongoing_signatures = 2;
         sign_with_ecdsa_contexts.insert(
             CallbackId::from(1),
-            SignWithEcdsaContext {
-                request: RequestBuilder::new().build(),
-                key_id: key_id.clone(),
-                pseudo_random_id: [1; 32],
-                message_hash: [0; 32],
-                derivation_path: vec![],
-                batch_time: mock_time(),
-            },
+            fake_sign_with_ecdsa_context(key_id.clone(), [1; 32]),
         );
         sign_with_ecdsa_contexts.insert(
             CallbackId::from(2),
-            SignWithEcdsaContext {
-                request: RequestBuilder::new().build(),
-                key_id: key_id.clone(),
-                pseudo_random_id: [2; 32],
-                message_hash: [0; 32],
-                derivation_path: vec![],
-                batch_time: mock_time(),
-            },
+            fake_sign_with_ecdsa_context(key_id, [2; 32]),
         );
         let mut ecdsa_payload = empty_ecdsa_payload(subnet_id);
 

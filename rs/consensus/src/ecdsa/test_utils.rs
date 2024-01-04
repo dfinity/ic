@@ -17,8 +17,11 @@ use ic_ic00_types::EcdsaKeyId;
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaPool};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
+use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
 use ic_test_utilities::consensus::fake::*;
+use ic_test_utilities::mock_time;
 use ic_test_utilities::types::ids::{node_test_id, NODE_1, NODE_2};
+use ic_test_utilities::types::messages::RequestBuilder;
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::ecdsa::{
     self, EcdsaArtifactId, EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent,
@@ -40,7 +43,7 @@ use ic_types::crypto::canister_threshold_sig::{
 };
 use ic_types::crypto::AlgorithmId;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
-use ic_types::signature::*;
+use ic_types::{signature::*, Time};
 use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId};
 use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
@@ -58,6 +61,30 @@ pub(crate) fn empty_response() -> ic_types::messages::Response {
         // be refunded to the canister.
         refund: ic_types::Cycles::new(0),
         response_payload: ic_types::messages::Payload::Data(vec![]),
+    }
+}
+
+pub fn fake_sign_with_ecdsa_context(
+    key_id: EcdsaKeyId,
+    pseudo_random_id: [u8; 32],
+) -> SignWithEcdsaContext {
+    fake_sign_with_ecdsa_context_with_batch_time(key_id, pseudo_random_id, mock_time())
+}
+
+pub fn fake_sign_with_ecdsa_context_with_batch_time(
+    key_id: EcdsaKeyId,
+    pseudo_random_id: [u8; 32],
+    batch_time: Time,
+) -> SignWithEcdsaContext {
+    SignWithEcdsaContext {
+        request: RequestBuilder::new().build(),
+        message_hash: [0; 32],
+        derivation_path: vec![],
+        batch_time,
+        key_id,
+        pseudo_random_id,
+        matched_quadruple: None,
+        nonce: None,
     }
 }
 
