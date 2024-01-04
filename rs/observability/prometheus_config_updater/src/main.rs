@@ -54,11 +54,11 @@ fn main() -> Result<()> {
     let mut handles = vec![];
 
     info!(log, "Starting prometheus-config-updater");
-    let mercury_dir = cli_args.targets_dir.join(cli_args.ic_name);
+    let mercury_target_dir = cli_args.targets_dir.join(cli_args.ic_name);
 
     rt.block_on(sync_local_registry(
         log.clone(),
-        mercury_dir,
+        mercury_target_dir,
         nns_urls,
         cli_args.skip_sync,
         public_key,

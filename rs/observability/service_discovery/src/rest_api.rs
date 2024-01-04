@@ -116,7 +116,7 @@ impl Service<Request<Body>> for RestApi {
                 // strip leading `/`
                 let job_name = &s[1..];
                 let job = JobType::from_str(job_name).unwrap();
-                let targets = self.scraper.get_target_groups(job);
+                let targets = self.scraper.get_target_groups(job, self.log.clone());
                 self.target_groups_to_response(targets)
             }
             path => {
