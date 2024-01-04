@@ -290,27 +290,27 @@ impl RegistryClient for RegistryClientImpl {
         // 1. Skip all entries up to the first_match_index
         // 2. Filter out all versions newer than the one we are interested in
         // 3. Only consider the subsequence that starts with the given prefix
-        let res = cache_state
+        let records = cache_state
             .records
             .iter()
             .skip(first_match_index) // (1)
             .filter(|r| r.version <= version) // (2)
-            .take_while(|r| r.key.starts_with(key_prefix)) // (3)
-            .fold(vec![], |mut acc, r| {
-                // is_set iff the key is set in this transport record.
-                let is_set = r.value.is_some();
-                // if this record indicates a removal for the last key in the list, we need to
-                // remove that key.
-                if acc.last().map(|k| k == &r.key).unwrap_or(false) {
-                    if !is_set {
-                        acc.pop();
-                    }
-                } else if is_set {
-                    acc.push(r.key.clone());
+            .take_while(|r| r.key.starts_with(key_prefix)); // (3)
+
+        let mut results = vec![];
+        for record in records {
+            let has_value = record.value.is_some();
+            let last_result_is_current_key =
+                results.last().map(|k| k == &record.key).unwrap_or(false);
+            if has_value {
+                if !last_result_is_current_key {
+                    results.push(record.key.clone());
                 }
-                acc
-            });
-        Ok(res)
+            } else if last_result_is_current_key {
+                results.pop();
+            }
+        }
+        Ok(results)
     }
 
     fn get_latest_version(&self) -> RegistryVersion {
@@ -402,6 +402,7 @@ mod tests {
         set("A", 3);
         set("A", 6);
         set("B", 6);
+        set("B2", 4);
         set("B2", 5);
         rem("B2", 6);
         set("B3", 5);
@@ -447,9 +448,10 @@ mod tests {
         assert_eq!(get("B", 6).unwrap(), Some(value(6)));
         assert!(get("B", latest_version + 1).is_err());
 
-        for t in 0..5 {
+        for t in 0..4 {
             assert!(get("B2", t).unwrap().is_none());
         }
+        assert_eq!(get("B2", 4).unwrap(), Some(value(4)));
         assert_eq!(get("B2", 5).unwrap(), Some(value(5)));
         assert!(get("B2", 6).unwrap().is_none());
         assert!(get("B2", latest_version + 1).is_err());
