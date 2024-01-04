@@ -51,10 +51,11 @@ use ic_metrics::MetricsRegistry;
 use phantom_newtype::AmountOf;
 use quinn::{AsyncUdpSocket, ConnectionError, WriteError};
 use thiserror::Error;
-use tokio::sync::{watch, Mutex};
+use tokio::sync::watch;
+use tokio_util::{sync::CancellationToken, task::task_tracker::TaskTracker};
 
 use crate::connection_handle::ConnectionHandle;
-use crate::connection_manager::{start_connection_manager, ShutdownHandle};
+use crate::connection_manager::start_connection_manager;
 
 mod connection_handle;
 mod connection_manager;
@@ -65,7 +66,8 @@ mod utils;
 #[derive(Clone)]
 pub struct QuicTransport {
     conn_handles: Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>,
-    conn_manager_shutdown_handle: Arc<Mutex<ShutdownHandle>>,
+    cancellation: CancellationToken,
+    conn_manager_task_tracker: TaskTracker,
 }
 
 /// This is the main transport handle used for communication between peers.
@@ -91,6 +93,8 @@ impl QuicTransport {
         registry_client: Arc<dyn RegistryClient>,
         sev_handshake: Arc<dyn ValidateAttestedStream<Box<dyn TlsStream>> + Send + Sync>,
         node_id: NodeId,
+        // The receiver is passed here mainly to be consistent with other managers that also
+        // require receivers on construction.
         topology_watcher: watch::Receiver<SubnetTopology>,
         udp_socket: Either<SocketAddr, impl AsyncUdpSocket>,
         // Make sure this is respected https://docs.rs/axum/latest/axum/struct.Router.html#a-note-about-performance
@@ -98,9 +102,11 @@ impl QuicTransport {
     ) -> QuicTransport {
         info!(log, "Starting Quic transport.");
 
+        let cancellation = CancellationToken::new();
         let conn_handles = Arc::new(RwLock::new(HashMap::new()));
+        let conn_manager_task_tracker = TaskTracker::new();
 
-        let conn_manager_shutdown_handle = start_connection_manager(
+        start_connection_manager(
             log,
             metrics_registry,
             rt,
@@ -110,24 +116,25 @@ impl QuicTransport {
             node_id,
             conn_handles.clone(),
             topology_watcher,
+            cancellation.clone(),
+            conn_manager_task_tracker.clone(),
             udp_socket,
             router,
         );
 
         QuicTransport {
             conn_handles,
-            conn_manager_shutdown_handle: Arc::new(Mutex::new(conn_manager_shutdown_handle)),
+            cancellation,
+            conn_manager_task_tracker,
         }
     }
 
+    /// Graceful shutdown of transport.
     pub async fn shutdown(&self) {
+        let _ = self.conn_manager_task_tracker.close();
         // If an error is returned it means the conn manager is already stopped.
-        let _ = self
-            .conn_manager_shutdown_handle
-            .lock()
-            .await
-            .shutdown()
-            .await;
+        self.cancellation.cancel();
+        self.conn_manager_task_tracker.wait().await;
     }
 
     pub(crate) fn get_conn_handle(&self, peer_id: &NodeId) -> Result<ConnectionHandle, SendError> {
