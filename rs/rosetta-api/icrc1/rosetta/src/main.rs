@@ -297,6 +297,7 @@ async fn main() -> Result<()> {
 
     let metadata = load_metadata(&args, &icrc1_agent, &storage).await?;
     let shared_state = Arc::new(AppState {
+        icrc1_agent,
         ledger_id: args.ledger_id,
         storage: storage.clone(),
         metadata,
@@ -313,6 +314,7 @@ async fn main() -> Result<()> {
         .route("/mempool/transaction", post(mempool_transaction))
         .route("/construction/derive", post(construction_derive))
         .route("/construction/preprocess", post(construction_preprocess))
+        .route("/construction/metadata", post(construction_metadata))
         // This layer creates a span for each http request and attaches
         // the request_id, HTTP Method and path to it.
         .layer(add_request_span())

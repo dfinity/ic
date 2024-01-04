@@ -1,3 +1,4 @@
+use ic_icrc_rosetta::construction_api::types::ConstructionMetadataRequestOptions;
 use reqwest::{Client, Url};
 use rosetta_core::identifiers::*;
 use rosetta_core::objects::Operation;
@@ -149,6 +150,22 @@ impl RosettaClient {
                 metadata: None,
                 operations,
                 network_identifier,
+            },
+        )
+        .await
+    }
+
+    pub async fn construction_metadata(
+        &self,
+        construction_metadata_options: ConstructionMetadataRequestOptions,
+        network_identifier: NetworkIdentifier,
+    ) -> reqwest::Result<ConstructionMetadataResponse> {
+        self.call_endpoint(
+            "/construction/metadata",
+            &ConstructionMetadataRequest {
+                options: Some(construction_metadata_options.into()),
+                network_identifier,
+                public_keys: None,
             },
         )
         .await

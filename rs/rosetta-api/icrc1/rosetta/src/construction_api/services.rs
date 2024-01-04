@@ -1,12 +1,15 @@
 use super::types::ConstructionMetadataRequestOptions;
 use crate::common::{types::Error, utils::utils::icrc1_account_to_rosetta_accountidentifier};
 use ic_base_types::PrincipalId;
+use icrc_ledger_agent::{CallMode, Icrc1Agent};
 use icrc_ledger_types::icrc1::account::Account;
+use rosetta_core::objects::{Amount, Currency};
 use rosetta_core::response_types::*;
 use rosetta_core::{
     convert::principal_id_from_public_key, objects::PublicKey,
     response_types::ConstructionDeriveResponse,
 };
+use std::sync::Arc;
 
 pub fn construction_derive(public_key: PublicKey) -> Result<ConstructionDeriveResponse, Error> {
     let principal_id: PrincipalId = principal_id_from_public_key(&public_key)?;
@@ -27,6 +30,29 @@ pub fn construction_preprocess() -> ConstructionPreprocessResponse {
         ),
         required_public_keys: None,
     }
+}
+
+pub async fn construction_metadata(
+    options: ConstructionMetadataRequestOptions,
+    icrc1_agent: Arc<Icrc1Agent>,
+    currency: Currency,
+) -> Result<ConstructionMetadataResponse, Error> {
+    Ok(ConstructionMetadataResponse {
+        metadata: serde_json::map::Map::new(),
+        suggested_fee: if options.suggested_fee {
+            Some(
+                icrc1_agent
+                    .fee(CallMode::Query)
+                    .await
+                    .map(|fee| vec![Amount::new(fee.0.to_string(), currency)])
+                    .map_err(|err| {
+                        Error::ledger_communication_unsuccessful(&format!("{:?}", err))
+                    })?,
+            )
+        } else {
+            None
+        },
+    })
 }
 
 #[cfg(test)]
