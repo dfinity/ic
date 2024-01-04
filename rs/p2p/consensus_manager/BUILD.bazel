@@ -93,3 +93,14 @@ rust_test_suite(
     flaky = True,
     deps = [":consensus_manager"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
+
+sh_binary(
+    name = "aws",
+    srcs = ["aws.sh"],
+    data = [
+        "//rs/p2p/consensus_manager:consensus_manager_runner",
+    ],
+    env = {
+        "RUNNER_BIN": "$(location //rs/p2p/consensus_manager:consensus_manager_runner)",
+    },
+)

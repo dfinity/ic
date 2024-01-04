@@ -248,11 +248,8 @@ fn main() {
         Arc::new(test_consensus.clone()) as Arc<_>,
         cb_tx,
     );
-    let transport_addr: SocketAddr = (
-        IpAddr::from_str("127.0.0.1").expect("Invalid IP"),
-        args.port,
-    )
-        .into();
+    let transport_addr: SocketAddr =
+        (IpAddr::from_str("0.0.0.0").expect("Invalid IP"), args.port).into();
 
     let mut topology: Vec<(NodeId, SocketAddr)> = (0..(args.peers_addrs.len() as u64))
         .into_iter()

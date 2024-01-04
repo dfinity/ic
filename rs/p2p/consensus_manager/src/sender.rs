@@ -169,7 +169,6 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
                 pool_reader.read().unwrap().get_validated_by_identifier(&id)
             })
             .await;
-            println!("push");
 
             match artifact {
                 Ok(Some(artifact)) => Some(artifact),
