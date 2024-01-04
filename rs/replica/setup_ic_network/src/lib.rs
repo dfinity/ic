@@ -391,7 +391,7 @@ pub fn setup_consensus_and_p2p(
     ));
 
     let _state_sync_manager = ic_state_sync_manager::start_state_sync_manager(
-        log.clone(),
+        log,
         metrics_registry,
         rt_handle,
         quic_transport.clone(),

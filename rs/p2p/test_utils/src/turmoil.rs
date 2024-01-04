@@ -366,7 +366,7 @@ pub fn add_transport_to_sim<F>(
 
             if let Some(state_sync_rx) = state_sync_rx {
                 ic_state_sync_manager::start_state_sync_manager(
-                    log.clone(),
+                    &log,
                     &MetricsRegistry::default(),
                     &tokio::runtime::Handle::current(),
                     transport.clone(),

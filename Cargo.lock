@@ -11304,6 +11304,7 @@ dependencies = [
  "strum_macros 0.25.3",
  "tokio",
  "tokio-metrics",
+ "tokio-util",
  "turmoil",
  "zstd",
 ]
