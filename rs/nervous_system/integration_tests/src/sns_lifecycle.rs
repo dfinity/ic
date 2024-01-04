@@ -595,8 +595,8 @@ fn install_nns_canisters(
 }
 
 fn test_sns_lifecycle(
-    neurons_fund_participation: bool,
     ensure_swap_time_run_out_without_sufficient_direct_participation: bool,
+    csns: CreateServiceNervousSystem,
 ) {
     // 1. Prepare the world
     let pocket_ic = PocketIcBuilder::new()
@@ -613,30 +613,7 @@ fn test_sns_lifecycle(
     );
 
     // 2. Create an SNS instance
-    let swap_parameters = CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
-        .swap_parameters
-        .clone()
-        .unwrap();
-    let swap_parameters = SwapParameters {
-        // This is the essential flag toggled by proptest
-        neurons_fund_participation: Some(neurons_fund_participation),
-        // Ensure just one huge direct participant can finalize the swap.
-        minimum_participants: Some(1),
-        minimum_participant_icp: Some(TokensPb::from_e8s(150_000 * E8)),
-        maximum_participant_icp: Some(TokensPb::from_e8s(650_000 * E8)),
-        minimum_direct_participation_icp: Some(TokensPb::from_e8s(150_000 * E8)),
-        maximum_direct_participation_icp: Some(TokensPb::from_e8s(650_000 * E8)),
-        // Instantly transit from Lifecycle::Committed to Lifecycle::Open.
-        start_time: None,
-        // Avoid the need to say that we're human.
-        confirmation_text: None,
-        ..swap_parameters
-    };
-    let csns = CreateServiceNervousSystem {
-        dapp_canisters: vec![],
-        swap_parameters: Some(swap_parameters),
-        ..CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone()
-    };
+    let swap_parameters = csns.swap_parameters.clone().unwrap();
     let proposal_info = propose_and_wait(
         &pocket_ic,
         Proposal {
@@ -769,7 +746,10 @@ fn test_sns_lifecycle(
         );
     }
 
-    if neurons_fund_participation {
+    if swap_parameters
+        .neurons_fund_participation
+        .unwrap_or_default()
+    {
         if ensure_swap_time_run_out_without_sufficient_direct_participation {
             assert_eq!(
                 derived_state.neurons_fund_participation_icp_e8s.unwrap(),
@@ -792,22 +772,48 @@ fn test_sns_lifecycle(
     }
 }
 
+fn test_csns(neurons_fund_participation: bool) -> CreateServiceNervousSystem {
+    let swap_parameters = CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
+        .swap_parameters
+        .clone()
+        .unwrap();
+    let swap_parameters = SwapParameters {
+        neurons_fund_participation: Some(neurons_fund_participation),
+        // Ensure just one huge direct participant can finalize the swap.
+        minimum_participants: Some(1),
+        minimum_participant_icp: Some(TokensPb::from_e8s(150_000 * E8)),
+        maximum_participant_icp: Some(TokensPb::from_e8s(650_000 * E8)),
+        minimum_direct_participation_icp: Some(TokensPb::from_e8s(150_000 * E8)),
+        maximum_direct_participation_icp: Some(TokensPb::from_e8s(650_000 * E8)),
+        // Instantly transit from Lifecycle::Committed to Lifecycle::Open.
+        start_time: None,
+        // Avoid the need to say that we're human.
+        confirmation_text: None,
+        ..swap_parameters
+    };
+    CreateServiceNervousSystem {
+        dapp_canisters: vec![],
+        swap_parameters: Some(swap_parameters),
+        ..CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone()
+    }
+}
+
 #[test]
 fn test_sns_lifecycle_happy_scenario_with_neurons_fund_participation() {
-    test_sns_lifecycle(true, false);
+    test_sns_lifecycle(true, test_csns(false));
 }
 
 #[test]
 fn test_sns_lifecycle_happy_scenario_without_neurons_fund_participation() {
-    test_sns_lifecycle(false, false);
+    test_sns_lifecycle(false, test_csns(false));
 }
 
 #[test]
 fn test_sns_lifecycle_swap_timeout_with_neurons_fund_participation() {
-    test_sns_lifecycle(true, true);
+    test_sns_lifecycle(true, test_csns(true));
 }
 
 #[test]
 fn test_sns_lifecycle_swap_timeout_without_neurons_fund_participation() {
-    test_sns_lifecycle(false, true);
+    test_sns_lifecycle(false, test_csns(true));
 }
