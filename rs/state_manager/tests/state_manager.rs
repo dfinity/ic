@@ -8,7 +8,7 @@ use ic_crypto_tree_hash::{
 };
 use ic_ic00_types::{CanisterChangeDetails, CanisterChangeOrigin};
 use ic_interfaces::certification::Verifier;
-use ic_interfaces::p2p::state_sync::StateSyncClient;
+use ic_interfaces::p2p::state_sync::{ChunkId, StateSyncClient};
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_state_manager::*;
 use ic_logger::replica_logger::no_op_logger;
@@ -49,7 +49,6 @@ use ic_types::batch::{
 };
 use ic_types::{
     artifact::{Priority, StateSyncArtifactId},
-    chunkable::ChunkId,
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::CallbackId,

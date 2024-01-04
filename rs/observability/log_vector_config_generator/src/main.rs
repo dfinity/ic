@@ -31,12 +31,12 @@ fn main() -> Result<()> {
     let shutdown_signal = shutdown_signal(log.clone()).shared();
     let mut handles = vec![];
 
-    info!(log, "Starting mercury ...");
-    let mercury_dir = cli_args.targets_dir.join("mercury");
+    info!(log, "Starting service discovery for mercury ...");
+    let mercury_target_dir = cli_args.targets_dir.join("mercury");
     let nns_url = vec![cli_args.nns_url];
     rt.block_on(sync_local_registry(
         log.clone(),
-        mercury_dir,
+        mercury_target_dir,
         nns_url,
         cli_args.skip_sync,
         None,

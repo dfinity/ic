@@ -291,7 +291,7 @@ pub trait Proxy: Sync + Send {
         &self,
         request_type: RequestType,
         request: Request<Body>,
-        node: Node,
+        node: Arc<Node>,
         canister_id: CanisterId,
     ) -> Result<Response, ErrorCause>;
 }
@@ -340,7 +340,7 @@ impl Proxy for ProxyRouter {
         &self,
         request_type: RequestType,
         request: Request<Body>,
-        node: Node,
+        node: Arc<Node>,
         canister_id: CanisterId,
     ) -> Result<Response, ErrorCause> {
         // Prepare the request
@@ -538,6 +538,8 @@ pub async fn preprocess_request(
         nonce: content.nonce.map(|x| x.0),
     };
 
+    let ctx = Arc::new(ctx);
+
     // Reconstruct request back from parts
     let mut request = Request::from_parts(parts, Body::from(body));
 
@@ -609,7 +611,7 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
         }
     }
 
-    let node = response.extensions().get::<Node>().cloned();
+    let node = response.extensions().get::<Arc<Node>>().cloned();
     if let Some(v) = node {
         // Principals and subnet type are always ASCII printable, so unwrap is safe
         response.headers_mut().insert(
@@ -628,7 +630,7 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
         );
     }
 
-    if let Some(ctx) = response.extensions().get::<RequestContext>().cloned() {
+    if let Some(ctx) = response.extensions().get::<Arc<RequestContext>>().cloned() {
         response.headers_mut().insert(
             HEADER_IC_REQUEST_TYPE,
             HeaderValue::from_maybe_shared(Bytes::from(ctx.request_type.to_string())).unwrap(),
@@ -655,10 +657,10 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
             )
         });
 
-        ctx.method_name.and_then(|v| {
+        ctx.method_name.as_ref().and_then(|v| {
             response.headers_mut().insert(
                 HEADER_IC_METHOD_NAME,
-                HeaderValue::from_maybe_shared(Bytes::from(v)).unwrap(),
+                HeaderValue::from_maybe_shared(Bytes::from(v.clone())).unwrap(),
             )
         });
     }
@@ -718,9 +720,9 @@ pub async fn status(
 // Handler: Unified handler for query/call/read_state calls
 pub async fn handle_call(
     State(p): State<Arc<dyn Proxy>>,
-    Extension(ctx): Extension<RequestContext>,
+    Extension(ctx): Extension<Arc<RequestContext>>,
     Extension(canister_id): Extension<CanisterId>,
-    Extension(node): Extension<Node>,
+    Extension(node): Extension<Arc<Node>>,
     request: Request<Body>,
 ) -> Result<impl IntoResponse, ApiError> {
     // Proxy the request

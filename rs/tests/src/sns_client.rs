@@ -80,7 +80,7 @@ impl TestEnvAttribute for SnsClient {
 
 impl SnsClient {
     pub fn get_wallet_canister_principal(&self) -> Principal {
-        Principal::try_from(self.wallet_canister_id).unwrap()
+        Principal::from(self.wallet_canister_id)
     }
 
     fn get_wallet_canister<'a>(&self, agent: &'a Agent) -> UniversalCanister<'a> {

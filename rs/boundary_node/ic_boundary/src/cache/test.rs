@@ -45,6 +45,8 @@ fn gen_request_with_params(
         ctx.nonce = Some(vec![1, 2, 3, 4]);
     }
 
+    let ctx = Arc::new(ctx);
+
     req.extensions_mut().insert(ctx);
     req.extensions_mut().insert(size);
     req.extensions_mut().insert(status_code);

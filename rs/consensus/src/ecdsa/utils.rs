@@ -272,7 +272,7 @@ pub(crate) fn inspect_ecdsa_initializations(
     }
 
     let ecdsa_init = ecdsa_initializations
-        .get(0)
+        .first()
         .expect("Error: Ecdsa Initialization is None");
 
     let ecdsa_key_id = ecdsa_init

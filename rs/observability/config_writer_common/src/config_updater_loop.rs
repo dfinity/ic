@@ -23,7 +23,7 @@ pub fn config_updater_loop(
 ) -> impl FnMut() {
     move || loop {
         for job in &jobs {
-            let target_groups = match discovery.get_target_groups(job._type) {
+            let target_groups = match discovery.get_target_groups(job._type, log.clone()) {
                 Ok(t) => t,
                 Err(e) => {
                     warn!(

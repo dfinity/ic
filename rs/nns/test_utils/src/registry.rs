@@ -480,7 +480,7 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
         ),
         insert(
             make_routing_table_record_key().as_bytes(),
-            encode_or_panic(&RoutingTablePB::try_from(routing_table).unwrap()),
+            encode_or_panic(&RoutingTablePB::from(routing_table)),
         ),
         insert(
             make_replica_version_key(replica_version_id).as_bytes(),

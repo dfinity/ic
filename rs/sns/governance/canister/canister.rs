@@ -18,6 +18,7 @@ use dfn_core::{
 };
 use ic_base_types::CanisterId;
 use ic_canister_log::log;
+use ic_canister_profiler::{measure_span, measure_span_async};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_clients::canister_status::CanisterStatusResultV2;
 use ic_nervous_system_common::{
@@ -34,7 +35,9 @@ use ic_sns_governance::pb::v1::{
     MintTokensResponse, Neuron,
 };
 use ic_sns_governance::{
-    governance::{log_prefix, Governance, TimeWarp, ValidGovernanceProto},
+    governance::{
+        log_prefix, Governance, TimeWarp, ValidGovernanceProto, MATURITY_DISBURSEMENT_DELAY_SECONDS,
+    },
     ledger::LedgerCanister,
     logs::{ERROR, INFO},
     pb::v1::{
@@ -280,6 +283,9 @@ fn canister_post_upgrade() {
             // TODO(NNS1-2731): Delete this once it's been released.
             settle_proposals_if_reward_rates_are_zero(now, &mut governance_proto);
 
+            // TODO: Delete this once it's been released.
+            populate_finalize_disbursement_timestamp_seconds(&mut governance_proto);
+
             canister_init_(governance_proto);
             Ok(())
         }
@@ -460,6 +466,17 @@ fn settle_proposals_if_reward_rates_are_zero(now: u64, governance_proto: &mut Go
     }
 }
 
+fn populate_finalize_disbursement_timestamp_seconds(governance_proto: &mut GovernanceProto) {
+    for neuron in governance_proto.neurons.values_mut() {
+        for disbursement in neuron.disburse_maturity_in_progress.iter_mut() {
+            disbursement.finalize_disbursement_timestamp_seconds = Some(
+                disbursement.timestamp_of_disbursement_seconds
+                    + MATURITY_DISBURSEMENT_DELAY_SECONDS,
+            );
+        }
+    }
+}
+
 #[cfg(feature = "test")]
 #[export_name = "canister_update set_time_warp"]
 /// Test only feature. When used, a delta is applied to the canister's system timestamp.
@@ -538,9 +555,13 @@ fn manage_neuron() {
 /// Internal method for calling manage_neuron.
 #[candid_method(update, rename = "manage_neuron")]
 async fn manage_neuron_(manage_neuron: ManageNeuron) -> ManageNeuronResponse {
-    governance_mut()
-        .manage_neuron(&manage_neuron, &caller())
-        .await
+    let governance = governance_mut();
+    measure_span_async(
+        governance.profiling_information,
+        "manage_neuron",
+        governance.manage_neuron(&manage_neuron, &caller()),
+    )
+    .await
 }
 
 #[cfg(feature = "test")]
@@ -555,7 +576,10 @@ fn update_neuron() {
 #[candid_method(update, rename = "update_neuron")]
 /// Internal method for calling update_neuron.
 fn update_neuron_(neuron: Neuron) -> Option<GovernanceError> {
-    governance_mut().update_neuron(neuron).err()
+    let governance = governance_mut();
+    measure_span(governance.profiling_information, "update_neuron", || {
+        governance.update_neuron(neuron).err()
+    })
 }
 
 /// Returns the full neuron corresponding to the neuron with ID `neuron_id`.
@@ -758,7 +782,12 @@ fn claim_swap_neurons() {
 fn claim_swap_neurons_(
     claim_swap_neurons_request: ClaimSwapNeuronsRequest,
 ) -> ClaimSwapNeuronsResponse {
-    governance_mut().claim_swap_neurons(claim_swap_neurons_request, caller())
+    let governance = governance_mut();
+    measure_span(
+        governance.profiling_information,
+        "claim_swap_neurons",
+        || governance.claim_swap_neurons(claim_swap_neurons_request, caller()),
+    )
 }
 
 /// This is not really useful to the public. It is, however, useful to integration tests.
@@ -773,7 +802,12 @@ fn get_maturity_modulation() {
 fn get_maturity_modulation_(
     request: GetMaturityModulationRequest,
 ) -> GetMaturityModulationResponse {
-    governance().get_maturity_modulation(request)
+    let governance = governance_mut();
+    measure_span(
+        governance.profiling_information,
+        "get_maturity_modulation",
+        || governance.get_maturity_modulation(request),
+    )
 }
 
 /// The canister's heartbeat.
@@ -960,7 +994,9 @@ fn check_governance_candid_file() {
 mod tests {
     use super::*;
     use ic_nervous_system_common::START_OF_2022_TIMESTAMP_SECONDS;
-    use ic_sns_governance::pb::v1::{Ballot, VotingRewardsParameters};
+    use ic_sns_governance::pb::v1::{
+        Ballot, DisburseMaturityInProgress, Neuron, VotingRewardsParameters,
+    };
     use maplit::btreemap;
     use strum::IntoEnumIterator;
 
@@ -1146,5 +1182,57 @@ mod tests {
 
         // Step 3b: Inspect results.
         assert_eq!(governance_proto, original_governance_proto);
+    }
+
+    #[test]
+    fn test_populate_finalize_disbursement_timestamp_seconds() {
+        // Step 1: prepare a neuron with 2 in progress disbursement, one with
+        // finalize_disbursement_timestamp_seconds as None, and the other has incorrect timestamp.
+        let mut governance_proto = GovernanceProto {
+            neurons: btreemap! {
+                "1".to_string() => Neuron {
+                    disburse_maturity_in_progress: vec![
+                        DisburseMaturityInProgress {
+                            timestamp_of_disbursement_seconds: 1,
+                            finalize_disbursement_timestamp_seconds: None,
+                            ..Default::default()
+                        },
+                        DisburseMaturityInProgress {
+                            timestamp_of_disbursement_seconds: 2,
+                            finalize_disbursement_timestamp_seconds: Some(3),
+                            ..Default::default()
+                        }
+                    ],
+                    ..Default::default()
+                },
+            },
+            ..Default::default()
+        };
+
+        // Step 2: populates the timestamps.
+        populate_finalize_disbursement_timestamp_seconds(&mut governance_proto);
+
+        // Step 3: verifies that both disbursements have the correct finalization timestamps.
+        let expected_governance_proto = GovernanceProto {
+            neurons: btreemap! {
+                "1".to_string() => Neuron {
+                    disburse_maturity_in_progress: vec![
+                        DisburseMaturityInProgress {
+                            timestamp_of_disbursement_seconds: 1,
+                            finalize_disbursement_timestamp_seconds: Some(1 + MATURITY_DISBURSEMENT_DELAY_SECONDS),
+                            ..Default::default()
+                        },
+                        DisburseMaturityInProgress {
+                            timestamp_of_disbursement_seconds: 2,
+                            finalize_disbursement_timestamp_seconds: Some(2 + MATURITY_DISBURSEMENT_DELAY_SECONDS),
+                            ..Default::default()
+                        },
+                    ],
+                    ..Default::default()
+                },
+            },
+            ..Default::default()
+        };
+        assert_eq!(governance_proto, expected_governance_proto);
     }
 }

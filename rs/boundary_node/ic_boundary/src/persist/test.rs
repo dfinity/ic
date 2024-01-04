@@ -58,8 +58,8 @@ fn test_principal_to_u256() -> Result<(), Error> {
     Ok(())
 }
 
-pub fn node(i: u64, subnet_id: Principal) -> Node {
-    Node {
+pub fn node(i: u64, subnet_id: Principal) -> Arc<Node> {
+    Arc::new(Node {
         id: node_test_id(1001 + i).get().0,
         subnet_id,
         subnet_type: SubnetType::Application,
@@ -69,7 +69,7 @@ pub fn node(i: u64, subnet_id: Principal) -> Node {
             .0
             .certificate_der,
         replica_version: "7742d96ddd30aa6b607c9d2d4093a7b714f5b25b".to_string(),
-    }
+    })
 }
 
 pub fn generate_test_subnets(offset: u64) -> Vec<Subnet> {

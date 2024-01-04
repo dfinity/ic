@@ -9,8 +9,7 @@ edition = "2021"
 async-trait = "0.1.36"
 either = "1.6.0"
 clap = { version = "4", features = ["derive"] }
-axum = { workspace = true }
-hex = "0.4.2"
+axum = "0.7.0"
 backoff = { workspace = true }
 bytes = { workspace = true }
 crossbeam-channel = { workspace = true }

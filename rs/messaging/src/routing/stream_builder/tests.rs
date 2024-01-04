@@ -452,7 +452,7 @@ fn build_streams_impl_respects_limits(
         let msgs = generate_messages_for_test(/* senders = */ 2, /* receivers = */ 2);
         let msg_count = msgs.len();
         // All messages returned by `generate_messages_for_test` are of the same size
-        let msg_size = msgs.get(0).unwrap().count_bytes() as u64;
+        let msg_size = msgs.first().unwrap().count_bytes() as u64;
 
         assert!(
             msg_count > expected_messages as usize,

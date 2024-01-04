@@ -29,6 +29,7 @@ const ERROR_CODE_INVALID_TRANSACTION_IDENTIFIER: u32 = 5;
 const ERROR_CODE_MEMPOOL_TRANSACTION_MISSING: u32 = 6;
 const ERROR_CODE_PARSING_ERROR: u32 = 7;
 const ERROR_CODE_UNSUPPORTED_OPERATION: u32 = 8;
+const ERROR_CODE_LEDGER_COMMUNICATION: u32 = 9;
 
 impl IntoResponse for Error {
     fn into_response(self) -> axum::response::Response {
@@ -134,6 +135,16 @@ impl Error {
                 op_type
             ),
             description: None,
+            retriable: false,
+            details: None,
+        })
+    }
+
+    pub fn ledger_communication_unsuccessful(description: &str) -> Self {
+        Self(rosetta_core::miscellaneous::Error {
+            code: ERROR_CODE_LEDGER_COMMUNICATION,
+            message: "Failed to communicate with the icrc1 ledger.".to_owned(),
+            description: Some(description.to_owned()),
             retriable: false,
             details: None,
         })

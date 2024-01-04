@@ -98,7 +98,6 @@ impl EcdsaSignerImpl {
     ) -> EcdsaChangeSet {
         let sig_inputs_map = block_reader
             .requested_signatures()
-            .map(|(request_id, sig_inputs)| (request_id, sig_inputs))
             .collect::<BTreeMap<_, _>>();
 
         // Collection of validated shares

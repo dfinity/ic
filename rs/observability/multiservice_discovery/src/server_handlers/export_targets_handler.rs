@@ -5,16 +5,18 @@ use service_discovery::{
     job_types::{JobType, NodeOS},
     IcServiceDiscovery,
 };
+use slog::Logger;
 use warp::reply::Reply;
 
 use crate::definition::Definition;
 
 use super::WebResult;
-use multiservice_discovery_shared::contracts::{map_to_target_dto, TargetDto};
+use multiservice_discovery_shared::contracts::target::{map_to_target_dto, TargetDto};
 use tokio::sync::Mutex;
 
 pub struct ExportTargetsBinding {
     pub definitions: Arc<Mutex<Vec<Definition>>>,
+    pub log: Logger,
 }
 
 pub async fn export_targets(binding: ExportTargetsBinding) -> WebResult<impl Reply> {
@@ -32,7 +34,10 @@ pub async fn export_targets(binding: ExportTargetsBinding) -> WebResult<impl Rep
 
     for def in definitions.iter() {
         for job_type in all_jobs {
-            let targets = match def.ic_discovery.get_target_groups(job_type) {
+            let targets = match def
+                .ic_discovery
+                .get_target_groups(job_type, binding.log.clone())
+            {
                 Ok(targets) => targets,
                 Err(_) => continue,
             };

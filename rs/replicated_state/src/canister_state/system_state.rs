@@ -579,8 +579,7 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                 };
                 let prepaid_execution_cycles = aborted
                     .prepaid_execution_cycles
-                    .map(|c| c.try_into())
-                    .transpose()?
+                    .map(|c| c.into())
                     .unwrap_or_else(Cycles::zero);
                 ExecutionTask::AbortedExecution {
                     input,
@@ -598,8 +597,7 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                 };
                 let prepaid_execution_cycles = aborted
                     .prepaid_execution_cycles
-                    .map(|c| c.try_into())
-                    .transpose()?
+                    .map(|c| c.into())
                     .unwrap_or_else(Cycles::zero);
                 let call_id = aborted.call_id.ok_or(ProxyDecodeError::MissingField(
                     "AbortedInstallCode::call_id",

@@ -253,7 +253,7 @@ fn make_valid_node_ivp4_config_or_panic(ip_addresses: Vec<String>) -> IPv4Interf
 
     // the node's IP address
     let (node_ip_address, prefix_length) = ip_addresses
-        .get(0)
+        .first()
         .expect("Failed to get the node's IP config")
         .split_once('/')
         .expect("Failed to split the config into IP address and prefix");

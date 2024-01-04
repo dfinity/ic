@@ -132,7 +132,7 @@ impl PocketIc {
             let subnet_config = pocket_ic::common::rest::SubnetConfig {
                 subnet_kind,
                 size: subnet_size,
-                canister_ranges: ranges.iter().map(|r| from_range(r)).collect(),
+                canister_ranges: ranges.iter().map(from_range).collect(),
             };
             topology.0.insert(subnet_id.get().0, subnet_config);
         }

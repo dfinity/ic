@@ -677,7 +677,7 @@ impl IntoMessages<(Vec<Response>, CanisterHttpBatchStats)> for CanisterHttpPaylo
             // Such a divergence response should never validate, therefore this should never happen
             // However, if it where ever to happen, we can ignore it here/
             // This is sound, since eventually a timeout will end the outstanding callback anyway.
-            response.shares.get(0).map(|share| {
+            response.shares.first().map(|share| {
                 // Map divergence responses to reject response
                 stats.divergence_responses += 1;
                 (

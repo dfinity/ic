@@ -25,6 +25,7 @@ DEPENDENCIES = [
     "@crate_index//:axum",
     "@crate_index//:either",
     "@crate_index//:tokio-util",
+    "@crate_index//:axum_0_7_0",
     "@crate_index//:backoff",
     "@crate_index//:hex",
     "@crate_index//:bytes",

@@ -570,7 +570,7 @@ fn assert_clean_refund(
             .push(cf_neuron.clone());
         expected_failed_refunds.push(sns_swap_pb::CfParticipant {
             hotkey_principal: extra_cf_participants
-                .get(0)
+                .first()
                 .unwrap()
                 .hotkey_principal
                 .clone(),
@@ -1275,7 +1275,7 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
         );
         let original_neuron_distribution: &_ = original_developer_distribution
             .developer_neurons
-            .get(0)
+            .first()
             .unwrap();
 
         let src::SwapDistribution { total: swap_total } = original_initial_token_distribution
@@ -1597,7 +1597,7 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
         );
         let original_neuron_distribution: &_ = original_developer_distribution
             .developer_neurons
-            .get(0)
+            .first()
             .unwrap();
 
         let src::SwapDistribution { total: swap_total } = original_initial_token_distribution

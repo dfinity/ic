@@ -1762,7 +1762,7 @@ where
 
                 // The first block must have the fee collector explicitly defined.
                 assert_eq!(
-                    fee_collector_from_block(blocks.get(0).unwrap().clone()),
+                    fee_collector_from_block(blocks.first().unwrap().clone()),
                     (Some(fee_collector_account), None)
                 );
                 // The other two blocks must have a pointer to the first block.
@@ -1797,7 +1797,7 @@ where
                     .expect("Unable to perform the transfer");
                 let blocks = get_blocks(&env, ledger_id.get().0, block_id, 3).blocks;
                 assert_eq!(
-                    fee_collector_from_block(blocks.get(0).unwrap().clone()),
+                    fee_collector_from_block(blocks.first().unwrap().clone()),
                     (Some(account_from), None)
                 );
                 assert_eq!(

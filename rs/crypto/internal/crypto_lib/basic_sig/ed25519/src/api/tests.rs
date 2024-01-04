@@ -380,7 +380,7 @@ mod verify {
 
                 // corrupt each signature by flipping a bit and check that both batched and non-batched verification return an error
                 {
-                    let corrupt_sigs: Vec<_> = sigs.iter().map(|sig| corrupt_sig(sig)).collect();
+                    let corrupt_sigs: Vec<_> = sigs.iter().map(corrupt_sig).collect();
                     let key_corrupt_sig_pairs: Vec<_> = key_pairs
                         .iter()
                         .zip(corrupt_sigs.iter())

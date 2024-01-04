@@ -132,7 +132,7 @@ pub const EXECUTE_NERVOUS_SYSTEM_FUNCTION_PAYLOAD_LISTING_BYTES_MAX: usize = 100
 const MAX_HEAP_SIZE_IN_KIB: usize = 4 * 1024 * 1024;
 const WASM32_PAGE_SIZE_IN_KIB: usize = 64;
 pub const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
-const SEVEN_DAYS_IN_SECONDS: u64 = 7 * 24 * 3600;
+pub const MATURITY_DISBURSEMENT_DELAY_SECONDS: u64 = 7 * 24 * 3600;
 
 /// The max number of wasm32 pages for the heap after which we consider that there
 /// is a risk to the ability to grow the heap.
@@ -1617,10 +1617,14 @@ impl Governance {
             ));
         }
 
+        let now_seconds = self.env.now();
         let disbursement_in_progress = DisburseMaturityInProgress {
             amount_e8s: maturity_to_deduct,
-            timestamp_of_disbursement_seconds: self.env.now(),
+            timestamp_of_disbursement_seconds: now_seconds,
             account_to_disburse_to: Some(to_account_proto),
+            finalize_disbursement_timestamp_seconds: Some(
+                now_seconds + MATURITY_DISBURSEMENT_DELAY_SECONDS,
+            ),
         };
 
         // Re-borrow the neuron mutably to update now that the maturity has been
@@ -2718,6 +2722,8 @@ impl Governance {
         )
         .await?;
 
+        // If this operation takes 5 minutes, there is very likely a real failure, and other intervention will
+        // be required
         let mark_failed_at_seconds = self.env.now() + 5 * 60;
 
         loop {
@@ -2728,7 +2734,7 @@ impl Governance {
                     candid::encode_one(
                         CanisterInfoRequest::new(
                             ledger_canister_id,
-                            Some(20),
+                            Some(20), // Get enough to ensure we did not miss the relevant change
                         )
                     ).map_err(|e| GovernanceError::new_with_message(ErrorType::External, format!("Could not check if ledger upgrade succeeded. Error encoding canister_info request.\n{}", e)))?
                 )
@@ -4256,7 +4262,6 @@ impl Governance {
 
         self.proto.is_finalizing_disburse_maturity = Some(true);
         let now_seconds = self.env.now();
-        let disbursal_delay_elapsed_seconds = now_seconds - SEVEN_DAYS_IN_SECONDS;
         // Filter all the neurons that have some disbursing maturity in progress.
         let neurons_with_disbursal: Vec<Neuron> = self
             .proto
@@ -4266,113 +4271,128 @@ impl Governance {
             .cloned()
             .collect();
         for neuron in neurons_with_disbursal {
-            if !neuron.disburse_maturity_in_progress.is_empty() {
-                // The first entry is the oldest one, check whether it can be completed.
-                let d = neuron.disburse_maturity_in_progress[0].clone();
-                if d.timestamp_of_disbursement_seconds < disbursal_delay_elapsed_seconds {
-                    let neuron_id = match neuron.id.as_ref() {
-                        None => {
-                            log!(ERROR, "NeuronId is not set for neuron. This should never happen. Cannot disburse.");
-                            continue;
-                        }
-                        Some(id) => id,
-                    };
+            // The first entry is the oldest one, check whether it can be completed.
+            let disbursement = match neuron.disburse_maturity_in_progress.first() {
+                Some(disbursement) => disbursement.clone(),
+                None => continue,
+            };
 
-                    let maturity_to_disburse_after_modulation_e8s: u64 =
-                        match apply_maturity_modulation(
-                            d.amount_e8s,
-                            maturity_modulation_basis_points,
-                        ) {
-                            Ok(maturity_to_disburse_after_modulation_e8s) => {
-                                maturity_to_disburse_after_modulation_e8s
-                            }
-                            Err(err) => {
-                                log!(
+            match disbursement.finalize_disbursement_timestamp_seconds {
+                Some(finalize_disbursement_timestamp_seconds) => {
+                    if now_seconds < finalize_disbursement_timestamp_seconds {
+                        // It's not time to disbuse yet
+                        continue;
+                    }
+                }
+                None => {
+                    log!(
+                        ERROR,
+                        "Finalize disbursement timestamp is not set. Cannot disburse."
+                    );
+                    continue;
+                }
+            }
+
+            let neuron_id = match neuron.id.as_ref() {
+                None => {
+                    log!(ERROR, "NeuronId is not set for neuron. This should never happen. Cannot disburse.");
+                    continue;
+                }
+                Some(id) => id,
+            };
+
+            let maturity_to_disburse_after_modulation_e8s: u64 = match apply_maturity_modulation(
+                disbursement.amount_e8s,
+                maturity_modulation_basis_points,
+            ) {
+                Ok(maturity_to_disburse_after_modulation_e8s) => {
+                    maturity_to_disburse_after_modulation_e8s
+                }
+                Err(err) => {
+                    log!(
                                     ERROR,
                                     "Could not apply maturity modulation to {:?} for neuron {} due to {:?}, skipping",
-                                    d, neuron_id, err
+                                    disbursement, neuron_id, err
                                 );
-                                continue;
-                            }
-                        };
+                    continue;
+                }
+            };
 
-                    let fdm = FinalizeDisburseMaturity {
-                        amount_to_be_disbursed_e8s: maturity_to_disburse_after_modulation_e8s,
-                        to_account: d.account_to_disburse_to.clone(),
-                    };
-                    let in_flight_command = NeuronInFlightCommand {
-                        timestamp: self.env.now(),
-                        command: Some(neuron_in_flight_command::Command::FinalizeDisburseMaturity(
-                            fdm,
-                        )),
-                    };
-                    let _neuron_lock =
-                        match self.lock_neuron_for_command(neuron_id, in_flight_command) {
-                            Ok(neuron_lock) => neuron_lock,
-                            Err(_) => continue, // if locking fails, try next neuron
-                        };
-                    // Do the transfer, this is a minting transfer, from the governance canister's
-                    // main account (which is also the minting account) to the provided account.
-                    let account_proto = match d.account_to_disburse_to {
-                        Some(ref proto) => proto.clone(),
-                        None => {
-                            log!(
-                                ERROR,
-                                "Invalid DisburseMaturityInProgress-entry {:?} for neuron {}, skipping.",
-                                d, neuron_id
-                            );
-                            continue;
-                        }
-                    };
-                    let to_account = match Account::try_from(account_proto) {
-                        Ok(account) => account,
-                        Err(e) => {
-                            log!(
+            let fdm = FinalizeDisburseMaturity {
+                amount_to_be_disbursed_e8s: maturity_to_disburse_after_modulation_e8s,
+                to_account: disbursement.account_to_disburse_to.clone(),
+            };
+            let in_flight_command = NeuronInFlightCommand {
+                timestamp: self.env.now(),
+                command: Some(neuron_in_flight_command::Command::FinalizeDisburseMaturity(
+                    fdm,
+                )),
+            };
+            let _neuron_lock = match self.lock_neuron_for_command(neuron_id, in_flight_command) {
+                Ok(neuron_lock) => neuron_lock,
+                Err(_) => continue, // if locking fails, try next neuron
+            };
+            // Do the transfer, this is a minting transfer, from the governance canister's
+            // main account (which is also the minting account) to the provided account.
+            let account_proto = match disbursement.account_to_disburse_to {
+                Some(ref proto) => proto.clone(),
+                None => {
+                    log!(
+                        ERROR,
+                        "Invalid DisburseMaturityInProgress-entry {:?} for neuron {}, skipping.",
+                        disbursement,
+                        neuron_id
+                    );
+                    continue;
+                }
+            };
+            let to_account = match Account::try_from(account_proto) {
+                Ok(account) => account,
+                Err(e) => {
+                    log!(
                                 ERROR,
                                 "Failure parsing account of DisburseMaturityInProgress-entry {:?} for neuron {}: {}.",
-                                d, neuron_id, e
+                                disbursement, neuron_id, e
                             );
+                    continue;
+                }
+            };
+            let transfer_result = self
+                .ledger
+                .transfer_funds(
+                    maturity_to_disburse_after_modulation_e8s,
+                    0,    // Minting transfers don't pay a fee.
+                    None, // This is a minting transfer, no 'from' account is needed
+                    to_account,
+                    self.env.now(), // The memo(nonce) for the ledger's transaction
+                )
+                .await;
+            match transfer_result {
+                Ok(block_index) => {
+                    log!(
+                                INFO,
+                                "Transferring DisburseMaturityInProgress-entry {:?} for neuron {} at block {}.",
+                                disbursement, neuron_id, block_index
+                            );
+                    let neuron = match self.get_neuron_result_mut(neuron_id) {
+                        Ok(neuron) => neuron,
+                        Err(e) => {
+                            log!(
+                                        ERROR,
+                                        "Failed updating DisburseMaturityInProgress-entry {:?} for neuron {}: {}.",
+                                        disbursement, neuron_id, e
+                                    );
                             continue;
                         }
                     };
-                    let transfer_result = self
-                        .ledger
-                        .transfer_funds(
-                            maturity_to_disburse_after_modulation_e8s,
-                            0,    // Minting transfers don't pay a fee.
-                            None, // This is a minting transfer, no 'from' account is needed
-                            to_account,
-                            self.env.now(), // The memo(nonce) for the ledger's transaction
-                        )
-                        .await;
-                    match transfer_result {
-                        Ok(block_index) => {
-                            log!(
-                                INFO,
-                                "Transferring DisburseMaturityInProgress-entry {:?} for neuron {} at block {}.",
-                                d, neuron_id, block_index
-                            );
-                            let neuron = match self.get_neuron_result_mut(neuron_id) {
-                                Ok(neuron) => neuron,
-                                Err(e) => {
-                                    log!(
-                                        ERROR,
-                                        "Failed updating DisburseMaturityInProgress-entry {:?} for neuron {}: {}.",
-                                        d, neuron_id, e
-                                    );
-                                    continue;
-                                }
-                            };
-                            neuron.disburse_maturity_in_progress.remove(0);
-                        }
-                        Err(e) => {
-                            log!(
+                    neuron.disburse_maturity_in_progress.remove(0);
+                }
+                Err(e) => {
+                    log!(
                                 ERROR,
                                 "Failed transferring funds for DisburseMaturityInProgress-entry {:?} for neuron {}: {}.",
-                                d, neuron_id, e
+                                disbursement, neuron_id, e
                             );
-                        }
-                    }
                 }
             }
         }

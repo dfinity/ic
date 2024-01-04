@@ -15,6 +15,7 @@ use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
 use ic_quic_transport::{ConnId, Transport};
 use ic_types::artifact::{Advert, ArtifactKind};
 use ic_types::NodeId;
+use tokio::task::AbortHandle;
 use tokio::{
     runtime::Handle,
     select,
@@ -193,8 +194,8 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
         let body = Bytes::from(pb::AdvertUpdate::proxy_encode(advert_update));
 
         let mut in_progress_transmissions = JoinSet::new();
-        // Stores the connection ID of the last successful transmission to a peer.
-        let mut initiated_transmissions: HashMap<NodeId, ConnId> = HashMap::new();
+        // Stores the connection ID and the `AbortHandle` of the last successful transmission task to a peer.
+        let mut initiated_transmissions: HashMap<NodeId, (ConnId, AbortHandle)> = HashMap::new();
         let mut periodic_check_interval = time::interval(Duration::from_secs(5));
 
         loop {
@@ -204,10 +205,11 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
                     // spawn task for peers with higher conn id or not in completed transmissions.
                     // add task to join map
                     for (peer, connection_id) in transport.peers() {
-                        let is_initiated = initiated_transmissions.get(&peer).is_some_and(|c| {
+                        let is_initiated = initiated_transmissions.get(&peer).is_some_and(|(c, abort_handle)| {
                             if *c == connection_id {
                                 true
                             } else {
+                                abort_handle.abort();
                                 metrics.send_view_resend_reconnect_total.inc();
                                 false
                             }
@@ -217,8 +219,8 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
                         if !is_initiated {
                             metrics.send_view_send_to_peer_total.inc();
                             let task = send_advert_to_peer(transport.clone(), body.clone(), peer, uri_prefix::<Artifact>());
-                            in_progress_transmissions.spawn_on(task, &rt_handle);
-                            initiated_transmissions.insert(peer, connection_id);
+                            let abort_handle = in_progress_transmissions.spawn_on(task, &rt_handle);
+                            initiated_transmissions.insert(peer, (connection_id, abort_handle));
                         }
                     }
                 }

@@ -1045,7 +1045,7 @@ fn test_list_subaccounts() {
     );
 
     // account_2.owner should have two batches of subaccounts.
-    let principal_2 = accounts_2.get(0).unwrap().owner;
+    let principal_2 = accounts_2.first().unwrap().owner;
     let batch_1 = list_subaccounts(env, index_id, PrincipalId(principal_2), None);
     let expected_batch_1: Vec<_> = accounts_2
         .iter()

@@ -123,7 +123,7 @@ fn der_decode_rfc5915_privatekey(der: &[u8]) -> Result<Vec<u8>, KeyDecodingError
         .map_err(|e| KeyDecodingError::InvalidKeyEncoding(format!("{:?}", e)))?;
 
     let seq = match der.len() {
-        1 => der.get(0),
+        1 => der.first(),
         x => {
             return Err(KeyDecodingError::InvalidKeyEncoding(format!(
                 "Unexpected number of elements {}",
@@ -134,7 +134,7 @@ fn der_decode_rfc5915_privatekey(der: &[u8]) -> Result<Vec<u8>, KeyDecodingError
 
     if let Some(ASN1Block::Sequence(_, seq)) = seq {
         // mandatory field: version, should be equal to 1
-        match seq.get(0) {
+        match seq.first() {
             Some(ASN1Block::Integer(_, _version)) => {}
             _ => {
                 return Err(KeyDecodingError::InvalidKeyEncoding(
