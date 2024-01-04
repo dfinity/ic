@@ -6,7 +6,6 @@ use std::{
     time::Duration,
 };
 
-use axum::headers::Location;
 use clap::Parser;
 use either::Either;
 use futures::StreamExt;
@@ -260,7 +259,7 @@ fn main() {
             (node_id, v)
         })
         .collect();
-    topology.push((node_id, transport_addr));
+    topology.insert(args.id as usize, (node_id, transport_addr));
     let (tx, watcher) =
         tokio::sync::watch::channel(SubnetTopology::new(Vec::new(), 1.into(), 2.into()));
 

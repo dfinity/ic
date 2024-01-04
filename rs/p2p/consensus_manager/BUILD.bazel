@@ -22,7 +22,6 @@ DEPENDENCIES = [
     "//rs/crypto/test_utils/tls",
     "//rs/types/types_test_utils",
     "@crate_index//:rand_chacha",
-    "@crate_index//:axum",
     "@crate_index//:either",
     "@crate_index//:tokio-util",
     "@crate_index//:axum_0_7_0",
