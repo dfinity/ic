@@ -263,6 +263,10 @@ pub struct IcConfig {
     /// Whitelisted firewall prefixes for initial registry state, separated by
     /// commas.
     whitelisted_prefixes: Option<String>,
+
+    /// Whitelisted ports for the firewall prefixes, separated by
+    /// commas. Port 8080 is always included.
+    whitelisted_ports: Option<String>,
 }
 
 #[derive(Error, Debug)]
@@ -327,6 +331,10 @@ impl IcConfig {
         self.whitelisted_prefixes = whitelisted_prefixes;
     }
 
+    pub fn set_whitelisted_ports(&mut self, whitelisted_ports: Option<String>) {
+        self.whitelisted_ports = whitelisted_ports;
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn new<P: AsRef<Path>>(
         target_dir: P,
@@ -359,6 +367,7 @@ impl IcConfig {
             use_specified_ids_allocation_range: false,
             initial_guest_launch_measurement_sha256_hex,
             whitelisted_prefixes: None,
+            whitelisted_ports: None,
         }
     }
 
@@ -379,13 +388,23 @@ impl IcConfig {
         let mut mutations = self.initial_mutations.clone();
 
         if let Some(prefixes) = self.whitelisted_prefixes {
+            let ports = if let Some(ports) = self.whitelisted_ports {
+                ports
+                    .split(',')
+                    .map(|port| port.parse::<u32>().unwrap())
+                    .chain(std::iter::once(8080))
+                    .collect()
+            } else {
+                vec![8080]
+            };
+
             mutations.extend(vec![insert(
                 make_firewall_rules_record_key(&FirewallRulesScope::Global),
                 encode_or_panic(&FirewallRuleSet {
                     entries: vec![FirewallRule {
                         ipv4_prefixes: Vec::new(),
                         ipv6_prefixes: prefixes.split(',').map(|v| v.to_string()).collect(),
-                        ports: vec![8080],
+                        ports,
                         action: FirewallAction::Allow as i32,
                         comment: "Globally allow provided prefixes for testing".to_string(),
                         user: None,
