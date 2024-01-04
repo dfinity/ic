@@ -16,7 +16,9 @@ pub async fn network_list(
     State(state): State<Arc<AppState>>,
     _request: Json<MetadataRequest>,
 ) -> Json<NetworkListResponse> {
-    Json(services::network_list(&state.ledger_id))
+    Json(services::network_list(
+        &state.icrc1_agent.ledger_canister_id,
+    ))
 }
 
 pub async fn network_options(
@@ -24,7 +26,9 @@ pub async fn network_options(
     request: Json<NetworkRequest>,
 ) -> Result<Json<NetworkOptionsResponse>> {
     verify_network_id(&request.network_identifier, &state)?;
-    Ok(Json(services::network_options(&state.ledger_id)))
+    Ok(Json(services::network_options(
+        &state.icrc1_agent.ledger_canister_id,
+    )))
 }
 
 pub async fn network_status(
