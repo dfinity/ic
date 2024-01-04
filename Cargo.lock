@@ -9980,6 +9980,7 @@ name = "ic-registry-client-fake"
 version = "0.9.0"
 dependencies = [
  "ic-interfaces-registry",
+ "ic-registry-keys",
  "ic-types",
 ]
 
