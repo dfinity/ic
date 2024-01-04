@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use ic_error_types::ErrorCode;
-use ic_ic00_types::{EmptyBlob, Payload, SkipPreUpgrade};
+use ic_ic00_types::{EmptyBlob, Payload, UpgradeOptions};
 use ic_logger::replica_logger::LogEntryLogger;
 use ic_replicated_state::{canister_state::NextExecution, CanisterState};
 use ic_state_machine_tests::{IngressState, WasmResult};
@@ -352,20 +352,28 @@ fn test_install_and_reinstall_with_canister_install_mode_v2() {
 fn test_pre_upgrade_execution_with_canister_install_mode_v2() {
     let mut test = execution_test_with_max_rounds(1);
 
-    for skip_pre_upgrade in [
-        None,
-        Some(SkipPreUpgrade(None)),
-        Some(SkipPreUpgrade(Some(false))),
-        Some(SkipPreUpgrade(Some(true))),
+    for upgrade_options in [
+        UpgradeOptions {
+            skip_pre_upgrade: None,
+            keep_main_memory: None,
+        },
+        UpgradeOptions {
+            skip_pre_upgrade: Some(false),
+            keep_main_memory: None,
+        },
+        UpgradeOptions {
+            skip_pre_upgrade: Some(true),
+            keep_main_memory: None,
+        },
     ] {
         let old_binary = binary(&[(Function::PreUpgrade, Execution::ShortTrap)]);
         let canister_id = test.create_canister(Cycles::from(1_000_000_000_000u128));
         test.install_canister_v2(canister_id, old_binary).unwrap();
         let canister_state_before = test.canister_state(canister_id).clone();
 
-        let result = test.upgrade_canister_v2(canister_id, new_empty_binary(), skip_pre_upgrade);
+        let result = test.upgrade_canister_v2(canister_id, new_empty_binary(), upgrade_options);
 
-        if skip_pre_upgrade == Some(SkipPreUpgrade(Some(true))) {
+        if upgrade_options.skip_pre_upgrade.unwrap_or(false) {
             assert_eq!(result, Ok(()));
             assert_canister_state_after_ok(
                 &canister_state_before,
@@ -385,11 +393,19 @@ fn test_pre_upgrade_execution_with_canister_install_mode_v2() {
 fn test_upgrade_execution_with_canister_install_mode_v2() {
     let mut test = execution_test_with_max_rounds(1);
 
-    for skip_pre_upgrade in [
-        None,
-        Some(SkipPreUpgrade(None)),
-        Some(SkipPreUpgrade(Some(false))),
-        Some(SkipPreUpgrade(Some(true))),
+    for upgrade_options in [
+        UpgradeOptions {
+            skip_pre_upgrade: None,
+            keep_main_memory: None,
+        },
+        UpgradeOptions {
+            skip_pre_upgrade: Some(false),
+            keep_main_memory: None,
+        },
+        UpgradeOptions {
+            skip_pre_upgrade: Some(true),
+            keep_main_memory: None,
+        },
     ] {
         let old_binary = binary(&[(Function::PreUpgrade, Execution::Short)]);
         let canister_id = test.create_canister(Cycles::from(1_000_000_000_000u128));
@@ -399,7 +415,7 @@ fn test_upgrade_execution_with_canister_install_mode_v2() {
         let result = test.upgrade_canister_v2(
             canister_id,
             binary(&[(Function::PostUpgrade, Execution::ShortTrap)]),
-            skip_pre_upgrade,
+            upgrade_options,
         );
 
         assert_eq!(result.unwrap_err().code(), ErrorCode::CanisterTrapped);
@@ -995,7 +1011,10 @@ fn upgrade_with_skip_pre_upgrade_fails_on_no_execution_state() {
     let result = test.upgrade_canister_v2(
         canister_id,
         new_empty_binary(),
-        Some(SkipPreUpgrade(Some(true))),
+        UpgradeOptions {
+            skip_pre_upgrade: Some(true),
+            keep_main_memory: None,
+        },
     );
     assert_eq!(
         result.unwrap_err().code(),
@@ -1013,7 +1032,10 @@ fn upgrade_with_skip_pre_upgrade_ok_with_no_pre_upgrade() {
     let result = test.upgrade_canister_v2(
         canister_id,
         new_empty_binary(),
-        Some(SkipPreUpgrade(Some(true))),
+        UpgradeOptions {
+            skip_pre_upgrade: Some(true),
+            keep_main_memory: None,
+        },
     );
     assert_eq!(result, Ok(()));
     assert_canister_state_after_ok(&canister_state_before, test.canister_state(canister_id));

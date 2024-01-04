@@ -6,8 +6,6 @@ use ic_test_utilities::{
     mock_time, types::ids::user_test_id, wasmtime_instance::WasmtimeInstanceBuilder,
 };
 use ic_types::methods::{FuncRef, WasmMethod};
-
-#[cfg(target_os = "linux")]
 use ic_types::Cycles;
 
 #[cfg(test)]
@@ -16,10 +14,8 @@ mod test {
     use ic_interfaces::execution_environment::{HypervisorError, TrapCode};
     use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
     use ic_test_utilities::wasmtime_instance::DEFAULT_NUM_INSTRUCTIONS;
-    use ic_types::{methods::WasmClosure, NumBytes};
-
-    #[cfg(target_os = "linux")]
     use ic_types::PrincipalId;
+    use ic_types::{methods::WasmClosure, NumBytes};
 
     use super::*;
 

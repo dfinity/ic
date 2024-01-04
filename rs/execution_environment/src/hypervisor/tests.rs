@@ -4,7 +4,7 @@ use ic_base_types::{NumSeconds, PrincipalId};
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::wasm_utils::instrumentation::instruction_to_cost_new;
 use ic_error_types::{ErrorCode, RejectCode};
-use ic_ic00_types::{CanisterChange, CanisterHttpResponsePayload, SkipPreUpgrade};
+use ic_ic00_types::{CanisterChange, CanisterHttpResponsePayload, UpgradeOptions};
 use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemory};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -6307,7 +6307,10 @@ fn upgrade_with_skip_pre_upgrade_preserves_stable_memory() {
     test.upgrade_canister_v2(
         canister_id,
         wat::parse_str(wat.clone()).unwrap(),
-        Some(SkipPreUpgrade(Some(true))),
+        UpgradeOptions {
+            skip_pre_upgrade: Some(true),
+            keep_main_memory: None,
+        },
     )
     .unwrap();
 
@@ -6316,7 +6319,10 @@ fn upgrade_with_skip_pre_upgrade_preserves_stable_memory() {
         .upgrade_canister_v2(
             canister_id,
             wat::parse_str(wat).unwrap(),
-            Some(SkipPreUpgrade(Some(false))),
+            UpgradeOptions {
+                skip_pre_upgrade: Some(false),
+                keep_main_memory: None,
+            },
         )
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterTrapped, err.code());

@@ -177,12 +177,6 @@ fn test_initial_wasmtime_config() {
         ),
         // Exceptions
         (
-            "memory64",
-            "https://github.com/WebAssembly/memory64/",
-            "(module (memory $m i64 1 1))",
-            "memory64 must be enabled",
-        ),
-        (
             "extended_const",
             "https://github.com/WebAssembly/extended-const/",
             "(module (global i32 (i32.add (i32.const 0) (i32.const 0))))",
