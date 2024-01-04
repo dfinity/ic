@@ -161,6 +161,11 @@ struct CliArgs {
     #[clap(long)]
     whitelisted_prefixes: Option<String>,
 
+    /// Whitelisted ports for the firewall prefixes, separated by
+    /// commas. Port 8080 is always included.
+    #[clap(long)]
+    whitelisted_ports: Option<String>,
+
     /// The indices of subnets that should have the SEV feature enabled, if any.
     #[clap(long, use_value_delimiter = true)]
     pub sev_subnet_indices: Vec<u64>,
@@ -244,6 +249,7 @@ fn main() -> Result<()> {
     ic_config0
         .set_use_specified_ids_allocation_range(valid_args.use_specified_ids_allocation_range);
     ic_config0.set_whitelisted_prefixes(valid_args.whitelisted_prefixes);
+    ic_config0.set_whitelisted_ports(valid_args.whitelisted_ports);
 
     let ic_config = match valid_args.dc_pk_dir {
         Some(dir) => ic_config0.load_registry_node_operator_records_from_dir(
@@ -280,6 +286,7 @@ struct ValidatedArgs {
     pub guest_launch_measurement_sha256_hex: Option<String>,
     pub use_specified_ids_allocation_range: bool,
     pub whitelisted_prefixes: Option<String>,
+    pub whitelisted_ports: Option<String>,
     pub sev_subnet_indices: Vec<u64>,
 }
 
@@ -434,6 +441,7 @@ impl CliArgs {
             guest_launch_measurement_sha256_hex: self.guest_launch_measurement_sha256_hex,
             use_specified_ids_allocation_range: self.use_specified_ids_allocation_range,
             whitelisted_prefixes: self.whitelisted_prefixes,
+            whitelisted_ports: self.whitelisted_ports,
             sev_subnet_indices: self.sev_subnet_indices,
         })
     }
