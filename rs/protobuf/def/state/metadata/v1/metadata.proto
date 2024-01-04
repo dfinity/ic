@@ -75,6 +75,9 @@ message SignWithEcdsaContext {
   uint64 batch_time = 5;
   repeated bytes derivation_path_vec = 6;
   registry.crypto.v1.EcdsaKeyId key_id = 7;
+  optional uint64 height = 8;
+  optional uint64 quadruple_id = 9;
+  optional bytes nonce = 10;
 }
 
 message SignWithEcdsaContextTree {

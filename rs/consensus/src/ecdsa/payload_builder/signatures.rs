@@ -134,36 +134,6 @@ pub(crate) fn build_signature_inputs(
 }
 
 #[cfg(test)]
-pub(super) mod test_utils {
-    use ic_ic00_types::EcdsaKeyId;
-    use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
-    use ic_test_utilities::{mock_time, types::messages::RequestBuilder};
-    use ic_types::Time;
-
-    pub fn fake_sign_with_ecdsa_context(
-        key_id: EcdsaKeyId,
-        pseudo_random_id: [u8; 32],
-    ) -> SignWithEcdsaContext {
-        fake_sign_with_ecdsa_context_with_batch_time(key_id, pseudo_random_id, mock_time())
-    }
-
-    pub fn fake_sign_with_ecdsa_context_with_batch_time(
-        key_id: EcdsaKeyId,
-        pseudo_random_id: [u8; 32],
-        batch_time: Time,
-    ) -> SignWithEcdsaContext {
-        SignWithEcdsaContext {
-            request: RequestBuilder::new().build(),
-            message_hash: [0; 32],
-            derivation_path: vec![],
-            batch_time,
-            key_id,
-            pseudo_random_id,
-        }
-    }
-}
-
-#[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
 
@@ -176,10 +146,13 @@ mod tests {
         payload_builder::{
             get_signing_requests, quadruples::test_utils::create_available_quadruple,
         },
-        test_utils::{empty_response, set_up_ecdsa_payload, TestEcdsaSignatureBuilder},
+        test_utils::{
+            empty_response, fake_sign_with_ecdsa_context, set_up_ecdsa_payload,
+            TestEcdsaSignatureBuilder,
+        },
     };
 
-    use super::{test_utils::fake_sign_with_ecdsa_context, *};
+    use super::*;
 
     fn set_up(
         should_create_key_transcript: bool,
