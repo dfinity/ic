@@ -244,6 +244,7 @@ where
                             // If the task panics we propagate the panic. But we allow tasks to be canceled.
                             // Task can be cancelled if someone calls .abort()
                             if err.is_panic() {
+                                error!(self.log, "Artifact processor task panicked: {:?},", err);
                                 std::panic::resume_unwind(err.into_panic());
                             }
                         }
