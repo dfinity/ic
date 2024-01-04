@@ -109,7 +109,8 @@ impl HostosUpgrader {
         for release_package_url in release_package_urls.iter() {
             // We only ever expect this command to exit in error. If the
             // upgrade call succeeds, the HostOS will reboot and shut us down.
-            if let Err(e) = UtilityCommand::request_hostos_upgrade(release_package_url, &hash) {
+            if let Err(e) = UtilityCommand::request_hostos_upgrade(release_package_url, &hash).await
+            {
                 info!(
                     &self.logger,
                     "HostOS upgrade failed using: '{release_package_url}'"

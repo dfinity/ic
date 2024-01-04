@@ -226,10 +226,12 @@ impl Orchestrator {
             .await,
         );
 
-        let hostos_version = UtilityCommand::request_hostos_version().and_then(|v| {
-            HostosVersion::try_from(v)
-                .map_err(|e| format!("Unable to parse HostOS version: {:?}", e))
-        });
+        let hostos_version = UtilityCommand::request_hostos_version()
+            .await
+            .and_then(|v| {
+                HostosVersion::try_from(v)
+                    .map_err(|e| format!("Unable to parse HostOS version: {:?}", e))
+            });
 
         let hostos_upgrade = match hostos_version.clone() {
             Err(e) => {
