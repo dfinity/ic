@@ -12,4 +12,4 @@
 //! crate.
 
 #[cfg(test)]
-mod neurons_fund;
+mod sns_lifecycle;
