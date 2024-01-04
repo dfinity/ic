@@ -1,4 +1,5 @@
 use crossbeam_channel::{Sender, TrySendError};
+use ic_config::{execution_environment::Config, flag_status::FlagStatus};
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_types::{
     batch::{CanisterQueryStats, LocalQueryStats, QueryStats},
@@ -15,7 +16,7 @@ pub use self::state_machine::deliver_query_stats;
 
 pub fn init_query_stats(
     log: ReplicaLogger,
-    query_stats_epoch_length: u64,
+    config: &Config,
 ) -> (QueryStatsCollector, QueryStatsPayloadBuilderParams) {
     let (tx, rx) = crossbeam_channel::bounded(1);
     (
@@ -24,9 +25,13 @@ pub fn init_query_stats(
             current_query_stats: Mutex::new(BTreeMap::new()),
             current_epoch: RwLock::new(None),
             sender: tx,
-            query_stats_epoch_length,
+            query_stats_epoch_length: config.query_stats_epoch_length,
         },
-        QueryStatsPayloadBuilderParams(rx, query_stats_epoch_length),
+        QueryStatsPayloadBuilderParams {
+            rx,
+            epoch_length: config.query_stats_epoch_length,
+            enabled: config.query_stats_aggregation == FlagStatus::Enabled,
+        },
     )
 }
 
