@@ -123,7 +123,7 @@ pub fn test(env: TestEnv) {
     let farm_url = boundary_node.get_playnet().unwrap();
 
     let ii_anchor = "<title>Internet Identity</title>";
-    let nns_dapp_anchor = "<title>Network Nervous System frontend dapp</title>";
+    let nns_dapp_anchor = "<title>NNS Dapp</title>";
     get_html(&env, &farm_url, ii_canister_id, ii_anchor);
     get_html(&env, &farm_url, nns_dapp_canister_id, nns_dapp_anchor);
 }
