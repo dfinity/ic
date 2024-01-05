@@ -6,12 +6,6 @@
 # Example use:
 # ansible-playbook -i env/${network}/hosts,env/shared
 
-prometheus:
-  vars:
-    stage: all
-  hosts:
-    ic-metrics-prometheus-staging.ch1-obsstage1.dfinity.network:
-
 data_centers:
   ch1:
     vars:
@@ -87,70 +81,72 @@ nodes:
 api:
   vars:
     ipv6_debug_ips:
-      - "2001:4d78:40d::/48"  # FR1
-      - "2607:f6f0:3004::/48" # CH1
+      - "2001:4d78:40d::/48" # FR1-old Equinix
+      - "2602:fb2b:110::/48" # FR1 InfraDC prefix
+      - "2607:f6f0:3004::/48" # CH1-old Equinix
+      - "2602:fb2b:120::/48" # CH1 InfraDC prefix
       - "2607:fb58:9005::/48" # SF1-old
-      - "2602:fb2b:100::/48"  # SF1
-      - "2a00:fb01:400::/56"  # ZH1
+      - "2602:fb2b:100::/48" # SF1
+      - "2a00:fb01:400::/56" # ZH1
     ipv6_monitoring_ips:
       - "2a05:d01c:e2c:a700::/56" # AWS eu-west-2 London Monitoring VPC
-      - "2a05:d01c:d9:2b00::/56" # prometheus.mainnet.dfinity.network
 
 boundary:
   vars:
     api_listen_port: 443
     api_listen_protocol: https
     elasticsearch_url: "https://elasticsearch.testnet.dfinity.network"
-    ipv4_http_ips:          # See: https://www.cloudflare.com/ips-v4
-      - "103.21.244.0/22"   # Cloudflare: https://www.cloudflare.com/ips/
-      - "103.22.200.0/22"   # Cloudflare: https://www.cloudflare.com/ips/
-      - "103.31.4.0/22"     # Cloudflare: https://www.cloudflare.com/ips/
-      - "104.16.0.0/13"     # Cloudflare: https://www.cloudflare.com/ips/ 
-      - "104.24.0.0/14"     # Cloudflare: https://www.cloudflare.com/ips/
-      - "108.162.192.0/18"  # Cloudflare: https://www.cloudflare.com/ips/
-      - "131.0.72.0/22"     # Cloudflare: https://www.cloudflare.com/ips/
-      - "141.101.64.0/18"   # Cloudflare: https://www.cloudflare.com/ips/
+    ipv4_http_ips: # See: https://www.cloudflare.com/ips-v4
+      - "103.21.244.0/22" # Cloudflare: https://www.cloudflare.com/ips/
+      - "103.22.200.0/22" # Cloudflare: https://www.cloudflare.com/ips/
+      - "103.31.4.0/22" # Cloudflare: https://www.cloudflare.com/ips/
+      - "104.16.0.0/13" # Cloudflare: https://www.cloudflare.com/ips/
+      - "104.24.0.0/14" # Cloudflare: https://www.cloudflare.com/ips/
+      - "108.162.192.0/18" # Cloudflare: https://www.cloudflare.com/ips/
+      - "131.0.72.0/22" # Cloudflare: https://www.cloudflare.com/ips/
+      - "141.101.64.0/18" # Cloudflare: https://www.cloudflare.com/ips/
       - "149.97.209.180/30" # CH1 Public
       - "149.97.209.182/30" # CH1 Public1
       - "149.97.209.186/30" # CH1 Public2
       - "149.97.248.176/30" # CH1 OOB1
       - "149.97.248.172/30" # CH1 OOB2
       - "162.209.33.190/29" # CH1 OOB (old)
-      - "162.158.0.0/15"    # Cloudflare: https://www.cloudflare.com/ips/
-      - "172.64.0.0/13"     # Cloudflare: https://www.cloudflare.com/ips/
-      - "173.245.48.0/20"   # Cloudflare: https://www.cloudflare.com/ips/
-      - "188.114.96.0/20"   # Cloudflare: https://www.cloudflare.com/ips/
-      - "190.93.240.0/20"   # Cloudflare: https://www.cloudflare.com/ips/
+      - "162.158.0.0/15" # Cloudflare: https://www.cloudflare.com/ips/
+      - "172.64.0.0/13" # Cloudflare: https://www.cloudflare.com/ips/
+      - "173.245.48.0/20" # Cloudflare: https://www.cloudflare.com/ips/
+      - "188.114.96.0/20" # Cloudflare: https://www.cloudflare.com/ips/
+      - "190.93.240.0/20" # Cloudflare: https://www.cloudflare.com/ips/
       - "192.235.122.32/28" # SF1 Public1 (old)
-      - "98.96.196.16/28"   # SF1 Public1 (old)
-      - "197.234.240.0/22"  # Cloudflare: https://www.cloudflare.com/ips/
-      - "198.41.128.0/17"   # Cloudflare: https://www.cloudflare.com/ips/
+      - "98.96.196.16/28" # SF1 Public1 (old)
+      - "197.234.240.0/22" # Cloudflare: https://www.cloudflare.com/ips/
+      - "198.41.128.0/17" # Cloudflare: https://www.cloudflare.com/ips/
       - "212.71.124.192/29" # ZH1 Public1 (old)
       - "212.71.125.160/29" # ZH1 Public1
-      - "162.209.33.190/29"  # FR1 OOB (old)
-      - "62.209.33.184/29"  # FR1 OOB
+      - "162.209.33.190/29" # FR1 OOB (old)
+      - "62.209.33.184/29" # FR1 OOB
     ipv6_http_ips:
-      - "2001:4d78:40d::/48"  # FR1
+      - "2001:4d78:40d::/48" # FR1
       - "2607:f6f0:3004::/48" # CH1
       - "2607:fb58:9005::/48" # SF1-old
-      - "2602:fb2b:100::/48"  # SF1
-      - "2a00:fb01:400::/56"  # ZH1
-      - "2400:cb00::/32"      # Cloudflare: https://www.cloudflare.com/ips/
-      - "2606:4700::/32"      # Cloudflare: https://www.cloudflare.com/ips/
-      - "2803:f800::/32"      # Cloudflare: https://www.cloudflare.com/ips/
-      - "2405:b500::/32"      # Cloudflare: https://www.cloudflare.com/ips/
-      - "2405:8100::/32"      # Cloudflare: https://www.cloudflare.com/ips/
-      - "2a06:98c0::/29"      # Cloudflare: https://www.cloudflare.com/ips/
-      - "2c0f:f248::/32"      # Cloudflare: https://www.cloudflare.com/ips/
+      - "2602:fb2b:100::/48" # SF1
+      - "2a00:fb01:400::/56" # ZH1
+      - "2400:cb00::/32" # Cloudflare: https://www.cloudflare.com/ips/
+      - "2606:4700::/32" # Cloudflare: https://www.cloudflare.com/ips/
+      - "2803:f800::/32" # Cloudflare: https://www.cloudflare.com/ips/
+      - "2405:b500::/32" # Cloudflare: https://www.cloudflare.com/ips/
+      - "2405:8100::/32" # Cloudflare: https://www.cloudflare.com/ips/
+      - "2a06:98c0::/29" # Cloudflare: https://www.cloudflare.com/ips/
+      - "2c0f:f248::/32" # Cloudflare: https://www.cloudflare.com/ips/
     ipv6_debug_ips:
-      - "2001:4d78:40d::/48"  # FR1
-      - "2607:f6f0:3004::/48" # CH1
+      - "2001:4d78:40d::/48" # FR1-old Equinix
+      - "2602:fb2b:110::/48" # FR1 InfraDC prefix
+      - "2607:f6f0:3004::/48" # CH1-old Equinix
+      - "2602:fb2b:120::/48" # CH1 InfraDC prefix
       - "2607:fb58:9005::/48" # SF1-old
-      - "2602:fb2b:100::/48"  # SF1
-      - "2a00:fb01:400::/56"  # ZH1
+      - "2602:fb2b:100::/48" # SF1
+      - "2a00:fb01:400::/56" # ZH1
     ipv6_monitoring_ips:
       - "2a05:d01c:e2c:a700::/56" # AWS eu-west-2 London Monitoring VPC
-      - "2a05:d01c:d9:2b00::/56" # prometheus.mainnet.dfinity.network
     node_exporter_metrics_ip: "{{ ipv6_address }}"
     node_exporter_metrics_port: 9100
     node_exporter_metrics_addr: "[{{ node_exporter_metrics_ip }}]:{{ node_exporter_metrics_port }}"

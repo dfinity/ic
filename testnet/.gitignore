@@ -1,6 +1,0 @@
-**/.vagrant/**
-orchestrator
-./replica
-ic-prep
-ic-admin
-ic-workload-generator
