@@ -10488,6 +10488,7 @@ version = "1.9.0"
 dependencies = [
  "actix-rt",
  "actix-web",
+ "anyhow",
  "async-trait",
  "base64 0.13.1",
  "candid",
@@ -16312,12 +16313,15 @@ dependencies = [
 name = "rosetta-core"
 version = "0.9.0"
 dependencies = [
+ "anyhow",
+ "candid",
  "hex",
  "ic-canister-client",
  "ic-canister-client-sender",
  "ic-crypto-ecdsa-secp256k1",
  "ic-crypto-internal-basic-sig-ecdsa-secp256k1",
  "ic-types",
+ "icrc-ledger-types",
  "rand 0.8.5",
  "serde",
  "serde_cbor",

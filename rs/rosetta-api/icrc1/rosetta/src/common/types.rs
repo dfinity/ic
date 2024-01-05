@@ -49,49 +49,46 @@ impl From<rosetta_core::miscellaneous::Error> for Error {
 
 impl From<strum::ParseError> for Error {
     fn from(value: strum::ParseError) -> Self {
-        Error::parsing_unsuccessful(&value.to_string())
+        Error::parsing_unsuccessful(&value)
     }
 }
 
 impl Error {
-    pub fn invalid_network_id(expected: &NetworkIdentifier) -> Self {
+    pub fn invalid_network_id<T: std::fmt::Debug>(description: &T) -> Self {
         Self(rosetta_core::miscellaneous::Error {
             code: ERROR_CODE_INVALID_NETWORK_ID,
             message: "Invalid network identifier".into(),
-            description: Some(format!(
-                "Invalid network identifier. Expected {}",
-                serde_json::to_string(expected).unwrap()
-            )),
+            description: Some(format!("{:?}", description)),
             retriable: false,
             details: None,
         })
     }
 
-    pub fn unable_to_find_block(description: String) -> Self {
+    pub fn unable_to_find_block<T: std::fmt::Debug>(description: &T) -> Self {
         Self(rosetta_core::miscellaneous::Error {
             code: ERROR_CODE_UNABLE_TO_FIND_BLOCK,
             message: "Unable to find block".into(),
-            description: Some(description),
+            description: Some(format!("{:?}", description)),
             retriable: false,
             details: None,
         })
     }
 
-    pub fn invalid_block_identifier(description: String) -> Self {
+    pub fn invalid_block_identifier<T: std::fmt::Debug>(description: &T) -> Self {
         Self(rosetta_core::miscellaneous::Error {
             code: ERROR_CODE_INVALID_BLOCK_IDENTIFIER,
             message: "Invalid block identifier provided".into(),
-            description: Some(description),
+            description: Some(format!("{:?}", description)),
             retriable: false,
             details: None,
         })
     }
 
-    pub fn failed_to_build_block_response(description: String) -> Self {
+    pub fn failed_to_build_block_response<T: std::fmt::Debug>(description: &T) -> Self {
         Self(rosetta_core::miscellaneous::Error {
             code: ERROR_CODE_FAILED_TO_BUILD_BLOCK_RESPONSE,
             message: "Failed to build block response".into(),
-            description: Some(description),
+            description: Some(format!("{:?}", description)),
             retriable: false,
             details: None,
         })
@@ -117,11 +114,11 @@ impl Error {
         })
     }
 
-    pub fn parsing_unsuccessful(description: &str) -> Self {
+    pub fn parsing_unsuccessful<T: std::fmt::Debug>(description: &T) -> Self {
         Self(rosetta_core::miscellaneous::Error {
             code: ERROR_CODE_PARSING_ERROR,
             message: "Failed trying to parse types.".to_owned(),
-            description: Some(description.to_owned()),
+            description: Some(format!("{:?}", description)),
             retriable: false,
             details: None,
         })
@@ -140,11 +137,11 @@ impl Error {
         })
     }
 
-    pub fn ledger_communication_unsuccessful(description: &str) -> Self {
+    pub fn ledger_communication_unsuccessful<T: std::fmt::Debug>(description: &T) -> Self {
         Self(rosetta_core::miscellaneous::Error {
             code: ERROR_CODE_LEDGER_COMMUNICATION,
             message: "Failed to communicate with the icrc1 ledger.".to_owned(),
-            description: Some(description.to_owned()),
+            description: Some(format!("{:?}", description)),
             retriable: false,
             details: None,
         })

@@ -1,3 +1,4 @@
+use anyhow::{Context, Result};
 use candid::Nat;
 use ic_icrc1::blocks::{
     encoded_block_to_generic_block, generic_block_to_encoded_block,
@@ -143,9 +144,9 @@ impl FromStr for RosettaToken {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<RosettaToken, Self::Err> {
-        Ok(Self(Nat::from_str(s).map_err(|err| {
-            anyhow::Error::msg(format!("Cannot parse Nat from String: {}", err))
-        })?))
+        Ok(Self(
+            Nat::from_str(s).with_context(|| "Cannot parse Nat from String.")?,
+        ))
     }
 }
 
