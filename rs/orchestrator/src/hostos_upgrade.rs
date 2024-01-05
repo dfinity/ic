@@ -35,17 +35,15 @@ impl HostosUpgrader {
 }
 
 impl HostosUpgrader {
-    /// Calls `check_for_upgrade()` once every `interval`, timing out after `timeout`.
-    /// Awaiting this function blocks until `exit_signal` is set to `true`.
+    /// Calls `check_for_upgrade()`, timing out after `timeout`, and waiting
+    /// for `interval` between attempts. Awaiting this function blocks until
+    /// `exit_signal` is set to `true`.
     pub async fn upgrade_loop(
         &mut self,
         mut exit_signal: Receiver<bool>,
         interval: Duration,
         timeout: Duration,
     ) {
-        // Wait for a minute before starting the loop, to allow the registry
-        // some time to catch up, after starting.
-        tokio::time::sleep(Duration::from_secs(60)).await;
         while !*exit_signal.borrow() {
             match tokio::time::timeout(timeout, self.check_for_upgrade()).await {
                 Ok(Ok(())) => {}
