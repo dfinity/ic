@@ -396,15 +396,7 @@ impl BlockResponseBuilder {
 
         let block_identifier = BlockIdentifier::from(&block);
 
-        let parent_hash = block
-            .parent_hash
-            .as_ref()
-            .map(hex::encode)
-            .unwrap_or_else(|| block_identifier.hash.clone());
-        let parent_block_identifier = BlockIdentifier {
-            index: block.index.saturating_sub(1),
-            hash: parent_hash,
-        };
+        let parent_block_identifier = block.get_parent_block_identifier();
 
         let icrc1_transaction = block.get_transaction()?;
 

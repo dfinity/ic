@@ -77,6 +77,32 @@ impl RosettaBlock {
             .map_err(anyhow::Error::msg)?
             .transaction)
     }
+
+    pub fn get_parent_block_identifier(&self) -> BlockIdentifier {
+        self.parent_hash
+            .as_ref()
+            .map(|ph| BlockIdentifier {
+                index: self.index.saturating_sub(1),
+                hash: hex::encode(ph),
+            })
+            .unwrap_or_else(|| BlockIdentifier {
+                index: self.index,
+                hash: hex::encode(&self.block_hash),
+            })
+    }
+
+    pub fn get_transaction_identifier(&self) -> rosetta_core::identifiers::TransactionIdentifier {
+        rosetta_core::identifiers::TransactionIdentifier {
+            hash: hex::encode(&self.transaction_hash),
+        }
+    }
+
+    pub fn get_block_identifier(&self) -> rosetta_core::identifiers::BlockIdentifier {
+        rosetta_core::identifiers::BlockIdentifier {
+            index: self.index,
+            hash: hex::encode(&self.block_hash),
+        }
+    }
 }
 
 impl From<&RosettaBlock> for BlockIdentifier {

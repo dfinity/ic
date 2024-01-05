@@ -172,7 +172,7 @@ impl StorageClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{common::utils::unit_test_utils::create_tmp_dir, Metadata};
+    use crate::Metadata;
     use ic_icrc1::{Block, Operation, Transaction};
     use ic_icrc1_test_utils::{
         arb_amount, blocks_strategy, metadata_strategy, valid_blockchain_with_gaps_strategy,
@@ -181,6 +181,13 @@ mod tests {
     use ic_icrc1_tokens_u64::U64;
     use ic_ledger_core::{block::BlockType, tokens::TokensType};
     use proptest::prelude::*;
+
+    pub fn create_tmp_dir() -> tempfile::TempDir {
+        tempfile::Builder::new()
+            .prefix("test_tmp_")
+            .tempdir_in(".")
+            .unwrap()
+    }
 
     fn convert_operation_type<A, B>(value: Operation<A>) -> Operation<B>
     where
