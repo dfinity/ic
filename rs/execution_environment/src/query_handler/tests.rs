@@ -1398,7 +1398,7 @@ fn query_stats_are_collected() {
 fn test_incorrect_query_name() {
     let test = ExecutionTestBuilder::new().build();
     let method = "unknown method".to_string();
-    match test.query(
+    let Err(err) = test.query(
         UserQuery {
             source: user_test_id(2),
             receiver: CanisterId::ic_00(),
@@ -1409,16 +1409,14 @@ fn test_incorrect_query_name() {
         },
         Arc::new(test.state().clone()),
         vec![],
-    ) {
-        Err(e) => {
-            assert_eq!(e.code(), ErrorCode::CanisterMethodNotFound);
-            assert_eq!(
-                e.description(),
-                format!("Query method {} not found.", method)
-            );
-        }
-        _ => panic!("Unexpected result."),
-    }
+    ) else {
+        panic!("Unexpected result.");
+    };
+    assert_eq!(err.code(), ErrorCode::CanisterMethodNotFound);
+    assert_eq!(
+        err.description(),
+        format!("Query method {} not found.", method)
+    );
 }
 
 #[test]
