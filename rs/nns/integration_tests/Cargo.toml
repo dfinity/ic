@@ -22,6 +22,11 @@ path = "test_canisters/unstoppable_canister.rs"
 name = "unstoppable-sns-root-canister"
 path = "test_canisters/unstoppable_sns_root_canister.rs"
 
+[[bin]]
+name = "canister-playground-canister"
+path = "test_canisters/canister_playground_canister.rs"
+
+
 # Dependencies required to compile the test canisters.
 [dependencies]
 assert_matches = "1.4.0"
@@ -36,6 +41,7 @@ dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-cdk = "0.10.0"
+ic-cdk-macros = "0.7.1"
 ic-cdk-timers = "0.4.0"
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
