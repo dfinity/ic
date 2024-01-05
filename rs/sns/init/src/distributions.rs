@@ -26,7 +26,7 @@ use std::collections::BTreeMap;
 pub const SWAP_SUBACCOUNT_NONCE: u64 = 1;
 
 /// The max number of DeveloperDistributions that can be specified in the SnsInitPayload.
-pub const MAX_DEVELOPER_DISTRIBUTION_COUNT: usize = 1000;
+pub const MAX_DEVELOPER_DISTRIBUTION_COUNT: usize = 100;
 
 /// The max number of AirdropDistributions that can be specified in the SnsInitPayload.
 pub const MAX_AIRDROP_DISTRIBUTION_COUNT: usize = 1000;
@@ -242,7 +242,7 @@ impl FractionalDeveloperVotingPower {
 
         if deduped_dev_neurons.len() != developer_distribution.developer_neurons.len() {
             return Err(
-                "Error: Neurons with the same controller and memo detected in developer_neurons"
+                "Error: Neurons with the same controller and memo found in developer_neurons"
                     .to_string(),
             );
         }

@@ -4,18 +4,16 @@ use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
-use ic_nervous_system_proto::pb::v1::Tokens as TokensPb;
+use ic_nervous_system_integration_tests::create_service_nervous_system_builder::CreateServiceNervousSystemBuilder;
+use ic_nervous_system_proto::pb::v1::{Duration as DurationPb, Tokens as TokensPb};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
-use ic_nns_governance::{
-    governance::test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
-    pb::v1::{
-        create_service_nervous_system::SwapParameters, manage_neuron, manage_neuron_response,
-        proposal, CreateServiceNervousSystem, ExecuteNnsFunction, ManageNeuron,
-        ManageNeuronResponse, NnsFunction, Proposal, ProposalInfo,
-    },
+use ic_nns_governance::pb::v1::{
+    create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution,
+    manage_neuron, manage_neuron_response, proposal, CreateServiceNervousSystem,
+    ExecuteNnsFunction, ManageNeuron, ManageNeuronResponse, NnsFunction, Proposal, ProposalInfo,
 };
 use ic_nns_test_utils::{
     common::{
@@ -29,6 +27,7 @@ use ic_nns_test_utils::{
     },
 };
 use ic_sns_governance::pb::v1::{governance::Mode, GetMode, GetModeResponse};
+use ic_sns_init::distributions::MAX_DEVELOPER_DISTRIBUTION_COUNT;
 use ic_sns_swap::{
     pb::v1::{
         FinalizeSwapResponse, GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse,
@@ -596,7 +595,7 @@ fn install_nns_canisters(
 
 fn test_sns_lifecycle(
     ensure_swap_time_run_out_without_sufficient_direct_participation: bool,
-    csns: CreateServiceNervousSystem,
+    create_service_nervous_system_proposal: CreateServiceNervousSystem,
 ) {
     // 1. Prepare the world
     let pocket_ic = PocketIcBuilder::new()
@@ -613,14 +612,19 @@ fn test_sns_lifecycle(
     );
 
     // 2. Create an SNS instance
-    let swap_parameters = csns.swap_parameters.clone().unwrap();
+    let swap_parameters = create_service_nervous_system_proposal
+        .swap_parameters
+        .clone()
+        .unwrap();
     let proposal_info = propose_and_wait(
         &pocket_ic,
         Proposal {
             title: Some(format!("Create SNS #{}", 1)),
             summary: "".to_string(),
             url: "".to_string(),
-            action: Some(proposal::Action::CreateServiceNervousSystem(csns)),
+            action: Some(proposal::Action::CreateServiceNervousSystem(
+                create_service_nervous_system_proposal,
+            )),
         },
     )
     .unwrap();
@@ -772,48 +776,68 @@ fn test_sns_lifecycle(
     }
 }
 
-fn test_csns(neurons_fund_participation: bool) -> CreateServiceNervousSystem {
-    let swap_parameters = CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
-        .swap_parameters
-        .clone()
-        .unwrap();
-    let swap_parameters = SwapParameters {
-        neurons_fund_participation: Some(neurons_fund_participation),
-        // Ensure just one huge direct participant can finalize the swap.
-        minimum_participants: Some(1),
-        minimum_participant_icp: Some(TokensPb::from_e8s(150_000 * E8)),
-        maximum_participant_icp: Some(TokensPb::from_e8s(650_000 * E8)),
-        minimum_direct_participation_icp: Some(TokensPb::from_e8s(150_000 * E8)),
-        maximum_direct_participation_icp: Some(TokensPb::from_e8s(650_000 * E8)),
-        // Instantly transit from Lifecycle::Committed to Lifecycle::Open.
-        start_time: None,
-        // Avoid the need to say that we're human.
-        confirmation_text: None,
-        ..swap_parameters
-    };
-    CreateServiceNervousSystem {
-        dapp_canisters: vec![],
-        swap_parameters: Some(swap_parameters),
-        ..CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone()
-    }
-}
-
 #[test]
 fn test_sns_lifecycle_happy_scenario_with_neurons_fund_participation() {
-    test_sns_lifecycle(true, test_csns(false));
+    test_sns_lifecycle(
+        true,
+        CreateServiceNervousSystemBuilder::default()
+            .neurons_fund_participation(false)
+            .build(),
+    );
 }
 
 #[test]
 fn test_sns_lifecycle_happy_scenario_without_neurons_fund_participation() {
-    test_sns_lifecycle(false, test_csns(false));
+    test_sns_lifecycle(
+        false,
+        CreateServiceNervousSystemBuilder::default()
+            .neurons_fund_participation(false)
+            .build(),
+    );
 }
 
 #[test]
 fn test_sns_lifecycle_swap_timeout_with_neurons_fund_participation() {
-    test_sns_lifecycle(true, test_csns(true));
+    test_sns_lifecycle(
+        true,
+        CreateServiceNervousSystemBuilder::default()
+            .neurons_fund_participation(true)
+            .build(),
+    );
 }
 
 #[test]
 fn test_sns_lifecycle_swap_timeout_without_neurons_fund_participation() {
-    test_sns_lifecycle(false, test_csns(true));
+    test_sns_lifecycle(
+        false,
+        CreateServiceNervousSystemBuilder::default()
+            .neurons_fund_participation(true)
+            .build(),
+    );
+}
+
+#[test]
+fn test_sns_lifecycle_happy_scenario_with_lots_of_dev_neurons() {
+    let developer_neurons = (0..MAX_DEVELOPER_DISTRIBUTION_COUNT)
+        .map(|i| NeuronDistribution {
+            controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+            memo: Some(i as u64),
+            // Set the dissolve delay to ~10 days, which is somewhat arbitrary.
+            // It just needs to be not greater than the maximum dissolve delay set elsewhere in the CreateServiceNervousSystem proposal,
+            // but high enough that it still has voting power
+            dissolve_delay: Some(DurationPb::from_secs(927391)),
+            stake: Some(TokensPb::from_e8s(E8)),
+            vesting_period: Some(DurationPb::from_secs(0)),
+        })
+        .collect();
+
+    let create_service_nervous_system_proposal = CreateServiceNervousSystemBuilder::default()
+        .neurons_fund_participation(false)
+        .initial_token_distribution_developer_neurons(developer_neurons)
+        .initial_token_distribution_total(TokensPb::from_e8s(
+            MAX_DEVELOPER_DISTRIBUTION_COUNT as u64 * E8,
+        ))
+        .build();
+
+    test_sns_lifecycle(true, create_service_nervous_system_proposal);
 }
