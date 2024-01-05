@@ -11,6 +11,16 @@ KEY_NAME="test-key-pair" # Replace with your key pair name
 STARTUP_SCRIPT="path/to/your/startup-script.sh"
 BINARY_FILE="consensus_manager_runner"
 BINARY_ARGS="your_cli_args"
+EXPERIMENT_TAG="ConsExp"
+
+
+if [ "$1" == "-d" ]; then
+    echo "Terminating instances"
+    aws ec2 --region $EU_REGION terminate-instances --instance-ids $(aws ec2 --region $EU_REGION describe-instances --query 'Reservations[].Instances[].InstanceId' --filters "Name=tag:tagkey,Values=$EXPERIMENT_TAG" --output text)
+    aws s3 rm s3://$S3_BUCKET/$BINARY_FILE
+    aws s3api --region $EU_REGION delete-bucket --bucket $S3_BUCKET 
+    exit 0
+fi
 
 # Create bucket
 aws s3api create-bucket \
@@ -18,28 +28,21 @@ aws s3api create-bucket \
     --region $EU_REGION \
     --create-bucket-configuration LocationConstraint=$EU_REGION
 
-
 aws s3 cp $RUNNER_BIN s3://$S3_BUCKET/$BINARY_FILE
 
 PRESIGNED=$(aws s3 presign --region $EU_REGION s3://$S3_BUCKET/$BINARY_FILE)
 
 echo $PRESIGNED
 
+aws ec2 create-vpc \
+    --cidr-block 10.0.0.0/16 \
+    --tag-specification ResourceType=vpc,Tags=[{Key=Name,Value=$EXPERIMENT_TAG}]
 
-# Create ssh key 
-aws ec2 create-key-pair \
-    --key-name $KEY_NAME \
-    --key-type rsa \
-    --key-format pem \
-    --query "KeyMaterial" \
-    --region $EU_REGION \
-    --output text > /tmp/test-key-pair.pem
-
-
-# aws ec2 create-vpc \
-#     --cidr-block 10.0.0.0/16 \
-#     --tag-specification ResourceType=vpc,Tags=[{Key=Name,Value=EXPERIMENT}]
-
+exit 1
+# aws ec2 create-subnet \
+#     --vpc-id vpc-081ec835f3EXAMPLE \
+#     --cidr-block 10.0.0.0/24 \
+#     --tag-specifications ResourceType=subnet,Tags=[{Key=Name,Value=$EXPERIMENT_TAG}]
 
 create_instance() {
     local REGION=$1
