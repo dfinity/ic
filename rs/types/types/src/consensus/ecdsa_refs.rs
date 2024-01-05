@@ -86,7 +86,7 @@ impl TryFrom<&pb::RequestId> for RequestId {
 
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
-pub struct QuadrupleId(pub(crate) u64, pub(crate) Option<EcdsaKeyId>);
+pub struct QuadrupleId(pub u64, pub Option<EcdsaKeyId>);
 
 impl QuadrupleId {
     pub fn id(&self) -> u64 {

@@ -55,7 +55,6 @@ fn baby_step_giant_step(c: &mut Criterion) {
     let rng = &mut reproducible_rng();
 
     let bsgs = BabyStepGiantStep::new(Gt::generator(), 0, 1 << 16, 512, 10);
-
     group.bench_function("solve", |b| {
         b.iter_batched_ref(
             || honest_dlog_instance(1, rng),

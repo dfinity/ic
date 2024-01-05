@@ -216,6 +216,7 @@ members = [
   "rs/observability/multiservice_discovery",
   "rs/observability/multiservice_discovery_downloader",
   "rs/observability/multiservice_discovery_shared",
+  "rs/observability/sns_downloader",
   "rs/orchestrator",
   "rs/orchestrator/dashboard",
   "rs/orchestrator/registry_replicator",

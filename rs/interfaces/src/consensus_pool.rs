@@ -47,7 +47,14 @@ pub enum ChangeAction {
     HandleInvalid(ConsensusMessage, String),
     PurgeValidatedBelow(Height),
     PurgeUnvalidatedBelow(Height),
-    PurgeValidatedSharesBelow(Height),
+    PurgeValidatedOfGivenTypeBelow(PurgeableArtifactType, Height),
+}
+
+/// A type of consensus artifact which can be selectively deleted from the consensus pool.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum PurgeableArtifactType {
+    NotarizationShare,
+    FinalizationShare,
 }
 
 impl From<ChangeAction> for ChangeSet {
@@ -107,9 +114,9 @@ impl ContentEq for ChangeAction {
             }
             (ChangeAction::PurgeValidatedBelow(x), ChangeAction::PurgeValidatedBelow(y)) => x == y,
             (
-                ChangeAction::PurgeValidatedSharesBelow(x),
-                ChangeAction::PurgeValidatedSharesBelow(y),
-            ) => x == y,
+                ChangeAction::PurgeValidatedOfGivenTypeBelow(type_1, x),
+                ChangeAction::PurgeValidatedOfGivenTypeBelow(type_2, y),
+            ) => x == y && type_1 == type_2,
             // Default to false when comparing actions of different type
             _ => false,
         }

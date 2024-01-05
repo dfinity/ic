@@ -245,7 +245,7 @@ fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_subnet() {
             .iter()
             .map(|record| PrincipalId::try_from(record).unwrap())
             .collect::<Vec<_>>();
-        let system_subnet_principal = subnet_principals.get(0).unwrap();
+        let system_subnet_principal = subnet_principals.first().unwrap();
 
         let system_subnet_id = SubnetId::new(*system_subnet_principal);
         let mut subnet_record = decode_registry_value::<SubnetRecord>(

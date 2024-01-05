@@ -87,6 +87,7 @@ rust_canister(
 
 rust_test(
     name = "ledger_canister_integration_test",
+    timeout = "long",
     srcs = ["test/test.rs"],
     data = [
         "ledger.did",

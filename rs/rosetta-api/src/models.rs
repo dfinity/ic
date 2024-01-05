@@ -324,47 +324,9 @@ impl ConstructionHashRequest {
     }
 }
 
-/// A ConstructionMetadataRequest is utilized to get information required to
-/// construct a transaction. The Options object used to specify which metadata
-/// to return is left purposely unstructured to allow flexibility for
-/// implementers.  Optionally, the request can also include an array of
-/// PublicKeys associated with the AccountIdentifiers returned in
-/// ConstructionPreprocessResponse.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct ConstructionMetadataRequest {
-    #[serde(rename = "network_identifier")]
-    pub network_identifier: NetworkIdentifier,
-
-    /// Some blockchains require different metadata for different types of
-    /// transaction construction (ex: delegation versus a transfer). Instead of
-    /// requiring a blockchain node to return all possible types of metadata for
-    /// construction (which may require multiple node fetches), the client can
-    /// populate an options object to limit the metadata returned to only the
-    /// subset required.
-    #[serde(rename = "options")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(default)]
-    pub options: Option<ConstructionMetadataRequestOptions>,
-
-    #[serde(rename = "public_keys")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub public_keys: Option<Vec<PublicKey>>,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConstructionMetadataRequestOptions {
     pub request_types: Vec<RequestType>,
-}
-
-impl ConstructionMetadataRequest {
-    pub fn new(network_identifier: NetworkIdentifier) -> ConstructionMetadataRequest {
-        ConstructionMetadataRequest {
-            network_identifier,
-            options: None,
-            public_keys: None,
-        }
-    }
 }
 
 impl From<ConstructionMetadataRequestOptions> for ObjectMap {
@@ -373,6 +335,18 @@ impl From<ConstructionMetadataRequestOptions> for ObjectMap {
             Ok(serde_json::Value::Object(o)) => o,
             _ => unreachable!(),
         }
+    }
+}
+
+impl TryFrom<ObjectMap> for ConstructionMetadataRequestOptions {
+    type Error = ApiError;
+    fn try_from(o: ObjectMap) -> Result<Self, ApiError> {
+        serde_json::from_value(serde_json::Value::Object(o)).map_err(|e| {
+            ApiError::internal_error(format!(
+                "Could not parse ConstructionMetadataRequestOptions from Object: {}",
+                e
+            ))
+        })
     }
 }
 
@@ -386,25 +360,6 @@ impl TryFrom<Option<ObjectMap>> for ConstructionMetadataRequestOptions {
             ))
         })
     }
-}
-
-/// The ConstructionMetadataResponse returns network-specific metadata used for
-/// transaction construction.  Optionally, the implementer can return the
-/// suggested fee associated with the transaction being constructed. The caller
-/// may use this info to adjust the intent of the transaction or to create a
-/// transaction with a different account that can pay the suggested fee.
-/// Suggested fee is an array in case fee payment must occur in multiple
-/// currencies.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct ConstructionMetadataResponse {
-    #[serde(rename = "metadata")]
-    pub metadata: ConstructionPayloadsRequestMetadata,
-
-    #[serde(rename = "suggested_fee")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(default)]
-    pub suggested_fee: Option<Vec<Amount>>,
 }
 
 /// ConstructionParseRequest is the input to the `/construction/parse` endpoint.
@@ -524,6 +479,27 @@ pub struct ConstructionPayloadsRequestMetadata {
     /// Represents number of nanoseconds since UNIX epoch.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at_time: Option<u64>,
+}
+
+impl From<ConstructionPayloadsRequestMetadata> for ObjectMap {
+    fn from(p: ConstructionPayloadsRequestMetadata) -> Self {
+        match serde_json::to_value(p) {
+            Ok(serde_json::Value::Object(o)) => o,
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl TryFrom<ObjectMap> for ConstructionPayloadsRequestMetadata {
+    type Error = ApiError;
+    fn try_from(o: ObjectMap) -> Result<Self, ApiError> {
+        serde_json::from_value(serde_json::Value::Object(o)).map_err(|e| {
+            ApiError::internal_error(format!(
+                "Could not parse ConstructionPayloadsRequestMetadata from Object: {}",
+                e
+            ))
+        })
+    }
 }
 
 /// ConstructionPayloadsRequest is the request to `/construction/payloads`. It

@@ -455,10 +455,7 @@ impl NeuronStore {
         &self,
         neuron_id: NeuronId,
     ) -> Result<(Cow<Neuron>, StorageLocation), NeuronStoreError> {
-        let heap_neuron = self
-            .heap_neurons
-            .get(&neuron_id.id)
-            .map(|neuron| Cow::Borrowed(neuron));
+        let heap_neuron = self.heap_neurons.get(&neuron_id.id).map(Cow::Borrowed);
 
         if let Some(heap_neuron) = heap_neuron.clone() {
             // If the neuron is active on heap, return early to avoid any operation on stable
@@ -470,10 +467,7 @@ impl NeuronStore {
         }
 
         let stable_neuron = with_stable_neuron_store(|stable_neuron_store| {
-            stable_neuron_store
-                .read(neuron_id)
-                .ok()
-                .map(|neuron| Cow::Owned(neuron))
+            stable_neuron_store.read(neuron_id).ok().map(Cow::Owned)
         });
         match (stable_neuron, heap_neuron) {
             (Some(stable), Some(_)) => {
@@ -493,15 +487,16 @@ impl NeuronStore {
     fn update_neuron(
         &mut self,
         neuron_id: NeuronId,
-        neuron: Neuron,
+        old_neuron: &Neuron,
+        new_neuron: Neuron,
         previous_location: StorageLocation,
-        is_neuron_changed: bool,
     ) -> Result<(), NeuronStoreError> {
-        let target_location = if neuron.is_inactive(self.now()) {
+        let target_location = if new_neuron.is_inactive(self.now()) {
             StorageLocation::Stable
         } else {
             StorageLocation::Heap
         };
+        let is_neuron_changed = *old_neuron != new_neuron;
 
         // Perform transition between 2 storage if necessary.
         //
@@ -516,7 +511,7 @@ impl NeuronStore {
             (StorageLocation::Heap, StorageLocation::Heap) => {
                 // We might be able to improve the performance by comparing and changing each field of neuron separately.
                 if is_neuron_changed {
-                    self.heap_neurons.insert(neuron_id.id, neuron);
+                    self.heap_neurons.insert(neuron_id.id, new_neuron);
                 }
             }
             (StorageLocation::Heap, StorageLocation::Stable) => {
@@ -524,14 +519,14 @@ impl NeuronStore {
                 // stable neuron store. Therefore we want to exist when there is an error in create,
                 // since there is probably a real issue.
                 with_stable_neuron_store_mut(|stable_neuron_store| {
-                    stable_neuron_store.create(neuron.clone())
+                    stable_neuron_store.create(new_neuron.clone())
                 })?;
                 self.heap_neurons.remove(&neuron_id.id);
             }
             (StorageLocation::Stable, StorageLocation::Heap) => {
                 // Now the neuron in heap becomes its primary copy and the one in stable memory is
                 // the secondary copy.
-                self.heap_neurons.insert(neuron_id.id, neuron);
+                self.heap_neurons.insert(neuron_id.id, new_neuron);
                 with_stable_neuron_store_mut(|stable_neuron_store| {
                     stable_neuron_store.delete(neuron_id)
                 })?;
@@ -541,7 +536,7 @@ impl NeuronStore {
                 // error since it signals a real issue.
                 if is_neuron_changed {
                     with_stable_neuron_store_mut(|stable_neuron_store| {
-                        stable_neuron_store.update(neuron.clone())
+                        stable_neuron_store.update(old_neuron, new_neuron)
                     })?;
                 }
             }
@@ -692,12 +687,7 @@ impl NeuronStore {
         let old_neuron = neuron.deref().clone();
         let mut new_neuron = old_neuron.clone();
         let result = f(&mut new_neuron);
-        self.update_neuron(
-            *neuron_id,
-            new_neuron.clone(),
-            location,
-            new_neuron != old_neuron,
-        )?;
+        self.update_neuron(*neuron_id, &old_neuron, new_neuron.clone(), location)?;
         // Updating indexes needs to happen after successfully storing primary data.
         self.update_neuron_indexes(&old_neuron, &new_neuron);
         Ok(result)

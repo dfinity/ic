@@ -7,8 +7,10 @@ pub fn verify_network_id(
     network_identifier: &NetworkIdentifier,
     state: &AppState,
 ) -> Result<(), Error> {
-    let expected =
-        &NetworkIdentifier::new(DEFAULT_BLOCKCHAIN.to_owned(), state.ledger_id.to_string());
+    let expected = &NetworkIdentifier::new(
+        DEFAULT_BLOCKCHAIN.to_owned(),
+        state.icrc1_agent.ledger_canister_id.to_string(),
+    );
 
     if network_identifier != expected {
         return Err(Error::invalid_network_id(expected));

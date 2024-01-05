@@ -141,8 +141,7 @@ pub mod bls12_381 {
                 CspNiDkgTranscript::Groth20_Bls12_381(transcript) => Ok(
                     transcript
                         .public_coefficients
-                        .coefficients
-                        .get(0)
+                        .coefficients.first()
                         .copied()
                         .ok_or(
                             CspNiDkgTranscriptThresholdSigPublicKeyBytesConversionError::CoefficientsEmpty,

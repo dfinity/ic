@@ -258,6 +258,14 @@ bazel-system-tests-k8s:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel $BAZEL_EXTRA_ARGS_RULES --test_tag_filters=k8s --k8s"
   timeout: 80 minutes
 
+bazel-system-test-hourly:
+  extends:
+    - .bazel-test-all
+    - .rules-post-master
+  variables:
+    BAZEL_EXTRA_ARGS: "--test_tag_filters=system_test_hourly"
+  timeout: 120 minutes
+
 bazel-system-test-hotfix:
   extends:
     - .bazel-test-all

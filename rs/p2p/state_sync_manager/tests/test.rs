@@ -11,6 +11,7 @@ use crate::common::{
     SharableMockChunkable, State,
 };
 use common::SharableMockStateSync;
+use ic_interfaces::p2p::state_sync::{ArtifactErrorCode, ChunkId};
 use ic_logger::info;
 use ic_memory_transport::TransportRouter;
 use ic_p2p_test_utils::{
@@ -23,10 +24,7 @@ use ic_p2p_test_utils::{
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types::{
-    artifact::StateSyncArtifactId,
-    chunkable::{ArtifactErrorCode, ChunkId},
-    crypto::CryptoHash,
-    CryptoHashOfState, Height, RegistryVersion,
+    artifact::StateSyncArtifactId, crypto::CryptoHash, CryptoHashOfState, Height, RegistryVersion,
 };
 use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3};
 use tokio::sync::Notify;

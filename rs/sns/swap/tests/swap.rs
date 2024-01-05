@@ -4531,7 +4531,7 @@ async fn test_claim_swap_neuron_correctly_creates_neuron_parameters() {
                 neuron_attributes: Some(NeuronAttributes {
                     memo: 10,
                     dissolve_delay_seconds: ONE_MONTH_SECONDS,
-                    followees: vec![NeuronId::new_test_neuron_id(10).try_into().unwrap()],
+                    followees: vec![NeuronId::new_test_neuron_id(10).into()],
                 }),
                 investor: Some(Investor::Direct(DirectInvestment {
                     buyer_principal: (*TEST_USER1_PRINCIPAL).to_string(),
@@ -4546,7 +4546,7 @@ async fn test_claim_swap_neuron_correctly_creates_neuron_parameters() {
                 neuron_attributes: Some(NeuronAttributes {
                     memo: 0,
                     dissolve_delay_seconds: 0,
-                    followees: vec![NeuronId::new_test_neuron_id(20).try_into().unwrap()],
+                    followees: vec![NeuronId::new_test_neuron_id(20).into()],
                 }),
                 investor: Some(Investor::CommunityFund(CfInvestment {
                     hotkey_principal: (*TEST_USER2_PRINCIPAL).to_string(),

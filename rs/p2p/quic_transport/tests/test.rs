@@ -1,10 +1,10 @@
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use crate::common::{PeerRestrictedSevHandshake, PeerRestrictedTlsConfig};
+use axum::http::Request;
 use bytes::Bytes;
 use either::Either;
 use futures::FutureExt;
-use http::Request;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_icos_sev::Sev;
 use ic_logger::info;

@@ -35,11 +35,11 @@
 /// └──────┘                           └──────┘
 use async_trait::async_trait;
 use axum::{
-    body::{Body, HttpBody},
+    body::Body,
+    http::{Request, Response},
     Router,
 };
-use bytes::{Buf, BufMut, Bytes};
-use http::{Request, Response};
+use bytes::Bytes;
 use ic_quic_transport::{ConnId, SendError, Transport};
 use ic_types::NodeId;
 use std::{
@@ -54,7 +54,7 @@ use tokio::{
         oneshot, Semaphore,
     },
 };
-use tower::{Service, ServiceExt};
+use tower::ServiceExt;
 
 #[derive(Clone)]
 pub struct PeerHandle {
@@ -151,19 +151,16 @@ impl TransportRouter {
                 parts.extensions.insert(ConnId::from(u64::MAX));
                 let req = Request::from_parts(parts, Body::from(body));
 
-                let router_resp_tx = router_resp_tx.clone();
-                let mut router = router.clone();
-                tokio::spawn(async move {
-                    // Call request handler
-                    let resp = router.ready().await.unwrap().call(req).await.unwrap();
+                // Call request handler
+                let resp = router.clone().oneshot(req).await.unwrap();
 
-                    // Transform request back to `Request<Bytes>` and attach this node in the extension map.
-                    let (mut parts, body) = resp.into_parts();
-                    let body = to_bytes(body).await.unwrap();
-                    parts.extensions.insert(this_node_id);
-                    let resp = Response::from_parts(parts, body);
-                    let _ = router_resp_tx.send((resp, origin_id, oneshot_tx));
-                });
+                // Transform request back to `Request<Bytes>` and attach this node in the extension map.
+                let (mut parts, body) = resp.into_parts();
+
+                let body = axum::body::to_bytes(body, usize::MAX).await.unwrap();
+                parts.extensions.insert(this_node_id);
+                let resp = Response::from_parts(parts, body);
+                let _ = router_resp_tx.send((resp, origin_id, oneshot_tx));
             }
         });
 
@@ -321,44 +318,4 @@ impl Transport for PeerTransport {
             .map(|(k, _)| (*k, ConnId::from(u64::MAX)))
             .collect()
     }
-}
-
-// Copied from hyper. Used to transform `BoxBodyBytes` to `Bytes`.
-// It might look slow but since in our case the data is fully available
-// the first data() call will immediately return everything.
-pub(crate) async fn to_bytes<T>(body: T) -> Result<Bytes, T::Error>
-where
-    T: HttpBody + Unpin,
-{
-    futures::pin_mut!(body);
-
-    // If there's only 1 chunk, we can just return Buf::to_bytes()
-    let mut first = if let Some(buf) = body.data().await {
-        buf?
-    } else {
-        return Ok(Bytes::new());
-    };
-
-    let second = if let Some(buf) = body.data().await {
-        buf?
-    } else {
-        return Ok(first.copy_to_bytes(first.remaining()));
-    };
-
-    // Don't pre-emptively reserve *too* much.
-    let rest = (body.size_hint().lower() as usize).min(1024 * 16);
-    let cap = first
-        .remaining()
-        .saturating_add(second.remaining())
-        .saturating_add(rest);
-    // With more than 1 buf, we gotta flatten into a Vec first.
-    let mut vec = Vec::with_capacity(cap);
-    vec.put(first);
-    vec.put(second);
-
-    while let Some(buf) = body.data().await {
-        vec.put(buf?);
-    }
-
-    Ok(vec.into())
 }

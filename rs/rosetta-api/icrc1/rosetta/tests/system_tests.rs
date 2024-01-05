@@ -5,6 +5,8 @@ use candid::{Nat, Principal};
 use ic_agent::{identity::Secp256k1Identity, Identity};
 use ic_base_types::CanisterId;
 pub use ic_canister_client_sender::Ed25519KeyPair as EdKeypair;
+use ic_icrc1_ledger_sm_tests::DECIMAL_PLACES;
+use ic_icrc1_ledger_sm_tests::{FEE, TOKEN_SYMBOL};
 use ic_icrc1_tokens_u64::U64;
 use ic_icrc_rosetta::{
     common::{
@@ -12,7 +14,7 @@ use ic_icrc_rosetta::{
         types::{ApproveMetadata, OperationType},
         utils::utils::icrc1_account_to_rosetta_accountidentifier,
     },
-    construction_api::types::MetadataOptions,
+    construction_api::types::ConstructionMetadataRequestOptions,
     Metadata,
 };
 use ic_icrc_rosetta_client::RosettaClient;
@@ -739,7 +741,7 @@ async fn test_construction_preprocess() {
         .expect("Unable to call Construction Preprocess");
     let expected = ConstructionPreprocessResponse {
         options: Some(
-            MetadataOptions {
+            ConstructionMetadataRequestOptions {
                 suggested_fee: true,
             }
             .into(),
@@ -801,4 +803,82 @@ async fn test_construction_derive() {
         account_identifier,
         icrc1_account_to_rosetta_accountidentifier(&account)
     );
+}
+
+#[tokio::test]
+async fn test_construction_metadata() {
+    let replica_context = local_replica::start_new_local_replica().await;
+    let replica_url = format!("http://localhost:{}", replica_context.port);
+
+    let icrc_ledger_canister_id =
+        local_replica::deploy_icrc_ledger_with_default_args(&replica_context).await;
+    let ledger_id = Principal::from(icrc_ledger_canister_id);
+
+    let context = start_rosetta(
+        &rosetta_bin(),
+        RosettaOptions {
+            ledger_id,
+            network_url: Some(replica_url),
+            offline: false,
+            ..RosettaOptions::default()
+        },
+    )
+    .await;
+
+    let network_identifier = NetworkIdentifier::new(
+        DEFAULT_BLOCKCHAIN.to_owned(),
+        CanisterId::try_from(ledger_id.as_slice())
+            .unwrap()
+            .to_string(),
+    );
+
+    let client = RosettaClient::from_str_url(&format!("http://0.0.0.0:{}", context.port))
+        .expect("Unable to parse url");
+
+    let _construction_preprocess_response = client
+        .construction_preprocess(vec![], network_identifier.clone())
+        .await
+        .expect("Unable to call Construction Preprocess");
+    let construction_metadata = ConstructionPreprocessResponse {
+        options: Some(
+            ConstructionMetadataRequestOptions {
+                suggested_fee: true,
+            }
+            .into(),
+        ),
+        required_public_keys: None,
+    };
+
+    let construction_metadata_response = client
+        .construction_metadata(
+            construction_metadata.options.try_into().unwrap(),
+            network_identifier.clone(),
+        )
+        .await
+        .expect("Unable to call Construction Metadata");
+    assert!(construction_metadata_response.metadata.is_empty());
+    assert_eq!(
+        construction_metadata_response.suggested_fee,
+        Some(vec![Amount::new(
+            FEE.to_string(),
+            Currency {
+                symbol: TOKEN_SYMBOL.to_owned(),
+                decimals: DECIMAL_PLACES as u32,
+                metadata: None
+            }
+        )])
+    );
+
+    let empty_construction_metadata_response = client
+        .construction_metadata(
+            ConstructionMetadataRequestOptions {
+                suggested_fee: false,
+            },
+            network_identifier,
+        )
+        .await
+        .expect("Unable to call Construction Metadata");
+
+    assert!(empty_construction_metadata_response.metadata.is_empty());
+    assert!(empty_construction_metadata_response.suggested_fee.is_none());
 }

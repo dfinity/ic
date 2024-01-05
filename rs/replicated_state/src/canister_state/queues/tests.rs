@@ -641,7 +641,7 @@ fn test_peek_round_robin() {
     // Due to the round-robin across Local, Ingress, and Remote Subnet messages,
     // the peek order should be:
     // 1. Local Subnet request (index 0)
-    let peeked_input = CanisterMessage::Request(Arc::new(local_requests.get(0).unwrap().clone()));
+    let peeked_input = CanisterMessage::Request(Arc::new(local_requests.first().unwrap().clone()));
     assert_eq!(queues.peek_input().unwrap(), peeked_input);
     // Peeking again the queues would return the same result.
     assert_eq!(queues.peek_input().unwrap(), peeked_input);
@@ -653,7 +653,7 @@ fn test_peek_round_robin() {
     assert_eq!(queues.pop_input().unwrap(), peeked_input);
 
     // 3. Remote Subnet request (index 0)
-    let peeked_input = CanisterMessage::Request(Arc::new(remote_requests.get(0).unwrap().clone()));
+    let peeked_input = CanisterMessage::Request(Arc::new(remote_requests.first().unwrap().clone()));
     assert_eq!(queues.peek_input().unwrap(), peeked_input);
     assert_eq!(queues.pop_input().unwrap(), peeked_input);
 
@@ -718,7 +718,7 @@ fn test_skip_round_robin() {
     let mut loop_detector = CanisterQueuesLoopDetector::default();
 
     // Pop local queue.
-    let peeked_input = CanisterMessage::Request(Arc::new(local_requests.get(0).unwrap().clone()));
+    let peeked_input = CanisterMessage::Request(Arc::new(local_requests.first().unwrap().clone()));
     assert_eq!(queues.peek_input().unwrap(), peeked_input);
     assert_eq!(queues.pop_input().unwrap(), peeked_input);
 
@@ -878,13 +878,13 @@ fn test_peek_canister_input_does_not_affect_schedule() {
         queues
             .peek_canister_input(InputQueueType::RemoteSubnet)
             .unwrap(),
-        CanisterMessage::Request(Arc::new(remote_requests.get(0).unwrap().clone()))
+        CanisterMessage::Request(Arc::new(remote_requests.first().unwrap().clone()))
     );
     assert_eq!(
         queues
             .peek_canister_input(InputQueueType::LocalSubnet)
             .unwrap(),
-        CanisterMessage::Request(Arc::new(local_requests.get(0).unwrap().clone()))
+        CanisterMessage::Request(Arc::new(local_requests.first().unwrap().clone()))
     );
 
     // Schedules are not changed.
@@ -928,13 +928,13 @@ fn test_skip_canister_input() {
         queues
             .peek_canister_input(InputQueueType::RemoteSubnet)
             .unwrap(),
-        CanisterMessage::Request(Arc::new(remote_requests.get(0).unwrap().clone()))
+        CanisterMessage::Request(Arc::new(remote_requests.first().unwrap().clone()))
     );
     assert_eq!(
         queues
             .peek_canister_input(InputQueueType::LocalSubnet)
             .unwrap(),
-        CanisterMessage::Request(Arc::new(local_requests.get(0).unwrap().clone()))
+        CanisterMessage::Request(Arc::new(local_requests.first().unwrap().clone()))
     );
 
     queues.skip_canister_input(InputQueueType::RemoteSubnet);

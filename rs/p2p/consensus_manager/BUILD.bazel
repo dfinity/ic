@@ -22,9 +22,9 @@ DEPENDENCIES = [
     "//rs/crypto/test_utils/tls",
     "//rs/types/types_test_utils",
     "@crate_index//:rand_chacha",
-    "@crate_index//:axum",
     "@crate_index//:either",
     "@crate_index//:tokio-util",
+    "@crate_index//:axum_0_7_0",
     "@crate_index//:backoff",
     "@crate_index//:hex",
     "@crate_index//:bytes",
@@ -77,4 +77,15 @@ rust_test_suite(
     srcs = ["tests/test.rs"],
     flaky = True,
     deps = [":consensus_manager"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+sh_binary(
+    name = "aws",
+    srcs = ["aws.sh"],
+    data = [
+        "//rs/p2p/consensus_manager:consensus_manager_runner",
+    ],
+    env = {
+        "RUNNER_BIN": "$(location //rs/p2p/consensus_manager:consensus_manager_runner)",
+    },
 )

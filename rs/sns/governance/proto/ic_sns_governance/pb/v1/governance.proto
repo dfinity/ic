@@ -79,6 +79,7 @@ message DisburseMaturityInProgress {
   uint64 amount_e8s = 1;
   uint64 timestamp_of_disbursement_seconds = 2;
   Account account_to_disburse_to = 3;
+  optional uint64 finalize_disbursement_timestamp_seconds = 4;
 }
 
 // A neuron in the governance system.

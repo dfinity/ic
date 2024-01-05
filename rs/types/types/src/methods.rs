@@ -322,15 +322,11 @@ impl TryFrom<pb::Callback> for Callback {
         let cycles_sent: PbCycles =
             try_from_option_field(value.cycles_sent, "Callback::cycles_sent")?;
 
-        let prepayment_for_response_execution = value
-            .prepayment_for_response_execution
-            .map(|c| c.try_into())
-            .transpose()?;
+        let prepayment_for_response_execution =
+            value.prepayment_for_response_execution.map(|c| c.into());
 
-        let prepayment_for_response_transmission = value
-            .prepayment_for_response_transmission
-            .map(|c| c.try_into())
-            .transpose()?;
+        let prepayment_for_response_transmission =
+            value.prepayment_for_response_transmission.map(|c| c.into());
 
         Ok(Self {
             call_context_id: CallContextId::from(value.call_context_id),

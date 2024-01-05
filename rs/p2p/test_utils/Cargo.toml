@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 async-trait = "0.1.36"
-axum = "0.6.12"
+axum = "0.7.0"
 bytes = { workspace = true }
 crossbeam-channel = "0.5.5"
 either = "1.6.0"

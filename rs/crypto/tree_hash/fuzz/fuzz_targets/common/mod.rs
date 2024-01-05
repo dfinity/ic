@@ -39,7 +39,7 @@ pub fn fuzz_mutator(data: &mut [u8], size: usize, max_size: usize, seed: u32) ->
             let seed = [0u8; CHACHA_SEED_LEN];
             let encoded_tree =
                 ProtobufLabeledTree::proxy_encode(LabeledTree::<Vec<u8>>::SubTree(flatmap!()));
-            let bytes: Vec<_> = seed.into_iter().chain(encoded_tree.into_iter()).collect();
+            let bytes: Vec<_> = seed.into_iter().chain(encoded_tree).collect();
             let new_size = bytes.len();
             if new_size <= max_size {
                 data[..new_size].copy_from_slice(&bytes[..new_size]);

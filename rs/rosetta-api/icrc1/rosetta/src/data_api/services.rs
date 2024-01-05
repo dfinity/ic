@@ -5,7 +5,7 @@ use crate::{
     },
     Metadata,
 };
-use ic_base_types::CanisterId;
+use candid::Principal;
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_rosetta_api::DEFAULT_BLOCKCHAIN;
 use rosetta_core::{identifiers::*, miscellaneous::*, objects::*, response_types::*};
@@ -15,7 +15,7 @@ use std::{sync::Arc, time::Duration};
 const ROSETTA_VERSION: &str = "1.4.13";
 const NODE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-pub fn network_list(ledger_id: &CanisterId) -> NetworkListResponse {
+pub fn network_list(ledger_id: &Principal) -> NetworkListResponse {
     NetworkListResponse {
         network_identifiers: vec![NetworkIdentifier::new(
             DEFAULT_BLOCKCHAIN.to_owned(),
@@ -24,7 +24,7 @@ pub fn network_list(ledger_id: &CanisterId) -> NetworkListResponse {
     }
 }
 
-pub fn network_options(ledger_id: &CanisterId) -> NetworkOptionsResponse {
+pub fn network_options(ledger_id: &Principal) -> NetworkOptionsResponse {
     NetworkOptionsResponse {
         version: Version {
             rosetta_version: ROSETTA_VERSION.to_string(),

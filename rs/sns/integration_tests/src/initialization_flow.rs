@@ -359,7 +359,7 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
     // Assert the SNS was created and get its info
     let snses = list_deployed_snses(&mut sns_initialization_flow_test.state_machine).instances;
     assert_eq!(snses.len(), 1);
-    let test_sns = snses.get(0).unwrap();
+    let test_sns = snses.first().unwrap();
 
     // Get the cycle balance of the SNS-W canister and verify it has been decremented
     let sns_wasm_cycles_balance = get_canister_status_from_root(
@@ -657,7 +657,7 @@ fn test_one_proposal_sns_initialization_success_without_neurons_fund_participati
     // Assert the SNS was created and get its info
     let snses = list_deployed_snses(&mut sns_initialization_flow_test.state_machine).instances;
     assert_eq!(snses.len(), 1);
-    let test_sns = snses.get(0).unwrap();
+    let test_sns = snses.first().unwrap();
 
     // Get the cycle balance of the SNS-W canister and verify it has been decremented
     let sns_wasm_cycles_balance = get_canister_status_from_root(
@@ -971,7 +971,7 @@ fn test_one_proposal_sns_initialization_swap_cannot_be_opened_by_legacy_method()
     // Assert the SNS was created and get its info
     let snses = list_deployed_snses(&mut sns_initialization_flow_test.state_machine).instances;
     assert_eq!(snses.len(), 1);
-    let test_sns = snses.get(0).unwrap();
+    let test_sns = snses.first().unwrap();
 
     // Assert the lifecycle of the Swap canister is adopted
     let get_lifecycle_response = get_lifecycle(
@@ -1121,7 +1121,7 @@ fn test_one_proposal_sns_initialization_failed_swap_returns_neurons_fund_and_dap
     // Assert the SNS was created and get its info
     let snses = list_deployed_snses(&mut sns_initialization_flow_test.state_machine).instances;
     assert_eq!(snses.len(), 1);
-    let test_sns = snses.get(0).unwrap();
+    let test_sns = snses.first().unwrap();
 
     // Get the cycle balance of the SNS-W canister and verify it has been decremented
     let sns_wasm_cycles_balance = get_canister_status_from_root(
@@ -1335,7 +1335,7 @@ fn test_one_proposal_sns_initialization_supports_multiple_open_swaps() {
     // Assert the SNS was created and get its info
     let snses = list_deployed_snses(&mut sns_initialization_flow_test.state_machine).instances;
     assert_eq!(snses.len(), 1);
-    let test_sns_1 = snses.get(0).unwrap();
+    let test_sns_1 = snses.first().unwrap();
 
     // Assert the lifecycle of the Swap canister is adopted
     let get_lifecycle_response = get_lifecycle(

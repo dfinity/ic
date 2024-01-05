@@ -1504,11 +1504,10 @@ mod validate_pks_and_sks {
     }
 
     fn dkg_dealing_encryption_key_id() -> KeyId {
-        KeyId::try_from(
+        KeyId::from(
             &CspFsEncryptionPublicKey::try_from(&valid_dkg_dealing_encryption_public_key())
                 .expect("invalid public key"),
         )
-        .expect("invalid public key")
     }
 
     fn idkg_dealing_encryption_key_id() -> KeyId {

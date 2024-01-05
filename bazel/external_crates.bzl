@@ -156,6 +156,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "headers",
                 ],
             ),
+            "axum_0_7_0": crate.spec(
+                package = "axum",
+                version = "^0.7.0",
+            ),
             "axum-extra": crate.spec(
                 version = "^0.9.0",
             ),
@@ -474,7 +478,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.1.0",
             ),
             "http-serde": crate.spec(
-                version = "^1.1.2",
+                version = "^2.0.0",
             ),
             "httparse": crate.spec(
                 version = "^1.5.1",

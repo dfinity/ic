@@ -30,7 +30,7 @@ pub fn config_writer_loop(
             ConfigWriter::new(vector_config_dir.clone(), filters.clone(), log.clone());
         loop {
             for job in &jobs {
-                let targets = match discovery.get_target_groups(*job) {
+                let targets = match discovery.get_target_groups(*job, log.clone()) {
                     Ok(t) => t,
                     Err(e) => {
                         warn!(log, "Failed to retrieve targets for job {}: {:?}", job, e);

@@ -4,16 +4,11 @@ use axum::http::{Request, Response};
 use bytes::Bytes;
 use ic_interfaces::p2p::{
     consensus::{PriorityFnAndFilterProducer, ValidatedPoolReader},
-    state_sync::StateSyncClient,
+    state_sync::{ArtifactErrorCode, Chunk, ChunkId, Chunkable, StateSyncClient},
 };
 use ic_quic_transport::{ConnId, SendError, Transport};
 use ic_types::artifact::PriorityFn;
-use ic_types::{
-    artifact::StateSyncArtifactId,
-    chunkable::{ArtifactErrorCode, Chunkable},
-    chunkable::{Chunk, ChunkId},
-    NodeId,
-};
+use ic_types::{artifact::StateSyncArtifactId, NodeId};
 use mockall::mock;
 
 mock! {

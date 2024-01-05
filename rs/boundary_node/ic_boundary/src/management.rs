@@ -38,7 +38,7 @@ lazy_static! {
 }
 
 pub async fn btc_mw(
-    Extension(ctx): Extension<RequestContext>,
+    Extension(ctx): Extension<Arc<RequestContext>>,
     Extension(canister_id): Extension<CanisterId>,
     mut request: Request<Body>,
     next: Next<Body>,
@@ -136,7 +136,7 @@ impl LedgerRatelimitState {
 
 pub async fn ledger_ratelimit_transfer_mw(
     State(state): State<Arc<LedgerRatelimitState>>,
-    Extension(ctx): Extension<RequestContext>,
+    Extension(ctx): Extension<Arc<RequestContext>>,
     Extension(canister_id): Extension<CanisterId>,
     request: Request<Body>,
     next: Next<Body>,

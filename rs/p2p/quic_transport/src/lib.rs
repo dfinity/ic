@@ -36,10 +36,12 @@ use std::{
 };
 
 use async_trait::async_trait;
-use axum::Router;
+use axum::{
+    http::{Request, Response},
+    Router,
+};
 use bytes::Bytes;
 use either::Either;
-use http::{Request, Response};
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::{TlsConfig, TlsStream};
 use ic_icos_sev::ValidateAttestedStream;

@@ -8,6 +8,7 @@ use crate::{
     metrics::{LABEL_POOL_TYPE, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},
 };
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
+use ic_interfaces::consensus_pool::PurgeableArtifactType;
 use ic_interfaces::{
     consensus_pool::{
         ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool,
@@ -32,8 +33,8 @@ use std::{marker::PhantomData, sync::Arc, time::Duration};
 pub enum PoolSectionOp<T> {
     Insert(T),
     Remove(ConsensusMessageId),
-    PurgeBelow(Height),       // Non-inclusive
-    PurgeSharesBelow(Height), // Non-inclusive
+    PurgeBelow(Height),                            // Non-inclusive
+    PurgeTypeBelow(PurgeableArtifactType, Height), // Non-inclusive
 }
 
 #[derive(Clone, Debug, Default)]
@@ -54,8 +55,9 @@ impl<T> PoolSectionOps<T> {
     pub fn purge_below(&mut self, height: Height) {
         self.ops.push(PoolSectionOp::PurgeBelow(height));
     }
-    pub fn purge_shares_below(&mut self, height: Height) {
-        self.ops.push(PoolSectionOp::PurgeSharesBelow(height));
+    pub fn purge_type_below(&mut self, artifact_type: PurgeableArtifactType, height: Height) {
+        self.ops
+            .push(PoolSectionOp::PurgeTypeBelow(artifact_type, height));
     }
 }
 
@@ -633,8 +635,8 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
                 ChangeAction::PurgeValidatedBelow(height) => {
                     validated_ops.purge_below(height);
                 }
-                ChangeAction::PurgeValidatedSharesBelow(height) => {
-                    validated_ops.purge_shares_below(height);
+                ChangeAction::PurgeValidatedOfGivenTypeBelow(artifact_type, height) => {
+                    validated_ops.purge_type_below(artifact_type, height);
                 }
                 ChangeAction::PurgeUnvalidatedBelow(height) => {
                     unvalidated_ops.purge_below(height);

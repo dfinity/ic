@@ -7,9 +7,10 @@ use ic_protobuf::{
 };
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
+    consensus::ecdsa::QuadrupleId,
     crypto::threshold_sig::ni_dkg::{id::ni_dkg_target_id, NiDkgTargetId},
     messages::{CallbackId, CanisterCall, Request, StopCanisterCallId},
-    node_id_into_protobuf, node_id_try_from_option, CanisterId, ExecutionRound, NodeId,
+    node_id_into_protobuf, node_id_try_from_option, CanisterId, ExecutionRound, Height, NodeId,
     RegistryVersion, Time,
 };
 use phantom_newtype::Id;
@@ -193,6 +194,8 @@ impl CanisterManagementCalls {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SubnetCallContextManager {
+    /// Should increase monotonically. This property is used to determine if a request
+    /// corresponds to a future state.
     next_callback_id: u64,
     pub setup_initial_dkg_contexts: BTreeMap<CallbackId, SetupInitialDkgContext>,
     pub sign_with_ecdsa_contexts: BTreeMap<CallbackId, SignWithEcdsaContext>,
@@ -206,6 +209,10 @@ pub struct SubnetCallContextManager {
 }
 
 impl SubnetCallContextManager {
+    pub fn next_callback_id(&self) -> CallbackId {
+        CallbackId::from(self.next_callback_id)
+    }
+
     pub fn push_context(&mut self, context: SubnetCallContext) -> CallbackId {
         let callback_id = CallbackId::new(self.next_callback_id);
         self.next_callback_id += 1;
@@ -679,6 +686,8 @@ pub struct SignWithEcdsaContext {
     pub derivation_path: Vec<Vec<u8>>,
     pub pseudo_random_id: [u8; 32],
     pub batch_time: Time,
+    pub matched_quadruple: Option<(QuadrupleId, Height)>,
+    pub nonce: Option<[u8; 32]>,
 }
 
 impl From<&SignWithEcdsaContext> for pb_metadata::SignWithEcdsaContext {
@@ -690,6 +699,9 @@ impl From<&SignWithEcdsaContext> for pb_metadata::SignWithEcdsaContext {
             derivation_path_vec: context.derivation_path.clone(),
             pseudo_random_id: context.pseudo_random_id.to_vec(),
             batch_time: context.batch_time.as_nanos_since_unix_epoch(),
+            height: context.matched_quadruple.as_ref().map(|q| q.1.get()),
+            quadruple_id: context.matched_quadruple.as_ref().map(|q| q.0.id()),
+            nonce: context.nonce.map(|n| n.to_vec()),
         }
     }
 }
@@ -699,13 +711,15 @@ impl TryFrom<pb_metadata::SignWithEcdsaContext> for SignWithEcdsaContext {
     fn try_from(context: pb_metadata::SignWithEcdsaContext) -> Result<Self, Self::Error> {
         let request: Request =
             try_from_option_field(context.request, "SignWithEcdsaContext::request")?;
-        let key_id = try_from_option_field(context.key_id, "SignWithEcdsaContext::key_id")?;
+        let key_id: EcdsaKeyId =
+            try_from_option_field(context.key_id, "SignWithEcdsaContext::key_id")?;
         Ok(SignWithEcdsaContext {
             message_hash: {
-                if context.message_hash.len() != 32 {
-                    return Err(Self::Error::Other(
-                        "message_hash is not 32 bytes.".to_string(),
-                    ));
+                if context.message_hash.len() != NiDkgTargetId::SIZE {
+                    return Err(Self::Error::Other(format!(
+                        "message_hash is not {} bytes.",
+                        NiDkgTargetId::SIZE
+                    )));
                 }
                 let mut id = [0; NiDkgTargetId::SIZE];
                 id.copy_from_slice(&context.message_hash);
@@ -713,18 +727,37 @@ impl TryFrom<pb_metadata::SignWithEcdsaContext> for SignWithEcdsaContext {
             },
             derivation_path: context.derivation_path_vec,
             request,
-            key_id,
+            key_id: key_id.clone(),
             pseudo_random_id: {
-                if context.pseudo_random_id.len() != 32 {
-                    return Err(Self::Error::Other(
-                        "pseudo_random_id is not 32 bytes.".to_string(),
-                    ));
+                if context.pseudo_random_id.len() != NiDkgTargetId::SIZE {
+                    return Err(Self::Error::Other(format!(
+                        "pseudo_random_id is not {} bytes.",
+                        NiDkgTargetId::SIZE
+                    )));
                 }
                 let mut id = [0; NiDkgTargetId::SIZE];
                 id.copy_from_slice(&context.pseudo_random_id);
                 id
             },
             batch_time: Time::from_nanos_since_unix_epoch(context.batch_time),
+            matched_quadruple: context
+                .quadruple_id
+                .map(|q| QuadrupleId(q, Some(key_id)))
+                .zip(context.height)
+                .map(|(q, h)| (q, Height::from(h))),
+            nonce: if let Some(nonce) = context.nonce.as_ref() {
+                if nonce.len() != NiDkgTargetId::SIZE {
+                    return Err(Self::Error::Other(format!(
+                        "nonce is not {} bytes.",
+                        NiDkgTargetId::SIZE
+                    )));
+                }
+                let mut id = [0; NiDkgTargetId::SIZE];
+                id.copy_from_slice(nonce);
+                Some(id)
+            } else {
+                None
+            },
         })
     }
 }

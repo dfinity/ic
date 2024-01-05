@@ -20,7 +20,6 @@ use std::num::TryFromIntError;
 
 pub mod conversions;
 pub mod proto_conversions;
-pub use conversions::*;
 
 #[cfg(test)]
 mod tests;

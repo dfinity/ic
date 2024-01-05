@@ -4446,9 +4446,15 @@ async fn find_reachable_nns_urls(nns_urls: Vec<Url>) -> Vec<Url> {
 
         // Wait for the first task to complete ==> until we have a reachable NNS URL.
         // select_all returns the completed future at position 0, and the remaining futures at position 2.
-        match futures::future::select_all(tasks).await.0 {
+        let (completed_task, _, remaining_tasks) = futures::future::select_all(tasks).await;
+        match completed_task {
             Some(url) => return vec![url],
             None => {
+                for task in remaining_tasks {
+                    if let Some(url) = task.await {
+                        return vec![url];
+                    }
+                }
                 eprintln!(
                     "WARNING: None of the provided NNS urls are reachable. Retrying in 5 seconds... ({}/{})",
                     i,

@@ -74,6 +74,7 @@ use crate::{
     peer_context::{GossipChunkRequestTracker, PeerContext, PeerContextMap},
     P2PError, P2PErrorCode, P2PResult,
 };
+use ic_interfaces::p2p::state_sync::ChunkId;
 use ic_interfaces_transport::TransportPayload;
 use ic_logger::{info, trace, warn};
 use ic_protobuf::{proxy::ProtoProxy, types::v1 as pb};
@@ -83,7 +84,6 @@ use ic_types::{
         CanisterHttpArtifact, CertificationArtifact, ConsensusArtifact, DkgArtifact, EcdsaArtifact,
         IngressArtifact,
     },
-    chunkable::ChunkId,
     crypto::CryptoHash,
     p2p::GossipAdvert,
     NodeId, RegistryVersion,

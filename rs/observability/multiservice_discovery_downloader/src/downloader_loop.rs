@@ -9,7 +9,7 @@ use multiservice_discovery_shared::{
         log_vector_config_structure::VectorConfigBuilderImpl,
         prometheus_config_structure::PrometheusConfigBuilder, ConfigBuilder,
     },
-    contracts::TargetDto,
+    contracts::target::TargetDto,
 };
 use service_discovery::job_types::{JobType, NodeOS};
 use slog::{debug, info, warn, Logger};
@@ -83,6 +83,11 @@ pub async fn run_downloader_loop(logger: Logger, cli: CliArgs, stop_signal: Rece
                 continue;
             }
         };
+
+        if targets.is_empty() {
+            warn!(logger, "Got zero targets, skipping @ interval {:?}", tick);
+            continue;
+        }
 
         let mut hasher = DefaultHasher::new();
 

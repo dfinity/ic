@@ -7,11 +7,10 @@ use crate::{
     state_sync::types::{FileGroupChunks, StateSyncMessage},
     StateSyncRefs, EXTRA_CHECKPOINTS_TO_KEEP, NUMBER_OF_CHECKPOINT_THREADS,
 };
-use ic_interfaces::p2p::state_sync::StateSyncClient;
+use ic_interfaces::p2p::state_sync::{Chunk, ChunkId, Chunkable, StateSyncClient};
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_types::{
     artifact::{Priority, StateSyncArtifactId},
-    chunkable::{Chunk, ChunkId, Chunkable},
     Height,
 };
 use std::sync::{Arc, Mutex};

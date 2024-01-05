@@ -33,7 +33,7 @@ use ic_types::{
 };
 use std::{
     collections::BTreeSet,
-    convert::{From, TryInto},
+    convert::From,
     panic::{catch_unwind, UnwindSafe},
     rc::Rc,
 };
@@ -1125,10 +1125,7 @@ fn test_fail_adding_more_cycles_when_not_enough_balance() {
 
     // Add cycles to call.
     let amount = cycles_amount / 2 + 1;
-    assert_eq!(
-        api.ic0_call_cycles_add128(amount.try_into().unwrap()),
-        Ok(())
-    );
+    assert_eq!(api.ic0_call_cycles_add128(amount.into()), Ok(()));
     // Check cycles balance after call_add_cycles.
     assert_eq!(
         api.ic0_canister_cycle_balance().unwrap() as u128,
@@ -1137,8 +1134,7 @@ fn test_fail_adding_more_cycles_when_not_enough_balance() {
 
     // Adding more cycles fails because not enough balance left.
     assert_eq!(
-        api.ic0_call_cycles_add128(amount.try_into().unwrap())
-            .unwrap_err(),
+        api.ic0_call_cycles_add128(amount.into()).unwrap_err(),
         HypervisorError::InsufficientCyclesBalance(CanisterOutOfCyclesError {
             canister_id,
             available: Cycles::from(cycles_amount - amount),

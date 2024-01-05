@@ -1,5 +1,7 @@
 use crate::{common::LOG_PREFIX, mutations::common::encode_or_panic, registry::Registry};
 
+#[cfg(target_arch = "wasm32")]
+use dfn_core::println;
 use ic_protobuf::registry::dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord};
 use ic_registry_keys::make_data_center_record_key;
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};

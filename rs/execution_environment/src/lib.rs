@@ -126,7 +126,7 @@ impl ExecutionServices {
             Box::new(IngressHistoryReaderImpl::new(Arc::clone(&state_reader)));
 
         let (query_stats_collector, query_stats_payload_builder) =
-            ic_query_stats::init_query_stats(logger.clone(), config.query_stats_epoch_length);
+            ic_query_stats::init_query_stats(logger.clone(), &config);
 
         let exec_env = Arc::new(ExecutionEnvironment::new(
             logger.clone(),

@@ -9,20 +9,17 @@ use crate::{
     CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS, LABEL_COPY_CHUNKS, LABEL_COPY_FILES, LABEL_FETCH,
     LABEL_PREALLOCATE, LABEL_STATE_SYNC_MAKE_CHECKPOINT,
 };
+use ic_interfaces::p2p::state_sync::{
+    ArtifactErrorCode::{self, ChunkVerificationFailed, ChunksMoreNeeded},
+    Chunk, ChunkId, Chunkable,
+};
 use ic_logger::{debug, error, fatal, info, trace, warn, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_state_layout::utils::do_copy_overwrite;
 use ic_state_layout::{error::LayoutError, CheckpointLayout, ReadOnly, RwPolicy, StateLayout};
 use ic_sys::mmap::ScopedMmap;
-use ic_types::{
-    chunkable::{
-        ArtifactErrorCode::{self, ChunkVerificationFailed, ChunksMoreNeeded},
-        Chunk, ChunkId, Chunkable,
-    },
-    malicious_flags::MaliciousFlags,
-    CryptoHashOfState, Height,
-};
+use ic_types::{malicious_flags::MaliciousFlags, CryptoHashOfState, Height};
 use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
 use std::time::Instant;

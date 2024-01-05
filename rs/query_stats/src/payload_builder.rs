@@ -23,7 +23,11 @@ use std::{
 /// We initialize the [`QueryStatsPayloadBuilder`] in two steps, because otherwise
 /// we would have to pass consensus related arguments (like the [`NodeId`]) to the
 /// execution environment.
-pub struct QueryStatsPayloadBuilderParams(pub(crate) Receiver<LocalQueryStats>, pub(crate) u64);
+pub struct QueryStatsPayloadBuilderParams {
+    pub(crate) rx: Receiver<LocalQueryStats>,
+    pub(crate) epoch_length: u64,
+    pub(crate) enabled: bool,
+}
 
 impl QueryStatsPayloadBuilderParams {
     pub fn into_payload_builder(
@@ -37,8 +41,9 @@ impl QueryStatsPayloadBuilderParams {
             node_id,
             log,
             current_stats: RwLock::new(None),
-            receiver: self.0,
-            epoch_length: self.1,
+            receiver: self.rx,
+            epoch_length: self.epoch_length,
+            enabled: self.enabled,
         })
     }
 }
@@ -50,6 +55,7 @@ pub struct QueryStatsPayloadBuilderImpl {
     current_stats: RwLock<Option<LocalQueryStats>>,
     receiver: Receiver<LocalQueryStats>,
     epoch_length: u64,
+    enabled: bool,
 }
 
 impl BatchPayloadBuilder for QueryStatsPayloadBuilderImpl {
@@ -115,6 +121,10 @@ impl QueryStatsPayloadBuilderImpl {
         past_payloads: &[PastPayload],
         context: &ValidationContext,
     ) -> Vec<u8> {
+        if !self.enabled {
+            return vec![];
+        }
+
         let Ok(current_stats) = self.current_stats.read() else {
             return vec![];
         };
@@ -122,7 +132,11 @@ impl QueryStatsPayloadBuilderImpl {
             Some(stats) => stats,
             None => {
                 return {
-                    warn!(self.log, "Current stats are uninitalized. This warning should go away after some minutes");
+                    warn!(
+                        every_n_seconds => 30,
+                        self.log,
+                        "Current stats are uninitalized. This warning should go away after some minutes"
+                    );
                     vec![]
                 }
             }
@@ -734,6 +748,7 @@ mod tests {
             current_stats: Some(stats).into(),
             receiver: rx,
             epoch_length: ic_config::execution_environment::QUERY_STATS_EPOCH_LENGTH,
+            enabled: true,
         }
     }
 

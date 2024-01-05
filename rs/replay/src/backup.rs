@@ -293,7 +293,7 @@ pub(crate) fn deserialize_consensus_artifacts(
         let mut finalized_block_hash = None;
         // We should never insert more than one finalization, because it breaks a lot of
         // invariants of the pool.
-        if let Some(file_name) = &height_artifacts.finalizations.get(0) {
+        if let Some(file_name) = &height_artifacts.finalizations.first() {
             // Save the hash of the finalized block proposal.
             finalized_block_hash = file_name.split('_').nth(1);
             let file = path.join(file_name);

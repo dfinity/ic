@@ -22,7 +22,7 @@ mod src {
             TreasuryDistribution,
         },
         swap_parameters::NeuronBasketConstructionParameters,
-        GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
+        GovernanceParameters, InitialTokenDistribution, SwapParameters,
     };
 } // end mod src
 
