@@ -26,6 +26,14 @@ pub enum KeyDecodingError {
     UnexpectedPemLabel(String),
 }
 
+impl std::fmt::Display for KeyDecodingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl std::error::Error for KeyDecodingError {}
+
 lazy_static::lazy_static! {
 
     /// See RFC 3279 section 2.3.5

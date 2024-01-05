@@ -2,6 +2,7 @@ use crate::{
     common::{
         storage::storage_client::StorageClient,
         types::{BlockResponseBuilder, BlockTransactionResponseBuilder, Error},
+        utils::utils::get_rosetta_block_from_partial_block_identifier,
     },
     Metadata,
 };
@@ -9,7 +10,6 @@ use candid::Principal;
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_rosetta_api::DEFAULT_BLOCKCHAIN;
 use rosetta_core::{identifiers::*, miscellaneous::*, objects::*, response_types::*};
-use serde_bytes::ByteBuf;
 use std::{sync::Arc, time::Duration};
 
 const ROSETTA_VERSION: &str = "1.4.13";
@@ -35,9 +35,9 @@ pub fn network_options(ledger_id: &Principal) -> NetworkOptionsResponse {
         allow: Allow {
             operation_statuses: vec![],
             operation_types: vec![],
-            errors: vec![Error::invalid_network_id(&NetworkIdentifier::new(
-                DEFAULT_BLOCKCHAIN.to_owned(),
-                ledger_id.to_string(),
+            errors: vec![Error::invalid_network_id(&format!(
+                "Invalid NetworkIdentifier. Expected Identifier: {:?} ",
+                NetworkIdentifier::new(DEFAULT_BLOCKCHAIN.to_owned(), ledger_id.to_string())
             ))
             .into()],
             historical_balance_lookup: true,
@@ -54,13 +54,15 @@ pub fn network_options(ledger_id: &Principal) -> NetworkOptionsResponse {
 pub fn network_status(storage_client: Arc<StorageClient>) -> Result<NetworkStatusResponse, Error> {
     let current_block = storage_client
         .get_block_with_highest_block_idx()
-        .map_err(|e| Error::unable_to_find_block(format!("Error retrieving current block: {}", e)))?
-        .ok_or_else(|| Error::unable_to_find_block("Current block not found".into()))?;
+        .map_err(|e| Error::unable_to_find_block(&e))?
+        .ok_or_else(|| Error::unable_to_find_block(&"Current block not found".to_owned()))?;
 
     let genesis_block = storage_client
         .get_block_at_idx(0)
-        .map_err(|e| Error::unable_to_find_block(format!("Error retrieving genesis block: {}", e)))?
-        .ok_or_else(|| Error::unable_to_find_block("Genesis block not found".into()))?;
+        .map_err(|e| {
+            Error::unable_to_find_block(&format!("Error retrieving genesis block: {:?}", e))
+        })?
+        .ok_or_else(|| Error::unable_to_find_block(&"Genesis block not found".to_owned()))?;
     let genesis_block_identifier = BlockIdentifier::from(&genesis_block);
 
     Ok(NetworkStatusResponse {
@@ -81,20 +83,20 @@ pub fn block_transaction(
 ) -> Result<BlockTransactionResponse, Error> {
     let rosetta_block = storage_client
         .get_block_at_idx(block_identifier.index)
-        .map_err(|e| Error::unable_to_find_block(format!("Unable to retrieve block: {}", e)))?
+        .map_err(|e| Error::unable_to_find_block(&format!("Unable to retrieve block: {:?}", e)))?
         .ok_or_else(|| {
-            Error::unable_to_find_block(format!(
+            Error::unable_to_find_block(&format!(
                 "Block at index {} could not be found",
                 block_identifier.index
             ))
         })?;
     if hex::encode(&rosetta_block.block_hash) != block_identifier.hash {
-        return Err(Error::invalid_block_identifier(format!("Both index {} and hash {} were provided but they do not match the same block. Actual index {} and hash {}",block_identifier.index,block_identifier.hash,rosetta_block.index,hex::encode(&rosetta_block.block_hash))));
+        return Err(Error::invalid_block_identifier(&format!("Both index {} and hash {} were provided but they do not match the same block. Actual index {} and hash {}",block_identifier.index,block_identifier.hash,rosetta_block.index,hex::encode(&rosetta_block.block_hash))));
     }
 
     let transaction = rosetta_block
         .get_transaction()
-        .map_err(|e| Error::failed_to_build_block_response(e.to_string()))?;
+        .map_err(|e| Error::failed_to_build_block_response(&e))?;
 
     if transaction.hash().to_string() != transaction_identifier.hash {
         return Err(Error::invalid_transaction_identifier());
@@ -112,75 +114,26 @@ pub fn block_transaction(
 
     if let Some(fee) = rosetta_block
         .get_effective_fee()
-        .map_err(|e| Error::failed_to_build_block_response(e.to_string()))?
+        .map_err(|e| Error::failed_to_build_block_response(&e))?
     {
         builder = builder.with_effective_fee(fee);
     }
 
     let response = builder
         .build()
-        .map_err(|e| Error::failed_to_build_block_response(e.to_string()))?;
+        .map_err(|e| Error::failed_to_build_block_response(&e))?;
 
     Ok(response)
 }
 
 pub fn block(
     storage_client: Arc<StorageClient>,
-    block_identifier: PartialBlockIdentifier,
+    partial_block_identifier: PartialBlockIdentifier,
     metadata: Metadata,
 ) -> Result<BlockResponse, Error> {
-    let rosetta_block = match (block_identifier.index, block_identifier.hash.as_ref()) {
-        (None, Some(hash)) => {
-            let hash_bytes = hex::decode(hash).map_err(|e| {
-                Error::unable_to_find_block(format!("Invalid block hash provided: {}", e))
-            })?;
-            let hash_buf = ByteBuf::from(hash_bytes);
-            storage_client
-                .get_block_by_hash(hash_buf)
-                .map_err(|e| {
-                    Error::unable_to_find_block(format!("Unable to retrieve block: {}", e))
-                })?
-                .ok_or_else(|| {
-                    Error::unable_to_find_block(format!(
-                        "Block with hash {} could not be found",
-                        hash
-                    ))
-                })?
-        }
-
-        (Some(block_idx), None) => storage_client
-            .get_block_at_idx(block_idx)
-            .map_err(|e| Error::unable_to_find_block(format!("Unable to retrieve block: {}", e)))?
-            .ok_or_else(|| {
-                Error::unable_to_find_block(format!(
-                    "Block at index {} could not be found",
-                    block_idx
-                ))
-            })?,
-        (Some(block_idx), Some(hash)) => {
-            let rosetta_block = storage_client
-                .get_block_at_idx(block_idx)
-                .map_err(|e| {
-                    Error::unable_to_find_block(format!("Unable to retrieve block: {}", e))
-                })?
-                .ok_or_else(|| {
-                    Error::unable_to_find_block(format!(
-                        "Block at index {} could not be found",
-                        block_idx
-                    ))
-                })?;
-            if &hex::encode(&rosetta_block.block_hash) != hash {
-                return Err(Error::invalid_block_identifier(format!("Both index {} and hash {} were provided but they do not match the same block. Actual index {} and hash {}",block_idx,hash,rosetta_block.index,hex::encode(&rosetta_block.block_hash))));
-            }
-            rosetta_block
-        }
-        (None, None) => {
-            return Err(Error::invalid_block_identifier(
-                "Neither block index nor block hash were provided".to_owned(),
-            ))
-        }
-    };
-
+    let rosetta_block =
+        get_rosetta_block_from_partial_block_identifier(partial_block_identifier, storage_client)
+            .map_err(|err| Error::invalid_block_identifier(&err))?;
     let currency = Currency {
         symbol: metadata.symbol.clone(),
         decimals: metadata.decimals.into(),
@@ -191,7 +144,7 @@ pub fn block(
         .with_rosetta_block(rosetta_block)
         .with_currency(currency)
         .build()
-        .map_err(|e| Error::failed_to_build_block_response(e.to_string()))?;
+        .map_err(|e| Error::failed_to_build_block_response(&e))?;
 
     Ok(response)
 }
@@ -296,7 +249,7 @@ mod test {
 
                         // If the block identifier hash is invalid the service should return an error
                         let block_res = block(storage_client_memory.clone(),block_identifier,metadata.clone());
-                        assert!(block_res.unwrap_err().0.description.unwrap().contains("Invalid block hash provided: Invalid character"));
+                        assert!(block_res.unwrap_err().0.description.unwrap().contains("Invalid block hash provided"));
 
                         if !blockchain.is_empty() {
                             let valid_block_hash = hex::encode(&rosetta_blocks[valid_block_idx as usize].block_hash);

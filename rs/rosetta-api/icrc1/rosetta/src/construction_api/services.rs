@@ -12,7 +12,8 @@ use rosetta_core::{
 use std::sync::Arc;
 
 pub fn construction_derive(public_key: PublicKey) -> Result<ConstructionDeriveResponse, Error> {
-    let principal_id: PrincipalId = principal_id_from_public_key(&public_key)?;
+    let principal_id: PrincipalId = principal_id_from_public_key(&public_key)
+        .map_err(|err| Error::parsing_unsuccessful(&err))?;
     let account: Account = principal_id.0.into();
     Ok(ConstructionDeriveResponse::new(
         None,
@@ -45,9 +46,7 @@ pub async fn construction_metadata(
                     .fee(CallMode::Query)
                     .await
                     .map(|fee| vec![Amount::new(fee.0.to_string(), currency)])
-                    .map_err(|err| {
-                        Error::ledger_communication_unsuccessful(&format!("{:?}", err))
-                    })?,
+                    .map_err(|err| Error::ledger_communication_unsuccessful(&err))?,
             )
         } else {
             None

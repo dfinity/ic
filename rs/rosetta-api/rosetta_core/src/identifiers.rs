@@ -1,5 +1,8 @@
 use crate::objects::{Object, ObjectMap};
+use anyhow::{anyhow, Context};
+use candid::Principal;
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 /// The network_identifier specifies which network a particular object is
 /// associated with.
@@ -89,6 +92,15 @@ impl PartialBlockIdentifier {
     }
 }
 
+impl From<BlockIdentifier> for PartialBlockIdentifier {
+    fn from(value: BlockIdentifier) -> Self {
+        Self {
+            index: Some(value.index),
+            hash: Some(value.hash),
+        }
+    }
+}
+
 /// Neuron management commands have no transaction identifier.
 /// Since Rosetta requires a transaction identifier,
 /// `None` is serialized to a transaction identifier with the hash
@@ -161,6 +173,30 @@ impl AccountIdentifier {
             sub_account: subaccount.map(SubAccountIdentifier::new),
             metadata: None,
         }
+    }
+}
+
+impl TryInto<icrc_ledger_types::icrc1::account::Account> for AccountIdentifier {
+    type Error = anyhow::Error;
+    fn try_into(self) -> Result<icrc_ledger_types::icrc1::account::Account, Self::Error> {
+        let subaccount: Option<[u8; 32]> = match self.sub_account.as_ref() {
+            None => None,
+            Some(sub_acc) => Some(hex::decode(&sub_acc.address)?.try_into().map_err(|_| {
+                anyhow!(
+                    "Could not convert subaccount to [u8;32] array: {:?}",
+                    sub_acc
+                )
+            })?),
+        };
+        Ok(icrc_ledger_types::icrc1::account::Account {
+            owner: Principal::from_str(&self.address).with_context(|| {
+                format!(
+                    "Unable to convert accountidentifier.address {:?} to Principal",
+                    &self.address
+                )
+            })?,
+            subaccount,
+        })
     }
 }
 
