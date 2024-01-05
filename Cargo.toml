@@ -27,7 +27,6 @@ members = [
   "rs/boundary_node/certificate_issuance/certificate_issuer",
   "rs/boundary_node/certificate_issuance/certificate_orchestrator",
   "rs/boundary_node/certificate_issuance/certificate_syncer",
-  "rs/boundary_node/control_plane",
   "rs/boundary_node/denylist_updater",
   "rs/boundary_node/discower_bowndary",
   "rs/boundary_node/ic_balance_exporter",
