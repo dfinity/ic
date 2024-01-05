@@ -23,6 +23,8 @@ BASE_DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:futures",
     "@crate_index//:fs_extra",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:lazy_static",
     "@crate_index//:prometheus-parse",
@@ -105,6 +107,7 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
 
 MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",
+    "@crate_index//:ic-cdk-macros",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [
     ],
@@ -122,6 +125,7 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {}
 
 DEV_DATA = [
+    ":canister-playground-canister",
     ":governance-mem-test-canister",
     ":unstoppable-canister",
     ":mem-utils-test-canister",
@@ -166,6 +170,7 @@ DEV_ENV = {
     "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
     "MEM_UTILS_TEST_CANISTER_WASM_PATH": "$(rootpath :mem-utils-test-canister)",
     "GOVERNANCE_MEM_TEST_CANISTER_WASM_PATH": "$(rootpath :governance-mem-test-canister)",
+    "CANISTER_PLAYGROUND_CANISTER_WASM_PATH": "$(rootpath :canister-playground-canister)",
     "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
     "UNSTOPPABLE_CANISTER_WASM_PATH": "$(rootpath :unstoppable-canister)",
     "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/sns/governance:sns-governance-canister)",
@@ -197,6 +202,15 @@ rust_canister(
 )
 
 rust_canister(
+    name = "canister-playground-canister",
+    srcs = ["test_canisters/canister_playground_canister.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":test_canisters/empty.did",
+    deps = DEPENDENCIES + [":integration_tests"],
+)
+
+rust_canister(
     name = "governance-mem-test-canister",
     srcs = ["test_canisters/governance_mem_test_canister.rs"],
     aliases = ALIASES,
@@ -213,8 +227,6 @@ rust_canister(
     service_file = ":test_canisters/empty.did",
     deps = DEPENDENCIES + [
         ":integration_tests",
-        "@crate_index//:ic-cdk",
-        "@crate_index//:ic-cdk-timers",
     ],
 )
 
@@ -228,8 +240,6 @@ rust_canister(
         ":integration_tests",
         "//rs/nervous_system/runtime",
         "//rs/sns/root",
-        "@crate_index//:ic-cdk",
-        "@crate_index//:ic-cdk-timers",
     ],
 )
 
@@ -243,6 +253,7 @@ rust_test_suite_with_extra_srcs(
             # mostly due to long running times.
             "src/copy_inactive_neurons_to_stable_memory.rs",
             "src/governance_mem_test.rs",
+            "src/canister_playground.rs",
         ],
     ),
     aliases = ALIASES,
@@ -265,6 +276,23 @@ rust_test(
     ],
     aliases = ALIASES,
     crate_root = "src/governance_mem_test.rs",
+    data = DEV_DATA,
+    env = DEV_ENV,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = ["manual"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+# To run this test use `bazel test --config=alltests //rs/nns/integration_tests:canister_playground` --test_output=all
+# See the .bazelrc for more configuration information.
+rust_test(
+    name = "canister_playground",
+    srcs = [
+        "src/canister_playground.rs",
+        "src/lib.rs",
+    ],
+    aliases = ALIASES,
+    crate_root = "src/canister_playground.rs",
     data = DEV_DATA,
     env = DEV_ENV,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
