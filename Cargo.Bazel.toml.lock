@@ -4836,7 +4836,8 @@ dependencies = [
 [[package]]
 name = "ic-btc-interface"
 version = "0.1.0"
-source = "git+https://github.com/dfinity/bitcoin-canister?rev=be0143a014ad4bccbc2eec5e2bcbe30317c5a84c#be0143a014ad4bccbc2eec5e2bcbe30317c5a84c"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e8f4efebc9c87f2b39ab307e6cea286795215df6b710cbc8413fbe3c6c5b02b6"
 dependencies = [
  "candid",
  "serde",

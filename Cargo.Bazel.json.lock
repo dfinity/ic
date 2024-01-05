@@ -1,5 +1,5 @@
 {
-  "checksum": "7961d89cd3532ecf88df8f41ed6acf7bedeef8abef4724c1214fe326ab6b2184",
+  "checksum": "b58fc1488f70213c8e2589a475eaa850be04584fdb9193b25274ffa4fc906f65",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -24280,12 +24280,9 @@
       "name": "ic-btc-interface",
       "version": "0.1.0",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/bitcoin-canister",
-          "commitish": {
-            "Rev": "be0143a014ad4bccbc2eec5e2bcbe30317c5a84c"
-          },
-          "strip_prefix": "interface"
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/ic-btc-interface/0.1.0/download",
+          "sha256": "e8f4efebc9c87f2b39ab307e6cea286795215df6b710cbc8413fbe3c6c5b02b6"
         }
       },
       "targets": [
@@ -24324,7 +24321,7 @@
         "edition": "2021",
         "version": "0.1.0"
       },
-      "license": null
+      "license": "Apache-2.0"
     },
     "ic-btc-test-utils 0.1.0": {
       "name": "ic-btc-test-utils",
