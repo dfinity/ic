@@ -364,12 +364,18 @@ impl Orchestrator {
             exit_signal: Receiver<bool>,
             log: ReplicaLogger,
         ) {
-            // This timeout is a last resort trying to revive the upgrade monitoring
-            // in case it gets stuck in an unexpected situation for longer than 15 minutes.
+            // Wait for a minute before starting the first loop, to allow the
+            // registry some time to catch up, after starting.
+            tokio::time::sleep(Duration::from_secs(60)).await;
+
+            // Run the HostOS upgrade loop with a 15 minute timeout, waiting 1
+            // minute between checks. This timeout is a last resort trying to
+            // revive the upgrade monitoring in case it gets stuck in an
+            // unexpected situation.
+            let interval = Duration::from_secs(60);
             let timeout = Duration::from_secs(60 * 15);
-            upgrade
-                .upgrade_loop(exit_signal, CHECK_INTERVAL_SECS, timeout)
-                .await;
+
+            upgrade.upgrade_loop(exit_signal, interval, timeout).await;
             info!(log, "Shut down the HostOS upgrade loop");
         }
 
