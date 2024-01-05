@@ -571,10 +571,6 @@ name = "ic-systest-small"
 path = "testing_verification/testnets/small.rs"
 
 [[bin]]
-name = "ic-systest-small-api"
-path = "testing_verification/testnets/small_api_boundary.rs"
-
-[[bin]]
 name = "ic-systest-small-nns"
 path = "testing_verification/testnets/small_nns.rs"
 

@@ -1,6 +1,5 @@
 use crate::{
     driver::{
-        api_boundary_node::{ApiBoundaryNode, ApiBoundaryNodeVm},
         boundary_node::{BoundaryNode, BoundaryNodeVm},
         ic::{InternetComputer, Subnet},
         prometheus_vm::{HasPrometheus, PrometheusVm},
@@ -28,18 +27,7 @@ use slog::{debug, info};
 
 use crate::boundary_nodes::helpers::BoundaryNodeHttpsConfig;
 
-#[derive(Debug)]
-pub enum BoundaryNodeType {
-    BoundaryNode,
-    ApiBoundaryNode,
-}
-
-pub fn setup_ic_with_bn(
-    bn_name: &str,
-    bn_type: BoundaryNodeType,
-    bn_https_config: BoundaryNodeHttpsConfig,
-    env: TestEnv,
-) {
+pub fn setup_ic_with_bn(bn_name: &str, bn_https_config: BoundaryNodeHttpsConfig, env: TestEnv) {
     let log = env.logger();
     PrometheusVm::default()
         .start(&env)
@@ -58,29 +46,16 @@ pub fn setup_ic_with_bn(
     NnsInstallationBuilder::new()
         .install(&nns_node, &env)
         .expect("could not install NNS canisters");
-    let nns_node_urls = match bn_type {
-        BoundaryNodeType::BoundaryNode => {
-            let mut bn = BoundaryNode::new(bn_name.to_string())
-                .allocate_vm(&env)
-                .unwrap()
-                .for_ic(&env, "");
-            if let BoundaryNodeHttpsConfig::UseRealCertsAndDns = bn_https_config {
-                bn = bn.use_real_certs_and_dns();
-            }
-            bn.start(&env).expect("failed to setup BoundaryNode VM");
-            bn.nns_node_urls
+    let nns_node_urls = {
+        let mut bn = BoundaryNode::new(bn_name.to_string())
+            .allocate_vm(&env)
+            .unwrap()
+            .for_ic(&env, "");
+        if let BoundaryNodeHttpsConfig::UseRealCertsAndDns = bn_https_config {
+            bn = bn.use_real_certs_and_dns();
         }
-        BoundaryNodeType::ApiBoundaryNode => {
-            let mut bn = ApiBoundaryNode::new(bn_name.to_string())
-                .allocate_vm(&env)
-                .unwrap()
-                .for_ic(&env, "");
-            if let BoundaryNodeHttpsConfig::UseRealCertsAndDns = bn_https_config {
-                bn = bn.use_real_certs_and_dns();
-            }
-            bn.start(&env).expect("failed to setup ApiBoundaryNode VM");
-            bn.nns_node_urls
-        }
+        bn.start(&env).expect("failed to setup BoundaryNode VM");
+        bn.nns_node_urls
     };
     info!(&log, "Checking readiness of all replica nodes ...");
     for subnet in env.topology_snapshot().subnets() {
@@ -107,54 +82,28 @@ pub fn setup_ic_with_bn(
             Ok((latest, routes))
         },
     ))
-    .unwrap_or_else(|_| panic!("Failed to poll registry. This is not an {bn_type:#?} error. It is a test environment issue."));
+    .unwrap_or_else(|_| panic!("Failed to poll registry. This is not an Boundary Node error. It is a test environment issue."));
     info!(log, "Latest registry {latest}: {routes:?}");
-    match bn_type {
-        BoundaryNodeType::BoundaryNode => {
-            let bn = env
-                .get_deployed_boundary_node(bn_name)
-                .unwrap()
-                .get_snapshot()
-                .unwrap();
-            info!(log, "Boundary node {bn_name} has IPv6 {:?}", bn.ipv6());
-            info!(
-                log,
-                "Boundary node {bn_name} has IPv4 {:?}",
-                bn.block_on_ipv4().unwrap()
-            );
-            info!(log, "Checking BN health");
-            bn.await_status_is_healthy()
-                .expect("Boundary node did not come up healthy.");
-            let list_dependencies = bn
-            .block_on_bash_script(
-                "systemctl list-dependencies systemd-sysusers.service --all --reverse --no-pager",
-            )
-            .unwrap();
-            debug!(log, "systemctl {bn_name} = '{list_dependencies}'");
-        }
-        BoundaryNodeType::ApiBoundaryNode => {
-            let bn = env
-                .get_deployed_api_boundary_node(bn_name)
-                .unwrap()
-                .get_snapshot()
-                .unwrap();
-            info!(log, "Api Boundary node {bn_name} has IPv6 {:?}", bn.ipv6());
-            info!(
-                log,
-                "Api Boundary node {bn_name} has IPv4 {:?}",
-                bn.block_on_ipv4().unwrap()
-            );
-            info!(log, "Checking API BN health");
-            bn.await_status_is_healthy()
-                .expect("Api Boundary node did not come up healthy.");
-            let list_dependencies = bn
-                .block_on_bash_script(
-                    "systemctl list-dependencies systemd-sysusers.service --all --reverse --no-pager",
-                )
-                .unwrap();
-            debug!(log, "systemctl {bn_name} = '{list_dependencies}'");
-        }
-    };
+    let bn = env
+        .get_deployed_boundary_node(bn_name)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+    info!(log, "Boundary node {bn_name} has IPv6 {:?}", bn.ipv6());
+    info!(
+        log,
+        "Boundary node {bn_name} has IPv4 {:?}",
+        bn.block_on_ipv4().unwrap()
+    );
+    info!(log, "Checking BN health");
+    bn.await_status_is_healthy()
+        .expect("Boundary node did not come up healthy.");
+    let list_dependencies = bn
+        .block_on_bash_script(
+            "systemctl list-dependencies systemd-sysusers.service --all --reverse --no-pager",
+        )
+        .unwrap();
+    debug!(log, "systemctl {bn_name} = '{list_dependencies}'");
     env.sync_with_prometheus();
 }
 

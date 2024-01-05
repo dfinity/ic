@@ -169,7 +169,7 @@ To test the proposals with a testnet that uses the same canister IDs as in the p
 
 ### Spin up the dynamic testnet
 
-The simplest is to tweak the setup from [small_api_boundary](https://sourcegraph.com/github.com/dfinity/ic@ee5f7514e37d138e0ff6e69ef5d0d10706a23f67/-/blob/rs/tests/testing_verification/testnets/small_api_boundary.rs?L65)
+The simplest is to tweak the setup from [small](https://sourcegraph.com/github.com/dfinity/ic@7313a15e21d8fb06fa119ef3ab9371da47c2cddc/-/blob/rs/tests/testing_verification/testnets/small.rs?L62)
 ```rust
 pub fn setup(env: TestEnv) {
     PrometheusVm::default()
@@ -187,31 +187,14 @@ pub fn setup(env: TestEnv) {
         NnsCanisterWasmStrategy::TakeBuiltFromSources,
         NnsCustomizations::default(),
     );
-    // Deploy a boundary node with a boundary-api-guestos image.
-    ApiBoundaryNode::new(String::from(API_BOUNDARY_NODE_NAME))
-        .allocate_vm(&env)
-        .expect("Allocation of ApiBoundaryNode failed.")
-        .for_ic(&env, "")
-        .use_real_certs_and_dns()
-        .start(&env)
-        .expect("failed to setup ApiBoundaryNode VM");
-    let api_boundary_node = env
-        .get_deployed_api_boundary_node(API_BOUNDARY_NODE_NAME)
-        .unwrap()
-        .get_snapshot()
-        .unwrap();
     env.sync_with_prometheus();
-    // Await for API boundary node to report healthy.
-    api_boundary_node
-        .await_status_is_healthy()
-        .expect("Boundary node did not come up healthy.");
 }
 ```
 
 and then spin up the dynamic testnet with a generous lifetime
 ```shell
 ./gitlab-ci/tools/docker-run
-ict testnet create small_api_boundary --lifetime-mins=880 --output-dir=./small_api_boundary -- --test_tmpdir=./small_api_boundary
+ict testnet create small --lifetime-mins=880 --output-dir=./small -- --test_tmpdir=./small
 ```
 
 Once the testnet is up and running, extract the external url of the boundary node from the logs, which should have the following format `https://ic<x>.farm.dfinity.systems`. In the following we will use `https://ic1.farm.dfinity.systems`.

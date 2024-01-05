@@ -198,46 +198,6 @@ inputs = ["nginx_access_metrics", "nginx_error_metrics"]
 address = "${NGINX_PROMETHUS_ADDR}"
 default_namespace = "nginx"
 
-# control-plane
-
-[sources.control_plane]
-type = "journald"
-include_units = ["control-plane"]
-
-[transforms.control_plane_json]
-type = "remap"
-inputs = ["control_plane"]
-source = """
-preserved_fields = {}; preserved_keys = ["host"]
-
-for_each(preserved_keys) -> |_, k| {
-  v = get!(., [k])
-  if v != null {
-    preserved_fields = set!(preserved_fields, [k], v)
-  }
-}
-
-. = parse_json!(.message)
-
-.@timestamp = to_timestamp!(.timestamp, unit: "milliseconds")
-.@timestamp = to_unix_timestamp(.@timestamp, unit: "milliseconds")
-del(.timestamp)
-
-. = merge(., preserved_fields)
-"""
-
-[sinks.elasticsearch_control_plane]
-type = "elasticsearch"
-inputs = ["control_plane_json"]
-endpoint = "${ELASTICSEARCH_URL}"
-mode = "bulk"
-
-  [sinks.elasticsearch_control_plane.bulk]
-  index = "boundary-node-control-plane-%Y.%m.%d"
-
-  [sinks.elasticsearch_control_plane.tls]
-  verify_certificate = false
-
 # danted (socks proxy)
 
 [sources.danted]

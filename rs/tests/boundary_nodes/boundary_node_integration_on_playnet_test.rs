@@ -9,7 +9,7 @@ use ic_tests::boundary_nodes::boundary_nodes_integration::{
     redirect_http_to_https_test, redirect_to_dashboard_test, redirect_to_non_raw_test, seo_test,
     sw_test,
 };
-use ic_tests::boundary_nodes::setup::{setup_ic_with_bn, BoundaryNodeType};
+use ic_tests::boundary_nodes::setup::setup_ic_with_bn;
 use ic_tests::boundary_nodes::{constants::BOUNDARY_NODE_NAME, helpers::BoundaryNodeHttpsConfig};
 use ic_tests::driver::group::{SystemTestGroup, SystemTestSubGroup};
 use ic_tests::systest;
@@ -18,7 +18,6 @@ fn main() -> Result<()> {
     let setup = |env| {
         setup_ic_with_bn(
             BOUNDARY_NODE_NAME,
-            BoundaryNodeType::BoundaryNode,
             BoundaryNodeHttpsConfig::UseRealCertsAndDns,
             env,
         )
