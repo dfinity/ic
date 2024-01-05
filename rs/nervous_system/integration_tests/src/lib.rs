@@ -11,5 +11,4 @@
 //! supposed to run all tests in parallel, because they are all in the same
 //! crate.
 
-#[cfg(test)]
-mod sns_lifecycle;
+pub mod create_service_nervous_system_builder;
