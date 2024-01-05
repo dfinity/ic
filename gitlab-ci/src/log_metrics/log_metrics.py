@@ -105,6 +105,7 @@ def get_env_data() -> Dict[str, str]:
         "GITLAB_USER_ID",
         "GITLAB_USER_LOGIN",
         "DISKIMG_BRANCH",
+        "NODE_NAME",
     ]:
         if os.environ.get(varname):
             data[varname] = os.environ[varname]
