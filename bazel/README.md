@@ -415,7 +415,7 @@ have `bazel` commands installed locally.
 
 ### Clear Local Bazel Cache
 
-`bazel clean`
+`bazel/bazel_clean.sh`
 
 You might also want to consider adding `--expunge`.
 
