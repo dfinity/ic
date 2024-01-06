@@ -12,7 +12,7 @@ use ic_nervous_system_common::dfn_core_stable_mem_utils::BufferedStableMemWriter
 use ic_sns_governance::{
     governance::HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES,
     pb::v1::{
-        governance::{NeuronInFlightCommand, SnsMetadata},
+        governance::{Mode, NeuronInFlightCommand, SnsMetadata},
         nervous_system_function::{FunctionType, GenericNervousSystemFunction},
         neuron::{DissolveState, Followees},
         proposal::Action,
@@ -322,6 +322,7 @@ fn populate_canister_state() {
             description: Some("A project to spin up a ServiceNervousSystem".to_string()),
             url: Some("https://internetcomputer.org".to_string()),
         }),
+        mode: Mode::Normal.into(),
         ..Default::default()
     };
 
