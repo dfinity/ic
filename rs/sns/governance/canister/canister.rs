@@ -41,11 +41,11 @@ use ic_sns_governance::{
     ledger::LedgerCanister,
     logs::{ERROR, INFO},
     pb::v1::{
-        governance, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
-        FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse,
-        GetMaturityModulationRequest, GetMaturityModulationResponse, GetMetadataRequest,
-        GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal,
-        GetProposalResponse, GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
+        ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, FailStuckUpgradeInProgressRequest,
+        FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
+        GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMode,
+        GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
+        GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
         GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
         Governance as GovernanceProto, ListNervousSystemFunctionsResponse, ListNeurons,
         ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron,
@@ -277,9 +277,6 @@ fn canister_post_upgrade() {
         Ok(mut governance_proto) => {
             // Post-process GovernanceProto
 
-            // TODO(NNS1-2732): Delete this.
-            set_mode_to_normal_if_unspecified(&mut governance_proto);
-
             // TODO(NNS1-2731): Delete this once it's been released.
             settle_proposals_if_reward_rates_are_zero(now, &mut governance_proto);
 
@@ -292,18 +289,6 @@ fn canister_post_upgrade() {
     }
     .expect("Couldn't upgrade canister.");
     log!(INFO, "Completed post upgrade");
-}
-
-/// Sets the GovernanceProto's mode to Normal if it is Unspecified.
-///
-/// This is NOT used during installation, because the installer needs to make an
-/// explicit choice about what mode to use. Wheres, this IS INDEED used during
-/// upgrades, because mode did not used to exist, but is now required (because
-/// Unspecified is not allowed); this is called in post_upgrade).
-fn set_mode_to_normal_if_unspecified(governance_proto: &mut GovernanceProto) {
-    if governance_proto.mode == governance::Mode::Unspecified as i32 {
-        governance_proto.mode = governance::Mode::Normal as i32;
-    }
 }
 
 /// As indicated by the name, this only modifies governance_proto if the initial and final reward
@@ -998,7 +983,6 @@ mod tests {
         Ballot, DisburseMaturityInProgress, Neuron, VotingRewardsParameters,
     };
     use maplit::btreemap;
-    use strum::IntoEnumIterator;
 
     /// A test that checks that set_time_warp advances time correctly.
     #[test]
@@ -1011,43 +995,6 @@ mod tests {
 
         assert!(delta_s >= 1000, "delta_s = {}", delta_s);
         assert!(delta_s < 1005, "delta_s = {}", delta_s);
-    }
-
-    #[test]
-    fn test_set_mode_to_normal_if_unspecified_already_specified() {
-        for mode in governance::Mode::iter() {
-            if mode == governance::Mode::Unspecified {
-                continue;
-            }
-
-            let before = GovernanceProto {
-                mode: mode as i32,
-                ..Default::default()
-            };
-
-            let mut after = before.clone();
-            set_mode_to_normal_if_unspecified(&mut after);
-            // No change.
-            assert_eq!(after, before);
-        }
-    }
-
-    #[test]
-    fn test_set_mode_to_normal_if_unspecified_originally_unspecified() {
-        let mut result = GovernanceProto {
-            mode: governance::Mode::Unspecified as i32,
-            ..Default::default()
-        };
-
-        set_mode_to_normal_if_unspecified(&mut result);
-        // Change!
-        assert_eq!(
-            result,
-            GovernanceProto {
-                mode: governance::Mode::Normal as i32,
-                ..Default::default()
-            },
-        );
     }
 
     #[test]
