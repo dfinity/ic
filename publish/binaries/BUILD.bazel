@@ -94,7 +94,6 @@ BINARIES = {
         }),
         executable = True,
         visibility = [
-            "//ic-os/boundary-api-guestos/envs:__subpackages__",
             "//ic-os/boundary-guestos/envs:__subpackages__",
             "//ic-os/guestos/envs:__subpackages__",
             "//ic-os/hostos/envs:__subpackages__",

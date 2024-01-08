@@ -51,7 +51,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 # [IC-OS]
 /ic-os/                                          @dfinity-lab/teams/node-team
 /ic-os/boundary-guestos/                         @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/node-team
-/ic-os/boundary-api-guestos/                     @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/node-team
 /ic-os/guestos/tests/e2e-benchmarking-suite.py   @dfinity-lab/teams/runtime-owners
 
 # [metrics-proxy]

@@ -13,12 +13,6 @@ use serde_json::json;
 use slog::{debug, info};
 
 use crate::driver::{
-    api_boundary_node::ApiBoundaryNodeVm,
-    farm::{DnsRecord, DnsRecordType},
-    test_env::TestEnvAttribute,
-    test_env_api::{CreateDnsRecords, HasDependencies},
-};
-use crate::driver::{
     constants::SSH_USERNAME,
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmAllocationStrategy, VmResources},
@@ -30,6 +24,11 @@ use crate::driver::{
     },
     test_setup::{GroupSetup, InfraProvider},
     universal_vm::{UniversalVm, UniversalVms},
+};
+use crate::driver::{
+    farm::{DnsRecord, DnsRecordType},
+    test_env::TestEnvAttribute,
+    test_env_api::{CreateDnsRecords, HasDependencies},
 };
 
 use super::boundary_node::BoundaryNodeVm;
@@ -401,26 +400,15 @@ fn sync_prometheus_config_dir_with_boundary_nodes(
     let mut boundary_nodes_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
     let mut boundary_nodes_exporter_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
     let mut boundary_nodes_nginx_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
-    let bns: Vec<(String, Ipv6Addr)> = {
-        let mut bn1: Vec<_> = env
-            .get_deployed_api_boundary_nodes()
-            .into_iter()
-            .map(|bn| {
-                let vm = bn.get_vm().unwrap();
-                (vm.hostname, vm.ipv6)
-            })
-            .collect();
-        let bn2: Vec<_> = env
-            .get_deployed_boundary_nodes()
-            .into_iter()
-            .map(|bn| {
-                let vm = bn.get_vm().unwrap();
-                (vm.hostname, vm.ipv6)
-            })
-            .collect();
-        bn1.extend(bn2);
-        bn1
-    };
+    let bns: Vec<(String, Ipv6Addr)> = env
+        .get_deployed_boundary_nodes()
+        .into_iter()
+        .map(|bn| {
+            let vm = bn.get_vm().unwrap();
+            (vm.hostname, vm.ipv6)
+        })
+        .collect();
+
     for (name, ipv6) in bns.iter() {
         let labels: HashMap<String, String> = [
             ("ic".to_string(), group_name.clone()),
