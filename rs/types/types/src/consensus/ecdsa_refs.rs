@@ -925,6 +925,9 @@ pub trait EcdsaBlockReader: Send + Sync {
         &self,
     ) -> Box<dyn Iterator<Item = (&RequestId, &ThresholdEcdsaSigInputsRef)> + '_>;
 
+    /// For the given quadruple ID, returns the quadruple ref if available.
+    fn available_quadruple(&self, id: &QuadrupleId) -> Option<&PreSignatureQuadrupleRef>;
+
     /// Returns the set of all the active references.
     fn active_transcripts(&self) -> BTreeSet<TranscriptRef>;
 

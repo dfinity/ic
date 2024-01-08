@@ -500,7 +500,7 @@ fn start_consensus(
         metrics_registry.clone(),
         subnet_id,
         log.clone(),
-        Arc::clone(&state_reader) as Arc<_>,
+        Arc::clone(&state_reader),
         cycles_account_manager,
         malicious_flags.clone(),
         CustomRandomState::default(),
@@ -793,6 +793,7 @@ fn start_consensus(
         let ecdsa_gossip = Arc::new(ecdsa::EcdsaGossipImpl::new(
             subnet_id,
             Arc::clone(&consensus_block_cache),
+            Arc::clone(&state_reader),
             metrics_registry.clone(),
         ));
 
@@ -802,6 +803,7 @@ fn start_consensus(
                 node_id,
                 Arc::clone(&consensus_block_cache),
                 Arc::clone(&consensus_crypto),
+                Arc::clone(&state_reader),
                 metrics_registry.clone(),
                 log.clone(),
                 malicious_flags,
