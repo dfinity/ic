@@ -44,7 +44,7 @@ lazy_static! {
                 developer_neurons: vec![src::NeuronDistribution {
                     controller: Some(PrincipalId::new_user_test_id(830947)),
                     dissolve_delay: Some(pb::Duration {
-                        seconds: Some(691793),
+                        seconds: Some(ONE_MONTH_SECONDS * 6),
                     }),
                     memo: Some(763535),
                     stake: Some(pb::Tokens { e8s: Some(756575) }),
@@ -89,7 +89,7 @@ lazy_static! {
                 seconds: Some(482538),
             }),
             neuron_maximum_dissolve_delay: Some(pb::Duration {
-                seconds: Some(927391),
+                seconds: Some(ONE_MONTH_SECONDS * 12),
             }),
             neuron_maximum_dissolve_delay_bonus: Some(pb::Percentage {
                 basis_points: Some(18_00),
