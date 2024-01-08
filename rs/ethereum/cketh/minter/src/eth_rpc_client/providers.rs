@@ -3,12 +3,14 @@ use ic_cdk::api::management_canister::http_request::HttpHeader;
 use serde::Deserialize;
 
 pub(crate) const MAINNET_PROVIDERS: &[RpcService] = &[
+    RpcService::EthMainnet(EthMainnetService::Alchemy),
     RpcService::EthMainnet(EthMainnetService::Ankr),
     RpcService::EthMainnet(EthMainnetService::PublicNode),
     RpcService::EthMainnet(EthMainnetService::Cloudflare),
 ];
 
 pub(crate) const SEPOLIA_PROVIDERS: &[RpcService] = &[
+    RpcService::EthSepolia(EthSepoliaService::Alchemy),
     RpcService::EthSepolia(EthSepoliaService::Ankr),
     RpcService::EthSepolia(EthSepoliaService::BlockPi),
     RpcService::EthSepolia(EthSepoliaService::PublicNode),
