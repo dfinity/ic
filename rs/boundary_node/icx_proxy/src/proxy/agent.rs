@@ -28,12 +28,12 @@ use ic_utils::{
     interfaces::http_request::HttpRequestCanister,
 };
 use tokio_util::task::LocalPoolHandle;
-use tracing::{enabled, error, info, instrument, trace, warn, Level};
+use tracing::{debug, enabled, error, info, trace, warn, Level};
 
 use crate::http;
 use crate::http::request::HttpRequest;
 use crate::http::response::{AgentResponseAny, HttpResponse};
-use crate::http_client::{HEADERS_IN, HEADERS_OUT};
+use crate::http_client::{HEADERS_IN, HEADERS_OUT, HEADER_X_REQUEST_ID};
 use crate::metrics::RequestContext;
 use crate::{
     canister_id,
@@ -209,11 +209,6 @@ pub async fn handler_wrapper<V: Validate + 'static, C: HyperService<Body> + 'sta
     rx.await.unwrap()
 }
 
-// Suppresses a clippy::let_with_type_underscore lint error which only manifests on GitHub CI
-// and seems unrelated to this function.
-// Remove "#[allow(unknown_lints)]" to check if issue persists.
-#[allow(unknown_lints)]
-#[instrument(level = "info", skip_all, fields(addr = display(addr), replica = display(&*args.replica_uri)))]
 pub async fn handler<V: Validate, C: HyperService<Body>>(
     State(mut args): State<Args<V, C>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
@@ -321,11 +316,19 @@ async fn process_request_inner(
         Some(canister_id) => canister_id,
     };
 
+    let request_id = request
+        .headers()
+        .get(HEADER_X_REQUEST_ID)
+        .cloned()
+        .map(|x| x.to_str().unwrap_or("<malformed id>").to_string())
+        .unwrap_or("<unknown id>".into());
+
     info!(
-        "<< {} {} {:?}",
+        "{}: {}: {} {}",
+        request_id,
+        canister_id,
         request.method(),
-        request.uri(),
-        request.version()
+        request.uri()
     );
 
     let (parts, body) = request.into_parts();
@@ -347,7 +350,7 @@ async fn process_request_inner(
             Err(e) => bail!(e),
         },
     ));
-    info!("<< {} body bytes", http_request.body.len());
+    debug!("<< {} body bytes", http_request.body.len());
 
     if enabled!(Level::TRACE) {
         let body = &http_request.body[0..usize::min(http_request.body.len(), MAX_LOG_BODY_SIZE)];
@@ -362,19 +365,25 @@ async fn process_request_inner(
     }
 
     let canister = HttpRequestCanister::create(agent, canister_id);
-    let header_fields = http_request.headers.iter().map(|(name, value)| {
-        if name.eq_ignore_ascii_case(ACCEPT_ENCODING_HEADER_NAME) {
-            let mut encodings = value.split(',').map(|s| s.trim()).collect::<Vec<_>>();
-            if !encodings.iter().any(|s| s.eq_ignore_ascii_case("identity")) {
-                encodings.push("identity");
-            };
+    let header_fields = http_request
+        .headers
+        .iter()
+        .filter(|(name, _)| name != "x-request-id")
+        .map(|(name, value)| {
+            if name.eq_ignore_ascii_case(ACCEPT_ENCODING_HEADER_NAME) {
+                let mut encodings = value.split(',').map(|s| s.trim()).collect::<Vec<_>>();
+                if !encodings.iter().any(|s| s.eq_ignore_ascii_case("identity")) {
+                    encodings.push("identity");
+                };
 
-            let value = encodings.join(", ");
-            return HeaderField(name.into(), value.into());
-        }
+                let value = encodings.join(", ");
+                return HeaderField(name.into(), value.into());
+            }
 
-        HeaderField(name.into(), value.into())
-    });
+            HeaderField(name.into(), value.into())
+        })
+        .collect::<Vec<_>>() // it needs to be an ExactSizeIterator
+        .into_iter();
 
     let query_result = canister
         .http_request_custom(
