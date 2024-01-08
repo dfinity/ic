@@ -28,6 +28,7 @@ pub enum RpcService {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Deserialize, CandidType)]
 pub enum EthMainnetService {
+    Alchemy,
     Ankr,
     BlockPi,
     PublicNode,
@@ -36,6 +37,7 @@ pub enum EthMainnetService {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Deserialize, CandidType)]
 pub enum EthSepoliaService {
+    Alchemy,
     Ankr,
     BlockPi,
     PublicNode,
