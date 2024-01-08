@@ -18,8 +18,8 @@ use crate::convert::{make_read_state_from_update, to_arg, to_model_account_ident
 use crate::errors::ApiError;
 use crate::ledger_client::LedgerAccess;
 use crate::models::{
-    AccountIdentifier, ConstructionPayloadsRequest, ConstructionPayloadsResponse, PublicKey,
-    SignatureType, SigningPayload, UnsignedTransaction,
+    AccountIdentifier, ConstructionPayloadsRequest, ConstructionPayloadsRequestMetadata,
+    ConstructionPayloadsResponse, PublicKey, SignatureType, SigningPayload, UnsignedTransaction,
 };
 use crate::request::Request;
 use crate::request_handler::{make_sig_data, verify_network_id, RosettaRequestHandler};
@@ -41,7 +41,10 @@ impl RosettaRequestHandler {
         &self,
         msg: ConstructionPayloadsRequest,
     ) -> Result<ConstructionPayloadsResponse, ApiError> {
-        verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
+        verify_network_id(
+            self.ledger.ledger_canister_id(),
+            &msg.network_identifier.into(),
+        )?;
 
         let ops = msg.operations.clone();
 
@@ -55,25 +58,33 @@ impl RosettaRequestHandler {
             - ic_constants::PERMITTED_DRIFT
             - Duration::from_secs(120);
 
-        let meta = msg.metadata.as_ref();
+        let meta: Option<ConstructionPayloadsRequestMetadata> = msg
+            .metadata
+            .as_ref()
+            .map(|m| ConstructionPayloadsRequestMetadata::try_from(m.clone()))
+            .transpose()?;
 
         let ingress_start = meta
+            .as_ref()
             .and_then(|meta| meta.ingress_start)
             .map(ic_types::time::Time::from_nanos_since_unix_epoch)
             .unwrap_or_else(ic_types::time::current_time);
 
         let ingress_end = meta
+            .as_ref()
             .and_then(|meta| meta.ingress_end)
             .map(ic_types::time::Time::from_nanos_since_unix_epoch)
             .unwrap_or_else(|| ingress_start + interval);
 
         let created_at_time: ic_ledger_core::timestamp::TimeStamp = meta
+            .as_ref()
             .and_then(|meta| meta.created_at_time)
             .map(ic_ledger_core::timestamp::TimeStamp::from_nanos_since_unix_epoch)
             .unwrap_or_else(|| std::time::SystemTime::now().into());
 
         // FIXME: the memo field needs to be associated with the operation
         let memo: Memo = meta
+            .as_ref()
             .and_then(|meta| meta.memo)
             .map(Memo)
             .unwrap_or_else(|| Memo(rand::thread_rng().gen()));
@@ -215,10 +226,11 @@ impl RosettaRequestHandler {
         }
 
         Ok(models::ConstructionPayloadsResponse::new(
-            &UnsignedTransaction {
+            UnsignedTransaction {
                 updates,
                 ingress_expiries,
-            },
+            }
+            .to_string(),
             payloads,
         ))
     }
