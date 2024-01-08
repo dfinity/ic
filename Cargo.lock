@@ -6081,13 +6081,22 @@ dependencies = [
 name = "ic-consensus-manager"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "axum 0.7.2",
  "backoff",
  "bytes",
+ "clap 4.4.6",
  "crossbeam-channel",
+ "either",
  "futures",
+ "ic-artifact-manager",
  "ic-async-utils",
+ "ic-config",
+ "ic-crypto-test-utils-tls",
+ "ic-crypto-tls-interfaces",
+ "ic-icos-sev",
  "ic-interfaces",
+ "ic-interfaces-registry",
  "ic-logger",
  "ic-metrics",
  "ic-p2p-test-utils",
@@ -6100,8 +6109,10 @@ dependencies = [
  "phantom_newtype",
  "prometheus",
  "rand 0.8.5",
+ "rand_chacha 0.3.1",
  "slog",
  "tokio",
+ "tokio-rustls",
  "tokio-util",
  "turmoil",
 ]

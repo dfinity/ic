@@ -37,7 +37,7 @@ const MAX_BACKOFF_INTERVAL: Duration = Duration::from_secs(60);
 const BACKOFF_MULTIPLIER: f64 = 2.0;
 
 // Used to log warnings if the slot table grows beyond the threshold.
-const SLOT_TABLE_THRESHOLD: u64 = 30_000;
+const SLOT_TABLE_THRESHOLD: u64 = 100_000;
 
 pub(crate) struct ConsensusManagerSender<Artifact: ArtifactKind> {
     log: ReplicaLogger,
