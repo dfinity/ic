@@ -3204,7 +3204,7 @@ dependencies = [
  "warp",
  "wasm-bindgen",
  "wasm-encoder 0.35.0",
- "wasm-encoder 0.36.2",
+ "wasm-encoder 0.38.1",
  "wasm-smith",
  "wasmparser 0.115.0",
  "wasmprinter",
@@ -11655,32 +11655,32 @@ dependencies = [
 
 [[package]]
 name = "wasm-encoder"
-version = "0.36.2"
+version = "0.38.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "822b645bf4f2446b949776ffca47e2af60b167209ffb70814ef8779d299cd421"
+checksum = "0ad2b51884de9c7f4fe2fd1043fccb8dcad4b1e29558146ee57a144d15779f3f"
 dependencies = [
  "leb128",
 ]
 
 [[package]]
 name = "wasm-encoder"
-version = "0.36.2"
-source = "git+https://github.com/dfinity/wasm-tools?rev=4d402ea9ff1d17cfe3d2ef4654428ac326c94475#4d402ea9ff1d17cfe3d2ef4654428ac326c94475"
+version = "0.38.1"
+source = "git+https://github.com/dfinity/wasm-tools?rev=50c1a9a155745214c7f09d713ed56ff99188725a#50c1a9a155745214c7f09d713ed56ff99188725a"
 dependencies = [
  "leb128",
 ]
 
 [[package]]
 name = "wasm-smith"
-version = "0.12.23"
-source = "git+https://github.com/dfinity/wasm-tools?rev=4d402ea9ff1d17cfe3d2ef4654428ac326c94475#4d402ea9ff1d17cfe3d2ef4654428ac326c94475"
+version = "0.13.1"
+source = "git+https://github.com/dfinity/wasm-tools?rev=50c1a9a155745214c7f09d713ed56ff99188725a#50c1a9a155745214c7f09d713ed56ff99188725a"
 dependencies = [
  "arbitrary",
  "flagset",
  "indexmap 2.1.0",
  "leb128",
- "wasm-encoder 0.36.2",
- "wasmparser 0.116.1",
+ "wasm-encoder 0.38.1",
+ "wasmparser 0.118.1",
 ]
 
 [[package]]
@@ -11730,8 +11730,8 @@ dependencies = [
 
 [[package]]
 name = "wasmparser"
-version = "0.116.1"
-source = "git+https://github.com/dfinity/wasm-tools?rev=4d402ea9ff1d17cfe3d2ef4654428ac326c94475#4d402ea9ff1d17cfe3d2ef4654428ac326c94475"
+version = "0.118.1"
+source = "git+https://github.com/dfinity/wasm-tools?rev=50c1a9a155745214c7f09d713ed56ff99188725a#50c1a9a155745214c7f09d713ed56ff99188725a"
 dependencies = [
  "indexmap 2.1.0",
  "semver",
