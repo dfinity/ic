@@ -49,7 +49,7 @@ lazy_static! {
                     memo: Some(763535),
                     stake: Some(pb::Tokens { e8s: Some(756575) }),
                     vesting_period: Some(pb::Duration {
-                        seconds: Some(785490),
+                        seconds: Some(0),
                     }),
                 }],
             }),
