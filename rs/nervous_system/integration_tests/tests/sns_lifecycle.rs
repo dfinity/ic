@@ -112,6 +112,28 @@ mod sns {
         Decode!(&result, sns_pb::ManageNeuronResponse).unwrap()
     }
 
+    pub fn start_dissolving_neuron(
+        pocket_ic: &PocketIc,
+        sns_governance_canister_id: PrincipalId,
+        sender: PrincipalId,
+        neuron_id: sns_pb::NeuronId,
+    ) -> sns_pb::ManageNeuronResponse {
+        let command = sns_pb::manage_neuron::Command::Configure(sns_pb::manage_neuron::Configure {
+            operation: Some(
+                sns_pb::manage_neuron::configure::Operation::StartDissolving(
+                    sns_pb::manage_neuron::StartDissolving {},
+                ),
+            ),
+        });
+        manage_neuron(
+            pocket_ic,
+            sns_governance_canister_id,
+            sender,
+            neuron_id,
+            command,
+        )
+    }
+
     pub fn propose_and_wait(
         pocket_ic: &PocketIc,
         sns_governance_canister_id: PrincipalId,
@@ -132,19 +154,16 @@ mod sns {
             Some(Command::Error(err)) => Err(err),
             _ => panic!("Proposal failed unexpectedly: {:#?}", response),
         }?;
-        let proposal_id = response
-            .proposal_id
-            .unwrap_or_else(|| {
-                panic!(
-                    "First SNS proposal response did not contain a proposal_id: {:#?}",
-                    response
-                )
-            })
-            .id;
-        let proposal_id = sns_pb::ProposalId { id: proposal_id };
+        let proposal_id = response.proposal_id.unwrap_or_else(|| {
+            panic!(
+                "First SNS proposal response did not contain a proposal_id: {:#?}",
+                response
+            )
+        });
         wait_for_proposal_execution(pocket_ic, sns_governance_canister_id, proposal_id)
     }
 
+    /// This function assumes that the proposal submission succeeded (and panics otherwise).
     fn wait_for_proposal_execution(
         pocket_ic: &PocketIc,
         sns_governance_canister_id: PrincipalId,
@@ -164,17 +183,18 @@ mod sns {
                 .result
                 .expect("GetProposalResponse.result must be set.");
             let proposal_data = match proposal {
-                sns_pb::get_proposal_response::Result::Error(err) => Err(err),
-                sns_pb::get_proposal_response::Result::Proposal(proposal) => Ok(proposal),
-            }?;
+                sns_pb::get_proposal_response::Result::Error(err) => {
+                    panic!("Proposal data cannot be found: {:?}", err);
+                }
+                sns_pb::get_proposal_response::Result::Proposal(proposal_data) => proposal_data,
+            };
             if proposal_data.executed_timestamp_seconds > 0 {
                 return Ok(proposal_data);
             }
-            assert_eq!(
-                proposal_data.failure_reason, None,
-                "Proposal execution failed: {:#?}",
-                proposal_data
-            );
+            proposal_data
+                .failure_reason
+                .clone()
+                .map_or(Ok(()), |err| Err(err))?;
             last_proposal_data = Some(proposal_data);
             pocket_ic.advance_time(Duration::from_millis(100));
         }
@@ -817,7 +837,9 @@ fn test_sns_lifecycle(
         sns_pb::governance::Mode::PreInitializationSwap as i32
     );
 
-    // Get an ID of an SNS neuron that can submit proposals.
+    // Get an ID of an SNS neuron that can submit proposals. We rely on the fact that this neuron
+    // either holds the majority of the voting power or the follow graph is set up s.t. when this
+    // neuron submits a proposal, that proposal gets through without the need for any voting.
     let (sns_neuron_id, sns_neuron_principal_id) = {
         let sns_neurons = sns::governance_list_neurons(
             &pocket_ic,
@@ -882,6 +904,39 @@ fn test_sns_lifecycle(
             "{:#?}",
             err
         );
+    }
+
+    // Currently, the neuron cannot start dissolving (an error is expected).
+    {
+        let start_dissolving_response = sns::start_dissolving_neuron(
+            &pocket_ic,
+            sns_governance_canister_id,
+            sns_neuron_principal_id,
+            sns_neuron_id.clone(),
+        );
+        match start_dissolving_response.command {
+            Some(sns_pb::manage_neuron_response::Command::Error(error)) => {
+                let sns_pb::GovernanceError {
+                    error_type,
+                    error_message,
+                } = &error;
+                use sns_pb::governance_error::ErrorType;
+                assert_eq!(
+                    ErrorType::try_from(*error_type).unwrap(),
+                    ErrorType::PreconditionFailed,
+                    "{:#?}",
+                    error
+                );
+                assert!(
+                    error_message.contains("PreInitializationSwap"),
+                    "{:#?}",
+                    error
+                );
+            }
+            response => {
+                panic!("{:#?}", response);
+            }
+        };
     }
 
     await_swap_lifecycle(&pocket_ic, swap_canister_id, Lifecycle::Open).unwrap();
@@ -981,14 +1036,15 @@ fn test_sns_lifecycle(
         );
     }
 
-    // Ensure that the proposal submission is possible if and only if the governance the SNS has
-    // launched.
+    // Ensure that the proposal submission is possible if and only if the SNS governance has
+    // launched, and that `PreInitializationSwap` mode limitations are still in place if and only
+    // if the swap aborted.
     {
         let proposal_result = sns::propose_and_wait(
             &pocket_ic,
             sns_governance_canister_id,
             sns_neuron_principal_id,
-            sns_neuron_id,
+            sns_neuron_id.clone(),
             sns_pb::Proposal {
                 title: "Try to smuggle in a ManageNervousSystemParameters proposal while \
                         in PreInitializationSwap mode."
@@ -1023,6 +1079,47 @@ fn test_sns_lifecycle(
             );
         } else {
             assert_is_ok!(proposal_result);
+        }
+    }
+
+    // Ensure that the neuron can start dissolving now if and only if the SNS governance has
+    // launched.
+    {
+        let start_dissolving_response = sns::start_dissolving_neuron(
+            &pocket_ic,
+            sns_governance_canister_id,
+            sns_neuron_principal_id,
+            sns_neuron_id,
+        );
+        if ensure_swap_time_run_out_without_sufficient_direct_participation {
+            match start_dissolving_response.command {
+                Some(sns_pb::manage_neuron_response::Command::Error(error)) => {
+                    let sns_pb::GovernanceError {
+                        error_type,
+                        error_message,
+                    } = &error;
+                    use sns_pb::governance_error::ErrorType;
+                    assert_eq!(
+                        ErrorType::try_from(*error_type).unwrap(),
+                        ErrorType::PreconditionFailed,
+                        "{:#?}",
+                        error
+                    );
+                    assert!(
+                        error_message.contains("PreInitializationSwap"),
+                        "{:#?}",
+                        error
+                    );
+                }
+                response => {
+                    panic!("{:#?}", response);
+                }
+            };
+        } else {
+            match start_dissolving_response.command {
+                Some(sns_pb::manage_neuron_response::Command::Configure(_)) => (),
+                _ => panic!("{:#?}", start_dissolving_response),
+            };
         }
     }
 
