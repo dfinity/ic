@@ -18,6 +18,7 @@ use ic_logger::{debug, fatal, info, warn, ReplicaLogger};
 use ic_metrics::buckets::{add_bucket, decimal_buckets, decimal_buckets_with_zero};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::proxy::ProxyDecodeError;
+use ic_query_stats::QueryStatsAggregatorMetrics;
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
     ecdsa_keys::EcdsaKeysRegistry,
@@ -300,6 +301,9 @@ pub(crate) struct MessageRoutingMetrics {
     /// Critical error: the batch times of successive batches regressed (when they
     /// are supposed to be monotonically increasing).
     critical_error_batch_time_regression: IntCounter,
+
+    /// Metrics for query stats aggregator
+    pub query_stats_metrics: QueryStatsAggregatorMetrics,
 }
 
 impl MessageRoutingMetrics {
@@ -381,6 +385,8 @@ impl MessageRoutingMetrics {
                 .error_counter(CRITICAL_ERROR_FAILED_TO_READ_REGISTRY),
             critical_error_batch_time_regression: metrics_registry
                 .error_counter(CRITICAL_ERROR_BATCH_TIME_REGRESSION),
+
+            query_stats_metrics: QueryStatsAggregatorMetrics::new(metrics_registry),
         }
     }
 

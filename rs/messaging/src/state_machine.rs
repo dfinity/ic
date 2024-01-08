@@ -87,6 +87,7 @@ impl StateMachine for StateMachineImpl {
                 batch.batch_number,
                 &self.log,
                 self.query_stats_epoch_length,
+                &self.metrics.query_stats_metrics,
             );
         }
 

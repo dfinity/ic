@@ -2055,7 +2055,7 @@ impl ExecutionTestBuilder {
             self.upload_wasm_chunk_instructions,
         );
         let (query_stats_collector, _) =
-            ic_query_stats::init_query_stats(self.log.clone(), &config);
+            ic_query_stats::init_query_stats(self.log.clone(), &config, &metrics_registry);
 
         let query_handler = InternalHttpQueryHandler::new(
             self.log.clone(),
