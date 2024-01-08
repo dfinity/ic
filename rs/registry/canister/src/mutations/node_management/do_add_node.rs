@@ -92,6 +92,7 @@ impl Registry {
                 .public_ipv4_config
                 .clone()
                 .map(make_valid_node_ivp4_config_or_panic),
+            domain: None,
         };
 
         // 6. Insert node, public keys, and crypto keys

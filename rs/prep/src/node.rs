@@ -395,6 +395,7 @@ mod node_configuration {
             hostos_version_id: None,
             chip_id: None,
             public_ipv4_config: None,
+            domain: None,
         };
 
         assert_eq!(got, want);

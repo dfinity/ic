@@ -133,7 +133,6 @@ use registry_canister::mutations::{
     do_remove_api_boundary_nodes::RemoveApiBoundaryNodesPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
     do_set_firewall_config::SetFirewallConfigPayload,
-    do_update_api_boundary_node_domain::UpdateApiBoundaryNodeDomainPayload,
     do_update_api_boundary_nodes_version::UpdateApiBoundaryNodesVersionPayload,
     do_update_elected_hostos_versions::UpdateElectedHostosVersionsPayload,
     do_update_elected_replica_versions::UpdateElectedReplicaVersionsPayload,
@@ -453,8 +452,6 @@ enum SubCommand {
     ProposeToAddApiBoundaryNode(ProposeToAddApiBoundaryNodeCmd),
     /// Propose to remove a set of API Boundary Nodes
     ProposeToRemoveApiBoundaryNodes(ProposeToRemoveApiBoundaryNodesCmd),
-    /// Propose to update the domain of an API Boundary Node
-    ProposeToUpdateApiBoundaryNodeDomain(ProposeToUpdateApiBoundaryNodeDomainCmd),
     /// Propose to update the version of a set of API Boundary Nodes
     ProposeToUpdateApiBoundaryNodesVersion(ProposeToUpdateApiBoundaryNodesVersionCmd),
     /// Sub-command to fetch an API Boundary Node record from the registry.
@@ -4222,7 +4219,6 @@ impl ProposalPayload<AddApiBoundaryNodePayload> for ProposeToAddApiBoundaryNodeC
         AddApiBoundaryNodePayload {
             node_id: NodeId::from(self.node),
             version: self.version.clone(),
-            domain: self.domain.clone(),
         }
     }
 }
@@ -4256,39 +4252,6 @@ impl ProposalPayload<RemoveApiBoundaryNodesPayload> for ProposeToRemoveApiBounda
     async fn payload(&self, _: Url) -> RemoveApiBoundaryNodesPayload {
         RemoveApiBoundaryNodesPayload {
             node_ids: self.nodes.iter().cloned().map(NodeId::from).collect(),
-        }
-    }
-}
-
-#[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
-struct ProposeToUpdateApiBoundaryNodeDomainCmd {
-    #[clap(long, required = true, alias = "node-id")]
-    /// The API Boundary Node to update
-    node: PrincipalId,
-
-    #[clap(long, required = true)]
-    /// The domain name the API Boundary Node will use
-    domain: String,
-}
-
-impl ProposalTitle for ProposeToUpdateApiBoundaryNodeDomainCmd {
-    fn title(&self) -> String {
-        match &self.proposal_title {
-            Some(title) => title.clone(),
-            None => format!("Update API Boundary Node Domain {}", self.node),
-        }
-    }
-}
-
-#[async_trait]
-impl ProposalPayload<UpdateApiBoundaryNodeDomainPayload>
-    for ProposeToUpdateApiBoundaryNodeDomainCmd
-{
-    async fn payload(&self, _: Url) -> UpdateApiBoundaryNodeDomainPayload {
-        UpdateApiBoundaryNodeDomainPayload {
-            node_id: NodeId::from(self.node),
-            domain: self.domain.clone(),
         }
     }
 }
@@ -4542,7 +4505,6 @@ async fn main() {
             SubCommand::ProposeToSetBitcoinConfig(_) => (),
             SubCommand::ProposeToAddApiBoundaryNode(_) => (),
             SubCommand::ProposeToRemoveApiBoundaryNodes(_) => (),
-            SubCommand::ProposeToUpdateApiBoundaryNodeDomain(_) => (),
             SubCommand::ProposeToUpdateApiBoundaryNodesVersion(_) => (),
             _ => panic!(
                 "Specifying a secret key or HSM is only supported for \
@@ -5723,21 +5685,6 @@ async fn main() {
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::RemoveApiBoundaryNodes,
-                make_canister_client(
-                    reachable_nns_urls,
-                    opts.verify_nns_responses,
-                    opts.nns_public_key_pem_file,
-                    sender,
-                ),
-                proposer,
-            )
-            .await;
-        }
-        SubCommand::ProposeToUpdateApiBoundaryNodeDomain(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            propose_external_proposal_from_command(
-                cmd,
-                NnsFunction::UpdateApiBoundaryNodeDomain,
                 make_canister_client(
                     reachable_nns_urls,
                     opts.verify_nns_responses,

@@ -12,10 +12,11 @@ use crate::{
     },
     util::block_on,
 };
-use std::convert::TryFrom;
+use std::{convert::TryFrom, str::FromStr};
 
 use anyhow::Context;
 
+use ic_base_types::PrincipalId;
 use ic_interfaces_registry::RegistryValue;
 use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
 use ic_registry_keys::make_routing_table_record_key;
@@ -26,6 +27,14 @@ use ic_registry_subnet_type::SubnetType;
 use slog::{debug, info};
 
 use crate::boundary_nodes::helpers::BoundaryNodeHttpsConfig;
+
+pub(crate) const TEST_PRINCIPAL: &str =
+    "imx2d-dctwe-ircfz-emzus-bihdn-aoyzy-lkkdi-vi5vw-npnik-noxiy-mae";
+pub(crate) const TEST_PRIVATE_KEY: &str = "-----BEGIN EC PRIVATE KEY-----
+MHQCAQEEIIBzyyJ32Kdjixx+ZJvNeUWsqAzSQZfLsOyXKgxc7aH9oAcGBSuBBAAK
+oUQDQgAECWc6ZRn9bBP96RM1G6h8ZAtbryO65dKg6cw0Oij2XbnAlb6zSPhU+4hh
+gc2Q0JiGrqKks1AVi+8wzmZ+2PQXXA==
+-----END EC PRIVATE KEY-----";
 
 pub fn setup_ic_with_bn(bn_name: &str, bn_https_config: BoundaryNodeHttpsConfig, env: TestEnv) {
     let log = env.logger();
@@ -114,6 +123,8 @@ pub fn setup_ic(env: TestEnv) {
         .expect("failed to start prometheus VM");
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
+        .with_node_provider(PrincipalId::from_str(TEST_PRINCIPAL).unwrap())
+        .with_node_operator(PrincipalId::from_str(TEST_PRINCIPAL).unwrap())
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
         .with_unassigned_nodes(2)
         .setup_and_start(&env)

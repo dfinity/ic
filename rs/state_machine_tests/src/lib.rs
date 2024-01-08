@@ -259,6 +259,7 @@ fn make_nodes_registry(
             hostos_version_id: None,
             chip_id: None,
             public_ipv4_config: None,
+            domain: None,
         };
         registry_data_provider
             .add(

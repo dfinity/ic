@@ -3560,8 +3560,6 @@ pub enum NnsFunction {
     AddApiBoundaryNode = 43,
     /// A proposal to remove a set of API Boundary Nodes, which will designate them as unassigned nodes
     RemoveApiBoundaryNodes = 44,
-    /// A proposal to update an API Boundary Node with a new domain name
-    UpdateApiBoundaryNodeDomain = 45,
     /// A proposal to update the version of a set of API Boundary Nodes
     UpdateApiBoundaryNodesVersion = 46,
 }
@@ -3625,9 +3623,6 @@ impl NnsFunction {
             NnsFunction::HardResetNnsRootToVersion => "NNS_FUNCTION_HARD_RESET_NNS_ROOT_TO_VERSION",
             NnsFunction::AddApiBoundaryNode => "NNS_FUNCTION_ADD_API_BOUNDARY_NODE",
             NnsFunction::RemoveApiBoundaryNodes => "NNS_FUNCTION_REMOVE_API_BOUNDARY_NODES",
-            NnsFunction::UpdateApiBoundaryNodeDomain => {
-                "NNS_FUNCTION_UPDATE_API_BOUNDARY_NODE_DOMAIN"
-            }
             NnsFunction::UpdateApiBoundaryNodesVersion => {
                 "NNS_FUNCTION_UPDATE_API_BOUNDARY_NODES_VERSION"
             }
@@ -3689,9 +3684,6 @@ impl NnsFunction {
             "NNS_FUNCTION_HARD_RESET_NNS_ROOT_TO_VERSION" => Some(Self::HardResetNnsRootToVersion),
             "NNS_FUNCTION_ADD_API_BOUNDARY_NODE" => Some(Self::AddApiBoundaryNode),
             "NNS_FUNCTION_REMOVE_API_BOUNDARY_NODES" => Some(Self::RemoveApiBoundaryNodes),
-            "NNS_FUNCTION_UPDATE_API_BOUNDARY_NODE_DOMAIN" => {
-                Some(Self::UpdateApiBoundaryNodeDomain)
-            }
             "NNS_FUNCTION_UPDATE_API_BOUNDARY_NODES_VERSION" => {
                 Some(Self::UpdateApiBoundaryNodesVersion)
             }
