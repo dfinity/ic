@@ -4,5 +4,5 @@ package registry.api_boundary_node.v1;
 
 message ApiBoundaryNodeRecord {
   string version = 1;
-  string domain = 2;
+  reserved 2;
 }

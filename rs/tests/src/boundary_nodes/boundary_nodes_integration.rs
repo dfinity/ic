@@ -16,12 +16,15 @@ Success::
 . The calls succeed with the expected values.
 end::catalog[] */
 
+use k256::SecretKey;
+
 use crate::boundary_nodes::{
     constants::{BOUNDARY_NODE_NAME, COUNTER_CANISTER_WAT},
     helpers::{
         create_canister, get_install_url, install_canisters, read_counters_on_counter_canisters,
         set_counters_on_counter_canisters,
     },
+    setup::TEST_PRIVATE_KEY,
 };
 use crate::{
     driver::{
@@ -37,14 +40,20 @@ use crate::{
     nns::{self, vote_execute_proposal_assert_executed},
     util::{agent_observes_canister_module, assert_create_agent, block_on, runtime_from_url},
 };
+use candid::{Decode, Encode};
 use discower_bowndary::api_nodes_discovery::{Fetch, RegistryFetcher};
 use ic_canister_client::Sender;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_common::types::NeuronId;
+use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_governance::pb::v1::NnsFunction;
 use ic_nns_test_utils::governance::submit_external_update_proposal;
 use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
-use registry_canister::mutations::do_add_api_boundary_node::AddApiBoundaryNodePayload;
+use registry_canister::mutations::{
+    do_add_api_boundary_node::AddApiBoundaryNodePayload,
+    node_management::do_update_node_domain_directly::UpdateNodeDomainDirectlyPayload,
+};
+
 use reqwest::{redirect::Policy, ClientBuilder};
 use std::{
     iter,
@@ -55,8 +64,9 @@ use std::{
 use anyhow::{anyhow, bail, Error};
 use futures::stream::FuturesUnordered;
 use ic_agent::{
-    agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport, export::Principal,
-    Agent,
+    agent::{http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport, Agent},
+    export::Principal,
+    identity::Secp256k1Identity,
 };
 
 use serde::Deserialize;
@@ -2874,12 +2884,41 @@ pub fn decentralization_test(env: TestEnv) {
     let governance = nns::get_governance_canister(&nns_runtime);
     let version = block_on(crate::nns::get_software_version_from_snapshot(&nns_node))
         .expect("could not obtain replica software version");
+    // Identity is needed to execute `update_node_domain_directly` as the caller is checked.
+    let agent_with_identity = {
+        let mut agent = nns_node.build_default_agent();
+        let identity = Secp256k1Identity::from_private_key(
+            SecretKey::from_sec1_pem(TEST_PRIVATE_KEY).unwrap(),
+        );
+        agent.set_identity(identity);
+        agent
+    };
+
     for (idx, node) in unassigned_nodes.iter().enumerate() {
         let domain = format!("api{}.com", idx + 1);
+        let update_domain_payload = UpdateNodeDomainDirectlyPayload {
+            node_id: node.node_id,
+            domain: Some(domain.clone()),
+        };
+        info!(
+            log,
+            "Setting domain name of the unassigned node with id={} to {} ...", node.node_id, domain
+        );
+        let call_result: Vec<u8> = block_on(
+            agent_with_identity
+                .update(&REGISTRY_CANISTER_ID.into(), "update_node_domain_directly")
+                .with_arg(Encode!(&update_domain_payload).unwrap())
+                .call_and_wait(),
+        )
+        .expect("Could not change domain name of the node");
+        assert_eq!(Decode!(&call_result, Result<(), String>).unwrap(), Ok(()));
+        info!(
+            log,
+            "Successfully updated domain name of the unassigned node with id={}", node.node_id
+        );
         let proposal_payload = AddApiBoundaryNodePayload {
             node_id: node.node_id,
             version: version.clone().into(),
-            domain,
         };
         let proposal_id = block_on(submit_external_update_proposal(
             &governance,

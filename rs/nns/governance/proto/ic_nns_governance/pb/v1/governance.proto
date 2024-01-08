@@ -613,8 +613,8 @@ enum NnsFunction {
   // A proposal to remove a set of API Boundary Nodes, which will designate them as unassigned nodes
   NNS_FUNCTION_REMOVE_API_BOUNDARY_NODES = 44;
 
-  // A proposal to update an API Boundary Node with a new domain name
-  NNS_FUNCTION_UPDATE_API_BOUNDARY_NODE_DOMAIN = 45;
+  reserved 45;
+  reserved "NNS_FUNCTION_UPDATE_API_BOUNDARY_NODE_DOMAIN";
 
   // A proposal to update the version of a set of API Boundary Nodes
   NNS_FUNCTION_UPDATE_API_BOUNDARY_NODES_VERSION = 46;
