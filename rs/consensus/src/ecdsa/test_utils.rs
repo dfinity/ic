@@ -186,6 +186,7 @@ pub(crate) struct TestEcdsaBlockReader {
     source_subnet_xnet_transcripts: Vec<IDkgTranscriptParamsRef>,
     target_subnet_xnet_transcripts: Vec<IDkgTranscriptParamsRef>,
     requested_signatures: Vec<(RequestId, ThresholdEcdsaSigInputsRef)>,
+    available_quadruples: BTreeMap<QuadrupleId, PreSignatureQuadrupleRef>,
     idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript>,
     fail_to_resolve: bool,
 }
@@ -222,16 +223,22 @@ impl TestEcdsaBlockReader {
     ) -> Self {
         let mut idkg_transcripts = BTreeMap::new();
         let mut requested_signatures = Vec::new();
+        let mut available_quadruples = BTreeMap::new();
         for (request_id, sig_inputs) in sig_inputs {
             for (transcript_ref, transcript) in sig_inputs.idkg_transcripts {
                 idkg_transcripts.insert(transcript_ref, transcript);
             }
+            available_quadruples.insert(
+                request_id.quadruple_id.clone(),
+                sig_inputs.sig_inputs_ref.presig_quadruple_ref.clone(),
+            );
             requested_signatures.push((request_id, sig_inputs.sig_inputs_ref));
         }
 
         Self {
             height,
             requested_signatures,
+            available_quadruples,
             idkg_transcripts,
             ..Default::default()
         }
@@ -307,6 +314,10 @@ impl EcdsaBlockReader for TestEcdsaBlockReader {
                 .iter()
                 .map(|(id, sig_inputs)| (id, sig_inputs)),
         )
+    }
+
+    fn available_quadruple(&self, id: &QuadrupleId) -> Option<&PreSignatureQuadrupleRef> {
+        self.available_quadruples.get(id)
     }
 
     fn source_subnet_xnet_transcripts(
@@ -481,14 +492,7 @@ pub(crate) fn create_pre_signer_dependencies_with_crypto(
     consensus_crypto: Option<Arc<dyn ConsensusCrypto>>,
 ) -> (EcdsaPoolImpl, EcdsaPreSignerImpl) {
     let metrics_registry = MetricsRegistry::new();
-    let Dependencies {
-        pool,
-        replica_config: _,
-        membership: _,
-        registry: _,
-        crypto,
-        ..
-    } = dependencies(pool_config.clone(), 1);
+    let Dependencies { pool, crypto, .. } = dependencies(pool_config.clone(), 1);
 
     // need to make sure subnet matches the transcript
     let pre_signer = EcdsaPreSignerImpl::new(
@@ -521,10 +525,8 @@ pub(crate) fn create_signer_dependencies_with_crypto(
     let metrics_registry = MetricsRegistry::new();
     let Dependencies {
         pool,
-        replica_config: _,
-        membership: _,
-        registry: _,
         crypto,
+        state_manager,
         ..
     } = dependencies(pool_config.clone(), 1);
 
@@ -532,6 +534,7 @@ pub(crate) fn create_signer_dependencies_with_crypto(
         NODE_1,
         pool.get_block_cache(),
         consensus_crypto.unwrap_or(crypto),
+        state_manager as Arc<_>,
         metrics_registry.clone(),
         logger.clone(),
     );
@@ -556,14 +559,7 @@ pub(crate) fn create_complaint_dependencies_with_crypto_and_node_id(
     node_id: NodeId,
 ) -> (EcdsaPoolImpl, EcdsaComplaintHandlerImpl) {
     let metrics_registry = MetricsRegistry::new();
-    let Dependencies {
-        pool,
-        replica_config: _,
-        membership: _,
-        registry: _,
-        crypto,
-        ..
-    } = dependencies(pool_config.clone(), 1);
+    let Dependencies { pool, crypto, .. } = dependencies(pool_config.clone(), 1);
 
     let complaint_handler = EcdsaComplaintHandlerImpl::new(
         node_id,

@@ -168,6 +168,10 @@ pub fn default_certified_state_reader(
             &self.0
         }
 
+        fn get_height(&self) -> Height {
+            self.2.height
+        }
+
         fn read_certified_state(
             &self,
             _paths: &LabeledTree<()>,

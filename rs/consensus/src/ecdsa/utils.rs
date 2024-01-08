@@ -14,7 +14,7 @@ use ic_protobuf::registry::subnet::v1 as pb;
 use ic_registry_client_helpers::ecdsa_keys::EcdsaKeysRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::EcdsaConfig;
-use ic_types::consensus::ecdsa::QuadrupleId;
+use ic_types::consensus::ecdsa::{PreSignatureQuadrupleRef, QuadrupleId};
 use ic_types::consensus::Block;
 use ic_types::consensus::{
     ecdsa::{
@@ -84,6 +84,15 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
             .map_or(Box::new(std::iter::empty()), |payload| {
                 Box::new(payload.ongoing_signatures.iter())
             })
+    }
+
+    fn available_quadruple(&self, id: &QuadrupleId) -> Option<&PreSignatureQuadrupleRef> {
+        self.chain
+            .tip()
+            .payload
+            .as_ref()
+            .as_ecdsa()
+            .and_then(|ecdsa_payload| ecdsa_payload.available_quadruples.get(id))
     }
 
     fn active_transcripts(&self) -> BTreeSet<TranscriptRef> {

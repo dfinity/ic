@@ -186,8 +186,10 @@ use ic_interfaces::{
     ecdsa::{EcdsaChangeSet, EcdsaPool},
     p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
 };
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use ic_replicated_state::ReplicatedState;
 use ic_types::{
     artifact::{EcdsaMessageId, Priority, PriorityFn},
     artifact_kind::EcdsaArtifact,
@@ -243,6 +245,7 @@ impl EcdsaImpl {
         node_id: NodeId,
         consensus_block_cache: Arc<dyn ConsensusBlockCache>,
         crypto: Arc<dyn ConsensusCrypto>,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         metrics_registry: MetricsRegistry,
         logger: ReplicaLogger,
         malicious_flags: MaliciousFlags,
@@ -259,6 +262,7 @@ impl EcdsaImpl {
             node_id,
             consensus_block_cache.clone(),
             crypto.clone(),
+            state_reader,
             metrics_registry.clone(),
             logger.clone(),
         ));
@@ -396,6 +400,7 @@ impl<T: EcdsaPool> ChangeSetProducer<T> for EcdsaImpl {
 pub struct EcdsaGossipImpl {
     subnet_id: SubnetId,
     consensus_block_cache: Arc<dyn ConsensusBlockCache>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     metrics: EcdsaGossipMetrics,
 }
 
@@ -404,11 +409,13 @@ impl EcdsaGossipImpl {
     pub fn new(
         subnet_id: SubnetId,
         consensus_block_cache: Arc<dyn ConsensusBlockCache>,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         metrics_registry: MetricsRegistry,
     ) -> Self {
         Self {
             subnet_id,
             consensus_block_cache,
+            state_reader,
             metrics: EcdsaGossipMetrics::new(metrics_registry),
         }
     }
@@ -416,13 +423,18 @@ impl EcdsaGossipImpl {
 
 struct EcdsaPriorityFnArgs {
     finalized_height: Height,
+    #[allow(dead_code)]
+    certified_height: Height,
     requested_transcripts: BTreeSet<IDkgTranscriptId>,
     requested_signatures: BTreeSet<RequestId>,
     active_transcripts: BTreeSet<IDkgTranscriptId>,
 }
 
 impl EcdsaPriorityFnArgs {
-    fn new(block_reader: &EcdsaBlockReaderImpl) -> Self {
+    fn new(
+        block_reader: &EcdsaBlockReaderImpl,
+        state_reader: &dyn StateReader<State = ReplicatedState>,
+    ) -> Self {
         let mut requested_transcripts = BTreeSet::new();
         for params in block_reader.requested_transcripts() {
             requested_transcripts.insert(params.transcript_id);
@@ -438,8 +450,33 @@ impl EcdsaPriorityFnArgs {
             active_transcripts.insert(transcript_ref.transcript_id);
         }
 
+        let (certified_height, _) =
+            state_reader
+                .get_certified_state_snapshot()
+                .map_or(Default::default(), |snapshot| {
+                    let certified_height = snapshot.get_height();
+                    let requested_signatures = snapshot
+                        .get_state()
+                        .sign_with_ecdsa_contexts()
+                        .values()
+                        .flat_map(|context| {
+                            context
+                                .matched_quadruple
+                                .clone()
+                                .map(|(quadruple_id, height)| RequestId {
+                                    quadruple_id,
+                                    pseudo_random_id: context.pseudo_random_id,
+                                    height,
+                                })
+                        })
+                        .collect::<BTreeSet<_>>();
+
+                    (certified_height, requested_signatures)
+                });
+
         Self {
             finalized_height: block_reader.tip_height(),
+            certified_height,
             requested_transcripts,
             requested_signatures,
             active_transcripts,
@@ -454,7 +491,7 @@ impl<Pool: EcdsaPool> PriorityFnAndFilterProducer<EcdsaArtifact, Pool> for Ecdsa
     ) -> PriorityFn<EcdsaMessageId, EcdsaMessageAttribute> {
         let block_reader = EcdsaBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let subnet_id = self.subnet_id;
-        let args = EcdsaPriorityFnArgs::new(&block_reader);
+        let args = EcdsaPriorityFnArgs::new(&block_reader, self.state_reader.as_ref());
         let metrics = self.metrics.clone();
         Box::new(move |_, attr: &'_ EcdsaMessageAttribute| {
             compute_priority(attr, subnet_id, &args, &metrics)
@@ -561,6 +598,7 @@ mod tests {
         requested_transcripts.insert(transcript_id_fetch_1);
         let args = EcdsaPriorityFnArgs {
             finalized_height: Height::from(100),
+            certified_height: Height::from(100),
             requested_transcripts,
             requested_signatures: BTreeSet::new(),
             active_transcripts: BTreeSet::new(),
@@ -652,6 +690,7 @@ mod tests {
         requested_signatures.insert(request_id_fetch_1.clone());
         let args = EcdsaPriorityFnArgs {
             finalized_height: Height::from(100),
+            certified_height: Height::from(100),
             requested_transcripts: BTreeSet::new(),
             requested_signatures,
             active_transcripts: BTreeSet::new(),
@@ -703,6 +742,7 @@ mod tests {
         requested_transcripts.insert(transcript_id_fetch_3);
         let args = EcdsaPriorityFnArgs {
             finalized_height: Height::from(100),
+            certified_height: Height::from(100),
             requested_transcripts,
             requested_signatures: BTreeSet::new(),
             active_transcripts,
