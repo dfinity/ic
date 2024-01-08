@@ -66,18 +66,10 @@ boundary-node-service-worker:
     paths:
       - typescript/service-worker/artifacts
 
-.after-script-test:
+after-script-test:
   extends:
     - .build-k8s
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      changes:
-        - gitlab-ci/src/after_script/**/*
-        - gitlab-ci/config/**/*
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"'
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\bhotfix\b/i'
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
+    - .rules-master-pipeline-and-merge-request
   needs: [] # don't wait on other jobs
   script:
     - |
@@ -88,10 +80,6 @@ boundary-node-service-worker:
       shellcheck -x gitlab-ci/src/after_script/*.sh
 
       buildevents cmd "$CI_PIPELINE_ID" "$CI_JOB_ID" "$CI_JOB_NAME" -- "${CI_PROJECT_DIR}"/gitlab-ci/src/after_script/after_script.sh
-
-after-script-test-ic-build-image:
-  extends:
-    - .after-script-test
 
 bazel-build-fuzzers:
   extends:
