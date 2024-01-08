@@ -1337,13 +1337,18 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "wasm-encoder": crate.spec(
                 version = "^0.35.0",
             ),
-            "wasm-encoder_0_36": crate.spec(
+            "wasm-encoder-for-ws": crate.spec(
                 package = "wasm-encoder",
-                version = "^0.36.2",
+                version = "^0.38.1",
             ),
             "wasm-smith": crate.spec(
+                # pin to upstream v0.13.1
                 git = "https://github.com/dfinity/wasm-tools",
-                rev = "4d402ea9ff1d17cfe3d2ef4654428ac326c94475",
+                rev = "50c1a9a155745214c7f09d713ed56ff99188725a",
+                default_features = False,
+                features = [
+                    "wasmparser",
+                ],
             ),
             "wasmparser": crate.spec(
                 version = "^0.115.0",
