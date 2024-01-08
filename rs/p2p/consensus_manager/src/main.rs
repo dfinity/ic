@@ -138,7 +138,7 @@ struct Args {
     #[arg(long)]
     relaying: bool,
 
-    #[arg(long)]
+    #[arg(long, value_delimiter = ' ', num_args = 1..)]
     peers_addrs: Vec<SocketAddr>,
 }
 
@@ -250,16 +250,18 @@ fn main() {
     let transport_addr: SocketAddr =
         (IpAddr::from_str("0.0.0.0").expect("Invalid IP"), args.port).into();
 
-    let mut topology: Vec<(NodeId, SocketAddr)> = (0..(args.peers_addrs.len() as u64))
+    let mut peers_addrs = args.peers_addrs;
+    peers_addrs.insert(args.id as usize, transport_addr);
+
+    let mut topology: Vec<(NodeId, SocketAddr)> = peers_addrs
         .into_iter()
-        .zip(args.peers_addrs.into_iter())
+        .enumerate()
         .map(|(id, v)| {
-            let mut seeded_rng = ChaCha20Rng::seed_from_u64(id);
+            let mut seeded_rng = ChaCha20Rng::seed_from_u64(id as u64);
             let node_id = node_test_id(seeded_rng.gen_range(0..u64::MAX));
             (node_id, v)
         })
         .collect();
-    topology.insert(args.id as usize, (node_id, transport_addr));
     let (tx, watcher) =
         tokio::sync::watch::channel(SubnetTopology::new(Vec::new(), 1.into(), 2.into()));
 
