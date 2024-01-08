@@ -2,7 +2,7 @@ use candid::{Decode, Encode, Nat, Principal};
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
+use ic_nervous_system_common::{assert_is_ok, E8, SECONDS_PER_DAY};
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
 use ic_nervous_system_integration_tests::create_service_nervous_system_builder::CreateServiceNervousSystemBuilder;
 use ic_nervous_system_proto::pb::v1::{Duration as DurationPb, Tokens as TokensPb};
@@ -26,7 +26,7 @@ use ic_nns_test_utils::{
         build_ledger_sns_wasm, build_root_sns_wasm, build_swap_sns_wasm,
     },
 };
-use ic_sns_governance::pb::v1::{governance::Mode, GetMode, GetModeResponse};
+use ic_sns_governance::pb::v1 as sns_pb;
 use ic_sns_init::distributions::MAX_DEVELOPER_DISTRIBUTION_COUNT;
 use ic_sns_swap::{
     pb::v1::{
@@ -53,6 +53,7 @@ use std::{collections::HashMap, time::Duration};
 
 const STARTING_CYCLES_PER_CANISTER: u128 = 2_000_000_000_000_000;
 
+/// Manage an NNS neuron, e.g., to make an NNS Governance proposal.
 fn manage_neuron(
     pocket_ic: &PocketIc,
     sender: PrincipalId,
@@ -74,9 +75,169 @@ fn manage_neuron(
         .unwrap();
     let result = match result {
         WasmResult::Reply(result) => result,
-        WasmResult::Reject(s) => panic!("Call to manage_neuron failed: {:#?}", s),
+        WasmResult::Reject(s) => panic!("Call to (NNS) manage_neuron failed: {:#?}", s),
     };
     Decode!(&result, ManageNeuronResponse).unwrap()
+}
+
+mod sns {
+    use super::*;
+
+    /// Manage an SNS neuron, e.g., to make an SNS Governance proposal.
+    fn manage_neuron(
+        pocket_ic: &PocketIc,
+        sns_governance_canister_id: PrincipalId,
+        sender: PrincipalId,
+        // subaccount: &[u8],
+        neuron_id: sns_pb::NeuronId,
+        command: sns_pb::manage_neuron::Command,
+    ) -> sns_pb::ManageNeuronResponse {
+        let sub_account = neuron_id.subaccount().unwrap();
+        let result = pocket_ic
+            .update_call(
+                sns_governance_canister_id.into(),
+                sender.into(),
+                "manage_neuron",
+                Encode!(&sns_pb::ManageNeuron {
+                    subaccount: sub_account.to_vec(),
+                    command: Some(command),
+                })
+                .unwrap(),
+            )
+            .expect("Error calling manage_neuron");
+        let result = match result {
+            WasmResult::Reply(result) => result,
+            WasmResult::Reject(s) => panic!("Call to (SNS) manage_neuron failed: {:#?}", s),
+        };
+        Decode!(&result, sns_pb::ManageNeuronResponse).unwrap()
+    }
+
+    pub fn propose_and_wait(
+        pocket_ic: &PocketIc,
+        sns_governance_canister_id: PrincipalId,
+        sender: PrincipalId,
+        neuron_id: sns_pb::NeuronId,
+        proposal: sns_pb::Proposal,
+    ) -> Result<sns_pb::ProposalData, sns_pb::GovernanceError> {
+        let response = manage_neuron(
+            pocket_ic,
+            sns_governance_canister_id,
+            sender,
+            neuron_id,
+            sns_pb::manage_neuron::Command::MakeProposal(proposal),
+        );
+        use sns_pb::manage_neuron_response::Command;
+        let response = match response.command {
+            Some(Command::MakeProposal(response)) => Ok(response),
+            Some(Command::Error(err)) => Err(err),
+            _ => panic!("Proposal failed unexpectedly: {:#?}", response),
+        }?;
+        let proposal_id = response
+            .proposal_id
+            .unwrap_or_else(|| {
+                panic!(
+                    "First SNS proposal response did not contain a proposal_id: {:#?}",
+                    response
+                )
+            })
+            .id;
+        let proposal_id = sns_pb::ProposalId { id: proposal_id };
+        wait_for_proposal_execution(pocket_ic, sns_governance_canister_id, proposal_id)
+    }
+
+    fn wait_for_proposal_execution(
+        pocket_ic: &PocketIc,
+        sns_governance_canister_id: PrincipalId,
+        proposal_id: sns_pb::ProposalId,
+    ) -> Result<sns_pb::ProposalData, sns_pb::GovernanceError> {
+        // We create some blocks until the proposal has finished executing (`pocket_ic.tick()`).
+        let mut last_proposal_data = None;
+        for _attempt_count in 1..=50 {
+            pocket_ic.tick();
+            let proposal = governance_get_proposal(
+                pocket_ic,
+                sns_governance_canister_id,
+                proposal_id,
+                PrincipalId::new_anonymous(),
+            );
+            let proposal = proposal
+                .result
+                .expect("GetProposalResponse.result must be set.");
+            let proposal_data = match proposal {
+                sns_pb::get_proposal_response::Result::Error(err) => Err(err),
+                sns_pb::get_proposal_response::Result::Proposal(proposal) => Ok(proposal),
+            }?;
+            if proposal_data.executed_timestamp_seconds > 0 {
+                return Ok(proposal_data);
+            }
+            assert_eq!(
+                proposal_data.failure_reason, None,
+                "Proposal execution failed: {:#?}",
+                proposal_data
+            );
+            last_proposal_data = Some(proposal_data);
+            pocket_ic.advance_time(Duration::from_millis(100));
+        }
+        panic!(
+            "Looks like the SNS proposal {:?} is never going to be decided: {:#?}",
+            proposal_id, last_proposal_data
+        );
+    }
+
+    fn governance_get_proposal(
+        pocket_ic: &PocketIc,
+        sns_governance_canister_id: PrincipalId,
+        proposal_id: sns_pb::ProposalId,
+        sender: PrincipalId,
+    ) -> sns_pb::GetProposalResponse {
+        let result = pocket_ic
+            .update_call(
+                sns_governance_canister_id.into(),
+                Principal::from(sender),
+                "get_proposal",
+                Encode!(&sns_pb::GetProposal {
+                    proposal_id: Some(proposal_id)
+                })
+                .unwrap(),
+            )
+            .unwrap();
+        let result = match result {
+            WasmResult::Reply(reply) => reply,
+            WasmResult::Reject(reject) => {
+                panic!(
+                    "get_proposal was rejected by the SNS governance canister: {:#?}",
+                    reject
+                )
+            }
+        };
+        Decode!(&result, sns_pb::GetProposalResponse).unwrap()
+    }
+
+    pub fn governance_list_neurons(
+        pocket_ic: &PocketIc,
+        sns_governance_canister_id: PrincipalId,
+        request: sns_pb::ListNeurons,
+        sender: PrincipalId,
+    ) -> sns_pb::ListNeuronsResponse {
+        let result = pocket_ic
+            .update_call(
+                sns_governance_canister_id.into(),
+                Principal::from(sender),
+                "list_neurons",
+                Encode!(&request).unwrap(),
+            )
+            .unwrap();
+        let result = match result {
+            WasmResult::Reply(reply) => reply,
+            WasmResult::Reject(reject) => {
+                panic!(
+                    "list_neurons was rejected by the SNS governance canister: {:#?}",
+                    reject
+                )
+            }
+        };
+        Decode!(&result, sns_pb::ListNeuronsResponse).unwrap()
+    }
 }
 
 fn refresh_buyer_tokens(
@@ -321,20 +482,23 @@ fn get_auto_finalization_status(
     Decode!(&result, GetAutoFinalizationStatusResponse).unwrap()
 }
 
-fn get_mode(pocket_ic: &PocketIc, sns_governance_canister_id: PrincipalId) -> GetModeResponse {
+fn get_mode(
+    pocket_ic: &PocketIc,
+    sns_governance_canister_id: PrincipalId,
+) -> sns_pb::GetModeResponse {
     let result = pocket_ic
         .update_call(
             sns_governance_canister_id.into(),
             Principal::anonymous(),
             "get_mode",
-            Encode!(&GetMode {}).unwrap(),
+            Encode!(&sns_pb::GetMode {}).unwrap(),
         )
         .unwrap();
     let result = match result {
         WasmResult::Reply(result) => result,
         WasmResult::Reject(s) => panic!("Call to get_mode failed: {:#?}", s),
     };
-    Decode!(&result, GetModeResponse).unwrap()
+    Decode!(&result, sns_pb::GetModeResponse).unwrap()
 }
 
 fn get_deployed_sns_by_proposal_id(
@@ -455,7 +619,7 @@ fn nns_wait_for_proposal_execution(
     pocket_ic: &PocketIc,
     proposal_id: u64,
 ) -> Result<ProposalInfo, String> {
-    // We create some blocks until the proposal has finished executing (machine.tick())
+    // We create some blocks until the proposal has finished executing (`pocket_ic.tick()`).
     let mut last_proposal_info = None;
     for _attempt_count in 1..=50 {
         pocket_ic.tick();
@@ -645,13 +809,80 @@ fn test_sns_lifecycle(
     let sns_governance_canister_id = deployed_sns.governance_canister_id.unwrap();
     let swap_canister_id = deployed_sns.swap_canister_id.unwrap();
 
-    // Assert that the mode of SNS Governance is not PreInitializationSwap
+    // Assert that the mode of SNS Governance is `PreInitializationSwap`.
     assert_eq!(
         get_mode(&pocket_ic, sns_governance_canister_id)
             .mode
             .unwrap(),
-        Mode::PreInitializationSwap as i32
+        sns_pb::governance::Mode::PreInitializationSwap as i32
     );
+
+    // Get an ID of an SNS neuron that can submit proposals.
+    let (sns_neuron_id, sns_neuron_principal_id) = {
+        let sns_neurons = sns::governance_list_neurons(
+            &pocket_ic,
+            sns_governance_canister_id,
+            sns_pb::ListNeurons::default(),
+            PrincipalId::new_anonymous(),
+        )
+        .neurons;
+        let sns_neuron = sns_neurons
+            .iter()
+            .find(|neuron| {
+                neuron.dissolve_delay_seconds(neuron.created_timestamp_seconds)
+                    >= 6 * 30 * SECONDS_PER_DAY
+            })
+            .unwrap_or_else(|| {
+                panic!(
+                    "cannot find SNS neuron with dissolve delay over 6 months. sns_neurons = {:#?}",
+                    sns_neurons
+                )
+            });
+        (
+            sns_neuron.id.clone().unwrap(),
+            sns_neuron.permissions.last().unwrap().principal.unwrap(),
+        )
+    };
+
+    // Currently, we are not allowed to make `ManageNervousSystemParameter` proposals.
+    {
+        let err = sns::propose_and_wait(
+            &pocket_ic,
+            sns_governance_canister_id,
+            sns_neuron_principal_id,
+            sns_neuron_id.clone(),
+            sns_pb::Proposal {
+                title: "Try to smuggle in a ManageNervousSystemParameters proposal while \
+                        in PreInitializationSwap mode."
+                    .to_string(),
+                summary: "".to_string(),
+                url: "".to_string(),
+                action: Some(sns_pb::proposal::Action::ManageNervousSystemParameters(
+                    sns_pb::NervousSystemParameters {
+                        reject_cost_e8s: Some(20_000), // More strongly discourage spam
+                        ..Default::default()
+                    },
+                )),
+            },
+        )
+        .unwrap_err();
+        let sns_pb::GovernanceError {
+            error_type,
+            error_message,
+        } = &err;
+        use sns_pb::governance_error::ErrorType;
+        assert_eq!(
+            ErrorType::try_from(*error_type).unwrap(),
+            ErrorType::PreconditionFailed,
+            "{:#?}",
+            err
+        );
+        assert!(
+            error_message.contains("PreInitializationSwap"),
+            "{:#?}",
+            err
+        );
+    }
 
     await_swap_lifecycle(&pocket_ic, swap_canister_id, Lifecycle::Open).unwrap();
     let derived_state = get_derived_state(&pocket_ic, swap_canister_id);
@@ -739,15 +970,60 @@ fn test_sns_lifecycle(
             get_mode(&pocket_ic, sns_governance_canister_id)
                 .mode
                 .unwrap(),
-            Mode::PreInitializationSwap as i32,
+            sns_pb::governance::Mode::PreInitializationSwap as i32,
         );
     } else {
         assert_eq!(
             get_mode(&pocket_ic, sns_governance_canister_id)
                 .mode
                 .unwrap(),
-            Mode::Normal as i32
+            sns_pb::governance::Mode::Normal as i32
         );
+    }
+
+    // Ensure that the proposal submission is possible if and only if the governance the SNS has
+    // launched.
+    {
+        let proposal_result = sns::propose_and_wait(
+            &pocket_ic,
+            sns_governance_canister_id,
+            sns_neuron_principal_id,
+            sns_neuron_id,
+            sns_pb::Proposal {
+                title: "Try to smuggle in a ManageNervousSystemParameters proposal while \
+                        in PreInitializationSwap mode."
+                    .to_string(),
+                summary: "".to_string(),
+                url: "".to_string(),
+                action: Some(sns_pb::proposal::Action::ManageNervousSystemParameters(
+                    sns_pb::NervousSystemParameters {
+                        reject_cost_e8s: Some(20_000), // More strongly discourage spam
+                        ..Default::default()
+                    },
+                )),
+            },
+        );
+        if ensure_swap_time_run_out_without_sufficient_direct_participation {
+            let err = proposal_result.unwrap_err();
+            let sns_pb::GovernanceError {
+                error_type,
+                error_message,
+            } = &err;
+            use sns_pb::governance_error::ErrorType;
+            assert_eq!(
+                ErrorType::try_from(*error_type).unwrap(),
+                ErrorType::PreconditionFailed,
+                "{:#?}",
+                err
+            );
+            assert!(
+                error_message.contains("PreInitializationSwap"),
+                "{:#?}",
+                err
+            );
+        } else {
+            assert_is_ok!(proposal_result);
+        }
     }
 
     if swap_parameters
@@ -818,25 +1094,36 @@ fn test_sns_lifecycle_swap_timeout_without_neurons_fund_participation() {
 
 #[test]
 fn test_sns_lifecycle_happy_scenario_with_lots_of_dev_neurons() {
-    let developer_neurons = (0..MAX_DEVELOPER_DISTRIBUTION_COUNT)
+    let num_neurons = MAX_DEVELOPER_DISTRIBUTION_COUNT as u64;
+    let mut developer_neurons: Vec<_> = (0..num_neurons - 1)
         .map(|i| NeuronDistribution {
             controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
-            memo: Some(i as u64),
-            // Set the dissolve delay to ~10 days, which is somewhat arbitrary.
-            // It just needs to be not greater than the maximum dissolve delay set elsewhere in the CreateServiceNervousSystem proposal,
-            // but high enough that it still has voting power
+            memo: Some(i),
+            // Set the dissolve delay to ~10 days, which is somewhat arbitrary. It needs to be less
+            // than or equal to the maximum dissolve delay (as defined
+            // in `CreateServiceNervousSystemBuilder::default()`), but high enough that it still has
+            // some voting power.
             dissolve_delay: Some(DurationPb::from_secs(927391)),
             stake: Some(TokensPb::from_e8s(E8)),
             vesting_period: Some(DurationPb::from_secs(0)),
         })
         .collect();
+    // One developer neuron needs to have the voting power majority for the underlying tests to
+    // be able to get SNS proposals through without arranging any following or voting. The dissolve
+    // delay of this neuron needs to be sufficient for voting (we set it to 7 months).
+    developer_neurons.push(NeuronDistribution {
+        controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+        memo: Some(num_neurons - 1),
+        dissolve_delay: Some(DurationPb::from_secs(SECONDS_PER_DAY * 30 * 7)),
+        // All other neurons together have `num_neurons - 1` e8s, so this one has the majority.
+        stake: Some(TokensPb::from_e8s(num_neurons * E8)),
+        vesting_period: Some(DurationPb::from_secs(0)),
+    });
 
     let create_service_nervous_system_proposal = CreateServiceNervousSystemBuilder::default()
         .neurons_fund_participation(false)
         .initial_token_distribution_developer_neurons(developer_neurons)
-        .initial_token_distribution_total(TokensPb::from_e8s(
-            MAX_DEVELOPER_DISTRIBUTION_COUNT as u64 * E8,
-        ))
+        .initial_token_distribution_total(TokensPb::from_e8s((num_neurons * 2 - 1) * E8))
         .build();
 
     test_sns_lifecycle(true, create_service_nervous_system_proposal);
