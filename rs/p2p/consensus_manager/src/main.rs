@@ -2,10 +2,19 @@ use std::{
     convert::Infallible,
     net::{IpAddr, SocketAddr},
     str::FromStr,
-    sync::{Arc, RwLock},
+    sync::{
+        atomic::{AtomicU64, Ordering::Relaxed},
+        Arc, RwLock,
+    },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use axum::{
+    extract::State,
+    http::StatusCode,
+    routing::{any, get},
+    Router,
+};
 use clap::Parser;
 use either::Either;
 use futures::StreamExt;
@@ -38,7 +47,7 @@ use tokio_rustls::rustls::{
     server::{ClientCertVerified, ClientCertVerifier},
     Certificate, ClientConfig, PrivateKey, ServerConfig,
 };
-use tokio_util::time::DelayQueue;
+// use tokio_util::time::DelayQueue;
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct TestArtifact;
@@ -71,7 +80,7 @@ impl ArtifactKind for TestArtifact {
     /// TestArtifact.
     fn message_to_advert(msg: &Self::Message) -> Advert<TestArtifact> {
         // let id = u64::from_le_bytes(msg[..24].try_into().unwrap());
-        let id = msg[..24].into();
+        let id = msg[..16].into();
         let attribute = ();
 
         Advert {
@@ -121,20 +130,21 @@ impl PriorityFnAndFilterProducer<TestArtifact, TestConsensus> for TestConsensus 
             let message_is_relayed_back = artifact_producer_node_id == node_id;
 
             if message_is_relayed_back {
-                return Priority::Drop;
-            }
-
-            let expiry_time_secs = u64::from_le_bytes(id[16..24].try_into().unwrap());
-
-            let expiry_time = UNIX_EPOCH
-                .checked_add(Duration::from_secs(expiry_time_secs))
-                .unwrap();
-
-            if expiry_time <= SystemTime::now() {
                 Priority::Drop
             } else {
                 Priority::Fetch
             }
+            // let expiry_time_secs = u64::from_le_bytes(id[16..24].try_into().unwrap());
+
+            // let expiry_time = UNIX_EPOCH
+            //     .checked_add(Duration::from_secs(expiry_time_secs))
+            //     .unwrap();
+
+            // if expiry_time <= SystemTime::now() {
+            //     Priority::Drop
+            // } else {
+            //     Priority::Fetch
+            // }
         })
     }
     fn get_filter(&self) -> <TestArtifact as ArtifactKind>::Filter {
@@ -166,10 +176,25 @@ struct Args {
     port: u16,
 
     #[arg(long)]
+    metrics_port: u16,
+
+    #[arg(long)]
     relaying: bool,
 
     #[arg(long)]
     peers_addrs: Vec<SocketAddr>,
+}
+
+#[derive(Default)]
+struct Metrics {
+    received_bytes: AtomicU64,
+    received_bytes_previous: AtomicU64,
+
+    received_artifact_count: AtomicU64,
+    received_artifact_count_previous: AtomicU64,
+
+    sent_artifacts: AtomicU64,
+    sent_artifacts_last: AtomicU64,
 }
 
 async fn load_generator(
@@ -179,6 +204,7 @@ async fn load_generator(
     received_artifacts: crossbeam_channel::Receiver<UnvalidatedArtifactMutation<TestArtifact>>,
     message_rate: usize,
     relaying: bool,
+    metrics: Arc<Metrics>,
 ) {
     let (tx, mut received_artifacts_rx) = tokio::sync::mpsc::channel(1000);
 
@@ -193,7 +219,7 @@ async fn load_generator(
         })
     };
 
-    let mut purge_queue: DelayQueue<Advert<TestArtifact>> = DelayQueue::new();
+    // let mut purge_queue: DelayQueue<Advert<TestArtifact>> = DelayQueue::new();
 
     let mut produce_and_send_artifact = tokio::time::interval(
         Duration::from_secs(1)
@@ -208,19 +234,14 @@ async fn load_generator(
 
     info!(
         log,
-        "Generatiing event evey {:?}",
+        "Generating event every {:?}",
         produce_and_send_artifact.period()
     );
     let mut log_interval = tokio::time::interval(Duration::from_secs(10));
 
     let mut received_bytes = 0;
-    let mut received_bytes_previous = 0;
-
     let mut received_artifact_count: u64 = 0;
-    let mut received_artifact_count_previous: u64 = 0;
-
     let mut sent_artifacts: u64 = 0;
-    let mut sent_artifacts_last: u64 = 0;
 
     loop {
         select! {
@@ -233,22 +254,22 @@ async fn load_generator(
                         received_bytes += message.len();
 
                         if relaying {
-                            let expiry_time_secs = u64::from_le_bytes(message[16..24].try_into().unwrap());
+                            // let expiry_time_secs = u64::from_le_bytes(message[16..24].try_into().unwrap());
 
-                            let removal_delay = UNIX_EPOCH
-                                .checked_add(Duration::from_secs(expiry_time_secs))
-                                .unwrap()
-                                .elapsed();
+                            // let removal_delay = UNIX_EPOCH
+                            //     .checked_add(Duration::from_secs(expiry_time_secs))
+                            //     .unwrap()
+                            //     .elapsed();
 
-                            if let Ok(removal_delay) = removal_delay {
-                                purge_queue.insert(TestArtifact::message_to_advert(&message), removal_delay);
+                            // if let Ok(removal_delay) = removal_delay {
+                                // purge_queue.insert(TestArtifact::message_to_advert(&message), removal_delay);
                                 match artifact_processor_rx.send(ArtifactProcessorEvent::Advert(TestArtifact::message_to_advert(&message))).await {
                                     Ok(_) => {},
                                     Err(e) => {
                                         error!(log, "Artifact processor failed to send relay: {:?}", e);
                                     }
                                 };
-                            }
+                            // }
                         }
                     }
                     _ => {
@@ -258,14 +279,14 @@ async fn load_generator(
             // Outgoing Artifact to peers
             _ = produce_and_send_artifact.tick() => {
 
-                let expiry_time = SystemTime::now().checked_add(removal_delay).unwrap().duration_since(UNIX_EPOCH).unwrap().as_secs();
+                // let expiry_time = SystemTime::now().checked_add(removal_delay).unwrap().duration_since(UNIX_EPOCH).unwrap().as_secs();
 
-                let mut id = Vec::with_capacity(24);
+                let mut id = Vec::with_capacity(16);
                 id.extend_from_slice(&sent_artifacts.to_le_bytes());
                 id.extend_from_slice(&node_id.to_le_bytes());
-                id.extend_from_slice(&expiry_time.to_le_bytes());
+                // id.extend_from_slice(&expiry_time.to_le_bytes());
 
-                purge_queue.insert(TestArtifact::message_to_advert(&id), removal_delay);
+                // purge_queue.insert(TestArtifact::message_to_advert(&id), removal_delay);
 
                 match artifact_processor_rx
                     .send(ArtifactProcessorEvent::Advert(TestArtifact::message_to_advert(&id)))
@@ -281,22 +302,40 @@ async fn load_generator(
 
             }
             _ = log_interval.tick() => {
-                info!(log, "Sent artifacts total {}", sent_artifacts);
-                info!(log, "Rate of message sent {}", (sent_artifacts - sent_artifacts_last)/10);
-                info!(log, "Rate of messages received {}", (received_artifact_count - received_artifact_count_previous)/10);
-                info!(log, "Rate of bytes received {}", (received_bytes - received_bytes_previous)/10);
-                sent_artifacts_last = sent_artifacts;
-                received_artifact_count_previous = received_artifact_count;
-                received_bytes_previous = received_bytes;
+                // info!(log, "Sent artifacts total {}", sent_artifacts);
+                // info!(log, "Rate of message sent {}", (sent_artifacts - sent_artifacts_last)/10);
+                // info!(log, "Rate of messages received {}", (received_artifact_count - received_artifact_count_previous)/10);
+                // info!(log, "Rate of bytes received {}", (received_bytes - received_bytes_previous)/10);
+                metrics
+                    .received_bytes
+                    .store(received_bytes.try_into().unwrap(), Relaxed);
+
+                metrics
+                    .received_artifact_count
+                    .store(received_artifact_count, Relaxed);
+
+                metrics
+                    .sent_artifacts
+                    .store(sent_artifacts, Relaxed);
             }
-            Some(n) = purge_queue.next() => {
-                let _ = artifact_processor_rx.send(ArtifactProcessorEvent::Purge(n.into_inner().id)).await.unwrap();
-            }
+            // Some(n) = purge_queue.next() => {
+            //     let _ = artifact_processor_rx.send(ArtifactProcessorEvent::Purge(n.into_inner().id)).await.unwrap();
+            // }
         }
     }
 }
 
-fn main() {
+async fn metrics_handler(State(metrics): State<Arc<Metrics>>) -> String {
+    format!(
+        "{}, {}, {}",
+        metrics.received_bytes.load(Relaxed),
+        metrics.received_artifact_count.load(Relaxed),
+        metrics.sent_artifacts.load(Relaxed)
+    )
+}
+
+#[tokio::main]
+async fn main() {
     let args = Args::parse();
 
     // generate deterministic crypto based on id
@@ -309,14 +348,15 @@ fn main() {
 
     // TODO: some input verification
 
-    let rt = tokio::runtime::Runtime::new().unwrap();
+    let rt_handle = tokio::runtime::Handle::current();
+    let metrics = Arc::new(Metrics::default());
 
     let (log, _async_log_guard) =
         new_replica_logger_from_config(&ic_config::logger::Config::default());
 
     let mut new_p2p_consensus = ic_consensus_manager::ConsensusManagerBuilder::new(
         log.clone(),
-        rt.handle().clone(),
+        rt_handle.clone(),
         MetricsRegistry::default(),
     );
 
@@ -362,7 +402,7 @@ fn main() {
     let quic_transport = Arc::new(ic_quic_transport::QuicTransport::start(
         &log,
         &MetricsRegistry::default(),
-        rt.handle(),
+        &rt_handle,
         Arc::new(tls) as Arc<_>,
         Arc::new(MockReg) as Arc<_>,
         Arc::new(SevImpl) as Arc<_>,
@@ -373,20 +413,35 @@ fn main() {
     ));
     new_p2p_consensus.run(quic_transport, watcher);
 
-    rt.spawn(load_generator(
+    rt_handle.spawn(load_generator(
         node_id_u64,
         log.clone(),
         artifact_processor_tx,
         cb_rx,
         args.message_rate as usize,
         args.relaying,
+        metrics.clone(),
     ));
 
     let _ = tx
         .send(SubnetTopology::new(topology, 1.into(), 2.into()))
         .unwrap();
 
-    std::thread::sleep(Duration::from_secs(10900000));
+    let metrics_address: SocketAddr = (
+        IpAddr::from_str("0.0.0.0").expect("Invalid IP"),
+        args.metrics_port,
+    )
+        .into();
+
+    let metric_listener = tokio::net::TcpListener::bind(metrics_address)
+        .await
+        .expect("Unable to bind metrics listener.");
+
+    let metrics_router = Router::new()
+        .route("/metrics", get(metrics_handler))
+        .with_state(metrics);
+
+    axum::serve(metric_listener, metrics_router).await.unwrap();
 }
 
 struct SevImpl;
