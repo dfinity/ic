@@ -767,9 +767,9 @@ mod tests {
         proptest!(|(metadata in gen_metadata.clone())| {
             let handler = handler.clone();
             let construction_payloads_result = handler.construction_payloads(ConstructionPayloadsRequest {
-                network_identifier: network_identifier.clone(),
+                network_identifier: network_identifier.clone().into(),
                 operations: operations.clone(),
-                metadata: metadata.clone(),
+                metadata: metadata.clone().map(|m|m.into()),
                 public_keys: Some(vec![pub_key.clone()]),
             }).unwrap();
             let unsigned_transaction = construction_payloads_result.unsigned_transaction;
@@ -797,9 +797,9 @@ mod tests {
         };
         proptest!(conf, |(metadata in gen_metadata.clone())| {
             let construction_payloads_result = handler.construction_payloads(ConstructionPayloadsRequest {
-                network_identifier: network_identifier.clone(),
+                network_identifier: network_identifier.clone().into(),
                 operations: operations.clone(),
-                metadata: metadata.clone(),
+                metadata: metadata.clone().map(|m|m.into()),
                 public_keys: Some(vec![pub_key.clone()]),
             }).unwrap();
             let unsigned_transaction = construction_payloads_result.unsigned_transaction;

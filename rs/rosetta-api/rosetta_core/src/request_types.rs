@@ -196,3 +196,36 @@ pub struct ConstructionMetadataRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub public_keys: Option<Vec<PublicKey>>,
 }
+
+/// ConstructionPayloadsRequest is the request to `/construction/payloads`. It
+/// contains the network, a slice of operations, and arbitrary metadata that was
+/// returned by the call to `/construction/metadata`.  Optionally, the request
+/// can also include an array of PublicKeys associated with the
+/// AccountIdentifiers returned in ConstructionPreprocessResponse.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct ConstructionPayloadsRequest {
+    pub network_identifier: NetworkIdentifier,
+
+    pub operations: Vec<Operation>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<ObjectMap>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub public_keys: Option<Vec<PublicKey>>,
+}
+
+impl ConstructionPayloadsRequest {
+    pub fn new(
+        network_identifier: NetworkIdentifier,
+        operations: Vec<Operation>,
+    ) -> ConstructionPayloadsRequest {
+        ConstructionPayloadsRequest {
+            network_identifier,
+            operations,
+            metadata: None,
+            public_keys: None,
+        }
+    }
+}
