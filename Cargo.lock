@@ -647,17 +647,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-scoped"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2bb5d44cd33a5095cf47aa2a90455ea3f9141f45e24d092425fef2bf4fd9c98e"
-dependencies = [
- "futures",
- "pin-project",
- "tokio",
-]
-
-[[package]]
 name = "async-socks5"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1325,43 +1314,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "boundary-node-control-plane"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "arc-swap",
- "async-scoped 0.8.0",
- "async-trait",
- "axum 0.6.20",
- "bytes",
- "candid",
- "clap 3.2.25",
- "dashmap",
- "futures",
- "hex",
- "ic-crypto-utils-basic-sig",
- "ic-protobuf",
- "ic-registry-client",
- "ic-registry-client-helpers",
- "ic-registry-local-store",
- "ic-types",
- "lazy_static",
- "mockall",
- "nix 0.24.3",
- "opentelemetry 0.18.0",
- "opentelemetry-prometheus 0.11.0",
- "prometheus",
- "regex",
- "reqwest",
- "serde",
- "serde_cbor",
- "serde_json",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "boundary-node-prober"
 version = "0.9.0"
 dependencies = [
@@ -1379,7 +1331,7 @@ dependencies = [
  "indoc",
  "mockall",
  "opentelemetry 0.20.0",
- "opentelemetry-prometheus 0.13.0",
+ "opentelemetry-prometheus",
  "prometheus",
  "serde",
  "serde_json",
@@ -1858,7 +1810,7 @@ dependencies = [
  "leb128",
  "mockall",
  "opentelemetry 0.20.0",
- "opentelemetry-prometheus 0.13.0",
+ "opentelemetry-prometheus",
  "pem 1.1.1",
  "prometheus",
  "rcgen",
@@ -1890,7 +1842,7 @@ dependencies = [
  "mockall",
  "nix 0.24.3",
  "opentelemetry 0.20.0",
- "opentelemetry-prometheus 0.13.0",
+ "opentelemetry-prometheus",
  "prometheus",
  "serde",
  "serde_json",
@@ -3021,7 +2973,7 @@ dependencies = [
  "mockall",
  "nix 0.24.3",
  "opentelemetry 0.20.0",
- "opentelemetry-prometheus 0.13.0",
+ "opentelemetry-prometheus",
  "prometheus",
  "reqwest",
  "rsa",
@@ -5178,7 +5130,7 @@ dependencies = [
  "indoc",
  "mockall",
  "opentelemetry 0.20.0",
- "opentelemetry-prometheus 0.13.0",
+ "opentelemetry-prometheus",
  "prometheus",
  "serde",
  "serde_json",
@@ -5252,7 +5204,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "arc-swap",
- "async-scoped 0.7.1",
+ "async-scoped",
  "async-trait",
  "axum 0.6.20",
  "axum-extra",
@@ -5787,9 +5739,9 @@ dependencies = [
 
 [[package]]
 name = "ic-cdk-macros"
-version = "0.7.0"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4587624e64b8db56224033ee74e5c246d39be15375d03d3df7c117d49d18487"
+checksum = "411c0dd4c149132b68e679274d397053332ee29996c6a541075895881916333b"
 dependencies = [
  "candid",
  "proc-macro2 1.0.70",
@@ -9440,6 +9392,7 @@ dependencies = [
  "ic-canister-client-sender",
  "ic-canisters-http-types",
  "ic-cdk",
+ "ic-cdk-macros",
  "ic-cdk-timers",
  "ic-config",
  "ic-crypto",
@@ -10547,6 +10500,7 @@ version = "1.9.0"
 dependencies = [
  "actix-rt",
  "actix-web",
+ "anyhow",
  "async-trait",
  "base64 0.13.1",
  "candid",
@@ -11315,6 +11269,7 @@ dependencies = [
  "strum_macros 0.25.3",
  "tokio",
  "tokio-metrics",
+ "tokio-util",
  "turmoil",
  "zstd",
 ]
@@ -11384,6 +11339,7 @@ dependencies = [
  "nix 0.24.3",
  "phantom_newtype",
  "tempfile",
+ "tokio",
  "wsl",
 ]
 
@@ -12324,7 +12280,7 @@ dependencies = [
  "ic-utils 0.30.2",
  "itertools 0.12.0",
  "opentelemetry 0.20.0",
- "opentelemetry-prometheus 0.13.0",
+ "opentelemetry-prometheus",
  "prometheus",
  "rustls",
  "rustls-native-certs",
@@ -14368,33 +14324,12 @@ dependencies = [
 
 [[package]]
 name = "opentelemetry"
-version = "0.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69d6c3d7288a106c0a363e4b0e8d308058d56902adefb16f4936f417ffef086e"
-dependencies = [
- "opentelemetry_api 0.18.0",
- "opentelemetry_sdk 0.18.0",
-]
-
-[[package]]
-name = "opentelemetry"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9591d937bc0e6d2feb6f71a559540ab300ea49955229c347a517a28d27784c54"
 dependencies = [
- "opentelemetry_api 0.20.0",
- "opentelemetry_sdk 0.20.0",
-]
-
-[[package]]
-name = "opentelemetry-prometheus"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06c3d833835a53cf91331d2cfb27e9121f5a95261f31f08a1f79ab31688b8da8"
-dependencies = [
- "opentelemetry 0.18.0",
- "prometheus",
- "protobuf",
+ "opentelemetry_api",
+ "opentelemetry_sdk",
 ]
 
 [[package]]
@@ -14404,26 +14339,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c7d81bc254e2d572120363a2b16cdb0d715d301b5789be0cfc26ad87e4e10e53"
 dependencies = [
  "once_cell",
- "opentelemetry_api 0.20.0",
- "opentelemetry_sdk 0.20.0",
+ "opentelemetry_api",
+ "opentelemetry_sdk",
  "prometheus",
  "protobuf",
-]
-
-[[package]]
-name = "opentelemetry_api"
-version = "0.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c24f96e21e7acc813c7a8394ee94978929db2bcc46cf6b5014fc612bf7760c22"
-dependencies = [
- "fnv",
- "futures-channel",
- "futures-util",
- "indexmap 1.9.2",
- "js-sys",
- "once_cell",
- "pin-project-lite",
- "thiserror",
 ]
 
 [[package]]
@@ -14444,26 +14363,6 @@ dependencies = [
 
 [[package]]
 name = "opentelemetry_sdk"
-version = "0.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ca41c4933371b61c2a2f214bf16931499af4ec90543604ec828f7a625c09113"
-dependencies = [
- "async-trait",
- "crossbeam-channel",
- "dashmap",
- "fnv",
- "futures-channel",
- "futures-executor",
- "futures-util",
- "once_cell",
- "opentelemetry_api 0.18.0",
- "percent-encoding 2.3.0",
- "rand 0.8.5",
- "thiserror",
-]
-
-[[package]]
-name = "opentelemetry_sdk"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fa8e705a0612d48139799fcbaba0d4a90f06277153e43dd2bdc16c6f0edd8026"
@@ -14474,7 +14373,7 @@ dependencies = [
  "futures-executor",
  "futures-util",
  "once_cell",
- "opentelemetry_api 0.20.0",
+ "opentelemetry_api",
  "ordered-float 3.7.0",
  "percent-encoding 2.3.0",
  "rand 0.8.5",
@@ -16426,12 +16325,15 @@ dependencies = [
 name = "rosetta-core"
 version = "0.9.0"
 dependencies = [
+ "anyhow",
+ "candid",
  "hex",
  "ic-canister-client",
  "ic-canister-client-sender",
  "ic-crypto-ecdsa-secp256k1",
  "ic-crypto-internal-basic-sig-ecdsa-secp256k1",
  "ic-types",
+ "icrc-ledger-types",
  "rand 0.8.5",
  "serde",
  "serde_cbor",

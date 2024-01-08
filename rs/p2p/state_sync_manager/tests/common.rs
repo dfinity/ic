@@ -468,7 +468,7 @@ pub fn create_node(
         link.1,
     );
     let jh = ic_state_sync_manager::start_state_sync_manager(
-        log,
+        &log,
         &MetricsRegistry::default(),
         rt,
         Arc::new(transport),

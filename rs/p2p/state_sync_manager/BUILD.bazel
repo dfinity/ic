@@ -25,6 +25,7 @@ DEPENDENCIES = [
     "@crate_index//:strum",
     "@crate_index//:tokio",
     "@crate_index//:tokio-metrics",
+    "@crate_index//:tokio-util",
     "@crate_index//:zstd",
 ]
 

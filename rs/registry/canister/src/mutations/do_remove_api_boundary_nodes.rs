@@ -90,7 +90,6 @@ mod tests {
                 make_api_boundary_node_record_key(node_id), // key
                 encode_or_panic(&ApiBoundaryNodeRecord {
                     version: "version".into(),
-                    domain: "domain".into(),
                 }),
             ),
         ]);

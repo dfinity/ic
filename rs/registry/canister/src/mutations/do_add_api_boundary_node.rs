@@ -9,13 +9,11 @@ use serde::Serialize;
 
 use crate::{common::LOG_PREFIX, mutations::common::encode_or_panic, registry::Registry};
 
-use super::common::{check_replica_version_is_blessed, is_valid_domain};
-
+use super::common::check_replica_version_is_blessed;
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct AddApiBoundaryNodePayload {
     pub node_id: NodeId,
     pub version: String,
-    pub domain: String,
 }
 
 impl Registry {
@@ -35,7 +33,6 @@ impl Registry {
                 key,
                 encode_or_panic(&ApiBoundaryNodeRecord {
                     version: payload.version,
-                    domain: payload.domain,
                 }),
             ),
         ])
@@ -86,11 +83,6 @@ impl Registry {
 
         // Ensure version exists and is blessed
         check_replica_version_is_blessed(self, &payload.version);
-
-        // Ensure domain is valid
-        if !is_valid_domain(&payload.domain) {
-            panic!("invalid domain");
-        }
     }
 }
 
@@ -132,7 +124,6 @@ mod tests {
         let payload = AddApiBoundaryNodePayload {
             node_id,
             version: "version".into(),
-            domain: "example.com".into(),
         };
 
         registry.do_add_api_boundary_node(payload);
@@ -156,7 +147,6 @@ mod tests {
         let payload = AddApiBoundaryNodePayload {
             node_id,
             version: "version".into(),
-            domain: "example.com".into(),
         };
 
         registry.maybe_apply_mutation_internal(vec![
@@ -165,7 +155,6 @@ mod tests {
                 make_api_boundary_node_record_key(payload.node_id), // key
                 encode_or_panic(&ApiBoundaryNodeRecord {
                     version: payload.version.clone(),
-                    domain: payload.domain.clone(),
                 }),
             ),
         ]);
@@ -203,7 +192,6 @@ mod tests {
         let payload = AddApiBoundaryNodePayload {
             node_id,
             version: "version".into(),
-            domain: "example.com".into(),
         };
 
         registry.do_add_api_boundary_node(payload);
@@ -227,7 +215,6 @@ mod tests {
         let payload = AddApiBoundaryNodePayload {
             node_id,
             version: "version".into(),
-            domain: "example.com".into(),
         };
 
         registry.do_add_api_boundary_node(payload);
@@ -279,7 +266,6 @@ mod tests {
         let payload = AddApiBoundaryNodePayload {
             node_id,
             version: "version".into(),
-            domain: "example.com".into(),
         };
 
         registry.do_add_api_boundary_node(payload);

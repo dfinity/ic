@@ -37,6 +37,7 @@ use tokio::{
     select,
     task::{JoinHandle, JoinSet},
 };
+use tokio_util::sync::CancellationToken;
 
 use crate::ongoing::start_ongoing_state_sync;
 
@@ -82,19 +83,21 @@ pub fn build_axum_router<T: 'static>(
 }
 
 pub fn start_state_sync_manager<T: Send + 'static>(
-    log: ReplicaLogger,
+    log: &ReplicaLogger,
     metrics: &MetricsRegistry,
     rt: &Handle,
     transport: Arc<dyn Transport>,
     state_sync: Arc<dyn StateSyncClient<Message = T>>,
     advert_receiver: tokio::sync::mpsc::Receiver<(StateSyncArtifactId, NodeId)>,
 ) -> JoinHandle<()> {
+    let cancellation = CancellationToken::new();
     let state_sync_manager_metrics = StateSyncManagerMetrics::new(metrics);
     let manager = StateSyncManager {
-        log,
+        log: log.clone(),
         rt: rt.clone(),
         metrics: state_sync_manager_metrics,
         transport,
+        cancellation,
         state_sync,
         advert_receiver,
         ongoing_state_sync: None,
@@ -107,6 +110,7 @@ struct StateSyncManager<T> {
     rt: Handle,
     metrics: StateSyncManagerMetrics,
     transport: Arc<dyn Transport>,
+    cancellation: CancellationToken,
     state_sync: Arc<dyn StateSyncClient<Message = T>>,
     advert_receiver: tokio::sync::mpsc::Receiver<(StateSyncArtifactId, NodeId)>,
     ongoing_state_sync: Option<OngoingStateSyncHandle>,
@@ -118,6 +122,9 @@ impl<T: 'static + Send> StateSyncManager<T> {
         let mut advertise_task = JoinSet::new();
         loop {
             select! {
+                () = self.cancellation.cancelled() => {
+                    break;
+                }
                 // Make sure we only have one active advertise task.
                 _ = interval.tick(), if advertise_task.is_empty() => {
                     advertise_task.spawn_on(
@@ -136,6 +143,7 @@ impl<T: 'static + Send> StateSyncManager<T> {
                 Some(_) = advertise_task.join_next() => {}
             }
         }
+        advertise_task.shutdown().await;
     }
 
     async fn handle_advert(&mut self, artifact_id: StateSyncArtifactId, peer_id: NodeId) {
@@ -173,6 +181,7 @@ impl<T: 'static + Send> StateSyncManager<T> {
                 artifact_id,
                 self.state_sync.clone(),
                 self.transport.clone(),
+                self.cancellation.child_token(),
             );
             // Add peer that initiated this state sync to ongoing state sync.
             ongoing

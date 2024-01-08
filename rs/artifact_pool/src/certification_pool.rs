@@ -240,6 +240,9 @@ impl MutablePool<CertificationArtifact> for CertificationPoolImpl {
 pub trait MutablePoolSection {
     /// Insert a [`CertificationMessage`] into the pool.
     fn insert(&self, message: CertificationMessage);
+    /// Lookup a [`CertificationMessage`] by [`CertificationMessageId`]. Return the
+    /// certification message if it exists, or None otherwise.
+    fn get(&self, msg_id: &CertificationMessageId) -> Option<CertificationMessage>;
     /// Get the height indexed pool section for full [`Certification`]s.
     fn certifications(&self) -> &dyn HeightIndexedPool<Certification>;
     /// Get the height indexed pool section for [`CertificationShare`]s.
@@ -317,21 +320,13 @@ impl ValidatedPoolReader<CertificationArtifact> for CertificationPoolImpl {
                 self.unvalidated_shares
                     .lookup(id.height)
                     .any(|share| &crypto_hash(share) == hash)
-                    || self
-                        .persistent_pool
-                        .certification_shares()
-                        .get_by_height(id.height)
-                        .any(|share| &crypto_hash(&share) == hash)
+                    || self.persistent_pool.get(id).is_some()
             }
             CertificationMessageHash::Certification(hash) => {
                 self.unvalidated_certifications
                     .lookup(id.height)
                     .any(|cert| &crypto_hash(cert) == hash)
-                    || self
-                        .persistent_pool
-                        .certifications()
-                        .get_by_height(id.height)
-                        .any(|cert| &crypto_hash(&cert) == hash)
+                    || self.persistent_pool.get(id).is_some()
             }
         }
     }
@@ -704,6 +699,37 @@ mod tests {
 
             let result = pool.apply_changes(vec![]);
             assert!(!result.poll_immediately);
+        });
+    }
+
+    #[test]
+    fn test_certification_pool_contains() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let mut pool = CertificationPoolImpl::new(
+                node_test_id(0),
+                pool_config,
+                no_op_logger(),
+                MetricsRegistry::new(),
+            );
+            let share_msg = fake_share(7, 0);
+            let cert_msg = fake_cert(8);
+
+            assert!(!pool.contains(&CertificationMessageId::from(&share_msg)));
+            assert!(!pool.contains(&CertificationMessageId::from(&cert_msg)));
+
+            let result = pool.apply_changes(vec![
+                ChangeAction::AddToValidated(share_msg.clone()),
+                ChangeAction::AddToValidated(cert_msg.clone()),
+            ]);
+            assert_eq!(result.adverts.len(), 2);
+            assert!(result.purged.is_empty());
+            assert!(result.poll_immediately);
+            assert_eq!(
+                pool.certification_at_height(Height::from(8)),
+                Some(msg_to_cert(cert_msg.clone()))
+            );
+            assert!(pool.contains(&CertificationMessageId::from(&share_msg)));
+            assert!(pool.contains(&CertificationMessageId::from(&cert_msg)));
         });
     }
 

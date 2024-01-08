@@ -373,7 +373,8 @@ impl TryFrom<&PublicKeyOrPrincipal> for PrincipalId {
     type Error = ApiError;
     fn try_from(p: &PublicKeyOrPrincipal) -> Result<PrincipalId, ApiError> {
         match p {
-            PublicKeyOrPrincipal::PublicKey(pk) => Ok(principal_id_from_public_key(pk)?),
+            PublicKeyOrPrincipal::PublicKey(pk) => principal_id_from_public_key(pk)
+                .map_err(|err| ApiError::InvalidPublicKey(false, err.into())),
             PublicKeyOrPrincipal::Principal(pid) => Ok(*pid),
         }
     }

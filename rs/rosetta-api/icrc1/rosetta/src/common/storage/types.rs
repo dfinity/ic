@@ -1,3 +1,4 @@
+use anyhow::{Context, Result};
 use candid::Nat;
 use ic_icrc1::blocks::{
     encoded_block_to_generic_block, generic_block_to_encoded_block,
@@ -77,6 +78,32 @@ impl RosettaBlock {
             .map_err(anyhow::Error::msg)?
             .transaction)
     }
+
+    pub fn get_parent_block_identifier(&self) -> BlockIdentifier {
+        self.parent_hash
+            .as_ref()
+            .map(|ph| BlockIdentifier {
+                index: self.index.saturating_sub(1),
+                hash: hex::encode(ph),
+            })
+            .unwrap_or_else(|| BlockIdentifier {
+                index: self.index,
+                hash: hex::encode(&self.block_hash),
+            })
+    }
+
+    pub fn get_transaction_identifier(&self) -> rosetta_core::identifiers::TransactionIdentifier {
+        rosetta_core::identifiers::TransactionIdentifier {
+            hash: hex::encode(&self.transaction_hash),
+        }
+    }
+
+    pub fn get_block_identifier(&self) -> rosetta_core::identifiers::BlockIdentifier {
+        rosetta_core::identifiers::BlockIdentifier {
+            index: self.index,
+            hash: hex::encode(&self.block_hash),
+        }
+    }
 }
 
 impl From<&RosettaBlock> for BlockIdentifier {
@@ -117,9 +144,9 @@ impl FromStr for RosettaToken {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<RosettaToken, Self::Err> {
-        Ok(Self(Nat::from_str(s).map_err(|err| {
-            anyhow::Error::msg(format!("Cannot parse Nat from String: {}", err))
-        })?))
+        Ok(Self(
+            Nat::from_str(s).with_context(|| "Cannot parse Nat from String.")?,
+        ))
     }
 }
 

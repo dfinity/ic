@@ -12,7 +12,7 @@ use ic_tests::{
             redirect_http_to_https_test, redirect_to_dashboard_test, redirect_to_non_raw_test,
             seo_test, sw_test,
         },
-        setup::{setup_ic_with_bn, BoundaryNodeType},
+        setup::setup_ic_with_bn,
         {constants::BOUNDARY_NODE_NAME, helpers::BoundaryNodeHttpsConfig},
     },
     driver::group::{SystemTestGroup, SystemTestSubGroup},
@@ -23,7 +23,6 @@ fn main() -> Result<()> {
     let setup = |env| {
         setup_ic_with_bn(
             BOUNDARY_NODE_NAME,
-            BoundaryNodeType::BoundaryNode,
             BoundaryNodeHttpsConfig::AcceptInvalidCertsAndResolveClientSide,
             env,
         )

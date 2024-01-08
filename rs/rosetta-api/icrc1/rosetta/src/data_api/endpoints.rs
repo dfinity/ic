@@ -25,7 +25,8 @@ pub async fn network_options(
     State(state): State<Arc<AppState>>,
     request: Json<NetworkRequest>,
 ) -> Result<Json<NetworkOptionsResponse>> {
-    verify_network_id(&request.network_identifier, &state)?;
+    verify_network_id(&request.network_identifier, &state)
+        .map_err(|err| Error::invalid_network_id(&format!("{:?}", err)))?;
     Ok(Json(services::network_options(
         &state.icrc1_agent.ledger_canister_id,
     )))
@@ -35,7 +36,8 @@ pub async fn network_status(
     State(state): State<Arc<AppState>>,
     request: Json<NetworkRequest>,
 ) -> Result<Json<NetworkStatusResponse>> {
-    verify_network_id(&request.network_identifier, &state)?;
+    verify_network_id(&request.network_identifier, &state)
+        .map_err(|err| Error::invalid_network_id(&format!("{:?}", err)))?;
     Ok(Json(services::network_status(state.storage.clone())?))
 }
 
@@ -43,7 +45,8 @@ pub async fn block(
     State(state): State<Arc<AppState>>,
     request: Json<BlockRequest>,
 ) -> Result<Json<BlockResponse>> {
-    verify_network_id(&request.network_identifier, &state)?;
+    verify_network_id(&request.network_identifier, &state)
+        .map_err(|err| Error::invalid_network_id(&format!("{:?}", err)))?;
     Ok(Json(services::block(
         state.storage.clone(),
         request.block_identifier.clone(),
@@ -55,7 +58,8 @@ pub async fn block_transaction(
     State(state): State<Arc<AppState>>,
     request: Json<BlockTransactionRequest>,
 ) -> Result<Json<BlockTransactionResponse>> {
-    verify_network_id(&request.network_identifier, &state)?;
+    verify_network_id(&request.network_identifier, &state)
+        .map_err(|err| Error::invalid_network_id(&format!("{:?}", err)))?;
     Ok(Json(services::block_transaction(
         state.storage.clone(),
         request.block_identifier.clone(),
@@ -68,7 +72,8 @@ pub async fn mempool(
     State(state): State<Arc<AppState>>,
     request: Json<NetworkRequest>,
 ) -> Result<Json<MempoolResponse>> {
-    verify_network_id(&request.network_identifier, &state)?;
+    verify_network_id(&request.network_identifier, &state)
+        .map_err(|err| Error::invalid_network_id(&format!("{:?}", err)))?;
     Ok(Json(MempoolResponse::new(vec![])))
 }
 
@@ -76,6 +81,7 @@ pub async fn mempool_transaction(
     State(state): State<Arc<AppState>>,
     request: Json<MempoolTransactionRequest>,
 ) -> Result<Json<MempoolTransactionResponse>> {
-    verify_network_id(&request.network_identifier, &state)?;
+    verify_network_id(&request.network_identifier, &state)
+        .map_err(|err| Error::invalid_network_id(&format!("{:?}", err)))?;
     Err(Error::mempool_transaction_missing().into())
 }

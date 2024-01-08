@@ -330,8 +330,8 @@ impl RosettaApiHandle {
         public_keys: Option<Vec<PublicKey>>,
     ) -> Result<Result<ConstructionPayloadsResponse, RosettaError>, String> {
         let req = ConstructionPayloadsRequest {
-            network_identifier: self.network_id(),
-            metadata,
+            network_identifier: self.network_id().into(),
+            metadata: metadata.map(|m| m.into()),
             operations,
             public_keys,
         };

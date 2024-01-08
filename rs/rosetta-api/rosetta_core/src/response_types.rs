@@ -242,10 +242,32 @@ impl ConstructionPreprocessResponse {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct ConstructionMetadataResponse {
-    #[serde(rename = "metadata")]
     pub metadata: ObjectMap,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(default)]
     pub suggested_fee: Option<Vec<Amount>>,
+}
+
+/// ConstructionTransactionResponse is returned by `/construction/payloads`. It
+/// contains an unsigned transaction blob (that is usually needed to construct
+/// the a network transaction from a collection of signatures) and an array of
+/// payloads that must be signed by the caller.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct ConstructionPayloadsResponse {
+    pub unsigned_transaction: String, // = CBOR+hex-encoded 'UnsignedTransaction'
+
+    pub payloads: Vec<SigningPayload>,
+}
+
+impl ConstructionPayloadsResponse {
+    pub fn new(
+        unsigned_transaction: String,
+        payloads: Vec<SigningPayload>,
+    ) -> ConstructionPayloadsResponse {
+        ConstructionPayloadsResponse {
+            unsigned_transaction,
+            payloads,
+        }
+    }
 }

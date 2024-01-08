@@ -541,8 +541,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "ic-btc-interface": crate.spec(
-                git = "https://github.com/dfinity/bitcoin-canister",
-                rev = "be0143a014ad4bccbc2eec5e2bcbe30317c5a84c",
+                version = "^0.1.0",
             ),
             "ic-btc-validation": crate.spec(
                 git = "https://github.com/dfinity/bitcoin-canister",

@@ -100,12 +100,6 @@ after_script:
     GIT_DEPTH: 0  # Pull the complete repo initially
     GIT_STRATEGY: "fetch"  # And then pull only new commits
 
-.build-k8s-legacy:
-  extends:
-    - .build-k8s
-  image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:faf4659295a243194eba5d02a551c0a703d9f0983febf53fe833672ffde5143d"
-
 # Container images used by jobs.
 
 .ic-build-image:

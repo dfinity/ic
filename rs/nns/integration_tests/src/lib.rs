@@ -19,6 +19,9 @@ mod autonomy;
 mod bad_input;
 
 #[cfg(test)]
+mod canister_playground;
+
+#[cfg(test)]
 mod copy_inactive_neurons_to_stable_memory;
 
 #[cfg(test)]

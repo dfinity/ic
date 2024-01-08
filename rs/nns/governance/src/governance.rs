@@ -647,9 +647,6 @@ impl NnsFunction {
             NnsFunction::RemoveApiBoundaryNodes => {
                 (REGISTRY_CANISTER_ID, "remove_api_boundary_nodes")
             }
-            NnsFunction::UpdateApiBoundaryNodeDomain => {
-                (REGISTRY_CANISTER_ID, "update_api_boundary_node_domain")
-            }
             NnsFunction::UpdateApiBoundaryNodesVersion => {
                 (REGISTRY_CANISTER_ID, "update_api_boundary_nodes_version")
             }
@@ -774,7 +771,6 @@ impl Proposal {
                             | NnsFunction::RetireReplicaVersion => Topic::ReplicaVersionManagement,
                             NnsFunction::AddApiBoundaryNode
                             | NnsFunction::RemoveApiBoundaryNodes
-                            | NnsFunction::UpdateApiBoundaryNodeDomain
                             | NnsFunction::UpdateApiBoundaryNodesVersion => {
                                 Topic::ApiBoundaryNodeManagement
                             }

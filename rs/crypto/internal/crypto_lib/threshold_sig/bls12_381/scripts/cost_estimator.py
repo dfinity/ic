@@ -167,7 +167,11 @@ class Time(object):
 
 class Bytes(object):
     def __init__(self, n):
-        self.val = n
+        if isinstance(n, int):
+            self.val = n
+        else:
+            assert isinstance(n, Bytes)
+            self.val = n.val
 
     def __add__(self, o):
         return Bytes(self.val + o.val)
@@ -282,11 +286,18 @@ class NidkgCosts(object):
 nidkg_expr = """
 security_level = 256
 g1_bytes = 48
+g2_bytes = 96
 gt_bytes = 576
 gt_hash_bytes = 28
 scalar_bytes = 32
 
-receivers = 28
+subnet_size = 28
+receivers = subnet_size
+dealers = threshold + 1
+
+faults_tolerated = (subnet_size - 1) // 3
+
+max_corrupt_dealers = faults_tolerated
 
 threshold = (2 * receivers + 1) // 3
 
@@ -296,12 +307,13 @@ chunking_rep = 32
 challenge_bits = ceil(security_level / chunking_rep)
 
 number_of_chunks = ceil(security_level / chunk_size)
+
+# chunking proof
 chunking_s = receivers * number_of_chunks * pow2(chunk_size) * pow2(challenge_bits)
 chunking_z = 2 * chunking_s * chunking_rep
 
 chunking_proof_bytes = g1_bytes*(2*chunking_rep + 3 + receivers) + scalar_bytes*(1 + chunking_rep + receivers)
 
-# assumes scalar is free which is basically true
 chunking_proof_gen_cost = cost(g1,hash) + cost(g1,mul,chunking_rep) + cost(g1,mul,receivers+1) + cost(g1,muln,receivers + 1) + cost(g1,mul2,chunking_rep)
 
 chunking_proof_verify_cost = cost(g1,mul,receivers+1) + receivers * cost(g1,muln,number_of_chunks) + chunking_rep*cost(g1,muln_sparse,receivers*number_of_chunks) + 2*cost(g1,muln,chunking_rep) + cost(g1,muln,receivers)
@@ -311,10 +323,28 @@ chunking_proof_number_of_g1 = (2*chunking_rep + 3 + receivers)
 chunking_proof_serialize_cost = chunking_proof_number_of_g1 * cost(g1,serialize)
 chunking_proof_deserialize_cost = chunking_proof_number_of_g1 * cost(g1,deserialize)
 
+# sharing proof
+sharing_proof_bytes = g1_bytes*2 + g2_bytes + scalar_bytes*2
+
+sharing_proof_gen_cost = cost(g1,mul) + cost(g2,mul) + cost(g1,muln,receivers) + cost(g1,mul2)
+
+sharing_proof_verify_cost = cost(g1,mul)*2 + cost(g2,muln,threshold) + 2*cost(g2,mul) + cost(g1,muln,receivers) + cost(g1,mul) + cost(g1,muln,receivers) + cost(g1,mul2)
+
+public_coeff_bytes = threshold*g2_bytes
+
+nidkg_ciphertext_bytes = number_of_chunks * (2*g1_bytes + g2_bytes) + receivers * number_of_chunks * g1_bytes
+
+# this is size of a non-resharing transcript
+nidkg_transcript_bytes = (max_corrupt_dealers + 1) * nidkg_ciphertext_bytes + public_coeff_bytes
+
+nidkg_dealing_bytes = public_coeff_bytes + nidkg_ciphertext_bytes + chunking_proof_bytes + sharing_proof_bytes
+
 bsgs_table_mult = 1
+bsgs_index_bytes = 8
 bsgs_range = 2*chunking_z - 1
 bsgs_table_elements = bsgs_table_mult * sqrt(bsgs_range)
-bsgs_table_bytes = bsgs_table_elements * gt_hash_bytes
+bsgs_table_overhead = 1.73
+bsgs_table_bytes = ceil(bsgs_table_overhead * bsgs_table_elements) * (gt_hash_bytes + bsgs_index_bytes)
 
 bsgs_setup_cost = bsgs_table_elements * cost(gt,add)
 bsgs_online_ops = ceil(bsgs_range / bsgs_table_elements)
@@ -344,7 +374,8 @@ class Repl(cmd.Cmd, object):
         """Evaluate an expression"""
         try:
             for v in arg.split(' '):
-                print("%s = %s" % (v, self.rules.eval(v)))
+                for f in self.rules.match_prefix(v):
+                    print("%s = %s" % (f, self.rules.eval(f)))
         except KeyError as e:
             print("Variable not found: ", e)
 
@@ -365,8 +396,12 @@ class Repl(cmd.Cmd, object):
 
     def do_keys(self, arg):
         """List stored expressions (with optional prefix matching)"""
-        for f in self.rules.match_prefix(arg):
-            print(f, "=", self.rules.expr(f))
+        for v in arg.split(' '):
+            for f in self.rules.match_prefix(v):
+                print("%s = %s" % (f, self.rules.expr(f)))
+
+    def complete_keys(self, text, line, begidx, endidx):
+        return sorted(self.rules.match_prefix(text))
 
     def do_quit(self, arg):
         """Exit the script"""

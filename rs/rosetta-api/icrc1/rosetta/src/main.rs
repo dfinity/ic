@@ -231,7 +231,7 @@ async fn load_metadata(
     let ic_metadata_entries = icrc1_agent
         .metadata(CallMode::Update)
         .await
-        .map_err(|e| anyhow::Error::msg(format!("Failed to get metadata: {:?}", e)))?
+        .with_context(|| "Failed to get metadata")?
         .iter()
         .map(|(key, value)| MetadataEntry::from_metadata_value(key, value))
         .collect::<Result<Vec<MetadataEntry>>>()?;

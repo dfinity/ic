@@ -13,6 +13,7 @@ use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::types::v1 as pb;
 use ic_types::consensus::certification::CertificationMessageHash;
+use ic_types::consensus::HasHash;
 use ic_types::{
     artifact::{CertificationMessageId, ConsensusMessageId, EcdsaMessageId},
     batch::BatchPayload,
@@ -205,9 +206,9 @@ impl From<(Height, &CryptoHash)> for IdKey {
 
 // This conversion is lossy because height and type tag are not preserved.
 // It is okay because we don't expect reverse conversion.
-impl From<&ConsensusMessageId> for IdKey {
-    fn from(id: &ConsensusMessageId) -> IdKey {
-        IdKey::from((id.height, id.hash.digest()))
+impl<T: HasHeight + HasHash> From<&T> for IdKey {
+    fn from(id: &T) -> IdKey {
+        IdKey::from((id.height(), id.hash()))
     }
 }
 
@@ -1408,6 +1409,23 @@ impl crate::certification_pool::MutablePoolSection
         };
     }
 
+    fn get(&self, msg_id: &CertificationMessageId) -> Option<CertificationMessage> {
+        let tx = log_err!(self.db_env.begin_ro_txn(), self.log, "begin_ro_txn")?;
+        let key = IdKey::from(msg_id);
+        log_err_except!(
+            CertificationMessage::load_as::<CertificationMessage>(
+                &key,
+                self.db_env.clone(),
+                self.artifacts,
+                &tx,
+                &self.log
+            ),
+            self.log,
+            lmdb::Error::NotFound,
+            format!("get {:?}", msg_id)
+        )
+    }
+
     fn purge_below(&self, height: Height) -> Vec<CertificationMessageId> {
         match self.purge_below_height(height) {
             Ok(purged) => purged,
@@ -1440,8 +1458,8 @@ impl From<EcdsaMessageId> for IdKey {
     }
 }
 
-impl From<&EcdsaPrefix> for IdKey {
-    fn from(prefix: &EcdsaPrefix) -> IdKey {
+impl From<EcdsaPrefix> for IdKey {
+    fn from(prefix: EcdsaPrefix) -> IdKey {
         let mut bytes = vec![];
         bytes.extend_from_slice(&u64::to_be_bytes(prefix.group_tag()));
         bytes.extend_from_slice(&u64::to_be_bytes(prefix.meta_hash()));
@@ -1639,7 +1657,7 @@ impl EcdsaMessageDb {
             self.db_env.clone(),
             self.db,
             deserialize_fn,
-            prefix.map(|p| p.as_ref().into()),
+            prefix.map(|p| p.get().into()),
             self.log.clone(),
         ))
     }

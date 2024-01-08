@@ -43,7 +43,6 @@ use registry_canister::{
         do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
         do_retire_replica_version::RetireReplicaVersionPayload,
         do_set_firewall_config::SetFirewallConfigPayload,
-        do_update_api_boundary_node_domain::UpdateApiBoundaryNodeDomainPayload,
         do_update_api_boundary_nodes_version::UpdateApiBoundaryNodesVersionPayload,
         do_update_elected_hostos_versions::UpdateElectedHostosVersionsPayload,
         do_update_elected_replica_versions::UpdateElectedReplicaVersionsPayload,
@@ -60,6 +59,7 @@ use registry_canister::{
         node_management::{
             do_add_node::AddNodePayload, do_remove_node_directly::RemoveNodeDirectlyPayload,
             do_remove_nodes::RemoveNodesPayload,
+            do_update_node_domain_directly::UpdateNodeDomainDirectlyPayload,
             do_update_node_ipv4_config_directly::UpdateNodeIPv4ConfigDirectlyPayload,
         },
         prepare_canister_migration::PrepareCanisterMigrationPayload,
@@ -562,20 +562,6 @@ fn remove_api_boundary_nodes_(payload: RemoveApiBoundaryNodesPayload) {
     recertify_registry();
 }
 
-#[export_name = "canister_update update_api_boundary_node_domain"]
-fn update_api_boundary_node_domain() {
-    check_caller_is_governance_and_log("update_api_boundary_node_domain");
-    over(candid_one, |payload: UpdateApiBoundaryNodeDomainPayload| {
-        update_api_boundary_node_domain_(payload)
-    });
-}
-
-#[candid_method(update, rename = "update_api_boundary_node_domain")]
-fn update_api_boundary_node_domain_(payload: UpdateApiBoundaryNodeDomainPayload) {
-    registry_mut().do_update_api_boundary_node_domain(payload);
-    recertify_registry();
-}
-
 #[export_name = "canister_update update_api_boundary_nodes_version"]
 fn update_api_boundary_nodes_version() {
     check_caller_is_governance_and_log("update_api_boundary_nodes_version");
@@ -918,6 +904,26 @@ fn update_node_directly_(payload: UpdateNodeDirectlyPayload) -> Result<(), Strin
     let result = registry_mut().do_update_node_directly(payload);
     recertify_registry();
     result
+}
+
+#[candid_method(update, rename = "update_node_domain_directly")]
+fn update_node_domain_directly_(payload: UpdateNodeDomainDirectlyPayload) -> Result<(), String> {
+    registry_mut().do_update_node_domain_directly(payload);
+    recertify_registry();
+    Ok(())
+}
+
+#[export_name = "canister_update update_node_domain_directly"]
+fn update_node_domain_directly() {
+    // This method can be called by anyone
+    println!(
+        "{}call: update_node_domain_directly from: {}",
+        LOG_PREFIX,
+        dfn_core::api::caller()
+    );
+    over(candid_one, |payload: UpdateNodeDomainDirectlyPayload| {
+        update_node_domain_directly_(payload)
+    });
 }
 
 #[export_name = "canister_update update_node_ipv4_config_directly"]

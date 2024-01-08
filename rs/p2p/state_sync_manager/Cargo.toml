@@ -25,6 +25,7 @@ strum = { workspace = true }
 strum_macros = { workspace = true }
 tokio = { workspace = true }
 tokio-metrics = "0.3.0"
+tokio-util = { workspace = true }
 zstd = "0.12.4"
 
 [dev-dependencies]

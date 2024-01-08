@@ -16,18 +16,7 @@ Success::
 . The calls succeed with the expected values.
 end::catalog[] */
 
-use crate::{
-    driver::{
-        asset_canister::{DeployAssetCanister, UploadAssetRequest},
-        boundary_node::BoundaryNodeVm,
-        test_env::TestEnv,
-        test_env_api::{
-            retry_async, HasPublicApiUrl, HasTopologySnapshot, HasVm, HasWasm, IcNodeContainer,
-            RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
-        },
-    },
-    util::{agent_observes_canister_module, assert_create_agent, block_on},
-};
+use k256::SecretKey;
 
 use crate::boundary_nodes::{
     constants::{BOUNDARY_NODE_NAME, COUNTER_CANISTER_WAT},
@@ -35,14 +24,49 @@ use crate::boundary_nodes::{
         create_canister, get_install_url, install_canisters, read_counters_on_counter_canisters,
         set_counters_on_counter_canisters,
     },
+    setup::TEST_PRIVATE_KEY,
 };
-use std::{iter, net::SocketAddrV6, time::Duration};
+use crate::{
+    driver::{
+        asset_canister::{DeployAssetCanister, UploadAssetRequest},
+        boundary_node::BoundaryNodeVm,
+        test_env::TestEnv,
+        test_env_api::{
+            retry_async, GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, HasVm,
+            HasWasm, IcNodeContainer, RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+        },
+    },
+    nns::{self, vote_execute_proposal_assert_executed},
+    util::{agent_observes_canister_module, assert_create_agent, block_on, runtime_from_url},
+};
+use candid::{Decode, Encode};
+use discower_bowndary::api_nodes_discovery::{Fetch, RegistryFetcher};
+use ic_canister_client::Sender;
+use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_nns_common::types::NeuronId;
+use ic_nns_constants::REGISTRY_CANISTER_ID;
+use ic_nns_governance::pb::v1::NnsFunction;
+use ic_nns_test_utils::governance::submit_external_update_proposal;
+use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
+use registry_canister::mutations::{
+    do_add_api_boundary_node::AddApiBoundaryNodePayload,
+    node_management::do_update_node_domain_directly::UpdateNodeDomainDirectlyPayload,
+};
+
+use reqwest::{redirect::Policy, ClientBuilder};
+use std::{
+    iter,
+    net::{SocketAddr, SocketAddrV6},
+    time::Duration,
+};
 
 use anyhow::{anyhow, bail, Error};
 use futures::stream::FuturesUnordered;
 use ic_agent::{
-    agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport, export::Principal,
-    Agent,
+    agent::{http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport, Agent},
+    export::Principal,
+    identity::Secp256k1Identity,
 };
 
 use serde::Deserialize;
@@ -2822,6 +2846,187 @@ pub fn canister_routing_test(env: TestEnv) {
     let counters = block_on(read_counters_on_counter_canisters(
         &log,
         bn_agent,
+        canister_ids,
+        CANISTER_RETRY_BACKOFF,
+        CANISTER_RETRY_TIMEOUT,
+    ));
+    assert_eq!(counters, canister_values);
+}
+
+/* tag::catalog[]
+Title:: API Boundary Nodes Decentralization
+
+Goal:: Verify that API Boundary Nodes added to the registry via proposals are functional
+
+Runbook:
+. IC with two unassigned nodes
+. Both unassigned nodes are converted to the API Boundary Nodes via proposals
+. Assert that API BN records are present in the registry
+. TODO: assert that calls to the IC via the domains of the newly added API BN are successful
+
+end::catalog[] */
+
+pub fn decentralization_test(env: TestEnv) {
+    let log = env.logger();
+    let nns_node = env.get_first_healthy_nns_node_snapshot();
+    let nns_url = nns_node.get_public_url();
+    let unassigned_nodes: Vec<_> = env.topology_snapshot().unassigned_nodes().collect();
+    info!(log, "Asserting no API BN domains exist in the registry");
+    let fetcher = RegistryFetcher::new(nns_url);
+    let api_domains: Vec<String> =
+        block_on(fetcher.api_node_domains_from_registry()).expect("failed to get API BN domains");
+    assert_eq!(api_domains, Vec::<&str>::new());
+    info!(
+        log,
+        "Adding two API BNs from the unassigned nodes to the registry via proposals"
+    );
+    let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+    let governance = nns::get_governance_canister(&nns_runtime);
+    let version = block_on(crate::nns::get_software_version_from_snapshot(&nns_node))
+        .expect("could not obtain replica software version");
+    // Identity is needed to execute `update_node_domain_directly` as the caller is checked.
+    let agent_with_identity = {
+        let mut agent = nns_node.build_default_agent();
+        let identity = Secp256k1Identity::from_private_key(
+            SecretKey::from_sec1_pem(TEST_PRIVATE_KEY).unwrap(),
+        );
+        agent.set_identity(identity);
+        agent
+    };
+
+    for (idx, node) in unassigned_nodes.iter().enumerate() {
+        let domain = format!("api{}.com", idx + 1);
+        let update_domain_payload = UpdateNodeDomainDirectlyPayload {
+            node_id: node.node_id,
+            domain: Some(domain.clone()),
+        };
+        info!(
+            log,
+            "Setting domain name of the unassigned node with id={} to {} ...", node.node_id, domain
+        );
+        let call_result: Vec<u8> = block_on(
+            agent_with_identity
+                .update(&REGISTRY_CANISTER_ID.into(), "update_node_domain_directly")
+                .with_arg(Encode!(&update_domain_payload).unwrap())
+                .call_and_wait(),
+        )
+        .expect("Could not change domain name of the node");
+        assert_eq!(Decode!(&call_result, Result<(), String>).unwrap(), Ok(()));
+        info!(
+            log,
+            "Successfully updated domain name of the unassigned node with id={}", node.node_id
+        );
+        let proposal_payload = AddApiBoundaryNodePayload {
+            node_id: node.node_id,
+            version: version.clone().into(),
+        };
+        let proposal_id = block_on(submit_external_update_proposal(
+            &governance,
+            Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
+            NeuronId(TEST_NEURON_1_ID),
+            NnsFunction::AddApiBoundaryNode,
+            proposal_payload,
+            String::from("Add an API boundary node"),
+            "Motivation: API boundary node testing".to_string(),
+        ));
+        block_on(vote_execute_proposal_assert_executed(
+            &governance,
+            proposal_id,
+        ));
+        info!(
+            log,
+            "Proposal with id={} for unassigned node with id={} has been executed successfully",
+            proposal_id,
+            node.node_id
+        );
+    }
+
+    info!(
+        log,
+        "Asserting API BN domains are now present in the registry"
+    );
+    let api_domains: Vec<String> =
+        block_on(fetcher.api_node_domains_from_registry()).expect("failed to get API BN domains");
+    assert_eq!(api_domains, vec!["api1.com", "api2.com"]);
+
+    // open the firewall ports - this is temporary until we complete the firewall for API BNs in the orchestrator
+    for node in unassigned_nodes.iter() {
+        node.block_on_bash_script(&indoc::formatdoc! {r#"
+            sudo nft add rule ip6 filter INPUT tcp dport 4444 accept
+        "#})
+            .expect("unable to open firewall port");
+    }
+
+    // create an HTTP client for the two API BNs
+    let http_client = {
+        let mut client_builder = ClientBuilder::new()
+            .redirect(Policy::none())
+            .danger_accept_invalid_certs(true);
+        for (idx, node) in unassigned_nodes.iter().enumerate() {
+            // set port to 0 as it is being ignored by the client
+            let node_addr = SocketAddr::new(node.get_ip_addr(), 0);
+            client_builder = client_builder.resolve(&api_domains[idx], node_addr);
+            info!(
+                log,
+                "API BN {:?}: url {:?}, node addr {:?}", idx, api_domains[idx], node_addr
+            );
+        }
+        client_builder.build().expect("failed to build http client")
+    };
+
+    info!(log, "Checking API BNs health ...");
+    for (idx, node) in unassigned_nodes.iter().enumerate() {
+        block_on(retry_async(
+            &log,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                let response = http_client
+                    .get(format!("http://{}:4444/health", api_domains[idx]))
+                    .send()
+                    .await?;
+                if response.status().is_success() {
+                    info!(log, "API BN {:?} ({:?}) came up healthy", idx, node.node_id);
+                    return Ok(());
+                }
+                bail!("API BN {:?} ({:?}) is not yet healthy", idx, node.node_id);
+            },
+        ))
+        .expect("API BNs didn't report healthy");
+    }
+    info!(log, "Installing counter canisters");
+    let canister_values: Vec<u32> = vec![1, 3];
+    let canister_ids: Vec<Principal> = block_on(install_canisters(
+        env.topology_snapshot(),
+        wat::parse_str(COUNTER_CANISTER_WAT).unwrap().as_slice(),
+        1,
+    ));
+    info!(
+        log,
+        "Successfully installed {} counter canisters",
+        canister_ids.len()
+    );
+    let api_bn_agent = {
+        let api_bn_url = format!(
+            "http://[{:?}]:4444",
+            unassigned_nodes.first().unwrap().get_ip_addr()
+        );
+        info!(log, "Creating an agent for the API BN {api_bn_url:?}");
+        block_on(assert_create_agent(&api_bn_url))
+    };
+    info!(log, "Incrementing counters on canisters");
+    block_on(set_counters_on_counter_canisters(
+        &log,
+        api_bn_agent.clone(),
+        canister_ids.clone(),
+        canister_values.clone(),
+        CANISTER_RETRY_BACKOFF,
+        CANISTER_RETRY_TIMEOUT,
+    ));
+    info!(log, "Asserting expected counter values on canisters");
+    let counters = block_on(read_counters_on_counter_canisters(
+        &log,
+        api_bn_agent,
         canister_ids,
         CANISTER_RETRY_BACKOFF,
         CANISTER_RETRY_TIMEOUT,
