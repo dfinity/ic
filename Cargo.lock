@@ -9789,6 +9789,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-types",
  "ic-types-test-utils",
+ "prometheus",
  "slog",
 ]
 

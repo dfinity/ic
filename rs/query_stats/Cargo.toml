@@ -16,6 +16,7 @@ ic-metrics = { path = "../monitoring/metrics" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-types = { path = "../types/types" }
 crossbeam-channel = "0.5.5"
+prometheus = { workspace = true }
 slog = { workspace = true }
 
 [dev-dependencies]
