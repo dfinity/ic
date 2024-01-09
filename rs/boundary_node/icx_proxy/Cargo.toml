@@ -36,6 +36,7 @@ hyper-rustls = { version = "0.24.0", features = ["http2"] }
 itertools = { workspace = true }
 ic-agent = { workspace = true }
 ic-utils = { workspace = true, features = ["raw"] }
+jemallocator = "0.3"
 opentelemetry = { version = "0.20", features = ["metrics"] }
 opentelemetry-prometheus = "0.13.0"
 prometheus = { workspace = true }
