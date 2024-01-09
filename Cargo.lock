@@ -10474,6 +10474,7 @@ dependencies = [
  "ic-utils 0.9.0",
  "ic-wasm-types",
  "itertools 0.12.0",
+ "jemalloc-sys",
  "lazy_static",
  "libc",
  "maplit",

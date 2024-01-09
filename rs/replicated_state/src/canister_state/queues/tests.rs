@@ -122,6 +122,22 @@ impl CanisterQueuesFixture {
     }
 }
 
+#[test]
+fn foo() {
+    unsafe {
+        assert_eq!(
+            0,
+            jemalloc_sys::mallctl(
+                b"prof.dump\0".to_vec().as_mut_ptr() as *mut i8,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                0,
+            )
+        );
+    }
+}
+
 /// Can push one request to the output queues.
 #[test]
 fn can_push_output_request() {
