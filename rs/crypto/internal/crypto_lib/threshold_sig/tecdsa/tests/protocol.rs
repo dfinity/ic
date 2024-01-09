@@ -1,3 +1,4 @@
+use assert_matches::assert_matches;
 use ic_crypto_internal_threshold_sig_ecdsa::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::*;
@@ -372,4 +373,89 @@ fn invalid_signatures_are_rejected() -> Result<(), ThresholdEcdsaError> {
     }
 
     Ok(())
+}
+
+#[test]
+fn should_fail_on_hashed_message_length_mismatch() {
+    let nodes = 3;
+    let threshold = nodes / 3;
+    let number_of_dealings_corrupted = 0;
+
+    let rng = &mut reproducible_rng();
+
+    for cfg in TestConfig::all() {
+        let setup = SignatureProtocolSetup::new(
+            cfg,
+            nodes,
+            threshold,
+            number_of_dealings_corrupted,
+            Seed::from_rng(rng),
+        )
+        .expect("failed to create setup");
+
+        let alg = setup.alg();
+        let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
+        let random_beacon = Randomness::from(rng.gen::<[u8; 32]>());
+
+        let message_with_wrong_length = vec![0; cfg.signature_curve().scalar_bytes() + 1];
+
+        let sign_share_result_with_wrong_msg_length = sign_share(
+            &derivation_path,
+            &message_with_wrong_length,
+            random_beacon,
+            &setup.key.transcript,
+            &setup.kappa.transcript,
+            &setup.lambda.openings[0],
+            &setup.kappa_times_lambda.openings[0],
+            &setup.key_times_lambda.openings[0],
+            alg,
+        );
+        assert_matches!(sign_share_result_with_wrong_msg_length, Err(ThresholdEcdsaGenerateSigShareInternalError::InvalidArguments(e))
+            if e.contains("length of hashed_message") && e.contains("not matching expected length")
+        );
+
+        let signed_message = rng.gen::<[u8; 32]>().to_vec();
+
+        let proto = SignatureProtocolExecution::new(
+            setup.clone(),
+            signed_message.clone(),
+            random_beacon,
+            derivation_path.clone(),
+        );
+        let shares = proto.generate_shares().expect("failed to generate shares");
+        for (&node_index, share) in &shares {
+            let verify_share_result_with_wrong_msg_length = verify_signature_share(
+                share,
+                &derivation_path,
+                &message_with_wrong_length,
+                random_beacon,
+                node_index,
+                &setup.key.transcript,
+                &setup.kappa.transcript,
+                &setup.lambda.transcript,
+                &setup.kappa_times_lambda.transcript,
+                &setup.key_times_lambda.transcript,
+                alg,
+            );
+            assert_matches!(verify_share_result_with_wrong_msg_length, Err(ThresholdEcdsaVerifySigShareInternalError::InvalidArguments(e))
+                if e.contains("length of hashed_message") && e.contains("not matching expected length")
+            );
+        }
+
+        let sig = proto
+            .generate_signature(&shares)
+            .expect("failed to generate signature");
+        let verify_sig_result_with_wrong_msg_length = verify_threshold_signature(
+            &sig,
+            &derivation_path,
+            &message_with_wrong_length,
+            random_beacon,
+            &setup.kappa.transcript,
+            &setup.key.transcript,
+            alg,
+        );
+        assert_matches!(verify_sig_result_with_wrong_msg_length, Err(ThresholdEcdsaVerifySignatureInternalError::InvalidArguments(e))
+            if e.contains("length of hashed_message") && e.contains("not matching expected length")
+        );
+    }
 }
