@@ -654,6 +654,7 @@ impl ValidatedConfig {
             rate_limiting_of_heap_delta: FlagStatus::Disabled,
             rate_limiting_of_instructions: FlagStatus::Disabled,
             composite_queries: FlagStatus::Enabled,
+            wasm_chunk_store: FlagStatus::Enabled,
             ..HypervisorConfig::default()
         };
 
