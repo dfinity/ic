@@ -104,13 +104,10 @@ prop_compose! {
     pub fn request_metadata()(
         call_tree_depth in proptest::option::of(any::<u64>()),
         call_tree_start_time_nanos in proptest::option::of(any::<u64>()),
-        call_subtree_deadline_nanos in proptest::option::of(any::<u64>()),
     ) -> RequestMetadata {
         RequestMetadata {
             call_tree_depth,
             call_tree_start_time: call_tree_start_time_nanos
-                .map(Time::from_nanos_since_unix_epoch),
-            call_subtree_deadline: call_subtree_deadline_nanos
                 .map(Time::from_nanos_since_unix_epoch),
         }
     }

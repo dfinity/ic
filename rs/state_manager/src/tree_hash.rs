@@ -215,9 +215,6 @@ mod tests {
                                     call_tree_start_time: (i % 3 > 0)
                                         .then_some(i % 2)
                                         .map(Time::from_nanos_since_unix_epoch),
-                                    call_subtree_deadline: (i % 4 > 0)
-                                        .then_some(i % 3)
-                                        .map(Time::from_nanos_since_unix_epoch),
                                 },
                             ),
                         )
@@ -339,8 +336,8 @@ mod tests {
             "1ED37E00D177681A4111B6D45F518DF3E414B0B614333BB6552EBC0D8492B687",
             "62B2E77DFCD17C7E0CE3E762FD37281776C4B0A38CE1B83A1316614C3F849E39",
             "80D4B528CC9E09C775273994261DD544D45EFFF90B655D90FC3A6E3F633ED718",
-            "E1108326097AE9BF8212F333F4F46B9619B947CDF2A73F3223BBEBC6FC2033B6",
-            "EEC0156BE3C97CE6D7E7FBE683FFB4641463648DB6AC6818DCF90114E6A9DA72",
+            "C8E5C0C21DA665B94DD78C3CCA682A44780058E9D92BC120E7CF0DD2952CE824",
+            "E2DA77E9435CB7C1F0E598DC3B3C41D305B216AF3E806E350BED1CC16E56817F",
         ];
 
         for certification_version in CertificationVersion::iter() {
