@@ -144,10 +144,7 @@ upload_artifacts(
     visibility = ["//testnet/tools:__pkg__"],
 )
 
-BINS_TO_TEST = [
-    ":ic-starter",
-    ":replica",
-]
+BINS_TO_TEST = [":" + name for name in BINARIES]
 
 sh_test(
     name = "binary-libraries-test",
