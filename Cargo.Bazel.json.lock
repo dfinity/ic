@@ -1,5 +1,5 @@
 {
-  "checksum": "11b270196bc867f899d44e8ce32c582485e86f78183ce5a67dac2393a02cf4d7",
+  "checksum": "df2833c42a32731746dff2e0346f41de7907b71e56353faffdc2befc965bb78d",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -15337,18 +15337,8 @@
               "target": "openssh_keys"
             },
             {
-              "id": "opentelemetry 0.18.0",
-              "target": "opentelemetry",
-              "alias": "opentelemetry_0_18_0"
-            },
-            {
               "id": "opentelemetry 0.20.0",
               "target": "opentelemetry"
-            },
-            {
-              "id": "opentelemetry-prometheus 0.11.0",
-              "target": "opentelemetry_prometheus",
-              "alias": "opentelemetry_prometheus_0_11_0"
             },
             {
               "id": "opentelemetry-prometheus 0.13.0",
@@ -35892,57 +35882,6 @@
       },
       "license": "Apache-2.0"
     },
-    "opentelemetry 0.18.0": {
-      "name": "opentelemetry",
-      "version": "0.18.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/opentelemetry/0.18.0/download",
-          "sha256": "69d6c3d7288a106c0a363e4b0e8d308058d56902adefb16f4936f417ffef086e"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "opentelemetry",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "opentelemetry",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "metrics",
-            "trace"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "opentelemetry_api 0.18.0",
-              "target": "opentelemetry_api"
-            },
-            {
-              "id": "opentelemetry_sdk 0.18.0",
-              "target": "opentelemetry_sdk"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.18.0"
-      },
-      "license": "Apache-2.0"
-    },
     "opentelemetry 0.20.0": {
       "name": "opentelemetry",
       "version": "0.20.0",
@@ -36070,53 +36009,6 @@
         },
         "edition": "2021",
         "version": "0.21.0"
-      },
-      "license": "Apache-2.0"
-    },
-    "opentelemetry-prometheus 0.11.0": {
-      "name": "opentelemetry-prometheus",
-      "version": "0.11.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/opentelemetry-prometheus/0.11.0/download",
-          "sha256": "06c3d833835a53cf91331d2cfb27e9121f5a95261f31f08a1f79ab31688b8da8"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "opentelemetry_prometheus",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "opentelemetry_prometheus",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "opentelemetry 0.18.0",
-              "target": "opentelemetry"
-            },
-            {
-              "id": "prometheus 0.13.3",
-              "target": "prometheus"
-            },
-            {
-              "id": "protobuf 2.28.0",
-              "target": "protobuf"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.11.0"
       },
       "license": "Apache-2.0"
     },
@@ -36275,86 +36167,6 @@
       },
       "license": "Apache-2.0"
     },
-    "opentelemetry_api 0.18.0": {
-      "name": "opentelemetry_api",
-      "version": "0.18.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/opentelemetry_api/0.18.0/download",
-          "sha256": "c24f96e21e7acc813c7a8394ee94978929db2bcc46cf6b5014fc612bf7760c22"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "opentelemetry_api",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "opentelemetry_api",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "fnv",
-            "metrics",
-            "pin-project-lite",
-            "trace"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "fnv 1.0.7",
-              "target": "fnv"
-            },
-            {
-              "id": "futures-channel 0.3.29",
-              "target": "futures_channel"
-            },
-            {
-              "id": "futures-util 0.3.29",
-              "target": "futures_util"
-            },
-            {
-              "id": "indexmap 1.9.3",
-              "target": "indexmap"
-            },
-            {
-              "id": "once_cell 1.18.0",
-              "target": "once_cell"
-            },
-            {
-              "id": "pin-project-lite 0.2.13",
-              "target": "pin_project_lite"
-            },
-            {
-              "id": "thiserror 1.0.51",
-              "target": "thiserror"
-            }
-          ],
-          "selects": {
-            "cfg(target_arch = \"wasm32\")": [
-              {
-                "id": "js-sys 0.3.64",
-                "target": "js_sys"
-              }
-            ]
-          }
-        },
-        "edition": "2021",
-        "version": "0.18.0"
-      },
-      "license": "Apache-2.0"
-    },
     "opentelemetry_api 0.20.0": {
       "name": "opentelemetry_api",
       "version": "0.20.0",
@@ -36431,108 +36243,6 @@
         },
         "edition": "2021",
         "version": "0.20.0"
-      },
-      "license": "Apache-2.0"
-    },
-    "opentelemetry_sdk 0.18.0": {
-      "name": "opentelemetry_sdk",
-      "version": "0.18.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/opentelemetry_sdk/0.18.0/download",
-          "sha256": "1ca41c4933371b61c2a2f214bf16931499af4ec90543604ec828f7a625c09113"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "opentelemetry_sdk",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "opentelemetry_sdk",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "async-trait",
-            "crossbeam-channel",
-            "dashmap",
-            "default",
-            "fnv",
-            "metrics",
-            "percent-encoding",
-            "rand",
-            "trace"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "crossbeam-channel 0.5.8",
-              "target": "crossbeam_channel"
-            },
-            {
-              "id": "dashmap 5.5.0",
-              "target": "dashmap"
-            },
-            {
-              "id": "fnv 1.0.7",
-              "target": "fnv"
-            },
-            {
-              "id": "futures-channel 0.3.29",
-              "target": "futures_channel"
-            },
-            {
-              "id": "futures-executor 0.3.28",
-              "target": "futures_executor"
-            },
-            {
-              "id": "futures-util 0.3.29",
-              "target": "futures_util"
-            },
-            {
-              "id": "once_cell 1.18.0",
-              "target": "once_cell"
-            },
-            {
-              "id": "opentelemetry_api 0.18.0",
-              "target": "opentelemetry_api"
-            },
-            {
-              "id": "percent-encoding 2.3.0",
-              "target": "percent_encoding"
-            },
-            {
-              "id": "rand 0.8.5",
-              "target": "rand"
-            },
-            {
-              "id": "thiserror 1.0.51",
-              "target": "thiserror"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "async-trait 0.1.73",
-              "target": "async_trait"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.18.0"
       },
       "license": "Apache-2.0"
     },
