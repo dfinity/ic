@@ -80,8 +80,8 @@ const ENABLE_NEW_P2P_CONSENSUS: bool = false;
 const ENABLE_NEW_P2P_CERTIFICATION: bool = false;
 const ENABLE_NEW_P2P_DKG: bool = false;
 const ENABLE_NEW_P2P_INGRESS: bool = false;
-const ENABLE_NEW_P2P_ECDSA: bool = false;
-const ENABLE_NEW_P2P_HTTPS_OUTCALLS: bool = false;
+const ENABLE_NEW_P2P_ECDSA: bool = true;
+const ENABLE_NEW_P2P_HTTPS_OUTCALLS: bool = true;
 
 struct P2PSenders {
     consensus: Channel<ConsensusArtifact>,
