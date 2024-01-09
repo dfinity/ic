@@ -72,7 +72,7 @@ enum CleanupError {
         #[source]
         source: std::io::Error,
     },
-    #[error("error determining if secret key store file '{old_sks_file}' and old secret key store '{current_sks_file}' are the same file: {source:?}")]
+    #[error("error determining if secret key store file '{current_sks_file}' and old secret key store '{old_sks_file}' are the same file: {source:?}")]
     InodesComparison {
         old_sks_file: String,
         current_sks_file: String,
