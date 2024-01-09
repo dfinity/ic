@@ -1205,11 +1205,11 @@ impl TestWasmExecutorCore {
         let callback = system_state
             .register_callback(Callback {
                 call_context_id,
-                originator: Some(sender),
-                respondent: Some(receiver),
+                originator: sender,
+                respondent: receiver,
                 cycles_sent: Cycles::zero(),
-                prepayment_for_response_execution: Some(prepayment_for_response_execution),
-                prepayment_for_response_transmission: Some(prepayment_for_response_transmission),
+                prepayment_for_response_execution,
+                prepayment_for_response_transmission,
                 on_reply: closure.clone(),
                 on_reject: closure,
                 on_cleanup: None,

@@ -382,7 +382,7 @@ impl CallContextManager {
                 // (EXC-877) Once this is deployed in production,
                 // it's safe to make `respondent` and `originator` non-optional.
                 // Currently optional to ensure backwards compatibility.
-                match (callback.respondent, callback.originator) {
+                match (callback.respondent(), callback.originator()) {
                     (Some(respondent), Some(originator))
                         if response.respondent != respondent
                             || response.originator != originator =>

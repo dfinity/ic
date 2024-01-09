@@ -277,7 +277,7 @@ impl PrincipalId {
         PrincipalId::try_from(&bytes[..]).unwrap()
     }
 
-    pub fn new_anonymous() -> Self {
+    pub const fn new_anonymous() -> Self {
         PrincipalId(Principal::anonymous())
     }
 

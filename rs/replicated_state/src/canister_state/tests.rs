@@ -105,11 +105,11 @@ impl CanisterStateFixture {
             .unwrap()
             .register_callback(Callback::new(
                 call_context_id,
-                Some(CANISTER_ID),
-                Some(OTHER_CANISTER_ID),
+                CANISTER_ID,
+                OTHER_CANISTER_ID,
                 Cycles::zero(),
-                Some(Cycles::new(42)),
-                Some(Cycles::new(84)),
+                Cycles::new(42),
+                Cycles::new(84),
                 WasmClosure::new(0, 2),
                 WasmClosure::new(0, 2),
                 None,
@@ -557,11 +557,11 @@ fn canister_state_callback_round_trip() {
 
     let callback = Callback::new(
         CallContextId::new(1),
-        Some(CANISTER_ID),
-        Some(OTHER_CANISTER_ID),
+        CANISTER_ID,
+        OTHER_CANISTER_ID,
         Cycles::zero(),
-        Some(Cycles::new(42)),
-        Some(Cycles::new(84)),
+        Cycles::new(42),
+        Cycles::new(84),
         WasmClosure::new(0, 2),
         WasmClosure::new(0, 2),
         None,

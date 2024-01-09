@@ -1,6 +1,6 @@
 use super::*;
 use ic_test_utilities::types::ids::canister_test_id;
-use ic_types::methods::WasmClosure;
+use ic_types::methods::{WasmClosure, UNKNOWN_CANISTER_ID};
 
 #[test]
 fn call_context_origin() {
@@ -70,22 +70,22 @@ fn call_context_handling() {
     // First call (CallContext 1) makes two outgoing calls
     let callback_id1 = call_context_manager.register_callback(Callback::new(
         call_context_id1,
-        None,
-        None,
+        UNKNOWN_CANISTER_ID,
+        UNKNOWN_CANISTER_ID,
         Cycles::zero(),
-        Some(Cycles::new(42)),
-        Some(Cycles::new(84)),
+        Cycles::new(42),
+        Cycles::new(84),
         WasmClosure::new(0, 1),
         WasmClosure::new(2, 3),
         None,
     ));
     let callback_id2 = call_context_manager.register_callback(Callback::new(
         call_context_id1,
-        None,
-        None,
+        UNKNOWN_CANISTER_ID,
+        UNKNOWN_CANISTER_ID,
         Cycles::zero(),
-        Some(Cycles::new(43)),
-        Some(Cycles::new(85)),
+        Cycles::new(43),
+        Cycles::new(85),
         WasmClosure::new(4, 5),
         WasmClosure::new(6, 7),
         None,
@@ -97,11 +97,11 @@ fn call_context_handling() {
     // Second one (CallContext 2) has one outgoing call
     let callback_id3 = call_context_manager.register_callback(Callback::new(
         call_context_id2,
-        None,
-        None,
+        UNKNOWN_CANISTER_ID,
+        UNKNOWN_CANISTER_ID,
         Cycles::zero(),
-        Some(Cycles::new(44)),
-        Some(Cycles::new(86)),
+        Cycles::new(44),
+        Cycles::new(86),
         WasmClosure::new(8, 9),
         WasmClosure::new(10, 11),
         None,
@@ -298,11 +298,11 @@ fn test_call_context_instructions_executed_is_updated() {
     // Register a callback, so the call context is not deleted in `on_canister_result()` later.
     let _callback_id = call_context_manager.register_callback(Callback::new(
         call_context_id,
-        None,
-        None,
+        UNKNOWN_CANISTER_ID,
+        UNKNOWN_CANISTER_ID,
         Cycles::zero(),
-        Some(Cycles::new(42)),
-        Some(Cycles::new(84)),
+        Cycles::new(42),
+        Cycles::new(84),
         WasmClosure::new(0, 1),
         WasmClosure::new(2, 3),
         None,
