@@ -410,7 +410,7 @@ impl SystemStateChanges {
             match update {
                 CallbackUpdate::Register(expected_id, mut callback) => {
                     if let Some(receiver) = callback_changes.get(&expected_id) {
-                        callback.respondent = Some(*receiver);
+                        callback.respondent = *receiver;
                     }
                     let id = call_context_manager.register_callback(callback);
                     if id != expected_id {

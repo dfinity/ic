@@ -205,11 +205,11 @@ pub(crate) fn into_request(
 
     let callback_id = sandbox_safe_system_state.register_callback(Callback::new(
         call_context_id,
-        Some(sender),
-        Some(destination_canister),
+        sender,
+        destination_canister,
         cycles,
-        Some(prepayment_for_response_execution),
-        Some(prepayment_for_response_transmission),
+        prepayment_for_response_execution,
+        prepayment_for_response_transmission,
         on_reply,
         on_reject,
         on_cleanup,

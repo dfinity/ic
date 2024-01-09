@@ -158,7 +158,7 @@ impl ResponseHelper {
         // have received the response, we can refund the cycles based on
         // the actual size of the response.
         let prepayment_for_response_transmission =
-            match original.callback.prepayment_for_response_transmission {
+            match original.callback.prepayment_for_response_transmission() {
                 Some(cycles) => cycles,
                 None => round
                     .cycles_account_manager
@@ -528,7 +528,7 @@ impl ResponseHelper {
         );
 
         let prepayment_for_response_execution =
-            match original.callback.prepayment_for_response_execution {
+            match original.callback.prepayment_for_response_execution() {
                 Some(cycles) => cycles,
                 None => round
                     .cycles_account_manager
