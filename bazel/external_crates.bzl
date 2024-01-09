@@ -645,7 +645,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.4.1",
             ),
             "k256": crate.spec(
-                version = "^0.13.2",
+                version = "^0.13.3",
                 features = [
                     "arithmetic",
                     "ecdsa",

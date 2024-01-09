@@ -1,5 +1,5 @@
 {
-  "checksum": "df2833c42a32731746dff2e0346f41de7907b71e56353faffdc2befc965bb78d",
+  "checksum": "39fa11b2871feac75d17b42b3a0eab7728196dbbb6c7a3510aa31d95cde75e7f",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -853,7 +853,7 @@
               "target": "mime"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -1266,7 +1266,7 @@
             ],
             "cfg(not(all(target_arch = \"arm\", target_os = \"none\")))": [
               {
-                "id": "once_cell 1.18.0",
+                "id": "once_cell 1.19.0",
                 "target": "once_cell"
               }
             ]
@@ -1352,7 +1352,7 @@
           "selects": {
             "cfg(not(all(target_arch = \"arm\", target_os = \"none\")))": [
               {
-                "id": "once_cell 1.18.0",
+                "id": "once_cell 1.19.0",
                 "target": "once_cell"
               }
             ]
@@ -3238,7 +3238,7 @@
               "target": "futures_lite"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             }
           ],
@@ -3769,7 +3769,7 @@
               "target": "memchr"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -6050,11 +6050,11 @@
               "target": "hmac"
             },
             {
-              "id": "k256 0.13.2",
+              "id": "k256 0.13.3",
               "target": "k256"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -8458,7 +8458,7 @@
               "target": "instant"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -8519,7 +8519,7 @@
               "target": "instant"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -9874,7 +9874,7 @@
               "target": "indexmap"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -12182,7 +12182,7 @@
               "target": "num_traits"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -13757,7 +13757,7 @@
               "target": "lock_api"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -15217,7 +15217,7 @@
               "target": "json5"
             },
             {
-              "id": "k256 0.13.2",
+              "id": "k256 0.13.3",
               "target": "k256"
             },
             {
@@ -15329,7 +15329,7 @@
               "target": "num_cpus"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -17738,7 +17738,7 @@
               "target": "log"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -17813,7 +17813,7 @@
               "target": "hex"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -18063,7 +18063,7 @@
               "target": "hex"
             },
             {
-              "id": "k256 0.13.2",
+              "id": "k256 0.13.3",
               "target": "k256"
             },
             {
@@ -18428,7 +18428,7 @@
               "target": "indenter"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             }
           ],
@@ -23191,7 +23191,7 @@
               "target": "log"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -24167,7 +24167,7 @@
               "target": "ic_verify_bls_signature"
             },
             {
-              "id": "k256 0.13.2",
+              "id": "k256 0.13.3",
               "target": "k256"
             },
             {
@@ -25370,7 +25370,7 @@
               "target": "ic_agent"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -26546,7 +26546,7 @@
               "target": "num_format"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -28078,13 +28078,13 @@
       },
       "license": "CC0-1.0"
     },
-    "k256 0.13.2": {
+    "k256 0.13.3": {
       "name": "k256",
-      "version": "0.13.2",
+      "version": "0.13.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/k256/0.13.2/download",
-          "sha256": "3f01b677d82ef7a676aa37e099defd83a28e15687112cafdd112d60236b6115b"
+          "url": "https://crates.io/api/v1/crates/k256/0.13.3/download",
+          "sha256": "956ff9b67e26e1a6a866cb758f12c6f8746208489e3e4a4b5580802f2f0a587b"
         }
       },
       "targets": [
@@ -28139,7 +28139,7 @@
               "target": "elliptic_curve"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -28158,7 +28158,7 @@
           "-C",
           "opt-level=3"
         ],
-        "version": "0.13.2"
+        "version": "0.13.3"
       },
       "license": "Apache-2.0 OR MIT"
     },
@@ -28675,7 +28675,7 @@
               "target": "k8s_openapi"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -29719,7 +29719,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             }
           ],
@@ -33221,7 +33221,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -35315,13 +35315,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "once_cell 1.18.0": {
+    "once_cell 1.19.0": {
       "name": "once_cell",
-      "version": "1.18.0",
+      "version": "1.19.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/once_cell/1.18.0/download",
-          "sha256": "dd8b5dd2ae5ed71462c540258bedcb51965123ad7e7ccf4b9a8cafaa4a63576d"
+          "url": "https://crates.io/api/v1/crates/once_cell/1.19.0/download",
+          "sha256": "3fdb12b2476b595f9358c5161aa467c2438859caa136dec86c26fdd2efe17b92"
         }
       },
       "targets": [
@@ -35438,7 +35438,7 @@
           }
         },
         "edition": "2021",
-        "version": "1.18.0"
+        "version": "1.19.0"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -35982,7 +35982,7 @@
               "target": "indexmap"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -36040,7 +36040,7 @@
         "deps": {
           "common": [
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -36101,7 +36101,7 @@
         "deps": {
           "common": [
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -36216,7 +36216,7 @@
               "target": "indexmap"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -36303,7 +36303,7 @@
               "target": "futures_util"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -36411,7 +36411,7 @@
               "target": "glob"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -38022,7 +38022,7 @@
         "deps": {
           "common": [
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -39444,7 +39444,7 @@
               "target": "nix"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -40316,7 +40316,7 @@
         "deps": {
           "common": [
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -41004,7 +41004,7 @@
               "target": "itertools"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -41277,7 +41277,7 @@
               "target": "multimap"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -41800,7 +41800,7 @@
               "target": "crossbeam_utils"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             }
           ],
@@ -44617,7 +44617,7 @@
                 "target": "mime"
               },
               {
-                "id": "once_cell 1.18.0",
+                "id": "once_cell 1.19.0",
                 "target": "once_cell"
               },
               {
@@ -44938,13 +44938,13 @@
                 "target": "libc"
               },
               {
-                "id": "once_cell 1.18.0",
+                "id": "once_cell 1.19.0",
                 "target": "once_cell"
               }
             ],
             "cfg(any(target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"illumos\", target_os = \"netbsd\", target_os = \"openbsd\", target_os = \"solaris\"))": [
               {
-                "id": "once_cell 1.18.0",
+                "id": "once_cell 1.19.0",
                 "target": "once_cell"
               }
             ],
@@ -47445,7 +47445,7 @@
               "target": "html5ever"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -51759,7 +51759,7 @@
               "target": "debug_unreachable"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -54119,7 +54119,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             }
           ],
@@ -56405,7 +56405,7 @@
         "deps": {
           "common": [
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             }
           ],
@@ -56505,7 +56505,7 @@
         "deps": {
           "common": [
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -56610,7 +56610,7 @@
         "deps": {
           "common": [
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -56690,7 +56690,7 @@
               "target": "nu_ansi_term"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -59352,7 +59352,7 @@
               "target": "log"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -60221,7 +60221,7 @@
               "target": "object"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
@@ -60748,7 +60748,7 @@
         "deps": {
           "common": [
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             }
           ],
@@ -61538,7 +61538,7 @@
           "selects": {
             "cfg(windows)": [
               {
-                "id": "once_cell 1.18.0",
+                "id": "once_cell 1.19.0",
                 "target": "once_cell"
               }
             ]
@@ -63656,7 +63656,7 @@
               "target": "log"
             },
             {
-              "id": "once_cell 1.18.0",
+              "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
             {
