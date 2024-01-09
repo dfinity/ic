@@ -1,3 +1,4 @@
+use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
@@ -30,7 +31,8 @@ use ic_sns_governance::pb::v1 as sns_pb;
 use ic_sns_init::distributions::MAX_DEVELOPER_DISTRIBUTION_COUNT;
 use ic_sns_swap::{
     pb::v1::{
-        FinalizeSwapResponse, GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse,
+        ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse,
+        GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse,
         GetDerivedStateRequest, GetDerivedStateResponse, GetLifecycleRequest, GetLifecycleResponse,
         Lifecycle, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse,
     },
@@ -41,7 +43,7 @@ use ic_sns_wasm::pb::v1::{
     GetDeployedSnsByProposalIdRequest, GetDeployedSnsByProposalIdResponse, SnsCanisterType,
     SnsWasm,
 };
-use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs};
+use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, DEFAULT_TRANSFER_FEE};
 use icrc_ledger_types::icrc1::{
     account::Account,
     transfer::{TransferArg, TransferError},
@@ -265,7 +267,7 @@ fn refresh_buyer_tokens(
     swap_canister_id: PrincipalId,
     buyer: PrincipalId,
     confirmation_text: Option<String>,
-) -> RefreshBuyerTokensResponse {
+) -> Result<RefreshBuyerTokensResponse, String> {
     let result = pocket_ic
         .update_call(
             swap_canister_id.into(),
@@ -277,12 +279,35 @@ fn refresh_buyer_tokens(
             })
             .unwrap(),
         )
-        .unwrap();
+        .map_err(|err| err.to_string())?;
     let result = match result {
         WasmResult::Reply(result) => result,
         WasmResult::Reject(s) => panic!("Call to refresh_buyer_tokens failed: {:#?}", s),
     };
-    Decode!(&result, RefreshBuyerTokensResponse).unwrap()
+    Ok(Decode!(&result, RefreshBuyerTokensResponse).unwrap())
+}
+
+fn error_refund_icp(
+    pocket_ic: &PocketIc,
+    swap_canister_id: PrincipalId,
+    source_principal_id: PrincipalId,
+) -> ErrorRefundIcpResponse {
+    let result = pocket_ic
+        .update_call(
+            swap_canister_id.into(),
+            Principal::anonymous(),
+            "error_refund_icp",
+            Encode!(&ErrorRefundIcpRequest {
+                source_principal_id: Some(source_principal_id),
+            })
+            .unwrap(),
+        )
+        .unwrap();
+    let result = match result {
+        WasmResult::Reply(result) => result,
+        WasmResult::Reject(s) => panic!("Call to error_refund_icp failed: {:#?}", s),
+    };
+    Decode!(&result, ErrorRefundIcpResponse).unwrap()
 }
 
 fn get_derived_state(
@@ -778,7 +803,7 @@ fn install_nns_canisters(
 }
 
 fn test_sns_lifecycle(
-    ensure_swap_time_run_out_without_sufficient_direct_participation: bool,
+    ensure_swap_timeout_is_reached: bool,
     create_service_nervous_system_proposal: CreateServiceNervousSystem,
 ) {
     // 1. Prepare the world
@@ -955,7 +980,7 @@ fn test_sns_lifecycle(
         account_balance(&pocket_ic, &direct_participant_icp_account),
         Tokens::from_e8s(1_000_000 * E8)
     );
-    let effective_participation_amount_e8s = 1_000_000 * E8 - 10_000;
+    let transferred_participation_amount_e8s = 1_000_000 * E8 - DEFAULT_TRANSFER_FEE.get_e8s();
     icrc1_transfer(
         &pocket_ic,
         direct_participant,
@@ -965,37 +990,61 @@ fn test_sns_lifecycle(
             fee: None,
             created_at_time: None,
             memo: None,
-            amount: Nat::from(effective_participation_amount_e8s),
+            amount: Nat::from(transferred_participation_amount_e8s),
         },
     )
     .unwrap();
+    // Ensure there are no tokens left on this user's account (this slightly simplifies the checks).
     assert_eq!(
         account_balance(&pocket_ic, &direct_participant_icp_account),
         Tokens::from_e8s(0)
     );
 
     // 4. Force the swap to reach either Aborted, or Committed.
-    if ensure_swap_time_run_out_without_sufficient_direct_participation {
-        // ... either by advancing the time
+    let expected_refund_e8s = if ensure_swap_timeout_is_reached {
+        // First, await the end of the swap period. Then try to participate (expected to fail).
         pocket_ic.advance_time(Duration::from_secs(30 * SECONDS_PER_DAY)); // 30 days
         await_swap_lifecycle(&pocket_ic, swap_canister_id, Lifecycle::Aborted).unwrap();
-    } else {
-        // ... or by participating in the swap
-        refresh_buyer_tokens(&pocket_ic, swap_canister_id, direct_participant, None);
-        await_swap_lifecycle(&pocket_ic, swap_canister_id, Lifecycle::Committed).unwrap();
-    }
 
-    // Double check that auto-finalization worked as expected, i.e.,
+        let err = assert_matches!(refresh_buyer_tokens(&pocket_ic, swap_canister_id, direct_participant, None), Err(err) => err);
+        assert!(err.contains("Participation is possible only when the Swap is in the OPEN state. Current state is Aborted."));
+
+        // Expecting to get refunded with Transferred - (ICP Ledger transfer fee).
+        transferred_participation_amount_e8s - DEFAULT_TRANSFER_FEE.get_e8s()
+    } else {
+        let expected_effective_participation_amount_e8s = transferred_participation_amount_e8s.min(
+            swap_parameters
+                .maximum_direct_participation_icp
+                .unwrap()
+                .e8s
+                .unwrap(),
+        );
+        // First, participating in the swap. Then await the swap finalization.
+        assert_eq!(
+            refresh_buyer_tokens(&pocket_ic, swap_canister_id, direct_participant, None),
+            Ok(RefreshBuyerTokensResponse {
+                icp_accepted_participation_e8s: expected_effective_participation_amount_e8s,
+                icp_ledger_account_balance_e8s: transferred_participation_amount_e8s,
+            })
+        );
+        await_swap_lifecycle(&pocket_ic, swap_canister_id, Lifecycle::Committed).unwrap();
+
+        // Expecting to get refunded with Transferred - Accepted - (ICP Ledger transfer fee).
+        transferred_participation_amount_e8s
+            - expected_effective_participation_amount_e8s
+            - DEFAULT_TRANSFER_FEE.get_e8s()
+    };
+
+    // 5. Double check that auto-finalization worked as expected, i.e.,
     // `Swap.get_auto_finalization_status` returns a structure with the top-level fields being set,
     // no errors, and matching the expected pattern (different for `Aborted` and `Committed`).
     // It may take some time for the process to complete, so we should await (implemented via a busy
     // loop) rather than try just once.
-    let expected_swap_finalization_status =
-        if ensure_swap_time_run_out_without_sufficient_direct_participation {
-            SwapFinalizationStatus::Aborted
-        } else {
-            SwapFinalizationStatus::Committed
-        };
+    let expected_swap_finalization_status = if ensure_swap_timeout_is_reached {
+        SwapFinalizationStatus::Aborted
+    } else {
+        SwapFinalizationStatus::Committed
+    };
     if let Err(err) = await_swap_finalization_status(
         &pocket_ic,
         swap_canister_id,
@@ -1008,9 +1057,26 @@ fn test_sns_lifecycle(
         );
     }
 
+    // 6. Check that refunding works as expected.
+    {
+        let result = error_refund_icp(&pocket_ic, swap_canister_id, direct_participant)
+            .result
+            .expect("Error while calling Swap.error_refund_icp");
+        if let ic_sns_swap::pb::v1::error_refund_icp_response::Result::Err(err) = result {
+            panic!("{:?}", err);
+        };
+
+        // This assertion assumes works because we have consumed all of the tokens from this user's
+        // account up to the last e8.
+        assert_eq!(
+            account_balance(&pocket_ic, &direct_participant_icp_account),
+            Tokens::from_e8s(expected_refund_e8s)
+        );
+    }
+
     // Inspect the final derived state
     let derived_state = get_derived_state(&pocket_ic, swap_canister_id);
-    if ensure_swap_time_run_out_without_sufficient_direct_participation {
+    if ensure_swap_timeout_is_reached {
         assert_eq!(derived_state.direct_participation_icp_e8s.unwrap(), 0);
     } else {
         assert_eq!(
@@ -1020,7 +1086,7 @@ fn test_sns_lifecycle(
     }
 
     // Assert that the mode of SNS Governance is correct
-    if ensure_swap_time_run_out_without_sufficient_direct_participation {
+    if ensure_swap_timeout_is_reached {
         assert_eq!(
             get_mode(&pocket_ic, sns_governance_canister_id)
                 .mode
@@ -1059,7 +1125,7 @@ fn test_sns_lifecycle(
                 )),
             },
         );
-        if ensure_swap_time_run_out_without_sufficient_direct_participation {
+        if ensure_swap_timeout_is_reached {
             let err = proposal_result.unwrap_err();
             let sns_pb::GovernanceError {
                 error_type,
@@ -1091,7 +1157,7 @@ fn test_sns_lifecycle(
             sns_neuron_principal_id,
             sns_neuron_id,
         );
-        if ensure_swap_time_run_out_without_sufficient_direct_participation {
+        if ensure_swap_timeout_is_reached {
             match start_dissolving_response.command {
                 Some(sns_pb::manage_neuron_response::Command::Error(error)) => {
                     let sns_pb::GovernanceError {
@@ -1127,7 +1193,7 @@ fn test_sns_lifecycle(
         .neurons_fund_participation
         .unwrap_or_default()
     {
-        if ensure_swap_time_run_out_without_sufficient_direct_participation {
+        if ensure_swap_timeout_is_reached {
             assert_eq!(
                 derived_state.neurons_fund_participation_icp_e8s.unwrap(),
                 0,
@@ -1154,7 +1220,7 @@ fn test_sns_lifecycle_happy_scenario_with_neurons_fund_participation() {
     test_sns_lifecycle(
         true,
         CreateServiceNervousSystemBuilder::default()
-            .neurons_fund_participation(false)
+            .neurons_fund_participation(true)
             .build(),
     );
 }
@@ -1184,7 +1250,7 @@ fn test_sns_lifecycle_swap_timeout_without_neurons_fund_participation() {
     test_sns_lifecycle(
         false,
         CreateServiceNervousSystemBuilder::default()
-            .neurons_fund_participation(true)
+            .neurons_fund_participation(false)
             .build(),
     );
 }
