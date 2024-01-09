@@ -227,7 +227,7 @@ bazel-system-tests-k8s:
     - .bazel-test-all
   tags:
     - dfinity-ic
-    - ch
+    - sf
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
       when: manual

@@ -1191,7 +1191,7 @@ bazel-system-tests-k8s:
     - "./gitlab-ci/src/bazel-ci/main.sh"
   tags:
     - dfinity-ic
-    - ch
+    - sf
   timeout: 80 minutes
   variables:
     BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
