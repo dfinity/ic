@@ -197,7 +197,7 @@ mod ecdsa_sign_share {
                 assert_matches!(
                     result,
                     Err(ThresholdEcdsaSignShareError::InternalError { internal_error })
-                    if internal_error.contains("UnsupportedAlgorithm")
+                    if internal_error.contains("unsupported algorithm")
                 )
             });
     }
@@ -226,7 +226,8 @@ mod ecdsa_sign_share {
             assert_matches!(
                 result,
                 Err(ThresholdEcdsaSignShareError::InternalError { internal_error })
-                if internal_error.contains("UnsupportedAlgorithm")
+                if internal_error.contains("length of hashed_message")
+                && internal_error.contains("not matching expected length (32)")
             )
         });
     }
