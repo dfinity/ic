@@ -7,6 +7,7 @@ use std::{net::SocketAddr, path::PathBuf};
 use anyhow::Context;
 use clap::{builder::ValueParser, Parser};
 use futures::try_join;
+use jemallocator::Jemalloc;
 use tracing::{error, Instrument};
 
 mod canister_alias;
@@ -27,6 +28,9 @@ use crate::{
     metrics::{MetricParams, WithMetrics},
     validate::Validator,
 };
+
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
 
 // TODO: Remove after inspect_err stabilizes (rust-lang/rust#91345)
 trait InspectErr {
