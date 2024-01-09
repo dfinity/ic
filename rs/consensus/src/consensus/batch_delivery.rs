@@ -7,7 +7,7 @@ use crate::{
         metrics::{BatchStats, BlockStats},
         status::{self, Status},
     },
-    ecdsa::utils::get_ecdsa_subnet_public_key,
+    ecdsa::utils::{get_ecdsa_subnet_public_key, get_quadruple_ids_to_deliver},
 };
 use ic_consensus_utils::{
     crypto_hashable_to_seed, get_block_hash_string, membership::Membership, pool_reader::PoolReader,
@@ -187,6 +187,7 @@ pub fn deliver_batches(
                     messages: batch_messages,
                     randomness,
                     ecdsa_subnet_public_keys: ecdsa_subnet_public_key.into_iter().collect(),
+                    ecdsa_quadruple_ids: get_quadruple_ids_to_deliver(&block),
                     registry_version: block.context.registry_version,
                     time: block.context.time,
                     consensus_responses,

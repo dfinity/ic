@@ -29,7 +29,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
 use ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
 use ic_types::registry::RegistryClientError;
 use ic_types::{Height, RegistryVersion, SubnetId};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryInto;
 use std::sync::Arc;
 
@@ -353,6 +353,43 @@ pub(crate) fn get_enabled_signing_keys(
         .collect())
 }
 
+/// Return the set of quadruple IDs to be delivered in the batch of this block.
+/// We deliver IDs of all available quadruples that were created using the current key transcript.
+pub(crate) fn get_quadruple_ids_to_deliver(
+    block: &Block,
+) -> BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>> {
+    let Some(ecdsa) = block.payload.as_ref().as_ecdsa() else {
+        return BTreeMap::new();
+    };
+    let Some(unmasked_transcript) = ecdsa.key_transcript.current.as_ref() else {
+        return BTreeMap::new();
+    };
+    let current_key_transcript_id = unmasked_transcript.transcript_id();
+
+    let mut quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>> = BTreeMap::new();
+
+    for (quadruple_id, quadruple) in &ecdsa.available_quadruples {
+        let Some(quadruple_key_transcript) = quadruple.key_unmasked_ref.as_ref() else {
+            continue;
+        };
+
+        if current_key_transcript_id != quadruple_key_transcript.as_ref().transcript_id {
+            continue;
+        }
+
+        if let Some(key_id) = quadruple_id.key_id() {
+            if *key_id == ecdsa.key_transcript.key_id {
+                quadruple_ids
+                    .entry(key_id.clone())
+                    .or_default()
+                    .insert(quadruple_id.clone());
+            }
+        }
+    }
+
+    quadruple_ids
+}
+
 /// This function returns the ECDSA subnet public key to be added to the batch, if required.
 /// We return `Ok(Some(key))`, if
 /// - The block contains an ECDSA payload with current key transcript ref, and
@@ -425,7 +462,10 @@ mod tests {
 
     use ic_config::artifact_pool::ArtifactPoolConfig;
     use ic_consensus_mocks::{dependencies, Dependencies};
-    use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_initial_idkg_dealing_for_tests;
+    use ic_crypto_test_utils_canister_threshold_sigs::{
+        dummy_values::dummy_initial_idkg_dealing_for_tests, generate_key_transcript,
+        IDkgParticipants,
+    };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_logger::replica_logger::no_op_logger;
     use ic_protobuf::registry::{
@@ -434,9 +474,23 @@ mod tests {
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::make_ecdsa_signing_subnet_list_key;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-    use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities::{
+        consensus::fake::Fake,
+        mock_time,
+        types::ids::{node_test_id, subnet_test_id},
+    };
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
-    use ic_types::subnet_id_into_protobuf;
+    use ic_types::{
+        batch::ValidationContext,
+        consensus::{
+            ecdsa::{EcdsaPayload, UnmaskedTranscript},
+            Payload,
+        },
+        crypto::{AlgorithmId, CryptoHashOf},
+        subnet_id_into_protobuf,
+    };
+
+    use crate::ecdsa::test_utils::{create_sig_inputs, set_up_ecdsa_payload};
 
     use super::*;
 
@@ -653,5 +707,162 @@ mod tests {
             );
             assert_eq!(result, expected);
         }
+    }
+
+    fn add_available_quadruples_with_key_transcript(
+        ecdsa_payload: &mut EcdsaPayload,
+        key_transcript: UnmaskedTranscript,
+        key_id: &EcdsaKeyId,
+    ) -> Vec<QuadrupleId> {
+        let mut quadruple_ids = vec![];
+        for i in 0..10 {
+            let sig_inputs = create_sig_inputs(i);
+            let mut quadruple_id = ecdsa_payload.uid_generator.next_quadruple_id();
+            quadruple_id.1 = Some(key_id.clone());
+            quadruple_ids.push(quadruple_id.clone());
+            let mut quadruple_ref = sig_inputs.sig_inputs_ref.presig_quadruple_ref.clone();
+            quadruple_ref.key_unmasked_ref = Some(key_transcript);
+            ecdsa_payload
+                .available_quadruples
+                .insert(quadruple_id, quadruple_ref.clone());
+        }
+        quadruple_ids
+    }
+
+    fn make_block(ecdsa_payload: Option<EcdsaPayload>) -> Block {
+        Block::new(
+            CryptoHashOf::from(ic_types::crypto::CryptoHash(Vec::new())),
+            Payload::new(
+                ic_types::crypto::crypto_hash,
+                (ic_types::consensus::dkg::Summary::fake(), ecdsa_payload).into(),
+            ),
+            Height::from(123),
+            ic_types::consensus::Rank(456),
+            ValidationContext {
+                registry_version: RegistryVersion::from(99),
+                certified_height: Height::from(42),
+                time: mock_time(),
+            },
+        )
+    }
+
+    #[test]
+    fn test_get_quadruple_ids_to_deliver() {
+        let mut rng = reproducible_rng();
+        let (mut ecdsa_payload, env, _) = set_up_ecdsa_payload(
+            &mut rng,
+            subnet_test_id(1),
+            /*nodes_count=*/ 8,
+            /*should_create_key_transcript=*/ true,
+        );
+        let current_key_transcript = ecdsa_payload.key_transcript.current.clone().unwrap();
+        let key_id = &ecdsa_payload.key_transcript.key_id.clone();
+
+        let quadruple_ids_to_be_delivered = add_available_quadruples_with_key_transcript(
+            &mut ecdsa_payload,
+            current_key_transcript.unmasked_transcript(),
+            key_id,
+        );
+
+        let (dealers, receivers) = env.choose_dealers_and_receivers(
+            &IDkgParticipants::AllNodesAsDealersAndReceivers,
+            &mut rng,
+        );
+
+        let key_transcript = generate_key_transcript(
+            &env,
+            &dealers,
+            &receivers,
+            AlgorithmId::ThresholdEcdsaSecp256k1,
+            &mut rng,
+        );
+        let old_key_transcript =
+            UnmaskedTranscript::try_from((Height::from(0), &key_transcript)).unwrap();
+        let quadruple_ids_not_to_be_delivered = add_available_quadruples_with_key_transcript(
+            &mut ecdsa_payload,
+            old_key_transcript,
+            key_id,
+        );
+
+        let block = make_block(Some(ecdsa_payload));
+        let mut delivered_map = get_quadruple_ids_to_deliver(&block);
+        assert_eq!(delivered_map.len(), 1);
+        let delivered_ids = delivered_map.remove(key_id).unwrap();
+
+        assert!(!quadruple_ids_not_to_be_delivered
+            .into_iter()
+            .any(|qid| delivered_ids.contains(&qid)));
+        assert_eq!(
+            quadruple_ids_to_be_delivered,
+            delivered_ids.into_iter().collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn test_quadruples_for_invalid_key_id_should_not_be_delivered() {
+        let mut rng = reproducible_rng();
+        let (mut ecdsa_payload, _, _) = set_up_ecdsa_payload(
+            &mut rng,
+            subnet_test_id(1),
+            /*nodes_count=*/ 8,
+            /*should_create_key_transcript=*/ true,
+        );
+        let current_key_transcript = ecdsa_payload.key_transcript.current.clone().unwrap();
+        let wrong_key_id = EcdsaKeyId::from_str("Secp256k1:wrong_key").unwrap();
+
+        add_available_quadruples_with_key_transcript(
+            &mut ecdsa_payload,
+            current_key_transcript.unmasked_transcript(),
+            &wrong_key_id,
+        );
+
+        let block = make_block(Some(ecdsa_payload));
+        let delivered_ids = get_quadruple_ids_to_deliver(&block);
+
+        assert!(delivered_ids.is_empty());
+    }
+
+    #[test]
+    fn test_block_without_ecdsa_should_not_deliver_quadruples() {
+        let block = make_block(None);
+        let delivered_ids = get_quadruple_ids_to_deliver(&block);
+
+        assert!(delivered_ids.is_empty());
+    }
+
+    #[test]
+    fn test_block_without_key_should_not_deliver_quadruples() {
+        let mut rng = reproducible_rng();
+        let (mut ecdsa_payload, env, _) = set_up_ecdsa_payload(
+            &mut rng,
+            subnet_test_id(1),
+            /*nodes_count=*/ 8,
+            /*should_create_key_transcript=*/ false,
+        );
+
+        let (dealers, receivers) = env.choose_dealers_and_receivers(
+            &IDkgParticipants::AllNodesAsDealersAndReceivers,
+            &mut rng,
+        );
+        let key_transcript = generate_key_transcript(
+            &env,
+            &dealers,
+            &receivers,
+            AlgorithmId::ThresholdEcdsaSecp256k1,
+            &mut rng,
+        );
+        let key_transcript_ref =
+            UnmaskedTranscript::try_from((Height::from(0), &key_transcript)).unwrap();
+        let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
+        add_available_quadruples_with_key_transcript(
+            &mut ecdsa_payload,
+            key_transcript_ref,
+            &key_id,
+        );
+
+        let block = make_block(Some(ecdsa_payload));
+        let delivered_ids = get_quadruple_ids_to_deliver(&block);
+
+        assert!(delivered_ids.is_empty());
     }
 }

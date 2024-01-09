@@ -18,6 +18,7 @@ pub use self::{
     xnet::XNetPayload,
 };
 use crate::{
+    consensus::ecdsa::QuadrupleId,
     crypto::canister_threshold_sig::MasterEcdsaPublicKey,
     messages::{Response, SignedIngress},
     xnet::CertifiedStreamSlice,
@@ -29,7 +30,10 @@ use ic_btc_types_internal::BitcoinAdapterResponse;
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_ic00_types::EcdsaKeyId;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, convert::TryInto};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    convert::TryInto,
+};
 
 pub const ENABLE_QUERY_STATS: bool = false;
 
@@ -45,8 +49,10 @@ pub struct Batch {
     pub messages: BatchMessages,
     /// A source of randomness for processing the Batch.
     pub randomness: Randomness,
-    /// The ECDSA public key of the subnet.
+    /// The ECDSA public keys of the subnet.
     pub ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+    /// The ECDSA quadruple Ids available to be matched with signature requests.
+    pub ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>>,
     /// The version of the registry to be referenced when processing the batch.
     pub registry_version: RegistryVersion,
     /// A clock time to be used for processing messages.
