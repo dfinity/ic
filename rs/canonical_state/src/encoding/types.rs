@@ -262,7 +262,7 @@ impl From<&ic_types::messages::RequestMetadata> for RequestMetadata {
         RequestMetadata {
             call_tree_depth: metadata.call_tree_depth,
             call_tree_start_time: metadata.call_tree_start_time,
-            call_subtree_deadline: metadata.call_subtree_deadline,
+            call_subtree_deadline: None,
         }
     }
 }
@@ -279,7 +279,6 @@ impl From<(&ic_types::messages::Request, CertificationVersion)> for Request {
             Some(ic_types::messages::RequestMetadata {
                 call_tree_depth: None,
                 call_tree_start_time: None,
-                call_subtree_deadline: None,
             })
             | None => None,
             Some(metadata) => {
@@ -305,7 +304,6 @@ impl From<RequestMetadata> for ic_types::messages::RequestMetadata {
         ic_types::messages::RequestMetadata {
             call_tree_depth: metadata.call_tree_depth,
             call_tree_start_time: metadata.call_tree_start_time,
-            call_subtree_deadline: metadata.call_subtree_deadline,
         }
     }
 }

@@ -36,7 +36,6 @@ pub fn request(certification_version: CertificationVersion) -> RequestOrResponse
             (certification_version >= CertificationVersion::V14).then_some(RequestMetadata {
                 call_tree_depth: Some(1),
                 call_tree_start_time: Some(Time::from_nanos_since_unix_epoch(100_000)),
-                call_subtree_deadline: Some(Time::from_nanos_since_unix_epoch(100_001)),
             }),
         )
         .build()

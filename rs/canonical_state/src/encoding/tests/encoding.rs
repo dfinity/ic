@@ -34,7 +34,6 @@ fn request_missing_metadata_and_missing_metadata_fields_encode_the_same() {
             .metadata(Some(RequestMetadata {
                 call_tree_depth: None,
                 call_tree_start_time: None,
-                call_subtree_deadline: None,
             }))
             .build()
             .into();
