@@ -323,8 +323,8 @@ fn canonical_encoding_request_v14_plus() {
             .method_name("test".to_string())
             .method_payload(vec![6])
             .metadata(Some(RequestMetadata {
-                call_tree_depth: Some(13),
-                call_tree_start_time: Some(Time::from_nanos_since_unix_epoch(101)),
+                call_tree_depth: 13,
+                call_tree_start_time: Time::from_nanos_since_unix_epoch(101),
             }))
             .build()
             .into();
