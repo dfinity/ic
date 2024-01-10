@@ -25,3 +25,4 @@ ic-crypto-ecdsa-secp256k1 = { path = "../../crypto/ecdsa_secp256k1" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 candid = { workspace = true }
 anyhow = { version = "1.0", default-features = false }
+serde_bytes = { workspace = true }

@@ -53,6 +53,7 @@ rosetta-core = {path = "../../rosetta_core"}
 strum_macros = { workspace = true }
 strum = { workspace = true }
 num-bigint = "0.4.4"
+ic-ledger-hash-of = { path = "../../../../packages/ic-ledger-hash-of" }
 
 [lib]
 path = "src/lib.rs"
