@@ -40,11 +40,11 @@ pub type CallContextId = Id<CallContextIdTag, u64>;
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct RequestMetadata {
     /// Indicates how many steps down the call tree a request is, starting at 0.
-    pub call_tree_depth: Option<u64>,
+    pub call_tree_depth: u64,
     /// The block time (on the respective subnet) at the start of the call at the
     /// root of the call tree that this request is part of. This is used for metrics
     /// only.
-    pub call_tree_start_time: Option<Time>,
+    pub call_tree_start_time: Time,
 }
 
 /// Canister-to-canister request message.
@@ -439,10 +439,10 @@ impl From<Response> for RequestOrResponse {
 impl From<&RequestMetadata> for pb_queues::RequestMetadata {
     fn from(metadata: &RequestMetadata) -> Self {
         Self {
-            call_tree_depth: metadata.call_tree_depth,
-            call_tree_start_time_nanos: metadata
-                .call_tree_start_time
-                .map(|call_tree_start_time| call_tree_start_time.as_nanos_since_unix_epoch()),
+            call_tree_depth: Some(metadata.call_tree_depth),
+            call_tree_start_time_nanos: Some(
+                metadata.call_tree_start_time.as_nanos_since_unix_epoch(),
+            ),
             call_subtree_deadline_nanos: None,
         }
     }
@@ -466,12 +466,10 @@ impl From<&Request> for pb_queues::Request {
 impl From<pb_queues::RequestMetadata> for RequestMetadata {
     fn from(metadata: pb_queues::RequestMetadata) -> Self {
         Self {
-            call_tree_depth: metadata.call_tree_depth,
-            call_tree_start_time: metadata
-                .call_tree_start_time_nanos
-                .map(|call_tree_start_time| {
-                    Time::from_nanos_since_unix_epoch(call_tree_start_time)
-                }),
+            call_tree_depth: metadata.call_tree_depth.unwrap_or(0),
+            call_tree_start_time: Time::from_nanos_since_unix_epoch(
+                metadata.call_tree_start_time_nanos.unwrap_or(0),
+            ),
         }
     }
 }

@@ -209,14 +209,11 @@ mod tests {
                 stream.push(
                     RequestBuilder::new()
                         .metadata(
-                            (certification_version >= CertificationVersion::V14).then_some(
-                                RequestMetadata {
-                                    call_tree_depth: (i % 2 > 0).then_some(i % 3),
-                                    call_tree_start_time: (i % 3 > 0)
-                                        .then_some(i % 2)
-                                        .map(Time::from_nanos_since_unix_epoch),
-                                },
-                            ),
+                            (certification_version >= CertificationVersion::V14 && i % 5 != 0)
+                                .then_some(RequestMetadata {
+                                    call_tree_depth: i % 3,
+                                    call_tree_start_time: Time::from_nanos_since_unix_epoch(i % 2),
+                                }),
                         )
                         .build()
                         .into(),
@@ -336,8 +333,8 @@ mod tests {
             "1ED37E00D177681A4111B6D45F518DF3E414B0B614333BB6552EBC0D8492B687",
             "62B2E77DFCD17C7E0CE3E762FD37281776C4B0A38CE1B83A1316614C3F849E39",
             "80D4B528CC9E09C775273994261DD544D45EFFF90B655D90FC3A6E3F633ED718",
-            "C8E5C0C21DA665B94DD78C3CCA682A44780058E9D92BC120E7CF0DD2952CE824",
-            "E2DA77E9435CB7C1F0E598DC3B3C41D305B216AF3E806E350BED1CC16E56817F",
+            "970BC5155AEB4B4F81E470CBF6748EFA7D8805B936998A54AE70B7DD21F5DDCC",
+            "EA3B53B72150E3982CB0E6773F86634685EE7B153DCFE10D86D9927778409D97",
         ];
 
         for certification_version in CertificationVersion::iter() {
