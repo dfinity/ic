@@ -14,6 +14,7 @@ use icrc_ledger_types::icrc3::blocks::GenericBlock;
 use num_bigint::BigUint;
 use num_traits::Bounded;
 use rosetta_core::identifiers::BlockIdentifier;
+use rosetta_core::objects::Amount;
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::fmt;
@@ -79,30 +80,23 @@ impl RosettaBlock {
             .transaction)
     }
 
+    pub fn get_icrc1_block(&self) -> anyhow::Result<Block<Tokens>> {
+        Block::<Tokens>::decode(self.encoded_block.clone()).map_err(anyhow::Error::msg)
+    }
+
     pub fn get_parent_block_identifier(&self) -> BlockIdentifier {
         self.parent_hash
             .as_ref()
-            .map(|ph| BlockIdentifier {
-                index: self.index.saturating_sub(1),
-                hash: hex::encode(ph),
-            })
-            .unwrap_or_else(|| BlockIdentifier {
-                index: self.index,
-                hash: hex::encode(&self.block_hash),
-            })
+            .map(|ph| BlockIdentifier::from_bytes(self.index.saturating_sub(1), ph))
+            .unwrap_or_else(|| BlockIdentifier::from_bytes(self.index, &self.block_hash))
     }
 
     pub fn get_transaction_identifier(&self) -> rosetta_core::identifiers::TransactionIdentifier {
-        rosetta_core::identifiers::TransactionIdentifier {
-            hash: hex::encode(&self.transaction_hash),
-        }
+        rosetta_core::identifiers::TransactionIdentifier::from_bytes(&self.transaction_hash)
     }
 
     pub fn get_block_identifier(&self) -> rosetta_core::identifiers::BlockIdentifier {
-        rosetta_core::identifiers::BlockIdentifier {
-            index: self.index,
-            hash: hex::encode(&self.block_hash),
-        }
+        BlockIdentifier::from_bytes(self.index, &self.block_hash)
     }
 }
 
@@ -171,6 +165,14 @@ impl CheckedSub for RosettaToken {
 impl From<U64> for RosettaToken {
     fn from(value: U64) -> Self {
         Self(value.into())
+    }
+}
+
+impl TryFrom<Amount> for RosettaToken {
+    type Error = anyhow::Error;
+    fn try_from(value: Amount) -> std::prelude::v1::Result<Self, Self::Error> {
+        RosettaToken::from_str(&value.value)
+            .with_context(|| format!("Could not convert amount: {:?} to RosettaToken", value))
     }
 }
 

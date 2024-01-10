@@ -1,19 +1,21 @@
 use crate::{
     common::{
+        constants::{NODE_VERSION, ROSETTA_VERSION},
         storage::storage_client::StorageClient,
-        types::{BlockResponseBuilder, BlockTransactionResponseBuilder, Error},
-        utils::utils::get_rosetta_block_from_partial_block_identifier,
+        types::Error,
+        utils::utils::{
+            convert_timestamp_to_millis, get_rosetta_block_from_block_identifier,
+            get_rosetta_block_from_partial_block_identifier,
+            icrc1_rosetta_block_to_rosetta_core_block,
+            icrc1_rosetta_block_to_rosetta_core_transaction,
+        },
     },
     Metadata,
 };
 use candid::Principal;
-use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_rosetta_api::DEFAULT_BLOCKCHAIN;
-use rosetta_core::{identifiers::*, miscellaneous::*, objects::*, response_types::*};
-use std::{sync::Arc, time::Duration};
-
-const ROSETTA_VERSION: &str = "1.4.13";
-const NODE_VERSION: &str = env!("CARGO_PKG_VERSION");
+use rosetta_core::{identifiers::*, miscellaneous::Version, objects::*, response_types::*};
+use std::sync::Arc;
 
 pub fn network_list(ledger_id: &Principal) -> NetworkListResponse {
     NetworkListResponse {
@@ -67,7 +69,8 @@ pub fn network_status(storage_client: Arc<StorageClient>) -> Result<NetworkStatu
 
     Ok(NetworkStatusResponse {
         current_block_identifier: BlockIdentifier::from(&current_block),
-        current_block_timestamp: Duration::from_nanos(current_block.timestamp).as_millis() as u64,
+        current_block_timestamp: convert_timestamp_to_millis(current_block.timestamp)
+            .map_err(|err| Error::parsing_unsuccessful(&err))?,
         genesis_block_identifier: genesis_block_identifier.clone(),
         oldest_block_identifier: Some(genesis_block_identifier),
         sync_status: None,
@@ -81,24 +84,15 @@ pub fn block_transaction(
     transaction_identifier: TransactionIdentifier,
     metadata: Metadata,
 ) -> Result<BlockTransactionResponse, Error> {
-    let rosetta_block = storage_client
-        .get_block_at_idx(block_identifier.index)
-        .map_err(|e| Error::unable_to_find_block(&format!("Unable to retrieve block: {:?}", e)))?
-        .ok_or_else(|| {
-            Error::unable_to_find_block(&format!(
-                "Block at index {} could not be found",
-                block_identifier.index
-            ))
-        })?;
-    if hex::encode(&rosetta_block.block_hash) != block_identifier.hash {
+    let rosetta_block =
+        get_rosetta_block_from_block_identifier(block_identifier.clone(), storage_client.clone())
+            .map_err(|err| Error::invalid_block_identifier(&err))?;
+
+    if rosetta_block.get_block_identifier() != block_identifier {
         return Err(Error::invalid_block_identifier(&format!("Both index {} and hash {} were provided but they do not match the same block. Actual index {} and hash {}",block_identifier.index,block_identifier.hash,rosetta_block.index,hex::encode(&rosetta_block.block_hash))));
     }
 
-    let transaction = rosetta_block
-        .get_transaction()
-        .map_err(|e| Error::failed_to_build_block_response(&e))?;
-
-    if transaction.hash().to_string() != transaction_identifier.hash {
+    if rosetta_block.get_transaction_identifier() != transaction_identifier {
         return Err(Error::invalid_transaction_identifier());
     }
 
@@ -108,22 +102,10 @@ pub fn block_transaction(
         ..Default::default()
     };
 
-    let mut builder = BlockTransactionResponseBuilder::default()
-        .with_transaction(transaction)
-        .with_currency(currency);
-
-    if let Some(fee) = rosetta_block
-        .get_effective_fee()
-        .map_err(|e| Error::failed_to_build_block_response(&e))?
-    {
-        builder = builder.with_effective_fee(fee);
-    }
-
-    let response = builder
-        .build()
-        .map_err(|e| Error::failed_to_build_block_response(&e))?;
-
-    Ok(response)
+    Ok(rosetta_core::response_types::BlockTransactionResponse {
+        transaction: icrc1_rosetta_block_to_rosetta_core_transaction(rosetta_block, currency)
+            .map_err(|e| Error::failed_to_build_block_response(&e))?,
+    })
 }
 
 pub fn block(
@@ -140,22 +122,19 @@ pub fn block(
         ..Default::default()
     };
 
-    let response = BlockResponseBuilder::default()
-        .with_rosetta_block(rosetta_block)
-        .with_currency(currency)
-        .build()
-        .map_err(|e| Error::failed_to_build_block_response(&e))?;
-
-    Ok(response)
+    Ok(BlockResponse {
+        block: Some(
+            icrc1_rosetta_block_to_rosetta_core_block(rosetta_block, currency)
+                .map_err(|err| Error::parsing_unsuccessful(&err))?,
+        ),
+        other_transactions: None,
+    })
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::common::{
-        storage::types::{RosettaBlock, Tokens},
-        types::BlockTransactionResponseBuilder,
-    };
+    use crate::common::storage::types::{RosettaBlock, Tokens};
     use ic_icrc1_test_utils::valid_blockchain_strategy;
     use proptest::prelude::*;
 
@@ -187,7 +166,7 @@ mod test {
 
                         assert_eq!(NetworkStatusResponse {
                             current_block_identifier: BlockIdentifier::from(&block_with_highest_idx),
-                            current_block_timestamp: Duration::from_nanos(block_with_highest_idx.timestamp).as_millis() as u64,
+                            current_block_timestamp: convert_timestamp_to_millis(block_with_highest_idx.timestamp).map_err(|err| Error::parsing_unsuccessful(&err)).unwrap(),
                             genesis_block_identifier: BlockIdentifier::from(&genesis_block).clone(),
                             oldest_block_identifier: Some(BlockIdentifier::from(&genesis_block)),
                             sync_status: None,
@@ -261,14 +240,15 @@ mod test {
 
                         // If the block identifier index is valid the service should return the block
                         let block_res = block(storage_client_memory.clone(),block_identifier,metadata.clone());
-                        assert_eq!(block_res.unwrap(),BlockResponseBuilder::default()
-                        .with_rosetta_block(rosetta_blocks[valid_block_idx as usize].clone())
-                        .with_currency(Currency {
-                            symbol: metadata.symbol.clone(),
-                            decimals: metadata.decimals.into(),
-                            ..Default::default()
-                        })
-                        .build().unwrap());
+                        assert_eq!(block_res.unwrap(),BlockResponse {
+                            block: Some(
+                                icrc1_rosetta_block_to_rosetta_core_block(rosetta_blocks[valid_block_idx as usize].clone(), Currency {
+                                    symbol: metadata.symbol.clone(),
+                                    decimals: metadata.decimals.into(),
+                                    ..Default::default()
+                                }).unwrap(),
+                            ),
+                            other_transactions:None});
 
                             block_identifier = PartialBlockIdentifier{
                                 index: None,
@@ -277,14 +257,15 @@ mod test {
 
                             // If the block identifier hash is valid the service should return the block
                             let block_res = block(storage_client_memory.clone(),block_identifier,metadata.clone());
-                            assert_eq!(block_res.unwrap(),BlockResponseBuilder::default()
-                            .with_rosetta_block(rosetta_blocks[valid_block_idx as usize].clone())
-                            .with_currency(Currency {
-                                symbol: metadata.symbol.clone(),
-                                decimals: metadata.decimals.into(),
-                                ..Default::default()
-                            })
-                            .build().unwrap());
+                            assert_eq!(block_res.unwrap(),BlockResponse {
+                                block: Some(
+                                    icrc1_rosetta_block_to_rosetta_core_block(rosetta_blocks[valid_block_idx as usize].clone(), Currency {
+                                        symbol: metadata.symbol.clone(),
+                                        decimals: metadata.decimals.into(),
+                                        ..Default::default()
+                                    }).unwrap(),
+                                ),
+                                other_transactions:None});
 
                             block_identifier = PartialBlockIdentifier{
                                 index: Some(valid_block_idx),
@@ -353,7 +334,7 @@ mod test {
 
                 if !blockchain.is_empty() {
                     let valid_block_hash = hex::encode(&rosetta_blocks[valid_block_idx as usize].block_hash);
-                    let valid_tx_hash = rosetta_blocks[valid_block_idx as usize].get_transaction().unwrap().hash().to_string();
+                    let valid_tx_hash = hex::encode(rosetta_blocks[valid_block_idx as usize].transaction_hash.as_ref());
 
                     block_identifier = BlockIdentifier{
                         index: valid_block_idx,
@@ -366,20 +347,13 @@ mod test {
 
                     // If the block identifier index and hash are valid the service should return the block
                     let block_transaction_res = block_transaction(storage_client_memory.clone(),block_identifier.clone(),transaction_identifier.clone(),metadata.clone());
-                    let mut expected_block_transaction_res = BlockTransactionResponseBuilder::default().with_currency(Currency {
+                    let expected_block_transaction_res = rosetta_core::response_types::BlockTransactionResponse { transaction: icrc1_rosetta_block_to_rosetta_core_transaction(rosetta_blocks[valid_block_idx as usize].clone(), Currency {
                         symbol: metadata.symbol.clone(),
                         decimals: metadata.decimals.into(),
                         ..Default::default()
-                    })
-                    .with_transaction(rosetta_blocks[valid_block_idx as usize].clone().get_transaction().unwrap());
+                    }).unwrap() };
 
-                    if let Some(fee) = rosetta_blocks[valid_block_idx as usize].clone()
-                    .get_effective_fee()
-                    .unwrap(){
-                        expected_block_transaction_res = expected_block_transaction_res.with_effective_fee(fee);
-                    }
-
-                    assert_eq!(block_transaction_res.unwrap(),expected_block_transaction_res.build().unwrap());
+                    assert_eq!(block_transaction_res.unwrap(),expected_block_transaction_res);
 
                     transaction_identifier = TransactionIdentifier{
                         hash: invalid_block_hash.clone()

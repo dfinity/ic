@@ -7,20 +7,19 @@ use ic_base_types::CanisterId;
 pub use ic_canister_client_sender::Ed25519KeyPair as EdKeypair;
 use ic_icrc1_ledger_sm_tests::DECIMAL_PLACES;
 use ic_icrc1_ledger_sm_tests::{FEE, TOKEN_SYMBOL};
-use ic_icrc1_tokens_u64::U64;
+use ic_icrc_rosetta::common::constants::DEFAULT_BLOCKCHAIN;
+use ic_icrc_rosetta::common::types::{BurnMetadata, TransferMetadata};
+use ic_icrc_rosetta::common::utils::utils::icrc1_rosetta_block_to_rosetta_core_block;
 use ic_icrc_rosetta::{
     common::{
         storage::types::RosettaBlock,
         types::{ApproveMetadata, OperationType},
-        utils::utils::icrc1_account_to_rosetta_accountidentifier,
     },
     construction_api::types::ConstructionMetadataRequestOptions,
     Metadata,
 };
 use ic_icrc_rosetta_client::RosettaClient;
 use ic_icrc_rosetta_runner::{start_rosetta, RosettaOptions, DEFAULT_DECIMAL_PLACES};
-use ic_ledger_canister_core::ledger::LedgerTransaction;
-use ic_rosetta_api::DEFAULT_BLOCKCHAIN;
 use ic_starter_tests::{start_replica, ReplicaBins, ReplicaStarterConfig};
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::{
@@ -316,72 +315,66 @@ fn expected_operations(
         vec![Operation::new(
             0,
             OperationType::Mint.to_string(),
-            Some(icrc1_account_to_rosetta_accountidentifier(&TEST_ACCOUNT)),
+            Some((*TEST_ACCOUNT).into()),
             Some(Amount::new("1000000000000".to_string(), currency.clone())),
+            None,
+            None,
         )],
         vec![Operation::new(
             0,
             OperationType::Mint.to_string(),
-            Some(icrc1_account_to_rosetta_accountidentifier(&TEST_ACCOUNT_2)),
+            Some((*TEST_ACCOUNT_2).into()),
             Some(Amount::new("100000000000".to_string(), currency.clone())),
+            None,
+            None,
         )],
-        vec![
-            Operation::new(
-                0,
-                OperationType::Transfer.to_string(),
-                Some(icrc1_account_to_rosetta_accountidentifier(&TEST_ACCOUNT_2)),
-                Some(Amount::new("-100000000".to_string(), currency.clone())),
+        vec![Operation::new(
+            0,
+            OperationType::Transfer.to_string(),
+            Some(Account::from(icrc_ledger_canister_id.get().0).into()),
+            Some(Amount::new("100000000".to_string(), currency.clone())),
+            None,
+            Some(
+                TransferMetadata {
+                    from_account: (*TEST_ACCOUNT_2).into(),
+                    spender_account: None,
+                    fee_set_by_user: None,
+                }
+                .into(),
             ),
-            Operation::new(
-                1,
-                OperationType::Transfer.to_string(),
-                Some(icrc1_account_to_rosetta_accountidentifier(
-                    &icrc_ledger_canister_id.get().0.into(),
-                )),
-                Some(Amount::new("100000000".to_string(), currency.clone())),
-            ),
-            Operation::new(
-                2,
-                OperationType::Fee.to_string(),
-                Some(icrc1_account_to_rosetta_accountidentifier(&TEST_ACCOUNT_2)),
-                Some(Amount::new("-10000".to_string(), currency.clone())),
-            ),
-        ],
+        )],
         vec![Operation::new(
             0,
             OperationType::Burn.to_string(),
-            Some(icrc1_account_to_rosetta_accountidentifier(&TEST_ACCOUNT_2)),
-            Some(Amount::new("-100000000".to_string(), currency.clone())),
-        )],
-        vec![
-            Operation {
-                operation_identifier: OperationIdentifier::new(0),
-                account: Some(icrc1_account_to_rosetta_accountidentifier(&TEST_ACCOUNT_2)),
-                _type: OperationType::Approve.to_string(),
-                amount: None,
-                metadata: Some(
-                    ApproveMetadata {
-                        from: icrc1_account_to_rosetta_accountidentifier(&TEST_ACCOUNT_2),
-                        spender: icrc1_account_to_rosetta_accountidentifier(
-                            &icrc_ledger_canister_id.get().0.into(),
-                        ),
-                        allowance: U64::new(100_000_000).into(),
-                        expected_allowance: None,
-                        expires_at: None,
-                    }
-                    .into(),
-                ),
-                related_operations: None,
-                status: None,
-                coin_change: None,
-            },
-            Operation::new(
-                1,
-                OperationType::Fee.to_string(),
-                Some(icrc1_account_to_rosetta_accountidentifier(&TEST_ACCOUNT_2)),
-                Some(Amount::new("-10000".to_string(), currency.clone())),
+            None,
+            Some(Amount::new("100000000".to_string(), currency.clone())),
+            None,
+            Some(
+                BurnMetadata {
+                    from_account: (*TEST_ACCOUNT_2).into(),
+                    spender_account: None,
+                }
+                .into(),
             ),
-        ],
+        )],
+        vec![Operation {
+            operation_identifier: OperationIdentifier::new(0),
+            account: Some(Account::from(icrc_ledger_canister_id.get().0).into()),
+            _type: OperationType::Approve.to_string(),
+            amount: Some(Amount::new("100000000".to_owned(), currency.clone())),
+            metadata: Some(
+                ApproveMetadata {
+                    approver_account: (*TEST_ACCOUNT_2).into(),
+                    expected_allowance: None,
+                    expires_at: None,
+                    fee_set_by_user: None,
+                }
+                .into(),
+            ),
+            related_operations: None,
+            status: None,
+            coin_change: None,
+        }],
     ]
 }
 
@@ -393,45 +386,26 @@ fn create_expected_rosetta_responses(
     // map the blocks to the expected operations to create the expected /block
     // responses
     let mut responses = vec![];
-    let expected_operations = expected_operations(icrc_ledger_canister_id, metadata);
+    let expected_operations = expected_operations(icrc_ledger_canister_id, metadata.clone());
 
-    for (index, (block, operations)) in blocks
+    for (index, (block, _)) in blocks
         .into_iter()
         .zip(expected_operations.into_iter())
         .enumerate()
     {
         let block = RosettaBlock::from_generic_block(block, index as u64).unwrap();
-        let block_hash = hex::encode(&block.block_hash);
-        let parent_hash = block
-            .parent_hash
-            .as_ref()
-            .map(hex::encode)
-            .unwrap_or_else(|| block_hash.clone());
-        let transaction_hash = block.get_transaction().unwrap().hash().to_string();
-        let mut transaction_metadata = ObjectMap::new();
-        if index == 0 {
-            transaction_metadata.insert(
-                "created_at_time".to_string(),
-                serde_json::Value::Number(Number::from(block.timestamp)),
-            );
-        }
 
-        responses.push(BlockResponse::new(Some(Block::new(
-            BlockIdentifier::new(index as u64, block_hash),
-            BlockIdentifier::new(index.saturating_sub(1) as u64, parent_hash),
-            Duration::from_nanos(block.timestamp).as_millis() as u64,
-            vec![Transaction {
-                transaction_identifier: TransactionIdentifier {
-                    hash: transaction_hash,
+        responses.push(BlockResponse::new(
+            icrc1_rosetta_block_to_rosetta_core_block(
+                block,
+                Currency {
+                    symbol: metadata.symbol.clone(),
+                    decimals: metadata.decimals.into(),
+                    metadata: None,
                 },
-                operations,
-                metadata: if !transaction_metadata.is_empty() {
-                    Some(transaction_metadata)
-                } else {
-                    None
-                },
-            }],
-        ))));
+            )
+            .ok(),
+        ));
     }
 
     responses
@@ -547,7 +521,7 @@ fn create_expected_block_hashes_and_block_transaction_responses(
     {
         let block = RosettaBlock::from_generic_block(block, index as u64).unwrap();
         let block_hash = hex::encode(&block.block_hash);
-        let transaction_hash = block.get_transaction().unwrap().hash().to_string();
+        let transaction_hash = hex::encode(&block.transaction_hash);
         let mut metadata = ObjectMap::new();
         if index == 0 {
             metadata.insert(
@@ -799,10 +773,7 @@ async fn test_construction_derive() {
         .expect("Unable to call /construction/derive")
         .account_identifier
         .expect("/construction/derive did not return an account identifier");
-    assert_eq!(
-        account_identifier,
-        icrc1_account_to_rosetta_accountidentifier(&account)
-    );
+    assert_eq!(account_identifier, account.into());
 }
 
 #[tokio::test]
