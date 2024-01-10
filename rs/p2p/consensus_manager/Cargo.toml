@@ -26,6 +26,7 @@ ic-protobuf = { path = "../../protobuf" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-quic-transport = { path = "../quic_transport" }
 ic-types = { path = "../../types/types" }
+ic-types-test-utils = { path = "../../types/types_test_utils" }
 phantom_newtype = { path = "../../phantom_newtype" }
 prometheus = { workspace = true }
 rand = "0.8.5"
@@ -34,13 +35,12 @@ slog = { workspace = true }
 tokio = { workspace = true }
 ic-crypto-test-utils-tls = { path = "../../crypto/test_utils/tls" }
 tokio-rustls = { version = "0.24.0", features = ["dangerous_configuration"] }
+tokio-util = { workspace = true }
 
 [dev-dependencies]
 ic-p2p-test-utils = { path = "../test_utils" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
-ic-types-test-utils = { path = "../../types/types_test_utils" }
 mockall = { workspace = true }
-tokio-util = { workspace = true }
 turmoil = { workspace = true }
 
 [[bin]]

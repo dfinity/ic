@@ -40,7 +40,6 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
-    "//rs/p2p/test_utils",
     "//rs/test_utilities/logger",
     "@crate_index//:mockall",
     "@crate_index//:turmoil",
