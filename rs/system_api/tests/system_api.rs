@@ -1422,9 +1422,10 @@ fn msg_cycles_accept_all_cycles_in_call_context_when_more_asked() {
 }
 
 /// If call call_perform() fails because canister does not have enough
-/// cycles to send the message, then the state is reset.
+/// cycles to send the message, then it does not trap, but returns
+/// a transient error reject code.
 #[test]
-fn call_perform_not_enough_cycles_resets_state() {
+fn call_perform_not_enough_cycles_does_not_trap() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new()
         .with_subnet_type(SubnetType::Application)
         .build();
@@ -1453,11 +1454,9 @@ fn call_perform_not_enough_cycles_resets_state() {
     api.ic0_call_cycles_add128(Cycles::new(100)).unwrap();
     let res = api.ic0_call_perform();
     match res {
-        Err(HypervisorError::InsufficientCyclesInMessageMemoryGrow {
-            bytes: _,
-            available: _,
-            threshold: _,
-        }) => {}
+        Ok(code) => {
+            assert_eq!(code, RejectCode::SysTransient as i32);
+        }
         _ => panic!(
             "expected to get an InsufficientCyclesInMessageMemoryGrow error, got {:?}",
             res
