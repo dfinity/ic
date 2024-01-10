@@ -2390,7 +2390,7 @@ impl ExecutionEnvironment {
         }
 
         let canister_id = old_canister.canister_id();
-        let new_wasm_hash = WasmHash::from(&install_context.wasm_module);
+        let new_wasm_hash = (&install_context.wasm_source).into();
         let compilation_cost_handling = if state
             .metadata
             .expected_compiled_wasms
@@ -2402,9 +2402,7 @@ impl ExecutionEnvironment {
         };
         info!(
             self.log,
-            "Start executing install_code message on canister {:?}, contains module {:?}",
-            canister_id,
-            install_context.wasm_module.is_empty().to_string(),
+            "Start executing install_code message on canister {:?}", canister_id,
         );
 
         let execution_parameters = self.execution_parameters(

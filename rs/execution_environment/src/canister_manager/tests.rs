@@ -2,7 +2,7 @@ use crate::{
     as_num_instructions,
     canister_manager::{
         uninstall_canister, AddCanisterChangeToHistory, CanisterManager, CanisterManagerError,
-        CanisterMgrConfig, InstallCodeContext, StopCanisterResult,
+        CanisterMgrConfig, InstallCodeContext, StopCanisterResult, WasmSource,
     },
     canister_settings::{CanisterSettings, CanisterSettingsBuilder},
     execution_environment::{as_round_instructions, RoundCounters},
@@ -156,7 +156,7 @@ impl InstallCodeContextBuilder {
     }
 
     pub fn wasm_module(mut self, wasm_module: Vec<u8>) -> Self {
-        self.ctx.wasm_module = CanisterModule::new(wasm_module);
+        self.ctx.wasm_source = WasmSource::CanisterModule(CanisterModule::new(wasm_module));
         self
     }
 
@@ -192,7 +192,9 @@ impl Default for InstallCodeContextBuilder {
             ctx: InstallCodeContext {
                 origin: canister_change_origin_from_principal(&PrincipalId::new_user_test_id(0)),
                 canister_id: canister_test_id(0),
-                wasm_module: CanisterModule::new(wat::parse_str(EMPTY_WAT).unwrap()),
+                wasm_source: WasmSource::CanisterModule(CanisterModule::new(
+                    wat::parse_str(EMPTY_WAT).unwrap(),
+                )),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -333,7 +335,7 @@ fn install_code(
     let args = InstallCodeArgsV2::new(
         context.mode,
         context.canister_id,
-        context.wasm_module.as_slice().into(),
+        context.wasm_source.unwrap_as_slice_for_testing().into(),
         context.arg.clone(),
         None,
         None,
@@ -3064,7 +3066,7 @@ fn failed_upgrade_hooks_consume_instructions() {
             InstallCodeContext {
                 origin: canister_change_origin_from_principal(&sender),
                 canister_id,
-                wasm_module: CanisterModule::new(initial_wasm),
+                wasm_source: WasmSource::CanisterModule(CanisterModule::new(initial_wasm)),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -3088,7 +3090,7 @@ fn failed_upgrade_hooks_consume_instructions() {
             InstallCodeContext {
                 origin: canister_change_origin_from_principal(&sender),
                 canister_id,
-                wasm_module: CanisterModule::new(upgrade_wasm),
+                wasm_source: WasmSource::CanisterModule(CanisterModule::new(upgrade_wasm)),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -3208,7 +3210,7 @@ fn failed_install_hooks_consume_instructions() {
             InstallCodeContext {
                 origin: canister_change_origin_from_principal(&sender),
                 canister_id,
-                wasm_module: CanisterModule::new(wasm),
+                wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm)),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -3326,7 +3328,7 @@ fn install_code_respects_instruction_limit() {
         InstallCodeContext {
             origin: canister_change_origin_from_principal(&sender),
             canister_id,
-            wasm_module: CanisterModule::new(wasm.clone()),
+            wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm.clone())),
             arg: vec![],
             compute_allocation: None,
             memory_allocation: None,
@@ -3357,7 +3359,7 @@ fn install_code_respects_instruction_limit() {
         InstallCodeContext {
             origin: canister_change_origin_from_principal(&sender),
             canister_id,
-            wasm_module: CanisterModule::new(wasm.clone()),
+            wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm.clone())),
             arg: vec![],
             compute_allocation: None,
             memory_allocation: None,
@@ -3381,7 +3383,7 @@ fn install_code_respects_instruction_limit() {
         InstallCodeContext {
             origin: canister_change_origin_from_principal(&sender),
             canister_id,
-            wasm_module: CanisterModule::new(wasm.clone()),
+            wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm.clone())),
             arg: vec![],
             compute_allocation: None,
             memory_allocation: None,
@@ -3411,7 +3413,7 @@ fn install_code_respects_instruction_limit() {
         InstallCodeContext {
             origin: canister_change_origin_from_principal(&sender),
             canister_id,
-            wasm_module: CanisterModule::new(wasm),
+            wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm)),
             arg: vec![],
             compute_allocation: None,
             memory_allocation: None,
@@ -3471,14 +3473,18 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         .sender(controller.into())
         .canister_id(canister_id)
         .build();
-    let compilation_cost = wasm_compilation_cost(install_code_context.wasm_module.as_slice());
+    let compilation_cost = wasm_compilation_cost(
+        install_code_context
+            .wasm_source
+            .unwrap_as_slice_for_testing(),
+    );
 
     let ctxt = InstallCodeContextBuilder::default()
         .mode(CanisterInstallModeV2::Install)
         .sender(controller.into())
         .canister_id(canister_id)
         .build();
-    let module_hash = ctxt.wasm_module.module_hash();
+    let module_hash = ctxt.wasm_source.module_hash();
     let (instructions_left, res, canister) =
         install_code(&canister_manager, ctxt, &mut state, &mut round_limits);
     state.put_canister_state(canister.unwrap());
@@ -3520,7 +3526,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         .sender(controller.into())
         .canister_id(canister_id)
         .build();
-    let module_hash = ctxt.wasm_module.module_hash();
+    let module_hash = ctxt.wasm_source.module_hash();
     let (instructions_left, res, canister) =
         install_code(&canister_manager, ctxt, &mut state, &mut round_limits);
     state.put_canister_state(canister.unwrap());
@@ -3571,7 +3577,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         .sender(controller.into())
         .canister_id(canister_id)
         .build();
-    let module_hash = ctxt.wasm_module.module_hash();
+
     let (instructions_left, res, canister) =
         install_code(&canister_manager, ctxt, &mut state, &mut round_limits);
     state.put_canister_state(canister.unwrap());
@@ -3644,7 +3650,7 @@ fn lower_memory_allocation_than_usage_fails() {
             InstallCodeContext {
                 origin: canister_change_origin_from_principal(&sender),
                 canister_id,
-                wasm_module: CanisterModule::new(wasm),
+                wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm)),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -3713,7 +3719,7 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
             InstallCodeContext {
                 origin: canister_change_origin_from_principal(&sender),
                 canister_id,
-                wasm_module: CanisterModule::new(wasm.clone()),
+                wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm.clone())),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -3755,7 +3761,7 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
             InstallCodeContext {
                 origin: canister_change_origin_from_principal(&sender),
                 canister_id,
-                wasm_module: CanisterModule::new(wasm),
+                wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm)),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -3814,7 +3820,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
             InstallCodeContext {
                 origin: canister_change_origin_from_principal(&sender),
                 canister_id,
-                wasm_module: CanisterModule::new(wasm),
+                wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm)),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -3839,7 +3845,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
             InstallCodeContext {
                 origin: canister_change_origin_from_principal(&sender),
                 canister_id,
-                wasm_module: CanisterModule::new(wasm.clone()),
+                wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm.clone())),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -3886,7 +3892,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
             InstallCodeContext {
                 origin: canister_change_origin_from_principal(&sender),
                 canister_id,
-                wasm_module: CanisterModule::new(wasm),
+                wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm)),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -4023,7 +4029,7 @@ fn test_install_when_setting_memory_allocation_to_zero() {
             InstallCodeContext {
                 origin: canister_change_origin_from_principal(&sender),
                 canister_id,
-                wasm_module: CanisterModule::new(wasm),
+                wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm)),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -4074,7 +4080,7 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
             InstallCodeContext {
                 origin: canister_change_origin_from_principal(&sender),
                 canister_id,
-                wasm_module: CanisterModule::new(wasm.clone()),
+                wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm.clone())),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -4110,7 +4116,7 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
             InstallCodeContext {
                 origin: canister_change_origin_from_principal(&sender),
                 canister_id,
-                wasm_module: CanisterModule::new(wasm),
+                wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm)),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
