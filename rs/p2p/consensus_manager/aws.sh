@@ -2,7 +2,7 @@
 
 
 # Variables
-S3_BUCKET="conesnsus-binary"
+S3_BUCKET="deletable-conesnsus-binary"
 EU_REGION="eu-central-1"
 BINARY_FILE="consensus_manager_runner"
 EXPERIMENT_TAG="ConsExp"

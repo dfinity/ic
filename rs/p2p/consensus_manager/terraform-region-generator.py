@@ -4,6 +4,8 @@ import sys
 region_map = {
     # Frankfurt
     "eu_central_1": "ami-0faab6bdbac9486fb",
+    # Zurich
+    "eu_central_2": "ami-02e901e47eb942582",
     # Ireland
     "eu_west_1": "ami-0905a3c97561e0b69",
     # London
@@ -13,7 +15,7 @@ region_map = {
     # Stockholm
     "eu_north_1": "ami-0014ce3e52359afbd",
     # Milan
-    "eu_south_1": "ami-056bb2662ef466553",
+    # "eu_south_1": "ami-056bb2662ef466553",
     # Spain
     "eu_south_2": "ami-0a9e7160cebfd8c12",
     # N. Virgina
@@ -45,18 +47,20 @@ region_map = {
     # Jakarta
     "ap_southeast_3": "ami-02157887724ade8ba",
     # Bahrain
-    "me_south_1": "ami-0ce1025465c85da8d",
+    # "me_south_1": "ami-0ce1025465c85da8d",
     # UAE
     "me_central_1": "ami-0b98fa71853d8d270",
     # Canada
     "ca_central_1": "ami-0a2e7efb4257c0907",
+    # Calgary
+    "ca_west_1": "ami-0db2fabcbd0e76d52",
     # Sao Paolo
     "sa_east_1": "ami-0fb4cf3a99aa89f72"
 }
 
 
 template = """
-resource "aws_security_group" "sg-REGION" {
+resource "aws_security_group" "deletable-sg-REGION" {
   provider        = aws.REGION
   name        = "allow_all"
 
@@ -79,18 +83,19 @@ resource "aws_security_group" "sg-REGION" {
   }
 }
 
-resource "aws_key_pair" "key-REGION" {
+resource "aws_key_pair" "deletable-key-REGION" {
   provider        = aws.REGION
   key_name   = "my-terraform-key-REGION"
   public_key = tls_private_key.experiment.public_key_openssh
 }
 
-resource "aws_instance" "instance-REGION" {
+resource "aws_instance" "deletable-instance-REGION" {
   provider        = aws.REGION
   ami             = "AMI"
-  instance_type   = "t3.micro"
-  key_name = aws_key_pair.key-REGION.key_name
-  vpc_security_group_ids = [aws_security_group.sg-REGION.id]
+  instance_type   = "m6g.4xlarge"
+  monitoring = true
+  key_name = aws_key_pair.deletable-key-REGION.key_name
+  vpc_security_group_ids = [aws_security_group.deletable-sg-REGION.id]
 
   tags = {
     Name = "experiment"
@@ -107,12 +112,12 @@ EOF
 }
 
 
-resource "null_resource" "prov-REGION" {
+resource "null_resource" "deletable-prov-REGION" {
   depends_on = DEPENDS_ON
 
   provisioner "remote-exec" {
     connection {
-      host        = aws_instance.instance-REGION.public_ip
+      host        = aws_instance.deletable-instance-REGION.public_ip
       user        = "ubuntu"
       private_key = tls_private_key.experiment.private_key_pem
     }
@@ -127,20 +132,29 @@ resource "null_resource" "prov-REGION" {
 
 merged = ""
 
-
+def keep_n_elements(d, n):
+    new_dict = {}
+    for key, value in d.items():
+        if len(new_dict) < n:
+            new_dict[key] = value
+        else:
+            break
+    return new_dict
 
 
 num_regions = sys.argv[1]
 message_size = sys.argv[2]
 message_rate = sys.argv[3]
 
+region_map = keep_n_elements(region_map,int(num_regions))
+
 id = 0
 for region, ami in sorted(region_map.items()):
-  if id + 1 > int(num_regions):
+  if id  > int(num_regions):
     break
-  depends_on = [f"aws_instance.instance-{region}" for region in sorted(region_map)]
+  depends_on = [f"aws_instance.deletable-instance-{region}" for region in sorted(region_map)]
   depends_on = f"[{', '.join(depends_on)}]"
-  peers_addrs = [f"${{aws_instance.instance-{r}.public_ip}}:4100" for r in sorted(region_map) if r != region]
+  peers_addrs = [f"${{aws_instance.deletable-instance-{r}.public_ip}}:4100" for r in sorted(region_map) if r != region]
   peers_addrs = ' '.join(peers_addrs)
   merged += template.replace("REGION", region).replace("AMI",ami).replace("DEPENDS_ON",depends_on).replace("PEERS_ADDRS", peers_addrs).replace("ID", str(id)).replace("MESSAGE_SIZE", message_size).replace("MESSAGE_RATE", message_rate)
   id += 1 

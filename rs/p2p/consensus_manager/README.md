@@ -45,3 +45,38 @@ It will keep running until you stop the experiment with
 ```
 terraform destory
 ```
+
+
+
+## Aws Instructions
+
+(inside dev container)
+
+Install saml2aws
+```
+CURRENT_VERSION=$(curl -Ls https://api.github.com/repos/Versent/saml2aws/releases/latest | grep 'tag_name' | cut -d'v' -f2 | cut -d'"' -f1)
+curl -L -C - "https://github.com/Versent/saml2aws/releases/download/v${CURRENT_VERSION}/saml2aws_${CURRENT_VERSION}_linux_amd64.tar.gz" | tar -xzv -C /ic/bin
+chmod u+x /ic/bin
+hash -r
+saml2aws --version
+
+export SAML2AWS_DUO_MFA_OPTION="Duo Push"
+
+echo "[ic-backups]
+aws_profile             = ic-backups
+role_arn                = arn:aws:iam::224267238713:role/DevOps
+url                     = https://dfinity.okta.com/home/amazon_aws/0oaakgpu6dUVPYM9y357/272
+username                = tim.gretler@dfinity.org
+provider                = Okta
+mfa                     = DUO
+skip_verify             = false
+aws_urn                 = urn:amazon:webservices
+aws_session_duration    = 9000
+saml_cache              = true
+saml_cache_file         = /tmp/saml2aws/cache
+disable_remember_device = false
+disable_sessions        = false" > /tmp/saml2aws_conf
+
+saml2aws -r eu-central-2 --config /tmp/saml2aws_conf login -a ic-backups
+eval $(saml2aws --config /tmp/saml2aws_conf script -a ic-backups)
+```

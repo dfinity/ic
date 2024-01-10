@@ -74,8 +74,18 @@ provider "aws" {
 }
 
 provider "aws" {
+  alias  = "ca_west_1"
+  region = "ca-west-1"
+}
+
+provider "aws" {
   alias  = "eu_central_1"
   region = "eu-central-1"
+}
+
+provider "aws" {
+  alias  = "eu_central_2"
+  region = "eu-central-2"
 }
 
 provider "aws" {
