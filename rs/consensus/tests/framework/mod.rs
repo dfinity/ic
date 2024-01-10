@@ -10,16 +10,18 @@ mod types;
 pub use runner::ConsensusRunner;
 pub use types::{
     ConsensusDependencies, ConsensusDriver, ConsensusInstance, ConsensusModifier,
-    ConsensusRunnerConfig,
+    ConsensusRunnerConfig, StopPredicate,
 };
 
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent, TempCryptoComponentGeneric};
 use ic_crypto_test_utils_ni_dkg::{initial_dkg_transcript, InitialNiDkgConfig};
+use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
 use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, InitialNiDkgTranscriptRecord};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_client_helpers::crypto::CryptoRegistry;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_registry_subnet_features::EcdsaConfig;
 use ic_test_utilities::consensus::make_genesis;
 use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_types::{
@@ -28,7 +30,7 @@ use ic_types::{
         threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId},
         KeyPurpose,
     },
-    NodeId, RegistryVersion, SubnetId,
+    subnet_id_into_protobuf, NodeId, RegistryVersion, SubnetId,
 };
 use rand::{CryptoRng, Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -54,7 +56,20 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
     let registry_version = RegistryVersion::from(initial_version);
     let data_provider = Arc::new(ProtoRegistryDataProvider::new());
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&data_provider) as Arc<_>));
-    let subnet_record = SubnetRecordBuilder::from(node_ids).build();
+    let ecdsa_key_id = EcdsaKeyId {
+        curve: EcdsaCurve::Secp256k1,
+        name: "test_key".to_string(),
+    };
+    let subnet_record = SubnetRecordBuilder::from(node_ids)
+        .with_dkg_interval_length(19)
+        .with_ecdsa_config(EcdsaConfig {
+            quadruples_to_create_in_advance: 4,
+            key_ids: vec![ecdsa_key_id.clone()],
+            max_queue_size: Some(40),
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+        })
+        .build();
     data_provider
         .add(
             &ic_registry_keys::make_subnet_record_key(subnet_id),
@@ -79,7 +94,7 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
         data_provider
             .add(
                 &ic_registry_keys::make_node_record_key(*node),
-                RegistryVersion::from(initial_version),
+                registry_version,
                 Some(ic_protobuf::registry::node::v1::NodeRecord::default()),
             )
             .expect("Could not add node record.");
@@ -155,10 +170,22 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
     data_provider
         .add(
             &ic_registry_keys::make_catch_up_package_contents_key(subnet_id),
-            RegistryVersion::from(initial_version),
+            registry_version,
             Some(subnet_dkg),
         )
         .expect("Could not add node record.");
+
+    // Add ECDSA signing subnet to registry
+    data_provider
+        .add(
+            &ic_registry_keys::make_ecdsa_signing_subnet_list_key(&ecdsa_key_id),
+            registry_version,
+            Some(ic_protobuf::registry::crypto::v1::EcdsaSigningSubnetList {
+                subnets: vec![subnet_id_into_protobuf(subnet_id)],
+            }),
+        )
+        .expect("Could not add ECDSA signing subnet list");
+
     registry_client.reload();
     registry_client.update_to_latest_version();
 

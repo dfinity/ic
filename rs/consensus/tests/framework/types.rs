@@ -6,7 +6,7 @@ use ic_artifact_pool::{
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::{
     consensus::{ConsensusGossipImpl, ConsensusImpl},
-    dkg,
+    dkg, ecdsa,
 };
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces::{
@@ -14,7 +14,7 @@ use ic_interfaces::{
     certification::ChangeSet,
     consensus_pool::ChangeSet as ConsensusChangeSet,
     ingress_manager::IngressSelector,
-    messaging::{MessageRouting, XNetPayloadBuilder},
+    messaging::XNetPayloadBuilder,
     p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
@@ -36,8 +36,8 @@ use ic_types::{
     artifact::{ArtifactKind, Priority, PriorityFn},
     artifact_kind::ConsensusArtifact,
     consensus::{
-        certification::CertificationMessage, dkg::Message as DkgMessage, CatchUpPackage,
-        ConsensusMessage,
+        certification::CertificationMessage, dkg::Message as DkgMessage, ecdsa::EcdsaMessage,
+        CatchUpPackage, ConsensusMessage,
     },
     replica_config::ReplicaConfig,
     time::{Time, UNIX_EPOCH},
@@ -112,6 +112,7 @@ pub enum InputMessage {
     Consensus(ConsensusMessage),
     Dkg(Box<DkgMessage>),
     Certification(CertificationMessage),
+    Ecdsa(EcdsaMessage),
 }
 
 /// A Message is a tuple of [`InputMessage`] with a timestamp.
@@ -173,8 +174,8 @@ pub struct ConsensusDependencies {
     pub dkg_pool: Arc<RwLock<dkg_pool::DkgPoolImpl>>,
     pub ecdsa_pool: Arc<RwLock<ecdsa_pool::EcdsaPoolImpl>>,
     pub canister_http_pool: Arc<RwLock<canister_http_pool::CanisterHttpPoolImpl>>,
-    pub message_routing: Arc<dyn MessageRouting>,
-    pub state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+    pub message_routing: Arc<FakeMessageRouting>,
+    pub state_manager: Arc<FakeStateManager>,
     pub replica_config: ReplicaConfig,
     pub metrics_registry: MetricsRegistry,
     pub registry_client: Arc<dyn RegistryClient>,
@@ -256,7 +257,7 @@ impl fmt::Display for ConsensusInstance<'_> {
 /// This is the type of predicates used by the ConsensusRunner to determine
 /// whether or not it should terminate. It is evaluated for all consensus
 /// instances at every time step.
-pub type StopPredicate<'a> = &'a dyn Fn(&ConsensusInstance<'a>) -> bool;
+pub type StopPredicate = Box<dyn Fn(&ConsensusInstance<'_>) -> bool>;
 
 pub(crate) struct PriorityFnState<Artifact: ArtifactKind> {
     priority_fn: PriorityFn<Artifact::Id, Artifact::Attribute>,
@@ -305,6 +306,7 @@ pub struct ConsensusDriver<'a> {
         Box<dyn ChangeSetProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>>,
     pub(crate) consensus_gossip: ConsensusGossipImpl,
     pub(crate) dkg: dkg::DkgImpl,
+    pub(crate) ecdsa: ecdsa::EcdsaImpl,
     pub(crate) certifier:
         Box<dyn ChangeSetProducer<CertificationPoolImpl, ChangeSet = ChangeSet> + 'a>,
     pub(crate) logger: ReplicaLogger,
@@ -312,6 +314,7 @@ pub struct ConsensusDriver<'a> {
     pub certification_pool: Arc<RwLock<CertificationPoolImpl>>,
     pub ingress_pool: RefCell<TestIngressPool>,
     pub dkg_pool: Arc<RwLock<dkg_pool::DkgPoolImpl>>,
+    pub ecdsa_pool: Arc<RwLock<ecdsa_pool::EcdsaPoolImpl>>,
     pub(crate) consensus_priority: RefCell<PriorityFnState<ConsensusArtifact>>,
 }
 
