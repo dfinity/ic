@@ -1280,20 +1280,15 @@ impl SystemApiImpl {
         } else {
             (memory_required_to_push_request(&req) as u64).into()
         };
-        if let Err(err) = self.memory_usage.allocate_message_memory(
+        if let Err(_err) = self.memory_usage.allocate_message_memory(
             reservation_bytes,
             &self.api_type,
             &self.sandbox_safe_system_state,
         ) {
             abort(req, &mut self.sandbox_safe_system_state);
-            match err {
-                err @ HypervisorError::InsufficientCyclesInMessageMemoryGrow { .. } => {
-                    // Return an the out-of-cycles error in this case for a better
-                    // error message to be relayed to the caller.
-                    return Err(err);
-                }
-                _ => return Ok(RejectCode::SysTransient as i32),
-            }
+            // Return an error code instead of trapping here in order to allow
+            // the user code to handle the error gracefully.
+            return Ok(RejectCode::SysTransient as i32);
         }
 
         match self.sandbox_safe_system_state.push_output_request(
