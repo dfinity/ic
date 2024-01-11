@@ -45,6 +45,12 @@ impl MaliciousFlags {
             || self.maliciously_notarize_all
     }
 
+    /// This function is to distinguish maliciousness gated by ecdsa's
+    /// implementation.
+    pub fn is_ecdsa_malicious(&self) -> bool {
+        self.maliciously_corrupt_ecdsa_dealings
+    }
+
     /// Delay the execution as specified by `maliciously_delay_execution`
     pub fn delay_execution(&self, execution_start: Instant) -> Option<Duration> {
         self.maliciously_delay_execution
