@@ -722,6 +722,11 @@ impl<Message: ConsensusMessageHashable + PerTypeCFInfo + 'static> HeightIndexedP
             _ => Err(OnlyError::MultipleValues),
         }
     }
+
+    // not implemented
+    fn size(&self) -> usize {
+        0
+    }
 }
 
 pub fn new_pool_snapshot_iterator<Message: ConsensusMessageHashable + PerTypeCFInfo>(
@@ -1171,6 +1176,10 @@ impl<Message: CertificationType + PerTypeCFInfo + 'static> HeightIndexedPool<Mes
             1 => Ok(as_vec.remove(0)),
             _ => Err(OnlyError::MultipleValues),
         }
+    }
+
+    fn size(&self) -> usize {
+        0
     }
 }
 

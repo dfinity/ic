@@ -85,6 +85,10 @@ impl<T: Eq + Clone> HeightIndex<T> {
         Box::new(self.buckets.values().flat_map(|bucket| bucket.iter()))
     }
 
+    pub fn size(&self) -> usize {
+        self.buckets.values().map(Vec::len).sum()
+    }
+
     /// Returns all heights of the index, in sorted order.
     pub fn heights(&self) -> Box<dyn Iterator<Item = &Height> + '_> {
         Box::new(self.buckets.keys())
