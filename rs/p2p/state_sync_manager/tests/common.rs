@@ -436,6 +436,7 @@ fn state_sync_artifact(id: StateSyncArtifactId) -> StateSyncMessage {
         manifest,
         meta_manifest: Arc::new(meta_manifest),
         state_sync_file_group: Default::default(),
+        malicious_flags: Default::default(),
     }
 }
 

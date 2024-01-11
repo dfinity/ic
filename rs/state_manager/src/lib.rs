@@ -118,6 +118,9 @@ const LABEL_COPY_FILES: &str = "copy_files";
 const LABEL_COPY_CHUNKS: &str = "copy_chunks";
 const LABEL_PREALLOCATE: &str = "preallocate";
 const LABEL_STATE_SYNC_MAKE_CHECKPOINT: &str = "state_sync_make_checkpoint";
+const LABEL_FETCH_META_MANIFEST_CHUNK: &str = "fetch_meta_manifest_chunk";
+const LABEL_FETCH_MANIFEST_CHUNK: &str = "fetch_manifest_chunk";
+const LABEL_FETCH_STATE_CHUNK: &str = "fetch_state_chunk";
 
 /// Labels for slice validation metrics
 const LABEL_VERIFY_SIG: &str = "verify";
@@ -533,12 +536,18 @@ impl StateSyncMetrics {
 
         let corrupted_chunks = metrics_registry.int_counter_vec(
             "state_sync_corrupted_chunks",
-            "Number of chunks not copied during state sync due to hash mismatch by source ('fetch', copy_files', 'copy_chunks')",
+            "Number of chunks not copied/applied during state sync due to hash mismatch by source ('copy_files', 'copy_chunks', 'fetch_meta_manifest_chunk', 'fetch_manifest_chunk', 'fetch_state_chunk')",
             &["source"],
         );
 
         // Note [Metrics preallocation]
-        for source in &[LABEL_FETCH, LABEL_COPY_FILES, LABEL_COPY_CHUNKS] {
+        for source in &[
+            LABEL_COPY_FILES,
+            LABEL_COPY_CHUNKS,
+            LABEL_FETCH_META_MANIFEST_CHUNK,
+            LABEL_FETCH_MANIFEST_CHUNK,
+            LABEL_FETCH_STATE_CHUNK,
+        ] {
             corrupted_chunks.with_label_values(&[*source]);
         }
 

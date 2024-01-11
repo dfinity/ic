@@ -87,6 +87,7 @@ impl StateSync {
                         meta_manifest,
                         manifest: manifest.clone(),
                         state_sync_file_group,
+                        malicious_flags: self.state_manager.malicious_flags.clone(),
                     })
                 } else {
                     None
@@ -137,6 +138,7 @@ impl StateSync {
                         manifest: manifest.clone(),
                         meta_manifest,
                         state_sync_file_group: Default::default(),
+                        malicious_flags: self.state_manager.malicious_flags.clone(),
                     };
                     Some(StateSyncArtifactId {
                         height: msg.height,
