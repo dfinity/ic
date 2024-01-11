@@ -17,7 +17,7 @@ use axum::{
     BoxError, Extension,
 };
 use bytes::Bytes;
-use candid::Principal;
+use candid::{CandidType, Decode, Principal};
 use http::{
     header::{HeaderName, HeaderValue, CONTENT_TYPE},
     Method,
@@ -26,6 +26,7 @@ use ic_types::{
     messages::{Blob, HttpStatusResponse, ReplicaHealthStatus},
     CanisterId,
 };
+
 use lazy_static::lazy_static;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -45,6 +46,7 @@ use crate::{
 // TODO which one to use?
 const IC_API_VERSION: &str = "0.18.0";
 pub const ANONYMOUS_PRINCIPAL: Principal = Principal::anonymous();
+const METHOD_HTTP: &str = "http_request";
 
 // Clippy complains that these are interior-mutable.
 // We don't mutate them, so silence it.
@@ -74,6 +76,9 @@ const HEADER_IC_REQUEST_TYPE: HeaderName = HeaderName::from_static("x-ic-request
 const HEADER_IC_RETRIES: HeaderName = HeaderName::from_static("x-ic-retries");
 #[allow(clippy::declare_interior_mutable_const)]
 const HEADER_X_REQUEST_ID: HeaderName = HeaderName::from_static("x-request-id");
+
+const HEADERS_HIDE_HTTP_REQUEST: [&str; 4] =
+    ["x-real-ip", "x-forwarded-for", "x-request-id", "user-agent"];
 
 // Rust const/static concat is non-existent, so we have to repeat
 pub const PATH_STATUS: &str = "/api/v2/status";
@@ -224,6 +229,15 @@ impl IntoResponse for ErrorCause {
     }
 }
 
+#[derive(Clone, CandidType, Deserialize, Hash, PartialEq)]
+pub struct HttpRequest {
+    pub method: String,
+    pub url: String,
+    pub headers: Vec<(String, String)>,
+    #[serde(with = "serde_bytes")]
+    pub body: Vec<u8>,
+}
+
 // Object that holds per-request information
 #[derive(Default, Clone)]
 pub struct RequestContext {
@@ -237,6 +251,9 @@ pub struct RequestContext {
     pub nonce: Option<Vec<u8>>,
     pub ingress_expiry: Option<u64>,
     pub arg: Option<Vec<u8>>,
+
+    // Filled in when the request is HTTP
+    pub http_request: Option<HttpRequest>,
 }
 
 impl RequestContext {
@@ -254,17 +271,30 @@ impl Hash for RequestContext {
         self.sender.hash(state);
         self.method_name.hash(state);
         self.ingress_expiry.hash(state);
-        self.arg.hash(state);
+
+        // Hash http_request if it's present, arg otherwise
+        // They're mutually exclusive
+        if self.http_request.is_some() {
+            self.http_request.hash(state);
+        } else {
+            self.arg.hash(state);
+        }
     }
 }
 
 impl PartialEq for RequestContext {
     fn eq(&self, other: &Self) -> bool {
-        self.canister_id == other.canister_id
+        let r = self.canister_id == other.canister_id
             && self.sender == other.sender
             && self.method_name == other.method_name
-            && self.ingress_expiry == other.ingress_expiry
-            && self.arg == other.arg
+            && self.ingress_expiry == other.ingress_expiry;
+
+        // Same as in hash()
+        if self.http_request.is_some() {
+            r && self.http_request == other.http_request
+        } else {
+            r && self.arg == other.arg
+        }
     }
 }
 impl Eq for RequestContext {}
@@ -526,6 +556,30 @@ pub async fn preprocess_request(
         .map_err(|err| ErrorCause::UnableToParseCBOR(err.to_string()))?;
     let content = envelope.content;
 
+    // Check if the request is HTTP and try to parse the arg
+    let (arg, http_request) = match (&content.method_name, content.arg) {
+        (Some(method), Some(arg)) => {
+            if request_type == RequestType::Query && method == METHOD_HTTP {
+                let mut req: HttpRequest = Decode!(&arg.0, HttpRequest).map_err(|err| {
+                    ErrorCause::UnableToParseCBOR(format!(
+                        "unable to decode arg as HttpRequest: {err}"
+                    ))
+                })?;
+
+                // Remove specific headers
+                req.headers
+                    .retain(|x| !HEADERS_HIDE_HTTP_REQUEST.contains(&(x.0.as_str())));
+
+                // Drop the arg as it's now redundant
+                (None, Some(req))
+            } else {
+                (Some(arg), None)
+            }
+        }
+
+        (_, arg) => (arg, None),
+    };
+
     // Construct the context
     let ctx = RequestContext {
         request_type,
@@ -534,8 +588,9 @@ pub async fn preprocess_request(
         canister_id: content.canister_id,
         method_name: content.method_name,
         ingress_expiry: content.ingress_expiry,
-        arg: content.arg.map(|x| x.0),
+        arg: arg.map(|x| x.0),
         nonce: content.nonce.map(|x| x.0),
+        http_request,
     };
 
     let ctx = Arc::new(ctx);
