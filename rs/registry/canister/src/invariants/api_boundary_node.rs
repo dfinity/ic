@@ -3,31 +3,29 @@ use std::collections::HashMap;
 use ic_base_types::NodeId;
 
 use super::common::{
-    get_api_boundary_node_ids_from_snapshot, get_api_boundary_node_record_from_snapshot,
-    get_node_record_from_snapshot, InvariantCheckError, RegistrySnapshot,
+    get_api_boundary_node_ids_from_snapshot, get_node_record_from_snapshot, InvariantCheckError,
+    RegistrySnapshot,
 };
 
 /// Checks API Boundary Node invariants:
 ///    * Ensure API Boundary Nodes have unique domain names
 ///    * Ensure each API Boundary Node record has a corresponding NodeRecord
-///    * Ensure that http field of the corresponding NodeRecord is not None.
+///    * Ensure that both `domain` and `http` fields of the NodeRecord are not None
 pub(crate) fn check_api_boundary_node_invariants(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
     let mut domain_to_id: HashMap<String, NodeId> = HashMap::new();
-    // IMPORTANT: this code structure below rigorously follows the structure of the `fn try_to_populate_api_boundary_nodes(..)`.
+    // IMPORTANT: this code structure below rigorously follows the structure of the `fn try_to_populate_api_boundary_nodes(..)` in message_routing.rs.
     // These two code blocks should be kept in sync to avoid stalling the subnets.
     // Please be very mindful when modifying the code below.
+    // Here is an example of code changes leading to subnet stalling:
+    // - Assume the requirement for an API BN to have a related NodeRecord is remove/relaxed below
+    // - However, this requirement still exists and holds in the message_route.rs code
+    // - An attempt to read the related NodeRecord for an API BN would fail and cause ReadRegistryError::Transient()
+    // - Transient registry errors are retried in `message_route.rs` code. However, in this case it's not helpful, the error is persistent in nature
+    // - As a result, the subnet is stalled
     let api_boundary_node_ids = get_api_boundary_node_ids_from_snapshot(snapshot)?;
     for api_bn_id in api_boundary_node_ids {
-        let api_node_record = get_api_boundary_node_record_from_snapshot(api_bn_id, snapshot)?;
-        let Some(_api_boundary_node_record) = api_node_record else {
-            return Err(InvariantCheckError {
-                msg: format!("API Boundary Node with id={api_bn_id} was not found"),
-                source: None,
-            });
-        };
-
         let node_record = get_node_record_from_snapshot(api_bn_id, snapshot)?;
         let Some(node_record) = node_record else {
             return Err(InvariantCheckError {
