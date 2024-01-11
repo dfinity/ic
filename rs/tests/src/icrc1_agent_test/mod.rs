@@ -131,7 +131,7 @@ pub fn test(env: TestEnv) {
         let init_args = InitArgsBuilder::for_tests()
             .with_minting_account(minting_account)
             .with_initial_balance(account1, 1_000_000_000u64)
-            .with_transfer_fee(1_000)
+            .with_transfer_fee(1_000_u16)
             .with_feature_flags(FeatureFlags { icrc2: true })
             .with_archive_options(ArchiveOptions {
                 trigger_threshold: 2,
@@ -267,14 +267,14 @@ pub fn test(env: TestEnv) {
         );
 
         let blocks_request = GetBlocksRequest {
-            start: Nat::from(0),
-            length: Nat::from(10),
+            start: Nat::from(0_u8),
+            length: Nat::from(10_u8),
         };
         let blocks_response = agent.get_blocks(blocks_request).await.unwrap();
-        assert_eq!(Nat::from(2), blocks_response.chain_length);
+        assert_eq!(Nat::from(2_u8), blocks_response.chain_length);
         assert_eq!(blocks_response.archived_blocks.len(), 1);
-        assert_eq!(blocks_response.archived_blocks[0].start, Nat::from(0));
-        assert_eq!(blocks_response.archived_blocks[0].length, Nat::from(2));
+        assert_eq!(blocks_response.archived_blocks[0].start, Nat::from(0_u8));
+        assert_eq!(blocks_response.archived_blocks[0].length, Nat::from(2_u8));
         let archived_blocks = agent
             .get_blocks_from_archive(blocks_response.archived_blocks[0].clone())
             .await
@@ -286,7 +286,7 @@ pub fn test(env: TestEnv) {
             .expect("failed to get certified tip")
             .unwrap();
         assert_eq!(archived_blocks.blocks[1].hash(), last_block_hash);
-        assert_eq!(Nat::from(1), last_block_index);
+        assert_eq!(Nat::from(1_u8), last_block_index);
 
         let data_certificate = agent.get_data_certificate().await.unwrap();
         assert!(data_certificate.certificate.is_some());
@@ -336,12 +336,12 @@ pub fn test(env: TestEnv) {
             .expect("failed to get certified tip")
             .unwrap();
         let blocks_request = GetBlocksRequest {
-            start: Nat::from(2),
-            length: Nat::from(1),
+            start: Nat::from(2_u8),
+            length: Nat::from(1_u8),
         };
         let blocks_response = agent.get_blocks(blocks_request).await.unwrap();
         assert_eq!(last_block_hash, blocks_response.blocks[0].hash());
-        assert_eq!(last_block_index, 2);
+        assert_eq!(last_block_index, 2u8);
 
         ledger
             .upgrade_to_self_binary(CandidOne(UpgradeArgs::default()).into_bytes().unwrap())
@@ -354,7 +354,7 @@ pub fn test(env: TestEnv) {
             .expect("failed to get certified tip")
             .unwrap();
         assert_eq!(last_block_hash, blocks_response.blocks[0].hash());
-        assert_eq!(last_block_index, 2);
+        assert_eq!(last_block_index, 2_u8);
 
         let allowance = agent
             .allowance(account1, spender, CallMode::Query)

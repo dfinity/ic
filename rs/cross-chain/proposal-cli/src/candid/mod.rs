@@ -2,7 +2,7 @@
 mod tests;
 
 use candid::types::{Type, TypeInner};
-use candid::{IDLArgs, TypeEnv};
+use candid::TypeEnv;
 use std::path::Path;
 
 const EMPTY_UPGRADE_ARGS: &str = "()";
@@ -44,8 +44,7 @@ pub fn encode_upgrade_args<F: Into<String>>(candid_file: &Path, upgrade_args: F)
     } else {
         vec![]
     };
-    let encoded_upgrade_args = upgrade_args
-        .parse::<IDLArgs>()
+    let encoded_upgrade_args = candid_parser::parse_idl_args(&upgrade_args)
         .expect("fail to parse upgrade args")
         .to_bytes_with_types(&env, &upgrade_types)
         .expect("failed to encode");
@@ -57,7 +56,8 @@ pub fn encode_upgrade_args<F: Into<String>>(candid_file: &Path, upgrade_args: F)
 }
 
 fn parse_constructor_args(candid_file: &Path) -> (TypeEnv, Vec<Type>) {
-    let (env, class_type) = candid::check_file(candid_file).expect("fail to parse candid file");
+    let (env, class_type) =
+        candid_parser::check_file(candid_file).expect("fail to parse candid file");
     let class_type = class_type.expect("missing class type");
     let constructor_types = match class_type.as_ref() {
         TypeInner::Class(constructor_types, _service_type) => constructor_types,

@@ -31,7 +31,7 @@ const MAX_LOGS_RESPONSE_SIZE: usize = 1 << 20;
 ///     Ok(())
 /// }
 ///
-/// #[ic_cdk::query]
+/// #[ic_cdk_macros::query]
 /// fn http_request(request: CanisterHttpRequestArgument) -> HttpResponse {
 ///     let path = match request.url.find('?') {
 ///         None => &request.url[..],
@@ -41,7 +41,7 @@ const MAX_LOGS_RESPONSE_SIZE: usize = 1 << 20;
 ///     match path {
 ///         "/metrics" => serve_metrics(encode_metrics),
 ///         _ => HttpResponse {
-///                 status: 404.into(),
+///                 status: 404_u32.into(),
 ///                 body: "not_found".into(),
 ///                 ..Default::default()
 ///             }
@@ -57,7 +57,7 @@ pub fn serve_metrics(
         Ok(()) => {
             let content_body: Vec<u8> = writer.into_inner();
             HttpResponse {
-                status: 200.into(),
+                status: 200_u8.into(),
                 headers: vec![
                     HttpHeader {
                         name: "Content-Type".to_string(),
@@ -72,7 +72,7 @@ pub fn serve_metrics(
             }
         }
         Err(err) => HttpResponse {
-            status: 500.into(),
+            status: 500_u16.into(),
             headers: vec![],
             body: format!("Failed to encode metrics: {}", err).into(),
         },
@@ -92,7 +92,7 @@ pub fn serve_metrics(
 /// declare_log_buffer!(name = INFO, capacity = 100);
 /// declare_log_buffer!(name = ERROR, capacity = 100);
 ///
-/// #[ic_cdk::query]
+/// #[ic_cdk_macros::query]
 /// fn http_request(request: CanisterHttpRequestArgument) -> HttpResponse {
 ///     log!(INFO, "This is an INFO log");
 ///     log!(ERROR, "This is an ERROR log");
@@ -105,7 +105,7 @@ pub fn serve_metrics(
 ///     match path {
 ///         "/logs" => serve_logs(request, &INFO, &ERROR),
 ///         _ => HttpResponse {
-///                 status: 404.into(),
+///                 status: 404_u32.into(),
 ///                 body: "not_found".into(),
 ///                 ..Default::default()
 ///             }
@@ -126,7 +126,7 @@ pub fn serve_logs(
                 .into_bytes();
 
             return HttpResponse {
-                status: 400.into(),
+                status: 400_u16.into(),
                 headers: vec![
                     HttpHeader {
                         name: "Content-Type".to_string(),
@@ -153,7 +153,7 @@ pub fn serve_logs(
 
     let content_body: Vec<u8> = body.into_bytes();
     HttpResponse {
-        status: 200.into(),
+        status: 200_u8.into(),
         headers: vec![
             HttpHeader {
                 name: "Content-Type".to_string(),

@@ -725,7 +725,7 @@ fn test_account_identifier_data_type_storable() {
 
 #[test]
 fn check_candid_interface_compatibility() {
-    use candid::utils::{service_compatible, CandidSource};
+    use candid_parser::utils::{service_compatible, CandidSource};
 
     candid::export_service!();
 

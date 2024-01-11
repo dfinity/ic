@@ -586,7 +586,7 @@ fn upgrade_archive_sns_canister_via_sns_wasms_legacy() {
                 owner: user.into(),
                 subaccount: None,
             },
-            Nat::from(100_000_000),
+            Nat::from(100_000_000_u32),
         ));
     } else {
         panic!("bug: expected Init got Upgrade");
@@ -862,7 +862,7 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed_legacy() {
                 owner: user.into(),
                 subaccount: None,
             },
-            Nat::from(100_000_000),
+            Nat::from(100_000_000_u32),
         ));
     } else {
         panic!("bug: expected Init got Upgrade");

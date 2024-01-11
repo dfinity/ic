@@ -173,7 +173,7 @@ async fn test() {
         owner: Principal::anonymous(),
         subaccount: None,
     };
-    let amount = Nat::from(10_000_000);
+    let amount = Nat::from(10_000_000_u64);
     let _ = ledger_agent
         .transfer(TransferArg {
             from_subaccount: None,

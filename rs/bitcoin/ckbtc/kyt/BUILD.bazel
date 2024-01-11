@@ -49,6 +49,7 @@ rust_test(
     env = {
         "CARGO_MANIFEST_DIR": "rs/bitcoin/ckbtc/kyt",
     },
+    deps = ["@crate_index//:candid_parser"],
 )
 
 rust_test(

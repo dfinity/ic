@@ -52,6 +52,7 @@ rust_test(
     env = {
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/tvl",
     },
+    deps = ["@crate_index//:candid_parser"],
 )
 
 DEV_ENV = {

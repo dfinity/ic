@@ -123,7 +123,7 @@ impl InitArgsBuilder {
             },
             fee_collector_account: None,
             initial_balances: vec![],
-            transfer_fee: 10_000.into(),
+            transfer_fee: 10_000_u32.into(),
             decimals: None,
             token_name: "Test Token".to_string(),
             token_symbol: "XTK".to_string(),

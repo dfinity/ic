@@ -223,7 +223,7 @@ fn icp_get_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_ledger::
 
 fn index_get_blocks(env: &StateMachine, index_id: CanisterId) -> Vec<icp_ledger::Block> {
     let req = GetBlocksRequest {
-        start: 0.into(),
+        start: 0u8.into(),
         length: u64::MAX.into(),
     };
     let req = Encode!(&req).expect("Failed to encode GetBlocksRequest");
@@ -915,7 +915,7 @@ fn test_approve_args() {
         ledger_id,
         account(1, 0),
         ApproveTestArgs::new(account(1, 0), account(2, 0), 100_000)
-            .expected_allowance(Some(100_000.into())),
+            .expected_allowance(Some(100_000u32.into())),
     );
     wait_until_sync_is_completed(env, index_id, ledger_id);
 

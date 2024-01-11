@@ -617,7 +617,7 @@ fn initial_state() -> State {
         ethereum_block_height: Default::default(),
         minimum_withdrawal_amount: Wei::TWO.into(),
         next_transaction_nonce: TransactionNonce::ZERO.into(),
-        last_scraped_block_number: candid::Nat::from(3_956_206),
+        last_scraped_block_number: candid::Nat::from(3_956_206_u32),
     })
     .expect("valid init args")
 }

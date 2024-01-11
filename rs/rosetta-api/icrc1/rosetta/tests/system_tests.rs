@@ -139,7 +139,7 @@ async fn test_network_status() {
             fee: None,
             created_at_time: None,
             memo: None,
-            amount: Nat::from(10_000_000),
+            amount: Nat::from(10_000_000_u64),
         })
         .await
         .expect("Failed to generate a new block");
@@ -158,8 +158,8 @@ async fn test_network_status() {
     // Get the blocks from the ledger to compare against rosetta
     let get_blocks_response = agent
         .get_blocks(GetBlocksRequest {
-            start: Nat::from(0),
-            length: Nat::from(10),
+            start: Nat::from(0_u8),
+            length: Nat::from(10_u8),
         })
         .await
         .expect("Failed to get blocks");
@@ -247,7 +247,7 @@ async fn create_blocks(
             fee: None,
             created_at_time: None,
             memo: None,
-            amount: Nat::from(100_000_000),
+            amount: Nat::from(100_000_000_u32),
         })
         .await
         .expect("Failed to generate a new transfer operation")
@@ -261,7 +261,7 @@ async fn create_blocks(
             fee: None,
             created_at_time: None,
             memo: None,
-            amount: Nat::from(100_000_000),
+            amount: Nat::from(100_000_000_u32),
         })
         .await
         .expect("Failed to generate a new burn operation")
@@ -275,7 +275,7 @@ async fn create_blocks(
                 owner: icrc_ledger_canister_id.into(),
                 subaccount: None,
             },
-            amount: Nat::from(100_000_000),
+            amount: Nat::from(100_000_000_u32),
             expected_allowance: None,
             expires_at: None,
             fee: None,
@@ -289,8 +289,8 @@ async fn create_blocks(
     // Get the blocks from the ledger to compare against rosetta
     let get_blocks_response = icrc_agent
         .get_blocks(GetBlocksRequest {
-            start: Nat::from(0),
-            length: Nat::from(10),
+            start: Nat::from(0_u8),
+            length: Nat::from(10_u8),
         })
         .await
         .expect("Failed to get blocks");

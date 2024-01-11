@@ -65,6 +65,7 @@ rust_test(
         "//rs/universal_canister/lib",
         "@crate_index//:bitcoin",
         "@crate_index//:candid",
+        "@crate_index//:candid_parser",
         "@crate_index//:hex",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-cdk",

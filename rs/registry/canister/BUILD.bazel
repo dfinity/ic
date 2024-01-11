@@ -50,6 +50,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     "@crate_index//:assert_matches",
+    "@crate_index//:candid_parser",
     "@crate_index//:itertools",
     "@crate_index//:maplit",
     "@crate_index//:rand",

@@ -48,6 +48,7 @@ thousands = "0.2"
 
 [dev-dependencies]
 assert_matches = "1.5.0"
+candid_parser = { workspace = true }
 ethers-core = "2.0.8"
 ic-base-types = { path = "../../../types/base_types" }
 ic-config = { path = "../../../config" }

@@ -32,6 +32,7 @@ strum = { workspace = true }
 strum_macros = { workspace = true }
 
 [dev-dependencies]
+candid_parser = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
