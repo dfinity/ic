@@ -24,6 +24,12 @@
 .bazelrc                  @dfinity-lab/teams/idx
 .bazelversion             @dfinity-lab/teams/idx
 
+# [Rust Lang]
+rust-toolchain.toml       @dfinity-lab/teams/networking-team  
+rustfmt.toml              @dfinity-lab/teams/networking-team
+deny.toml                 @dfinity-lab/teams/networking-team
+clippy.toml               @dfinity-lab/teams/interface-owners
+
 # [Golang]
 go.mod                    @dfinity-lab/teams/idx
 go.sum                    @dfinity-lab/teams/idx
@@ -291,9 +297,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/wasm_transform/                                     @dfinity-lab/teams/runtime-owners
 /rs/workload_generator/                                 @dfinity-lab/teams/runtime-owners
 /rs/xnet/                                               @dfinity-lab/teams/message-routing-owners
-
-# [Haskell]
-/hs/spec_compliance/                                    @dfinity-lab/teams/ic-testing-verification
 
 # [Scalability]
 /scalability/                                                       @dfinity-lab/teams/runtime-owners
