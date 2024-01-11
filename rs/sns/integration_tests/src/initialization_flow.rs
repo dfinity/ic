@@ -491,6 +491,9 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
         &canister_id_or_panic(test_sns.swap_canister_id),
     );
     assert_eq!(get_lifecycle_response.lifecycle(), Lifecycle::Committed);
+    assert!(get_lifecycle_response
+        .decentralization_swap_termination_timestamp_seconds
+        .is_some());
 
     // Step 4: Verify the Swap auto-finalizes and the SNS is in the correct state
     sns_initialization_flow_test
@@ -788,6 +791,9 @@ fn test_one_proposal_sns_initialization_success_without_neurons_fund_participati
         &canister_id_or_panic(test_sns.swap_canister_id),
     );
     assert_eq!(get_lifecycle_response.lifecycle(), Lifecycle::Committed);
+    assert!(get_lifecycle_response
+        .decentralization_swap_termination_timestamp_seconds
+        .is_some());
 
     // Step 4: Verify the Swap auto-finalizes and the SNS is in the correct state
     sns_initialization_flow_test
