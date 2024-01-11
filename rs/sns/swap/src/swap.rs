@@ -448,6 +448,7 @@ impl Swap {
             open_sns_token_swap_proposal_id: None,
             finalize_swap_in_progress: Some(false),
             decentralization_sale_open_timestamp_seconds: None,
+            decentralization_swap_termination_timestamp_seconds: None,
             next_ticket_id: Some(0),
             purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
             purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
@@ -840,6 +841,7 @@ impl Swap {
         }
 
         self.set_lifecycle(Lifecycle::Committed);
+        self.decentralization_swap_termination_timestamp_seconds = Some(now_seconds);
 
         true
     }
@@ -1064,6 +1066,7 @@ impl Swap {
         }
 
         self.set_lifecycle(Lifecycle::Aborted);
+        self.decentralization_swap_termination_timestamp_seconds = Some(now_seconds);
 
         true
     }
@@ -3226,6 +3229,8 @@ impl Swap {
             lifecycle: Some(self.lifecycle),
             decentralization_sale_open_timestamp_seconds: self
                 .decentralization_sale_open_timestamp_seconds,
+            decentralization_swap_termination_timestamp_seconds: self
+                .decentralization_swap_termination_timestamp_seconds,
         }
     }
 
@@ -3791,6 +3796,7 @@ impl<'a> fmt::Debug for SwapDigest<'a> {
             open_sns_token_swap_proposal_id,
             finalize_swap_in_progress,
             decentralization_sale_open_timestamp_seconds,
+            decentralization_swap_termination_timestamp_seconds,
             next_ticket_id,
             purge_old_tickets_last_completion_timestamp_nanoseconds,
             purge_old_tickets_next_principal,
@@ -3820,6 +3826,10 @@ impl<'a> fmt::Debug for SwapDigest<'a> {
             .field(
                 "decentralization_sale_open_timestamp_seconds",
                 decentralization_sale_open_timestamp_seconds,
+            )
+            .field(
+                "decentralization_swap_termination_timestamp_seconds",
+                decentralization_swap_termination_timestamp_seconds,
             )
             .field("next_ticket_id", next_ticket_id)
             .field(
@@ -3956,6 +3966,34 @@ mod tests {
         assert_eq!(
             swap.get_lifecycle(&request).lifecycle,
             Some(Lifecycle::Aborted as i32)
+        );
+
+        swap.decentralization_sale_open_timestamp_seconds = None;
+        assert_eq!(
+            swap.get_lifecycle(&request)
+                .decentralization_sale_open_timestamp_seconds,
+            None,
+        );
+
+        swap.decentralization_sale_open_timestamp_seconds = Some(42);
+        assert_eq!(
+            swap.get_lifecycle(&request)
+                .decentralization_sale_open_timestamp_seconds,
+            Some(42),
+        );
+
+        swap.decentralization_swap_termination_timestamp_seconds = None;
+        assert_eq!(
+            swap.get_lifecycle(&request)
+                .decentralization_swap_termination_timestamp_seconds,
+            None,
+        );
+
+        swap.decentralization_swap_termination_timestamp_seconds = Some(42);
+        assert_eq!(
+            swap.get_lifecycle(&request)
+                .decentralization_swap_termination_timestamp_seconds,
+            Some(42),
         );
     }
 
@@ -4575,6 +4613,7 @@ mod tests {
                 open_sns_token_swap_proposal_id: Some(0),
                 finalize_swap_in_progress: Some(false),
                 decentralization_sale_open_timestamp_seconds: Some(1),
+                decentralization_swap_termination_timestamp_seconds: None,
                 next_ticket_id: Some(0),
                 purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
                 purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
@@ -4870,6 +4909,7 @@ mod tests {
             open_sns_token_swap_proposal_id: Some(0),
             finalize_swap_in_progress: Some(false),
             decentralization_sale_open_timestamp_seconds: Some(10),
+            decentralization_swap_termination_timestamp_seconds: None,
             next_ticket_id: Some(0),
             purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
             purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),

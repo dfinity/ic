@@ -218,6 +218,7 @@ fn create_generic_committed_swap() -> Swap {
         open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
         finalize_swap_in_progress: None,
         decentralization_sale_open_timestamp_seconds: None,
+        decentralization_swap_termination_timestamp_seconds: None,
         next_ticket_id: Some(0),
         purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
         purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
@@ -966,6 +967,10 @@ fn test_scenario_happy() {
     assert!(!swap.try_abort(END_TIMESTAMP_SECONDS));
     assert!(swap.try_commit(END_TIMESTAMP_SECONDS));
     assert_eq!(swap.lifecycle(), Committed);
+    assert_eq!(
+        swap.decentralization_swap_termination_timestamp_seconds,
+        Some(END_TIMESTAMP_SECONDS)
+    );
     // Should not be able to re-open after commit.
     assert!(!swap.can_open(END_TIMESTAMP_SECONDS));
     assert!(!swap.try_open(END_TIMESTAMP_SECONDS));
@@ -1243,6 +1248,7 @@ async fn test_finalize_swap_ok_matched_funding() {
         open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
         finalize_swap_in_progress: None,
         decentralization_sale_open_timestamp_seconds: None,
+        decentralization_swap_termination_timestamp_seconds: None,
         next_ticket_id: Some(0),
         purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
         purge_old_tickets_next_principal: Some(vec![0; 32]),
@@ -1269,6 +1275,10 @@ async fn test_finalize_swap_ok_matched_funding() {
     // Step 2: Commit the swap
     assert!(swap.try_commit(END_TIMESTAMP_SECONDS));
     assert_eq!(swap.lifecycle(), Committed);
+    assert_eq!(
+        swap.decentralization_swap_termination_timestamp_seconds,
+        Some(END_TIMESTAMP_SECONDS)
+    );
 
     // We need to create a function to generate the clients, so we can get them
     // twice: once for when we call `finalize` and once for when we call
@@ -1681,6 +1691,7 @@ async fn test_finalize_swap_ok_fixed_funding() {
         open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
         finalize_swap_in_progress: None,
         decentralization_sale_open_timestamp_seconds: None,
+        decentralization_swap_termination_timestamp_seconds: None,
         next_ticket_id: Some(0),
         purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
         purge_old_tickets_next_principal: Some(vec![0; 32]),
@@ -1707,6 +1718,10 @@ async fn test_finalize_swap_ok_fixed_funding() {
     // Step 2: Commit the swap
     assert!(swap.try_commit(END_TIMESTAMP_SECONDS));
     assert_eq!(swap.lifecycle(), Committed);
+    assert_eq!(
+        swap.decentralization_swap_termination_timestamp_seconds,
+        Some(END_TIMESTAMP_SECONDS)
+    );
 
     // We need to create a function to generate the clients, so we can get them
     // twice: once for when we call `finalize` and once for when we call
@@ -2065,6 +2080,7 @@ async fn test_finalize_swap_abort_matched_funding() {
         open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
         finalize_swap_in_progress: None,
         decentralization_sale_open_timestamp_seconds: None,
+        decentralization_swap_termination_timestamp_seconds: None,
         next_ticket_id: Some(0),
         purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
         purge_old_tickets_next_principal: Some(vec![0; 32]),
@@ -2094,6 +2110,10 @@ async fn test_finalize_swap_abort_matched_funding() {
     // Step 2: Abort the swap
     assert!(swap.try_abort(/* now_seconds: */ END_TIMESTAMP_SECONDS + 1));
     assert_eq!(swap.lifecycle(), Aborted);
+    assert_eq!(
+        swap.decentralization_swap_termination_timestamp_seconds,
+        Some(END_TIMESTAMP_SECONDS + 1)
+    );
     // Cannot open when aborted.
     assert!(!swap.can_open(END_TIMESTAMP_SECONDS + 1));
     assert!(!swap.try_open(END_TIMESTAMP_SECONDS + 1));
@@ -2320,6 +2340,7 @@ async fn test_finalize_swap_abort_fixed_funding() {
         open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
         finalize_swap_in_progress: None,
         decentralization_sale_open_timestamp_seconds: None,
+        decentralization_swap_termination_timestamp_seconds: None,
         next_ticket_id: Some(0),
         purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
         purge_old_tickets_next_principal: Some(vec![0; 32]),
@@ -2349,6 +2370,10 @@ async fn test_finalize_swap_abort_fixed_funding() {
     // Step 2: Abort the swap
     assert!(swap.try_abort(/* now_seconds: */ END_TIMESTAMP_SECONDS + 1));
     assert_eq!(swap.lifecycle(), Aborted);
+    assert_eq!(
+        swap.decentralization_swap_termination_timestamp_seconds,
+        Some(END_TIMESTAMP_SECONDS + 1)
+    );
     // Cannot open when aborted.
     assert!(!swap.can_open(END_TIMESTAMP_SECONDS + 1));
     assert!(!swap.try_open(END_TIMESTAMP_SECONDS + 1));

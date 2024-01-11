@@ -241,6 +241,9 @@ message Swap {
   // the swap proposal.
   optional uint64 decentralization_sale_open_timestamp_seconds = 11;
 
+  // The timestamp for the actual termination of the swap (committed or aborted).
+  optional uint64 decentralization_swap_termination_timestamp_seconds = 21;
+
   // This ticket id counter keeps track of the latest ticket id. Whenever a new
   // ticket is created this counter is incremented. It ensures that ticket ids
   // are unique. The ticket IDs are sequential and next_ticket_id is assigned to
@@ -1271,6 +1274,7 @@ message GetLifecycleRequest {}
 message GetLifecycleResponse {
   optional Lifecycle lifecycle = 1;
   optional uint64 decentralization_sale_open_timestamp_seconds = 2;
+  optional uint64 decentralization_swap_termination_timestamp_seconds = 3;
 }
 
 message GetAutoFinalizationStatusRequest {}
