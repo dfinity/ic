@@ -126,6 +126,29 @@ struct BabyStepGiantStepTable {
 /// TODO(CRP-2308) use a better data structure than HashMap here.
 impl BabyStepGiantStepTable {
     const GT_REPR_SIZE: usize = 28;
+    /// The byte length of the prefix is chosen to be the smallest possible that
+    /// gives us a small number of false positives. The space of the prefixes
+    /// is, therefore, 2^(5*8) = 2^40. Given that we use the hash prefix, the
+    /// prefixes are pseudo-random. Therefore, the probability of having a false
+    /// positive equals the number of possible prefixes (2^40) divided by the
+    /// number of distinct prefixes in the table. For simplicity, we bound this
+    /// probability by the number of the prefixes in general, which is the case
+    /// when all stored prefixes are indeed distinct.
+    ///
+    /// Our BSGS table contains around a million elements for multiplier 1 with
+    /// current production subnet sizes (e.g., 28 nodes -> 978928, 40 nodes ->
+    /// 1170043). In production, we use a table with multiplier 20, totaling in
+    /// approx. 20mil elements. The probability of a false positive is therefore
+    /// bounded by 2^log2(20mil)/2^40, which is approx. 1 in 55 thousand. If we
+    /// increase the multiplier to our current optimal value (approx. 64), then
+    /// the probability is around 1 in 17 thousand. Given that on a false
+    /// positive we only need to perform one additional lookup that is slower by
+    /// a small constant (say, very roughly, factor 5 slowdown), handling false
+    /// positives is a small runtime overhead.
+    ///
+    /// If it happens that the table size is increased by much more, then we can
+    /// reduce the false positive probability simply by increasing the prefix
+    /// size by 1 byte or more.
     const GT_REPR_PREFIX_SIZE: usize = 5;
 
     fn hash_gt(gt: &Gt) -> ([u8; Self::GT_REPR_PREFIX_SIZE], [u8; Self::GT_REPR_SIZE]) {
