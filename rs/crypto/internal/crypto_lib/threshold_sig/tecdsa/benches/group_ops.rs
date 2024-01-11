@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use criterion::*;
 use ic_crypto_internal_threshold_sig_ecdsa::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
@@ -350,6 +348,17 @@ fn point_mul(c: &mut Criterion) {
             )
         });
 
+        group.bench_function("mul_by_node_index_0_to_50", |b| {
+            b.iter_with_setup(
+                || random_point(curve_type, rng),
+                |p| {
+                    for node_index in 0..50 {
+                        p.mul_by_node_index_vartime(node_index).unwrap();
+                    }
+                },
+            )
+        });
+
         group.bench_function("multiply_vartime_total", |b| {
             b.iter_batched_ref(
                 || {
@@ -445,9 +454,13 @@ fn point_serialize(c: &mut Criterion) {
     }
 }
 
-criterion_group! {
-name = group_ops;
-config = Criterion::default().measurement_time(Duration::from_secs(30));
-targets = point_multiexp_constant_time, point_multiexp_vartime_total, point_multiexp_vartime_online, point_mul, point_double_vs_addition, point_serialize,
-}
-criterion_main!(group_ops);
+criterion_group!(
+    benches,
+    point_multiexp_constant_time,
+    point_multiexp_vartime_total,
+    point_multiexp_vartime_online,
+    point_mul,
+    point_double_vs_addition,
+    point_serialize,
+);
+criterion_main!(benches);
