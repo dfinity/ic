@@ -49,11 +49,9 @@ use ic_sns_governance::{
         GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
         Governance as GovernanceProto, ListNervousSystemFunctionsResponse, ListNeurons,
         ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron,
-        ManageNeuronResponse, NervousSystemParameters, ProposalData, ProposalRewardStatus,
-        RewardEvent, SetMode, SetModeResponse,
+        ManageNeuronResponse, NervousSystemParameters, RewardEvent, SetMode, SetModeResponse,
     },
     types::{Environment, HeapGrowthPotential},
-    LEGACY_REWARD_EVENT_END_TIMESTAMP_SECONDS,
 };
 use prost::Message;
 use rand::{RngCore, SeedableRng};
@@ -257,11 +255,6 @@ fn canister_post_upgrade() {
     dfn_core::printer::hook();
     log!(INFO, "Executing post upgrade");
 
-    let now = now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("Cannot tell what time it is.")
-        .as_secs();
-
     let reader = BufferedStableMemReader::new(STABLE_MEM_BUFFER_SIZE);
 
     match GovernanceProto::decode(reader) {
@@ -277,9 +270,6 @@ fn canister_post_upgrade() {
         Ok(mut governance_proto) => {
             // Post-process GovernanceProto
 
-            // TODO(NNS1-2731): Delete this once it's been released.
-            settle_proposals_if_reward_rates_are_zero(now, &mut governance_proto);
-
             // TODO: Delete this once it's been released.
             populate_finalize_disbursement_timestamp_seconds(&mut governance_proto);
 
@@ -289,166 +279,6 @@ fn canister_post_upgrade() {
     }
     .expect("Couldn't upgrade canister.");
     log!(INFO, "Completed post upgrade");
-}
-
-/// As indicated by the name, this only modifies governance_proto if the initial and final reward
-/// rates are both 0. At this time, the only SNS that does this is Dragginz (formerly known as
-/// SNS-1). Thus, we ensure that this has no effect on other SNSs.
-///
-/// There are two categories of proposals that get modified (when the SNS the initial and final
-/// reward rate are both set to 0):
-///
-///   1. Stuck in the ReadyToSettle state. This occurs when the proposal has is_eligible_for_rewards
-///      = true. The only known example of this is Dragginz proposal ID=36. Prior to the
-///      introduction of this function, distribute_rewards was effectively disabled when the initial
-///      and final reward rates are both set to 0. In that case, these proposals would never be
-///      associated with a reward event, resulting in perpetually being in the ReadyToSettle state.
-///      We would like to move these into the Settled state.
-///
-///   2. is_eligible_for_rewards = false. We want to get rid of this field. However, there are a
-///      couple reasons that we should not suddenly rip it out. One is that it would cause many
-///      proposals that are currently in the Settled state to switch to the ReadyToSettle state. We
-///      would like these to stay in the Settled state.
-///
-/// The same changes are made in both of these cases:
-///
-///   1. Set reward_event_end_timestamp_seconds to Some(LEGACY_REWARD_EVENT_END_TIMESTAMP_SECONDS).
-///      This ensures that even if we later delete is_eligible_for_rewards, the proposal will be in
-///      the Settled state.
-///
-///   2. Clears ballots. Normally, this would be done by distribute_rewards, but these proposals
-///      skipped that (and we do not want distribute_rewards to backfill these for us, even though
-///      that might work ok).
-fn settle_proposals_if_reward_rates_are_zero(now: u64, governance_proto: &mut GovernanceProto) {
-    let voting_rewards_parameters = governance_proto
-        .parameters
-        .as_ref()
-        .unwrap_or_default()
-        .voting_rewards_parameters
-        .as_ref()
-        .unwrap_or_default();
-
-    let zero_reward_rate = voting_rewards_parameters
-        .initial_reward_rate_basis_points
-        .unwrap_or_default()
-        == 0
-        && voting_rewards_parameters
-            .final_reward_rate_basis_points
-            .unwrap_or_default()
-            == 0;
-
-    if !zero_reward_rate {
-        return;
-    }
-
-    const OCT_01_2023_TIMESTAMP_SECONDS: u64 = 1696111200;
-
-    for (_, ref mut proposal) in governance_proto.proposals.iter_mut() {
-        if proposal.reward_status(now) == ProposalRewardStatus::ReadyToSettle {
-            // The only proposal that we know of that would be considered here is Dragginz's
-            // proposal 36. We do some assertions to make sure we are only affecting the intended
-            // proposals.
-
-            // Not rewarded.
-            assert_eq!(proposal.reward_event_round, 0, "{:#?}", proposal);
-            assert_eq!(
-                proposal.reward_event_end_timestamp_seconds, None,
-                "{:#?}",
-                proposal
-            );
-
-            assert!(proposal.is_eligible_for_rewards, "{:#?}", proposal);
-            assert!(
-                proposal.proposal_creation_timestamp_seconds < OCT_01_2023_TIMESTAMP_SECONDS,
-                "{:#?}",
-                proposal,
-            );
-            assert!(!proposal.ballots.is_empty(), "{:#?}", proposal);
-
-            // We are now all clear to make modifications.
-
-            // This forces the proposal's reward_status to be Settled.
-            proposal.reward_event_end_timestamp_seconds =
-                Some(LEGACY_REWARD_EVENT_END_TIMESTAMP_SECONDS);
-            assert_eq!(proposal.reward_status(now), ProposalRewardStatus::Settled);
-            proposal.ballots.clear();
-
-            continue;
-        }
-
-        if !proposal.is_eligible_for_rewards {
-            // Similar to the previous case, make sure we are only modifying the right proposals.
-
-            // Not rewarded
-            assert_eq!(proposal.reward_event_round, 0, "{:#?}", proposal);
-            assert_eq!(
-                proposal.reward_event_end_timestamp_seconds, None,
-                "{:#?}",
-                proposal
-            );
-
-            // This is the only assertion that's different compared to the previous case.
-            assert_eq!(
-                proposal.reward_status(now),
-                ProposalRewardStatus::Settled,
-                "{:#?}",
-                proposal,
-            );
-
-            // Created before 2023-10-01.
-            assert!(
-                proposal.proposal_creation_timestamp_seconds < OCT_01_2023_TIMESTAMP_SECONDS,
-                "{:#?}",
-                proposal,
-            );
-            assert!(!proposal.ballots.is_empty(), "{:#?}", proposal);
-
-            // We are now all clear to make modifications.
-
-            // This forces the proposal's reward_status to be Settled, but in a different way, such
-            // that we can stop relying on the is_eligible_for_rewards field.
-            proposal.reward_event_end_timestamp_seconds =
-                Some(LEGACY_REWARD_EVENT_END_TIMESTAMP_SECONDS);
-            proposal.ballots.clear();
-
-            continue;
-        }
-
-        // This does not perform any modifications; just sanity checks.
-        let proposal: &ProposalData = proposal; // Remove mut.
-        match proposal.reward_status(now) {
-            ProposalRewardStatus::Unspecified => {
-                panic!(
-                    "A proposal's reward_status is Unspecified:\n{:#?}",
-                    proposal
-                );
-            }
-            ProposalRewardStatus::AcceptVotes => {
-                // Not "insanely" old.
-                assert!(
-                    proposal.proposal_creation_timestamp_seconds > OCT_01_2023_TIMESTAMP_SECONDS,
-                    "Proposal is accepting votes, yet it is pretty old:\n{:#?}",
-                    proposal,
-                );
-            }
-            ProposalRewardStatus::ReadyToSettle => {
-                panic!(
-                    "ReadyToSettle should not be reachable, \
-                     because this case was already handled earlier:\n{:#?}",
-                    proposal,
-                );
-            }
-            ProposalRewardStatus::Settled => {
-                // The only known case were this is violated is when !is_eligible_for_rewards, but
-                // that is already handled earlier.
-                assert!(
-                    proposal.ballots.is_empty(),
-                    "Proposal is Settled yet ballots have not been cleared. proposal:\n{:#?}",
-                    proposal,
-                );
-            }
-        }
-    }
 }
 
 fn populate_finalize_disbursement_timestamp_seconds(governance_proto: &mut GovernanceProto) {
@@ -978,10 +808,7 @@ fn check_governance_candid_file() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_nervous_system_common::START_OF_2022_TIMESTAMP_SECONDS;
-    use ic_sns_governance::pb::v1::{
-        Ballot, DisburseMaturityInProgress, Neuron, VotingRewardsParameters,
-    };
+    use ic_sns_governance::pb::v1::{DisburseMaturityInProgress, Neuron};
     use maplit::btreemap;
 
     /// A test that checks that set_time_warp advances time correctly.
@@ -995,140 +822,6 @@ mod tests {
 
         assert!(delta_s >= 1000, "delta_s = {}", delta_s);
         assert!(delta_s < 1005, "delta_s = {}", delta_s);
-    }
-
-    #[test]
-    fn test_settle_proposals_if_reward_rates_are_zero() {
-        // Step 1: Prepare the world. This just means constructing the input GovernanceProto.
-
-        // Much later than proposal creation time. 2023-11-16 (time of writing).
-        let now = 1700149747;
-
-        // Cast A: Ancient proposal that is waiting to be rewarded, because rewards were enabled
-        // when it was created, but rewards were disabled later. This represent's to Dragginz's
-        // proposal 36.
-        let ready_to_settle = ProposalData {
-            // Together, these result in the deadline being in the (distant) past.
-            // Therefore, this cannot be accepting votes anymore.
-            proposal_creation_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS,
-            initial_voting_period_seconds: 60,
-
-            // This means that the proposal does not immediately jump to Settled, skipping
-            // ReadyToSettle.
-            is_eligible_for_rewards: true,
-
-            // Taken together these mean that the proposal has not been rewarded yet.
-            reward_event_round: 0,
-            reward_event_end_timestamp_seconds: None,
-
-            // This is supposed to get cleared.
-            ballots: btreemap! {
-                "just another neuron".to_string() => Ballot::default(),
-            },
-
-            ..Default::default()
-        };
-        assert_eq!(
-            ready_to_settle.reward_status(now),
-            ProposalRewardStatus::ReadyToSettle,
-            "{:#?}",
-            ready_to_settle,
-        );
-
-        // Case B: Proposal that was created after rewards were disabled. This represents Dragginz's
-        // later proposals.
-        let not_eligible_for_rewards = ProposalData {
-            is_eligible_for_rewards: false,
-
-            // This should end up being cleared.
-            ballots: btreemap! {
-                "whale".to_string() => Ballot::default(),
-                "small fry".to_string() => Ballot::default(),
-            },
-
-            ..ready_to_settle.clone()
-        };
-        assert_eq!(
-            not_eligible_for_rewards.reward_status(now),
-            ProposalRewardStatus::Settled,
-            "{:#?}",
-            not_eligible_for_rewards
-        );
-
-        // Step 1a: Final assembly of the input.
-        let original_governance_proto = GovernanceProto {
-            proposals: btreemap! {
-                1 => ready_to_settle.clone(),
-                2 => not_eligible_for_rewards.clone(),
-            },
-            // By default, (initial and final) reward rate is zero .
-            ..Default::default()
-        };
-
-        // Step 2a: Call code under test.
-        let mut governance_proto = original_governance_proto.clone();
-        settle_proposals_if_reward_rates_are_zero(now, &mut governance_proto);
-
-        // Step 3a: Inspect results.
-
-        // Step 3a.1: Assert that the expected proposal modifications were made (and nothing else).
-        let reward_event_end_timestamp_seconds = Some(42);
-        assert_eq!(
-            governance_proto,
-            GovernanceProto {
-                proposals: btreemap! {
-                    1 => ProposalData {
-                        reward_event_end_timestamp_seconds, // rewarded 0 -> Settled.
-                        ballots: btreemap! {},
-                        ..ready_to_settle // Everything else same.
-                    },
-                    2 => ProposalData {
-                        reward_event_end_timestamp_seconds, // rewarded 0 -> Settled.
-                        ballots: btreemap! {}, // Cleared.
-                        ..not_eligible_for_rewards // Everything else same.
-                    },
-                },
-
-                // Everything else same.
-                ..Default::default()
-            },
-        );
-
-        // Step 3a.2: Assert that all proposals are Settled now. Ofc, not_eligible_for_rewards was
-        // already in that state, but now, for a different reason: before it was because
-        // is_eligible_for_rewards = false, but now it's because reward_event_end_timestamp_seconds
-        // = Some(...).
-        for proposal in governance_proto.proposals.values() {
-            assert_eq!(
-                proposal.reward_status(now),
-                ProposalRewardStatus::Settled,
-                "{:#?}",
-                proposal,
-            );
-        }
-
-        // Step 1b: Finally assembly of input.
-        let original_governance_proto = GovernanceProto {
-            parameters: Some(NervousSystemParameters {
-                voting_rewards_parameters: Some(VotingRewardsParameters {
-                    // Specific values do not matter, but just for realism start at 10% and drop
-                    // down to 5%. What matters is that they are positive.
-                    initial_reward_rate_basis_points: Some(1_000),
-                    final_reward_rate_basis_points: Some(500),
-                    ..Default::default()
-                }),
-                ..Default::default()
-            }),
-            ..original_governance_proto
-        };
-        let mut governance_proto = original_governance_proto.clone();
-
-        // Step 2b: Call code under test, but this time, expect that proposals are NOT modified,
-        // because final and inital reward rates are positive.
-        settle_proposals_if_reward_rates_are_zero(now, &mut governance_proto);
-
-        // Step 3b: Inspect results.
-        assert_eq!(governance_proto, original_governance_proto);
     }
 
     #[test]
