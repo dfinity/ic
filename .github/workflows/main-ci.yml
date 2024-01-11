@@ -23,7 +23,8 @@ jobs:
   bazel-test-all:
     name: Bazel-Test-All
     runs-on:
-      group: IC-Prod
+      group: IC
+      labels: bazel-runner
     timeout-minutes: 80
     container:
       image: dfinity/ic-build:faf4659295a243194eba5d02a551c0a703d9f0983febf53fe833672ffde5143d
