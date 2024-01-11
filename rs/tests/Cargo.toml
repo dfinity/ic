@@ -559,6 +559,10 @@ name = "ic-systest-xnet-malicious-slices"
 path = "message_routing/xnet/xnet_malicious_slices.rs"
 
 [[bin]]
+name = "ic-systest-state-sync-malicious-chunk-test"
+path = "message_routing/state_sync_malicious_chunk_test.rs"
+
+[[bin]]
 name = "ic-systest-canister-global-reboot-test"
 path = "message_routing/global_reboot_test.rs"
 
