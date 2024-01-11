@@ -358,9 +358,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "dashmap": crate.spec(
                 version = "^5.3.4",
             ),
-            "debug_stub_derive": crate.spec(
-                version = "^0.3.0",
-            ),
             "derive_more": crate.spec(
                 git = "https://github.com/dfinity-lab/derive_more",
                 rev = "9f1b894e6fde640da4e9ea71a8fc0e4dd98d01da",
@@ -415,9 +412,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "flate2": crate.spec(
                 version = "^1.0.22",
-            ),
-            "float-cmp": crate.spec(
-                version = "^0.9.0",
             ),
             "form_urlencoded": crate.spec(
                 version = "^1.0.0",
@@ -820,9 +814,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "pem": crate.spec(
                 version = "^1.0.1",
             ),
-            "pico-args": crate.spec(
-                version = "^0.3",
-            ),
             "pin-project-lite": crate.spec(
                 version = "^0.2",
             ),
@@ -1089,20 +1080,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "iterator",
                 ],
             ),
-            "signal-hook-mio": crate.spec(
-                version = "^0.2.0",
-                features = [
-                    "support-v0_7",
-                ],
-            ),
             "signature": crate.spec(
                 version = "^2.1.0",
             ),
             "simple_asn1": crate.spec(
                 version = "^0.6.2",
-            ),
-            "simple_moving_average": crate.spec(
-                version = "^0.1.2",
             ),
             "slog": crate.spec(
                 version = "^2.7.0",
@@ -1146,9 +1128,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "ssh2": crate.spec(
                 git = "https://github.com/dfinity-lab/ssh2-rs",
                 rev = "f842906afaa2443206b8365d51950ed3ef85c940",
-            ),
-            "static_assertions": crate.spec(
-                version = "^0.3.4",
             ),
             "strum": crate.spec(
                 version = "^0.25.0",
