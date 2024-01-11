@@ -11,7 +11,7 @@ use crate::registry_helper::RegistryHelper;
 use crate::ssh_access_manager::SshAccessManager;
 use crate::upgrade::Upgrade;
 use ic_config::metrics::{Config as MetricsConfig, Exporter};
-use ic_crypto::{CryptoComponent, CryptoComponentForNonReplicaProcess};
+use ic_crypto::CryptoComponent;
 use ic_crypto_node_key_generation::{generate_node_keys_once, NodeKeyGenerationError};
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
@@ -152,7 +152,7 @@ impl Orchestrator {
         let crypto_config = config.crypto.clone();
         let c_metrics = metrics_registry.clone();
         let crypto = tokio::task::spawn_blocking(move || {
-            Arc::new(CryptoComponent::new_for_non_replica_process(
+            Arc::new(CryptoComponent::new(
                 &crypto_config,
                 Some(tokio::runtime::Handle::current()),
                 c_registry.get_registry_client(),
@@ -169,7 +169,7 @@ impl Orchestrator {
             &slog_logger,
             &metrics_registry,
             registry.get_registry_client(),
-            crypto.clone(),
+            Arc::clone(&crypto) as _,
         );
         let metrics = Arc::new(metrics);
 
@@ -184,7 +184,7 @@ impl Orchestrator {
             Arc::clone(&registry_client),
             Arc::clone(&metrics),
             node_id,
-            Arc::clone(&crypto) as Arc<dyn CryptoComponentForNonReplicaProcess>,
+            Arc::clone(&crypto) as _,
             registry_local_store.clone(),
         );
 
@@ -198,7 +198,7 @@ impl Orchestrator {
         let cup_provider = Arc::new(CatchUpPackageProvider::new(
             Arc::clone(&registry),
             args.cup_dir.clone(),
-            crypto.clone(),
+            Arc::clone(&crypto) as _,
             logger.clone(),
             node_id,
         ));
