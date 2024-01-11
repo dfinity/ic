@@ -128,6 +128,14 @@ resource "null_resource" "deletable-prov-REGION" {
     ]
   }
 }
+
+resource "null_resource" "deletable-local-prov-REGION" {
+  depends_on = DEPENDS_ON
+
+  provisioner "local-exe" {
+    command = "python scrape_metrics.py ALL_ADDRS",
+  }
+}
 """
 
 merged = ""
@@ -155,8 +163,9 @@ for region, ami in sorted(region_map.items()):
   depends_on = [f"aws_instance.deletable-instance-{region}" for region in sorted(region_map)]
   depends_on = f"[{', '.join(depends_on)}]"
   peers_addrs = [f"${{aws_instance.deletable-instance-{r}.public_ip}}:4100" for r in sorted(region_map) if r != region]
+  all_addrs = [f"${{aws_instance.deletable-instance-{r}.public_ip}}:9090" for r in sorted(region_map)]
   peers_addrs = ' '.join(peers_addrs)
-  merged += template.replace("REGION", region).replace("AMI",ami[0]).replace("DEPENDS_ON",depends_on).replace("PEERS_ADDRS", peers_addrs).replace("ID", str(id)).replace("MESSAGE_SIZE", message_size).replace("MESSAGE_RATE", message_rate).replace("MACHINE", ami[1])
+  merged += template.replace("REGION", region).replace("AMI",ami[0]).replace("DEPENDS_ON",depends_on).replace("PEERS_ADDRS", peers_addrs).replace("ID", str(id)).replace("MESSAGE_SIZE", message_size).replace("MESSAGE_RATE", message_rate).replace("MACHINE", ami[1]).replace("ALL_ADDRS", all_addrs)
   id += 1 
  
 with open("providers.txt") as f:
