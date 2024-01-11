@@ -51,6 +51,11 @@ pub(crate) const DEFAULT_MAX_SANDBOX_COUNT: usize = 2_000;
 /// duration and sandbox process eviction is activated.
 pub(crate) const DEFAULT_MAX_SANDBOX_IDLE_TIME: Duration = Duration::from_secs(30 * 60);
 
+/// The maximum number of pages that a message dirties without optimizing dirty
+/// page copying by triggering a new execution slice for copying and using prefaulting.
+/// This default is 1 GiB. This is 262_144 pages of 4 KiB each.
+pub(crate) const DEFAULT_MAX_DIRTY_PAGES_WITHOUT_OPTIMIZATION: usize = 262_144;
+
 #[allow(non_upper_case_globals)]
 const KiB: u64 = 1024;
 #[allow(non_upper_case_globals)]
@@ -169,6 +174,10 @@ pub struct Config {
     /// If this flag is enabled, then execution of a slice will produce a log
     /// entry with the number of executed instructions and the duration.
     pub trace_execution: FlagStatus,
+
+    /// The maximum number of pages that a message dirties without optimizing dirty
+    /// page copying by triggering a new execution slice for copying and using prefaulting.
+    pub max_dirty_pages_without_optimization: usize,
 }
 
 impl Config {
@@ -194,6 +203,7 @@ impl Config {
             subnet_type: SubnetType::Application,
             dirty_page_overhead: NumInstructions::new(0),
             trace_execution: FlagStatus::Disabled,
+            max_dirty_pages_without_optimization: DEFAULT_MAX_DIRTY_PAGES_WITHOUT_OPTIMIZATION,
         }
     }
 }
