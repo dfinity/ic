@@ -29,15 +29,13 @@ available.
 Use "quit" or enter an EOF (Ctrl-D) to exit.
 
 Welcome to NIDKG cost estimator
+> set subnet_size = 40
 > eval fs_decryption_worst_cost
-fs_decryption_worst_cost = 5.55 hours
-> set bsgs_table_mult = 5
-> eval fs_decryption_worst_cost
-fs_decryption_worst_cost = 1.12 hours
-> keys bsgs_table
-bsgs_table_mult = 5
-bsgs_table_size = bsgs_table_mult * sqrt(bsgs_range)
-bsgs_table_bytes = bsgs_table_size * gt_bytes
+fs_decryption_worst_cost = 21.8 minutes
+> set bsgs_table_mult = 30
+> eval fs_decryption_worst_cost bsgs_table_bytes
+fs_decryption_worst_cost = 16.2 minutes
+bsgs_table_bytes = 1494.67 MiB
 > keys
 # prints all of the keys
 > eval_all
@@ -289,6 +287,7 @@ g1_bytes = 48
 g2_bytes = 96
 gt_bytes = 576
 gt_hash_bytes = 28
+gt_hash_prefix_bytes = 5
 scalar_bytes = 32
 
 subnet_size = 28
@@ -339,12 +338,17 @@ nidkg_transcript_bytes = (max_corrupt_dealers + 1) * nidkg_ciphertext_bytes + pu
 
 nidkg_dealing_bytes = public_coeff_bytes + nidkg_ciphertext_bytes + chunking_proof_bytes + sharing_proof_bytes
 
-bsgs_table_mult = 1
+# see https://ntietz.com/blog/rust-hashmap-overhead/
+hashset_overhead = 1.73
+
+bsgs_table_mult = 20
 bsgs_index_bytes = 8
 bsgs_range = 2*chunking_z - 1
 bsgs_table_elements = bsgs_table_mult * sqrt(bsgs_range)
-bsgs_table_overhead = 1.73
-bsgs_table_bytes = ceil(bsgs_table_overhead * bsgs_table_elements) * (gt_hash_bytes + bsgs_index_bytes)
+bsgs_full_gt_table_bytes = bsgs_table_elements * (gt_hash_bytes + bsgs_index_bytes)
+bsgs_filter_bytes = ceil(bsgs_table_elements * hashset_overhead) * gt_hash_prefix_bytes
+
+bsgs_table_bytes = bsgs_full_gt_table_bytes + bsgs_filter_bytes
 
 bsgs_setup_cost = bsgs_table_elements * cost(gt,add)
 bsgs_online_ops = ceil(bsgs_range / bsgs_table_elements)

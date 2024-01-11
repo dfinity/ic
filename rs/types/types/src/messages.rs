@@ -680,26 +680,14 @@ mod tests {
         assert_matches!(signed_ingress1, Ok(signed_ingress1) if signed_ingress == signed_ingress1);
     }
 
-    fn make_request_metadata(
-        call_tree_depth: Option<u64>,
-        call_tree_start_time: Option<u64>,
-        call_subtree_deadline: Option<u64>,
-    ) -> Option<RequestMetadata> {
-        Some(RequestMetadata {
-            call_tree_depth,
-            call_tree_start_time: call_tree_start_time.map(Time::from_nanos_since_unix_epoch),
-            call_subtree_deadline: call_subtree_deadline.map(Time::from_nanos_since_unix_epoch),
-        })
-    }
-
     #[test]
     fn serialize_request_via_bincode() {
         for metadata in [
             None,
-            make_request_metadata(None, None, None),
-            make_request_metadata(Some(13), None, None),
-            make_request_metadata(None, Some(17), None),
-            make_request_metadata(None, None, Some(19)),
+            Some(RequestMetadata {
+                call_tree_depth: 13,
+                call_tree_start_time: Time::from_nanos_since_unix_epoch(17),
+            }),
         ] {
             let request = Request {
                 receiver: CanisterId::from(13),

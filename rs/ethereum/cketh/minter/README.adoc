@@ -164,7 +164,7 @@ dfx canister --network ic call ledger icrc2_approve "(record { spender = record 
 +
 [source,shell]
 ----
-dfx canister --network ic call minter withdraw_eth '(SMALL_AMOUNT_WEI, "YOUR_ETH_ADDRESS")'
+dfx canister --network ic call minter withdraw_eth "(record {amount = SMALL_AMOUNT_WEI; recipient = \"YOUR_ETH_ADDRESS\"})"
 ----
 
 Additional withdrawals could be made as long as the allowance from step 1 was not exhausted or did not time out.

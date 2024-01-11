@@ -48,7 +48,7 @@ use ic_types::batch::{
     CanisterQueryStats, QueryStats, QueryStatsPayload, RawQueryStats, TotalQueryStats,
 };
 use ic_types::{
-    artifact::{Priority, StateSyncArtifactId},
+    artifact::StateSyncArtifactId,
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::CallbackId,
@@ -2047,75 +2047,39 @@ fn state_sync_priority_fn_respects_states_to_fetch() {
         let (_height, state) = state_manager.take_tip();
         state_manager.commit_and_certify(state, height(2), CertificationScope::Metadata);
 
-        let priority_fn = state_sync.get_priority_function();
-        for (h, p) in [
-            (1, Priority::Drop),
-            (2, Priority::Drop),
-            (3, Priority::Stash),
-        ]
-        .iter()
-        {
+        for (h, p) in [(1, false), (2, false), (3, false)].iter() {
             assert_eq!(
                 *p,
-                priority_fn(
-                    &StateSyncArtifactId {
-                        height: height(*h),
-                        hash: hash(*h as u8),
-                    },
-                    &()
-                )
+                state_sync.should_download(&StateSyncArtifactId {
+                    height: height(*h),
+                    hash: hash(*h as u8),
+                },)
             );
         }
 
         // Request fetching of state 3.
         state_manager.fetch_state(height(3), hash(3), Height::new(99));
-        let priority_fn = state_sync.get_priority_function();
         // Good hash
-        assert_eq!(
-            Priority::Fetch,
-            priority_fn(
-                &StateSyncArtifactId {
-                    height: height(3),
-                    hash: hash(3),
-                },
-                &()
-            )
-        );
+        assert!(state_sync.should_download(&StateSyncArtifactId {
+            height: height(3),
+            hash: hash(3),
+        }));
         // Wrong hash
-        assert_eq!(
-            Priority::Drop,
-            priority_fn(
-                &StateSyncArtifactId {
-                    height: height(3),
-                    hash: hash(4),
-                },
-                &()
-            )
-        );
+        assert!(!state_sync.should_download(&StateSyncArtifactId {
+            height: height(3),
+            hash: hash(4),
+        }));
 
         // Request fetching of newer state 4.
         state_manager.fetch_state(height(4), hash(4), Height::new(99));
-        let priority_fn = state_sync.get_priority_function();
-        assert_eq!(
-            Priority::Drop,
-            priority_fn(
-                &StateSyncArtifactId {
-                    height: height(3),
-                    hash: hash(3),
-                },
-                &()
-            )
-        );
-        assert_eq!(
-            Priority::Fetch,
-            priority_fn(
-                &StateSyncArtifactId {
-                    height: height(4),
-                    hash: hash(4),
-                },
-                &()
-            )
-        );
+        assert!(!state_sync.should_download(&StateSyncArtifactId {
+            height: height(3),
+            hash: hash(3),
+        },));
+        assert!(state_sync.should_download(&StateSyncArtifactId {
+            height: height(4),
+            hash: hash(4),
+        }));
     });
 }
 

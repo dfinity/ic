@@ -1493,7 +1493,7 @@ fn get_canidid_interface() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use candid::utils::{service_compatible, service_equal, CandidSource};
+    use candid_parser::utils::{service_compatible, service_equal, CandidSource};
     use std::path::PathBuf;
 
     #[test]

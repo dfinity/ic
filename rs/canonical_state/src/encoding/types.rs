@@ -260,9 +260,9 @@ impl TryFrom<RequestOrResponse> for ic_types::messages::RequestOrResponse {
 impl From<&ic_types::messages::RequestMetadata> for RequestMetadata {
     fn from(metadata: &ic_types::messages::RequestMetadata) -> Self {
         RequestMetadata {
-            call_tree_depth: metadata.call_tree_depth,
-            call_tree_start_time: metadata.call_tree_start_time,
-            call_subtree_deadline: metadata.call_subtree_deadline,
+            call_tree_depth: Some(metadata.call_tree_depth),
+            call_tree_start_time: Some(metadata.call_tree_start_time),
+            call_subtree_deadline: None,
         }
     }
 }
@@ -275,17 +275,6 @@ impl From<(&ic_types::messages::Request, CertificationVersion)> for Request {
             cycles: (&request.payment, certification_version).into(),
             icp: 0,
         };
-        let metadata = match request.metadata.as_ref() {
-            Some(ic_types::messages::RequestMetadata {
-                call_tree_depth: None,
-                call_tree_start_time: None,
-                call_subtree_deadline: None,
-            })
-            | None => None,
-            Some(metadata) => {
-                (certification_version >= CertificationVersion::V14).then_some(metadata.into())
-            }
-        };
 
         Self {
             receiver: request.receiver.get().to_vec(),
@@ -295,7 +284,9 @@ impl From<(&ic_types::messages::Request, CertificationVersion)> for Request {
             method_name: request.method_name.clone(),
             method_payload: request.method_payload.clone(),
             cycles_payment: None,
-            metadata,
+            metadata: request.metadata.as_ref().and_then(|metadata| {
+                (certification_version >= CertificationVersion::V14).then_some(metadata.into())
+            }),
         }
     }
 }
@@ -303,9 +294,10 @@ impl From<(&ic_types::messages::Request, CertificationVersion)> for Request {
 impl From<RequestMetadata> for ic_types::messages::RequestMetadata {
     fn from(metadata: RequestMetadata) -> Self {
         ic_types::messages::RequestMetadata {
-            call_tree_depth: metadata.call_tree_depth,
-            call_tree_start_time: metadata.call_tree_start_time,
-            call_subtree_deadline: metadata.call_subtree_deadline,
+            call_tree_depth: metadata.call_tree_depth.unwrap_or(0),
+            call_tree_start_time: metadata
+                .call_tree_start_time
+                .unwrap_or(Time::from_nanos_since_unix_epoch(0)),
         }
     }
 }

@@ -2,6 +2,7 @@ use crate::objects::{Object, ObjectMap};
 use anyhow::{anyhow, Context};
 use candid::Principal;
 use serde::{Deserialize, Serialize};
+use serde_bytes::ByteBuf;
 use std::str::FromStr;
 
 /// The network_identifier specifies which network a particular object is
@@ -68,6 +69,26 @@ impl BlockIdentifier {
     pub fn new(index: u64, hash: String) -> BlockIdentifier {
         BlockIdentifier { index, hash }
     }
+    pub fn from_bytes(index: u64, bytes: &ByteBuf) -> BlockIdentifier {
+        BlockIdentifier {
+            index,
+            hash: hex::encode(bytes),
+        }
+    }
+}
+
+impl TryFrom<BlockIdentifier> for ByteBuf {
+    type Error = anyhow::Error;
+    fn try_from(value: BlockIdentifier) -> Result<Self, Self::Error> {
+        Ok(ByteBuf::from(
+            hex::decode(value.hash.clone()).with_context(|| {
+                format!(
+                    "Could not decode string format for BlockIdentifier: {}",
+                    value.hash
+                )
+            })?,
+        ))
+    }
 }
 
 /// When fetching data by BlockIdentifier, it may be possible to only specify
@@ -113,6 +134,29 @@ impl From<BlockIdentifier> for PartialBlockIdentifier {
 pub struct TransactionIdentifier {
     /// Any transactions that are attributable only to a block (ex: a block event) should use the hash of the block as the identifier. This should be normalized according to the case specified in the transaction_hash_case in network options.
     pub hash: String,
+}
+
+impl TransactionIdentifier {
+    pub fn from_bytes(bytes: &ByteBuf) -> TransactionIdentifier {
+        TransactionIdentifier {
+            hash: hex::encode(bytes),
+        }
+    }
+}
+
+impl TryFrom<TransactionIdentifier> for ByteBuf {
+    type Error = anyhow::Error;
+
+    fn try_from(value: TransactionIdentifier) -> Result<Self, Self::Error> {
+        Ok(ByteBuf::from(
+            hex::decode(value.hash.clone()).with_context(|| {
+                format!(
+                    "Could not decode string format for TransactionIdentifier: {}",
+                    value.hash
+                )
+            })?,
+        ))
+    }
 }
 
 /// The operation_identifier uniquely identifies an operation within a
@@ -197,6 +241,19 @@ impl TryInto<icrc_ledger_types::icrc1::account::Account> for AccountIdentifier {
             })?,
             subaccount,
         })
+    }
+}
+
+impl From<icrc_ledger_types::icrc1::account::Account> for AccountIdentifier {
+    fn from(value: icrc_ledger_types::icrc1::account::Account) -> Self {
+        Self {
+            address: value.owner.to_string(),
+            sub_account: value.subaccount.map(|s| SubAccountIdentifier {
+                address: hex::encode(s),
+                metadata: None,
+            }),
+            metadata: None,
+        }
     }
 }
 

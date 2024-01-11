@@ -1,42 +1,4 @@
 ---
-".after-script-test":
-  artifacts:
-    expire_in: 3 days
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
-    when: always
-  extends:
-    - ".build-k8s"
-  image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:faf4659295a243194eba5d02a551c0a703d9f0983febf53fe833672ffde5143d
-  needs: []
-  rules:
-    - changes:
-        - gitlab-ci/src/after_script/**/*
-        - gitlab-ci/config/**/*
-      if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\bhotfix\b/i
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
-  script:
-    - |
-      set -eExuo pipefail
-
-      cd "${CI_PROJECT_DIR}"
-
-      shellcheck -x gitlab-ci/src/after_script/*.sh
-
-      buildevents cmd "$CI_PIPELINE_ID" "$CI_JOB_ID" "$CI_JOB_NAME" -- "${CI_PROJECT_DIR}"/gitlab-ci/src/after_script/after_script.sh
-  tags:
-    - dfinity-ic
-  variables:
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
 ".bazel-test-all":
   after_script:
     - |
@@ -211,7 +173,6 @@
     - changes:
         - gitlab-ci/config/base-images-build.yml
         - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/boundary-api-guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/packages.common
         - ic-os/guestos/rootfs/packages.dev
@@ -354,7 +315,6 @@
     - changes:
         - gitlab-ci/config/base-images-build.yml
         - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/boundary-api-guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/packages.common
         - ic-os/guestos/rootfs/packages.dev
@@ -394,7 +354,7 @@
     - allow_failure: true
       if: $CI_PIPELINE_SOURCE == "trigger"
       when: manual
-after-script-test-ic-build-image:
+after-script-test:
   artifacts:
     expire_in: 3 days
     paths:
@@ -403,17 +363,13 @@ after-script-test-ic-build-image:
       - coredumps/*.gz
     when: always
   extends:
-    - ".after-script-test"
+    - ".build-k8s"
+    - ".rules-master-pipeline-and-merge-request"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:faf4659295a243194eba5d02a551c0a703d9f0983febf53fe833672ffde5143d
   needs: []
   rules:
-    - changes:
-        - gitlab-ci/src/after_script/**/*
-        - gitlab-ci/config/**/*
-      if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\bhotfix\b/i
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
   script:
@@ -1235,7 +1191,7 @@ bazel-system-tests-k8s:
     - "./gitlab-ci/src/bazel-ci/main.sh"
   tags:
     - dfinity-ic
-    - ch
+    - sf
   timeout: 80 minutes
   variables:
     BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
@@ -1834,8 +1790,6 @@ build-base-images-ref-update:
     - build-guestos-base-dev-sev
     - build-boundaryos-base
     - build-boundaryos-base-snp
-    - build-boundaryos-api-guestos-base
-    - build-boundaryos-api-guestos-base-snp
     - build-hostos-base
     - build-hostos-base-dev
     - build-hostos-base-dev-sev
@@ -1853,8 +1807,6 @@ build-base-images-ref-update:
     - build-guestos-base-dev-sev
     - build-boundaryos-base
     - build-boundaryos-base-snp
-    - build-boundaryos-api-guestos-base
-    - build-boundaryos-api-guestos-base-snp
     - build-hostos-base
     - build-hostos-base-dev
     - build-hostos-base-dev-sev
@@ -1869,7 +1821,6 @@ build-base-images-ref-update:
     - changes:
         - gitlab-ci/config/base-images-build.yml
         - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/boundary-api-guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/packages.common
         - ic-os/guestos/rootfs/packages.dev
@@ -1920,123 +1871,6 @@ build-base-images-ref-update:
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
-build-boundaryos-api-guestos-base:
-  artifacts:
-    expire_in: 3 days
-    paths:
-      - digestfile*
-    when: always
-  extends:
-    - ".build-base-image-job"
-  image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:faf4659295a243194eba5d02a551c0a703d9f0983febf53fe833672ffde5143d
-  needs: []
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-push-base-images"
-    - allow_failure: true
-      if: $CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
-      when: manual
-    - changes:
-        - gitlab-ci/config/base-images-build.yml
-        - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/boundary-api-guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/packages.common
-        - ic-os/guestos/rootfs/packages.dev
-        - ic-os/hostos/rootfs/Dockerfile.base
-        - ic-os/hostos/rootfs/packages.common
-        - ic-os/hostos/rootfs/packages.dev
-        - ic-os/setupos/rootfs/Dockerfile.base
-        - ic-os/setupos/rootfs/packages.common
-        - ic-os/setupos/rootfs/packages.dev
-      if: $CI_PIPELINE_SOURCE == "merge_request_event"
-  script:
-    - |
-      set -euo pipefail
-
-      TAG=$(date '+%Y-%m-%d-%H%M')
-      echo -e "\e[0Ksection_start:$(date +%s):${IMAGE}[collapsed=true]\r\e[0KClick here to see the ${IMAGE} build"
-      pushd "$CONTEXT"
-      podman build "${BUILD_ARGS[@]}" --squash-all --no-cache -t "docker.io/dfinity/${IMAGE}:${TAG}" -f Dockerfile.base .
-      popd
-      echo -e "\e[0Ksection_end:$(date +%s):${IMAGE}\r\e[0K"
-
-      if [ "${CI_COMMIT_REF_NAME:-}" == "master" ]; then
-          podman login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD" docker.io
-          podman push "dfinity/${IMAGE}:${TAG}" --digestfile digestfile
-          echo "dfinity/${IMAGE}@$(cat digestfile)" > "digestfile-${IMAGE}"
-          echo "$REF_FILE" >> "digestfile-${IMAGE}"
-          rm -f digestfile
-      fi
-  tags:
-    - dfinity-ic
-  variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/boundary-api-guestos/rootfs"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
-    IMAGE: boundary-api-guestos-base
-    REF_FILE: ic-os/boundary-api-guestos/rootfs/docker-base.prod
-build-boundaryos-api-guestos-base-snp:
-  artifacts:
-    expire_in: 3 days
-    paths:
-      - digestfile*
-    when: always
-  extends:
-    - ".build-base-image-job"
-  image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:faf4659295a243194eba5d02a551c0a703d9f0983febf53fe833672ffde5143d
-  needs: []
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-push-base-images"
-    - allow_failure: true
-      if: $CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
-      when: manual
-    - changes:
-        - gitlab-ci/config/base-images-build.yml
-        - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/boundary-api-guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/packages.common
-        - ic-os/guestos/rootfs/packages.dev
-        - ic-os/hostos/rootfs/Dockerfile.base
-        - ic-os/hostos/rootfs/packages.common
-        - ic-os/hostos/rootfs/packages.dev
-        - ic-os/setupos/rootfs/Dockerfile.base
-        - ic-os/setupos/rootfs/packages.common
-        - ic-os/setupos/rootfs/packages.dev
-      if: $CI_PIPELINE_SOURCE == "merge_request_event"
-  script:
-    - BUILD_ARGS=(--build-arg "CPU_SUPPORT=snp")
-    - |
-      set -euo pipefail
-
-      TAG=$(date '+%Y-%m-%d-%H%M')
-      echo -e "\e[0Ksection_start:$(date +%s):${IMAGE}[collapsed=true]\r\e[0KClick here to see the ${IMAGE} build"
-      pushd "$CONTEXT"
-      podman build "${BUILD_ARGS[@]}" --squash-all --no-cache -t "docker.io/dfinity/${IMAGE}:${TAG}" -f Dockerfile.base .
-      popd
-      echo -e "\e[0Ksection_end:$(date +%s):${IMAGE}\r\e[0K"
-
-      if [ "${CI_COMMIT_REF_NAME:-}" == "master" ]; then
-          podman login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD" docker.io
-          podman push "dfinity/${IMAGE}:${TAG}" --digestfile digestfile
-          echo "dfinity/${IMAGE}@$(cat digestfile)" > "digestfile-${IMAGE}"
-          echo "$REF_FILE" >> "digestfile-${IMAGE}"
-          rm -f digestfile
-      fi
-  tags:
-    - dfinity-ic
-  variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/boundary-api-guestos/rootfs"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
-    IMAGE: boundary-api-guestos-base-snp
-    REF_FILE: ic-os/boundary-api-guestos/rootfs/docker-base.snp
 build-boundaryos-base:
   artifacts:
     expire_in: 3 days
@@ -2056,7 +1890,6 @@ build-boundaryos-base:
     - changes:
         - gitlab-ci/config/base-images-build.yml
         - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/boundary-api-guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/packages.common
         - ic-os/guestos/rootfs/packages.dev
@@ -2114,7 +1947,6 @@ build-boundaryos-base-snp:
     - changes:
         - gitlab-ci/config/base-images-build.yml
         - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/boundary-api-guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/packages.common
         - ic-os/guestos/rootfs/packages.dev
@@ -2270,7 +2102,6 @@ build-guestos-base:
     - changes:
         - gitlab-ci/config/base-images-build.yml
         - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/boundary-api-guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/packages.common
         - ic-os/guestos/rootfs/packages.dev
@@ -2328,7 +2159,6 @@ build-guestos-base-dev:
     - changes:
         - gitlab-ci/config/base-images-build.yml
         - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/boundary-api-guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/packages.common
         - ic-os/guestos/rootfs/packages.dev
@@ -2387,7 +2217,6 @@ build-guestos-base-dev-sev:
     - changes:
         - gitlab-ci/config/base-images-build.yml
         - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/boundary-api-guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/packages.common
         - ic-os/guestos/rootfs/packages.dev
@@ -2446,7 +2275,6 @@ build-hostos-base:
     - changes:
         - gitlab-ci/config/base-images-build.yml
         - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/boundary-api-guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/packages.common
         - ic-os/guestos/rootfs/packages.dev
@@ -2504,7 +2332,6 @@ build-hostos-base-dev:
     - changes:
         - gitlab-ci/config/base-images-build.yml
         - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/boundary-api-guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/packages.common
         - ic-os/guestos/rootfs/packages.dev
@@ -2563,7 +2390,6 @@ build-hostos-base-dev-sev:
     - changes:
         - gitlab-ci/config/base-images-build.yml
         - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/boundary-api-guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/packages.common
         - ic-os/guestos/rootfs/packages.dev
@@ -2771,7 +2597,6 @@ build-setupos-base:
     - changes:
         - gitlab-ci/config/base-images-build.yml
         - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/boundary-api-guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/packages.common
         - ic-os/guestos/rootfs/packages.dev
@@ -2829,7 +2654,6 @@ build-setupos-base-dev:
     - changes:
         - gitlab-ci/config/base-images-build.yml
         - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/boundary-api-guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/packages.common
         - ic-os/guestos/rootfs/packages.dev
@@ -2888,7 +2712,6 @@ build-setupos-base-dev-sev:
     - changes:
         - gitlab-ci/config/base-images-build.yml
         - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/boundary-api-guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/packages.common
         - ic-os/guestos/rootfs/packages.dev

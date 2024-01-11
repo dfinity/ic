@@ -208,6 +208,10 @@ where
             Box::new(std::iter::empty())
         }
     }
+
+    fn size(&self) -> usize {
+        self.select_index::<CryptoHashOf<T>>().size()
+    }
 }
 
 impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> PoolSection<T>

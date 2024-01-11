@@ -5,7 +5,7 @@ use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
 use ic_consensus::{
     certification::{CertificationCrypto, CertifierImpl},
-    dkg,
+    dkg, ecdsa,
 };
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::membership::Membership;
@@ -45,7 +45,7 @@ pub struct ConsensusRunner<'a> {
     idle_since: RefCell<Time>,
     pub time: Arc<FastForwardTimeSource>,
     pub instances: Vec<ConsensusInstance<'a>>,
-    pub(crate) stop_predicate: StopPredicate<'a>,
+    pub(crate) stop_predicate: StopPredicate,
     pub(crate) logger: ReplicaLogger,
     pub(crate) rng: RefCell<ChaChaRng>,
     pub(crate) config: ConsensusRunnerConfig,
@@ -111,7 +111,7 @@ impl<'a> ConsensusRunner<'a> {
         ConsensusRunner {
             idle_since: RefCell::new(now),
             instances: Vec::new(),
-            stop_predicate: &stop_immediately,
+            stop_predicate: Box::new(stop_immediately),
             time: time_source,
             logger,
             config,
@@ -149,7 +149,7 @@ impl<'a> ConsensusRunner<'a> {
         )));
         let fake_local_store_certified_time_reader =
             Arc::new(FakeLocalStoreCertifiedTimeReader::new(self.time.clone()));
-
+        let malicious_flags = MaliciousFlags::default();
         let (consensus, consensus_gossip) = ic_consensus::consensus::setup(
             deps.replica_config.clone(),
             Arc::clone(&deps.registry_client),
@@ -166,7 +166,7 @@ impl<'a> ConsensusRunner<'a> {
             deps.message_routing.clone(),
             deps.state_manager.clone(),
             Arc::clone(&self.time) as Arc<_>,
-            MaliciousFlags::default(),
+            malicious_flags.clone(),
             deps.metrics_registry.clone(),
             replica_logger.clone(),
             fake_local_store_certified_time_reader,
@@ -174,11 +174,20 @@ impl<'a> ConsensusRunner<'a> {
         );
         let dkg = dkg::DkgImpl::new(
             deps.replica_config.node_id,
-            consensus_crypto,
+            Arc::clone(&consensus_crypto),
             deps.consensus_pool.read().unwrap().get_cache(),
             dkg_key_manager,
             deps.metrics_registry.clone(),
             replica_logger.clone(),
+        );
+        let ecdsa = ecdsa::EcdsaImpl::new(
+            deps.replica_config.node_id,
+            deps.consensus_pool.read().unwrap().get_block_cache(),
+            consensus_crypto,
+            deps.state_manager.clone(),
+            deps.metrics_registry.clone(),
+            replica_logger.clone(),
+            malicious_flags,
         );
         let certifier = CertifierImpl::new(
             deps.replica_config.clone(),
@@ -206,9 +215,11 @@ impl<'a> ConsensusRunner<'a> {
                 modifier.unwrap_or_else(|| Box::new(|x| Box::new(x)))(consensus),
                 consensus_gossip,
                 dkg,
+                ecdsa,
                 Box::new(certifier),
                 deps.consensus_pool.clone(),
                 deps.dkg_pool.clone(),
+                deps.ecdsa_pool.clone(),
                 replica_logger,
                 deps.metrics_registry.clone(),
             ),
@@ -220,7 +231,7 @@ impl<'a> ConsensusRunner<'a> {
     /// Run until the given StopPredicate becomes true for all instances.
     /// Return true if it runs to completion according to StopPredicate.
     /// Otherwise return false, which indicates the network has stalled.
-    pub fn run_until(&mut self, pred: StopPredicate<'a>) -> bool {
+    pub fn run_until(&mut self, pred: StopPredicate) -> bool {
         info!(self.logger, "{}", &self.config);
         self.stop_predicate = pred;
         loop {

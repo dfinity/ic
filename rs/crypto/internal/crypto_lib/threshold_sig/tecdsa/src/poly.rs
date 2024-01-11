@@ -400,7 +400,7 @@ fn evaluate_at(points: &[EccPoint], eval_point: NodeIndex) -> ThresholdEcdsaResu
 
     let mut acc = EccPoint::identity(curve_type);
     for pt in points.iter().rev() {
-        acc = acc.mul_by_node_index(eval_point)?;
+        acc = acc.mul_by_node_index_vartime(eval_point)?;
         acc = acc.add_points(pt)?;
     }
     Ok(acc)

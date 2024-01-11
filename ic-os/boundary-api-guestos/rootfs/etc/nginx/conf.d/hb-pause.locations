@@ -1,3 +1,0 @@
-location /api/v2/status {
-        return 403;
-}

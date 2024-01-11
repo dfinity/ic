@@ -745,11 +745,11 @@ pub fn register_callback(
 
     call_context_manager.register_callback(Callback::new(
         call_context_id,
-        Some(originator),
-        Some(respondent),
+        originator,
+        respondent,
         Cycles::zero(),
-        Some(Cycles::new(42)),
-        Some(Cycles::new(84)),
+        Cycles::new(42),
+        Cycles::new(84),
         WasmClosure::new(0, 2),
         WasmClosure::new(0, 2),
         None,

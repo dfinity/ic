@@ -10,8 +10,10 @@ use ic_interfaces::crypto::{
     ErrorReproducibility, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
 };
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{debug, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use ic_replicated_state::ReplicatedState;
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::ecdsa::{
     sig_share_prefix, EcdsaBlockReader, EcdsaMessage, EcdsaSigShare, EcdsaStats, RequestId,
@@ -39,6 +41,8 @@ pub(crate) struct EcdsaSignerImpl {
     node_id: NodeId,
     consensus_block_cache: Arc<dyn ConsensusBlockCache>,
     crypto: Arc<dyn ConsensusCrypto>,
+    #[allow(dead_code)]
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     schedule: RoundRobin,
     metrics: EcdsaSignerMetrics,
     log: ReplicaLogger,
@@ -49,6 +53,7 @@ impl EcdsaSignerImpl {
         node_id: NodeId,
         consensus_block_cache: Arc<dyn ConsensusBlockCache>,
         crypto: Arc<dyn ConsensusCrypto>,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
     ) -> Self {
@@ -56,6 +61,7 @@ impl EcdsaSignerImpl {
             node_id,
             consensus_block_cache,
             crypto,
+            state_reader,
             schedule: RoundRobin::default(),
             metrics: EcdsaSignerMetrics::new(metrics_registry),
             log,

@@ -9,10 +9,7 @@ use crate::{
 };
 use ic_interfaces::p2p::state_sync::{Chunk, ChunkId, Chunkable, StateSyncClient};
 use ic_logger::{info, warn, ReplicaLogger};
-use ic_types::{
-    artifact::{Priority, StateSyncArtifactId},
-    Height,
-};
+use ic_types::{artifact::StateSyncArtifactId, Height};
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
@@ -152,77 +149,63 @@ impl StateSync {
             .collect()
     }
 
-    #[allow(clippy::type_complexity)]
-    pub fn get_priority_function(
-        &self,
-    ) -> Box<dyn Fn(&StateSyncArtifactId, &()) -> Priority + Send + Sync + 'static> {
+    pub fn should_download(&self, artifact_id: &StateSyncArtifactId) -> bool {
         use ic_interfaces_state_manager::StateReader;
+        use std::cmp::Ordering;
 
-        let latest_height = self.state_manager.latest_state_height();
-        let fetch_state = self.state_manager.states.read().fetch_state.clone();
-        let state_sync_refs = self.state_sync_refs.clone();
-        let log = self.log.clone();
+        if artifact_id.height <= self.state_manager.latest_state_height() {
+            return false;
+        }
 
-        Box::new(move |artifact_id, _attr| {
-            use std::cmp::Ordering;
-
-            if artifact_id.height <= latest_height {
-                return Priority::Drop;
-            }
-
-            if let Some((max_sync_height, hash, cup_interval_length)) = &fetch_state {
-                if let Some(recorded_root_hash) = state_sync_refs.get(&artifact_id.height) {
-                    // If this advert@h is for an ongoing state sync, we check if the hash is the
-                    // same as the hash that consensus gave us.
-                    if recorded_root_hash != artifact_id.hash {
-                        warn!(
-                            log,
+        if let Some((max_sync_height, hash, cup_interval_length)) =
+            &self.state_manager.states.read().fetch_state
+        {
+            if let Some(recorded_root_hash) = self.state_sync_refs.get(&artifact_id.height) {
+                // If this advert@h is for an ongoing state sync, we check if the hash is the
+                // same as the hash that consensus gave us.
+                if recorded_root_hash != artifact_id.hash {
+                    warn!(
+                            self.log,
                             "Received an advert for state @{} with a hash that does not match the hash of the state we are fetching: expected {:?}, got {:?}",
                             artifact_id.height,
                             recorded_root_hash,
                             artifact_id.hash
                         );
-                        return Priority::Drop;
-                    }
-
-                    // To keep the active state sync for longer time, we wait for another
-                    // `EXTRA_CHECKPOINTS_TO_KEEP` CUPs. Then a CUP beyond that can drop the
-                    // active state sync.
-                    //
-                    // Note: CUP interval length may change, and we can't predict future intervals.
-                    // The condition below is only a heuristic.
-                    if *max_sync_height
-                        > artifact_id.height
-                            + cup_interval_length.increment() * EXTRA_CHECKPOINTS_TO_KEEP as u64
-                    {
-                        return Priority::Drop;
-                    } else {
-                        return Priority::Fetch;
-                    };
+                    return false;
                 }
 
-                return match artifact_id.height.cmp(max_sync_height) {
-                    Ordering::Less => Priority::Drop,
-                    // Drop the advert if the hashes do not match.
-                    Ordering::Equal if *hash != artifact_id.hash => {
-                        warn!(
-                            log,
+                // To keep the active state sync for longer time, we wait for another
+                // `EXTRA_CHECKPOINTS_TO_KEEP` CUPs. Then a CUP beyond that can drop the
+                // active state sync.
+                //
+                // Note: CUP interval length may change, and we can't predict future intervals.
+                // The condition below is only a heuristic.
+                return *max_sync_height
+                    <= artifact_id.height
+                        + cup_interval_length.increment() * EXTRA_CHECKPOINTS_TO_KEEP as u64;
+            }
+
+            return match artifact_id.height.cmp(max_sync_height) {
+                Ordering::Less => false,
+                // Drop the advert if the hashes do not match.
+                Ordering::Equal if *hash != artifact_id.hash => {
+                    warn!(
+                            self.log,
                             "Received an advert for state {} with a hash that does not match the hash passed to fetch_state: expected {:?}, got {:?}",
                             artifact_id.height,
                             *hash,
                             artifact_id.hash
                         );
-                        Priority::Drop
-                    }
-                    // Do not fetch it for now if we're already fetching another state.
-                    Ordering::Equal if !state_sync_refs.is_empty() => Priority::Stash,
-                    Ordering::Equal => Priority::Fetch,
-                    Ordering::Greater => Priority::Stash,
-                };
-            }
+                    false
+                }
+                // Do not fetch it for now if we're already fetching another state.
+                Ordering::Equal if !self.state_sync_refs.is_empty() => false,
+                Ordering::Equal => true,
+                Ordering::Greater => false,
+            };
+        }
 
-            Priority::Stash
-        })
+        false
     }
 }
 
@@ -242,15 +225,15 @@ impl StateSyncClient for StateSync {
         &self,
         id: &StateSyncArtifactId,
     ) -> Option<Box<dyn Chunkable<StateSyncMessage> + Send>> {
-        if self.get_priority_function()(id, &()) != Priority::Fetch {
-            return None;
+        if self.should_download(id) {
+            return Some(self.create_chunkable_state(id));
         }
-        Some(self.create_chunkable_state(id))
+        None
     }
 
     /// Non-Blocking.
     fn should_cancel(&self, id: &StateSyncArtifactId) -> bool {
-        self.get_priority_function()(id, &()) == Priority::Drop
+        !self.should_download(id)
     }
 
     /// Blocking. Makes synchronous file system calls.

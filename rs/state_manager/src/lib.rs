@@ -3256,6 +3256,10 @@ impl CertifiedStateSnapshot for CertifiedStateSnapshotImpl {
         &self.state
     }
 
+    fn get_height(&self) -> Height {
+        self.certification.height
+    }
+
     fn read_certified_state(
         &self,
         paths: &LabeledTree<()>,

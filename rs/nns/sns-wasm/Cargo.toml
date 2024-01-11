@@ -46,6 +46,7 @@ ic-registry-keys = { path = "../../registry/keys" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 
 [dev-dependencies]
+candid_parser = { workspace = true }
 ic-sns-wasm-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }

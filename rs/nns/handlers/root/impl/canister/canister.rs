@@ -249,7 +249,7 @@ fn main() {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use candid::utils::{service_compatible, CandidSource};
+    use candid_parser::utils::{service_compatible, CandidSource};
     use lazy_static::lazy_static;
     use pretty_assertions::assert_eq;
     use std::{env::var_os, path::PathBuf};

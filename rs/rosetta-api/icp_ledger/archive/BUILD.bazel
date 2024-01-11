@@ -48,4 +48,5 @@ rust_test(
     rustc_env = {
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/icp_ledger/archive",
     },
+    deps = ["@crate_index//:candid_parser"],
 )

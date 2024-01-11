@@ -131,16 +131,18 @@ impl Operation {
         _type: String,
         account: Option<AccountIdentifier>,
         amount: Option<Amount>,
+        related_operations: Option<Vec<OperationIdentifier>>,
+        metadata: Option<ObjectMap>,
     ) -> Operation {
         Operation {
             operation_identifier: OperationIdentifier::new(op_id),
-            related_operations: None,
+            related_operations,
             _type,
             status: None,
             account,
             amount,
             coin_change: None,
-            metadata: None,
+            metadata,
         }
     }
 }

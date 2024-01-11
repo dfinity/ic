@@ -1,4 +1,5 @@
-use candid::{utils::service_compatible, utils::CandidSource, CandidType, Principal};
+use candid::{CandidType, Principal};
+use candid_parser::utils::{service_compatible, CandidSource};
 use canister_test::*;
 use dfn_candid::{candid, candid_one, CandidOne};
 use dfn_protobuf::protobuf;

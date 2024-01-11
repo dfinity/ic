@@ -991,7 +991,7 @@ pub fn add_one_participant(env: TestEnv) {
         "Second update call to `icp_ledger.transfer` returned {block_idx_2:?} (elapsed {:?})",
         start_time.elapsed()
     );
-    assert_eq!(block_idx_1 + 1, block_idx_2);
+    assert_eq!(block_idx_1 + 1u8, block_idx_2);
 
     info!(log, "Validating the participation setup by calling `sns_sale.refresh_buyer_tokens` in two different ways ...");
     // Use the default identity to call refresh_buyer_tokens for the wealthy user

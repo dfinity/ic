@@ -5951,13 +5951,11 @@ fn call_perform_checks_freezing_threshold_in_update() {
         .build();
     let err = test.ingress(canister_id, "update", body).unwrap_err();
     assert!(
-        err.description().contains(
-            "Canister cannot grow message memory by 2097168 bytes due to insufficient cycles"
-        ),
+        err.description().contains("call_perform failed"),
         "Unexpected error: {}",
         err.description()
     );
-    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMessageMemoryGrow);
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
 }
 
 #[test]

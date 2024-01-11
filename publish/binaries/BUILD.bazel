@@ -94,7 +94,6 @@ BINARIES = {
         }),
         executable = True,
         visibility = [
-            "//ic-os/boundary-api-guestos/envs:__subpackages__",
             "//ic-os/boundary-guestos/envs:__subpackages__",
             "//ic-os/guestos/envs:__subpackages__",
             "//ic-os/hostos/envs:__subpackages__",
@@ -145,10 +144,7 @@ upload_artifacts(
     visibility = ["//testnet/tools:__pkg__"],
 )
 
-BINS_TO_TEST = [
-    ":ic-starter",
-    ":replica",
-]
+BINS_TO_TEST = [":" + name for name in BINARIES]
 
 sh_test(
     name = "binary-libraries-test",

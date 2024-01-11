@@ -120,12 +120,13 @@
 //! without need for a quorum of voting power to participate, and it
 //! can also always decide upon proposals in a timely manner.
 
+use crate::pb::v1::ProposalStatus;
 use crate::{
     governance::{Governance, TimeWarp},
     pb::v1::governance::GovernanceCachedMetrics,
 };
 use mockall::automock;
-use std::{collections::HashMap, io};
+use std::{collections::BTreeMap, collections::HashMap, io};
 
 mod account_id_index;
 mod audit_event;
@@ -388,6 +389,28 @@ pub fn encode_metrics(
         governance.neuron_store.stable_neuron_store_len() as f64,
         "The number of neurons in stable memory.",
     )?;
+
+    let mut builder = w.gauge_vec(
+        "governance_proposal_deadline_timestamp_seconds",
+        "The deadline for open proposals, labelled with proposal id",
+    )?;
+
+    let open_proposals_deadline = governance
+        .heap_data
+        .proposals
+        .iter()
+        .filter(|(_, data)| data.status() == ProposalStatus::Open)
+        .map(|(proposal_id, data)| {
+            let voting_period = governance.voting_period_seconds()(data.topic());
+            let deadline_ts = data.get_deadline_timestamp_seconds(voting_period);
+            (proposal_id, deadline_ts)
+        })
+        .collect::<BTreeMap<&u64, u64>>();
+    for (k, v) in open_proposals_deadline.iter() {
+        builder = builder
+            .value(&[("proposal_id", &k.to_string())], Metric::into(*v))
+            .unwrap();
+    }
 
     if let Some(metrics) = &governance.heap_data.metrics {
         let GovernanceCachedMetrics {

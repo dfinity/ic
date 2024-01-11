@@ -2869,7 +2869,7 @@ mod tests {
 
     #[test]
     fn test_candid_interface_compatibility() {
-        use candid::utils::{service_compatible, CandidSource};
+        use candid_parser::utils::{service_compatible, CandidSource};
         use std::path::PathBuf;
 
         candid::export_service!();

@@ -116,11 +116,11 @@ where
         .new_call_context(call_origin.clone(), Cycles::new(10), mock_time());
     let callback = Callback::new(
         call_context_id,
-        Some(canister_test_id(LOCAL_CANISTER_ID)),
-        Some(canister_test_id(REMOTE_CANISTER_ID)),
+        canister_test_id(LOCAL_CANISTER_ID),
+        canister_test_id(REMOTE_CANISTER_ID),
         Cycles::new(0),
-        None,
-        None,
+        Cycles::new(0),
+        Cycles::new(0),
         WasmClosure::new(0, 1),
         WasmClosure::new(0, 1),
         None,

@@ -1,3 +1,4 @@
+use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
@@ -30,7 +31,8 @@ use ic_sns_governance::pb::v1 as sns_pb;
 use ic_sns_init::distributions::MAX_DEVELOPER_DISTRIBUTION_COUNT;
 use ic_sns_swap::{
     pb::v1::{
-        FinalizeSwapResponse, GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse,
+        ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse,
+        GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse,
         GetDerivedStateRequest, GetDerivedStateResponse, GetLifecycleRequest, GetLifecycleResponse,
         Lifecycle, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse,
     },
@@ -41,7 +43,7 @@ use ic_sns_wasm::pb::v1::{
     GetDeployedSnsByProposalIdRequest, GetDeployedSnsByProposalIdResponse, SnsCanisterType,
     SnsWasm,
 };
-use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs};
+use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, DEFAULT_TRANSFER_FEE};
 use icrc_ledger_types::icrc1::{
     account::Account,
     transfer::{TransferArg, TransferError},
@@ -83,160 +85,230 @@ fn manage_neuron(
 mod sns {
     use super::*;
 
-    /// Manage an SNS neuron, e.g., to make an SNS Governance proposal.
-    fn manage_neuron(
-        pocket_ic: &PocketIc,
-        sns_governance_canister_id: PrincipalId,
-        sender: PrincipalId,
-        // subaccount: &[u8],
-        neuron_id: sns_pb::NeuronId,
-        command: sns_pb::manage_neuron::Command,
-    ) -> sns_pb::ManageNeuronResponse {
-        let sub_account = neuron_id.subaccount().unwrap();
-        let result = pocket_ic
-            .update_call(
-                sns_governance_canister_id.into(),
-                sender.into(),
-                "manage_neuron",
-                Encode!(&sns_pb::ManageNeuron {
-                    subaccount: sub_account.to_vec(),
-                    command: Some(command),
-                })
-                .unwrap(),
-            )
-            .expect("Error calling manage_neuron");
-        let result = match result {
-            WasmResult::Reply(result) => result,
-            WasmResult::Reject(s) => panic!("Call to (SNS) manage_neuron failed: {:#?}", s),
-        };
-        Decode!(&result, sns_pb::ManageNeuronResponse).unwrap()
-    }
+    pub mod governance {
+        use super::*;
 
-    pub fn propose_and_wait(
-        pocket_ic: &PocketIc,
-        sns_governance_canister_id: PrincipalId,
-        sender: PrincipalId,
-        neuron_id: sns_pb::NeuronId,
-        proposal: sns_pb::Proposal,
-    ) -> Result<sns_pb::ProposalData, sns_pb::GovernanceError> {
-        let response = manage_neuron(
-            pocket_ic,
-            sns_governance_canister_id,
-            sender,
-            neuron_id,
-            sns_pb::manage_neuron::Command::MakeProposal(proposal),
-        );
-        use sns_pb::manage_neuron_response::Command;
-        let response = match response.command {
-            Some(Command::MakeProposal(response)) => Ok(response),
-            Some(Command::Error(err)) => Err(err),
-            _ => panic!("Proposal failed unexpectedly: {:#?}", response),
-        }?;
-        let proposal_id = response
-            .proposal_id
-            .unwrap_or_else(|| {
+        pub fn get_mode(
+            pocket_ic: &PocketIc,
+            sns_governance_canister_id: PrincipalId,
+        ) -> sns_pb::GetModeResponse {
+            let result = pocket_ic
+                .update_call(
+                    sns_governance_canister_id.into(),
+                    Principal::anonymous(),
+                    "get_mode",
+                    Encode!(&sns_pb::GetMode {}).unwrap(),
+                )
+                .unwrap();
+            let result = match result {
+                WasmResult::Reply(result) => result,
+                WasmResult::Reject(s) => panic!("Call to get_mode failed: {:#?}", s),
+            };
+            Decode!(&result, sns_pb::GetModeResponse).unwrap()
+        }
+
+        /// Manage an SNS neuron, e.g., to make an SNS Governance proposal.
+        fn manage_neuron(
+            pocket_ic: &PocketIc,
+            sns_governance_canister_id: PrincipalId,
+            sender: PrincipalId,
+            // subaccount: &[u8],
+            neuron_id: sns_pb::NeuronId,
+            command: sns_pb::manage_neuron::Command,
+        ) -> sns_pb::ManageNeuronResponse {
+            let sub_account = neuron_id.subaccount().unwrap();
+            let result = pocket_ic
+                .update_call(
+                    sns_governance_canister_id.into(),
+                    sender.into(),
+                    "manage_neuron",
+                    Encode!(&sns_pb::ManageNeuron {
+                        subaccount: sub_account.to_vec(),
+                        command: Some(command),
+                    })
+                    .unwrap(),
+                )
+                .expect("Error calling manage_neuron");
+            let result = match result {
+                WasmResult::Reply(result) => result,
+                WasmResult::Reject(s) => panic!("Call to (SNS) manage_neuron failed: {:#?}", s),
+            };
+            Decode!(&result, sns_pb::ManageNeuronResponse).unwrap()
+        }
+
+        pub fn start_dissolving_neuron(
+            pocket_ic: &PocketIc,
+            sns_governance_canister_id: PrincipalId,
+            sender: PrincipalId,
+            neuron_id: sns_pb::NeuronId,
+        ) -> sns_pb::ManageNeuronResponse {
+            let command =
+                sns_pb::manage_neuron::Command::Configure(sns_pb::manage_neuron::Configure {
+                    operation: Some(
+                        sns_pb::manage_neuron::configure::Operation::StartDissolving(
+                            sns_pb::manage_neuron::StartDissolving {},
+                        ),
+                    ),
+                });
+            manage_neuron(
+                pocket_ic,
+                sns_governance_canister_id,
+                sender,
+                neuron_id,
+                command,
+            )
+        }
+
+        pub fn propose_and_wait(
+            pocket_ic: &PocketIc,
+            sns_governance_canister_id: PrincipalId,
+            sender: PrincipalId,
+            neuron_id: sns_pb::NeuronId,
+            proposal: sns_pb::Proposal,
+        ) -> Result<sns_pb::ProposalData, sns_pb::GovernanceError> {
+            let response = manage_neuron(
+                pocket_ic,
+                sns_governance_canister_id,
+                sender,
+                neuron_id,
+                sns_pb::manage_neuron::Command::MakeProposal(proposal),
+            );
+            use sns_pb::manage_neuron_response::Command;
+            let response = match response.command {
+                Some(Command::MakeProposal(response)) => Ok(response),
+                Some(Command::Error(err)) => Err(err),
+                _ => panic!("Proposal failed unexpectedly: {:#?}", response),
+            }?;
+            let proposal_id = response.proposal_id.unwrap_or_else(|| {
                 panic!(
                     "First SNS proposal response did not contain a proposal_id: {:#?}",
                     response
                 )
-            })
-            .id;
-        let proposal_id = sns_pb::ProposalId { id: proposal_id };
-        wait_for_proposal_execution(pocket_ic, sns_governance_canister_id, proposal_id)
-    }
+            });
+            wait_for_proposal_execution(pocket_ic, sns_governance_canister_id, proposal_id)
+        }
 
-    fn wait_for_proposal_execution(
-        pocket_ic: &PocketIc,
-        sns_governance_canister_id: PrincipalId,
-        proposal_id: sns_pb::ProposalId,
-    ) -> Result<sns_pb::ProposalData, sns_pb::GovernanceError> {
-        // We create some blocks until the proposal has finished executing (`pocket_ic.tick()`).
-        let mut last_proposal_data = None;
-        for _attempt_count in 1..=50 {
-            pocket_ic.tick();
-            let proposal = governance_get_proposal(
+        /// This function assumes that the proposal submission succeeded (and panics otherwise).
+        fn wait_for_proposal_execution(
+            pocket_ic: &PocketIc,
+            sns_governance_canister_id: PrincipalId,
+            proposal_id: sns_pb::ProposalId,
+        ) -> Result<sns_pb::ProposalData, sns_pb::GovernanceError> {
+            // We create some blocks until the proposal has finished executing (`pocket_ic.tick()`).
+            let mut last_proposal_data = None;
+            for _attempt_count in 1..=50 {
+                pocket_ic.tick();
+                let proposal = governance_get_proposal(
+                    pocket_ic,
+                    sns_governance_canister_id,
+                    proposal_id,
+                    PrincipalId::new_anonymous(),
+                );
+                let proposal = proposal
+                    .result
+                    .expect("GetProposalResponse.result must be set.");
+                let proposal_data = match proposal {
+                    sns_pb::get_proposal_response::Result::Error(err) => {
+                        panic!("Proposal data cannot be found: {:?}", err);
+                    }
+                    sns_pb::get_proposal_response::Result::Proposal(proposal_data) => proposal_data,
+                };
+                if proposal_data.executed_timestamp_seconds > 0 {
+                    return Ok(proposal_data);
+                }
+                proposal_data
+                    .failure_reason
+                    .clone()
+                    .map_or(Ok(()), |err| Err(err))?;
+                last_proposal_data = Some(proposal_data);
+                pocket_ic.advance_time(Duration::from_millis(100));
+            }
+            panic!(
+                "Looks like the SNS proposal {:?} is never going to be decided: {:#?}",
+                proposal_id, last_proposal_data
+            );
+        }
+
+        fn governance_get_proposal(
+            pocket_ic: &PocketIc,
+            sns_governance_canister_id: PrincipalId,
+            proposal_id: sns_pb::ProposalId,
+            sender: PrincipalId,
+        ) -> sns_pb::GetProposalResponse {
+            let result = pocket_ic
+                .update_call(
+                    sns_governance_canister_id.into(),
+                    Principal::from(sender),
+                    "get_proposal",
+                    Encode!(&sns_pb::GetProposal {
+                        proposal_id: Some(proposal_id)
+                    })
+                    .unwrap(),
+                )
+                .unwrap();
+            let result = match result {
+                WasmResult::Reply(reply) => reply,
+                WasmResult::Reject(reject) => {
+                    panic!(
+                        "get_proposal was rejected by the SNS governance canister: {:#?}",
+                        reject
+                    )
+                }
+            };
+            Decode!(&result, sns_pb::GetProposalResponse).unwrap()
+        }
+
+        fn governance_list_neurons(
+            pocket_ic: &PocketIc,
+            sns_governance_canister_id: PrincipalId,
+            request: sns_pb::ListNeurons,
+            sender: PrincipalId,
+        ) -> sns_pb::ListNeuronsResponse {
+            let result = pocket_ic
+                .update_call(
+                    sns_governance_canister_id.into(),
+                    Principal::from(sender),
+                    "list_neurons",
+                    Encode!(&request).unwrap(),
+                )
+                .unwrap();
+            let result = match result {
+                WasmResult::Reply(reply) => reply,
+                WasmResult::Reject(reject) => {
+                    panic!(
+                        "list_neurons was rejected by the SNS governance canister: {:#?}",
+                        reject
+                    )
+                }
+            };
+            Decode!(&result, sns_pb::ListNeuronsResponse).unwrap()
+        }
+
+        /// Searches for the ID and controller principal of an SNS neuron that can submit proposals.
+        pub fn find_neuron_with_majority_voting_power(
+            pocket_ic: &PocketIc,
+            sns_governance_canister_id: PrincipalId,
+        ) -> Option<(sns_pb::NeuronId, PrincipalId)> {
+            let sns_neurons = governance_list_neurons(
                 pocket_ic,
                 sns_governance_canister_id,
-                proposal_id,
+                sns_pb::ListNeurons::default(),
                 PrincipalId::new_anonymous(),
-            );
-            let proposal = proposal
-                .result
-                .expect("GetProposalResponse.result must be set.");
-            let proposal_data = match proposal {
-                sns_pb::get_proposal_response::Result::Error(err) => Err(err),
-                sns_pb::get_proposal_response::Result::Proposal(proposal) => Ok(proposal),
-            }?;
-            if proposal_data.executed_timestamp_seconds > 0 {
-                return Ok(proposal_data);
-            }
-            assert_eq!(
-                proposal_data.failure_reason, None,
-                "Proposal execution failed: {:#?}",
-                proposal_data
-            );
-            last_proposal_data = Some(proposal_data);
-            pocket_ic.advance_time(Duration::from_millis(100));
-        }
-        panic!(
-            "Looks like the SNS proposal {:?} is never going to be decided: {:#?}",
-            proposal_id, last_proposal_data
-        );
-    }
-
-    fn governance_get_proposal(
-        pocket_ic: &PocketIc,
-        sns_governance_canister_id: PrincipalId,
-        proposal_id: sns_pb::ProposalId,
-        sender: PrincipalId,
-    ) -> sns_pb::GetProposalResponse {
-        let result = pocket_ic
-            .update_call(
-                sns_governance_canister_id.into(),
-                Principal::from(sender),
-                "get_proposal",
-                Encode!(&sns_pb::GetProposal {
-                    proposal_id: Some(proposal_id)
+            )
+            .neurons;
+            sns_neurons
+                .iter()
+                .find(|neuron| {
+                    neuron.dissolve_delay_seconds(neuron.created_timestamp_seconds)
+                        >= 6 * 30 * SECONDS_PER_DAY
                 })
-                .unwrap(),
-            )
-            .unwrap();
-        let result = match result {
-            WasmResult::Reply(reply) => reply,
-            WasmResult::Reject(reject) => {
-                panic!(
-                    "get_proposal was rejected by the SNS governance canister: {:#?}",
-                    reject
-                )
-            }
-        };
-        Decode!(&result, sns_pb::GetProposalResponse).unwrap()
-    }
-
-    pub fn governance_list_neurons(
-        pocket_ic: &PocketIc,
-        sns_governance_canister_id: PrincipalId,
-        request: sns_pb::ListNeurons,
-        sender: PrincipalId,
-    ) -> sns_pb::ListNeuronsResponse {
-        let result = pocket_ic
-            .update_call(
-                sns_governance_canister_id.into(),
-                Principal::from(sender),
-                "list_neurons",
-                Encode!(&request).unwrap(),
-            )
-            .unwrap();
-        let result = match result {
-            WasmResult::Reply(reply) => reply,
-            WasmResult::Reject(reject) => {
-                panic!(
-                    "list_neurons was rejected by the SNS governance canister: {:#?}",
-                    reject
-                )
-            }
-        };
-        Decode!(&result, sns_pb::ListNeuronsResponse).unwrap()
+                .map(|sns_neuron| {
+                    (
+                        sns_neuron.id.clone().unwrap(),
+                        sns_neuron.permissions.last().unwrap().principal.unwrap(),
+                    )
+                })
+        }
     }
 }
 
@@ -245,7 +317,7 @@ fn refresh_buyer_tokens(
     swap_canister_id: PrincipalId,
     buyer: PrincipalId,
     confirmation_text: Option<String>,
-) -> RefreshBuyerTokensResponse {
+) -> Result<RefreshBuyerTokensResponse, String> {
     let result = pocket_ic
         .update_call(
             swap_canister_id.into(),
@@ -257,12 +329,35 @@ fn refresh_buyer_tokens(
             })
             .unwrap(),
         )
-        .unwrap();
+        .map_err(|err| err.to_string())?;
     let result = match result {
         WasmResult::Reply(result) => result,
         WasmResult::Reject(s) => panic!("Call to refresh_buyer_tokens failed: {:#?}", s),
     };
-    Decode!(&result, RefreshBuyerTokensResponse).unwrap()
+    Ok(Decode!(&result, RefreshBuyerTokensResponse).unwrap())
+}
+
+fn error_refund_icp(
+    pocket_ic: &PocketIc,
+    swap_canister_id: PrincipalId,
+    source_principal_id: PrincipalId,
+) -> ErrorRefundIcpResponse {
+    let result = pocket_ic
+        .update_call(
+            swap_canister_id.into(),
+            Principal::anonymous(),
+            "error_refund_icp",
+            Encode!(&ErrorRefundIcpRequest {
+                source_principal_id: Some(source_principal_id),
+            })
+            .unwrap(),
+        )
+        .unwrap();
+    let result = match result {
+        WasmResult::Reply(result) => result,
+        WasmResult::Reject(s) => panic!("Call to error_refund_icp failed: {:#?}", s),
+    };
+    Decode!(&result, ErrorRefundIcpResponse).unwrap()
 }
 
 fn get_derived_state(
@@ -480,25 +575,6 @@ fn get_auto_finalization_status(
         WasmResult::Reject(s) => panic!("Call to get_auto_finalization_status failed: {:#?}", s),
     };
     Decode!(&result, GetAutoFinalizationStatusResponse).unwrap()
-}
-
-fn get_mode(
-    pocket_ic: &PocketIc,
-    sns_governance_canister_id: PrincipalId,
-) -> sns_pb::GetModeResponse {
-    let result = pocket_ic
-        .update_call(
-            sns_governance_canister_id.into(),
-            Principal::anonymous(),
-            "get_mode",
-            Encode!(&sns_pb::GetMode {}).unwrap(),
-        )
-        .unwrap();
-    let result = match result {
-        WasmResult::Reply(result) => result,
-        WasmResult::Reject(s) => panic!("Call to get_mode failed: {:#?}", s),
-    };
-    Decode!(&result, sns_pb::GetModeResponse).unwrap()
 }
 
 fn get_deployed_sns_by_proposal_id(
@@ -757,8 +833,80 @@ fn install_nns_canisters(
     add_real_wasms_to_sns_wasm(pocket_ic).unwrap();
 }
 
+/// This is a parametric test function for the testing the SNS lifecycle. A test instance should
+/// end by calling this function, instantiating it with a set of parameter values that define
+/// a particular testing scenario. If this function panics, the test fails. Otherwise, it succeeds.
+///
+/// At a high level, the following aspects of an SNS are covered in this function:
+/// 1. Basic properties on an SNS instance:
+/// 1.1. An SNS instance can be deployed successfully by submitting an NNS proposal.
+/// 1.2. A new SNS instance automatically transitions into `Lifecycle::Open`.
+/// 1.3. Direct participation works as expected.
+///
+/// 2. Auto-finalization works as expected.
+///
+/// 3. The SNS instance obeys the following Hoare triples:
+///
+///    Abbreviations. (See diagram in rs/sns/swap/proto/ic_sns_swap/pb/v1/swap.proto for more details.)
+///    - `FinalizeUnSuccessfully` is an operation that brings the SNS instance from an initial state
+///      `Lifecycle::Open` to the terminal state `Lifecycle::Aborted`, i.e., the following assertion
+///      holds by-definition: `{ Lifecycle::Open } FinalizeUnSuccessfully { Lifecycle::Aborted }`.
+///    - `FinalizeSuccessfully` is an operation that brings the SNS instance from an initial state
+///      `Lifecycle::Open` to the terminal state `Lifecycle::Committed`, i.e., the following assertion
+///      holds by-definition: `{ Lifecycle::Open } FinalizeUnSuccessfully { Lifecycle::Committed }`.
+///    - `Finalize` is the same as
+///      ```
+///      if ensure_swap_timeout_is_reached {
+///          FinalizeUnSuccessfully
+///      } else {
+///          FinalizeSuccessfully
+///      }
+///      ```
+///    - `Canister.function()` refers to calling `Canister`s public API `function`.
+///
+///    Notation.
+///    - Hoare triples are in pseudo code, e.g., `{ Precondition } Operation { Postcondition }`.
+///    - `old(P)` in `{ Postcondition }` refers to condition `P` evaluated in `{ Precondition }`.
+///    - `snake_case` is used to refer to values and structures.
+///    - `CamelCase` is used to refer to operations.
+///    - `Operation.is_enabled()` refers to the possibility of calling `Operation` in this state.
+///
+/// 3.1. State machine:
+/// 3.1.1. `{ governance::Mode::PreInitializationSwap } FinalizeUnSuccessfully { governance::Mode::PreInitializationSwap }`
+/// 3.1.2. `{ governance::Mode::PreInitializationSwap } FinalizeSuccessfully   { governance::Mode::Normal }`
+///
+/// 3.2. Availability of SNS operations in different states:
+/// 3.2.1. `{ !ManageNervousSystemParameters.is_enabled() } FinalizeUnSuccessfully { !ManageNervousSystemParameters.is_enabled() }`
+/// 3.2.2. `{ !ManageNervousSystemParameters.is_enabled() } FinalizeSuccessfully   {  ManageNervousSystemParameters.is_enabled() }`
+/// 3.2.3. `{ !DissolveSnsNeuron.is_enabled() } FinalizeUnSuccessfully { !DissolveSnsNeuron.is_enabled() }`
+/// 3.2.4. `{ !DissolveSnsNeuron.is_enabled() } FinalizeSuccessfully   {  DissolveSnsNeuron.is_enabled() }`
+/// 3.2.5. `{ RefreshBuyerTokens.is_enabled() } Finalize { !RefreshBuyerTokens.is_enabled() }`
+///
+/// 3.3. ICP refunding mechanism and ICP balances:
+/// 3.3.1. `{ true } FinalizeUnSuccessfully; Swap.error_refund_icp() { All directly participated ICP (minus the fees) are refunded. }`
+/// 3.3.2. `{ true } FinalizeSuccessfully;   Swap.error_refund_icp() { Excess directly participated ICP (minus the fees) are refunded. }`
+///
+/// 4. The Neurons' Fund works as expected:
+/// 4.1.1. `{  neurons_fund_participation && direct_participation_icp_e8s==0 && neurons_fund_participation_icp_e8s==0 } FinalizeUnSuccessfully { direct_participation_icp_e8s==0            && neurons_fund_participation_icp_e8s==0 }`
+/// 4.1.2. `{  neurons_fund_participation && direct_participation_icp_e8s==0 && neurons_fund_participation_icp_e8s==0 } FinalizeSuccessfully   { direct_participation_icp_e8s==650_000 * E8 && neurons_fund_participation_icp_e8s==150_000 * E8 }`
+/// 4.1.3. `{ !neurons_fund_participation && direct_participation_icp_e8s==0 && neurons_fund_participation_icp_e8s==0 } FinalizeUnSuccessfully { direct_participation_icp_e8s==0            && neurons_fund_participation_icp_e8s==0 }`
+/// 4.1.4. `{ !neurons_fund_participation && direct_participation_icp_e8s==0 && neurons_fund_participation_icp_e8s==0 } FinalizeSuccessfully   { direct_participation_icp_e8s==650_000 * E8 && neurons_fund_participation_icp_e8s==0 }`
+/// TODO[NNS1-2801]: 4.2. `Maturity of Neurons' Fund neurons is refunded correctly.`
+/// TODO[NNS1-2801]: 4.3.
+///
+/// 5. Control over the dapp:
+/// TODO[NNS1-2801]: 5.1. `{ dapp_canister_status.controllers() == vec![developer_principal] } FinalizeUnSuccessfully { dapp_canister_status.controllers() == vec![developer_principal] }`
+/// TODO[NNS1-2801]: 5.2. `{ dapp_canister_status.controllers() == vec![developer_principal] } FinalizeSuccessfully   { dapp_canister_status.controllers() == vec![sns_governance_principal] }`
+///
+/// 6. SNS neuron creation:
+/// TODO[NNS1-2801]: 6.1. `{  } FinalizeUnSuccessfully { No additional SNS neurons are created. }`
+/// TODO[NNS1-2801]: 6.2. `{  } FinalizeSuccessfully   { New SNS neurons are created as expected. }`
+///
+/// 7. SNS token balances:
+/// TODO[NNS1-2801]: 7.1. `{ true } FinalizeUnSuccessfully { sns_token_balances == old(sns_token_balances) }`
+/// TODO[NNS1-2801]: 7.2. `{ true } FinalizeSuccessfully   { SNS token balances are as expected. }`
 fn test_sns_lifecycle(
-    ensure_swap_time_run_out_without_sufficient_direct_participation: bool,
+    ensure_swap_timeout_is_reached: bool,
     create_service_nervous_system_proposal: CreateServiceNervousSystem,
 ) {
     // 1. Prepare the world
@@ -811,42 +959,25 @@ fn test_sns_lifecycle(
 
     // Assert that the mode of SNS Governance is `PreInitializationSwap`.
     assert_eq!(
-        get_mode(&pocket_ic, sns_governance_canister_id)
+        sns::governance::get_mode(&pocket_ic, sns_governance_canister_id)
             .mode
             .unwrap(),
         sns_pb::governance::Mode::PreInitializationSwap as i32
     );
 
-    // Get an ID of an SNS neuron that can submit proposals.
-    let (sns_neuron_id, sns_neuron_principal_id) = {
-        let sns_neurons = sns::governance_list_neurons(
+    // Get an ID of an SNS neuron that can submit proposals. We rely on the fact that this neuron
+    // either holds the majority of the voting power or the follow graph is set up s.t. when this
+    // neuron submits a proposal, that proposal gets through without the need for any voting.
+    let (sns_neuron_id, sns_neuron_principal_id) =
+        sns::governance::find_neuron_with_majority_voting_power(
             &pocket_ic,
             sns_governance_canister_id,
-            sns_pb::ListNeurons::default(),
-            PrincipalId::new_anonymous(),
         )
-        .neurons;
-        let sns_neuron = sns_neurons
-            .iter()
-            .find(|neuron| {
-                neuron.dissolve_delay_seconds(neuron.created_timestamp_seconds)
-                    >= 6 * 30 * SECONDS_PER_DAY
-            })
-            .unwrap_or_else(|| {
-                panic!(
-                    "cannot find SNS neuron with dissolve delay over 6 months. sns_neurons = {:#?}",
-                    sns_neurons
-                )
-            });
-        (
-            sns_neuron.id.clone().unwrap(),
-            sns_neuron.permissions.last().unwrap().principal.unwrap(),
-        )
-    };
+        .expect("cannot find SNS neuron with dissolve delay over 6 months.");
 
     // Currently, we are not allowed to make `ManageNervousSystemParameter` proposals.
     {
-        let err = sns::propose_and_wait(
+        let err = sns::governance::propose_and_wait(
             &pocket_ic,
             sns_governance_canister_id,
             sns_neuron_principal_id,
@@ -884,6 +1015,39 @@ fn test_sns_lifecycle(
         );
     }
 
+    // Currently, the neuron cannot start dissolving (an error is expected).
+    {
+        let start_dissolving_response = sns::governance::start_dissolving_neuron(
+            &pocket_ic,
+            sns_governance_canister_id,
+            sns_neuron_principal_id,
+            sns_neuron_id.clone(),
+        );
+        match start_dissolving_response.command {
+            Some(sns_pb::manage_neuron_response::Command::Error(error)) => {
+                let sns_pb::GovernanceError {
+                    error_type,
+                    error_message,
+                } = &error;
+                use sns_pb::governance_error::ErrorType;
+                assert_eq!(
+                    ErrorType::try_from(*error_type).unwrap(),
+                    ErrorType::PreconditionFailed,
+                    "{:#?}",
+                    error
+                );
+                assert!(
+                    error_message.contains("PreInitializationSwap"),
+                    "{:#?}",
+                    error
+                );
+            }
+            response => {
+                panic!("{:#?}", response);
+            }
+        };
+    }
+
     await_swap_lifecycle(&pocket_ic, swap_canister_id, Lifecycle::Open).unwrap();
     let derived_state = get_derived_state(&pocket_ic, swap_canister_id);
     assert_eq!(derived_state.direct_participation_icp_e8s.unwrap(), 0);
@@ -900,7 +1064,7 @@ fn test_sns_lifecycle(
         account_balance(&pocket_ic, &direct_participant_icp_account),
         Tokens::from_e8s(1_000_000 * E8)
     );
-    let effective_participation_amount_e8s = 1_000_000 * E8 - 10_000;
+    let transferred_participation_amount_e8s = 1_000_000 * E8 - DEFAULT_TRANSFER_FEE.get_e8s();
     icrc1_transfer(
         &pocket_ic,
         direct_participant,
@@ -910,37 +1074,58 @@ fn test_sns_lifecycle(
             fee: None,
             created_at_time: None,
             memo: None,
-            amount: Nat::from(effective_participation_amount_e8s),
+            amount: Nat::from(transferred_participation_amount_e8s),
         },
     )
     .unwrap();
+    // Ensure there are no tokens left on this user's account (this slightly simplifies the checks).
     assert_eq!(
         account_balance(&pocket_ic, &direct_participant_icp_account),
         Tokens::from_e8s(0)
     );
 
     // 4. Force the swap to reach either Aborted, or Committed.
-    if ensure_swap_time_run_out_without_sufficient_direct_participation {
-        // ... either by advancing the time
+    let expected_refund_e8s = if ensure_swap_timeout_is_reached {
+        // Await the end of the swap period.
         pocket_ic.advance_time(Duration::from_secs(30 * SECONDS_PER_DAY)); // 30 days
         await_swap_lifecycle(&pocket_ic, swap_canister_id, Lifecycle::Aborted).unwrap();
-    } else {
-        // ... or by participating in the swap
-        refresh_buyer_tokens(&pocket_ic, swap_canister_id, direct_participant, None);
-        await_swap_lifecycle(&pocket_ic, swap_canister_id, Lifecycle::Committed).unwrap();
-    }
 
-    // Double check that auto-finalization worked as expected, i.e.,
+        // Expecting to get refunded with Transferred - (ICP Ledger transfer fee).
+        transferred_participation_amount_e8s - DEFAULT_TRANSFER_FEE.get_e8s()
+    } else {
+        let expected_effective_participation_amount_e8s = transferred_participation_amount_e8s.min(
+            swap_parameters
+                .maximum_direct_participation_icp
+                .unwrap()
+                .e8s
+                .unwrap(),
+        );
+        // First, participating in the swap. Then await the swap finalization.
+        assert_eq!(
+            refresh_buyer_tokens(&pocket_ic, swap_canister_id, direct_participant, None),
+            Ok(RefreshBuyerTokensResponse {
+                icp_accepted_participation_e8s: expected_effective_participation_amount_e8s,
+                icp_ledger_account_balance_e8s: transferred_participation_amount_e8s,
+            })
+        );
+        await_swap_lifecycle(&pocket_ic, swap_canister_id, Lifecycle::Committed).unwrap();
+
+        // Expecting to get refunded with Transferred - Accepted - (ICP Ledger transfer fee).
+        transferred_participation_amount_e8s
+            - expected_effective_participation_amount_e8s
+            - DEFAULT_TRANSFER_FEE.get_e8s()
+    };
+
+    // 5. Double check that auto-finalization worked as expected, i.e.,
     // `Swap.get_auto_finalization_status` returns a structure with the top-level fields being set,
     // no errors, and matching the expected pattern (different for `Aborted` and `Committed`).
     // It may take some time for the process to complete, so we should await (implemented via a busy
     // loop) rather than try just once.
-    let expected_swap_finalization_status =
-        if ensure_swap_time_run_out_without_sufficient_direct_participation {
-            SwapFinalizationStatus::Aborted
-        } else {
-            SwapFinalizationStatus::Committed
-        };
+    let expected_swap_finalization_status = if ensure_swap_timeout_is_reached {
+        SwapFinalizationStatus::Aborted
+    } else {
+        SwapFinalizationStatus::Committed
+    };
     if let Err(err) = await_swap_finalization_status(
         &pocket_ic,
         swap_canister_id,
@@ -953,9 +1138,30 @@ fn test_sns_lifecycle(
         );
     }
 
+    // Participation is no longer possible due to Swap being in a terminal state.
+    let err = assert_matches!(refresh_buyer_tokens(&pocket_ic, swap_canister_id, direct_participant, None), Err(err) => err);
+    assert!(err.contains("Participation is possible only when the Swap is in the OPEN state."));
+
+    // 6. Check that refunding works as expected.
+    {
+        let result = error_refund_icp(&pocket_ic, swap_canister_id, direct_participant)
+            .result
+            .expect("Error while calling Swap.error_refund_icp");
+        if let ic_sns_swap::pb::v1::error_refund_icp_response::Result::Err(err) = result {
+            panic!("{:?}", err);
+        };
+
+        // This assertion assumes works because we have consumed all of the tokens from this user's
+        // account up to the last e8.
+        assert_eq!(
+            account_balance(&pocket_ic, &direct_participant_icp_account),
+            Tokens::from_e8s(expected_refund_e8s)
+        );
+    }
+
     // Inspect the final derived state
     let derived_state = get_derived_state(&pocket_ic, swap_canister_id);
-    if ensure_swap_time_run_out_without_sufficient_direct_participation {
+    if ensure_swap_timeout_is_reached {
         assert_eq!(derived_state.direct_participation_icp_e8s.unwrap(), 0);
     } else {
         assert_eq!(
@@ -965,30 +1171,31 @@ fn test_sns_lifecycle(
     }
 
     // Assert that the mode of SNS Governance is correct
-    if ensure_swap_time_run_out_without_sufficient_direct_participation {
+    if ensure_swap_timeout_is_reached {
         assert_eq!(
-            get_mode(&pocket_ic, sns_governance_canister_id)
+            sns::governance::get_mode(&pocket_ic, sns_governance_canister_id)
                 .mode
                 .unwrap(),
             sns_pb::governance::Mode::PreInitializationSwap as i32,
         );
     } else {
         assert_eq!(
-            get_mode(&pocket_ic, sns_governance_canister_id)
+            sns::governance::get_mode(&pocket_ic, sns_governance_canister_id)
                 .mode
                 .unwrap(),
             sns_pb::governance::Mode::Normal as i32
         );
     }
 
-    // Ensure that the proposal submission is possible if and only if the governance the SNS has
-    // launched.
+    // Ensure that the proposal submission is possible if and only if the SNS governance has
+    // launched, and that `PreInitializationSwap` mode limitations are still in place if and only
+    // if the swap aborted.
     {
-        let proposal_result = sns::propose_and_wait(
+        let proposal_result = sns::governance::propose_and_wait(
             &pocket_ic,
             sns_governance_canister_id,
             sns_neuron_principal_id,
-            sns_neuron_id,
+            sns_neuron_id.clone(),
             sns_pb::Proposal {
                 title: "Try to smuggle in a ManageNervousSystemParameters proposal while \
                         in PreInitializationSwap mode."
@@ -1003,7 +1210,7 @@ fn test_sns_lifecycle(
                 )),
             },
         );
-        if ensure_swap_time_run_out_without_sufficient_direct_participation {
+        if ensure_swap_timeout_is_reached {
             let err = proposal_result.unwrap_err();
             let sns_pb::GovernanceError {
                 error_type,
@@ -1026,11 +1233,52 @@ fn test_sns_lifecycle(
         }
     }
 
+    // Ensure that the neuron can start dissolving now if and only if the SNS governance has
+    // launched.
+    {
+        let start_dissolving_response = sns::governance::start_dissolving_neuron(
+            &pocket_ic,
+            sns_governance_canister_id,
+            sns_neuron_principal_id,
+            sns_neuron_id,
+        );
+        if ensure_swap_timeout_is_reached {
+            match start_dissolving_response.command {
+                Some(sns_pb::manage_neuron_response::Command::Error(error)) => {
+                    let sns_pb::GovernanceError {
+                        error_type,
+                        error_message,
+                    } = &error;
+                    use sns_pb::governance_error::ErrorType;
+                    assert_eq!(
+                        ErrorType::try_from(*error_type).unwrap(),
+                        ErrorType::PreconditionFailed,
+                        "{:#?}",
+                        error
+                    );
+                    assert!(
+                        error_message.contains("PreInitializationSwap"),
+                        "{:#?}",
+                        error
+                    );
+                }
+                response => {
+                    panic!("{:#?}", response);
+                }
+            };
+        } else {
+            match start_dissolving_response.command {
+                Some(sns_pb::manage_neuron_response::Command::Configure(_)) => (),
+                _ => panic!("{:#?}", start_dissolving_response),
+            };
+        }
+    }
+
     if swap_parameters
         .neurons_fund_participation
         .unwrap_or_default()
     {
-        if ensure_swap_time_run_out_without_sufficient_direct_participation {
+        if ensure_swap_timeout_is_reached {
             assert_eq!(
                 derived_state.neurons_fund_participation_icp_e8s.unwrap(),
                 0,
@@ -1057,7 +1305,7 @@ fn test_sns_lifecycle_happy_scenario_with_neurons_fund_participation() {
     test_sns_lifecycle(
         true,
         CreateServiceNervousSystemBuilder::default()
-            .neurons_fund_participation(false)
+            .neurons_fund_participation(true)
             .build(),
     );
 }
@@ -1087,7 +1335,7 @@ fn test_sns_lifecycle_swap_timeout_without_neurons_fund_participation() {
     test_sns_lifecycle(
         false,
         CreateServiceNervousSystemBuilder::default()
-            .neurons_fund_participation(true)
+            .neurons_fund_participation(false)
             .build(),
     );
 }
