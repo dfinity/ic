@@ -37,7 +37,7 @@ python3 terraform-region-generator.py 3 100 10
 After generating the terraform it can be applied
 
 ```
-terraform apply
+terraform apply -parallelism=30
 ```
 
 It will keep running until you stop the experiment with
@@ -71,7 +71,7 @@ provider                = Okta
 mfa                     = DUO
 skip_verify             = false
 aws_urn                 = urn:amazon:webservices
-aws_session_duration    = 9000
+aws_session_duration    = 43200
 saml_cache              = true
 saml_cache_file         = /tmp/saml2aws/cache
 disable_remember_device = false

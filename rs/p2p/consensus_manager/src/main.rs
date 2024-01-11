@@ -302,10 +302,10 @@ async fn load_generator(
 
             }
             _ = log_interval.tick() => {
-                // info!(log, "Sent artifacts total {}", sent_artifacts);
-                // info!(log, "Rate of message sent {}", (sent_artifacts - sent_artifacts_last)/10);
-                // info!(log, "Rate of messages received {}", (received_artifact_count - received_artifact_count_previous)/10);
-                // info!(log, "Rate of bytes received {}", (received_bytes - received_bytes_previous)/10);
+                info!(log, "Sent artifacts total {}", sent_artifacts as u64 - metrics.sent_artifacts.load(Relaxed));
+                info!(log, "Rate of message sent {}", (sent_artifacts as u64 - metrics.sent_artifacts.load(Relaxed))/10);
+                info!(log, "Rate of messages received {}", (received_artifact_count as u64 - metrics.received_artifact_count.load(Relaxed))/10);
+                info!(log, "Rate of bytes received {}", (received_bytes as u64 - metrics.received_bytes.load(Relaxed))/10);
                 metrics
                     .received_bytes
                     .store(received_bytes.try_into().unwrap(), Relaxed);
