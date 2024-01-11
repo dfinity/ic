@@ -174,11 +174,16 @@ impl BabyStepGiantStepTable {
     fn compute_table_size(range: usize, max_mbytes: usize, max_table_mul: usize) -> usize {
         let sqrt = (range as f64).sqrt().ceil() as usize;
 
-        // Estimate of HashMap overhead from https://ntietz.com/blog/rust-hashmap-overhead/
-        let hash_table_overhead = 1.73_f64;
-        let hash_table_storage = Self::GT_REPR_SIZE + 8;
+        // Number of bytes per element in the main (Gt->usize) table
+        let main_table_bytes_per_elem = Self::GT_REPR_SIZE + 8;
 
-        let storage = (hash_table_storage as f64) * hash_table_overhead * (sqrt as f64);
+        // Estimate of HashMap/HashSet overhead from https://ntietz.com/blog/rust-hashmap-overhead/
+        let hash_set_overhead = 1.73_f64;
+
+        let prefix_filter_bytes_per_elem = hash_set_overhead * (Self::GT_REPR_PREFIX_SIZE as f64);
+
+        let storage =
+            (main_table_bytes_per_elem as f64 + prefix_filter_bytes_per_elem) * (sqrt as f64);
 
         let max_bytes = max_mbytes * 1024 * 1024;
 
