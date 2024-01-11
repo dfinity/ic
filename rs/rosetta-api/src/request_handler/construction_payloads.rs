@@ -24,7 +24,7 @@ use crate::models::{
 use crate::request::Request;
 use crate::request_handler::{make_sig_data, verify_network_id, RosettaRequestHandler};
 use crate::request_types::{
-    AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, MergeMaturity, NeuronInfo,
+    AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity, NeuronInfo,
     PublicKeyOrPrincipal, RegisterVote, RemoveHotKey, RequestType, SetDissolveTimestamp, Spawn,
     Stake, StakeMaturity, StartDissolve, StopDissolve,
 };
@@ -125,6 +125,13 @@ impl RosettaRequestHandler {
                     &ingress_expiries,
                 )?,
                 Request::NeuronInfo(req) => handle_neuron_info(
+                    req,
+                    &mut payloads,
+                    &mut updates,
+                    &pks_map,
+                    &ingress_expiries,
+                )?,
+                Request::ListNeurons(req) => handle_list_neurons(
                     req,
                     &mut payloads,
                     &mut updates,
@@ -389,6 +396,50 @@ fn handle_neuron_info(
         },
         update,
     ));
+    Ok(())
+}
+
+/// Handle LIST_NEURONS.
+fn handle_list_neurons(
+    req: ListNeurons,
+    payloads: &mut Vec<SigningPayload>,
+    updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
+    pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
+    ingress_expiries: &[u64],
+) -> Result<(), ApiError> {
+    let account = req.account;
+
+    // In the case of an hotkey, account will be derived from the hotkey so
+    // we can use the same logic for controller or hotkey.
+    let pk = pks_map.get(&account).ok_or_else(|| {
+        ApiError::internal_error(format!(
+            "NeuronInfo - Cannot find public key for account {}",
+            account,
+        ))
+    })?;
+    let sender = principal_id_from_public_key(pk)
+        .map_err(|err| ApiError::InvalidPublicKey(false, err.into()))?;
+
+    // Argument for the method called on the governance canister.
+    let args = ic_nns_governance::pb::v1::ListNeurons {
+        neuron_ids: vec![],
+        include_neurons_readable_by_caller: true,
+    };
+    let update = HttpCanisterUpdate {
+        canister_id: Blob(ic_nns_constants::GOVERNANCE_CANISTER_ID.get().to_vec()),
+        method_name: "list_neurons".to_string(),
+        arg: Blob(CandidOne(args).into_bytes().expect("Serialization failed")),
+        nonce: None,
+        sender: Blob(sender.into_vec()), // Sender is controller or hotkey.
+        ingress_expiry: 0,
+    };
+    add_payloads(
+        payloads,
+        ingress_expiries,
+        &convert::to_model_account_identifier(&account),
+        &update,
+    );
+    updates.push((RequestType::ListNeurons, update));
     Ok(())
 }
 

@@ -254,6 +254,10 @@ pub fn operations_to_requests(
                 };
                 state.neuron_info(account, principal, neuron_index)?;
             }
+            OperationType::ListNeurons => {
+                validate_neuron_management_op()?;
+                state.list_neurons(account)?;
+            }
             OperationType::Burn | OperationType::Mint => {
                 let msg = format!("Unsupported operation type: {:?}", o._type);
                 return Err(op_error(o, msg));
