@@ -74,9 +74,10 @@ pub trait MutablePoolSection<T>: PoolSection<T> {
 }
 
 struct PerTypeMetrics<T> {
-    max_height: prometheus::IntGauge,
-    min_height: prometheus::IntGauge,
-    count: Histogram,
+    max_height: IntGauge,
+    min_height: IntGauge,
+    count: IntGauge,
+    count_per_height: Histogram,
     phantom: PhantomData<T>,
 }
 
@@ -88,6 +89,7 @@ impl<T> PerTypeMetrics<T> {
         const NAME: &str = "artifact_pool_consensus_height_stat";
         const HELP: &str =
             "The height of objects in a consensus pool, by pool type, object type and stat";
+
         Self {
             max_height: registry.register(
                 IntGauge::with_opts(opts!(
@@ -106,6 +108,14 @@ impl<T> PerTypeMetrics<T> {
                 .unwrap(),
             ),
             count: registry.register(
+                IntGauge::with_opts(opts!(
+                    "consensus_pool_size",
+                    "The number of artifacts in a consensus pool, by pool type and object type",
+                    labels! {LABEL_POOL_TYPE => pool_portion, LABEL_TYPE => type_name}
+                ))
+                .unwrap(),
+            ),
+            count_per_height: registry.register(
                 Histogram::with_opts(histogram_opts!(
                     "artifact_pool_consensus_count_per_height",
                     "The number of artifacts of the given height in a consensus pool, by pool type \
@@ -120,29 +130,26 @@ impl<T> PerTypeMetrics<T> {
         }
     }
 
-    fn update_from_height_indexed_pool(&self, index: &dyn HeightIndexedPool<T>) {
-        let (min, max) = index
-            .height_range()
-            .map_or((-1, -1), |r| (r.min.get() as i64, r.max.get() as i64));
-        if min >= 0 {
-            self.min_height.set(min);
+    fn update_from_height_indexed_pool(&self, pool: &dyn HeightIndexedPool<T>) {
+        if let Some(height_range) = pool.height_range() {
+            self.min_height.set(height_range.min.get() as i64);
+            self.max_height.set(height_range.max.get() as i64);
         }
-        if max >= 0 {
-            self.max_height.set(max);
-        }
+
+        self.count.set(pool.size() as i64);
     }
 
     /// Updates the number of artifacts for each height in [last_height, new_height)
-    fn update_count(
+    fn update_count_per_height(
         &self,
-        index: &dyn HeightIndexedPool<T>,
+        pool: &dyn HeightIndexedPool<T>,
         last_height: Height,
         new_height: Height,
     ) {
         let mut height = last_height;
         while height < new_height {
-            let count = index.get_by_height(height).count();
-            self.count.observe(count as f64);
+            let count = pool.get_by_height(height).count();
+            self.count_per_height.observe(count as f64);
             height.inc_assign();
         }
     }
@@ -160,7 +167,6 @@ struct PoolMetrics {
     notarization_share: PerTypeMetrics<NotarizationShare>,
     finalization_share: PerTypeMetrics<FinalizationShare>,
     catch_up_package_share: PerTypeMetrics<CatchUpPackageShare>,
-    total_size: prometheus::IntGauge,
 }
 
 impl PoolMetrics {
@@ -184,14 +190,6 @@ impl PoolMetrics {
                 &registry,
                 pool_portion,
                 "catch_up_package_share",
-            ),
-            total_size: registry.register(
-                IntGauge::with_opts(opts!(
-                    "consensus_pool_size",
-                    "The total size of a consensus pool",
-                    labels! {LABEL_POOL_TYPE => pool_portion}
-                ))
-                .unwrap(),
             ),
         }
     }
@@ -219,18 +217,17 @@ impl PoolMetrics {
             .update_from_height_indexed_pool(pool_section.finalization_share());
         self.catch_up_package_share
             .update_from_height_indexed_pool(pool_section.catch_up_package_share());
-        self.total_size.set(pool_section.size() as i64)
     }
 
-    fn update_count<T>(
+    fn update_count_per_height<T>(
         &mut self,
         pool_section: &dyn PoolSection<T>,
         last_height: Height,
         new_height: Height,
     ) {
-        macro_rules! update_count {
+        macro_rules! update_count_per_height {
             ($artifact_name:ident) => {
-                self.$artifact_name.update_count(
+                self.$artifact_name.update_count_per_height(
                     pool_section.$artifact_name(),
                     last_height,
                     new_height,
@@ -238,15 +235,15 @@ impl PoolMetrics {
             };
         }
 
-        update_count!(random_beacon);
-        update_count!(random_tape);
-        update_count!(block_proposal);
-        update_count!(notarization);
-        update_count!(finalization);
-        update_count!(random_beacon_share);
-        update_count!(random_tape_share);
-        update_count!(notarization_share);
-        update_count!(finalization_share);
+        update_count_per_height!(random_beacon);
+        update_count_per_height!(random_tape);
+        update_count_per_height!(block_proposal);
+        update_count_per_height!(notarization);
+        update_count_per_height!(finalization);
+        update_count_per_height!(random_beacon_share);
+        update_count_per_height!(random_tape_share);
+        update_count_per_height!(notarization_share);
+        update_count_per_height!(finalization_share);
     }
 }
 
@@ -474,10 +471,11 @@ impl ConsensusPoolImpl {
             let new_height = self.validated.pool_section().finalization().max_height();
 
             self.validated_metrics.update(self.validated.pool_section());
+
             // Update the metrics if necessary.
             if let (Some(last_height), Some(new_height)) = (last_height, new_height) {
                 if new_height != last_height {
-                    self.validated_metrics.update_count(
+                    self.validated_metrics.update_count_per_height(
                         self.validated.pool_section(),
                         last_height,
                         new_height,

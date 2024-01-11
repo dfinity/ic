@@ -412,7 +412,7 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
     }
 
     /// Get the index database of the given type_key.
-    /// Each index database maps HeightKey to a list of IdKey.
+    /// Each index database maps [`HeightKey`] to a list of [`IdKey`].
     fn get_index_db(&self, type_key: &TypeKey) -> Database {
         self.indices
             .iter()
@@ -737,6 +737,19 @@ where
             1 => Ok(as_vec.remove(0)),
             _ => Err(OnlyError::MultipleValues),
         }
+    }
+
+    fn size(&self) -> usize {
+        let index_db = self.get_index_db(&Message::type_key());
+        let Some(tx) = log_err!(self.db_env.begin_ro_txn(), &self.log, "begin_ro_txn") else {
+            return 0;
+        };
+        let Some(mut cursor) = log_err!(tx.open_ro_cursor(index_db), &self.log, "open_ro_cursor")
+        else {
+            return 0;
+        };
+
+        cursor.iter().count()
     }
 }
 
@@ -2107,9 +2120,29 @@ mod tests {
         });
     }
 
+    fn assert_count_consistency_<T>(pool: &dyn HeightIndexedPool<T>) {
+        assert_eq!(pool.size(), pool.get_all().count());
+    }
+
+    fn assert_count_consistency(pool: &PersistentHeightIndexedPool<ConsensusMessage>) {
+        assert_count_consistency_(pool.random_beacon());
+        assert_count_consistency_(pool.random_tape());
+        assert_count_consistency_(pool.block_proposal());
+        assert_count_consistency_(pool.notarization());
+        assert_count_consistency_(pool.finalization());
+        assert_count_consistency_(pool.random_beacon_share());
+        assert_count_consistency_(pool.random_tape_share());
+        assert_count_consistency_(pool.notarization_share());
+        assert_count_consistency_(pool.finalization_share());
+        assert_count_consistency_(pool.catch_up_package());
+        assert_count_consistency_(pool.catch_up_package_share());
+    }
+
     // Assert that entries in artifacts db are reflected by index db and vice versa.
     // Each entry should have a join partner when joining on IdKey.
     fn assert_consistency(pool: &PersistentHeightIndexedPool<ConsensusMessage>) {
+        assert_count_consistency(pool);
+
         let tx = pool.db_env.begin_ro_txn().unwrap();
         // get all ids from all indices
         let mut ids_index = pool
