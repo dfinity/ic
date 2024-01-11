@@ -3,7 +3,7 @@ use crate::errors::ApiError;
 use crate::models::{ConstructionParseRequest, ConstructionParseResponse, ParsedTransaction};
 use crate::request_handler::{verify_network_id, RosettaRequestHandler};
 use crate::request_types::{
-    AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, MergeMaturity, NeuronInfo,
+    AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity, NeuronInfo,
     PublicKeyOrPrincipal, RegisterVote, RemoveHotKey, RequestType, SetDissolveTimestamp, Spawn,
     Stake, StakeMaturity, StartDissolve, StopDissolve,
 };
@@ -92,6 +92,7 @@ impl RosettaRequestHandler {
                 RequestType::StakeMaturity { neuron_index } => {
                     stake_maturity(&mut requests, arg, from, neuron_index)?
                 }
+                RequestType::ListNeurons => list_neurons(&mut requests, arg, from)?,
                 RequestType::NeuronInfo {
                     neuron_index,
                     controller,
@@ -534,6 +535,16 @@ fn neuron_info(
             return Err(ApiError::invalid_request("Invalid neuron info request."));
         }
     }
+    Ok(())
+}
+
+/// Handle LIST_NEURONS.
+fn list_neurons(
+    requests: &mut Vec<Request>,
+    _arg: Blob,
+    from: AccountIdentifier,
+) -> Result<(), ApiError> {
+    requests.push(Request::ListNeurons(ListNeurons { account: from }));
     Ok(())
 }
 
