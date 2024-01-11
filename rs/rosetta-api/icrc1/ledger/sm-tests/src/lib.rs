@@ -851,7 +851,7 @@ where
         from_subaccount: None,
         to: p2.0.into(),
         fee: None,
-        amount: Nat::from(1_000_000),
+        amount: Nat::from(1_000_000u32),
         created_at_time: Some(now),
         memo: None,
     };
@@ -869,7 +869,7 @@ where
     // Same transaction, but with the fee set explicitly.
     // The Ledger should not deduplicate.
     let args = TransferArg {
-        fee: Some(Nat::from(10_000)),
+        fee: Some(Nat::from(10_000u32)),
         ..transfer_args.clone()
     };
     let block_idx = send_transfer(&env, canister_id, p1.0, &args)
@@ -901,7 +901,7 @@ where
             from_subaccount: None,
             to: p2.0.into(),
             fee: None,
-            amount: Nat::from(1_000_000),
+            amount: Nat::from(1_000_000u32),
             created_at_time: Some(now),
             memo: None,
         },
@@ -921,7 +921,7 @@ where
                 from_subaccount: None,
                 to: p2.0.into(),
                 fee: None,
-                amount: Nat::from(1_000_000),
+                amount: Nat::from(1_000_000u32),
                 created_at_time: Some(now),
                 memo: None,
             }
@@ -937,7 +937,7 @@ where
             from_subaccount: Some([0; 32]),
             to: p2.0.into(),
             fee: None,
-            amount: Nat::from(1_000_000),
+            amount: Nat::from(1_000_000u32),
             created_at_time: Some(now),
             memo: None,
         },
@@ -954,7 +954,7 @@ where
             from_subaccount: None,
             to: p2.0.into(),
             fee: None,
-            amount: Nat::from(1_000_000),
+            amount: Nat::from(1_000_000u32),
             created_at_time: Some(now),
             memo: Some(Memo::default()),
         },
@@ -974,7 +974,7 @@ where
                 from_subaccount: None,
                 to: p2.0.into(),
                 fee: None,
-                amount: Nat::from(1_000_000),
+                amount: Nat::from(1_000_000u32),
                 created_at_time: Some(now),
                 memo: Some(Memo::default()),
             }
@@ -1155,7 +1155,7 @@ where
                 from_subaccount: None,
                 to: p2.0.into(),
                 fee: None,
-                amount: Nat::from(1_000_000),
+                amount: Nat::from(1_000_000u32),
                 created_at_time: Some(now - tx_window - 1),
                 memo: None,
             }
@@ -1172,7 +1172,7 @@ where
                 from_subaccount: None,
                 to: p2.0.into(),
                 fee: None,
-                amount: Nat::from(1_000_000),
+                amount: Nat::from(1_000_000u32),
                 created_at_time: Some(now + Duration::from_secs(5 * 60).as_nanos() as u64),
                 memo: None
             }
@@ -1207,7 +1207,7 @@ pub fn test_archiving<T>(
 
     let archive_info = list_archives(&env, canister_id);
     assert_eq!(archive_info.len(), 1);
-    assert_eq!(archive_info[0].block_range_start, 0);
+    assert_eq!(archive_info[0].block_range_start, 0u8);
     assert_eq!(archive_info[0].block_range_end, NUM_BLOCKS_TO_ARCHIVE - 1);
 
     let archive_principal = archive_info[0].canister_id;
@@ -1219,7 +1219,7 @@ pub fn test_archiving<T>(
         (ARCHIVE_TRIGGER_THRESHOLD - NUM_BLOCKS_TO_ARCHIVE + 1) as usize
     );
     assert_eq!(resp.archived_transactions.len(), 1);
-    assert_eq!(resp.archived_transactions[0].start, Nat::from(0));
+    assert_eq!(resp.archived_transactions[0].start, Nat::from(0_u8));
     assert_eq!(
         resp.archived_transactions[0].length,
         Nat::from(NUM_BLOCKS_TO_ARCHIVE)
@@ -1291,7 +1291,7 @@ pub fn test_archiving<T>(
 
     let archive_info = list_archives(&env, canister_id);
     assert_eq!(archive_info.len(), 1);
-    assert_eq!(archive_info[0].block_range_start, 0);
+    assert_eq!(archive_info[0].block_range_start, 0u8);
     assert_eq!(
         archive_info[0].block_range_end,
         2 * NUM_BLOCKS_TO_ARCHIVE - 1
@@ -1338,7 +1338,7 @@ where
         (ARCHIVE_TRIGGER_THRESHOLD - NUM_BLOCKS_TO_ARCHIVE + 1) as usize
     );
     assert_eq!(resp.archived_blocks.len(), 1);
-    assert_eq!(resp.archived_blocks[0].start, Nat::from(0));
+    assert_eq!(resp.archived_blocks[0].start, Nat::from(0_u8));
     assert_eq!(
         resp.archived_blocks[0].length,
         Nat::from(NUM_BLOCKS_TO_ARCHIVE)
@@ -1834,7 +1834,7 @@ where
             Encode!(&TransferArg {
                 from_subaccount: None,
                 to: to_account,
-                amount: Nat::from(1),
+                amount: Nat::from(1_u8),
                 fee: None,
                 created_at_time: None,
                 memo: Some(Memo::from(memo.to_vec())),
@@ -2088,7 +2088,7 @@ where
 
     // Approval for a subaccount.
     approve_args.from_subaccount = Some([1; 32]);
-    approve_args.amount = Nat::from(1_000_000);
+    approve_args.amount = Nat::from(1_000_000u32);
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     assert_eq!(block_index, 3);
@@ -2149,7 +2149,7 @@ where
     // Decrease expiration.
     let new_expiration = expiration - Duration::from_secs(3600).as_nanos() as u64;
     approve_args.expires_at = Some(new_expiration);
-    approve_args.amount = Nat::from(40_000);
+    approve_args.amount = Nat::from(40_000u32);
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     assert_eq!(block_index, 2);
@@ -2162,7 +2162,7 @@ where
     // Increase expiration.
     let new_expiration = expiration + Duration::from_secs(3600).as_nanos() as u64;
     approve_args.expires_at = Some(new_expiration);
-    approve_args.amount = Nat::from(300_000);
+    approve_args.amount = Nat::from(300_000u32);
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     assert_eq!(block_index, 3);
@@ -2226,12 +2226,12 @@ where
 
     // Wrong expected_allowance.
     approve_args.expires_at = None;
-    approve_args.amount = Nat::from(400_000);
-    approve_args.expected_allowance = Some(Nat::from(100_000));
+    approve_args.amount = Nat::from(400_000u32);
+    approve_args.expected_allowance = Some(Nat::from(100_000u32));
     assert_eq!(
         send_approval(&env, canister_id, from.0, &approve_args),
         Err(ApproveError::AllowanceChanged {
-            current_allowance: Nat::from(150_000)
+            current_allowance: Nat::from(150_000u32)
         })
     );
     let allowance = get_allowance(&env, canister_id, from.0, spender.0);
@@ -2242,12 +2242,12 @@ where
 
     // Wrong expected_allowance - above u64::MAX
     approve_args.expires_at = None;
-    approve_args.amount = Nat::from(400_000);
+    approve_args.amount = Nat::from(400_000u32);
     approve_args.expected_allowance = Some(Nat::from(u128::MAX));
     assert_eq!(
         send_approval(&env, canister_id, from.0, &approve_args),
         Err(ApproveError::AllowanceChanged {
-            current_allowance: Nat::from(150_000)
+            current_allowance: Nat::from(150_000u32)
         })
     );
     let allowance = get_allowance(&env, canister_id, from.0, spender.0);
@@ -2257,8 +2257,8 @@ where
     assert_eq!(balance_of(&env, canister_id, spender.0), 0);
 
     // Correct expected_allowance.
-    approve_args.amount = Nat::from(400_000);
-    approve_args.expected_allowance = Some(Nat::from(150_000));
+    approve_args.amount = Nat::from(400_000u32);
+    approve_args.expected_allowance = Some(Nat::from(150_000u32));
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     assert_eq!(block_index, 2);
@@ -2289,7 +2289,7 @@ where
     assert_eq!(
         send_approval(&env, canister_id, from.0, &approve_args),
         Err(ApproveError::InsufficientFunds {
-            balance: Nat::from(5_000)
+            balance: Nat::from(5_000u32)
         })
     );
     let allowance = get_allowance(&env, canister_id, from.0, spender.0);
@@ -2314,7 +2314,7 @@ where
 
     let mut approve_args = default_approve_args(spender.0, 150_000);
 
-    approve_args.amount = Nat::from(Tokens::MAX) * 2;
+    approve_args.amount = Nat::from(Tokens::MAX) * 2u8;
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     assert_eq!(block_index, 1);
@@ -2364,7 +2364,7 @@ where
         Some(system_time_to_nanos(env.time()) + Duration::from_secs(3600).as_nanos() as u64);
     approve_args.from_subaccount = Some([1; 32]);
     approve_args.expires_at = expiration;
-    approve_args.amount = Nat::from(100_000);
+    approve_args.amount = Nat::from(100_000u32);
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     assert_eq!(block_index, 3);
@@ -2571,14 +2571,14 @@ where
     assert_eq!(
         send_transfer_from(&env, canister_id, spender.0, &transfer_from_args),
         Err(TransferFromError::InsufficientAllowance {
-            allowance: Nat::from(0)
+            allowance: Nat::from(0_u8)
         })
     );
 
     let mut approve_args = default_approve_args(spender.0, 150_000);
     send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     approve_args.from_subaccount = Some([1; 32]);
-    approve_args.amount = Nat::from(50_000);
+    approve_args.amount = Nat::from(50_000u32);
     send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
 
     let block_index = send_transfer_from(&env, canister_id, spender.0, &transfer_from_args)
@@ -2613,7 +2613,7 @@ where
     assert_eq!(
         send_transfer_from(&env, canister_id, spender.0, &transfer_from_args),
         Err(TransferFromError::InsufficientFunds {
-            balance: Nat::from(50_000)
+            balance: Nat::from(50_000u32)
         })
     );
     assert_eq!(balance_of(&env, canister_id, from.0), 50_000);
@@ -2625,7 +2625,7 @@ where
     assert_eq!(
         send_transfer_from(&env, canister_id, spender.0, &transfer_from_args),
         Err(TransferFromError::InsufficientAllowance {
-            allowance: Nat::from(10_000)
+            allowance: Nat::from(10_000u32)
         })
     );
     assert_eq!(balance_of(&env, canister_id, from.0), 50_000);
@@ -2704,7 +2704,7 @@ where
     assert_eq!(
         send_transfer_from(&env, canister_id, spender.0, &transfer_from_args),
         Err(TransferFromError::InsufficientAllowance {
-            allowance: Nat::from(0)
+            allowance: Nat::from(0_u8)
         })
     );
     assert_eq!(balance_of(&env, canister_id, from.0), 100_000);
@@ -2817,7 +2817,7 @@ where
     }
 
     fn total_allowance(env: &StateMachine, canister_id: CanisterId, num_approvals: u64) -> Nat {
-        let mut allowance = Nat::from(0);
+        let mut allowance = Nat::from(0_u8);
         for i in 0..num_approvals {
             allowance += get_allowance(
                 env,
@@ -2832,7 +2832,7 @@ where
 
     assert_eq!(
         total_allowance(&env, canister_id, num_approvals),
-        Nat::from(30_000)
+        Nat::from(30_000u32)
     );
 
     let mut new_accounts = 0;

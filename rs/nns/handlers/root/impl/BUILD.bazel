@@ -66,6 +66,7 @@ ALIASES = {}
 
 DEV_DEPENDENCIES = [
     "//rs/state_machine_tests",
+    "@crate_index//:candid_parser",
     "@crate_index//:pretty_assertions",
     "@crate_index//:tokio",
 ] + select({

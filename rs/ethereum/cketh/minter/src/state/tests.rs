@@ -233,7 +233,7 @@ mod upgrade {
         let mut state = initial_state();
         assert_matches!(
             state.upgrade(UpgradeArg {
-                minimum_withdrawal_amount: Some(Nat::from(0)),
+                minimum_withdrawal_amount: Some(Nat::from(0_u8)),
                 ..Default::default()
             }),
             Err(InvalidStateError::InvalidMinimumWithdrawalAmount(_))
@@ -265,8 +265,8 @@ mod upgrade {
         use crate::endpoints::CandidBlockTag;
         let mut state = initial_state();
         let upgrade_arg = UpgradeArg {
-            next_transaction_nonce: Some(Nat::from(15)),
-            minimum_withdrawal_amount: Some(Nat::from(100)),
+            next_transaction_nonce: Some(Nat::from(15_u8)),
+            minimum_withdrawal_amount: Some(Nat::from(100_u8)),
             ethereum_contract_address: Some(
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string(),
             ),

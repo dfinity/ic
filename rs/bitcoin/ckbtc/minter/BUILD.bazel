@@ -115,6 +115,9 @@ rust_test(
     env = {
         "CARGO_MANIFEST_DIR": "rs/bitcoin/ckbtc/minter",
     },
+    deps = [
+        "@crate_index//:candid_parser",
+    ],
 )
 
 # integration tests defined in ckbtc minter tests/

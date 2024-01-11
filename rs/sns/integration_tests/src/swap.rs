@@ -2712,9 +2712,9 @@ fn test_last_man_less_than_min() {
                 owner: swap_id.into(),
                 subaccount: None
             },
-            Nat::from(10_000_000),
+            Nat::from(10_000_000_u32),
         )],
-        transfer_fee: Nat::from(10_000),
+        transfer_fee: Nat::from(10_000_u32),
         token_name: "SNS Token".to_string(),
         token_symbol: "STK".to_string(),
         decimals: None,

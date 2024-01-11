@@ -35,6 +35,7 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 
 [dev-dependencies]
+candid_parser = { workspace = true }
 cddl = "0.9.0-beta.1"
 ic-icrc1-ledger-sm-tests = { path = "sm-tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }

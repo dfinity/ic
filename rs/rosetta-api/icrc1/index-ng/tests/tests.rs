@@ -677,7 +677,7 @@ fn test_get_account_transactions() {
     // List of the transactions that the test is going to add. This exists to make
     // the test easier to read.
     let tx0 = TransactionWithId {
-        id: 0.into(),
+        id: 0u8.into(),
         transaction: Transaction::mint(
             Mint {
                 to: account(1, 0),
@@ -689,13 +689,13 @@ fn test_get_account_transactions() {
         ),
     };
     let tx1 = TransactionWithId {
-        id: 1.into(),
+        id: 1u8.into(),
         transaction: Transaction::transfer(
             Transfer {
                 from: account(1, 0),
                 to: account(2, 0),
                 spender: None,
-                amount: 1_000_000.into(),
+                amount: 1_000_000u32.into(),
                 fee: Some(FEE.into()),
                 created_at_time: None,
                 memo: None,
@@ -704,13 +704,13 @@ fn test_get_account_transactions() {
         ),
     };
     let tx2 = TransactionWithId {
-        id: 2.into(),
+        id: 2u8.into(),
         transaction: Transaction::transfer(
             Transfer {
                 from: account(1, 0),
                 to: account(2, 0),
                 spender: None,
-                amount: 2_000_000.into(),
+                amount: 2_000_000u32.into(),
                 fee: Some(FEE.into()),
                 created_at_time: None,
                 memo: None,
@@ -719,13 +719,13 @@ fn test_get_account_transactions() {
         ),
     };
     let tx3 = TransactionWithId {
-        id: 3.into(),
+        id: 3u8.into(),
         transaction: Transaction::transfer(
             Transfer {
                 from: account(2, 0),
                 to: account(1, 1),
                 spender: None,
-                amount: 1_000_000.into(),
+                amount: 1_000_000u32.into(),
                 fee: Some(FEE.into()),
                 created_at_time: None,
                 memo: None,
@@ -808,7 +808,7 @@ fn test_get_account_transactions_start_length() {
         minter,
     );
     let index_id = install_index_ng(env, ledger_id);
-    let expected_txs: Vec<_> = (0..10)
+    let expected_txs: Vec<_> = (0..10u32)
         .map(|i| TransactionWithId {
             id: i.into(),
             transaction: Transaction::mint(
@@ -1123,7 +1123,7 @@ fn test_oldest_tx_id() {
     // account(1, 0) oldest_tx_id is 0, i.e. the mint at ledger init.
     let oldest_tx_id =
         get_account_transactions(env, index_id, account(1, 0), None, u64::MAX).oldest_tx_id;
-    assert_eq!(Some(0.into()), oldest_tx_id);
+    assert_eq!(Some(0u8.into()), oldest_tx_id);
 
     ////
     // Add one block for account(1, 0) and account(2, 0).
@@ -1133,12 +1133,12 @@ fn test_oldest_tx_id() {
     // account(1, 0) oldest_tx_id is still 0.
     let oldest_tx_id =
         get_account_transactions(env, index_id, account(1, 0), None, u64::MAX).oldest_tx_id;
-    assert_eq!(Some(0.into()), oldest_tx_id);
+    assert_eq!(Some(0u8.into()), oldest_tx_id);
 
     // account(2, 0) oldest_tx_id is 1, i.e. the new transfer.
     let oldest_tx_id =
         get_account_transactions(env, index_id, account(2, 0), None, u64::MAX).oldest_tx_id;
-    assert_eq!(Some(1.into()), oldest_tx_id);
+    assert_eq!(Some(1u8.into()), oldest_tx_id);
 
     // account(3, 0) oldest_tx_id is still `None`.
     let oldest_tx_id =
@@ -1155,17 +1155,17 @@ fn test_oldest_tx_id() {
     // account(1, 0) oldest_tx_id is still 0.
     let oldest_tx_id =
         get_account_transactions(env, index_id, account(1, 0), None, u64::MAX).oldest_tx_id;
-    assert_eq!(Some(0.into()), oldest_tx_id);
+    assert_eq!(Some(0u8.into()), oldest_tx_id);
 
     // account(2, 0) oldest_tx_id is still 1.
     let oldest_tx_id =
         get_account_transactions(env, index_id, account(2, 0), None, u64::MAX).oldest_tx_id;
-    assert_eq!(Some(1.into()), oldest_tx_id);
+    assert_eq!(Some(1u8.into()), oldest_tx_id);
 
     // account(3, 0) oldest_tx_id is 3, i.e. the last block index.
     let oldest_tx_id =
         get_account_transactions(env, index_id, account(3, 0), None, u64::MAX).oldest_tx_id;
-    assert_eq!(Some(3.into()), oldest_tx_id);
+    assert_eq!(Some(3u8.into()), oldest_tx_id);
 
     // There should be no fee collector.
     assert_eq!(get_fee_collectors_ranges(env, index_id).ranges, vec![]);
@@ -1211,7 +1211,7 @@ fn test_fee_collector() {
 
     assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
-        vec![(fee_collector, vec![(0.into(), 4.into())])],
+        vec![(fee_collector, vec![(0u8.into(), 4u8.into())])],
     );
 
     // Remove the fee collector to burn some transactions fees.
@@ -1229,7 +1229,7 @@ fn test_fee_collector() {
 
     assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
-        vec![(fee_collector, vec![(0.into(), 4.into())])],
+        vec![(fee_collector, vec![(0u8.into(), 4u8.into())])],
     );
 
     // Add a new fee collector different from the first one.
@@ -1250,8 +1250,8 @@ fn test_fee_collector() {
     assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
         vec![
-            (new_fee_collector, vec![(6.into(), 7.into())]),
-            (fee_collector, vec![(0.into(), 4.into())]),
+            (new_fee_collector, vec![(6u8.into(), 7u8.into())]),
+            (fee_collector, vec![(0u8.into(), 4u8.into())]),
         ],
     );
 
@@ -1273,10 +1273,10 @@ fn test_fee_collector() {
     assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
         vec![
-            (new_fee_collector, vec![(6.into(), 7.into())]),
+            (new_fee_collector, vec![(6u8.into(), 7u8.into())]),
             (
                 fee_collector,
-                vec![(0.into(), 4.into()), (7.into(), 9.into())],
+                vec![(0u8.into(), 4u8.into()), (7u8.into(), 9u8.into())],
             ),
         ],
     );
