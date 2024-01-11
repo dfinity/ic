@@ -26,18 +26,15 @@ use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp::api::CspPublicKeyStore;
 use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
-use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_crypto_utils_basic_sig::conversions::derive_node_id;
 use ic_crypto_utils_time::CurrentSystemTimeSource;
-use ic_interfaces::crypto::{BasicSigner, KeyManager, ThresholdSigVerifierByPublicKey};
+use ic_interfaces::crypto::KeyManager;
 use ic_interfaces::time_source::TimeSource;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{new_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert};
-use ic_types::consensus::CatchUpContentProtobufBytes;
 use ic_types::crypto::{CryptoError, CryptoResult, KeyPurpose};
-use ic_types::messages::MessageId;
 use ic_types::{NodeId, RegistryVersion};
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::fmt;
@@ -50,42 +47,6 @@ pub const THRESHOLD_SIG_DATA_STORE_CAPACITY: usize = ThresholdSigDataStoreImpl::
 /// A type alias for `CryptoComponentImpl<Csp>`.
 /// See the Rust documentation of `CryptoComponentImpl`.
 pub type CryptoComponent = CryptoComponentImpl<Csp>;
-
-/// A crypto component that offers limited functionality and can be used outside
-/// of the replica process.
-///
-/// This is an intermediate solution before crypto runs in a separate process.
-///
-/// This should be used whenever crypto is required on a node, but a
-/// full-fledged `CryptoComponent` is not available. Example use cases are in
-/// separate process such as ic-fe or the orchestrator.
-///
-/// Do not instantiate a CryptoComponent outside of the replica process, since
-/// that may lead to problems with concurrent access to the secret key store.
-/// `CryptoComponentForNonReplicaProcess` guarantees that only methods are
-/// exposed that don't risk running into such concurrency issues, as they do not
-/// modify the secret key store.
-pub trait CryptoComponentForNonReplicaProcess:
-    KeyManager
-    + BasicSigner<MessageId>
-    + ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes>
-    + TlsHandshake
-    + Send
-    + Sync // TODO(CRP-606): add API for authenticating registry queries.
-{
-}
-
-// Blanket implementation of `CryptoComponentForNonReplicaProcess` for all types
-// that fulfill the requirements.
-impl<T> CryptoComponentForNonReplicaProcess for T where
-    T: KeyManager
-        + BasicSigner<MessageId>
-        + ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes>
-        + TlsHandshake
-        + Send
-        + Sync
-{
-}
 
 /// Allows Internet Computer nodes to perform crypto operations such as
 /// distributed key generation, signing, signature verification, and TLS
@@ -280,54 +241,6 @@ impl CryptoComponentImpl<Csp> {
             metrics,
             time_source,
         }
-    }
-
-    /// Creates a crypto component that offers limited functionality and can be
-    /// used outside of the replica process.
-    ///
-    /// Please refer to the trait documentation of
-    /// `CryptoComponentForNonReplicaProcess` for more details.
-    ///
-    /// If the `config`'s vault type is `UnixSocket`, a `tokio_runtime_handle`
-    /// must be provided, which is then used for the `async`hronous
-    /// communication with the vault via RPC for secret key operations. In most
-    /// cases, this is done by calling `tokio::runtime::Handle::block_on` and
-    /// it is the caller's responsibility to ensure that these calls to
-    /// `block_on` do not panic. This can be achieved, for example, by ensuring
-    /// that the crypto component's methods are not themselves called from
-    /// within a call to `block_on` (because calls to `block_on` cannot be
-    /// nested), or by wrapping them with `tokio::task::block_in_place`
-    /// and accepting the performance implications.
-    /// Because the asynchronous communication with the vault happens only for
-    /// secret key operations, for the `CryptoComponentImpl` the concerned
-    /// methods are
-    /// * `KeyManager::check_keys_with_registry`
-    /// * `BasicSigner::sign_basic`
-    ///
-    /// The methods of the `TlsHandshake` trait are unaffected by this.
-    ///
-    /// # NOTE:
-    /// Callers of this method are strongly encouraged to switch from using
-    /// `CryptoComponentForNonReplicaProcess`, to using the full crypto component,
-    /// by calling `new` instead of `new_for_non_replica_process`.
-    ///
-    /// # Panics
-    /// Panics if the `config`'s vault type is `UnixSocket` and
-    /// `tokio_runtime_handle` is `None`.
-    pub fn new_for_non_replica_process(
-        config: &CryptoConfig,
-        tokio_runtime_handle: Option<tokio::runtime::Handle>,
-        registry_client: Arc<dyn RegistryClient>,
-        logger: ReplicaLogger,
-        metrics_registry: Option<&MetricsRegistry>,
-    ) -> impl CryptoComponentForNonReplicaProcess {
-        CryptoComponentImpl::new(
-            config,
-            tokio_runtime_handle,
-            registry_client,
-            logger,
-            metrics_registry,
-        )
     }
 
     /// Returns the `NodeId` of this crypto component.

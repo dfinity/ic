@@ -14,7 +14,6 @@ use ic_config::{
     transport::TransportConfig,
     Config,
 };
-use ic_crypto::CryptoComponentForNonReplicaProcess;
 use ic_icos_sev::{get_chip_id, SnpError};
 use ic_interfaces::crypto::IDkgKeyRotationResult;
 use ic_interfaces_registry::RegistryClient;
@@ -42,6 +41,20 @@ use url::Url;
 /// we use a 15% time buffer compensating for a potential delay of the previous node.
 const DELAY_COMPENSATION: f64 = 0.85;
 
+pub trait NodeRegistrationCrypto:
+    ic_interfaces::crypto::KeyManager + ic_interfaces::crypto::BasicSigner<MessageId> + Send + Sync
+{
+}
+
+// Blanket implementation of `NodeRegistrationCrypto` for all types that fulfill the requirements.
+impl<T> NodeRegistrationCrypto for T where
+    T: ic_interfaces::crypto::KeyManager
+        + ic_interfaces::crypto::BasicSigner<MessageId>
+        + Send
+        + Sync
+{
+}
+
 /// Subcomponent used to register this node with the provided NNS.
 pub(crate) struct NodeRegistration {
     log: ReplicaLogger,
@@ -49,7 +62,7 @@ pub(crate) struct NodeRegistration {
     registry_client: Arc<dyn RegistryClient>,
     metrics: Arc<OrchestratorMetrics>,
     node_id: NodeId,
-    key_handler: Arc<dyn CryptoComponentForNonReplicaProcess>,
+    key_handler: Arc<dyn NodeRegistrationCrypto>,
     local_store: Arc<dyn LocalStore>,
     signer: Box<dyn Signer>,
 }
@@ -63,7 +76,7 @@ impl NodeRegistration {
         registry_client: Arc<dyn RegistryClient>,
         metrics: Arc<OrchestratorMetrics>,
         node_id: NodeId,
-        key_handler: Arc<dyn CryptoComponentForNonReplicaProcess>,
+        key_handler: Arc<dyn NodeRegistrationCrypto>,
         local_store: Arc<dyn LocalStore>,
     ) -> Self {
         // If we can open a PEM file under the path specified in the replica config,
