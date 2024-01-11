@@ -1,5 +1,5 @@
 {
-  "checksum": "2f568c938287d582c2e58b6ebb9de03f826b828a7083eef44eb8e516b8db43b8",
+  "checksum": "b81ffdc4381568cd517047dd52ec06f6bb7a69b26919df1e99b105f4b5c33f87",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -15626,7 +15626,7 @@
               "target": "socket2"
             },
             {
-              "id": "ssh2 0.9.3",
+              "id": "ssh2 0.9.4",
               "target": "ssh2"
             },
             {
@@ -30191,16 +30191,13 @@
       },
       "license": "MIT"
     },
-    "libssh2-sys 0.2.23": {
+    "libssh2-sys 0.3.0": {
       "name": "libssh2-sys",
-      "version": "0.2.23",
+      "version": "0.3.0",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity-lab/ssh2-rs",
-          "commitish": {
-            "Rev": "f842906afaa2443206b8365d51950ed3ef85c940"
-          },
-          "strip_prefix": "libssh2-sys"
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/libssh2-sys/0.3.0/download",
+          "sha256": "2dc8a030b787e2119a731f1951d6a773e2280c660f8ec4b0f5e1505a386e71ee"
         }
       },
       "targets": [
@@ -30235,7 +30232,7 @@
               "target": "libc"
             },
             {
-              "id": "libssh2-sys 0.2.23",
+              "id": "libssh2-sys 0.3.0",
               "target": "build_script_build"
             },
             {
@@ -30253,7 +30250,7 @@
           }
         },
         "edition": "2015",
-        "version": "0.2.23"
+        "version": "0.3.0"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -51046,15 +51043,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "ssh2 0.9.3": {
+    "ssh2 0.9.4": {
       "name": "ssh2",
-      "version": "0.9.3",
+      "version": "0.9.4",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity-lab/ssh2-rs",
-          "commitish": {
-            "Rev": "f842906afaa2443206b8365d51950ed3ef85c940"
-          }
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/ssh2/0.9.4/download",
+          "sha256": "e7fe461910559f6d5604c3731d00d2aafc4a83d1665922e280f42f9a168d5455"
         }
       },
       "targets": [
@@ -51084,7 +51079,7 @@
               "target": "libc"
             },
             {
-              "id": "libssh2-sys 0.2.23",
+              "id": "libssh2-sys 0.3.0",
               "target": "libssh2_sys"
             },
             {
@@ -51095,7 +51090,7 @@
           "selects": {}
         },
         "edition": "2015",
-        "version": "0.9.3"
+        "version": "0.9.4"
       },
       "license": "MIT/Apache-2.0"
     },
