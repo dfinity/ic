@@ -13228,8 +13228,9 @@ dependencies = [
 
 [[package]]
 name = "libssh2-sys"
-version = "0.2.23"
-source = "git+https://github.com/dfinity-lab/ssh2-rs?rev=f842906afaa2443206b8365d51950ed3ef85c940#f842906afaa2443206b8365d51950ed3ef85c940"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2dc8a030b787e2119a731f1951d6a773e2280c660f8ec4b0f5e1505a386e71ee"
 dependencies = [
  "cc",
  "libc",
@@ -17570,8 +17571,9 @@ checksum = "3b9b39299b249ad65f3b7e96443bad61c02ca5cd3589f46cb6d610a0fd6c0d6a"
 
 [[package]]
 name = "ssh2"
-version = "0.9.3"
-source = "git+https://github.com/dfinity-lab/ssh2-rs?rev=f842906afaa2443206b8365d51950ed3ef85c940#f842906afaa2443206b8365d51950ed3ef85c940"
+version = "0.9.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e7fe461910559f6d5604c3731d00d2aafc4a83d1665922e280f42f9a168d5455"
 dependencies = [
  "bitflags 1.3.2",
  "libc",

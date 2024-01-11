@@ -1126,8 +1126,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "ssh2": crate.spec(
-                git = "https://github.com/dfinity-lab/ssh2-rs",
-                rev = "f842906afaa2443206b8365d51950ed3ef85c940",
+                version = "0.9.4",
             ),
             "strum": crate.spec(
                 version = "^0.25.0",
