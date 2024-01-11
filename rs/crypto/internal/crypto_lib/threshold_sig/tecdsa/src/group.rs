@@ -624,14 +624,14 @@ impl EccPoint {
     /// polynomials are small and public (namely, the nodex indexes). By taking
     /// advantage of this, it is possible to gain substantial performance
     /// improvements as compared to using a constant-time scalar multiplication.
-    pub fn mul_by_node_index(&self, scalar: NodeIndex) -> ThresholdEcdsaResult<Self> {
+    pub fn mul_by_node_index_vartime(&self, node_index: NodeIndex) -> ThresholdEcdsaResult<Self> {
         // This cannot overflow as NodeIndex is a u32
-        let scalar = scalar as u64 + 1;
+        let scalar = node_index as u64 + 1;
         let scalar_bits = 64 - scalar.leading_zeros();
 
-        let mut res = Self::identity(self.curve_type());
+        let mut res = self.clone();
 
-        for b in 0..scalar_bits {
+        for b in 1..scalar_bits {
             res = res.double();
             if (scalar >> (scalar_bits - 1 - b)) & 1 == 1 {
                 res = res.add_points(self)?;
