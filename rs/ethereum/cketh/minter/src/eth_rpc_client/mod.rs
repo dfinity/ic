@@ -299,25 +299,17 @@ impl<T: PartialEq> MultiCallResults<T> {
     /// * MultiCallError::ConsistentHttpOutcallError: all errors are the same HTTP outcall error.
     /// * MultiCallError::InconsistentResults if there are different errors.
     fn all_ok(self) -> Result<BTreeMap<RpcService, T>, MultiCallError<T>> {
-        let mut results = BTreeMap::new();
-        let mut first_error: Option<(RpcService, Result<T, RpcError>)> = None;
-        for (provider, result) in self.results.into_iter() {
+        let mut first_error: Option<(RpcService, &Result<T, RpcError>)> = None;
+        for (provider, result) in self.results.iter() {
             match result {
-                Ok(value) => {
-                    results.insert(provider, value);
-                }
+                Ok(_value) => {}
                 _ => match first_error {
                     None => {
-                        first_error = Some((provider, result));
+                        first_error = Some((*provider, result));
                     }
                     Some((first_error_provider, error)) => {
-                        if !are_errors_consistent(&error, &result) {
-                            return Err(MultiCallError::InconsistentResults(
-                                MultiCallResults::from_non_empty_iter(vec![
-                                    (first_error_provider, error),
-                                    (provider, result),
-                                ]),
-                            ));
+                        if !are_errors_consistent(&error, result) {
+                            return Err(MultiCallError::InconsistentResults(self));
                         }
                         first_error = Some((first_error_provider, error));
                     }
@@ -325,11 +317,14 @@ impl<T: PartialEq> MultiCallResults<T> {
             }
         }
         match first_error {
-            None => Ok(results),
-            Some((_provider, Err(RpcError::JsonRpcError(JsonRpcError { code, message })))) => Err(
-                MultiCallError::ConsistentError(JsonRpcError { code, message }.into()),
-            ),
-            Some((_provider, Err(error))) => Err(MultiCallError::ConsistentError(error)),
+            None => Ok(self
+                .results
+                .into_iter()
+                .map(|(provider, result)| {
+                    (provider, result.expect("BUG: all results should be ok"))
+                })
+                .collect()),
+            Some((_, Err(error))) => Err(MultiCallError::ConsistentError(error.clone())),
             Some((_, Ok(_))) => {
                 panic!("BUG: first_error should be an error type")
             }
