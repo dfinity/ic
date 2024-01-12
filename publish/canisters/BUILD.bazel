@@ -15,6 +15,7 @@ CANISTERS = {
     "ic-ckbtc-minter_debug.wasm": "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
     "ic-ckbtc-kyt.wasm": "//rs/bitcoin/ckbtc/kyt:kyt_canister",
     "ic-cketh-minter.wasm": "//rs/ethereum/cketh/minter:cketh_minter",
+    "ic-ledger-suite-orchestrator-canister.wasm": "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister",
     "ic-icrc1-index.wasm": "//rs/rosetta-api/icrc1/index:index_canister",
     "ic-icrc1-index-ng.wasm": "//rs/rosetta-api/icrc1/index-ng:index_ng_canister",
     "ic-icrc1-index-ng-u256.wasm": "//rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256",

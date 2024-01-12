@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:defs.bzl", "rust_ic_test")
+load("//bazel:defs.bzl", "gzip_compress", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -88,6 +88,17 @@ package(default_visibility = ["//visibility:public"])
                 "//rs/rosetta-api/icrc1/tokens_u256",
             ],
         ),
+    ]
+]
+
+[
+    gzip_compress(
+        name = "ledger_canister" + name_suffix + ".wasm.gz",
+        srcs = [":ledger_canister" + name_suffix],
+    )
+    for name_suffix in [
+        "",
+        "_u256",
     ]
 ]
 

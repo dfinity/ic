@@ -1,0 +1,91 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_doc_test", "rust_library", "rust_test")
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "ledger_suite_orchestrator",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = [
+            "src/main.rs",
+        ],
+    ),
+    crate_name = "ic_ledger_suite_orchestrator",
+    proc_macro_deps = [
+        "@crate_index//:ic-cdk-macros",
+    ],
+    version = "0.1.0",
+    deps = [
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/rosetta-api/icrc1/index-ng",
+        "//rs/rosetta-api/icrc1/ledger",
+        "//rs/types/base_types",
+        "//rs/types/ic00_types",
+        "@crate_index//:candid",
+        "@crate_index//:hex",
+        "@crate_index//:ic-canister-log",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-timers",
+        "@crate_index//:ic-stable-structures",
+        "@crate_index//:minicbor",
+        "@crate_index//:num-traits",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+    ],
+)
+
+rust_doc(
+    name = "doc",
+    crate = ":ledger_suite_orchestrator",
+)
+
+rust_doc_test(
+    name = "doc_test",
+    crate = ":ledger_suite_orchestrator",
+)
+
+rust_test(
+    name = "lib_unit_tests",
+    crate = ":ledger_suite_orchestrator",
+    deps = [
+        ":ledger_suite_orchestrator",
+        "@crate_index//:proptest",
+    ],
+)
+
+rust_test(
+    name = "canister_unit_tests",
+    crate = ":_wasm_ledger_suite_orchestrator_canister",
+    data = [":ledger_suite_orchestrator.did"],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/ledger_suite_orchestrator",
+    },
+    deps = [
+        ":ledger_suite_orchestrator",
+        "@crate_index//:candid_parser",
+    ],
+)
+
+rust_canister(
+    name = "ledger_suite_orchestrator_canister",
+    srcs = [
+        "src/main.rs",
+    ],
+    compile_data = [
+    ],
+    crate_name = "ic_ledger_suite_orchestrator_canister",
+    proc_macro_deps = [
+        "@crate_index//:ic-cdk-macros",
+    ],
+    service_file = "ledger_suite_orchestrator.did",
+    deps = [
+        ":ledger_suite_orchestrator",
+        "@crate_index//:candid",
+        "@crate_index//:ic-canister-log",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-timers",
+        "@crate_index//:ic-metrics-encoder",
+        "@crate_index//:serde",
+    ],
+)
