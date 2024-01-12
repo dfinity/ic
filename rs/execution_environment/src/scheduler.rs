@@ -730,6 +730,7 @@ impl SchedulerImpl {
             }
             drop(preparation_timer);
 
+            let execution_timer = self.metrics.round_inner_iteration_exe.start_timer();
             let instructions_before = round_limits.instructions;
             let (executed_canisters, mut loop_ingress_execution_results, heap_delta) = self
                 .execute_canisters_in_inner_round(
@@ -742,6 +743,7 @@ impl SchedulerImpl {
                     registry_settings.subnet_size,
                 );
             let instructions_consumed = instructions_before - round_limits.instructions;
+            drop(execution_timer);
 
             let finalization_timer = self.metrics.round_inner_iteration_fin.start_timer();
             total_heap_delta += heap_delta;
