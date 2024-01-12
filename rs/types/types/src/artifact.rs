@@ -21,7 +21,7 @@ use crate::{
         dkg::Message as DkgMessage,
         ecdsa::{EcdsaArtifactId, EcdsaMessage, EcdsaMessageAttribute},
         ConsensusMessage, ConsensusMessageAttribute, ConsensusMessageHash,
-        ConsensusMessageHashable,
+        ConsensusMessageHashable, HasHash, HasHeight,
     },
     crypto::{crypto_hash, CryptoHash},
     filetree_sync::{FileTreeSyncArtifact, FileTreeSyncId},
@@ -371,6 +371,30 @@ pub struct ConsensusMessageId {
     pub height: Height,
 }
 
+impl HasHeight for ConsensusMessageId {
+    fn height(&self) -> Height {
+        self.height
+    }
+}
+
+impl HasHash for ConsensusMessageId {
+    fn hash(&self) -> &CryptoHash {
+        match &self.hash {
+            ConsensusMessageHash::RandomBeacon(hash) => hash.get_ref(),
+            ConsensusMessageHash::Finalization(hash) => hash.get_ref(),
+            ConsensusMessageHash::Notarization(hash) => hash.get_ref(),
+            ConsensusMessageHash::BlockProposal(hash) => hash.get_ref(),
+            ConsensusMessageHash::RandomBeaconShare(hash) => hash.get_ref(),
+            ConsensusMessageHash::NotarizationShare(hash) => hash.get_ref(),
+            ConsensusMessageHash::FinalizationShare(hash) => hash.get_ref(),
+            ConsensusMessageHash::RandomTape(hash) => hash.get_ref(),
+            ConsensusMessageHash::RandomTapeShare(hash) => hash.get_ref(),
+            ConsensusMessageHash::CatchUpPackage(hash) => hash.get_ref(),
+            ConsensusMessageHash::CatchUpPackageShare(hash) => hash.get_ref(),
+        }
+    }
+}
+
 impl From<ConsensusMessageId> for pb::ConsensusMessageId {
     fn from(value: ConsensusMessageId) -> Self {
         Self {
@@ -478,6 +502,21 @@ pub struct CertificationMessageId {
     pub height: Height,
 }
 
+impl HasHeight for CertificationMessageId {
+    fn height(&self) -> Height {
+        self.height
+    }
+}
+
+impl HasHash for CertificationMessageId {
+    fn hash(&self) -> &CryptoHash {
+        match &self.hash {
+            CertificationMessageHash::Certification(hash) => hash.get_ref(),
+            CertificationMessageHash::CertificationShare(hash) => hash.get_ref(),
+        }
+    }
+}
+
 impl From<CertificationMessageId> for pb::CertificationMessageId {
     fn from(value: CertificationMessageId) -> Self {
         Self {
@@ -577,7 +616,7 @@ impl TryFrom<pb::Artifact> for Artifact {
             Kind::Dkg(x) => Artifact::DkgMessage(x.try_into()?),
             Kind::Ecdsa(x) => Artifact::EcdsaMessage(x.try_into()?),
             Kind::HttpShare(x) => Artifact::CanisterHttpMessage(x.try_into()?),
-            Kind::FileTreeSync(x) => Artifact::FileTreeSync(x.try_into()?),
+            Kind::FileTreeSync(x) => Artifact::FileTreeSync(x.into()),
         })
     }
 }

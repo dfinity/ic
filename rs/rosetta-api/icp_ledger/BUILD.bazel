@@ -87,6 +87,7 @@ rust_canister(
 
 rust_test(
     name = "ledger_canister_integration_test",
+    timeout = "long",
     srcs = ["test/test.rs"],
     data = [
         "ledger.did",
@@ -121,6 +122,7 @@ rust_test(
         "//rs/rust_canisters/on_wire",
         "//rs/types/base_types",
         "@crate_index//:candid",
+        "@crate_index//:candid_parser",
         "@crate_index//:rand",
         "@crate_index//:rand_chacha",
         "@crate_index//:serde",

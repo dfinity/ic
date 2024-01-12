@@ -9,6 +9,10 @@
 /hs/                      @dfinity-lab/teams/ic-testing-verification
 /licenses/                @dfinity-lab/teams/idx
 /bin/ict                  @dfinity-lab/teams/ic-testing-verification
+/bin/afl_test.sh          @dfinity-lab/teams/prodsec
+/bin/afl_wrapper.sh       @dfinity-lab/teams/prodsec
+/bin/build-all-fuzzers.sh @dfinity-lab/teams/prodsec
+/bin/fuzzing_coverage.sh  @dfinity-lab/teams/prodsec
 /bin/                     @dfinity-lab/teams/idx
 
 # [Bazel]
@@ -19,6 +23,12 @@
 /BUILD.bazel              @dfinity-lab/teams/idx
 .bazelrc                  @dfinity-lab/teams/idx
 .bazelversion             @dfinity-lab/teams/idx
+
+# [Rust Lang]
+rust-toolchain.toml       @dfinity-lab/teams/networking-team  
+rustfmt.toml              @dfinity-lab/teams/networking-team
+deny.toml                 @dfinity-lab/teams/networking-team
+clippy.toml               @dfinity-lab/teams/interface-owners
 
 # [Golang]
 go.mod                    @dfinity-lab/teams/idx
@@ -47,7 +57,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 # [IC-OS]
 /ic-os/                                          @dfinity-lab/teams/node-team
 /ic-os/boundary-guestos/                         @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/node-team
-/ic-os/boundary-api-guestos/                     @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/node-team
 /ic-os/guestos/tests/e2e-benchmarking-suite.py   @dfinity-lab/teams/runtime-owners
 
 # [metrics-proxy]
@@ -288,9 +297,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/wasm_transform/                                     @dfinity-lab/teams/runtime-owners
 /rs/workload_generator/                                 @dfinity-lab/teams/runtime-owners
 /rs/xnet/                                               @dfinity-lab/teams/message-routing-owners
-
-# [Haskell]
-/hs/spec_compliance/                                    @dfinity-lab/teams/ic-testing-verification
 
 # [Scalability]
 /scalability/                                                       @dfinity-lab/teams/runtime-owners

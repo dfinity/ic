@@ -271,7 +271,7 @@ fn check_memo() {
             fee: None,
             created_at_time: None,
             memo: Some(Memo(ByteBuf::from(vec![0; memo_size_bytes]))),
-            amount: 100_000_000.into(),
+            amount: 100_000_000_u32.into(),
         };
         let req = Encode!(&req).unwrap();
         env.execute_ingress_as(PrincipalId(MINTER.owner), ledger_id, "icrc1_transfer", req)
@@ -760,7 +760,7 @@ fn test_query_archived_blocks() {
         &ApproveArgs {
             from_subaccount: None,
             spender: user1.into(),
-            amount: 100_000_000.into(),
+            amount: 100_000_000_u32.into(),
             expected_allowance: None,
             expires_at: None,
             fee: None,
@@ -778,7 +778,7 @@ fn test_query_archived_blocks() {
         start,
         length,
         callback,
-    } = res.archived_blocks.get(0).unwrap();
+    } = res.archived_blocks.first().unwrap();
     // query the archive
     let block_range = Decode!(
         &env.query(

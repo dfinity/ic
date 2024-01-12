@@ -539,6 +539,11 @@ pub fn extract_effective_canister_id(
     }
 }
 
+/// Checks whether the given canister ID refers to the subnet (directly or as `IC_00`).
+pub fn is_subnet_id(canister_id: CanisterId, own_subnet_id: SubnetId) -> bool {
+    canister_id == IC_00 || canister_id.get_ref() == own_subnet_id.get_ref()
+}
+
 #[cfg(test)]
 mod test {
     use crate::messages::ingress_messages::{
@@ -588,9 +593,4 @@ mod test {
             );
         }
     }
-}
-
-/// Checks whether the given canister ID refers to the subnet (directly or as `IC_00`).
-pub fn is_subnet_id(canister_id: CanisterId, own_subnet_id: SubnetId) -> bool {
-    canister_id == IC_00 || canister_id.get_ref() == own_subnet_id.get_ref()
 }

@@ -11,7 +11,7 @@ use crate::registry_helper::RegistryHelper;
 use crate::ssh_access_manager::SshAccessManager;
 use crate::upgrade::Upgrade;
 use ic_config::metrics::{Config as MetricsConfig, Exporter};
-use ic_crypto::{CryptoComponent, CryptoComponentForNonReplicaProcess};
+use ic_crypto::CryptoComponent;
 use ic_crypto_node_key_generation::{generate_node_keys_once, NodeKeyGenerationError};
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
@@ -152,7 +152,7 @@ impl Orchestrator {
         let crypto_config = config.crypto.clone();
         let c_metrics = metrics_registry.clone();
         let crypto = tokio::task::spawn_blocking(move || {
-            Arc::new(CryptoComponent::new_for_non_replica_process(
+            Arc::new(CryptoComponent::new(
                 &crypto_config,
                 Some(tokio::runtime::Handle::current()),
                 c_registry.get_registry_client(),
@@ -169,7 +169,7 @@ impl Orchestrator {
             &slog_logger,
             &metrics_registry,
             registry.get_registry_client(),
-            crypto.clone(),
+            Arc::clone(&crypto) as _,
         );
         let metrics = Arc::new(metrics);
 
@@ -184,7 +184,7 @@ impl Orchestrator {
             Arc::clone(&registry_client),
             Arc::clone(&metrics),
             node_id,
-            Arc::clone(&crypto) as Arc<dyn CryptoComponentForNonReplicaProcess>,
+            Arc::clone(&crypto) as _,
             registry_local_store.clone(),
         );
 
@@ -198,7 +198,7 @@ impl Orchestrator {
         let cup_provider = Arc::new(CatchUpPackageProvider::new(
             Arc::clone(&registry),
             args.cup_dir.clone(),
-            crypto.clone(),
+            Arc::clone(&crypto) as _,
             logger.clone(),
             node_id,
         ));
@@ -226,10 +226,12 @@ impl Orchestrator {
             .await,
         );
 
-        let hostos_version = UtilityCommand::request_hostos_version().and_then(|v| {
-            HostosVersion::try_from(v)
-                .map_err(|e| format!("Unable to parse HostOS version: {:?}", e))
-        });
+        let hostos_version = UtilityCommand::request_hostos_version()
+            .await
+            .and_then(|v| {
+                HostosVersion::try_from(v)
+                    .map_err(|e| format!("Unable to parse HostOS version: {:?}", e))
+            });
 
         let hostos_upgrade = match hostos_version.clone() {
             Err(e) => {
@@ -362,12 +364,18 @@ impl Orchestrator {
             exit_signal: Receiver<bool>,
             log: ReplicaLogger,
         ) {
-            // This timeout is a last resort trying to revive the upgrade monitoring
-            // in case it gets stuck in an unexpected situation for longer than 15 minutes.
+            // Wait for a minute before starting the first loop, to allow the
+            // registry some time to catch up, after starting.
+            tokio::time::sleep(Duration::from_secs(60)).await;
+
+            // Run the HostOS upgrade loop with a 15 minute timeout, waiting 1
+            // minute between checks. This timeout is a last resort trying to
+            // revive the upgrade monitoring in case it gets stuck in an
+            // unexpected situation.
+            let interval = Duration::from_secs(60);
             let timeout = Duration::from_secs(60 * 15);
-            upgrade
-                .upgrade_loop(exit_signal, CHECK_INTERVAL_SECS, timeout)
-                .await;
+
+            upgrade.upgrade_loop(exit_signal, interval, timeout).await;
             info!(log, "Shut down the HostOS upgrade loop");
         }
 

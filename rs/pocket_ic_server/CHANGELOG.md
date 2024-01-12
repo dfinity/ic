@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Canisters are created with 100T cycles by default when using the provisional management canister API.
 
+### Fixed
+- Canister inspect message errors when executing ingress messages are returned as canister execution results rather than request errors.
 
 
 ## 2.0.1 - 2023-11-23

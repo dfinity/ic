@@ -126,11 +126,10 @@ DEV_ENV = {
 }
 
 rust_library(
-    name = "integration_tests",
+    name = "nervous_system_integration_tests",
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
-    crate_features = ["test"],
-    crate_name = "ic_neurons_fund_integration_tests",
+    crate_name = "ic_nervous_system_integration_tests",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES_WITH_TEST_FEATURES,
@@ -139,16 +138,13 @@ rust_library(
 rust_test_suite_with_extra_srcs(
     name = "integration_tests_test",
     srcs = glob(
-        ["src/**/*.rs"],
-        exclude = [
-            "src/lib.rs",
-        ],
+        ["tests/**/*.rs"],
     ),
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV,
-    extra_srcs = ["src/lib.rs"],
+    extra_srcs = [],
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
+    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
 )

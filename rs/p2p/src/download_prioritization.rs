@@ -15,9 +15,9 @@
 
 use crate::metrics::DownloadPrioritizerMetrics;
 use ic_interfaces::p2p::artifact_manager::ArtifactManager;
+use ic_interfaces::p2p::state_sync::ChunkId;
 use ic_types::{
     artifact::{ArtifactId, ArtifactPriorityFn, ArtifactTag, Priority},
-    chunkable::ChunkId,
     crypto::CryptoHash,
     p2p::GossipAdvert,
     NodeId,

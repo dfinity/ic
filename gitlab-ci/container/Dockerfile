@@ -28,11 +28,11 @@ RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /
 
 # install afl & gsutils deps for bazel-fuzzers
 RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
-    echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-15 main" | tee -a /etc/apt/sources.list.d/llvm.list && \
+    echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-17 main" | tee -a /etc/apt/sources.list.d/llvm.list && \
     echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
     curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg  add - && \
     apt -yq update && \
-    apt -yqq install --no-install-recommends lld-15 llvm-15 llvm-15-dev clang-15 libclang-rt-15-dev google-cloud-cli \
+    apt -yqq install --no-install-recommends lld-17 llvm-17 llvm-17-dev clang-17 libclang-rt-17-dev google-cloud-cli \
         gcc-$(gcc --version|head -n1|sed 's/\..*//'|sed 's/.* //')-plugin-dev libstdc++-$(gcc --version|head -n1|sed 's/\..*//'|sed 's/.* //')-dev
 
 ARG sdk_version=0.12.0
@@ -90,14 +90,14 @@ RUN curl -fsSL "https://github.com/cocogitto/cocogitto/releases/download/${COCOG
     echo "26a64a7ace621a0c8aabf9305987b91aa9e84c35db949e8809d4a97ae977fa34  ${COCOGITTO_BIN}" | shasum -a 256 -c -
 
 # Install AFLplusplus
-ARG AFL_RELEASE_VERSION=v4.08c
+ARG AFL_RELEASE_VERSION=v4.09c
 RUN mkdir -p /afl && \
     chown -R ubuntu:ubuntu /afl && \
     cd /afl && \
     git clone --depth=1 --branch=${AFL_RELEASE_VERSION} https://github.com/AFLplusplus/AFLplusplus.git && \
     cd AFLplusplus && \
-    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-15 CC=/usr/bin/clang-15 CXX=/usr/bin/clang++-15 make all && \
-    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-15 CC=/usr/bin/clang-15 CXX=/usr/bin/clang++-15 make install && \
+    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-17 CC=/usr/bin/clang-17 CXX=/usr/bin/clang++-17 make all && \
+    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-17 CC=/usr/bin/clang-17 CXX=/usr/bin/clang++-17 make install && \
     mv afl-fuzz afl-showmap  /afl && \
     cd .. && rm -rf AFLplusplus
 

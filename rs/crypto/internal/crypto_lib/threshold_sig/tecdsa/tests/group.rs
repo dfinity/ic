@@ -181,11 +181,19 @@ fn test_scalar_negate() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn test_point_mul_by_node_index() -> ThresholdEcdsaResult<()> {
+    let rng = &mut reproducible_rng();
     for curve in EccCurveType::all() {
         let g = EccPoint::generator_g(curve);
 
-        for node_index in 0..300 {
-            let g_ni = g.mul_by_node_index(node_index)?;
+        let mut node_indices: Vec<_> = (0..300).collect();
+        node_indices.push(u32::MAX - 1);
+        node_indices.push(u32::MAX);
+        for _ in 0..100 {
+            node_indices.push(rng.gen());
+        }
+
+        for node_index in node_indices {
+            let g_ni = g.mul_by_node_index_vartime(node_index)?;
 
             let scalar = EccScalar::from_node_index(curve, node_index);
             let g_s = g.scalar_mul(&scalar)?;
@@ -380,6 +388,10 @@ fn test_mul_n_vartime_naf() -> ThresholdEcdsaResult<()> {
                 }
 
                 // create refs of pairs
+
+                // False positive `map_identity` warning.
+                // See: https://github.com/rust-lang/rust-clippy/pull/11792 (merged)
+                #[allow(clippy::map_identity)]
                 let refs_of_pairs: Vec<_> = pairs.iter().map(|(p, s)| (p, s)).collect();
 
                 // compute the result using an optimized algorithm, which is to be tested

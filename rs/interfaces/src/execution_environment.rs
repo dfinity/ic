@@ -499,6 +499,10 @@ pub trait OutOfInstructionsHandler {
     // the function returns `Err(HypervisorError::InstructionLimitExceeded)`.
     // Otherwise, the function returns a new positive instruction counter.
     fn out_of_instructions(&self, instruction_counter: i64) -> HypervisorResult<i64>;
+
+    // Invoked only when a long execution dirties many memory pages to yield control
+    // and start the copy only in a new slice. This is a performance improvement.
+    fn yield_for_dirty_memory_copy(&self, instruction_counter: i64) -> HypervisorResult<i64>;
 }
 
 /// Indicates the type of stable memory API being used.
@@ -895,6 +899,11 @@ pub trait SystemApi {
     /// the functions return `Err(HypervisorError::InstructionLimitExceeded)`.
     /// Otherwise, the function return a new non-negative instruction counter.
     fn out_of_instructions(&mut self, instruction_counter: i64) -> HypervisorResult<i64>;
+
+    /// This system call is not part of the public spec and it is invoked when
+    /// Wasm execution has a large number of dirty pages that, for performance reasons,
+    /// should be copied in a new execution slice.
+    fn yield_for_dirty_memory_copy(&mut self, instruction_counter: i64) -> HypervisorResult<i64>;
 
     /// This system call is not part of the public spec. It's called after a
     /// native `memory.grow` or `table.grow` has been called to check whether

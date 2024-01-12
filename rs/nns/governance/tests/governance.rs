@@ -807,7 +807,7 @@ async fn test_cascade_following_new() {
             proposal_id: Some(ProposalId { id: 1 }),
             vote: Vote::Yes as i32
         },
-        nns.get_neuron(&id).recent_ballots.get(0).unwrap()
+        nns.get_neuron(&id).recent_ballots.first().unwrap()
     );
     // Check that the vote is registered in the proposal
     assert_eq!(
@@ -1022,7 +1022,7 @@ async fn test_cascade_following_new() {
         },
         nns.get_neuron(&NeuronId { id: 2 })
             .recent_ballots
-            .get(0)
+            .first()
             .unwrap()
     );
     // The proposal should now be accepted and executed.
@@ -1249,7 +1249,7 @@ async fn test_cascade_following() {
             .get(&1)
             .unwrap()
             .recent_ballots
-            .get(0)
+            .first()
             .unwrap()
     );
     // Check that the vote is registered in the proposal
@@ -1299,7 +1299,7 @@ async fn test_cascade_following() {
             .get(&2)
             .unwrap()
             .recent_ballots
-            .get(0)
+            .first()
             .unwrap()
     );
     // The proposal should now be accepted and executed.
@@ -2277,7 +2277,7 @@ async fn test_manage_neuron() {
                     .get(&(Topic::NeuronManagement as i32))
                     .unwrap()
                     .followees
-                    .get(0)
+                    .first()
                     .unwrap()
                     .id
             })
@@ -5418,18 +5418,15 @@ fn test_neuron_spawn() {
 
     // An attempt to spawn a neuron should simply return an error and
     // change nothing.
-    let spawn_res = gov
-        .spawn_neuron(
-            &id,
-            &from,
-            &Spawn {
-                new_controller: Some(child_controller),
-                nonce: None,
-                percentage_to_spawn: None,
-            },
-        )
-        .now_or_never()
-        .unwrap();
+    let spawn_res = gov.spawn_neuron(
+        &id,
+        &from,
+        &Spawn {
+            new_controller: Some(child_controller),
+            nonce: None,
+            percentage_to_spawn: None,
+        },
+    );
     assert_matches!(
         spawn_res,
         Err(GovernanceError{error_type: code, error_message: msg})
@@ -5466,8 +5463,6 @@ fn test_neuron_spawn() {
                 percentage_to_spawn: None,
             },
         )
-        .now_or_never()
-        .unwrap()
         .unwrap();
 
     // We should now have 2 neurons.
@@ -5596,18 +5591,15 @@ fn test_neuron_spawn_with_subaccount() {
 
     // An attempt to spawn a neuron should simply return an error and
     // change nothing.
-    let spawn_res = gov
-        .spawn_neuron(
-            &id,
-            &from,
-            &Spawn {
-                new_controller: Some(child_controller),
-                nonce: None,
-                percentage_to_spawn: None,
-            },
-        )
-        .now_or_never()
-        .unwrap();
+    let spawn_res = gov.spawn_neuron(
+        &id,
+        &from,
+        &Spawn {
+            new_controller: Some(child_controller),
+            nonce: None,
+            percentage_to_spawn: None,
+        },
+    );
     assert_matches!(
         spawn_res,
         Err(GovernanceError{error_type: code, error_message: msg})
@@ -5645,8 +5637,6 @@ fn test_neuron_spawn_with_subaccount() {
                 percentage_to_spawn: None,
             },
         )
-        .now_or_never()
-        .unwrap()
         .unwrap();
 
     let creation_timestamp = driver.now();
@@ -5803,8 +5793,6 @@ fn assert_neuron_spawn_partial(
                 percentage_to_spawn: Some(percentage),
             },
         )
-        .now_or_never()
-        .unwrap()
         .unwrap();
 
     let creation_timestamp = driver.now();
@@ -5900,18 +5888,15 @@ fn test_neuron_with_non_self_authenticating_controller_cannot_be_spawned() {
 
     let non_self_authenticating_principal_id = PrincipalId::new_user_test_id(144);
 
-    let result: Result<NeuronId, GovernanceError> = gov
-        .spawn_neuron(
-            &id,
-            &from,
-            &Spawn {
-                new_controller: Some(non_self_authenticating_principal_id),
-                nonce: None,
-                percentage_to_spawn: None,
-            },
-        )
-        .now_or_never()
-        .unwrap();
+    let result: Result<NeuronId, GovernanceError> = gov.spawn_neuron(
+        &id,
+        &from,
+        &Spawn {
+            new_controller: Some(non_self_authenticating_principal_id),
+            nonce: None,
+            percentage_to_spawn: None,
+        },
+    );
 
     assert_matches!(
         result,
@@ -9771,7 +9756,7 @@ fn test_update_node_provider() {
     assert_eq!(
         gov.heap_data
             .node_providers
-            .get(0)
+            .first()
             .unwrap()
             .reward_account
             .as_ref()

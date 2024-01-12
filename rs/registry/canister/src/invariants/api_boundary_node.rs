@@ -3,37 +3,42 @@ use std::collections::HashMap;
 use ic_base_types::NodeId;
 
 use super::common::{
-    get_api_boundary_node_ids_from_snapshot, get_api_boundary_node_record_from_snapshot,
-    get_node_record_from_snapshot, InvariantCheckError, RegistrySnapshot,
+    get_api_boundary_node_ids_from_snapshot, get_node_record_from_snapshot, InvariantCheckError,
+    RegistrySnapshot,
 };
 
 /// Checks API Boundary Node invariants:
 ///    * Ensure API Boundary Nodes have unique domain names
 ///    * Ensure each API Boundary Node record has a corresponding NodeRecord
-///    * Ensure that http field of the corresponding NodeRecord is not None.
+///    * Ensure that both `domain` and `http` fields of the NodeRecord are not None
 pub(crate) fn check_api_boundary_node_invariants(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
-    let mut domain_to_ids: HashMap<String, Vec<NodeId>> = HashMap::new();
-    // IMPORTANT: this code structure below rigorously follows the structure of the `fn try_to_populate_api_boundary_nodes(..)`.
+    let mut domain_to_id: HashMap<String, NodeId> = HashMap::new();
+    // IMPORTANT: this code structure below rigorously follows the structure of the `fn try_to_populate_api_boundary_nodes(..)` in message_routing.rs.
     // These two code blocks should be kept in sync to avoid stalling the subnets.
     // Please be very mindful when modifying the code below.
+    // Here is an example of code changes leading to subnet stalling:
+    // - Assume the requirement for an API BN to have a related NodeRecord is remove/relaxed below
+    // - However, this requirement still exists and holds in the message_route.rs code
+    // - An attempt to read the related NodeRecord for an API BN would fail and cause ReadRegistryError::Transient()
+    // - Transient registry errors are retried in `message_route.rs` code. However, in this case it's not helpful, the error is persistent in nature
+    // - As a result, the subnet is stalled
     let api_boundary_node_ids = get_api_boundary_node_ids_from_snapshot(snapshot)?;
     for api_bn_id in api_boundary_node_ids {
-        let api_node_record = get_api_boundary_node_record_from_snapshot(api_bn_id, snapshot)?;
-        let Some(api_boundary_node_record) = api_node_record else {
-            return Err(InvariantCheckError {
-                msg: format!("API Boundary Node with id={api_bn_id} was not found"),
-                source: None,
-            });
-        };
-
         let node_record = get_node_record_from_snapshot(api_bn_id, snapshot)?;
         let Some(node_record) = node_record else {
             return Err(InvariantCheckError {
                 msg: format!(
                     "API Boundary Node with id={api_bn_id} doesn't have a corresponding NodeRecord"
                 ),
+                source: None,
+            });
+        };
+
+        let Some(domain) = node_record.domain else {
+            return Err(InvariantCheckError {
+                msg: format!("domain field of the NodeRecord with id={api_bn_id} is None"),
                 source: None,
             });
         };
@@ -45,19 +50,13 @@ pub(crate) fn check_api_boundary_node_invariants(
             });
         };
 
-        domain_to_ids
-            .entry(api_boundary_node_record.domain.clone())
-            .or_default()
-            .push(api_bn_id);
-    }
-
-    for (domain, ids) in domain_to_ids.iter() {
-        if ids.len() != 1 {
+        if let Some(existing_api_bn) = domain_to_id.get(&domain) {
             return Err(InvariantCheckError {
-                msg: format!("domain {domain} should have one node associated with it, but has the following: {ids:?}"),
+                msg: format!("domain {domain} has two nodes associated with it with id={existing_api_bn} and id={api_bn_id}"),
                 source: None,
             });
         }
+        domain_to_id.insert(domain, api_bn_id);
     }
 
     Ok(())
@@ -89,15 +88,13 @@ mod tests {
 
             snapshot.insert(
                 make_api_boundary_node_record_key(node_id).into_bytes(), // key
-                encode_or_panic(&ApiBoundaryNodeRecord {
-                    domain: domain.into(),
-                    ..Default::default()
-                }), // record
+                encode_or_panic(&ApiBoundaryNodeRecord::default()),      // record
             );
             snapshot.insert(
                 make_node_record_key(node_id).into_bytes(), // key
                 encode_or_panic(&NodeRecord {
                     http: Some(ConnectionEndpoint::default()),
+                    domain: Some(domain.into()),
                     ..Default::default()
                 }), // record
             );
@@ -111,15 +108,11 @@ mod tests {
         let mut snapshot = RegistrySnapshot::new();
 
         let id = 0;
-        let domain = "example-1.com";
         let node_id: NodeId = PrincipalId::new_node_test_id(id).into();
 
         snapshot.insert(
             make_api_boundary_node_record_key(node_id).into_bytes(), // key
-            encode_or_panic(&ApiBoundaryNodeRecord {
-                domain: domain.into(),
-                ..Default::default()
-            }), // record
+            encode_or_panic(&ApiBoundaryNodeRecord::default()),      // record
         );
 
         assert_eq!(
@@ -140,16 +133,13 @@ mod tests {
 
         snapshot.insert(
             make_api_boundary_node_record_key(node_id).into_bytes(), // key
-            encode_or_panic(&ApiBoundaryNodeRecord {
-                domain: domain.into(),
-                ..Default::default()
-            }), // record
+            encode_or_panic(&ApiBoundaryNodeRecord::default()),      // record
         );
 
         snapshot.insert(
             make_node_record_key(node_id).into_bytes(), // key
             encode_or_panic(&NodeRecord {
-                http: None,
+                domain: Some(domain.into()),
                 ..Default::default()
             }), // record
         );
@@ -159,6 +149,34 @@ mod tests {
                 .unwrap_err()
                 .msg,
             format!("http field of the NodeRecord with id={node_id} is None"),
+        );
+    }
+
+    #[test]
+    fn test_check_api_boundary_node_empty_domain_invariants_conflict() {
+        let mut snapshot = RegistrySnapshot::new();
+
+        let id = 0;
+        let node_id: NodeId = PrincipalId::new_node_test_id(id).into();
+
+        snapshot.insert(
+            make_api_boundary_node_record_key(node_id).into_bytes(), // key
+            encode_or_panic(&ApiBoundaryNodeRecord::default()),      // record
+        );
+
+        snapshot.insert(
+            make_node_record_key(node_id).into_bytes(), // key
+            encode_or_panic(&NodeRecord {
+                http: Some(ConnectionEndpoint::default()),
+                ..Default::default()
+            }), // record
+        );
+
+        assert_eq!(
+            check_api_boundary_node_invariants(&snapshot)
+                .unwrap_err()
+                .msg,
+            format!("domain field of the NodeRecord with id={node_id} is None"),
         );
     }
 
@@ -175,25 +193,27 @@ mod tests {
 
             snapshot.insert(
                 make_api_boundary_node_record_key(node_id).into_bytes(), // key
-                encode_or_panic(&ApiBoundaryNodeRecord {
-                    domain: domain.into(),
-                    ..Default::default()
-                }), // record
+                encode_or_panic(&ApiBoundaryNodeRecord::default()),      // record
             );
             snapshot.insert(
                 make_node_record_key(node_id).into_bytes(), // key
                 encode_or_panic(&NodeRecord {
                     http: Some(ConnectionEndpoint::default()),
+                    domain: Some(domain.into()),
                     ..Default::default()
                 }), // record
             );
         }
 
-        assert_eq!(check_api_boundary_node_invariants(&snapshot)
-            .unwrap_err()
-            .msg,
-            format!("domain example-2.com should have one node associated with it, but has the following: [{}, {}]", 
-            PrincipalId::new_node_test_id(1), PrincipalId::new_node_test_id(2))
+        assert_eq!(
+            check_api_boundary_node_invariants(&snapshot)
+                .unwrap_err()
+                .msg,
+            format!(
+                "domain example-2.com has two nodes associated with it with id={} and id={}",
+                PrincipalId::new_node_test_id(1),
+                PrincipalId::new_node_test_id(2)
+            )
         );
     }
 }

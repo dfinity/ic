@@ -1,5 +1,7 @@
 use crossbeam_channel::{Sender, TrySendError};
+use ic_config::{execution_environment::Config, flag_status::FlagStatus};
 use ic_logger::{info, warn, ReplicaLogger};
+use ic_metrics::MetricsRegistry;
 use ic_types::{
     batch::{CanisterQueryStats, LocalQueryStats, QueryStats},
     epoch_from_height, CanisterId, Height, NumInstructions, QueryStatsEpoch,
@@ -7,15 +9,20 @@ use ic_types::{
 use std::sync::Mutex;
 use std::{collections::BTreeMap, sync::RwLock};
 
+mod metrics;
 mod payload_builder;
 mod state_machine;
 
+pub use self::metrics::QueryStatsAggregatorMetrics;
 pub use self::payload_builder::{QueryStatsPayloadBuilderImpl, QueryStatsPayloadBuilderParams};
 pub use self::state_machine::deliver_query_stats;
 
+use self::metrics::CollectorMetrics;
+
 pub fn init_query_stats(
     log: ReplicaLogger,
-    query_stats_epoch_length: u64,
+    config: &Config,
+    metrics_registry: &MetricsRegistry,
 ) -> (QueryStatsCollector, QueryStatsPayloadBuilderParams) {
     let (tx, rx) = crossbeam_channel::bounded(1);
     (
@@ -24,9 +31,14 @@ pub fn init_query_stats(
             current_query_stats: Mutex::new(BTreeMap::new()),
             current_epoch: RwLock::new(None),
             sender: tx,
-            query_stats_epoch_length,
+            query_stats_epoch_length: config.query_stats_epoch_length,
+            metrics: CollectorMetrics::new(metrics_registry),
         },
-        QueryStatsPayloadBuilderParams(rx, query_stats_epoch_length),
+        QueryStatsPayloadBuilderParams {
+            rx,
+            epoch_length: config.query_stats_epoch_length,
+            enabled: config.query_stats_aggregation == FlagStatus::Enabled,
+        },
     )
 }
 
@@ -40,6 +52,7 @@ pub struct QueryStatsCollector {
     current_epoch: RwLock<Option<QueryStatsEpoch>>,
     sender: Sender<LocalQueryStats>,
     query_stats_epoch_length: u64,
+    metrics: CollectorMetrics,
 }
 
 impl QueryStatsCollector {
@@ -51,6 +64,9 @@ impl QueryStatsCollector {
         let mut current_epoch = self.current_epoch.write().unwrap();
         let Some(previous_epoch) = *current_epoch else {
             *current_epoch = Some(new_epoch);
+            self.metrics
+                .query_stats_collector_current_epoch
+                .set(new_epoch.get() as i64);
             return;
         };
 
@@ -94,6 +110,9 @@ impl QueryStatsCollector {
             }
         }
         *current_epoch = Some(new_epoch);
+        self.metrics
+            .query_stats_collector_current_epoch
+            .set(new_epoch.get() as i64);
     }
 
     pub fn register_query_statistics(
@@ -127,5 +146,9 @@ impl QueryStatsCollector {
         stats_for_canister.egress_payload_size = stats_for_canister
             .egress_payload_size
             .saturating_add(egress_payload_size);
+
+        self.metrics
+            .query_stats_collector_num_canister_ids
+            .set(state.len() as i64);
     }
 }

@@ -3,7 +3,7 @@ mod framework;
 use crate::framework::ConsensusDriver;
 use ic_artifact_pool::{consensus_pool, dkg_pool, ecdsa_pool};
 use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
-use ic_consensus::{certification::CertifierImpl, dkg};
+use ic_consensus::{certification::CertifierImpl, dkg, ecdsa};
 use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces_state_manager::Labeled;
@@ -159,6 +159,15 @@ fn consensus_produces_expected_batches() {
             metrics_registry.clone(),
             no_op_logger(),
         );
+        let ecdsa = ecdsa::EcdsaImpl::new(
+            replica_config.node_id,
+            consensus_pool.read().unwrap().get_block_cache(),
+            Arc::clone(&fake_crypto) as Arc<_>,
+            Arc::clone(&state_manager) as Arc<_>,
+            metrics_registry.clone(),
+            no_op_logger(),
+            MaliciousFlags::default(),
+        );
         let certifier = CertifierImpl::new(
             replica_config.clone(),
             Arc::clone(&membership) as Arc<_>,
@@ -175,9 +184,11 @@ fn consensus_produces_expected_batches() {
             Box::new(consensus),
             consensus_gossip,
             dkg,
+            ecdsa,
             Box::new(certifier),
             consensus_pool,
             dkg_pool,
+            ecdsa_pool,
             no_op_logger(),
             metrics_registry,
         );

@@ -117,7 +117,8 @@ impl std::hash::BuildHasher for BuildShiftXorHasher {
 
 struct BabyStepGiantStepTable {
     // Table storing the baby steps
-    table: std::collections::HashMap<[u8; Self::GT_REPR_SIZE], usize, BuildShiftXorHasher>,
+    table: Vec<([u8; Self::GT_REPR_SIZE], usize)>,
+    prefix_set: std::collections::HashSet<[u8; Self::GT_REPR_PREFIX_SIZE], BuildShiftXorHasher>,
 }
 
 /// The table for storing the baby steps of BSGS
@@ -125,9 +126,42 @@ struct BabyStepGiantStepTable {
 /// TODO(CRP-2308) use a better data structure than HashMap here.
 impl BabyStepGiantStepTable {
     const GT_REPR_SIZE: usize = 28;
+    /// The byte length of the prefix is chosen to be the smallest possible that
+    /// gives us a small number of false positives. The space of the prefixes
+    /// is, therefore, 2^(5*8) = 2^40. Given that we use the hash prefix, the
+    /// prefixes are pseudo-random. Therefore, the probability of having a false
+    /// positive equals the number of possible prefixes (2^40) divided by the
+    /// number of distinct prefixes in the table. For simplicity, we bound this
+    /// probability by the number of the prefixes in general, which is the case
+    /// when all stored prefixes are indeed distinct.
+    ///
+    /// Our BSGS table contains around a million elements for multiplier 1 with
+    /// current production subnet sizes (e.g., 28 nodes -> 978928, 40 nodes ->
+    /// 1170043). In production, we use a table with multiplier 20, totaling in
+    /// approx. 20mil elements. The probability of a false positive is therefore
+    /// bounded by 2^log2(20mil)/2^40, which is approx. 1 in 55 thousand. If we
+    /// increase the multiplier to our current optimal value (approx. 64), then
+    /// the probability is around 1 in 17 thousand. Given that on a false
+    /// positive we only need to perform one additional lookup that is slower by
+    /// a small constant (say, very roughly, factor 5 slowdown), handling false
+    /// positives is a small runtime overhead.
+    ///
+    /// If it happens that the table size is increased by much more, then we can
+    /// reduce the false positive probability simply by increasing the prefix
+    /// size by 1 byte or more.
+    const GT_REPR_PREFIX_SIZE: usize = 5;
 
-    fn hash_gt(gt: &Gt) -> [u8; Self::GT_REPR_SIZE] {
-        ic_crypto_sha2::Sha224::hash(&gt.tag())
+    fn hash_gt(gt: &Gt) -> ([u8; Self::GT_REPR_PREFIX_SIZE], [u8; Self::GT_REPR_SIZE]) {
+        let hash = ic_crypto_sha2::Sha224::hash(&gt.tag());
+        let prefix =
+            <[u8; Self::GT_REPR_PREFIX_SIZE]>::try_from(&hash[0..Self::GT_REPR_PREFIX_SIZE])
+                .unwrap_or_else(|_| {
+                    panic!(
+                        "hash should always be larger than {}B",
+                        Self::GT_REPR_PREFIX_SIZE
+                    )
+                });
+        (prefix, hash)
     }
 
     /// Return a table size appropriate for solving BSGS in [0,range) while
@@ -140,11 +174,16 @@ impl BabyStepGiantStepTable {
     fn compute_table_size(range: usize, max_mbytes: usize, max_table_mul: usize) -> usize {
         let sqrt = (range as f64).sqrt().ceil() as usize;
 
-        // Estimate of HashMap overhead from https://ntietz.com/blog/rust-hashmap-overhead/
-        let hash_table_overhead = 1.73_f64;
-        let hash_table_storage = Self::GT_REPR_SIZE + 8;
+        // Number of bytes per element in the main (Gt->usize) table
+        let main_table_bytes_per_elem = Self::GT_REPR_SIZE + 8;
 
-        let storage = (hash_table_storage as f64) * hash_table_overhead * (sqrt as f64);
+        // Estimate of HashMap/HashSet overhead from https://ntietz.com/blog/rust-hashmap-overhead/
+        let hash_set_overhead = 1.73_f64;
+
+        let prefix_filter_bytes_per_elem = hash_set_overhead * (Self::GT_REPR_PREFIX_SIZE as f64);
+
+        let storage =
+            (main_table_bytes_per_elem as f64 + prefix_filter_bytes_per_elem) * (sqrt as f64);
 
         let max_bytes = max_mbytes * 1024 * 1024;
 
@@ -161,22 +200,35 @@ impl BabyStepGiantStepTable {
 
     /// Returns the table plus the giant step
     fn new(base: &Gt, table_size: usize) -> (Self, Gt) {
-        let mut table =
-            std::collections::HashMap::with_capacity_and_hasher(table_size, BuildShiftXorHasher);
+        let mut table = Vec::with_capacity(table_size);
+        let mut prefix_set =
+            std::collections::HashSet::with_capacity_and_hasher(table_size, BuildShiftXorHasher);
         let mut accum = Gt::identity();
 
         for i in 0..table_size {
-            let hash = Self::hash_gt(&accum);
-            table.insert(hash, i);
+            let (prefix, hash) = Self::hash_gt(&accum);
+            table.push((hash, i));
+            // we are not checking the return value of `insert` because
+            // duplicate prefixes do not affect the correctness
+            prefix_set.insert(prefix);
             accum += base;
         }
+        table.sort_unstable();
 
-        (Self { table }, accum.neg())
+        (Self { table, prefix_set }, accum.neg())
     }
 
     /// Return the value if gt exists in this table
     fn get(&self, gt: &Gt) -> Option<usize> {
-        self.table.get(&Self::hash_gt(gt)).copied()
+        let (prefix, hash) = Self::hash_gt(gt);
+        if self.prefix_set.contains(&prefix) {
+            match self.table.binary_search_by_key(&hash, |&(key, _value)| key) {
+                Ok(i) => Some(self.table[i].1),
+                _ => None,
+            }
+        } else {
+            None
+        }
     }
 }
 

@@ -570,7 +570,7 @@ fn assert_clean_refund(
             .push(cf_neuron.clone());
         expected_failed_refunds.push(sns_swap_pb::CfParticipant {
             hotkey_principal: extra_cf_participants
-                .get(0)
+                .first()
                 .unwrap()
                 .hotkey_principal
                 .clone(),
@@ -1275,7 +1275,7 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
         );
         let original_neuron_distribution: &_ = original_developer_distribution
             .developer_neurons
-            .get(0)
+            .first()
             .unwrap();
 
         let src::SwapDistribution { total: swap_total } = original_initial_token_distribution
@@ -1597,7 +1597,7 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
         );
         let original_neuron_distribution: &_ = original_developer_distribution
             .developer_neurons
-            .get(0)
+            .first()
             .unwrap();
 
         let src::SwapDistribution { total: swap_total } = original_initial_token_distribution
@@ -1768,6 +1768,58 @@ mod metrics_tests {
         // We assert that it is '555' instead of '1', so that we know the correct
         // proposal action is filtered out.
         assert!(s.contains("governance_voting_power_total 555 1000"));
+    }
+
+    #[test]
+    fn test_metrics_proposal_deadline_timestamp_seconds() {
+        let open_proposal = ProposalData {
+            proposal: Some(Proposal {
+                title: Some("open_proposal".to_string()),
+                action: Some(proposal::Action::ManageNeuron(Box::default())),
+                ..Proposal::default()
+            }),
+            ..ProposalData::default()
+        };
+
+        let rejected_proposal = ProposalData {
+            proposal: Some(Proposal {
+                title: Some("rejected_proposal".to_string()),
+                action: Some(proposal::Action::ManageNeuron(Box::default())),
+                ..Proposal::default()
+            }),
+            decided_timestamp_seconds: 1,
+            ..ProposalData::default()
+        };
+
+        let governance = Governance::new(
+            GovernanceProto {
+                proposals: btreemap! {
+                    1 =>  open_proposal.clone(),
+                    2 =>  rejected_proposal,
+                },
+                ..GovernanceProto::default()
+            },
+            Box::<MockEnvironment<'_>>::default(),
+            Box::new(StubIcpLedger {}),
+            Box::new(StubCMC {}),
+        );
+
+        let mut writer = ic_metrics_encoder::MetricsEncoder::new(vec![], 10);
+
+        encode_metrics(&governance, &mut writer).unwrap();
+
+        let voting_period = governance.voting_period_seconds()(open_proposal.topic());
+        let deadline_ts = open_proposal.get_deadline_timestamp_seconds(voting_period);
+        let body = writer.into_inner();
+        let s = String::from_utf8_lossy(&body);
+
+        assert!(s.contains(&format!(
+            "governance_proposal_deadline_timestamp_seconds{{proposal_id=\"1\"}} {} 10",
+            deadline_ts
+        )));
+
+        // We assert that decided proposals are filtered out from metrics
+        assert!(!s.contains("governance_proposal_deadline_timestamp_seconds{proposal_id=\"2\"}"));
     }
 }
 

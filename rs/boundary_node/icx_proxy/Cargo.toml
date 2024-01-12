@@ -22,7 +22,7 @@ async-trait = "0.1"
 axum = "0.6.1"
 base64 = { workspace = true }
 bytes = { workspace = true }
-candid = { workspace = true, features = ["mute_warnings"] }
+candid = { workspace = true }
 clap = { version = "4", features = ["cargo", "derive"] }
 flate2 = "1"
 form_urlencoded = "1"
@@ -36,6 +36,7 @@ hyper-rustls = { version = "0.24.0", features = ["http2"] }
 itertools = { workspace = true }
 ic-agent = { workspace = true }
 ic-utils = { workspace = true, features = ["raw"] }
+jemallocator = "0.3"
 opentelemetry = { version = "0.20", features = ["metrics"] }
 opentelemetry-prometheus = "0.13.0"
 prometheus = { workspace = true }
@@ -52,8 +53,8 @@ serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 sha2 = "0.10"
 tokio = { workspace = true }
-ic-response-verification = "2.0"
-ic-http-certification = "2.0"
+ic-response-verification = { git = "https://github.com/dfinity/response-verification", rev = "0d472818e35aff152ae8d1bf482da26b97334494" }
+ic-http-certification = { git = "https://github.com/dfinity/response-verification", rev = "0d472818e35aff152ae8d1bf482da26b97334494" }
 thiserror = "1.0.40"
 
 [features]

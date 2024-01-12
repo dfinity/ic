@@ -9,7 +9,6 @@ use ic_metrics::MetricsRegistry;
 use ic_sys::PAGE_SIZE;
 use ic_types::{Height, MAX_STABLE_MEMORY_IN_BYTES};
 use nix::unistd::dup;
-use static_assertions::const_assert_ne;
 use std::sync::Arc;
 use std::{fs::OpenOptions, path::Path};
 
@@ -516,7 +515,7 @@ fn get_memory_instructions_returns_deltas() {
     );
 
     // Add a page that is not an end of the bucket.
-    const_assert_ne!((24 + 1) % WRITE_BUCKET_PAGES, 0);
+    assert_ne!((24 + 1) % WRITE_BUCKET_PAGES, 0);
     let pages = &[(PageIndex::new(24), &[1u8; PAGE_SIZE])];
     page_map.update(pages);
 

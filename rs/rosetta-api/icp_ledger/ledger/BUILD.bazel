@@ -118,6 +118,7 @@ rust_test(
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/icp_ledger/ledger",
     },
     rustc_env = LEDGER_CANISTER_RUSTC_ENV,
+    deps = ["@crate_index//:candid_parser"],
 )
 
 rust_test(

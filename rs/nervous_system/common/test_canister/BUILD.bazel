@@ -45,6 +45,7 @@ rust_test(
     crate = ":_wasm_test_canister",
     data = [":interface.did"],
     env = {"CARGO_MANIFEST_DIR": "rs/nervous_system/common/test_canister"},
+    deps = ["@crate_index//:candid_parser"],
 )
 
 rust_test(

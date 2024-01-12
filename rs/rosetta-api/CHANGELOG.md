@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 ### Added
 - Add `timestamp` to the `blocks` table
+- Add support for `list_neurons`. Let's a user query a list of all they neurons a user has created.
 
 ## [1.9.0] - 2023-11-16
 ### Fixes

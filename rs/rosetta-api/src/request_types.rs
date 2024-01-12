@@ -38,6 +38,7 @@ pub const MERGE_MATURITY: &str = "MERGE_MATURITY";
 pub const REGISTER_VOTE: &str = "REGISTER_VOTE";
 pub const STAKE_MATURITY: &str = "STAKE_MATURITY";
 pub const NEURON_INFO: &str = "NEURON_INFO";
+pub const LIST_NEURONS: &str = "LIST_NEURONS";
 pub const FOLLOW: &str = "FOLLOW";
 
 /// `RequestType` contains all supported values of `Operation.type`.
@@ -91,6 +92,9 @@ pub enum RequestType {
         neuron_index: u64,
         controller: Option<PublicKeyOrPrincipal>,
     },
+    #[serde(rename = "LIST_NEURONS")]
+    #[serde(alias = "ListNeurons")]
+    ListNeurons,
     #[serde(rename = "FOLLOW")]
     #[serde(alias = "Follow")]
     Follow {
@@ -116,6 +120,7 @@ impl RequestType {
             RequestType::RegisterVote { .. } => REGISTER_VOTE,
             RequestType::StakeMaturity { .. } => STAKE_MATURITY,
             RequestType::NeuronInfo { .. } => NEURON_INFO,
+            RequestType::ListNeurons { .. } => LIST_NEURONS,
             RequestType::Follow { .. } => FOLLOW,
         }
     }
@@ -140,6 +145,7 @@ impl RequestType {
                 | RequestType::RegisterVote { .. }
                 | RequestType::StakeMaturity { .. }
                 | RequestType::NeuronInfo { .. }
+                | RequestType::ListNeurons { .. }
                 | RequestType::Follow { .. }
         )
     }
@@ -352,6 +358,11 @@ pub struct NeuronInfo {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct ListNeurons {
+    pub account: icp_ledger::AccountIdentifier,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Follow {
     pub account: icp_ledger::AccountIdentifier,
     pub topic: i32,
@@ -373,7 +384,8 @@ impl TryFrom<&PublicKeyOrPrincipal> for PrincipalId {
     type Error = ApiError;
     fn try_from(p: &PublicKeyOrPrincipal) -> Result<PrincipalId, ApiError> {
         match p {
-            PublicKeyOrPrincipal::PublicKey(pk) => Ok(principal_id_from_public_key(pk)?),
+            PublicKeyOrPrincipal::PublicKey(pk) => principal_id_from_public_key(pk)
+                .map_err(|err| ApiError::InvalidPublicKey(false, err.into())),
             PublicKeyOrPrincipal::Principal(pid) => Ok(*pid),
         }
     }
@@ -1315,6 +1327,21 @@ impl TransactionBuilder {
                 }
                 .into(),
             ),
+        });
+    }
+
+    pub fn list_neurons(&mut self, req: &ListNeurons) {
+        let ListNeurons { account } = req;
+        let operation_identifier = self.allocate_op_id();
+        self.ops.push(Operation {
+            operation_identifier,
+            _type: OperationType::ListNeurons.to_string(),
+            status: None,
+            account: Some(to_model_account_identifier(account)),
+            amount: None,
+            related_operations: None,
+            coin_change: None,
+            metadata: None,
         });
     }
 

@@ -125,6 +125,7 @@ use ic_xnet_payload_builder::{
     ExpectedIndices, RefillTaskHandle, XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics,
     XNetSlicePool,
 };
+use serde::Deserialize;
 
 pub use ic_error_types::RejectCode;
 use maplit::btreemap;
@@ -149,6 +150,12 @@ use tokio::sync::mpsc;
 
 #[cfg(test)]
 mod tests;
+
+#[derive(Debug, Serialize, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+pub enum SubmitIngressError {
+    HttpError(String),
+    UserError(UserError),
+}
 
 struct FakeVerifier;
 
@@ -259,6 +266,7 @@ fn make_nodes_registry(
             hostos_version_id: None,
             chip_id: None,
             public_ipv4_config: None,
+            domain: None,
         };
         registry_data_provider
             .add(
@@ -979,6 +987,7 @@ impl StateMachine {
 
     /// Constructs and initializes a new state machine that uses the specified
     /// directory for storing states.
+    #[allow(clippy::too_many_arguments)]
     fn setup_from_dir(
         state_dir: TempDir,
         nonce: u64,
@@ -1165,7 +1174,7 @@ impl StateMachine {
 
         Self {
             subnet_id,
-            secret_key: secret_key_bytes.get(0).unwrap().clone(),
+            secret_key: secret_key_bytes.first().unwrap().clone(),
             public_key,
             ecdsa_secret_key,
             registry_data_provider,
@@ -1305,7 +1314,7 @@ impl StateMachine {
         canister_id: CanisterId,
         method: impl ToString,
         payload: Vec<u8>,
-    ) -> Result<MessageId, String> {
+    ) -> Result<MessageId, SubmitIngressError> {
         // Build `SignedIngress` with maximum ingress expiry and unique nonce,
         // omitting delegations and signatures.
         let ingress_expiry = (self.get_time() + MAX_INGRESS_TTL).as_nanos_since_unix_epoch();
@@ -1357,18 +1366,18 @@ impl StateMachine {
 
         // Validate the size of the ingress message.
         if msg.count_bytes() > ingress_registry_settings.max_ingress_bytes_per_message {
-            return Err(format!(
+            return Err(SubmitIngressError::HttpError(format!(
                 "Request {} is too large. Message byte size {} is larger than the max allowed {}.",
                 msg.id(),
                 msg.count_bytes(),
                 ingress_registry_settings.max_ingress_bytes_per_message
-            ));
+            )));
         }
 
         // Run `IngressFilter` on the ingress message.
         self.ingress_filter
             .should_accept_ingress_message(state, &provisional_whitelist, msg.content())
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| SubmitIngressError::UserError(e))?;
 
         // All checks were successful at this point so we can push the ingress message to the ingress pool.
         let message_id = msg.id();
@@ -1468,6 +1477,7 @@ impl StateMachine {
             },
             randomness: Randomness::from(seed),
             ecdsa_subnet_public_keys: self.ecdsa_subnet_public_keys.clone(),
+            ecdsa_quadruple_ids: BTreeMap::new(),
             registry_version: self.registry_client.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(self.time.load(Ordering::Relaxed)),
             consensus_responses: payload.consensus_responses,

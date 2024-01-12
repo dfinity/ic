@@ -170,7 +170,8 @@ class IcDeploymentInventory:
         # Update a list of all IC "nodes" in the deployment
         self._update_all_nodes_hosts(inventory)
         self._update_nns_nodes(inventory)
-        self._update_api_nodes(inventory)
+        # All [api] sections were removed from env hosts.ini files.
+        # self._update_api_nodes(inventory)
         self._update_aux_nodes(inventory)
         self._update_boundary_nodes(inventory)
         self._update_all_physical_nodes_hosts(inventory)

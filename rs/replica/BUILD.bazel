@@ -62,7 +62,6 @@ DEPENDENCIES = [
     "@crate_index//:serde_cbor",
     "@crate_index//:slog",
     "@crate_index//:slog-async",
-    "@crate_index//:static_assertions",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:tower",

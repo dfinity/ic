@@ -227,7 +227,7 @@ mod tests {
     fn test_get_subnet_for_canister() {
         let mut registry = invariant_compliant_registry(0);
         let system_subnet =
-            PrincipalId::try_from(registry.get_subnet_list_record().subnets.get(0).unwrap())
+            PrincipalId::try_from(registry.get_subnet_list_record().subnets.first().unwrap())
                 .unwrap();
 
         let mut rt = RoutingTable::new();

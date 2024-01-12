@@ -89,7 +89,7 @@ pub(crate) async fn run_benchmark() -> RunScenarioResult {
     let args = GetAccountTransactionsArgs {
         account,
         start: None,
-        max_results: Nat::from(1000),
+        max_results: Nat::from(1000_u32),
     };
     let start = ic_cdk::api::time();
     let (res,): (GetTransactionsResult,) =
@@ -114,7 +114,7 @@ pub(crate) async fn run_benchmark() -> RunScenarioResult {
                 scenario: Scenario::IndexPerf,
                 success: true,
                 duration_sec,
-                blocks: oldest_tx_id.unwrap_or_else(|| Nat::from(0)),
+                blocks: oldest_tx_id.unwrap_or_else(|| Nat::from(0_u8)),
             }
         }
         Err(GetTransactionsErr { message }) => {

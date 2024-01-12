@@ -1,4 +1,6 @@
 use crate::{pb::v1::NodeProvidersMonthlyXdrRewards, registry::Registry};
+#[cfg(target_arch = "wasm32")]
+use dfn_core::println;
 use ic_nns_common::registry::decode_or_panic;
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;

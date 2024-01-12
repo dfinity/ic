@@ -45,22 +45,20 @@ use crate::{
     snapshot::{RegistrySnapshot, Snapshot, Snapshotter, Subnet},
 };
 
-struct TestHttpClient;
+struct TestHttpClient(usize);
 
 #[async_trait]
 impl HttpClient for TestHttpClient {
     async fn execute(&self, req: reqwest::Request) -> Result<reqwest::Response, reqwest::Error> {
-        let size = 1024;
-
         let status = if req.url().path().ends_with("/call") {
             http::StatusCode::ACCEPTED
         } else {
             http::StatusCode::OK
         };
 
-        let mut resp = http::response::Response::new("a".repeat(size));
+        let mut resp = http::response::Response::new("a".repeat(self.0));
         *resp.status_mut() = status;
-        resp.headers_mut().insert("Content-Length", size.into());
+        resp.headers_mut().insert("Content-Length", self.0.into());
 
         Ok(reqwest::Response::from(resp))
     }
@@ -208,18 +206,20 @@ pub fn setup_test_router(
     enable_cache: bool,
     subnet_count: usize,
     nodes_per_subnet: usize,
+    response_size: usize,
 ) -> (Router, Vec<Subnet>) {
-    #[cfg(not(feature = "tls"))]
-    let mut cli = Cli::parse_from(["", "--local-store-path", "/tmp"]);
-    #[cfg(feature = "tls")]
-    let mut cli = Cli::parse_from(["", "--local-store-path", "/tmp", "--hostname", "foobar"]);
+    use axum::extract::connect_info::MockConnectInfo;
+    use std::net::SocketAddr;
 
-    cli.monitoring.disable_request_logging = true;
+    #[cfg(not(feature = "tls"))]
+    let cli = Cli::parse_from(["", "--local-store-path", "/tmp"]);
+    #[cfg(feature = "tls")]
+    let cli = Cli::parse_from(["", "--local-store-path", "/tmp", "--hostname", "foobar"]);
 
     let routing_table: Arc<ArcSwapOption<Routes>> = Arc::new(ArcSwapOption::empty());
     let registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>> = Arc::new(ArcSwapOption::empty());
 
-    let http_client = Arc::new(TestHttpClient);
+    let http_client = Arc::new(TestHttpClient(response_size));
     let metrics_registry = Registry::new_custom(None, None).unwrap();
 
     let (registry_client, _, _) = create_fake_registry_client(subnet_count, nodes_per_subnet, None);
@@ -234,17 +234,18 @@ pub fn setup_test_router(
     let subnets = registry_snapshot.load_full().unwrap().subnets.clone();
     persister.persist(subnets.clone());
 
-    (
-        setup_router(
-            registry_snapshot,
-            routing_table,
-            http_client,
-            &cli,
-            &metrics_registry,
-            enable_cache.then_some(Arc::new(
-                Cache::new(10485760, 262144, Duration::from_secs(1), false).unwrap(),
-            )),
-        ),
-        subnets,
-    )
+    let router = setup_router(
+        registry_snapshot,
+        routing_table,
+        http_client,
+        &cli,
+        &metrics_registry,
+        enable_cache.then_some(Arc::new(
+            Cache::new(10485760, 262144, Duration::from_secs(1), false).unwrap(),
+        )),
+    );
+
+    let router = router.layer(MockConnectInfo(SocketAddr::from(([0, 0, 0, 0], 1337))));
+
+    (router, subnets)
 }

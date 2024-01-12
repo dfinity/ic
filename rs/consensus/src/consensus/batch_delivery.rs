@@ -7,7 +7,7 @@ use crate::{
         metrics::{BatchStats, BlockStats},
         status::{self, Status},
     },
-    ecdsa::utils::get_ecdsa_subnet_public_key,
+    ecdsa::utils::{get_ecdsa_subnet_public_key, get_quadruple_ids_to_deliver},
 };
 use ic_consensus_utils::{
     crypto_hashable_to_seed, get_block_hash_string, membership::Membership, pool_reader::PoolReader,
@@ -187,6 +187,7 @@ pub fn deliver_batches(
                     messages: batch_messages,
                     randomness,
                     ecdsa_subnet_public_keys: ecdsa_subnet_public_key.into_iter().collect(),
+                    ecdsa_quadruple_ids: get_quadruple_ids_to_deliver(&block),
                     registry_version: block.context.registry_version,
                     time: block.context.time,
                     consensus_responses,
@@ -362,15 +363,36 @@ fn generate_dkg_response_payload(
             let high_threshold_transcript_record =
                 InitialNiDkgTranscriptRecord::from(high_threshold_transcript.clone());
 
-            // This is what we expect consensus to reply with.
-            let threshold_sig_pk = ThresholdSigPublicKey::try_from(high_threshold_transcript)
-                .expect("should extract public key from high threshold transcript");
+            let threshold_sig_pk = match ThresholdSigPublicKey::try_from(high_threshold_transcript)
+            {
+                Ok(key) => key,
+                Err(err) => {
+                    return Some(Payload::Reject(RejectContext::new(
+                        ic_error_types::RejectCode::CanisterReject,
+                        format!(
+                            "Failed to extract public key from high threshold transcript with id {:?}: {}",
+                            high_threshold_transcript.dkg_id,
+                            err,
+                        ),
+                    )))
+                }
+            };
             let subnet_threshold_public_key = PublicKeyProto::from(threshold_sig_pk);
-            let key_der: Vec<u8> =
-                ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der(
-                    threshold_sig_pk,
-                )
-                .unwrap();
+            let key_der = match ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der(
+                threshold_sig_pk,
+            ) {
+                Ok(key) => key,
+                Err(err) => {
+                    return Some(Payload::Reject(RejectContext::new(
+                        ic_error_types::RejectCode::CanisterReject,
+                        format!(
+                            "Failed to encode threshold signature public key of transcript id {:?} into DER: {}",
+                            high_threshold_transcript.dkg_id,
+                            err,
+                        ),
+                    )))
+                }
+            };
             let fresh_subnet_id =
                 SubnetId::new(PrincipalId::new_self_authenticating(key_der.as_slice()));
 
@@ -387,14 +409,9 @@ fn generate_dkg_response_payload(
             ic_error_types::RejectCode::CanisterReject,
             format!("{}{}", err_str1, err_str2),
         ))),
-        (Some(Err(err_str)), _) => Some(Payload::Reject(RejectContext::new(
-            ic_error_types::RejectCode::CanisterReject,
-            err_str,
-        ))),
-        (_, Some(Err(err_str))) => Some(Payload::Reject(RejectContext::new(
-            ic_error_types::RejectCode::CanisterReject,
-            err_str,
-        ))),
+        (Some(Err(err_str)), _) | (_, Some(Err(err_str))) => Some(Payload::Reject(
+            RejectContext::new(ic_error_types::RejectCode::CanisterReject, err_str),
+        )),
         _ => None,
     }
 }

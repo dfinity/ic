@@ -23,5 +23,6 @@ pub enum OperationType {
     RegisterVote,
     StakeMaturity,
     NeuronInfo,
+    ListNeurons,
     Follow,
 }

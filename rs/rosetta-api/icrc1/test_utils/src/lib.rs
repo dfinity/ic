@@ -176,7 +176,7 @@ pub fn blocks_strategy<Tokens: TokensType>(
     let transaction_strategy = transaction_strategy(amount_strategy);
     let fee_collector_strategy = prop::option::of(account_strategy());
     let fee_collector_block_index_strategy = prop::option::of(prop::num::u64::ANY);
-    let fee_strategy = prop::option::of(arb_small_amount());
+    let effective_fee_strategy = arb_small_amount::<Tokens>();
     let timestamp_strategy = Just({
         let end = SystemTime::now();
         // Ledger takes transactions that were created in the last 24 hours (5 minute window to submit valid transactions)
@@ -189,23 +189,20 @@ pub fn blocks_strategy<Tokens: TokensType>(
     });
     (
         transaction_strategy,
-        fee_strategy,
+        effective_fee_strategy,
         timestamp_strategy,
         fee_collector_strategy,
         fee_collector_block_index_strategy,
     )
         .prop_map(
-            |(transaction, fee, timestamp, fee_collector, fee_collector_block_index)| {
-                let transaction_fee = match transaction.operation {
-                    Operation::Transfer { ref fee, .. } => fee.clone(),
-                    Operation::Approve { ref fee, .. } => fee.clone(),
+            |(transaction, arb_fee, timestamp, fee_collector, fee_collector_block_index)| {
+                let effective_fee = match transaction.operation {
+                    Operation::Transfer { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
+                    Operation::Approve { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
                     Operation::Burn { .. } => None,
                     Operation::Mint { .. } => None,
                 };
-                let effective_fee = transaction_fee
-                    .is_none()
-                    .then(|| fee.clone().unwrap_or(token_amount(DEFAULT_TRANSFER_FEE)));
-                assert!(effective_fee.is_some() || transaction_fee.is_some());
+
                 Block {
                     parent_hash: Some(Block::<Tokens>::block_hash(
                         &Block {
@@ -916,27 +913,6 @@ pub fn metadata_strategy() -> impl Strategy<Value = Vec<(String, MetadataValue)>
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::{minter_identity, valid_transactions_strategy};
-    use proptest::{
-        strategy::{Strategy, ValueTree},
-        test_runner::TestRunner,
-    };
-    use std::time::SystemTime;
-
-    #[test]
-    fn test_valid_transactions_strategy_generates_transaction() {
-        let size = 10;
-        let strategy =
-            valid_transactions_strategy(minter_identity(), 10_000, size, SystemTime::now());
-        let tree = strategy
-            .new_tree(&mut TestRunner::default())
-            .expect("Unable to run valid_transactions_strategy");
-        assert_eq!(tree.current().len(), size)
-    }
-}
-
 pub fn arb_account() -> impl Strategy<Value = Account> {
     (
         proptest::collection::vec(any::<u8>(), 28),
@@ -1081,4 +1057,25 @@ where
                 fee_collector_block_index: fee_col_block,
             },
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{minter_identity, valid_transactions_strategy};
+    use proptest::{
+        strategy::{Strategy, ValueTree},
+        test_runner::TestRunner,
+    };
+    use std::time::SystemTime;
+
+    #[test]
+    fn test_valid_transactions_strategy_generates_transaction() {
+        let size = 10;
+        let strategy =
+            valid_transactions_strategy(minter_identity(), 10_000, size, SystemTime::now());
+        let tree = strategy
+            .new_tree(&mut TestRunner::default())
+            .expect("Unable to run valid_transactions_strategy");
+        assert_eq!(tree.current().len(), size)
+    }
 }

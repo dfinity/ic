@@ -34,7 +34,7 @@ use crate::error::{OrchestratorError, OrchestratorResult};
 use crate::registry_helper::RegistryHelper;
 use ic_canister_client::Sender;
 use ic_canister_client::{Agent, HttpClient};
-use ic_crypto::CryptoComponentForNonReplicaProcess;
+use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::types::v1 as pb;
@@ -60,7 +60,7 @@ pub(crate) struct CatchUpPackageProvider {
     registry: Arc<RegistryHelper>,
     cup_dir: PathBuf,
     client: HttpClient,
-    crypto: Arc<dyn CryptoComponentForNonReplicaProcess + Send + Sync>,
+    crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
     logger: ReplicaLogger,
     node_id: NodeId,
 }
@@ -70,7 +70,7 @@ impl CatchUpPackageProvider {
     pub(crate) fn new(
         registry: Arc<RegistryHelper>,
         cup_dir: PathBuf,
-        crypto: Arc<dyn CryptoComponentForNonReplicaProcess + Send + Sync>,
+        crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
         logger: ReplicaLogger,
         node_id: NodeId,
     ) -> Self {

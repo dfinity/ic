@@ -1,8 +1,4 @@
-type AddApiBoundaryNodePayload = record {
-  node_id : principal;
-  domain : text;
-  version : text;
-};
+type AddApiBoundaryNodePayload = record { node_id : principal; version : text };
 type AddFirewallRulesPayload = record {
   expected_hash : text;
   scope : FirewallRulesScope;
@@ -202,10 +198,6 @@ type SubnetFeatures = record {
   sev_enabled : opt bool;
 };
 type SubnetType = variant { application; verified_application; system };
-type UpdateApiBoundaryNodeDomainPayload = record {
-  node_id : principal;
-  domain : text;
-};
 type UpdateApiBoundaryNodesVersionPayload = record {
   version : text;
   node_ids : vec principal;
@@ -225,6 +217,10 @@ type UpdateElectedReplicaVersionsPayload = record {
 };
 type UpdateNodeDirectlyPayload = record {
   idkg_dealing_encryption_pk : opt vec nat8;
+};
+type UpdateNodeDomainDirectlyPayload = record {
+  node_id : principal;
+  domain : opt text;
 };
 type UpdateNodeIPv4ConfigDirectlyPayload = record {
   node_id : principal;
@@ -323,7 +319,6 @@ service : {
   reroute_canister_ranges : (RerouteCanisterRangesPayload) -> (Result_1);
   retire_replica_version : (RetireReplicaVersionPayload) -> ();
   set_firewall_config : (SetFirewallConfigPayload) -> ();
-  update_api_boundary_node_domain : (UpdateApiBoundaryNodeDomainPayload) -> ();
   update_api_boundary_nodes_version : (
       UpdateApiBoundaryNodesVersionPayload,
     ) -> ();
@@ -331,6 +326,7 @@ service : {
   update_elected_replica_versions : (UpdateElectedReplicaVersionsPayload) -> ();
   update_firewall_rules : (AddFirewallRulesPayload) -> ();
   update_node_directly : (UpdateNodeDirectlyPayload) -> (Result_1);
+  update_node_domain_directly : (UpdateNodeDomainDirectlyPayload) -> (Result_1);
   update_node_ipv4_config_directly : (UpdateNodeIPv4ConfigDirectlyPayload) -> (
       Result_1,
     );

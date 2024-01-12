@@ -131,16 +131,18 @@ impl Operation {
         _type: String,
         account: Option<AccountIdentifier>,
         amount: Option<Amount>,
+        related_operations: Option<Vec<OperationIdentifier>>,
+        metadata: Option<ObjectMap>,
     ) -> Operation {
         Operation {
             operation_identifier: OperationIdentifier::new(op_id),
-            related_operations: None,
+            related_operations,
             _type,
             status: None,
             account,
             amount,
             coin_change: None,
-            metadata: None,
+            metadata,
         }
     }
 }
@@ -530,6 +532,89 @@ impl ::std::str::FromStr for CurveType {
             "edwards25519" => Ok(CurveType::Edwards25519),
             "tweedle" => Ok(CurveType::Tweedle),
             "pallas" => Ok(CurveType::Pallas),
+            _ => Err(()),
+        }
+    }
+}
+
+/// SigningPayload is signed by the client with the keypair associated with an
+/// AccountIdentifier using the specified SignatureType.  SignatureType can be
+/// optionally populated if there is a restriction on the signature scheme that
+/// can be used to sign the payload.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct SigningPayload {
+    /// [DEPRECATED by `account_identifier` in `v1.4.4`] The network-specific
+    /// address of the account that should sign the payload.
+    #[serde(rename = "address")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub address: Option<String>,
+
+    #[serde(rename = "account_identifier")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account_identifier: Option<AccountIdentifier>,
+
+    #[serde(rename = "hex_bytes")]
+    pub hex_bytes: String,
+
+    #[serde(rename = "signature_type")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub signature_type: Option<SignatureType>,
+}
+
+impl SigningPayload {
+    pub fn new(hex_bytes: String) -> SigningPayload {
+        SigningPayload {
+            address: None,
+            account_identifier: None,
+            hex_bytes,
+            signature_type: None,
+        }
+    }
+}
+
+/// SignatureType is the type of a cryptographic signature.  * ecdsa: `r (32-bytes) || s (32-bytes)` - `64 bytes` * ecdsa_recovery: `r (32-bytes) || s (32-bytes) || v (1-byte)` - `65 bytes` * ed25519: `R (32-byte) || s (32-bytes)` - `64 bytes` * schnorr_1: `r (32-bytes) || s (32-bytes)` - `64 bytes`  (schnorr signature implemented by Zilliqa where both `r` and `s` are scalars encoded as `32-bytes` values, most significant byte first.) * schnorr_poseidon: `r (32-bytes) || s (32-bytes)` where s = Hash(1st pk || 2nd pk || r) - `64 bytes`  (schnorr signature w/ Poseidon hash function implemented by O(1) Labs where both `r` and `s` are scalars encoded as `32-bytes` values, least significant byte first. https://github.com/CodaProtocol/signer-reference/blob/master/schnorr.ml )
+/// Enumeration of values.
+/// Since this enum's variants do not hold data, we can easily define them them
+/// as `#[repr(C)]` which helps with FFI.
+#[allow(non_camel_case_types)]
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGenericEnum))]
+pub enum SignatureType {
+    #[serde(rename = "ecdsa")]
+    Ecdsa,
+    #[serde(rename = "ecdsa_recovery")]
+    EcdsaRecovery,
+    #[serde(rename = "ed25519")]
+    Ed25519,
+    #[serde(rename = "schnorr_1")]
+    Schnorr1,
+    #[serde(rename = "schnorr_poseidon")]
+    SchnorrPoseidon,
+}
+
+impl ::std::fmt::Display for SignatureType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            SignatureType::Ecdsa => write!(f, "ecdsa"),
+            SignatureType::EcdsaRecovery => write!(f, "ecdsa_recovery"),
+            SignatureType::Ed25519 => write!(f, "ed25519"),
+            SignatureType::Schnorr1 => write!(f, "schnorr_1"),
+            SignatureType::SchnorrPoseidon => write!(f, "schnorr_poseidon"),
+        }
+    }
+}
+
+impl ::std::str::FromStr for SignatureType {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "ecdsa" => Ok(SignatureType::Ecdsa),
+            "ecdsa_recovery" => Ok(SignatureType::EcdsaRecovery),
+            "ed25519" => Ok(SignatureType::Ed25519),
+            "schnorr_1" => Ok(SignatureType::Schnorr1),
+            "schnorr_poseidon" => Ok(SignatureType::SchnorrPoseidon),
             _ => Err(()),
         }
     }

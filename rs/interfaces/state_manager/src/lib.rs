@@ -327,6 +327,9 @@ pub trait CertifiedStateSnapshot: Send + Sync {
     /// Returns a reference to the underlying certified state.
     fn get_state(&self) -> &Self::State;
 
+    /// Returns the height of the underlying certified state.
+    fn get_height(&self) -> Height;
+
     /// This method runs the same computation as [StateReader::read_certified_state],
     /// with three significant differences:
     ///

@@ -33,6 +33,15 @@ pub struct MaliciousFlags {
     /// Alter the signed hash in the certification before verifying a
     /// stream slice's signature.
     pub maliciously_alter_certified_hash: bool,
+    pub maliciously_alter_state_sync_chunk_sending_side: bool,
+    pub maliciously_alter_state_sync_chunk_receiving_side: Option<InvalidChunksAllowance>,
+}
+
+#[derive(Clone, Default, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+pub struct InvalidChunksAllowance {
+    pub meta_manifest_chunk_error_allowance: u32,
+    pub manifest_chunk_error_allowance: u32,
+    pub state_chunk_error_allowance: u32,
 }
 
 impl MaliciousFlags {
@@ -43,6 +52,12 @@ impl MaliciousFlags {
             || self.maliciously_propose_empty_blocks
             || self.maliciously_finalize_all
             || self.maliciously_notarize_all
+    }
+
+    /// This function is to distinguish maliciousness gated by ecdsa's
+    /// implementation.
+    pub fn is_ecdsa_malicious(&self) -> bool {
+        self.maliciously_corrupt_ecdsa_dealings
     }
 
     /// Delay the execution as specified by `maliciously_delay_execution`

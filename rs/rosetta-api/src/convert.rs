@@ -39,7 +39,7 @@ pub fn block_to_transaction(
     token_name: &str,
 ) -> Result<models::Transaction, ApiError> {
     let block = Block::decode(hb.block.clone())
-        .map_err(|err| ApiError::internal_error(format!("Cannot decode block: {}", err)))?;
+        .map_err(|err| ApiError::internal_error(format!("Cannot decode block: {:?}", err)))?;
     let transaction = block.transaction;
     let transaction_identifier = TransactionIdentifier::from(&transaction);
     let operation = transaction.operation;
@@ -254,6 +254,10 @@ pub fn operations_to_requests(
                 };
                 state.neuron_info(account, principal, neuron_index)?;
             }
+            OperationType::ListNeurons => {
+                validate_neuron_management_op()?;
+                state.list_neurons(account)?;
+            }
             OperationType::Burn | OperationType::Mint => {
                 let msg = format!("Unsupported operation type: {:?}", o._type);
                 return Err(op_error(o, msg));
@@ -319,7 +323,7 @@ pub fn from_public_key(pk: &models::PublicKey) -> Result<Vec<u8>, ApiError> {
 
 pub fn from_hex(hex: &str) -> Result<Vec<u8>, ApiError> {
     hex::decode(hex)
-        .map_err(|e| ApiError::invalid_request(format!("Hex could not be decoded {}", e)))
+        .map_err(|e| ApiError::invalid_request(format!("Hex could not be decoded {:?}", e)))
 }
 
 pub fn to_hex(v: &[u8]) -> String {
@@ -327,7 +331,8 @@ pub fn to_hex(v: &[u8]) -> String {
 }
 
 pub fn account_from_public_key(pk: &models::PublicKey) -> Result<AccountIdentifier, ApiError> {
-    let pid = principal_id_from_public_key(pk)?;
+    let pid = principal_id_from_public_key(pk)
+        .map_err(|err| ApiError::InvalidPublicKey(false, err.into()))?;
     Ok(to_model_account_identifier(&pid.into()))
 }
 
@@ -336,7 +341,8 @@ pub fn neuron_subaccount_bytes_from_public_key(
     pk: &models::PublicKey,
     neuron_index: u64,
 ) -> Result<[u8; 32], ApiError> {
-    let controller = principal_id_from_public_key(pk)?;
+    let controller = principal_id_from_public_key(pk)
+        .map_err(|err| ApiError::InvalidPublicKey(false, err.into()))?;
     Ok(neuron_subaccount_hash(&controller, neuron_index))
 }
 
@@ -377,7 +383,8 @@ pub fn principal_id_from_public_key_or_principal(
 ) -> Result<PrincipalId, ApiError> {
     match pkp {
         PublicKeyOrPrincipal::Principal(p) => Ok(p),
-        PublicKeyOrPrincipal::PublicKey(pk) => Ok(principal_id_from_public_key(&pk)?),
+        PublicKeyOrPrincipal::PublicKey(pk) => principal_id_from_public_key(&pk)
+            .map_err(|err| ApiError::InvalidPublicKey(false, err.into())),
     }
 }
 

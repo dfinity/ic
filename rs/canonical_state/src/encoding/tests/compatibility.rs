@@ -269,9 +269,8 @@ fn canonical_encoding_request() {
 ///         method_name: "test".to_string(),
 ///         method_payload: vec![6],
 ///         metadata: Some(RequestMetadata {
-///             call_tree_depth: Some(13),
-///             call_tree_start_time: Some(Time::as_nanos_since_unix_epoch(101)),
-///             call_subtree_deadline: Some(Time::as_nanos_since_unix_epoch(103)),
+///             call_tree_depth: 13,
+///             call_tree_start_time: Time::as_nanos_since_unix_epoch(101),
 ///         }),
 ///     }
 /// )
@@ -304,13 +303,11 @@ fn canonical_encoding_request() {
 ///       41                      # bytes(1)
 ///          06                   # "\u0006"
 ///       07                      # unsigned(7)
-///       A3                      # map(3)
+///       A2                      # map(2)
 ///          00                   # unsigned(0)
 ///          0D                   # unsigned(13)
 ///          01                   # unsigned(1)
 ///          18 65                # unsigned(101)
-///          02                   # unsigned(2)
-///          18 67                # unsigned(103)
 /// ```
 /// Used http://cbor.me/ for printing the human friendly output.
 #[test]
@@ -326,15 +323,14 @@ fn canonical_encoding_request_v14_plus() {
             .method_name("test".to_string())
             .method_payload(vec![6])
             .metadata(Some(RequestMetadata {
-                call_tree_depth: Some(13),
-                call_tree_start_time: Some(Time::from_nanos_since_unix_epoch(101)),
-                call_subtree_deadline: Some(Time::from_nanos_since_unix_epoch(103)),
+                call_tree_depth: 13,
+                call_tree_start_time: Time::from_nanos_since_unix_epoch(101),
             }))
             .build()
             .into();
 
         assert_eq!(
-            "A1 00 A7 00 4A 00 00 00 00 00 00 00 01 01 01 01 4A 00 00 00 00 00 00 00 02 01 01 02 03 03 A1 00 A1 00 04 04 64 74 65 73 74 05 41 06 07 A3 00 0D 01 18 65 02 18 67",
+            "A1 00 A7 00 4A 00 00 00 00 00 00 00 01 01 01 01 4A 00 00 00 00 00 00 00 02 01 01 02 03 03 A1 00 A1 00 04 04 64 74 65 73 74 05 41 06 07 A2 00 0D 01 18 65",
             as_hex(&encode_message(&request, certification_version))
         );
     }

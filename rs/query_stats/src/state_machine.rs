@@ -7,6 +7,8 @@ use ic_types::{
 };
 use std::collections::BTreeMap;
 
+use crate::metrics::QueryStatsAggregatorMetrics;
+
 /// Aggregate given query stats
 ///
 /// Aggregation needs to be deterministic and needs to be able to tolerate malicious nodes over- or under-reporting charges.
@@ -73,6 +75,7 @@ pub fn deliver_query_stats(
     height: Height,
     logger: &ReplicaLogger,
     epoch_length: u64,
+    metrics: &QueryStatsAggregatorMetrics,
 ) {
     let epoch = epoch_from_height(height, epoch_length);
 
@@ -114,6 +117,10 @@ pub fn deliver_query_stats(
                 }
             }
         }
+
+        metrics
+            .query_stats_aggregator_current_epoch
+            .set(epoch.get() as i64);
 
         state.epoch_query_stats = RawQueryStats {
             epoch: Some(epoch),
@@ -183,6 +190,7 @@ mod tests {
             Height::new(1),
             &no_op_logger(),
             epoch_length,
+            &QueryStatsAggregatorMetrics::new(&ic_metrics::MetricsRegistry::new()),
         );
 
         // Check that query stats are added to replicated state.

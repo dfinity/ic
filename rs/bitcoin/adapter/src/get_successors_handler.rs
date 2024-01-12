@@ -309,7 +309,7 @@ mod test {
             header: main_chain[1],
             txdata: vec![],
         };
-        let side_1 = side_chain.get(0).cloned().expect("Should have 1 header");
+        let side_1 = side_chain.first().cloned().expect("Should have 1 header");
         let side_block_1 = Block {
             header: side_1,
             txdata: vec![],
@@ -341,7 +341,7 @@ mod test {
         // Check that blocks contain block 1.
         assert_eq!(response.blocks.len(), 1);
         assert!(
-            matches!(response.blocks.get(0), Some(block) if block.block_hash() == side_block_1.block_hash())
+            matches!(response.blocks.first(), Some(block) if block.block_hash() == side_block_1.block_hash())
         );
 
         assert_eq!(response.next.len(), 6);
@@ -504,7 +504,7 @@ mod test {
             1,
             &headers_to_hashes(&main_chain),
         );
-        let side_1 = side_chain.get(0).cloned().expect("Should have 1 header");
+        let side_1 = side_chain.first().cloned().expect("Should have 1 header");
         let side_block_1 = Block {
             header: side_1,
             txdata: vec![],
@@ -532,7 +532,7 @@ mod test {
         let response = handler.get_successors(request).await.unwrap();
         assert_eq!(response.blocks.len(), 3);
         assert!(
-            matches!(response.blocks.get(0), Some(block) if block.block_hash() == main_block_1.block_hash())
+            matches!(response.blocks.first(), Some(block) if block.block_hash() == main_block_1.block_hash())
         );
         assert!(
             matches!(response.blocks.get(1), Some(block) if block.block_hash() == side_block_1.block_hash())
@@ -609,7 +609,7 @@ mod test {
             1,
             &headers_to_hashes(&main_chain),
         );
-        let side_1 = side_chain.get(0).cloned().expect("Should have 1 header");
+        let side_1 = side_chain.first().cloned().expect("Should have 1 header");
         let side_block_1 = Block {
             header: side_1,
             txdata: vec![],
@@ -658,7 +658,7 @@ mod test {
                 .collect::<Vec<BlockHash>>()
         );
         assert!(
-            matches!(response.blocks.get(0), Some(block) if block.block_hash() == side_block_1.block_hash())
+            matches!(response.blocks.first(), Some(block) if block.block_hash() == side_block_1.block_hash())
         );
         assert_eq!(
             response.next.len(),

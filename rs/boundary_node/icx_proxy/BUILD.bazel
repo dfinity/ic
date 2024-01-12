@@ -21,6 +21,7 @@ DEPENDENCIES = [
     "@crate_index//:itertools",
     "@crate_index//:ic-agent",
     "@crate_index//:ic-utils",
+    "@crate_index//:jemallocator",
     "@crate_index//:opentelemetry",
     "@crate_index//:opentelemetry-prometheus",
     "@crate_index//:prometheus",

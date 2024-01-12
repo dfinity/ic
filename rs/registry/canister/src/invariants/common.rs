@@ -14,9 +14,8 @@ use ic_protobuf::registry::{
     hostos_version::v1::HostosVersionRecord, node::v1::NodeRecord, subnet::v1::SubnetListRecord,
 };
 use ic_registry_keys::{
-    get_api_boundary_node_record_node_id, get_node_record_node_id,
-    make_api_boundary_node_record_key, make_node_record_key, make_subnet_list_record_key,
-    ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX, HOSTOS_VERSION_KEY_PREFIX,
+    get_api_boundary_node_record_node_id, get_node_record_node_id, make_node_record_key,
+    make_subnet_list_record_key, ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX, HOSTOS_VERSION_KEY_PREFIX,
 };
 
 /// A representation of the data held by the registry.
@@ -158,23 +157,6 @@ pub(crate) fn get_api_boundary_node_ids_from_snapshot(
         });
 
     api_bn_ids
-}
-
-/// Returns api boundary node record from the snapshot corresponding to a key.
-pub(crate) fn get_api_boundary_node_record_from_snapshot(
-    key: NodeId,
-    snapshot: &RegistrySnapshot,
-) -> Result<Option<ApiBoundaryNodeRecord>, InvariantCheckError> {
-    let key = make_api_boundary_node_record_key(key);
-    let value = snapshot.get(key.as_bytes());
-    value
-        .map(|bytes| {
-            ApiBoundaryNodeRecord::decode(bytes.as_slice()).map_err(|err| InvariantCheckError {
-                msg: format!("Deserialize registry value failed with {}", err),
-                source: None,
-            })
-        })
-        .transpose()
 }
 
 /// Returns node record from the snapshot corresponding to a key.

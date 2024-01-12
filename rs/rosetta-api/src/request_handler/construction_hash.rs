@@ -2,7 +2,6 @@ use crate::errors::ApiError;
 use crate::models::{ConstructionHashRequest, ConstructionHashResponse};
 use crate::request_handler::{verify_network_id, RosettaRequestHandler};
 use crate::transaction_id::{self, TransactionIdentifier};
-
 use serde_json::map::Map;
 
 impl RosettaRequestHandler {

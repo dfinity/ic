@@ -1033,8 +1033,6 @@ fn update_next_key_transcript(
 
 #[cfg(test)]
 mod tests {
-    use super::signatures::test_utils::fake_sign_with_ecdsa_context;
-    use super::signatures::test_utils::fake_sign_with_ecdsa_context_with_batch_time;
     use super::*;
     use crate::consensus::batch_delivery::generate_responses_to_sign_with_ecdsa_calls;
     use crate::ecdsa::payload_builder::quadruples::test_utils::create_available_quadruple;

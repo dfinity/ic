@@ -40,7 +40,7 @@ fn ledger_id() -> CanisterId {
     ic_icrc1_index::ledger_id()
 }
 
-#[query]
+#[query(hidden = true)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
         let mut writer =
@@ -76,14 +76,14 @@ fn post_upgrade() {
     });
 }
 
-#[query]
+#[query(hidden = true)]
 fn __get_candid_interface_tmp_hack() -> &'static str {
     include_str!(env!("INDEX_DID_PATH"))
 }
 
 #[test]
 fn check_candid_interface() {
-    use candid::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{service_equal, CandidSource};
     use std::path::PathBuf;
 
     candid::export_service!();

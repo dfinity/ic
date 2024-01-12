@@ -2,6 +2,7 @@ mod handle_add_hotkey;
 mod handle_change_auto_stake_maturity;
 mod handle_disburse;
 mod handle_follow;
+mod handle_list_neurons;
 mod handle_merge_maturity;
 mod handle_neuron_info;
 mod handle_register_vote;
@@ -13,6 +14,7 @@ mod handle_stake;
 mod handle_stake_maturity;
 mod handle_start_dissolve;
 mod handle_stop_dissolve;
+pub mod list_neurons_response;
 mod neuron_response;
 pub mod pending_proposals_response;
 pub mod proposal_info_response;
@@ -68,6 +70,8 @@ use crate::request_types::{RequestType, Status};
 use crate::transaction_id::TransactionIdentifier;
 use rosetta_core::objects::ObjectMap;
 
+use self::handle_list_neurons::handle_list_neurons;
+use self::list_neurons_response::ListNeuronsResponse;
 use self::proposal_info_response::ProposalInfoResponse;
 
 struct LedgerBlocksSynchronizerMetricsImpl {}
@@ -122,6 +126,7 @@ pub enum OperationOutput {
     NeuronId(u64),
     NeuronResponse(NeuronResponse),
     ProposalInfoResponse(ProposalInfoResponse),
+    ListNeuronsResponse(ListNeuronsResponse),
 }
 
 fn public_key_to_der(key: ThresholdSigPublicKey) -> Result<Vec<u8>, ApiError> {
@@ -617,6 +622,9 @@ impl LedgerClient {
                     OperationOutput::ProposalInfoResponse(response) => {
                         result.response = Some(ObjectMap::from(response));
                     }
+                    OperationOutput::ListNeuronsResponse(response) => {
+                        result.response = Some(ObjectMap::from(response))
+                    }
                 }
                 result.status = Status::Completed;
                 Ok(())
@@ -766,6 +774,7 @@ impl LedgerClient {
             RequestType::RegisterVote { .. } => handle_register_vote(bytes),
             RequestType::StakeMaturity { .. } => handle_stake_maturity(bytes),
             RequestType::NeuronInfo { .. } => handle_neuron_info(bytes),
+            RequestType::ListNeurons { .. } => handle_list_neurons(bytes),
             RequestType::RemoveHotKey { .. } => handle_remove_hotkey(bytes),
             RequestType::Send => handle_send(bytes),
             RequestType::SetDissolveTimestamp { .. } => handle_set_dissolve_timestamp(bytes),

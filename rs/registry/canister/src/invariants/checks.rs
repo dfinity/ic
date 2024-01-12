@@ -17,6 +17,8 @@ use crate::{
     registry::Registry,
 };
 
+#[cfg(target_arch = "wasm32")]
+use dfn_core::println;
 use ic_registry_transport::pb::v1::{registry_mutation::Type, RegistryMutation};
 
 impl Registry {

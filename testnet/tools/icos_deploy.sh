@@ -185,7 +185,6 @@ if command -v ip &>/dev/null; then
 fi
 
 MEDIA_PATH="${REPO_ROOT}/artifacts/guestos/${deployment}/${GIT_REVISION}"
-API_MEDIA_PATH="${REPO_ROOT}/artifacts/boundary-api-guestos/${deployment}/${GIT_REVISION}"
 BN_MEDIA_PATH="${REPO_ROOT}/artifacts/boundary-guestos/${deployment}/${GIT_REVISION}"
 INVENTORY="${REPO_ROOT}/testnet/env/${deployment}/hosts"
 USE_API_NODES="${USE_API_NODES:-true}"
@@ -315,47 +314,6 @@ EOF
     BOUNDARY_PID=$!
 fi
 
-if [[ "${USE_API_NODES}" == "true" ]]; then
-    API_OUT="${TMPDIR}/build-api.log"
-    echo "**** Build USB sticks for api nodes - ($(dateFromEpoch "$(date '+%s')"))"
-    COMMAND=$(
-        cat <<EOF
-set -x
-$(declare -f err)
-
-HOSTS=($(jq <"${BN_MEDIA_PATH}/list.json" -r '(.physical_hosts.hosts // [])[]'))
-CERT_NAME=$(jq <"${BN_MEDIA_PATH}/list.json" -r '.api.vars.cert_name // empty')
-
-echo "**** Trying to SCP using $(whoami)"
-
-mkdir -p "${API_MEDIA_PATH}/certs"
-if [[ -z \${CERT_NAME+x} ]]; then
-    err "'.api.vars.cert_name' was not defined"
-else
-    (for HOST in "\${HOSTS[@]}"; do
-        echo >&2 "\$(date --rfc-3339=seconds): Copying \$CERT_NAME from server \$HOST"
-        scp -B -o "ConnectTimeout 30" -o "UserKnownHostsFile=/dev/null" -o "StrictHostKeyChecking=no" -r "${SCP_PREFIX}\${HOST}:/etc/letsencrypt/live/\${CERT_NAME}/*" "${API_MEDIA_PATH}/certs/"
-    done) || {
-        err "failed to find certificate \${CERT_NAME} on any designated server"
-        exit 1
-    }
-fi
-
-echo >&2 "$(date --rfc-3339=seconds): Running build-deployment.sh"
-
-"${REPO_ROOT}"/ic-os/boundary-api-guestos/scripts/build-deployment.sh \
-    --env=test \
-    --input="${MEDIA_PATH}/${deployment}.json" \
-    --output="${API_MEDIA_PATH}" \
-    --certdir="${API_MEDIA_PATH}/certs" \
-    --nns_public_key="${MEDIA_PATH}/nns-public-key.pem"
-EOF
-    )
-    echo ${COMMAND}
-    SHELL="${BASH}" script --quiet --return "${API_OUT}" --command "${COMMAND}" >/dev/null 2>&1 &
-    API_PID=$!
-fi
-
 echo "-------------------------------------------------------------------------------"
 
 # In case someone wants to deploy with a locally built disk image the following lines contain
@@ -418,7 +376,7 @@ echo "**** Install NNS canisters - ($(dateFromEpoch "$(date '+%s')"))"
 ansible icos_network_redeploy.yml -e ic_state="install"
 
 echo "**** Start monitoring - ($(dateFromEpoch "$(date '+%s')"))"
-ansible ic_p8s_service_discovery_install.yml -e yes_i_confirm=yes -e nns_public_key="${NNS_PUBLIC_KEY}"
+ansible ic_p8s_service_discovery_install.yml -e nns_public_key="${NNS_PUBLIC_KEY}"
 
 endtime="$(date '+%s')"
 echo "**** Completed deployment at $(dateFromEpoch "${endtime}") (start time was $(dateFromEpoch "${starttime}"))"

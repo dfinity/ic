@@ -310,6 +310,7 @@ impl ValidatedCanisterSettings {
 /// - controllers:
 ///     - the number of controllers cannot exceed the given maximum.
 /// Keep this function in sync with `do_update_settings()`.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn validate_canister_settings(
     settings: CanisterSettings,
     canister_memory_usage: NumBytes,

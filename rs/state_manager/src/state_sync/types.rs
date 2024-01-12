@@ -79,12 +79,10 @@
 //!   table only and does not include a version number.
 pub mod proto;
 
+use ic_interfaces::p2p::state_sync::{Chunk, ChunkId};
 use ic_protobuf::{proxy::ProtoProxy, state::sync::v1 as pb};
 use ic_types::state_sync::StateSyncVersion;
-use ic_types::{
-    chunkable::{Chunk, ChunkId},
-    CryptoHashOfState, Height,
-};
+use ic_types::{malicious_flags::MaliciousFlags, CryptoHashOfState, Height};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
@@ -438,6 +436,35 @@ pub struct StateSyncMessage {
     /// The manifest containing the summary of the content.
     pub manifest: Manifest,
     pub state_sync_file_group: Arc<FileGroupChunks>,
+    pub malicious_flags: MaliciousFlags,
+}
+
+#[cfg(feature = "malicious_code")]
+pub(crate) fn maliciously_alter_chunk_payload(mut payload: Vec<u8>) -> Vec<u8> {
+    match payload.last_mut() {
+        Some(last) => {
+            // Alter the last element of chunk payload.
+            *last = last.wrapping_add(1);
+        }
+        None => {
+            // The chunk payload is empty. Set it to some non-empty value.
+            payload = vec![1; 100];
+        }
+    }
+    payload
+}
+
+#[cfg(feature = "malicious_code")]
+pub(crate) fn maliciously_alter_meta_manifest(mut meta_manifest: MetaManifest) -> Vec<u8> {
+    match meta_manifest.sub_manifest_hashes.last_mut() {
+        Some(last) => {
+            last[0] = last[0].wrapping_add(1);
+        }
+        None => {
+            meta_manifest.sub_manifest_hashes.push([1; 32]);
+        }
+    }
+    encode_meta_manifest(&meta_manifest)
 }
 
 impl StateSyncMessage {
@@ -498,6 +525,26 @@ impl StateSyncMessage {
                 }
                 StateSyncChunk::FileChunk(index) => {
                     payload = get_single_chunk(index as usize)?;
+                }
+            }
+
+            #[cfg(feature = "malicious_code")]
+            {
+                if self
+                    .malicious_flags
+                    .maliciously_alter_state_sync_chunk_sending_side
+                {
+                    match state_sync_chunk_type(chunk_id.get()) {
+                        StateSyncChunk::MetaManifestChunk => {
+                            // If the chunk is for the meta-manifest, we alter its inner content and then encode it.
+                            payload =
+                                maliciously_alter_meta_manifest((*self.meta_manifest).clone());
+                        }
+                        _ => {
+                            // Otherwise, we alter the raw payload directly.
+                            payload = maliciously_alter_chunk_payload(payload);
+                        }
+                    }
                 }
             }
 

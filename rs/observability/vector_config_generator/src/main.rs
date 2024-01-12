@@ -58,10 +58,10 @@ fn main() -> Result<()> {
 
     info!(log, "Starting vector-config-generator");
     info!(log, "Started jobs: {:?}", &cli_args.jobs_and_ports);
-    let mercury_dir = cli_args.targets_dir.join("mercury");
+    let mercury_target_dir = cli_args.targets_dir.join("mercury");
     rt.block_on(sync_local_registry(
         log.clone(),
-        mercury_dir,
+        mercury_target_dir,
         vec![cli_args.nns_url],
         cli_args.skip_sync,
         None,

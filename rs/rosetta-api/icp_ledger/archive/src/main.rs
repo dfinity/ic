@@ -318,7 +318,7 @@ fn get_canidid_interface() {
 
 #[test]
 fn check_archive_candid_interface_compatibility() {
-    use candid::utils::CandidSource;
+    use candid_parser::utils::CandidSource;
 
     candid::export_service!();
 
@@ -326,7 +326,7 @@ fn check_archive_candid_interface_compatibility() {
     let expected_interface_path =
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../ledger_archive.did");
 
-    candid::utils::service_equal(
+    candid_parser::utils::service_equal(
         CandidSource::Text(&actual_interface),
         CandidSource::File(&expected_interface_path),
     )

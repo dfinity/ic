@@ -207,23 +207,3 @@ rust_test_suite_with_extra_srcs(
     tags = ["cpu:8"],
     deps = DEPENDENCIES_WITH_TEST_FEATURES + TEST_DEV_DEPENDENCIES,
 )
-
-rust_test_suite_with_extra_srcs(
-    name = "long_bench",
-    size = "enormous",
-    srcs = ["src/swap.rs"],
-    aliases = ALIASES,
-    args = ["swap_load_test"],
-    crate_features = [
-        "test",
-        "long_bench",
-    ],
-    data = DATA_DEPS,
-    env = ENV,
-    extra_srcs = ["src/lib.rs"],
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    tags = ["manual"],
-    deps = DEPENDENCIES_WITH_TEST_FEATURES + TEST_DEV_DEPENDENCIES + [
-        "@crate_index//:chrono",
-    ],
-)

@@ -18,13 +18,13 @@ use crate::convert::{make_read_state_from_update, to_arg, to_model_account_ident
 use crate::errors::ApiError;
 use crate::ledger_client::LedgerAccess;
 use crate::models::{
-    AccountIdentifier, ConstructionPayloadsRequest, ConstructionPayloadsResponse, PublicKey,
-    SignatureType, SigningPayload, UnsignedTransaction,
+    AccountIdentifier, ConstructionPayloadsRequest, ConstructionPayloadsRequestMetadata,
+    ConstructionPayloadsResponse, PublicKey, SignatureType, SigningPayload, UnsignedTransaction,
 };
 use crate::request::Request;
 use crate::request_handler::{make_sig_data, verify_network_id, RosettaRequestHandler};
 use crate::request_types::{
-    AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, MergeMaturity, NeuronInfo,
+    AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity, NeuronInfo,
     PublicKeyOrPrincipal, RegisterVote, RemoveHotKey, RequestType, SetDissolveTimestamp, Spawn,
     Stake, StakeMaturity, StartDissolve, StopDissolve,
 };
@@ -41,7 +41,10 @@ impl RosettaRequestHandler {
         &self,
         msg: ConstructionPayloadsRequest,
     ) -> Result<ConstructionPayloadsResponse, ApiError> {
-        verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
+        verify_network_id(
+            self.ledger.ledger_canister_id(),
+            &msg.network_identifier.into(),
+        )?;
 
         let ops = msg.operations.clone();
 
@@ -55,25 +58,33 @@ impl RosettaRequestHandler {
             - ic_constants::PERMITTED_DRIFT
             - Duration::from_secs(120);
 
-        let meta = msg.metadata.as_ref();
+        let meta: Option<ConstructionPayloadsRequestMetadata> = msg
+            .metadata
+            .as_ref()
+            .map(|m| ConstructionPayloadsRequestMetadata::try_from(m.clone()))
+            .transpose()?;
 
         let ingress_start = meta
+            .as_ref()
             .and_then(|meta| meta.ingress_start)
             .map(ic_types::time::Time::from_nanos_since_unix_epoch)
             .unwrap_or_else(ic_types::time::current_time);
 
         let ingress_end = meta
+            .as_ref()
             .and_then(|meta| meta.ingress_end)
             .map(ic_types::time::Time::from_nanos_since_unix_epoch)
             .unwrap_or_else(|| ingress_start + interval);
 
         let created_at_time: ic_ledger_core::timestamp::TimeStamp = meta
+            .as_ref()
             .and_then(|meta| meta.created_at_time)
             .map(ic_ledger_core::timestamp::TimeStamp::from_nanos_since_unix_epoch)
             .unwrap_or_else(|| std::time::SystemTime::now().into());
 
         // FIXME: the memo field needs to be associated with the operation
         let memo: Memo = meta
+            .as_ref()
             .and_then(|meta| meta.memo)
             .map(Memo)
             .unwrap_or_else(|| Memo(rand::thread_rng().gen()));
@@ -94,7 +105,8 @@ impl RosettaRequestHandler {
         let pks_map = pks
             .iter()
             .map(|pk| {
-                let pid: PrincipalId = principal_id_from_public_key(pk)?;
+                let pid: PrincipalId = principal_id_from_public_key(pk)
+                    .map_err(|err| ApiError::InvalidPublicKey(false, err.into()))?;
                 let account: icp_ledger::AccountIdentifier = pid.into();
                 Ok((account, pk))
             })
@@ -113,6 +125,13 @@ impl RosettaRequestHandler {
                     &ingress_expiries,
                 )?,
                 Request::NeuronInfo(req) => handle_neuron_info(
+                    req,
+                    &mut payloads,
+                    &mut updates,
+                    &pks_map,
+                    &ingress_expiries,
+                )?,
+                Request::ListNeurons(req) => handle_list_neurons(
                     req,
                     &mut payloads,
                     &mut updates,
@@ -214,10 +233,11 @@ impl RosettaRequestHandler {
         }
 
         Ok(models::ConstructionPayloadsResponse::new(
-            &UnsignedTransaction {
+            UnsignedTransaction {
                 updates,
                 ingress_expiries,
-            },
+            }
+            .to_string(),
             payloads,
         ))
     }
@@ -311,7 +331,11 @@ fn handle_transfer_operation(
         // We don't use a it here because we never want two transactions with
         // identical tx IDs to both land on chain.
         nonce: None,
-        sender: Blob(principal_id_from_public_key(pk)?.into_vec()),
+        sender: Blob(
+            principal_id_from_public_key(pk)
+                .map_err(|err| ApiError::InvalidPublicKey(false, err.into()))?
+                .into_vec(),
+        ),
         ingress_expiry: 0,
     };
 
@@ -346,7 +370,8 @@ fn handle_neuron_info(
             account,
         ))
     })?;
-    let sender = principal_id_from_public_key(pk)?;
+    let sender = principal_id_from_public_key(pk)
+        .map_err(|err| ApiError::InvalidPublicKey(false, err.into()))?;
 
     // Argument for the method called on the governance canister.
     let args = NeuronIdOrSubaccount::Subaccount(neuron_subaccount.to_vec());
@@ -371,6 +396,50 @@ fn handle_neuron_info(
         },
         update,
     ));
+    Ok(())
+}
+
+/// Handle LIST_NEURONS.
+fn handle_list_neurons(
+    req: ListNeurons,
+    payloads: &mut Vec<SigningPayload>,
+    updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
+    pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
+    ingress_expiries: &[u64],
+) -> Result<(), ApiError> {
+    let account = req.account;
+
+    // In the case of an hotkey, account will be derived from the hotkey so
+    // we can use the same logic for controller or hotkey.
+    let pk = pks_map.get(&account).ok_or_else(|| {
+        ApiError::internal_error(format!(
+            "NeuronInfo - Cannot find public key for account {}",
+            account,
+        ))
+    })?;
+    let sender = principal_id_from_public_key(pk)
+        .map_err(|err| ApiError::InvalidPublicKey(false, err.into()))?;
+
+    // Argument for the method called on the governance canister.
+    let args = ic_nns_governance::pb::v1::ListNeurons {
+        neuron_ids: vec![],
+        include_neurons_readable_by_caller: true,
+    };
+    let update = HttpCanisterUpdate {
+        canister_id: Blob(ic_nns_constants::GOVERNANCE_CANISTER_ID.get().to_vec()),
+        method_name: "list_neurons".to_string(),
+        arg: Blob(CandidOne(args).into_bytes().expect("Serialization failed")),
+        nonce: None,
+        sender: Blob(sender.into_vec()), // Sender is controller or hotkey.
+        ingress_expiry: 0,
+    };
+    add_payloads(
+        payloads,
+        ingress_expiries,
+        &convert::to_model_account_identifier(&account),
+        &update,
+    );
+    updates.push((RequestType::ListNeurons, update));
     Ok(())
 }
 
@@ -447,7 +516,11 @@ fn handle_stake(
                 .into_bytes()
                 .expect("Serialization of neuron_index failed"),
         )),
-        sender: Blob(principal_id_from_public_key(pk)?.into_vec()),
+        sender: Blob(
+            principal_id_from_public_key(pk)
+                .map_err(|err| ApiError::InvalidPublicKey(false, err.into()))?
+                .into_vec(),
+        ),
         ingress_expiry: 0,
     };
 
@@ -595,7 +668,8 @@ fn handle_add_hotkey(
     let key = req.key;
     let pid = match key {
         PublicKeyOrPrincipal::Principal(p) => p,
-        PublicKeyOrPrincipal::PublicKey(pk) => principal_id_from_public_key(&pk)?,
+        PublicKeyOrPrincipal::PublicKey(pk) => principal_id_from_public_key(&pk)
+            .map_err(|err| ApiError::InvalidPublicKey(false, err.into()))?,
     };
     let command = Command::Configure(manage_neuron::Configure {
         operation: Some(configure::Operation::AddHotKey(manage_neuron::AddHotKey {
@@ -629,7 +703,8 @@ fn handle_remove_hotkey(
     let key = req.key;
     let pid = match key {
         PublicKeyOrPrincipal::Principal(p) => p,
-        PublicKeyOrPrincipal::PublicKey(pk) => principal_id_from_public_key(&pk)?,
+        PublicKeyOrPrincipal::PublicKey(pk) => principal_id_from_public_key(&pk)
+            .map_err(|err| ApiError::InvalidPublicKey(false, err.into()))?,
     };
     let command = Command::Configure(manage_neuron::Configure {
         operation: Some(configure::Operation::RemoveHotKey(
@@ -845,7 +920,11 @@ fn add_neuron_management_payload(
                 .into_bytes()
                 .expect("Serialization of neuron_index failed"),
         )),
-        sender: Blob(principal_id_from_public_key(pk)?.into_vec()),
+        sender: Blob(
+            principal_id_from_public_key(pk)
+                .map_err(|err| ApiError::InvalidPublicKey(false, err.into()))?
+                .into_vec(),
+        ),
         ingress_expiry: 0,
     };
 

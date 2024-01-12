@@ -1460,7 +1460,7 @@ mod eth_transactions {
             assert_eq!(
                 transactions.transaction_status(&ledger_burn_index),
                 RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Reimbursed {
-                    reimbursed_in_block: candid::Nat::from(16),
+                    reimbursed_in_block: candid::Nat::from(16_u8),
                     transaction_hash: signed_tx.hash().to_string(),
                     reimbursed_amount: Wei::new(DEFAULT_WITHDRAWAL_AMOUNT)
                         .checked_sub(effective_fee_paid)

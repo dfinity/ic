@@ -1,4 +1,4 @@
-use candid::{candid_method, Nat};
+use candid::Nat;
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
@@ -66,7 +66,6 @@ fn setup_timers() {
 }
 
 #[init]
-#[candid_method(init)]
 fn init(arg: MinterArg) {
     match arg {
         MinterArg::InitArg(init_arg) => {
@@ -111,13 +110,11 @@ fn post_upgrade(minter_arg: Option<MinterArg>) {
 }
 
 #[update]
-#[candid_method(update)]
 async fn minter_address() -> String {
     state::minter_address().await.to_string()
 }
 
 #[query]
-#[candid_method(query)]
 async fn smart_contract_address() -> String {
     read_state(|s| s.ethereum_contract_address)
         .map(|a| a.to_string())
@@ -128,7 +125,6 @@ async fn smart_contract_address() -> String {
 /// `base_fee_per_gas` included in the last finalized block.
 /// See https://www.blocknative.com/blog/eip-1559-fees
 #[update]
-#[candid_method(update)]
 async fn eip_1559_transaction_price() -> Eip1559TransactionPrice {
     let transaction_price = estimate_transaction_price(
         &eth_fee_history()
@@ -140,7 +136,6 @@ async fn eip_1559_transaction_price() -> Eip1559TransactionPrice {
 }
 
 #[update]
-#[candid_method(update)]
 async fn withdraw_eth(
     WithdrawalArg { amount, recipient }: WithdrawalArg,
 ) -> Result<RetrieveEthRequest, WithdrawalError> {
@@ -241,13 +236,11 @@ async fn withdraw_eth(
 }
 
 #[update]
-#[candid_method(update)]
 async fn retrieve_eth_status(block_index: u64) -> RetrieveEthStatus {
     let ledger_burn_index = LedgerBurnIndex::new(block_index);
     read_state(|s| s.eth_transactions.transaction_status(&ledger_burn_index))
 }
 
-#[candid_method(query)]
 #[query]
 fn is_address_blocked(address_string: String) -> bool {
     let address = Address::from_str(&address_string)
@@ -255,7 +248,6 @@ fn is_address_blocked(address_string: String) -> bool {
     ic_cketh_minter::blocklist::is_blocked(address)
 }
 
-#[candid_method(update)]
 #[update]
 async fn get_canister_status() -> ic_cdk::api::management_canister::main::CanisterStatusResponse {
     ic_cdk::api::management_canister::main::canister_status(
@@ -269,7 +261,6 @@ async fn get_canister_status() -> ic_cdk::api::management_canister::main::Canist
 }
 
 #[query]
-#[candid_method(query)]
 fn get_events(arg: GetEventsArg) -> GetEventsResult {
     use ic_cketh_minter::endpoints::events::{
         AccessListItem, TransactionReceipt as CandidTransactionReceipt,
@@ -447,7 +438,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
     }
 }
 
-#[query]
+#[query(hidden = true)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     use ic_metrics_encoder::MetricsEncoder;
 
@@ -646,24 +637,24 @@ fn main() {}
 /// Checks the real candid interface against the one declared in the did file
 #[test]
 fn check_candid_interface_compatibility() {
-    fn source_to_str(source: &candid::utils::CandidSource) -> String {
+    fn source_to_str(source: &candid_parser::utils::CandidSource) -> String {
         match source {
-            candid::utils::CandidSource::File(f) => {
+            candid_parser::utils::CandidSource::File(f) => {
                 std::fs::read_to_string(f).unwrap_or_else(|_| "".to_string())
             }
-            candid::utils::CandidSource::Text(t) => t.to_string(),
+            candid_parser::utils::CandidSource::Text(t) => t.to_string(),
         }
     }
 
     fn check_service_equal(
         new_name: &str,
-        new: candid::utils::CandidSource,
+        new: candid_parser::utils::CandidSource,
         old_name: &str,
-        old: candid::utils::CandidSource,
+        old: candid_parser::utils::CandidSource,
     ) {
         let new_str = source_to_str(&new);
         let old_str = source_to_str(&old);
-        match candid::utils::service_equal(new, old) {
+        match candid_parser::utils::service_equal(new, old) {
             Ok(_) => {}
             Err(e) => {
                 eprintln!(
@@ -689,8 +680,8 @@ fn check_candid_interface_compatibility() {
 
     check_service_equal(
         "actual ledger candid interface",
-        candid::utils::CandidSource::Text(&new_interface),
+        candid_parser::utils::CandidSource::Text(&new_interface),
         "declared candid interface in cketh_minter.did file",
-        candid::utils::CandidSource::File(old_interface.as_path()),
+        candid_parser::utils::CandidSource::File(old_interface.as_path()),
     );
 }

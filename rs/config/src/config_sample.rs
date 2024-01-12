@@ -324,6 +324,7 @@ pub const SAMPLE_CONFIG: &str = r#"
          maliciously_disable_ingress_validation: false,
          maliciously_corrupt_ecdsa_dealings: false,
          maliciously_alter_certified_hash: false,
+         maliciously_alter_state_sync_chunk_sending_side: false,
        },
     },
 

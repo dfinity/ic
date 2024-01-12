@@ -25,7 +25,6 @@ BINARIES = {
     "canister_sandbox": "//rs/canister_sandbox",
     "ic-btc-adapter": "//rs/bitcoin/adapter:ic-btc-adapter",
     "replica": "//rs/replica",
-    "boundary-node-control-plane": "//rs/boundary_node/control_plane:boundary-node-control-plane",
     "boundary-node-prober": "//rs/boundary_node/prober:boundary-node-prober",
     "certificate-issuer": "//rs/boundary_node/certificate_issuance/certificate_issuer:certificate-issuer",
     "certificate-syncer": "//rs/boundary_node/certificate_issuance/certificate_syncer:certificate-syncer",
@@ -95,7 +94,6 @@ BINARIES = {
         }),
         executable = True,
         visibility = [
-            "//ic-os/boundary-api-guestos/envs:__subpackages__",
             "//ic-os/boundary-guestos/envs:__subpackages__",
             "//ic-os/guestos/envs:__subpackages__",
             "//ic-os/hostos/envs:__subpackages__",
@@ -146,10 +144,7 @@ upload_artifacts(
     visibility = ["//testnet/tools:__pkg__"],
 )
 
-BINS_TO_TEST = [
-    ":ic-starter",
-    ":replica",
-]
+BINS_TO_TEST = [":" + name for name in BINARIES]
 
 sh_test(
     name = "binary-libraries-test",

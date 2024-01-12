@@ -118,6 +118,7 @@ type DisburseMaturityInProgress = record {
   timestamp_of_disbursement_seconds : nat64;
   amount_e8s : nat64;
   account_to_disburse_to : opt Account;
+  finalize_disbursement_timestamp_seconds : opt nat64;
 };
 type DisburseMaturityResponse = record {
   amount_disbursed_e8s : nat64;
@@ -372,7 +373,6 @@ type RewardEvent = record {
   rounds_since_last_distribution : opt nat64;
   actual_timestamp_seconds : nat64;
   end_timestamp_seconds : opt nat64;
-  total_available_e8s_equivalent : opt nat64;
   distributed_e8s_equivalent : nat64;
   round : nat64;
   settled_proposals : vec ProposalId;

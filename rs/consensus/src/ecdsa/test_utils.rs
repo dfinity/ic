@@ -17,8 +17,11 @@ use ic_ic00_types::EcdsaKeyId;
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaPool};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
+use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
 use ic_test_utilities::consensus::fake::*;
+use ic_test_utilities::mock_time;
 use ic_test_utilities::types::ids::{node_test_id, NODE_1, NODE_2};
+use ic_test_utilities::types::messages::RequestBuilder;
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::ecdsa::{
     self, EcdsaArtifactId, EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent,
@@ -40,7 +43,7 @@ use ic_types::crypto::canister_threshold_sig::{
 };
 use ic_types::crypto::AlgorithmId;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
-use ic_types::signature::*;
+use ic_types::{signature::*, Time};
 use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId};
 use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
@@ -58,6 +61,30 @@ pub(crate) fn empty_response() -> ic_types::messages::Response {
         // be refunded to the canister.
         refund: ic_types::Cycles::new(0),
         response_payload: ic_types::messages::Payload::Data(vec![]),
+    }
+}
+
+pub fn fake_sign_with_ecdsa_context(
+    key_id: EcdsaKeyId,
+    pseudo_random_id: [u8; 32],
+) -> SignWithEcdsaContext {
+    fake_sign_with_ecdsa_context_with_batch_time(key_id, pseudo_random_id, mock_time())
+}
+
+pub fn fake_sign_with_ecdsa_context_with_batch_time(
+    key_id: EcdsaKeyId,
+    pseudo_random_id: [u8; 32],
+    batch_time: Time,
+) -> SignWithEcdsaContext {
+    SignWithEcdsaContext {
+        request: RequestBuilder::new().build(),
+        message_hash: [0; 32],
+        derivation_path: vec![],
+        batch_time,
+        key_id,
+        pseudo_random_id,
+        matched_quadruple: None,
+        nonce: None,
     }
 }
 
@@ -159,6 +186,7 @@ pub(crate) struct TestEcdsaBlockReader {
     source_subnet_xnet_transcripts: Vec<IDkgTranscriptParamsRef>,
     target_subnet_xnet_transcripts: Vec<IDkgTranscriptParamsRef>,
     requested_signatures: Vec<(RequestId, ThresholdEcdsaSigInputsRef)>,
+    available_quadruples: BTreeMap<QuadrupleId, PreSignatureQuadrupleRef>,
     idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript>,
     fail_to_resolve: bool,
 }
@@ -195,16 +223,22 @@ impl TestEcdsaBlockReader {
     ) -> Self {
         let mut idkg_transcripts = BTreeMap::new();
         let mut requested_signatures = Vec::new();
+        let mut available_quadruples = BTreeMap::new();
         for (request_id, sig_inputs) in sig_inputs {
             for (transcript_ref, transcript) in sig_inputs.idkg_transcripts {
                 idkg_transcripts.insert(transcript_ref, transcript);
             }
+            available_quadruples.insert(
+                request_id.quadruple_id.clone(),
+                sig_inputs.sig_inputs_ref.presig_quadruple_ref.clone(),
+            );
             requested_signatures.push((request_id, sig_inputs.sig_inputs_ref));
         }
 
         Self {
             height,
             requested_signatures,
+            available_quadruples,
             idkg_transcripts,
             ..Default::default()
         }
@@ -273,10 +307,17 @@ impl EcdsaBlockReader for TestEcdsaBlockReader {
         &self,
     ) -> Box<dyn Iterator<Item = (&RequestId, &ThresholdEcdsaSigInputsRef)> + '_> {
         Box::new(
+            // False positive `map_identity` warning.
+            // See: https://github.com/rust-lang/rust-clippy/pull/11792 (merged)
+            #[allow(clippy::map_identity)]
             self.requested_signatures
                 .iter()
                 .map(|(id, sig_inputs)| (id, sig_inputs)),
         )
+    }
+
+    fn available_quadruple(&self, id: &QuadrupleId) -> Option<&PreSignatureQuadrupleRef> {
+        self.available_quadruples.get(id)
     }
 
     fn source_subnet_xnet_transcripts(
@@ -451,14 +492,7 @@ pub(crate) fn create_pre_signer_dependencies_with_crypto(
     consensus_crypto: Option<Arc<dyn ConsensusCrypto>>,
 ) -> (EcdsaPoolImpl, EcdsaPreSignerImpl) {
     let metrics_registry = MetricsRegistry::new();
-    let Dependencies {
-        pool,
-        replica_config: _,
-        membership: _,
-        registry: _,
-        crypto,
-        ..
-    } = dependencies(pool_config.clone(), 1);
+    let Dependencies { pool, crypto, .. } = dependencies(pool_config.clone(), 1);
 
     // need to make sure subnet matches the transcript
     let pre_signer = EcdsaPreSignerImpl::new(
@@ -491,10 +525,8 @@ pub(crate) fn create_signer_dependencies_with_crypto(
     let metrics_registry = MetricsRegistry::new();
     let Dependencies {
         pool,
-        replica_config: _,
-        membership: _,
-        registry: _,
         crypto,
+        state_manager,
         ..
     } = dependencies(pool_config.clone(), 1);
 
@@ -502,6 +534,7 @@ pub(crate) fn create_signer_dependencies_with_crypto(
         NODE_1,
         pool.get_block_cache(),
         consensus_crypto.unwrap_or(crypto),
+        state_manager as Arc<_>,
         metrics_registry.clone(),
         logger.clone(),
     );
@@ -526,14 +559,7 @@ pub(crate) fn create_complaint_dependencies_with_crypto_and_node_id(
     node_id: NodeId,
 ) -> (EcdsaPoolImpl, EcdsaComplaintHandlerImpl) {
     let metrics_registry = MetricsRegistry::new();
-    let Dependencies {
-        pool,
-        replica_config: _,
-        membership: _,
-        registry: _,
-        crypto,
-        ..
-    } = dependencies(pool_config.clone(), 1);
+    let Dependencies { pool, crypto, .. } = dependencies(pool_config.clone(), 1);
 
     let complaint_handler = EcdsaComplaintHandlerImpl::new(
         node_id,

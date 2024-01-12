@@ -1917,6 +1917,13 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_max_dirty_pages_optimization_embedder_config(mut self, no_pages: usize) -> Self {
+        self.execution_config
+            .embedders_config
+            .max_dirty_pages_without_optimization = no_pages;
+        self
+    }
+
     pub fn build(self) -> ExecutionTest {
         let own_range = CanisterIdRange {
             start: CanisterId::from(CANISTER_IDS_PER_SUBNET),
@@ -2055,7 +2062,7 @@ impl ExecutionTestBuilder {
             self.upload_wasm_chunk_instructions,
         );
         let (query_stats_collector, _) =
-            ic_query_stats::init_query_stats(self.log.clone(), config.query_stats_epoch_length);
+            ic_query_stats::init_query_stats(self.log.clone(), &config, &metrics_registry);
 
         let query_handler = InternalHttpQueryHandler::new(
             self.log.clone(),

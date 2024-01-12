@@ -23,10 +23,11 @@ jobs:
   bazel-test-all:
     name: Bazel-Test-All
     runs-on:
-      group: IC-Prod
+      group: IC
+      labels: bazel-runner
     timeout-minutes: 80
     container:
-      image: dfinity/ic-build:c09c09c9b48ca3ad09407c1cc8fa3e9483954ee046c64d23410d88b23f95e2f3
+      image: dfinity/ic-build:faf4659295a243194eba5d02a551c0a703d9f0983febf53fe833672ffde5143d
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout

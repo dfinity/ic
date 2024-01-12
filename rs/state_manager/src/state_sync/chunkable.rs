@@ -7,7 +7,12 @@ use crate::{
     },
     StateManagerMetrics, StateSyncMetrics, StateSyncRefs,
     CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS, LABEL_COPY_CHUNKS, LABEL_COPY_FILES, LABEL_FETCH,
+    LABEL_FETCH_MANIFEST_CHUNK, LABEL_FETCH_META_MANIFEST_CHUNK, LABEL_FETCH_STATE_CHUNK,
     LABEL_PREALLOCATE, LABEL_STATE_SYNC_MAKE_CHECKPOINT,
+};
+use ic_interfaces::p2p::state_sync::{
+    ArtifactErrorCode::{self, ChunkVerificationFailed, ChunksMoreNeeded},
+    Chunk, ChunkId, Chunkable,
 };
 use ic_logger::{debug, error, fatal, info, trace, warn, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
@@ -15,14 +20,7 @@ use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_state_layout::utils::do_copy_overwrite;
 use ic_state_layout::{error::LayoutError, CheckpointLayout, ReadOnly, RwPolicy, StateLayout};
 use ic_sys::mmap::ScopedMmap;
-use ic_types::{
-    chunkable::{
-        ArtifactErrorCode::{self, ChunkVerificationFailed, ChunksMoreNeeded},
-        Chunk, ChunkId, Chunkable,
-    },
-    malicious_flags::MaliciousFlags,
-    CryptoHashOfState, Height,
-};
+use ic_types::{malicious_flags::MaliciousFlags, CryptoHashOfState, Height};
 use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -788,6 +786,7 @@ impl IncompleteState {
             // `state_sync_file_group` and `checkpoint_root` are not included in the integrity hash of this artifact.
             // Therefore it is OK to pass a default value here as it is only used when fetching chunks.
             state_sync_file_group: Default::default(),
+            malicious_flags: Default::default(),
         }
     }
 
@@ -1125,6 +1124,62 @@ impl IncompleteState {
     }
 }
 
+#[cfg(feature = "malicious_code")]
+fn maliciously_alter_chunk_data(
+    mut chunk: Chunk,
+    chunk_id: ChunkId,
+    malicious_flags: &mut MaliciousFlags,
+) -> Chunk {
+    let allowance = match malicious_flags
+        .maliciously_alter_state_sync_chunk_receiving_side
+        .as_mut()
+    {
+        Some(allowance) => allowance,
+        None => {
+            return chunk;
+        }
+    };
+
+    let payload = chunk.clone();
+
+    let ix = chunk_id.get();
+    match state_sync_chunk_type(ix) {
+        StateSyncChunk::MetaManifestChunk => {
+            if allowance.meta_manifest_chunk_error_allowance == 0 {
+                return chunk;
+            }
+            allowance.meta_manifest_chunk_error_allowance -= 1;
+            let meta_manifest = match decode_meta_manifest(&payload) {
+                Ok(meta_manifest) => meta_manifest,
+                Err(_) => {
+                    return chunk;
+                }
+            };
+            chunk = crate::state_sync::types::maliciously_alter_meta_manifest(meta_manifest);
+        }
+        StateSyncChunk::ManifestChunk(_) => {
+            if allowance.manifest_chunk_error_allowance == 0 {
+                return chunk;
+            }
+            allowance.manifest_chunk_error_allowance -= 1;
+            chunk = crate::state_sync::types::maliciously_alter_chunk_payload(payload);
+        }
+        _ => {
+            if allowance.state_chunk_error_allowance == 0 {
+                return chunk;
+            }
+            allowance.state_chunk_error_allowance -= 1;
+            chunk = crate::state_sync::types::maliciously_alter_chunk_payload(payload);
+        }
+    }
+    // Sleep for 15 seconds to allow the replica connecting to more peers for state sync.
+    // Otherwise, the first invalid chunk in the very beginning will immediately fail the state sync
+    // if there is only one peer connected.
+    // Note that this is only an issue for tests not the real system.
+    std::thread::sleep(std::time::Duration::from_secs(15));
+    chunk
+}
+
 impl Chunkable<StateSyncMessage> for IncompleteState {
     fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>> {
         match self.state {
@@ -1160,6 +1215,9 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
         chunk_id: ChunkId,
         chunk: Chunk,
     ) -> Result<StateSyncMessage, ArtifactErrorCode> {
+        #[cfg(feature = "malicious_code")]
+        let chunk = maliciously_alter_chunk_data(chunk, chunk_id, &mut self.malicious_flags);
+
         let ix = chunk_id.get();
         let payload = &chunk;
         match &mut self.state {
@@ -1186,6 +1244,11 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                     crate::manifest::validate_meta_manifest(&meta_manifest, &self.root_hash)
                         .map_err(|err| {
                             warn!(self.log, "Received invalid meta-manifest: {}", err);
+                            self.metrics
+                                .state_sync_metrics
+                                .corrupted_chunks
+                                .with_label_values(&[LABEL_FETCH_META_MANIFEST_CHUNK])
+                                .inc();
                             ChunkVerificationFailed
                         })?;
                     let manifest_chunks_len = meta_manifest.sub_manifest_hashes.len();
@@ -1251,6 +1314,11 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                 )
                 .map_err(|err| {
                     warn!(self.log, "Received invalid sub-manifest: {}", err);
+                    self.metrics
+                        .state_sync_metrics
+                        .corrupted_chunks
+                        .with_label_values(&[LABEL_FETCH_MANIFEST_CHUNK])
+                        .inc();
                     ChunkVerificationFailed
                 })?;
                 manifest_in_construction.insert(ix, payload.clone());
@@ -1445,7 +1513,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                         metrics
                             .state_sync_metrics
                             .corrupted_chunks
-                            .with_label_values(&[LABEL_FETCH])
+                            .with_label_values(&[LABEL_FETCH_STATE_CHUNK])
                             .inc();
                         ChunkVerificationFailed
                     })?;

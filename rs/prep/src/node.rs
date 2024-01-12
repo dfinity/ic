@@ -380,7 +380,7 @@ mod node_configuration {
             chip_id: None,
         };
 
-        let got = pbNodeRecord::try_from(node_configuration).unwrap();
+        let got = pbNodeRecord::from(node_configuration);
 
         let want = pbNodeRecord {
             node_operator_id: vec![],
@@ -395,6 +395,7 @@ mod node_configuration {
             hostos_version_id: None,
             chip_id: None,
             public_ipv4_config: None,
+            domain: None,
         };
 
         assert_eq!(got, want);

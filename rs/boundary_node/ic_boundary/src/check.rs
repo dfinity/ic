@@ -16,7 +16,6 @@ use dashmap::DashMap;
 use http::Method;
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use mockall::automock;
-use rayon::prelude::*;
 use tracing::warn;
 use url::Url;
 
@@ -36,7 +35,7 @@ struct NodeState {
 }
 
 struct NodeCheckResult {
-    node: Node,
+    node: Arc<Node>,
     ok_count: u8,
     height: u64,
 }
@@ -107,7 +106,7 @@ impl<P: Persist, C: Check> Runner<P, C> {
     }
 
     // Perform a health check on a given node
-    async fn check_node(&self, node: Node) -> Result<NodeCheckResult, CheckError> {
+    async fn check_node(&self, node: Arc<Node>) -> Result<NodeCheckResult, CheckError> {
         // Perform Health Check
         let check_result = self.checker.check(&node).await;
 
@@ -186,7 +185,7 @@ impl<P: Persist, C: Check> Runner<P, C> {
 
         // Filter out bad nodes
         let mut nodes = nodes
-            .into_par_iter()
+            .into_iter()
             .filter_map(Result::ok) // Filter any green thread errors
             .filter_map(Result::ok) // Filter any `check` errors
             .collect::<Vec<_>>();
@@ -208,7 +207,7 @@ impl<P: Persist, C: Check> Runner<P, C> {
 
         // Filter out nodes that fail the predicates
         let nodes = nodes
-            .into_par_iter()
+            .into_iter()
             .filter(|x| x.height >= min_height) // Filter below min_height
             .filter(|x| x.ok_count >= self.min_ok_count) // Filter below min_ok_count
             .map(|x| x.node)

@@ -3,7 +3,7 @@ use crate::errors::ApiError;
 use crate::models::{ConstructionParseRequest, ConstructionParseResponse, ParsedTransaction};
 use crate::request_handler::{verify_network_id, RosettaRequestHandler};
 use crate::request_types::{
-    AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, MergeMaturity, NeuronInfo,
+    AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity, NeuronInfo,
     PublicKeyOrPrincipal, RegisterVote, RemoveHotKey, RequestType, SetDissolveTimestamp, Spawn,
     Stake, StakeMaturity, StartDissolve, StopDissolve,
 };
@@ -92,6 +92,7 @@ impl RosettaRequestHandler {
                 RequestType::StakeMaturity { neuron_index } => {
                     stake_maturity(&mut requests, arg, from, neuron_index)?
                 }
+                RequestType::ListNeurons => list_neurons(&mut requests, arg, from)?,
                 RequestType::NeuronInfo {
                     neuron_index,
                     controller,
@@ -537,6 +538,16 @@ fn neuron_info(
     Ok(())
 }
 
+/// Handle LIST_NEURONS.
+fn list_neurons(
+    requests: &mut Vec<Request>,
+    _arg: Blob,
+    from: AccountIdentifier,
+) -> Result<(), ApiError> {
+    requests.push(Request::ListNeurons(ListNeurons { account: from }));
+    Ok(())
+}
+
 /// Handle FOLLOW.
 fn follow(
     requests: &mut Vec<Request>,
@@ -767,9 +778,9 @@ mod tests {
         proptest!(|(metadata in gen_metadata.clone())| {
             let handler = handler.clone();
             let construction_payloads_result = handler.construction_payloads(ConstructionPayloadsRequest {
-                network_identifier: network_identifier.clone(),
+                network_identifier: network_identifier.clone().into(),
                 operations: operations.clone(),
-                metadata: metadata.clone(),
+                metadata: metadata.clone().map(|m|m.into()),
                 public_keys: Some(vec![pub_key.clone()]),
             }).unwrap();
             let unsigned_transaction = construction_payloads_result.unsigned_transaction;
@@ -797,9 +808,9 @@ mod tests {
         };
         proptest!(conf, |(metadata in gen_metadata.clone())| {
             let construction_payloads_result = handler.construction_payloads(ConstructionPayloadsRequest {
-                network_identifier: network_identifier.clone(),
+                network_identifier: network_identifier.clone().into(),
                 operations: operations.clone(),
-                metadata: metadata.clone(),
+                metadata: metadata.clone().map(|m|m.into()),
                 public_keys: Some(vec![pub_key.clone()]),
             }).unwrap();
             let unsigned_transaction = construction_payloads_result.unsigned_transaction;

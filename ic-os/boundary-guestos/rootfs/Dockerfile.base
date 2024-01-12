@@ -127,10 +127,10 @@ RUN \
         https://github.com/leev/ngx_http_geoip2_module/archive/refs/tags/${NGX_HTTP_GEOIP2_MODULE_TAG}.tar.gz \
     | tar -xzf -
 
-ARG NGINX_VERSION=1.24.0
+ARG NGINX_VERSION=1.25.3
 RUN \
     curl -sLv \
-        http://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz \
+        https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz \
     | tar -xzf -
 
 WORKDIR /nginx-${NGINX_VERSION}
@@ -161,8 +161,8 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommends install gnupg 
 RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys ABF5BD827BD9BF62
 
-RUN echo "deb http://nginx.org/packages/ubuntu/ focal nginx" >> /etc/apt/sources.list.d/nginx.list &&\
-    echo "deb-src http://nginx.org/packages/ubuntu/ focal nginx" >> /etc/apt/sources.list.d/nginx.list 
+RUN echo "deb http://nginx.org/packages/mainline/ubuntu/ focal nginx" >> /etc/apt/sources.list.d/nginx.list &&\
+    echo "deb-src http://nginx.org/packages/mainline/ubuntu/ focal nginx" >> /etc/apt/sources.list.d/nginx.list 
 
 # GeoIP repository
 RUN \
@@ -205,8 +205,8 @@ RUN \
         net-tools \
         netbase \
         nftables \
-        nginx-module-njs=1.24.0+0.8.2-1~focal \
-        nginx=1.24.0-1~focal \
+        nginx-module-njs=1.25.3+0.8.2-1~focal \
+        nginx=1.25.3-1~focal \
         opensc \
         openssh-client openssh-server \
         parted \

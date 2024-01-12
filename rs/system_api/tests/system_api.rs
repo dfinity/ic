@@ -33,7 +33,7 @@ use ic_types::{
 };
 use std::{
     collections::BTreeSet,
-    convert::{From, TryInto},
+    convert::From,
     panic::{catch_unwind, UnwindSafe},
     rc::Rc,
 };
@@ -1125,10 +1125,7 @@ fn test_fail_adding_more_cycles_when_not_enough_balance() {
 
     // Add cycles to call.
     let amount = cycles_amount / 2 + 1;
-    assert_eq!(
-        api.ic0_call_cycles_add128(amount.try_into().unwrap()),
-        Ok(())
-    );
+    assert_eq!(api.ic0_call_cycles_add128(amount.into()), Ok(()));
     // Check cycles balance after call_add_cycles.
     assert_eq!(
         api.ic0_canister_cycle_balance().unwrap() as u128,
@@ -1137,8 +1134,7 @@ fn test_fail_adding_more_cycles_when_not_enough_balance() {
 
     // Adding more cycles fails because not enough balance left.
     assert_eq!(
-        api.ic0_call_cycles_add128(amount.try_into().unwrap())
-            .unwrap_err(),
+        api.ic0_call_cycles_add128(amount.into()).unwrap_err(),
         HypervisorError::InsufficientCyclesBalance(CanisterOutOfCyclesError {
             canister_id,
             available: Cycles::from(cycles_amount - amount),
@@ -1426,9 +1422,10 @@ fn msg_cycles_accept_all_cycles_in_call_context_when_more_asked() {
 }
 
 /// If call call_perform() fails because canister does not have enough
-/// cycles to send the message, then the state is reset.
+/// cycles to send the message, then it does not trap, but returns
+/// a transient error reject code.
 #[test]
-fn call_perform_not_enough_cycles_resets_state() {
+fn call_perform_not_enough_cycles_does_not_trap() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new()
         .with_subnet_type(SubnetType::Application)
         .build();
@@ -1457,11 +1454,9 @@ fn call_perform_not_enough_cycles_resets_state() {
     api.ic0_call_cycles_add128(Cycles::new(100)).unwrap();
     let res = api.ic0_call_perform();
     match res {
-        Err(HypervisorError::InsufficientCyclesInMessageMemoryGrow {
-            bytes: _,
-            available: _,
-            threshold: _,
-        }) => {}
+        Ok(code) => {
+            assert_eq!(code, RejectCode::SysTransient as i32);
+        }
         _ => panic!(
             "expected to get an InsufficientCyclesInMessageMemoryGrow error, got {:?}",
             res
@@ -1557,11 +1552,11 @@ fn push_output_request_respects_memory_limits() {
     let callback_id = sandbox_safe_system_state
         .register_callback(Callback::new(
             call_context_test_id(0),
-            Some(own_canister_id),
-            Some(canister_test_id(0)),
+            own_canister_id,
+            canister_test_id(0),
             Cycles::zero(),
-            Some(Cycles::zero()),
-            Some(Cycles::zero()),
+            Cycles::zero(),
+            Cycles::zero(),
             WasmClosure::new(0, 0),
             WasmClosure::new(0, 0),
             None,
@@ -1662,11 +1657,11 @@ fn push_output_request_oversized_request_memory_limits() {
     let callback_id = sandbox_safe_system_state
         .register_callback(Callback::new(
             call_context_test_id(0),
-            Some(own_canister_id),
-            Some(canister_test_id(0)),
+            own_canister_id,
+            canister_test_id(0),
             Cycles::zero(),
-            Some(Cycles::zero()),
-            Some(Cycles::zero()),
+            Cycles::zero(),
+            Cycles::zero(),
             WasmClosure::new(0, 0),
             WasmClosure::new(0, 0),
             None,

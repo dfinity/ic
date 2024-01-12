@@ -19,7 +19,6 @@ path = "src/lib.rs"
 
 [dependencies]
 build-info = { workspace = true }
-
 candid = { workspace = true }
 dfn_candid = { path = "../../../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../../../rust_canisters/dfn_core" }
@@ -68,6 +67,7 @@ registry-canister = { path = "../../../../registry/canister" }
 build-info-build = { workspace = true }
 
 [dev-dependencies]
+candid_parser = { workspace = true }
 ic-state-machine-tests = { path = "../../../../state_machine_tests" }
 pretty_assertions = { workspace = true }
 tokio = { workspace = true }

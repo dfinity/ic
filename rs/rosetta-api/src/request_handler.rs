@@ -642,7 +642,7 @@ fn create_parent_block_id(
     block: &HashedBlock,
 ) -> Result<BlockIdentifier, ApiError> {
     // For the first block, we return the block itself as its parent
-    let idx = std::cmp::max(0, block_height_to_index(block.index)? - 1);
+    let idx = std::cmp::max(0, block_height_to_index(block.index) - 1);
     if blocks.is_verified_by_idx(&(idx as u64))? {
         let parent = blocks.get_hashed_block(&(idx as u64))?;
         convert::block_id(&parent)
@@ -651,8 +651,8 @@ fn create_parent_block_id(
     }
 }
 
-fn block_height_to_index(height: BlockIndex) -> Result<i128, ApiError> {
-    i128::try_from(height).map_err(|e| ApiError::InternalError(true, e.to_string().into()))
+fn block_height_to_index(height: BlockIndex) -> i128 {
+    i128::from(height)
 }
 
 fn get_block(

@@ -80,7 +80,7 @@ fn should_deposit_and_withdraw() {
     let cketh = cketh
         .deposit(DepositParams::default())
         .expect_mint()
-        .call_ledger_get_transaction(0)
+        .call_ledger_get_transaction(0_u8)
         .expect_mint(Mint {
             amount: EXPECTED_BALANCE.into(),
             to: Account {
@@ -122,10 +122,10 @@ fn should_deposit_and_withdraw() {
             })),
             created_at_time: None,
         });
-    assert_eq!(cketh.balance_of(caller), Nat::from(0));
+    assert_eq!(cketh.balance_of(caller), Nat::from(0_u8));
 
     let max_fee_per_gas = Nat::from(33003708258u64);
-    let gas_limit = Nat::from(21_000);
+    let gas_limit = Nat::from(21_000_u32);
 
     cketh.assert_has_unique_events_in_order(&vec![
         EventPayload::AcceptedEthWithdrawalRequest {
@@ -139,9 +139,9 @@ fn should_deposit_and_withdraw() {
         EventPayload::CreatedTransaction {
             withdrawal_id: withdrawal_id.clone(),
             transaction: UnsignedTransaction {
-                chain_id: Nat::from(1),
-                nonce: Nat::from(0),
-                max_priority_fee_per_gas: Nat::from(1_500_000_000),
+                chain_id: Nat::from(1_u8),
+                nonce: Nat::from(0_u8),
+                max_priority_fee_per_gas: Nat::from(1_500_000_000_u32),
                 max_fee_per_gas: max_fee_per_gas.clone(),
                 gas_limit: gas_limit.clone(),
                 destination,
@@ -160,7 +160,7 @@ fn should_deposit_and_withdraw() {
                 block_hash: DEFAULT_BLOCK_HASH.to_string(),
                 block_number: Nat::from(DEFAULT_BLOCK_NUMBER),
                 effective_gas_price: Nat::from(4277923390u64),
-                gas_used: Nat::from(21_000),
+                gas_used: Nat::from(21_000_u32),
                 status: TransactionStatus::Success,
                 transaction_hash:
                 "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string(),
@@ -242,7 +242,7 @@ fn should_fail_to_withdraw_without_approval() {
         .expect_mint()
         .call_minter_withdraw_eth(
             caller,
-            Nat::from(10),
+            Nat::from(10_u8),
             DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
         )
         .expect_error(WithdrawalError::InsufficientAllowance {
@@ -385,7 +385,7 @@ fn should_reimburse() {
     let cketh = cketh
         .deposit(DepositParams::default())
         .expect_mint()
-        .call_ledger_get_transaction(0)
+        .call_ledger_get_transaction(0_u8)
         .expect_mint(Mint {
             amount: EXPECTED_BALANCE.into(),
             to: Account {
@@ -443,7 +443,7 @@ fn should_reimburse() {
             created_at_time: None,
         });
 
-    assert_eq!(cketh.balance_of(caller), Nat::from(0));
+    assert_eq!(cketh.balance_of(caller), Nat::from(0_u8));
 
     cketh.env.advance_time(PROCESS_REIMBURSEMENT);
     cketh.env.tick();
@@ -463,7 +463,7 @@ fn should_reimburse() {
     );
 
     let reimbursed_amount = Nat::from(tx.value.unwrap().as_u128());
-    let reimbursed_in_block = withdrawal_id.clone() + Nat::from(1);
+    let reimbursed_in_block = withdrawal_id.clone() + Nat::from(1_u8);
     let failed_tx_hash =
         "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string();
     assert_eq!(
@@ -476,7 +476,7 @@ fn should_reimburse() {
     );
 
     let max_fee_per_gas = Nat::from(33003708258u64);
-    let gas_limit = Nat::from(21_000);
+    let gas_limit = Nat::from(21_000_u32);
 
     cketh
         .call_ledger_get_transaction(reimbursed_in_block)
@@ -504,9 +504,9 @@ fn should_reimburse() {
         EventPayload::CreatedTransaction {
             withdrawal_id: withdrawal_id.clone(),
             transaction: UnsignedTransaction {
-                chain_id: Nat::from(1),
-                nonce: Nat::from(0),
-                max_priority_fee_per_gas: Nat::from(1_500_000_000),
+                chain_id: Nat::from(1_u8),
+                nonce: Nat::from(0_u8),
+                max_priority_fee_per_gas: Nat::from(1_500_000_000_u32),
                 max_fee_per_gas: max_fee_per_gas.clone(),
                 gas_limit: gas_limit.clone(),
                 destination,
@@ -525,7 +525,7 @@ fn should_reimburse() {
                 block_hash: DEFAULT_BLOCK_HASH.to_string(),
                 block_number: Nat::from(DEFAULT_BLOCK_NUMBER),
                 effective_gas_price: Nat::from(4277923390u64),
-                gas_used: Nat::from(21_000),
+                gas_used: Nat::from(21_000_u32),
                 status: TransactionStatus::Failure,
                 transaction_hash:
                 "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string(),
@@ -534,7 +534,7 @@ fn should_reimburse() {
             transaction_hash: Some("0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string()),
             reimbursed_amount,
             withdrawal_id: withdrawal_id.clone(),
-            reimbursed_in_block: withdrawal_id + 1,
+            reimbursed_in_block: withdrawal_id + Nat::from(1_u8),
         },
     ]);
 }
@@ -688,11 +688,11 @@ fn should_resubmit_new_transaction_when_price_increased() {
         EventPayload::ReplacedTransaction {
             withdrawal_id: withdrawal_id.clone(),
             transaction: UnsignedTransaction {
-                chain_id: Nat::from(1),
-                nonce: Nat::from(0),
+                chain_id: Nat::from(1_u8),
+                nonce: Nat::from(0_u8),
                 max_priority_fee_per_gas: Nat::from(1_650_000_000_u64),
                 max_fee_per_gas: Nat::from(36_304_079_084_u64),
-                gas_limit: Nat::from(21_000),
+                gas_limit: Nat::from(21_000_u32),
                 destination: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
                 value: Nat::from(99_237_614_339_235_990_u64),
                 data: Default::default(),
@@ -709,7 +709,7 @@ fn should_resubmit_new_transaction_when_price_increased() {
                 block_hash: DEFAULT_BLOCK_HASH.to_string(),
                 block_number: Nat::from(DEFAULT_BLOCK_NUMBER),
                 effective_gas_price: Nat::from(4277923390u64),
-                gas_used: Nat::from(21_000),
+                gas_used: Nat::from(21_000_u32),
                 status: TransactionStatus::Success,
                 transaction_hash: format!("{:?}", resubmitted_tx_hash),
             },
@@ -1118,7 +1118,7 @@ fn install_minter(env: &StateMachine, ledger_id: CanisterId, minter_id: Canister
         ecdsa_key_name: "master_ecdsa_public_key".parse().unwrap(),
         ethereum_network: EthereumNetwork::Mainnet,
         ledger_id: ledger_id.get().0,
-        next_transaction_nonce: 0.into(),
+        next_transaction_nonce: 0_u8.into(),
         ethereum_block_height: CandidBlockTag::Finalized,
         ethereum_contract_address: Some(HELPER_SMART_CONTRACT_ADDRESS.to_string()),
         minimum_withdrawal_amount: CKETH_TRANSFER_FEE.into(),
@@ -1506,7 +1506,7 @@ impl CkEthSetup {
 
         let request = GetTransactionsRequest {
             start: ledger_index.into(),
-            length: 1.into(),
+            length: 1_u8.into(),
         };
         let mut response = Decode!(
             &assert_reply(
@@ -1795,7 +1795,7 @@ impl DepositFlow {
                     transaction_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
                     log_index: Nat::from(DEFAULT_DEPOSIT_LOG_INDEX),
                 },
-                mint_block_index: Nat::from(0),
+                mint_block_index: Nat::from(0_u8),
             },
         );
         self.setup
@@ -2473,7 +2473,7 @@ mod mock {
             };
             let transform_arg = TransformArgs {
                 response: OutCallHttpResponse {
-                    status: 200.into(),
+                    status: 200_u8.into(),
                     headers: vec![],
                     body: response_body,
                 },

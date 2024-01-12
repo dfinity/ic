@@ -639,7 +639,7 @@ impl ThresholdEcdsaSigShareInternal {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ThresholdEcdsaGenerateSigShareInternalError {
-    UnsupportedAlgorithm,
+    InvalidArguments(String),
     InconsistentCommitments,
     InternalError(String),
 }
@@ -686,11 +686,16 @@ pub fn sign_share(
     key_times_lambda: &CommitmentOpening,
     algorithm_id: AlgorithmId,
 ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaGenerateSigShareInternalError> {
-    let (curve_type, hash_len) = signature_parameters(algorithm_id)
-        .ok_or(ThresholdEcdsaGenerateSigShareInternalError::UnsupportedAlgorithm)?;
+    let (curve_type, hash_len) = signature_parameters(algorithm_id).ok_or_else(|| {
+        ThresholdEcdsaGenerateSigShareInternalError::InvalidArguments(format!(
+            "unsupported algorithm: {algorithm_id:?}"
+        ))
+    })?;
 
     if hashed_message.len() != hash_len {
-        return Err(ThresholdEcdsaGenerateSigShareInternalError::UnsupportedAlgorithm);
+        return Err(ThresholdEcdsaGenerateSigShareInternalError::InvalidArguments(
+            format!("length of hashed_message ({}) not matching expected length ({hash_len}) for algorithm_id ({algorithm_id:?})", hashed_message.len()))
+        );
     }
 
     ThresholdEcdsaSigShareInternal::new(
@@ -709,7 +714,7 @@ pub fn sign_share(
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ThresholdEcdsaVerifySigShareInternalError {
-    UnsupportedAlgorithm,
+    InvalidArguments(String),
     InconsistentCommitments,
     InvalidSignatureShare,
     InternalError(String),
@@ -744,11 +749,16 @@ pub fn verify_signature_share(
     key_times_lambda: &IDkgTranscriptInternal,
     algorithm_id: AlgorithmId,
 ) -> Result<(), ThresholdEcdsaVerifySigShareInternalError> {
-    let (curve_type, hash_len) = signature_parameters(algorithm_id)
-        .ok_or(ThresholdEcdsaVerifySigShareInternalError::UnsupportedAlgorithm)?;
+    let (curve_type, hash_len) = signature_parameters(algorithm_id).ok_or_else(|| {
+        ThresholdEcdsaVerifySigShareInternalError::InvalidArguments(format!(
+            "unsupported algorithm: {algorithm_id:?}"
+        ))
+    })?;
 
     if hashed_message.len() != hash_len {
-        return Err(ThresholdEcdsaVerifySigShareInternalError::UnsupportedAlgorithm);
+        return Err(ThresholdEcdsaVerifySigShareInternalError::InvalidArguments(
+            format!("length of hashed_message ({}) not matching expected length ({hash_len}) for algorithm_id ({algorithm_id:?})", hashed_message.len()))
+        );
     }
 
     sig_share
@@ -820,7 +830,7 @@ pub fn combine_sig_shares(
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ThresholdEcdsaVerifySignatureInternalError {
     InvalidSignature,
-    UnsupportedAlgorithm,
+    InvalidArguments(String),
     InconsistentCommitments,
     InternalError(String),
 }
@@ -852,11 +862,16 @@ pub fn verify_threshold_signature(
     key_transcript: &IDkgTranscriptInternal,
     algorithm_id: AlgorithmId,
 ) -> Result<(), ThresholdEcdsaVerifySignatureInternalError> {
-    let (curve_type, hash_len) = signature_parameters(algorithm_id)
-        .ok_or(ThresholdEcdsaVerifySignatureInternalError::UnsupportedAlgorithm)?;
+    let (curve_type, hash_len) = signature_parameters(algorithm_id).ok_or_else(|| {
+        ThresholdEcdsaVerifySignatureInternalError::InvalidArguments(format!(
+            "unsupported algorithm: {algorithm_id:?}"
+        ))
+    })?;
 
     if hashed_message.len() != hash_len {
-        return Err(ThresholdEcdsaVerifySignatureInternalError::UnsupportedAlgorithm);
+        return Err(ThresholdEcdsaVerifySignatureInternalError::InvalidArguments(
+            format!("length of hashed_message ({}) not matching expected length ({hash_len}) for algorithm_id ({algorithm_id:?})", hashed_message.len())
+        ));
     }
 
     signature

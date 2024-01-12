@@ -9,17 +9,16 @@ use std::{
     time::Duration,
 };
 
-use ic_interfaces::p2p::state_sync::StateSyncClient;
+use ic_interfaces::p2p::state_sync::{
+    ArtifactErrorCode, Chunk, ChunkId, Chunkable, StateSyncClient,
+};
 use ic_logger::ReplicaLogger;
 use ic_memory_transport::TransportRouter;
 use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::mocks::{MockChunkable, MockStateSync};
 use ic_state_manager::state_sync::types::{Manifest, MetaManifest, StateSyncMessage};
 use ic_types::{
-    artifact::StateSyncArtifactId,
-    chunkable::{ArtifactErrorCode, Chunk, ChunkId, Chunkable},
-    crypto::CryptoHash,
-    state_sync::StateSyncVersion,
+    artifact::StateSyncArtifactId, crypto::CryptoHash, state_sync::StateSyncVersion,
     CryptoHashOfState, Height, NodeId, PrincipalId,
 };
 use tokio::{runtime::Handle, task::JoinHandle};
@@ -437,6 +436,7 @@ fn state_sync_artifact(id: StateSyncArtifactId) -> StateSyncMessage {
         manifest,
         meta_manifest: Arc::new(meta_manifest),
         state_sync_file_group: Default::default(),
+        malicious_flags: Default::default(),
     }
 }
 
@@ -469,7 +469,7 @@ pub fn create_node(
         link.1,
     );
     let jh = ic_state_sync_manager::start_state_sync_manager(
-        log,
+        &log,
         &MetricsRegistry::default(),
         rt,
         Arc::new(transport),

@@ -31,8 +31,8 @@ use ic_rosetta_api::request::Request;
 use ic_rosetta_api::request_types::ChangeAutoStakeMaturity;
 use ic_rosetta_api::request_types::RegisterVote;
 use ic_rosetta_api::request_types::{
-    AddHotKey, Disburse, Follow, MergeMaturity, NeuronInfo, RemoveHotKey, SetDissolveTimestamp,
-    Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
+    AddHotKey, Disburse, Follow, ListNeurons, MergeMaturity, NeuronInfo, RemoveHotKey,
+    SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
 };
 use ic_rosetta_api::transaction_id::TransactionIdentifier;
 use ic_rosetta_api::{convert, errors, DEFAULT_TOKEN_SYMBOL};
@@ -371,6 +371,7 @@ where
             | Request::MergeMaturity(MergeMaturity { account, .. })
             | Request::StakeMaturity(StakeMaturity { account, .. })
             | Request::NeuronInfo(NeuronInfo { account, .. })
+            | Request::ListNeurons(ListNeurons { account, .. })
             | Request::Follow(Follow { account, .. }) => {
                 all_sender_account_ids.push(to_model_account_identifier(&account));
             }
@@ -460,13 +461,13 @@ where
 
     // The fee reported here should be the same as the one we got from dry run
     assert_eq!(suggested_fee, dry_run_suggested_fee);
-
+    let metadata = ConstructionPayloadsRequestMetadata::try_from(metadata_res.metadata)?;
     ros.construction_payloads(
         Some(ConstructionPayloadsRequestMetadata {
             memo: Some(0),
             ingress_end,
             created_at_time,
-            ..metadata_res.metadata
+            ..metadata
         }),
         all_ops,
         Some(all_sender_pks),
@@ -707,7 +708,7 @@ pub fn create_neuron(
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct NeuronDetails {
     pub(crate) account_id: AccountIdentifier,
     pub(crate) key_pair: EdKeypair,

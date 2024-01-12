@@ -13,7 +13,7 @@ WASMTIME_FUZZER_DEPENDENCIES = [
     "@crate_index//:libfuzzer-sys",
     "@crate_index//:arbitrary",
     "@crate_index//:wasm-smith",
-    "@crate_index//:wasm_encoder_0_36",
+    "@crate_index//:wasm_encoder_for_ws",
 ]
 
 rust_fuzz_test_binary(
@@ -57,7 +57,7 @@ WASM_EXECUTOR_FUZZER_DEPENDENCIES = [
     "@crate_index//:arbitrary",
     "@crate_index//:wasm-smith",
     "@crate_index//:libfuzzer-sys",
-    "@crate_index//:wasm_encoder_0_36",
+    "@crate_index//:wasm_encoder_for_ws",
 ]
 
 rust_fuzz_test_binary(
@@ -116,7 +116,7 @@ rust_binary(
         "@crate_index//:arbitrary",
         "@crate_index//:clap",
         "@crate_index//:wasm-smith",
-        "@crate_index//:wasm_encoder_0_36",
+        "@crate_index//:wasm_encoder_for_ws",
         "@crate_index//:wasmprinter",
     ],
 )

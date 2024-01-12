@@ -271,7 +271,7 @@ fn get_blocks(req: GetTransactionsRequest) -> BlockRange {
     BlockRange { blocks }
 }
 
-#[query]
+#[query(hidden = true)]
 fn __get_candid_interface_tmp_hack() -> &'static str {
     include_str!(env!("ARCHIVE_DID_PATH"))
 }
@@ -308,7 +308,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     Ok(())
 }
 
-#[query]
+#[query(hidden = true)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
         let mut writer =
@@ -333,7 +333,7 @@ fn main() {}
 
 #[test]
 fn check_candid_interface() {
-    use candid::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{service_equal, CandidSource};
     use std::path::PathBuf;
 
     candid::export_service!();

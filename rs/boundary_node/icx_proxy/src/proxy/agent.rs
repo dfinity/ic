@@ -1,6 +1,5 @@
 use std::{
     borrow::Borrow,
-    error::Error,
     net::{IpAddr, SocketAddr},
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -28,16 +27,15 @@ use ic_utils::{
     interfaces::http_request::HttpRequestCanister,
 };
 use tokio_util::task::LocalPoolHandle;
-use tracing::{enabled, error, info, instrument, trace, warn, Level};
+use tracing::{debug, enabled, info, trace, warn, Level};
 
-use crate::http;
 use crate::http::request::HttpRequest;
 use crate::http::response::{AgentResponseAny, HttpResponse};
-use crate::http_client::{HEADERS_IN, HEADERS_OUT};
+use crate::http_client::{HEADERS_IN, HEADERS_OUT, HEADER_X_REQUEST_ID};
 use crate::metrics::RequestContext;
 use crate::{
     canister_id,
-    proxy::{AppState, HandleError, HyperService, REQUEST_BODY_SIZE_LIMIT},
+    proxy::{AppState, HandleError, HyperService},
     validate::Validate,
 };
 use crate::{
@@ -125,7 +123,7 @@ fn forward_uri<B>(proxy_url: Uri, req: &Request<B>) -> Result<Uri, anyhow::Error
         )
         .as_str(),
     )
-    .map_or(req_uri_path_and_query, |p| Some(p));
+    .map_or(req_uri_path_and_query, Some);
     Ok(Uri::from_parts(parts)?)
 }
 
@@ -150,21 +148,6 @@ fn remove_hop_headers(headers: &HeaderMap<HeaderValue>) -> HeaderMap<HeaderValue
         .filter(|(k, _v)| is_not_hop_header(*k))
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect()
-}
-
-// Dive into the error chain and figure out if the underlying error was caused by an HTTP2 GOAWAY frame
-fn is_h2_goaway(e: &anyhow::Error) -> bool {
-    if let Some(AgentError::TransportError(e)) = e.downcast_ref::<AgentError>() {
-        if let Some(e) = e.downcast_ref::<hyper::Error>() {
-            let def_err = h2::Error::from(h2::Reason::INTERNAL_ERROR);
-
-            if let Some(e) = e.source().unwrap_or(&def_err).downcast_ref::<h2::Error>() {
-                return e.is_go_away();
-            }
-        }
-    }
-
-    false
 }
 
 // This function wraps Axum handler.
@@ -209,11 +192,6 @@ pub async fn handler_wrapper<V: Validate + 'static, C: HyperService<Body> + 'sta
     rx.await.unwrap()
 }
 
-// Suppresses a clippy::let_with_type_underscore lint error which only manifests on GitHub CI
-// and seems unrelated to this function.
-// Remove "#[allow(unknown_lints)]" to check if issue persists.
-#[allow(unknown_lints)]
-#[instrument(level = "info", skip_all, fields(addr = display(addr), replica = display(&*args.replica_uri)))]
 pub async fn handler<V: Validate, C: HyperService<Body>>(
     State(mut args): State<Args<V, C>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
@@ -230,57 +208,22 @@ pub async fn handler<V: Validate, C: HyperService<Body>>(
     let referer_canister_id = referer_host_canister_id.map(|v| v.0);
     let referer_query_param_canister_id = referer_query_param_canister_id.map(|v| v.0);
 
-    // Read the request body into a Vec
-    let (parts, body) = request.into_parts();
-    let body = match http::body::read_streaming_body(body, REQUEST_BODY_SIZE_LIMIT).await {
-        Err(e) => {
-            error!("Unable to read body: {}", e);
-            return Response::builder()
-                .status(500)
-                .body("Error reading body".into())
-                .unwrap();
-        }
-        Ok(b) => b,
-    };
+    let res = process_request_inner(
+        request,
+        addr,
+        &args.agent,
+        &args.replica_uri,
+        &args.validator,
+        &mut args.client,
+        uri_canister_id
+            .or(host_canister_id)
+            .or(query_param_canister_id)
+            .or(referer_canister_id)
+            .or(referer_query_param_canister_id),
+    )
+    .await;
 
-    let mut retries = 3;
-    loop {
-        // Create a new request based on the incoming one
-        let mut request_new = Request::new(Body::from(body.clone()));
-        *request_new.headers_mut() = parts.headers.clone();
-        *request_new.method_mut() = parts.method.clone();
-        *request_new.uri_mut() = parts.uri.clone();
-
-        let res = process_request_inner(
-            request_new,
-            addr,
-            &args.agent,
-            &args.replica_uri,
-            &args.validator,
-            &mut args.client,
-            uri_canister_id
-                .or(host_canister_id)
-                .or(query_param_canister_id)
-                .or(referer_canister_id)
-                .or(referer_query_param_canister_id),
-        )
-        .await;
-
-        // If we have retries left - check if the underlying reason is a GOAWAY and retry if that's the case.
-        // GOAWAY is issued when the server is gracefully shutting down and it will not execute the request.
-        // So we can safely retry the request even if it's not idempotent since it was never worked on in case of GOAWAY.
-        if retries > 0 {
-            if let Err(e) = &res {
-                if is_h2_goaway(e) {
-                    retries -= 1;
-                    info!("HTTP GOAWAY received, retrying request");
-                    continue;
-                }
-            }
-        }
-
-        return res.handle_error(args.debug);
-    }
+    res.handle_error(args.debug)
 }
 
 async fn process_request_inner(
@@ -321,11 +264,19 @@ async fn process_request_inner(
         Some(canister_id) => canister_id,
     };
 
+    let request_id = request
+        .headers()
+        .get(HEADER_X_REQUEST_ID)
+        .cloned()
+        .map(|x| x.to_str().unwrap_or("<malformed id>").to_string())
+        .unwrap_or("<unknown id>".into());
+
     info!(
-        "<< {} {} {:?}",
+        "{}: {}: {} {}",
+        request_id,
+        canister_id,
         request.method(),
-        request.uri(),
-        request.version()
+        request.uri()
     );
 
     let (parts, body) = request.into_parts();
@@ -347,7 +298,7 @@ async fn process_request_inner(
             Err(e) => bail!(e),
         },
     ));
-    info!("<< {} body bytes", http_request.body.len());
+    debug!("<< {} body bytes", http_request.body.len());
 
     if enabled!(Level::TRACE) {
         let body = &http_request.body[0..usize::min(http_request.body.len(), MAX_LOG_BODY_SIZE)];
@@ -362,19 +313,25 @@ async fn process_request_inner(
     }
 
     let canister = HttpRequestCanister::create(agent, canister_id);
-    let header_fields = http_request.headers.iter().map(|(name, value)| {
-        if name.eq_ignore_ascii_case(ACCEPT_ENCODING_HEADER_NAME) {
-            let mut encodings = value.split(',').map(|s| s.trim()).collect::<Vec<_>>();
-            if !encodings.iter().any(|s| s.eq_ignore_ascii_case("identity")) {
-                encodings.push("identity");
-            };
+    let header_fields = http_request
+        .headers
+        .iter()
+        .filter(|(name, _)| name != "x-request-id")
+        .map(|(name, value)| {
+            if name.eq_ignore_ascii_case(ACCEPT_ENCODING_HEADER_NAME) {
+                let mut encodings = value.split(',').map(|s| s.trim()).collect::<Vec<_>>();
+                if !encodings.iter().any(|s| s.eq_ignore_ascii_case("identity")) {
+                    encodings.push("identity");
+                };
 
-            let value = encodings.join(", ");
-            return HeaderField(name.into(), value.into());
-        }
+                let value = encodings.join(", ");
+                return HeaderField(name.into(), value.into());
+            }
 
-        HeaderField(name.into(), value.into())
-    });
+            HeaderField(name.into(), value.into())
+        })
+        .collect::<Vec<_>>() // it needs to be an ExactSizeIterator
+        .into_iter();
 
     let query_result = canister
         .http_request_custom(

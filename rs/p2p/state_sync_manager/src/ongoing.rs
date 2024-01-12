@@ -20,15 +20,10 @@ use crate::metrics::OngoingStateSyncMetrics;
 use crate::routes::{build_chunk_handler_request, parse_chunk_handler_response};
 
 use ic_async_utils::JoinMap;
-use ic_interfaces::p2p::state_sync::StateSyncClient;
+use ic_interfaces::p2p::state_sync::{ArtifactErrorCode, ChunkId, Chunkable, StateSyncClient};
 use ic_logger::{error, info, ReplicaLogger};
 use ic_quic_transport::Transport;
-use ic_types::{
-    artifact::StateSyncArtifactId,
-    chunkable::ChunkId,
-    chunkable::{ArtifactErrorCode, Chunkable},
-    NodeId,
-};
+use ic_types::{artifact::StateSyncArtifactId, NodeId};
 use rand::{
     distributions::{Distribution, WeightedIndex},
     rngs::SmallRng,
@@ -41,6 +36,7 @@ use tokio::{
     sync::mpsc::{Receiver, Sender},
     task::JoinHandle,
 };
+use tokio_util::sync::CancellationToken;
 
 // TODO: NET-1461 find appropriate value for the parallelism
 const PARALLEL_CHUNK_DOWNLOADS: usize = 10;
@@ -58,6 +54,7 @@ struct OngoingStateSync<T: Send> {
     artifact_id: StateSyncArtifactId,
     metrics: OngoingStateSyncMetrics,
     transport: Arc<dyn Transport>,
+    cancellation: CancellationToken,
     // Peer management
     new_peers_rx: Receiver<NodeId>,
     // Peers that advertised state and the number of outstanding chunk downloads to that peer.
@@ -91,6 +88,7 @@ pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
     artifact_id: StateSyncArtifactId,
     state_sync: Arc<dyn StateSyncClient<Message = T>>,
     transport: Arc<dyn Transport>,
+    cancellation: CancellationToken,
 ) -> OngoingStateSyncHandle {
     let (new_peers_tx, new_peers_rx) = tokio::sync::mpsc::channel(ONGOING_STATE_SYNC_CHANNEL_SIZE);
     let ongoing = OngoingStateSync {
@@ -99,6 +97,7 @@ pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
         artifact_id,
         metrics,
         transport,
+        cancellation,
         new_peers_rx,
         active_downloads: HashMap::new(),
         allowed_downloads: 0,
@@ -122,6 +121,9 @@ impl<T: 'static + Send> OngoingStateSync<T> {
         tokio::pin!(state_sync_timeout);
         loop {
             select! {
+                () = self.cancellation.cancelled() => {
+                    break
+                },
                 _ = &mut state_sync_timeout => {
                     info!(self.log, "State sync for height {} timed out.", self.artifact_id.height);
                     break;
@@ -427,6 +429,7 @@ mod tests {
                 },
                 Arc::new(s),
                 Arc::new(t),
+                CancellationToken::new(),
             );
 
             rt.block_on(async move {
@@ -468,6 +471,7 @@ mod tests {
                 },
                 Arc::new(s),
                 Arc::new(t),
+                CancellationToken::new(),
             );
 
             rt.block_on(async move {
@@ -515,6 +519,7 @@ mod tests {
                 },
                 Arc::new(s),
                 Arc::new(t),
+                CancellationToken::new(),
             );
 
             rt.block_on(async move {

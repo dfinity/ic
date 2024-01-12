@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use criterion::*;
 use ic_crypto_internal_threshold_sig_ecdsa::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
@@ -92,6 +90,10 @@ fn point_multiexp_vartime_total(c: &mut Criterion) {
                                     p.precompute(window_size).unwrap();
                                 }
                                 // create refs of pairs
+
+                                // False positive `map_identity` warning.
+                                // See: https://github.com/rust-lang/rust-clippy/pull/11792 (merged)
+                                #[allow(clippy::map_identity)]
                                 let refs_of_pairs: Vec<_> =
                                     terms.iter().map(|(p, s)| (p, s)).collect();
 
@@ -168,6 +170,10 @@ fn point_multiexp_vartime_online(c: &mut Criterion) {
                             },
                             |terms| {
                                 // create refs of pairs
+
+                                // False positive `map_identity` warning.
+                                // See: https://github.com/rust-lang/rust-clippy/pull/11792 (merged)
+                                #[allow(clippy::map_identity)]
                                 let refs_of_pairs: Vec<_> =
                                     terms.iter().map(|(p, s)| (p, s)).collect();
                                 EccPoint::mul_n_points_vartime(&refs_of_pairs)
@@ -259,6 +265,10 @@ fn point_multiexp_constant_time(c: &mut Criterion) {
                         || gen_mul_n_instance(*size, curve_type, rng),
                         |terms| {
                             // create refs of pairs
+
+                            // False positive `map_identity` warning.
+                            // See: https://github.com/rust-lang/rust-clippy/pull/11792 (merged)
+                            #[allow(clippy::map_identity)]
                             let refs_of_pairs: Vec<_> = terms.iter().map(|(p, s)| (p, s)).collect();
                             EccPoint::mul_n_points_pippenger(&refs_of_pairs)
                         },
@@ -335,6 +345,17 @@ fn point_mul(c: &mut Criterion) {
                 },
                 |(p, s)| p.scalar_mul_vartime(s),
                 BatchSize::SmallInput,
+            )
+        });
+
+        group.bench_function("mul_by_node_index_0_to_50", |b| {
+            b.iter_with_setup(
+                || random_point(curve_type, rng),
+                |p| {
+                    for node_index in 0..50 {
+                        p.mul_by_node_index_vartime(node_index).unwrap();
+                    }
+                },
             )
         });
 
@@ -433,9 +454,13 @@ fn point_serialize(c: &mut Criterion) {
     }
 }
 
-criterion_group! {
-name = group_ops;
-config = Criterion::default().measurement_time(Duration::from_secs(30));
-targets = point_multiexp_constant_time, point_multiexp_vartime_total, point_multiexp_vartime_online, point_mul, point_double_vs_addition, point_serialize,
-}
-criterion_main!(group_ops);
+criterion_group!(
+    benches,
+    point_multiexp_constant_time,
+    point_multiexp_vartime_total,
+    point_multiexp_vartime_online,
+    point_mul,
+    point_double_vs_addition,
+    point_serialize,
+);
+criterion_main!(benches);

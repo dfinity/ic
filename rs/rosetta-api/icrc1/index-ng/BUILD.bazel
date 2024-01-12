@@ -78,6 +78,7 @@ rust_test(
     data = [":index-ng.did"],
     deps = [
         "//rs/rosetta-api/icrc1/test_utils",
+        "@crate_index//:candid_parser",
         "@crate_index//:proptest",
     ],
 )

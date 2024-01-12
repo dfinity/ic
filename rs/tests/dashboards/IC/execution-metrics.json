@@ -468,7 +468,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum by(api_type) (\n  quantile by(api_type, ic_subnet) (\n    0.5,\n    sum without(status) (\n      rate(sandboxed_execution_executed_message_slices_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",api_type!=\"non replicated query\"}[$__rate_interval])\n    )\n  )\n)",
+          "expr": "sum by(api_type) (\n  quantile by(api_type, ic_subnet) (\n    0.5,\n    sum without(status) (\n      rate(sandboxed_execution_executed_message_slices_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",api_type!=\"non replicated query\",api_type!=\"inspect message\"}[$__rate_interval])\n    )\n  )\n)",
           "hide": false,
           "interval": "",
           "legendFormat": "{{api_type}}",
@@ -563,7 +563,7 @@
             "uid": "000000001"
           },
           "exemplar": true,
-          "expr": "label_replace(\n  quantile by (status, ic_subnet) (\n    0.5,\n    sum without(api_type) (\n      rate(sandboxed_execution_executed_message_slices_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",api_type!=\"non replicated query\",status!~\"Success|NoResponse|Paused\"}[$__rate_interval])\n    )\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+          "expr": "label_replace(\n  quantile by (status, ic_subnet) (\n    0.5,\n    sum without(api_type) (\n      rate(sandboxed_execution_executed_message_slices_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",api_type!=\"non replicated query\",api_type!=\"inspect message\",status!~\"Success|NoResponse|Paused\"}[$__rate_interval])\n    )\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
           "interval": "",
           "legendFormat": "{{ic_subnet}}: {{status}}",
           "refId": "A"

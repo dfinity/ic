@@ -256,7 +256,7 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
             .iter()
             .map(|record| PrincipalId::try_from(record).unwrap())
             .collect::<Vec<_>>();
-        let system_subnet_principal = subnet_principals.get(0).unwrap();
+        let system_subnet_principal = subnet_principals.first().unwrap();
 
         let system_subnet_id = SubnetId::new(*system_subnet_principal);
         let mut subnet_record = decode_registry_value::<SubnetRecord>(
@@ -454,7 +454,7 @@ fn test_recover_subnet_without_ecdsa_key_removes_it_from_signing_list() {
             .iter()
             .map(|record| PrincipalId::try_from(record).unwrap())
             .collect::<Vec<_>>();
-        let system_subnet_principal = subnet_principals.get(0).unwrap();
+        let system_subnet_principal = subnet_principals.first().unwrap();
 
         let system_subnet_id = SubnetId::new(*system_subnet_principal);
         let mut subnet_record = decode_registry_value::<SubnetRecord>(

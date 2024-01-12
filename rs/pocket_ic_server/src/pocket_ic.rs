@@ -12,7 +12,7 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
     EcdsaCurve, EcdsaKeyId, IngressState, IngressStatus, StateMachine, StateMachineBuilder,
-    StateMachineConfig, Time,
+    StateMachineConfig, SubmitIngressError, Time,
 };
 use ic_test_utilities::types::ids::subnet_test_id;
 use ic_types::{CanisterId, PrincipalId, SubnetId};
@@ -132,7 +132,7 @@ impl PocketIc {
             let subnet_config = pocket_ic::common::rest::SubnetConfig {
                 subnet_kind,
                 size: subnet_size,
-                canister_ranges: ranges.iter().map(|r| from_range(r)).collect(),
+                canister_ranges: ranges.iter().map(from_range).collect(),
             };
             topology.0.insert(subnet_id.get().0, subnet_config);
         }
@@ -478,9 +478,13 @@ impl Operation for ExecuteIngressMessage {
                     self.0.method,
                     self.0.payload,
                 ) {
-                    Err(e) => {
+                    Err(SubmitIngressError::HttpError(e)) => {
                         eprintln!("Failed to submit ingress message: {}", e);
                         OpOut::Error(PocketIcError::BadIngressMessage(e))
+                    }
+                    Err(ic_state_machine_tests::SubmitIngressError::UserError(e)) => {
+                        eprintln!("Failed to submit ingress message: {:?}", e);
+                        Err::<ic_state_machine_tests::WasmResult, ic_state_machine_tests::UserError>(e).into()
                     }
                     Ok(msg_id) => {
                         // Now, we execute on all subnets until we have the result

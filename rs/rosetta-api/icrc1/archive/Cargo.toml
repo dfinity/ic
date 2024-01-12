@@ -22,6 +22,9 @@ ic-stable-structures = { workspace = true }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 serde = { workspace = true }
 
+[dev-dependencies]
+candid_parser = { workspace = true }
+
 [features]
 default = []
 u256-tokens = ["dep:ic-icrc1-tokens-u256"]

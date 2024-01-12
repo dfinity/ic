@@ -6,6 +6,8 @@ use prost::Message;
 
 use candid::{CandidType, Deserialize};
 use dfn_core::api::now;
+#[cfg(target_arch = "wasm32")]
+use dfn_core::println;
 use ic_base_types::NodeId;
 use ic_crypto_node_key_validation::ValidIDkgDealingEncryptionPublicKey;
 use ic_nns_common::registry::get_subnet_ids_from_subnet_list;
