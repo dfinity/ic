@@ -1,5 +1,5 @@
 {
-  "checksum": "f65499342165fadd24b41babc34171ce3c126a18fb09e411c1e63bd3bfbd191e",
+  "checksum": "9401d7861bd9923ae8408d1c6a7880d69a44d14919a7ad10a877fb11b1ee01ae",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -9095,13 +9095,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "cddl 0.9.3": {
+    "cddl 0.9.4": {
       "name": "cddl",
-      "version": "0.9.3",
+      "version": "0.9.4",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/cddl/0.9.3/download",
-          "sha256": "436ba47def0bac296c651f18d8b731e1e66b136dcde4016149452535837efdd2"
+          "url": "https://crates.io/api/v1/crates/cddl/0.9.4/download",
+          "sha256": "2cc18488a72cef88de14f00d3db73f57a9511d53ae8dd72204a4bf8bc19309d7"
         }
       },
       "targets": [
@@ -9260,7 +9260,7 @@
           ],
           "selects": {}
         },
-        "version": "0.9.3"
+        "version": "0.9.4"
       },
       "license": "MIT"
     },
@@ -14931,7 +14931,7 @@
               "target": "cc"
             },
             {
-              "id": "cddl 0.9.3",
+              "id": "cddl 0.9.4",
               "target": "cddl"
             },
             {
