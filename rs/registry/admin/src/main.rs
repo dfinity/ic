@@ -6295,6 +6295,7 @@ async fn get_node_list_since(
                         .unwrap_or_else(|| Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0)),
                     node_provider_id,
                     dc_id,
+                    hostos_version_id: node_record.hostos_version_id,
                 },
             )
         })
