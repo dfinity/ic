@@ -299,10 +299,13 @@ impl<T: PartialEq> MultiCallResults<T> {
     /// * MultiCallError::ConsistentHttpOutcallError: all errors are the same HTTP outcall error.
     /// * MultiCallError::InconsistentResults if there are different errors.
     fn all_ok(self) -> Result<BTreeMap<RpcService, T>, MultiCallError<T>> {
+        let mut has_ok = false;
         let mut first_error: Option<(RpcService, &Result<T, RpcError>)> = None;
         for (provider, result) in self.results.iter() {
             match result {
-                Ok(_value) => {}
+                Ok(_value) => {
+                    has_ok = true;
+                }
                 _ => match first_error {
                     None => {
                         first_error = Some((*provider, result));
@@ -324,7 +327,13 @@ impl<T: PartialEq> MultiCallResults<T> {
                     (provider, result.expect("BUG: all results should be ok"))
                 })
                 .collect()),
-            Some((_, Err(error))) => Err(MultiCallError::ConsistentError(error.clone())),
+            Some((_, Err(error))) => {
+                if has_ok {
+                    Err(MultiCallError::InconsistentResults(self))
+                } else {
+                    Err(MultiCallError::ConsistentError(error.clone()))
+                }
+            }
             Some((_, Ok(_))) => {
                 panic!("BUG: first_error should be an error type")
             }
