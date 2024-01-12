@@ -1,4 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:defs.bzl", "rust_ic_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -65,16 +66,12 @@ MACRO_DEV_DEPENDENCIES = []
 DEV_DATA = [
     # Keep sorted.
     ":replica_tests",
-    "//rs/canister_sandbox",
-    "//rs/canister_sandbox/sandbox_launcher",
 ]
 
 ALIASES = {}
 
 DEV_ENV = {
     # Keep sorted.
-    "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-    "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
 }
 
 rust_library(
@@ -96,7 +93,7 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-rust_test_suite(
+rust_ic_test_suite(
     name = "replica_tests_integration",
     timeout = "long",
     srcs = glob(["tests/**/*.rs"]),

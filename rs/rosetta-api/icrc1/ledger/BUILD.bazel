@@ -1,5 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -103,15 +104,13 @@ rust_test(
 )
 
 [
-    rust_test(
+    rust_ic_test(
         name = "ledger_test" + name_suffix,
         srcs = ["tests/tests.rs"],
         crate_features = features,
         data = [
             ":block.cddl",
             ":ledger_canister" + name_suffix + ".wasm",
-            "//rs/canister_sandbox",
-            "//rs/canister_sandbox/sandbox_launcher",
             "//rs/rosetta-api/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz",
             "@ic-icrc1-ledger-first-version.wasm.gz//file",
             "@mainnet_ic-icrc1-ledger//file",
@@ -122,8 +121,6 @@ rust_test(
             "IC_ICRC1_LEDGER_FIRST_VERSION_WASM_PATH": "$(rootpath @ic-icrc1-ledger-first-version.wasm.gz//file)",
             "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-ledger//file)",
             "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz)",
-            "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-            "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
         },
         deps = [
             ":ledger",

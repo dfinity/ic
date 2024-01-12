@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library", "rust_test")
-load("//bazel:defs.bzl", "rust_bench")
+load("//bazel:defs.bzl", "rust_ic_bench")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -72,14 +72,10 @@ MACRO_DEPENDENCIES = [
 ]
 
 DATA = [
-    "//rs/canister_sandbox",
-    "//rs/canister_sandbox/sandbox_launcher",
     "//rs/rust_canisters/stable_structures:stable_structures_canister",
 ]
 
 ENV = {
-    "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-    "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     "STABLE_STRUCTURES_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/stable_structures:stable_structures_canister)",
 }
 
@@ -129,7 +125,7 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":consensus"],
 )
 
-rust_bench(
+rust_ic_bench(
     name = "validate_payload_bench",
     testonly = True,
     srcs = ["benches/validate_payload.rs"],

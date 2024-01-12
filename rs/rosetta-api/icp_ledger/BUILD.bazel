@@ -2,6 +2,7 @@ load("@rules_motoko//motoko:defs.bzl", "motoko_binary", "motoko_library")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:candid.bzl", "did_git_test")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test")
 load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//visibility:public"])
@@ -85,7 +86,7 @@ rust_canister(
     ],
 )
 
-rust_test(
+rust_ic_test(
     name = "ledger_canister_integration_test",
     timeout = "long",
     srcs = ["test/test.rs"],
@@ -94,8 +95,6 @@ rust_test(
         "ledger_archive.did",
         ":ledger_proxy.wasm",
         ":test_notified_canister",
-        "//rs/canister_sandbox",
-        "//rs/canister_sandbox/sandbox_launcher",
         "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm",
         "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
     ],
@@ -105,8 +104,6 @@ rust_test(
         "LEDGER_PROXY_WASM_PATH": "$(rootpath :ledger_proxy.wasm)",
         "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
         "TEST_NOTIFIED_WASM_PATH": "$(rootpath :test_notified_canister)",
-        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     },
     deps = [
         ":icp_ledger",

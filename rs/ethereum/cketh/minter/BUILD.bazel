@@ -2,6 +2,7 @@ load("@aspect_rules_sol//sol:defs.bzl", "sol_binary")
 load("@io_bazel_rules_closure//closure:defs.bzl", "closure_js_library", "closure_js_test")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc", "rust_doc_test", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -160,21 +161,17 @@ rust_binary(
     ],
 )
 
-rust_test(
+rust_ic_test(
     name = "integration_tests",
     srcs = ["tests/tests.rs"],
     data = [
         ":cketh_minter_debug.wasm",
-        "//rs/canister_sandbox",
-        "//rs/canister_sandbox/sandbox_launcher",
         "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
         "CKETH_MINTER_WASM_PATH": "$(rootpath :cketh_minter_debug.wasm)",
         "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm)",
-        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     },
     proc_macro_deps = [
         "@crate_index//:strum_macros",

@@ -1,6 +1,6 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
+load("//bazel:defs.bzl", "rust_ic_test", "rust_ic_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -129,8 +129,6 @@ DEV_DATA = [
     ":governance-mem-test-canister",
     ":unstoppable-canister",
     ":mem-utils-test-canister",
-    "//rs/canister_sandbox",
-    "//rs/canister_sandbox/sandbox_launcher",
     "//rs/nns/cmc:cycles-minting-canister",
     "//rs/nns/governance:governance-canister",
     "//rs/nns/governance:governance-canister-test",
@@ -155,8 +153,6 @@ DEV_DATA = [
 DEV_ENV = {
     "CARGO_MANIFEST_DIR": "rs/nns/integration_tests",
     "CYCLES_LEDGER_WASM_PATH": "$(rootpath @cycles-ledger.wasm.gz//file)",
-    "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-    "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     "GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister)",
     "GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister-test)",
     "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
@@ -243,7 +239,7 @@ rust_canister(
     ],
 )
 
-rust_test_suite_with_extra_srcs(
+rust_ic_test_suite_with_extra_srcs(
     name = "integration_tests_test",
     srcs = glob(
         ["src/**/*.rs"],
@@ -267,7 +263,7 @@ rust_test_suite_with_extra_srcs(
 
 # To run this test use `bazel test --config=alltests //rs/nns/integration_tests:governance_mem_test`
 # See the .bazelrc for more configuration information.
-rust_test(
+rust_ic_test(
     name = "governance_mem_test",
     size = "large",
     srcs = [
@@ -285,7 +281,7 @@ rust_test(
 
 # To run this test use `bazel test --config=alltests //rs/nns/integration_tests:canister_playground` --test_output=all
 # See the .bazelrc for more configuration information.
-rust_test(
+rust_ic_test(
     name = "canister_playground",
     srcs = [
         "src/canister_playground.rs",
@@ -320,7 +316,7 @@ rust_test(
 # at the end.
 #
 # See the .bazelrc for more configuration information.
-rust_test(
+rust_ic_test(
     name = "copy_inactive_neurons_to_stable_memory_test",
     size = "large",
     srcs = [

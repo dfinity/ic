@@ -1,6 +1,7 @@
 load("@rules_motoko//motoko:defs.bzl", "external_actor")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "motoko_canister")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -65,17 +66,9 @@ rust_test(
     ],
 )
 
-rust_test(
+rust_ic_test(
     name = "lifeline_test",
     srcs = ["tests/test.rs"],
-    data = [
-        "//rs/canister_sandbox",
-        "//rs/canister_sandbox/sandbox_launcher",
-    ],
-    env = {
-        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
-    },
     deps = [
         "//rs/nervous_system/clients",
         "//rs/nervous_system/common",

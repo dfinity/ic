@@ -2,7 +2,7 @@
 Utilities for building IC replica and canisters.
 """
 
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test", "rust_test_suite")
 load("//publish:defs.bzl", "release_nostrip_binary")
 
 _COMPRESS_CONCURRENCY = 16
@@ -154,6 +154,18 @@ def sha256sum2url(name, src, tags = [], **kwargs):
         **kwargs
     )
 
+# Binaries needed for testing with canister_sandbox
+_SANDBOX_DATA = [
+    "//rs/canister_sandbox",
+    "//rs/canister_sandbox/sandbox_launcher",
+]
+
+# Env needed for testing with canister_sandbox
+_SANDBOX_ENV = {
+    "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+    "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+}
+
 def rust_test_suite_with_extra_srcs(name, srcs, extra_srcs, **kwargs):
     """ A rule for creating a test suite for a set of `rust_test` targets.
 
@@ -194,6 +206,51 @@ def rust_test_suite_with_extra_srcs(name, srcs, extra_srcs, **kwargs):
         tags = kwargs.get("tags", None),
     )
 
+def rust_ic_test_suite_with_extra_srcs(name, srcs, extra_srcs, env = {}, data = [], **kwargs):
+    """ A rule for creating a test suite for a set of `rust_test` targets.
+
+    Like `rust_test_suite_with_extra_srcs`, but adds data and env params required for canister sandbox
+
+    Args:
+      see description for `rust_test_suite_with_extra_srcs`
+    """
+    rust_test_suite_with_extra_srcs(
+        name,
+        srcs,
+        extra_srcs,
+        env = dict(env.items() + _SANDBOX_ENV.items()),
+        data = data + _SANDBOX_DATA,
+        **kwargs
+    )
+
+def rust_ic_test_suite(env = {}, data = [], **kwargs):
+    """ A rule for creating a test suite for a set of `rust_test` targets.
+
+    Like `rust_test_suite`, but adds data and env params required for canister sandbox
+
+    Args:
+      see description for `rust_test_suite`
+    """
+    rust_test_suite(
+        env = dict(env.items() + _SANDBOX_ENV.items()),
+        data = data + _SANDBOX_DATA,
+        **kwargs
+    )
+
+def rust_ic_test(env = {}, data = [], **kwargs):
+    """ A rule for creating a test suite for a set of `rust_test` targets.
+
+    Like `rust_test`, but adds data and env params required for canister sandbox
+
+    Args:
+      see description for `rust_test`
+    """
+    rust_test(
+        env = dict(env.items() + _SANDBOX_ENV.items()),
+        data = data + _SANDBOX_DATA,
+        **kwargs
+    )
+
 def rust_bench(name, env = {}, data = [], **kwargs):
     """A rule for defining a rust benchmark.
 
@@ -227,4 +284,18 @@ def rust_bench(name, env = {}, data = [], **kwargs):
         env = dict(env.items() + {"BAZEL_DEFS_BENCH_BIN": "$(location :%s)" % binary_name_publish}.items()),
         data = data + [":" + binary_name_publish],
         tags = kwargs.get("tags", []) + ["rust_bench"],
+    )
+
+def rust_ic_bench(env = {}, data = [], **kwargs):
+    """A rule for defining a rust benchmark.
+
+    Like `rust_bench`, but adds data and env params required for canister sandbox
+
+    Args:
+      see description for `rust_bench`
+    """
+    rust_bench(
+        env = dict(env.items() + _SANDBOX_ENV.items()),
+        data = data + _SANDBOX_DATA,
+        **kwargs
     )
