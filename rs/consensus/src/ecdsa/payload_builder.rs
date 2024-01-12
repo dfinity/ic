@@ -493,6 +493,11 @@ pub(crate) fn create_data_payload(
     Ok(new_payload)
 }
 
+pub(crate) enum CertifiedHeight {
+    ReachedSummaryHeight,
+    BelowSummaryHeight,
+}
+
 pub(crate) fn create_data_payload_helper(
     subnet_id: SubnetId,
     context: &ValidationContext,
@@ -551,6 +556,12 @@ pub(crate) fn create_data_payload_helper(
         .subnet_call_context_manager
         .ecdsa_dealings_contexts;
 
+    let certified_height = if context.certified_height >= summary_block.height() {
+        CertifiedHeight::ReachedSummaryHeight
+    } else {
+        CertifiedHeight::BelowSummaryHeight
+    };
+
     create_data_payload_helper_2(
         &mut ecdsa_payload,
         height,
@@ -558,6 +569,7 @@ pub(crate) fn create_data_payload_helper(
         &ecdsa_config,
         &enabled_signing_keys,
         next_interval_registry_version,
+        certified_height,
         &receivers,
         all_signing_requests,
         ecdsa_dealings_contexts,
@@ -577,6 +589,7 @@ pub(crate) fn create_data_payload_helper_2(
     ecdsa_config: &EcdsaConfig,
     enabled_signing_keys: &BTreeSet<EcdsaKeyId>,
     next_interval_registry_version: RegistryVersion,
+    certified_height: CertifiedHeight,
     receivers: &[NodeId],
     all_signing_requests: &BTreeMap<CallbackId, SignWithEcdsaContext>,
     ecdsa_dealings_contexts: &BTreeMap<CallbackId, EcdsaDealingsContext>,
@@ -614,6 +627,11 @@ pub(crate) fn create_data_payload_helper_2(
         ecdsa_payload,
         log,
     )?;
+
+    if matches!(certified_height, CertifiedHeight::ReachedSummaryHeight) {
+        quadruples::purge_old_key_quadruples(ecdsa_payload, all_signing_requests);
+    }
+
     quadruples::make_new_quadruples_if_needed(ecdsa_config, ecdsa_payload);
 
     let mut new_transcripts =
@@ -1848,6 +1866,7 @@ mod tests {
             &EcdsaConfig::default(),
             &valid_keys,
             RegistryVersion::from(9),
+            CertifiedHeight::ReachedSummaryHeight,
             &[node_test_id(0)],
             &sign_with_ecdsa_contexts,
             &BTreeMap::default(),
@@ -1871,6 +1890,7 @@ mod tests {
             &EcdsaConfig::default(),
             &valid_keys,
             RegistryVersion::from(9),
+            CertifiedHeight::ReachedSummaryHeight,
             &[node_test_id(0)],
             &sign_with_ecdsa_contexts,
             &BTreeMap::default(),
@@ -2876,6 +2896,8 @@ mod tests {
             assert_eq!(metrics.critical_error_ecdsa_key_transcript_missing.get(), 1);
 
             // Now, quadruples and xnet reshares should be purged
+            // TODO(CON-1149): Extend once available quadruples are no longer immediately purged
+            // on key reshares.
             assert!(payload_4.available_quadruples.is_empty());
             assert!(payload_4.quadruples_in_creation.is_empty());
             assert!(payload_4.ongoing_xnet_reshares.is_empty());
@@ -2944,6 +2966,7 @@ mod tests {
                 &ecdsa_config,
                 &valid_keys,
                 registry_version,
+                CertifiedHeight::ReachedSummaryHeight,
                 &node_ids,
                 &BTreeMap::default(),
                 &BTreeMap::default(),
@@ -3109,6 +3132,7 @@ mod tests {
                 &ecdsa_config,
                 &valid_keys,
                 registry_version,
+                CertifiedHeight::ReachedSummaryHeight,
                 &node_ids,
                 &BTreeMap::default(),
                 &BTreeMap::default(),
@@ -3137,6 +3161,7 @@ mod tests {
                 &ecdsa_config,
                 &valid_keys,
                 registry_version,
+                CertifiedHeight::ReachedSummaryHeight,
                 &node_ids,
                 &BTreeMap::default(),
                 &BTreeMap::default(),
@@ -3163,6 +3188,7 @@ mod tests {
                 &ecdsa_config,
                 &valid_keys,
                 registry_version,
+                CertifiedHeight::ReachedSummaryHeight,
                 &node_ids,
                 &BTreeMap::default(),
                 &BTreeMap::default(),

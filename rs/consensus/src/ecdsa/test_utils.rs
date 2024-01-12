@@ -43,6 +43,7 @@ use ic_types::crypto::canister_threshold_sig::{
 };
 use ic_types::crypto::AlgorithmId;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
+use ic_types::messages::CallbackId;
 use ic_types::{signature::*, Time};
 use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId};
 use rand::{CryptoRng, Rng};
@@ -86,6 +87,24 @@ pub fn fake_sign_with_ecdsa_context_with_batch_time(
         matched_quadruple: None,
         nonce: None,
     }
+}
+
+pub fn fake_sign_with_ecdsa_context_with_quadruple(
+    id: u8,
+    key_id: EcdsaKeyId,
+    quadruple: Option<QuadrupleId>,
+) -> (CallbackId, SignWithEcdsaContext) {
+    let context = SignWithEcdsaContext {
+        request: RequestBuilder::new().build(),
+        message_hash: [0; 32],
+        derivation_path: vec![],
+        batch_time: mock_time(),
+        key_id,
+        pseudo_random_id: [id; 32],
+        matched_quadruple: quadruple.map(|qid| (qid, Height::from(1))),
+        nonce: None,
+    };
+    (CallbackId::from(id as u64), context)
 }
 
 #[derive(Clone)]
