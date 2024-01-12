@@ -2722,9 +2722,19 @@ impl Governance {
             ));
         }
 
-        let creation_timestamp_seconds = self.env.now();
+        let created_timestamp_seconds = self.env.now();
         let dissolve_and_spawn_at_timestamp_seconds =
-            creation_timestamp_seconds + economics.neuron_spawn_dissolve_delay_seconds;
+            created_timestamp_seconds + economics.neuron_spawn_dissolve_delay_seconds;
+
+        // Lock both parent and child neurons so that it cannot interleave with other async
+        // operations on those neurons and spawn doesn't happen while the parent is in a corrupted
+        // state.
+        let in_flight_command = NeuronInFlightCommand {
+            timestamp: created_timestamp_seconds,
+            command: Some(InFlightCommand::SyncCommand(SyncCommand {})),
+        };
+        let _parent_lock = self.lock_neuron_for_command(id.id, in_flight_command.clone())?;
+        let _child_lock = self.lock_neuron_for_command(child_nid.id, in_flight_command.clone())?;
 
         let child_neuron = Neuron {
             id: Some(child_nid),
@@ -2733,7 +2743,7 @@ impl Governance {
             hot_keys: parent_neuron.hot_keys.clone(),
             cached_neuron_stake_e8s: 0,
             neuron_fees_e8s: 0,
-            created_timestamp_seconds: creation_timestamp_seconds,
+            created_timestamp_seconds,
             aging_since_timestamp_seconds: u64::MAX,
             dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                 dissolve_and_spawn_at_timestamp_seconds,
