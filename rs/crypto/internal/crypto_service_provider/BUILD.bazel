@@ -132,7 +132,6 @@ rust_test_suite(
             "tests/check_generated_files.rs",
         ],
     ),
-    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + DEV_MACRO_DEPENDENCIES,
     deps = [":crypto_service_provider"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
