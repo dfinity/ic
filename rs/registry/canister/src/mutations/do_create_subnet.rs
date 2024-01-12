@@ -509,4 +509,57 @@ mod test {
 
         futures::executor::block_on(registry.do_create_subnet(payload));
     }
+
+    #[test]
+    #[should_panic(
+        expected = "[Registry] Cannot create subnet: The requested ECDSA key ids [EcdsaKeyId { curve: \
+                    Secp256k1, name: \"fake_key_id\" }, EcdsaKeyId { curve: Secp256k1, name: \"fake_key_id\" }] \
+                    have duplicates"
+    )]
+    fn test_disallow_duplicate_ecdsa_keys() {
+        // Step 1.1: prepare registry.
+        let mut registry = invariant_compliant_registry(0);
+        let (mutate_request, node_ids) = prepare_registry_with_nodes(1, 1);
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+
+        // Step 1.2: prepare a subnet with an ECDSA key.
+        let key_id = EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "fake_key_id".to_string(),
+        };
+        let signing_subnet = SubnetId::from(*TEST_USER1_PRINCIPAL);
+        let mut subnet_list_record = registry.get_subnet_list_record();
+        let mut subnet_record: SubnetRecord = get_invariant_compliant_subnet_record(node_ids);
+        subnet_record.ecdsa_config = Some(
+            EcdsaConfig {
+                quadruples_to_create_in_advance: 1,
+                key_ids: vec![key_id.clone()],
+                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                signature_request_timeout_ns: None,
+                idkg_key_rotation_period_ms: None,
+            }
+            .into(),
+        );
+        let fake_subnet_mutation =
+            add_fake_subnet(signing_subnet, &mut subnet_list_record, subnet_record);
+        registry.maybe_apply_mutation_internal(fake_subnet_mutation);
+
+        // Step 2: Try to create another subnet with duplicate keys, which should panic.
+        let key_request = EcdsaKeyRequest {
+            key_id,
+            subnet_id: Some(*TEST_USER1_PRINCIPAL),
+        };
+        let payload = CreateSubnetPayload {
+            replica_version_id: ReplicaVersion::default().into(),
+            ecdsa_config: Some(EcdsaInitialConfig {
+                quadruples_to_create_in_advance: 1,
+                keys: vec![key_request; 2],
+                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                signature_request_timeout_ns: None,
+                idkg_key_rotation_period_ms: None,
+            }),
+            ..Default::default()
+        };
+        futures::executor::block_on(registry.do_create_subnet(payload));
+    }
 }
