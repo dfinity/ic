@@ -6,10 +6,7 @@ use ic_config::{
 };
 use ic_interfaces::{
     certification::{CertificationPermanentError, Verifier, VerifierError},
-    p2p::state_sync::{
-        ArtifactErrorCode::{ChunkVerificationFailed, ChunksMoreNeeded},
-        Chunk, ChunkId, Chunkable,
-    },
+    p2p::state_sync::{Chunk, ChunkId, Chunkable},
     validation::ValidationResult,
 };
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, DecodeStreamError};
@@ -440,9 +437,11 @@ pub fn pipe_meta_manifest(
     }
 
     match dst.add_chunk(id, chunk) {
-        Ok(msg) => Ok(msg),
-        Err(ChunksMoreNeeded) => Err(StateSyncErrorCode::ChunksMoreNeeded),
-        Err(ChunkVerificationFailed) => Err(StateSyncErrorCode::MetaManifestVerificationFailed),
+        Ok(()) => match dst.completed() {
+            Some(artifact) => Ok(artifact),
+            None => Err(StateSyncErrorCode::ChunksMoreNeeded),
+        },
+        Err(_) => Err(StateSyncErrorCode::MetaManifestVerificationFailed),
     }
 }
 
@@ -474,12 +473,13 @@ pub fn pipe_manifest(
         }
 
         match dst.add_chunk(*id, chunk) {
-            Ok(msg) => {
-                return Ok(msg);
+            Ok(()) => {
+                if let Some(msg) = dst.completed() {
+                    return Ok(msg);
+                }
             }
-            Err(ChunksMoreNeeded) => (),
-            Err(ChunkVerificationFailed) => {
-                return Err(StateSyncErrorCode::ManifestVerificationFailed)
+            Err(_) => {
+                return Err(StateSyncErrorCode::ManifestVerificationFailed);
             }
         }
     }
@@ -517,13 +517,12 @@ pub fn pipe_partial_state_sync(
             }
 
             match dst.add_chunk(*id, chunk) {
-                Ok(msg) => {
-                    return Ok(msg);
+                Ok(()) => {
+                    if let Some(msg) = dst.completed() {
+                        return Ok(msg);
+                    }
                 }
-                Err(ChunksMoreNeeded) => (),
-                Err(ChunkVerificationFailed) => {
-                    return Err(StateSyncErrorCode::OtherChunkVerificationFailed)
-                }
+                Err(_) => return Err(StateSyncErrorCode::OtherChunkVerificationFailed),
             }
         }
         if omitted_chunks {

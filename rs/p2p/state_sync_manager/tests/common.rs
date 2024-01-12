@@ -9,9 +9,7 @@ use std::{
     time::Duration,
 };
 
-use ic_interfaces::p2p::state_sync::{
-    ArtifactErrorCode, Chunk, ChunkId, Chunkable, StateSyncClient,
-};
+use ic_interfaces::p2p::state_sync::{AddChunkError, Chunk, ChunkId, Chunkable, StateSyncClient};
 use ic_logger::ReplicaLogger;
 use ic_memory_transport::TransportRouter;
 use ic_metrics::MetricsRegistry;
@@ -281,11 +279,7 @@ impl Chunkable<StateSyncMessage> for FakeChunkable {
         Box::new(to_download.into_iter().map(ChunkId::from))
     }
 
-    fn add_chunk(
-        &mut self,
-        chunk_id: ChunkId,
-        chunk: Chunk,
-    ) -> Result<StateSyncMessage, ArtifactErrorCode> {
+    fn add_chunk(&mut self, chunk_id: ChunkId, chunk: Chunk) -> Result<(), AddChunkError> {
         for set in self.chunk_sets.iter_mut() {
             if set.is_empty() {
                 continue;
@@ -302,11 +296,15 @@ impl Chunkable<StateSyncMessage> for FakeChunkable {
             self.local_state.add_chunk(chunk_id, chunk.len())
         }
 
+        Ok(())
+    }
+
+    fn completed(&self) -> Option<StateSyncMessage> {
         let elems = self.chunk_sets.iter().map(|set| set.len()).sum::<usize>();
         if elems == 0 {
-            Ok(state_sync_artifact(self.syncing_state.clone()))
+            Some(state_sync_artifact(self.syncing_state.clone()))
         } else {
-            Err(ArtifactErrorCode::ChunksMoreNeeded)
+            None
         }
     }
 }
@@ -342,13 +340,13 @@ impl Chunkable<StateSyncMessage> for SharableMockChunkable {
         self.chunks_to_download_calls.fetch_add(1, Ordering::SeqCst);
         self.mock.lock().unwrap().chunks_to_download()
     }
-    fn add_chunk(
-        &mut self,
-        chunk_id: ChunkId,
-        chunk: Chunk,
-    ) -> Result<StateSyncMessage, ArtifactErrorCode> {
+    fn add_chunk(&mut self, chunk_id: ChunkId, chunk: Chunk) -> Result<(), AddChunkError> {
         self.add_chunks_calls.fetch_add(1, Ordering::SeqCst);
         self.mock.lock().unwrap().add_chunk(chunk_id, chunk)
+    }
+
+    fn completed(&self) -> Option<StateSyncMessage> {
+        self.mock.lock().unwrap().completed()
     }
 }
 
