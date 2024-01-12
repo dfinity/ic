@@ -2509,28 +2509,44 @@ icTests my_sub other_sub =
                                                                          ],
                                                                        testGroup "Delegation targets" $
                                                                          let callReq cid =
-                                                                               rec
-                                                                                 [ "request_type" =: GText "call",
-                                                                                   "sender" =: GBlob defaultUser,
-                                                                                   "canister_id" =: GBlob cid,
-                                                                                   "method_name" =: GText "update",
-                                                                                   "arg" =: GBlob (run reply)
-                                                                                 ]
+                                                                               ( rec
+                                                                                   [ "request_type" =: GText "call",
+                                                                                     "sender" =: GBlob defaultUser,
+                                                                                     "canister_id" =: GBlob cid,
+                                                                                     "method_name" =: GText "update",
+                                                                                     "arg" =: GBlob (run reply)
+                                                                                   ],
+                                                                                 rec
+                                                                                   [ "request_type" =: GText "query",
+                                                                                     "sender" =: GBlob defaultUser,
+                                                                                     "canister_id" =: GBlob cid,
+                                                                                     "method_name" =: GText "query",
+                                                                                     "arg" =: GBlob (run reply)
+                                                                                   ]
+                                                                               )
 
                                                                              mgmtReq cid =
-                                                                               rec
-                                                                                 [ "request_type" =: GText "call",
-                                                                                   "sender" =: GBlob defaultUser,
-                                                                                   "canister_id" =: GBlob "",
-                                                                                   "method_name" =: GText "canister_status",
-                                                                                   "arg" =: GBlob (Candid.encode (#canister_id .== Principal cid))
-                                                                                 ]
+                                                                               ( rec
+                                                                                   [ "request_type" =: GText "call",
+                                                                                     "sender" =: GBlob defaultUser,
+                                                                                     "canister_id" =: GBlob "",
+                                                                                     "method_name" =: GText "canister_status",
+                                                                                     "arg" =: GBlob (Candid.encode (#canister_id .== Principal cid))
+                                                                                   ],
+                                                                                 rec
+                                                                                   [ "request_type" =: GText "query",
+                                                                                     "sender" =: GBlob defaultUser,
+                                                                                     "canister_id" =: GBlob "",
+                                                                                     "method_name" =: GText "canister_status",
+                                                                                     "arg" =: GBlob (Candid.encode (#canister_id .== Principal cid))
+                                                                                   ]
+                                                                               )
 
-                                                                             good cid req dels = do
-                                                                               req <- addExpiry req
-                                                                               let rid = requestId req
+                                                                             good cid call query dels = do
+                                                                               call <- addExpiry call
+                                                                               let rid = requestId call
                                                                                -- sign request with delegations
-                                                                               delegationEnv defaultSK dels req >>= postCallCBOR cid >>= code2xx
+                                                                               delegationEnv defaultSK dels call >>= postCallCBOR cid >>= code2xx
                                                                                -- wait for it
                                                                                void $ awaitStatus (getRequestStatus' defaultUser cid rid) >>= isReply
                                                                                -- also read status with delegation
@@ -2542,11 +2558,15 @@ icTests my_sub other_sub =
                                                                                        "paths" =: GList [GList [GBlob "request_status", GBlob rid]]
                                                                                      ]
                                                                                delegationEnv defaultSK dels sreq >>= postReadStateCBOR cid >>= void . code2xx
+                                                                               -- also make query call
+                                                                               query <- addExpiry query
+                                                                               let qrid = requestId query
+                                                                               delegationEnv defaultSK dels query >>= postQueryCBOR cid >>= code2xx
 
                                                                              badSubmit cid req dels = do
                                                                                req <- addExpiry req
                                                                                -- sign request with delegations (should fail)
-                                                                               delegationEnv defaultSK dels req >>= postCallCBOR cid >>= code4xx
+                                                                               delegationEnv defaultSK dels req >>= postCallCBOR cid >>= code403
 
                                                                              badRead cid req dels = do
                                                                                req <- addExpiry req
@@ -2563,16 +2583,22 @@ icTests my_sub other_sub =
                                                                                        "sender" =: GBlob defaultUser,
                                                                                        "paths" =: GList [GList [GBlob "request_status", GBlob rid]]
                                                                                      ]
-                                                                               delegationEnv defaultSK dels sreq >>= postReadStateCBOR cid >>= void . code4xx
+                                                                               delegationEnv defaultSK dels sreq >>= postReadStateCBOR cid >>= void . code403
+
+                                                                             badQuery cid req dels = do
+                                                                               req <- addExpiry req
+                                                                               -- sign request with delegations (should fail)
+                                                                               delegationEnv defaultSK dels req >>= postQueryCBOR cid >>= code403
 
                                                                              goodTestCase name mkReq mkDels =
-                                                                               simpleTestCase name ecid $ \cid -> good cid (mkReq cid) (mkDels cid)
+                                                                               simpleTestCase name ecid $ \cid -> good cid (fst $ mkReq cid) (snd $ mkReq cid) (mkDels cid)
 
                                                                              badTestCase name mkReq mkDels =
                                                                                testGroup
                                                                                  name
-                                                                                 [ simpleTestCase "in submit" ecid $ \cid -> badSubmit cid (mkReq cid) (mkDels cid),
-                                                                                   simpleTestCase "in read_state" ecid $ \cid -> badRead cid (mkReq cid) (mkDels cid)
+                                                                                 [ simpleTestCase "in submit" ecid $ \cid -> badSubmit cid (fst $ mkReq cid) (mkDels cid),
+                                                                                   simpleTestCase "in read_state" ecid $ \cid -> badRead cid (fst $ mkReq cid) (mkDels cid),
+                                                                                   simpleTestCase "in query" ecid $ \cid -> badQuery cid (snd $ mkReq cid) (mkDels cid)
                                                                                  ]
 
                                                                              withEd25519 = zip [createSecretKeyEd25519 (BS.singleton n) | n <- [0 ..]]

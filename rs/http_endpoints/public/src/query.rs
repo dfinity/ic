@@ -199,21 +199,14 @@ impl Service<Request<Bytes>> for QueryService {
         let logger = self.log.clone();
 
         async move {
-            let get_authorized_canisters_fut =
-                validator_executor.validate_request(request.clone(), registry_version);
-
-            match get_authorized_canisters_fut.await {
-                Ok(targets) => {
-                    if !targets.contains(&request.content().receiver) {
-                        let res = make_plaintext_response(StatusCode::FORBIDDEN, "".to_string());
-                        return Ok(res);
-                    }
-                }
-                Err(http_err) => {
-                    let res = make_plaintext_response(http_err.status, http_err.message);
-                    return Ok(res);
-                }
+            if let Err(http_err) = validator_executor
+                .validate_request(request.clone(), registry_version)
+                .await
+            {
+                let res = make_plaintext_response(http_err.status, http_err.message);
+                return Ok(res);
             };
+
             let user_query = request.take_content();
 
             let query_execution_response = old_query_execution_service
