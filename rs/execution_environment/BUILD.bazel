@@ -1,5 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
-load("//bazel:defs.bzl", "rust_bench")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_library")
+load("//bazel:defs.bzl", "rust_ic_bench", "rust_ic_test", "rust_ic_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -87,15 +87,9 @@ MACRO_DEV_DEPENDENCIES = [
 
 ALIASES = {}
 
-DATA = [
-    "//rs/canister_sandbox",
-    "//rs/canister_sandbox/sandbox_launcher",
-]
+DATA = []
 
-ENV = {
-    "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-    "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
-}
+ENV = {}
 
 rust_library(
     name = "execution_environment",
@@ -108,7 +102,7 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
-rust_test(
+rust_ic_test(
     name = "execution_environment_test",
     timeout = "long",
     aliases = ALIASES,
@@ -122,7 +116,7 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-rust_test_suite(
+rust_ic_test_suite(
     name = "execution_environment_misc_integration",
     size = "large",
     srcs = glob(["tests/*.rs"]),
@@ -176,7 +170,7 @@ rust_library(
     deps = BENCH_DEPENDENCIES,
 )
 
-rust_bench(
+rust_ic_bench(
     name = "execute_inspect_message_bench",
     srcs = ["benches/system_api/execute_inspect_message.rs"],
     data = DATA,
@@ -184,7 +178,7 @@ rust_bench(
     deps = [":execution_environment_bench"] + BENCH_DEPENDENCIES,
 )
 
-rust_bench(
+rust_ic_bench(
     name = "execute_query_bench",
     srcs = ["benches/system_api/execute_query.rs"],
     data = DATA,
@@ -192,7 +186,7 @@ rust_bench(
     deps = [":execution_environment_bench"] + BENCH_DEPENDENCIES,
 )
 
-rust_bench(
+rust_ic_bench(
     name = "execute_update_bench",
     srcs = ["benches/system_api/execute_update.rs"],
     data = DATA,
@@ -200,7 +194,7 @@ rust_bench(
     deps = [":execution_environment_bench"] + BENCH_DEPENDENCIES,
 )
 
-rust_bench(
+rust_ic_bench(
     name = "wasm_instructions_bench",
     srcs = ["benches/wasm_instructions/main.rs"],
     data = DATA,
@@ -208,7 +202,7 @@ rust_bench(
     deps = [":execution_environment_bench"] + BENCH_DEPENDENCIES,
 )
 
-rust_bench(
+rust_ic_bench(
     name = "scheduler_bench",
     srcs = ["benches/scheduler.rs"],
     data = DATA,
@@ -221,7 +215,7 @@ rust_bench(
     ] + BENCH_DEPENDENCIES,
 )
 
-rust_bench(
+rust_ic_bench(
     name = "100k_canisters_bench",
     srcs = ["benches/100k_canisters.rs"],
     data = DATA + ["//rs/rust_canisters/canister_creator:canister_creator_canister"],
@@ -250,7 +244,7 @@ rust_library(
     ] + BENCH_DEPENDENCIES,
 )
 
-rust_bench(
+rust_ic_bench(
     name = "management_canister_bench",
     srcs = glob(["benches/management_canister/*.rs"]),
     data = DATA + ["//rs/execution_environment/benches/management_canister/test_canister"],

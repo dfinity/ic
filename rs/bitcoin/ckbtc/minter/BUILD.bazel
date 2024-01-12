@@ -1,5 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -118,15 +119,13 @@ rust_test(
 )
 
 # integration tests defined in ckbtc minter tests/
-rust_test(
+rust_ic_test(
     name = "ckbtc_minter_tests",
     srcs = ["tests/tests.rs"],
     data = [
         ":ckbtc_minter_debug.wasm",
         "//rs/bitcoin/ckbtc/kyt:kyt_canister.wasm",
         "//rs/bitcoin/mock:bitcoin_canister_mock.wasm",
-        "//rs/canister_sandbox",
-        "//rs/canister_sandbox/sandbox_launcher",
         "//rs/rosetta-api/icrc1/ledger:ledger_canister.wasm",
     ],
     env = {
@@ -134,8 +133,6 @@ rust_test(
         "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath :ckbtc_minter_debug.wasm)",
         "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister.wasm)",
         "IC_CKBTC_KYT_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/kyt:kyt_canister.wasm)",
-        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
         "IC_BITCOIN_CANISTER_MOCK_WASM_PATH": "$(rootpath //rs/bitcoin/mock:bitcoin_canister_mock.wasm)",
     },
     deps = [

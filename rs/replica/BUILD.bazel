@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
-load("//bazel:defs.bzl", "rust_bench")
+load("//bazel:defs.bzl", "rust_ic_bench")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -92,14 +92,10 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {}
 
 DATA = [
-    "//rs/canister_sandbox",
-    "//rs/canister_sandbox/sandbox_launcher",
     "//rs/rust_canisters/stable_structures:stable_structures_canister",
 ]
 
 ENV = {
-    "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-    "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     "STABLE_STRUCTURES_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/stable_structures:stable_structures_canister)",
 }
 
@@ -151,7 +147,7 @@ rust_test_suite(
     deps = [":replica_lib"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-rust_bench(
+rust_ic_bench(
     name = "calls_bench",
     testonly = True,
     srcs = ["benches/calls.rs"],

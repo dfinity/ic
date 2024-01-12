@@ -1,6 +1,7 @@
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -47,18 +48,14 @@ rust_test(
     env = {"CARGO_MANIFEST_DIR": "rs/nervous_system/common/test_canister"},
 )
 
-rust_test(
+rust_ic_test(
     name = "integration_tests",
     srcs = ["tests/test.rs"],
     data = [
         ":test_canister",
-        "//rs/canister_sandbox",
-        "//rs/canister_sandbox/sandbox_launcher",
     ],
     env = {
         "IC_NERVOUS_SYSTEM_COMMON_TEST_CANISTER_WASM_PATH": "$(rootpath :test_canister)",
-        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     },
     deps = [
         "//rs/rust_canisters/canister_test",

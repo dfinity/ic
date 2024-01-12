@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
+load("//bazel:defs.bzl", "rust_ic_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -141,8 +141,6 @@ rust_canister(
 DATA_DEPS = [
     ":sns-governance-mem-test-canister",
     ":sns-test-dapp-canister",
-    "//rs/canister_sandbox",
-    "//rs/canister_sandbox/sandbox_launcher",
     "//rs/nervous_system/common/test_canister",
     "//rs/nns/cmc:cycles-minting-canister",
     "//rs/nns/governance:governance-canister-test",
@@ -171,11 +169,9 @@ ENV = {
     "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister)",
     "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm)",
     "IC_NERVOUS_SYSTEM_COMMON_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/nervous_system/common/test_canister:test_canister)",
-    "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
     "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
     "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
     "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
-    "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/sns/governance:sns-governance-canister-test)",
     "SNS_GOVERNANCE_MEM_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/sns/integration_tests:sns-governance-mem-test-canister)",
     "SNS_ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/sns/root:sns-root-canister)",
@@ -185,7 +181,7 @@ ENV = {
     "UNSTOPPABLE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/integration_tests:unstoppable-canister)",
 }
 
-rust_test_suite_with_extra_srcs(
+rust_ic_test_suite_with_extra_srcs(
     name = "integration_test",
     size = "large",
     srcs = glob(

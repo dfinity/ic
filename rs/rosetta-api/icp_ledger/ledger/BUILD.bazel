@@ -1,5 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -120,20 +121,16 @@ rust_test(
     rustc_env = LEDGER_CANISTER_RUSTC_ENV,
 )
 
-rust_test(
+rust_ic_test(
     name = "ledger_canister_test",
     srcs = ["tests/tests.rs"],
     data = [
         ":ledger-canister-wasm",
-        "//rs/canister_sandbox",
-        "//rs/canister_sandbox/sandbox_launcher",
         "@mainnet_icp_ledger_canister//file",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/icp_ledger/ledger",
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath :ledger-canister-wasm)",
-        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
         "ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister//file)",
     },
     deps = [

@@ -1,7 +1,7 @@
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
+load("//bazel:defs.bzl", "rust_ic_test", "rust_ic_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//visibility:public"])
@@ -122,15 +122,13 @@ rust_canister(
     deps = DEPENDENCIES + [":canister"] + [":build_script"],
 )
 
-rust_test(
+rust_ic_test(
     name = "registry_canister_canister_test",
     srcs = glob(["canister/*.rs"]),
     crate_root = "canister/canister.rs",
     data = [
         "canister/registry.did",
         ":registry-canister",
-        "//rs/canister_sandbox",
-        "//rs/canister_sandbox/sandbox_launcher",
         "//rs/nns/cmc:cycles-minting-canister",
     ],
     env = {
@@ -147,7 +145,7 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-rust_test_suite_with_extra_srcs(
+rust_ic_test_suite_with_extra_srcs(
     name = "registry_canister_integration_test",
     srcs = glob(
         ["tests/*.rs"],
@@ -158,16 +156,12 @@ rust_test_suite_with_extra_srcs(
     ),
     data = [
         ":registry-canister",
-        "//rs/canister_sandbox",
-        "//rs/canister_sandbox/sandbox_launcher",
         "//rs/nns/cmc:cycles-minting-canister",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/registry/canister",
         "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
         "REGISTRY_CANISTER_WASM_PATH": "$(rootpath :registry-canister)",
-        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     },
     extra_srcs = glob(["tests/common/*.rs"]),
     proc_macro_deps = DEV_MACRO_DEPENDENCIES,

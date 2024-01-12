@@ -1,6 +1,7 @@
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test_suite")
 load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//visibility:public"])
@@ -146,7 +147,7 @@ rust_test(
     },
 )
 
-rust_test_suite(
+rust_ic_test_suite(
     name = "gtc_integration_test",
     srcs = glob(
         ["tests/**/*.rs"],
@@ -154,13 +155,9 @@ rust_test_suite(
     ),
     aliases = ALIASES,
     data = [
-        "//rs/canister_sandbox",
-        "//rs/canister_sandbox/sandbox_launcher",
         "//rs/nns/gtc:genesis-token-canister",
     ],
     env = {
-        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
         "CARGO_MANIFEST_DIR": "rs/nns/gtc",
         "GENESIS_TOKEN_CANISTER_WASM_PATH": "$(rootpath //rs/nns/gtc:genesis-token-canister)",
     },
