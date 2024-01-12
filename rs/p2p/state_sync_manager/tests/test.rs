@@ -11,7 +11,7 @@ use crate::common::{
     SharableMockChunkable, State,
 };
 use common::SharableMockStateSync;
-use ic_interfaces::p2p::state_sync::{ArtifactErrorCode, ChunkId};
+use ic_interfaces::p2p::state_sync::{AddChunkError, ChunkId};
 use ic_logger::info;
 use ic_memory_transport::TransportRouter;
 use ic_p2p_test_utils::{
@@ -670,9 +670,8 @@ fn test_state_sync_abortion() {
         c2.get_mut()
             .expect_chunks_to_download()
             .returning(|| Box::new(vec![ChunkId::from(1)].into_iter()) as Box<_>);
-        c2.get_mut()
-            .expect_add_chunk()
-            .return_const(Err(ArtifactErrorCode::ChunksMoreNeeded));
+        c2.get_mut().expect_add_chunk().return_const(Ok(()));
+        c2.get_mut().expect_completed().return_const(None);
         {
             let c2 = c2.clone();
             s2.get_mut()
@@ -733,7 +732,7 @@ fn test_state_sync_abortion() {
         c2.clear();
         c2.get_mut()
             .expect_add_chunk()
-            .returning(|_, _| Err(ArtifactErrorCode::ChunkVerificationFailed));
+            .returning(|_, _| Err(AddChunkError::Invalid));
         c2.get_mut()
             .expect_chunks_to_download()
             .returning(|| Box::new(vec![ChunkId::from(1)].into_iter()) as Box<_>);
