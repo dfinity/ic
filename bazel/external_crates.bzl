@@ -270,7 +270,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.0",
             ),
             "cddl": crate.spec(
-                version = "^0.9.0-beta.1",
+                version = "^0.9.4",
             ),
             "cfg-if": crate.spec(version = "^1.0.0"),
             "chacha20poly1305": crate.spec(

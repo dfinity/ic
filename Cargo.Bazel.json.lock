@@ -1,5 +1,5 @@
 {
-  "checksum": "b81ffdc4381568cd517047dd52ec06f6bb7a69b26919df1e99b105f4b5c33f87",
+  "checksum": "16bd01c7eb1794cec1696a2ff19fb2ba510a88d9ad5021879d1b3c33c1d96f9c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -5423,7 +5423,6 @@
         ],
         "crate_features": {
           "common": [
-            "alloc",
             "default",
             "std"
           ],
@@ -5472,13 +5471,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "base64-url 1.4.13": {
+    "base64-url 2.0.2": {
       "name": "base64-url",
-      "version": "1.4.13",
+      "version": "2.0.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/base64-url/1.4.13/download",
-          "sha256": "67a99c239d0c7e77c85dddfa9cebce48704b3c49550fcd3b84dd637e4484899f"
+          "url": "https://crates.io/api/v1/crates/base64-url/2.0.2/download",
+          "sha256": "fb9fb9fb058cc3063b5fc88d9a21eefa2735871498a04e1650da76ed511c8569"
         }
       },
       "targets": [
@@ -5497,17 +5496,24 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
-              "id": "base64 0.13.1",
+              "id": "base64 0.21.6",
               "target": "base64"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.4.13"
+        "version": "2.0.2"
       },
       "license": "MIT"
     },
@@ -9017,13 +9023,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "cddl 0.9.1": {
+    "cddl 0.9.4": {
       "name": "cddl",
-      "version": "0.9.1",
+      "version": "0.9.4",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/cddl/0.9.1/download",
-          "sha256": "286a21bdd91f4cab45c26ae7310f73aedf1e8f6fe21e210d220c449991c7fcf4"
+          "url": "https://crates.io/api/v1/crates/cddl/0.9.4/download",
+          "sha256": "2cc18488a72cef88de14f00d3db73f57a9511d53ae8dd72204a4bf8bc19309d7"
         }
       },
       "targets": [
@@ -9077,11 +9083,7 @@
               "target": "base16"
             },
             {
-              "id": "base64 0.13.1",
-              "target": "base64"
-            },
-            {
-              "id": "base64-url 1.4.13",
+              "id": "base64-url 2.0.2",
               "target": "base64_url"
             },
             {
@@ -9101,11 +9103,15 @@
               "target": "codespan_reporting"
             },
             {
+              "id": "data-encoding 2.4.0",
+              "target": "data_encoding"
+            },
+            {
               "id": "hexf-parse 0.2.1",
               "target": "hexf_parse"
             },
             {
-              "id": "itertools 0.10.5",
+              "id": "itertools 0.11.0",
               "target": "itertools"
             },
             {
@@ -9129,7 +9135,7 @@
               "target": "regex"
             },
             {
-              "id": "regex-syntax 0.6.29",
+              "id": "regex-syntax 0.7.4",
               "target": "regex_syntax"
             },
             {
@@ -9141,7 +9147,7 @@
               "target": "serde_json"
             },
             {
-              "id": "simplelog 0.11.2",
+              "id": "simplelog 0.12.1",
               "target": "simplelog"
             },
             {
@@ -9152,7 +9158,7 @@
           "selects": {
             "cfg(not(target_arch = \"wasm32\"))": [
               {
-                "id": "crossterm 0.25.0",
+                "id": "crossterm 0.27.0",
                 "target": "crossterm"
               }
             ],
@@ -9162,7 +9168,7 @@
                 "target": "console_error_panic_hook"
               },
               {
-                "id": "serde-wasm-bindgen 0.4.5",
+                "id": "serde-wasm-bindgen 0.5.0",
                 "target": "serde_wasm_bindgen"
               },
               {
@@ -9182,7 +9188,7 @@
           ],
           "selects": {}
         },
-        "version": "0.9.1"
+        "version": "0.9.4"
       },
       "license": "MIT"
     },
@@ -12637,13 +12643,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "crossterm 0.25.0": {
+    "crossterm 0.27.0": {
       "name": "crossterm",
-      "version": "0.25.0",
+      "version": "0.27.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/crossterm/0.25.0/download",
-          "sha256": "e64e6c0fbe2c17357405f7c758c1ef960fce08bdfb2c03d88d2a18d7e09c4b67"
+          "url": "https://crates.io/api/v1/crates/crossterm/0.27.0/download",
+          "sha256": "f476fe445d41c9e991fd07515a6f463074b782242ccf4a5b7b1d1012e70824df"
         }
       },
       "targets": [
@@ -12665,14 +12671,16 @@
         "crate_features": {
           "common": [
             "bracketed-paste",
-            "default"
+            "default",
+            "events",
+            "windows"
           ],
           "selects": {}
         },
         "deps": {
           "common": [
             {
-              "id": "bitflags 1.3.2",
+              "id": "bitflags 2.4.1",
               "target": "bitflags"
             },
             {
@@ -12691,7 +12699,7 @@
                 "target": "mio"
               },
               {
-                "id": "signal-hook 0.3.16",
+                "id": "signal-hook 0.3.17",
                 "target": "signal_hook"
               },
               {
@@ -12712,7 +12720,7 @@
           }
         },
         "edition": "2021",
-        "version": "0.25.0"
+        "version": "0.27.0"
       },
       "license": "MIT"
     },
@@ -14792,7 +14800,7 @@
               "target": "cc"
             },
             {
-              "id": "cddl 0.9.1",
+              "id": "cddl 0.9.4",
               "target": "cddl"
             },
             {
@@ -15586,7 +15594,7 @@
               "target": "sha3"
             },
             {
-              "id": "signal-hook 0.3.16",
+              "id": "signal-hook 0.3.17",
               "target": "signal_hook"
             },
             {
@@ -48125,13 +48133,13 @@
       },
       "license": "MIT"
     },
-    "serde-wasm-bindgen 0.4.5": {
+    "serde-wasm-bindgen 0.5.0": {
       "name": "serde-wasm-bindgen",
-      "version": "0.4.5",
+      "version": "0.5.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/serde-wasm-bindgen/0.4.5/download",
-          "sha256": "e3b4c031cd0d9014307d82b8abf653c0290fbdaeb4c02d00c63cf52f728628bf"
+          "url": "https://crates.io/api/v1/crates/serde-wasm-bindgen/0.5.0/download",
+          "sha256": "f3b143e2833c57ab9ad3ea280d21fd34e285a42837aeb0ee301f4f41890fa00e"
         }
       },
       "targets": [
@@ -48168,7 +48176,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.4.5"
+        "version": "0.5.0"
       },
       "license": "MIT"
     },
@@ -49550,13 +49558,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "signal-hook 0.3.16": {
+    "signal-hook 0.3.17": {
       "name": "signal-hook",
-      "version": "0.3.16",
+      "version": "0.3.17",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/signal-hook/0.3.16/download",
-          "sha256": "b824b6e687aff278cdbf3b36f07aa52d4bd4099699324d5da86a2ebce3aa00b3"
+          "url": "https://crates.io/api/v1/crates/signal-hook/0.3.17/download",
+          "sha256": "8621587d4798caf8eb44879d42e56b9a93ea5dcd315a6487c357130095b62801"
         }
       },
       "targets": [
@@ -49599,7 +49607,7 @@
               "target": "libc"
             },
             {
-              "id": "signal-hook 0.3.16",
+              "id": "signal-hook 0.3.17",
               "target": "build_script_build"
             },
             {
@@ -49610,7 +49618,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.16"
+        "version": "0.3.17"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -49663,7 +49671,7 @@
               "alias": "mio_0_8"
             },
             {
-              "id": "signal-hook 0.3.16",
+              "id": "signal-hook 0.3.17",
               "target": "signal_hook"
             }
           ],
@@ -49948,13 +49956,13 @@
       },
       "license": "MIT"
     },
-    "simplelog 0.11.2": {
+    "simplelog 0.12.1": {
       "name": "simplelog",
-      "version": "0.11.2",
+      "version": "0.12.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/simplelog/0.11.2/download",
-          "sha256": "c1348164456f72ca0116e4538bdaabb0ddb622c7d9f16387c725af3e96d6001c"
+          "url": "https://crates.io/api/v1/crates/simplelog/0.12.1/download",
+          "sha256": "acee08041c5de3d5048c8b3f6f13fafb3026b24ba43c6a695a0c76179b844369"
         }
       },
       "targets": [
@@ -49976,6 +49984,7 @@
         "crate_features": {
           "common": [
             "default",
+            "local-offset",
             "termcolor"
           ],
           "selects": {}
@@ -49983,22 +49992,22 @@
         "deps": {
           "common": [
             {
-              "id": "chrono 0.4.31",
-              "target": "chrono"
-            },
-            {
               "id": "log 0.4.20",
               "target": "log"
             },
             {
               "id": "termcolor 1.1.3",
               "target": "termcolor"
+            },
+            {
+              "id": "time 0.3.31",
+              "target": "time"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.11.2"
+        "version": "0.12.1"
       },
       "license": "MIT OR Apache-2.0"
     },

@@ -1786,9 +1786,9 @@ dependencies = [
 
 [[package]]
 name = "cddl"
-version = "0.9.3"
+version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "436ba47def0bac296c651f18d8b731e1e66b136dcde4016149452535837efdd2"
+checksum = "2cc18488a72cef88de14f00d3db73f57a9511d53ae8dd72204a4bf8bc19309d7"
 dependencies = [
  "abnf_to_pest",
  "base16",
