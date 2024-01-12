@@ -9,11 +9,10 @@ BindsTo=setup-vector.service
 User=vector
 Group=vector
 Restart=always
-Environment="NGINX_PROMETHUS_ADDR=[::]:9316"
 Environment="VECTOR_PROMETHUS_ADDR=[::]:9317"
 Environment="DANTED_PROMETHUS_ADDR=[::]:9323"
 EnvironmentFile=/run/ic-node/etc/default/vector
-ExecStart=/usr/bin/vector --config /etc/vector/vector.toml
+ExecStart=/usr/bin/vector --config /etc/vector/vector.yaml
 
 [Install]
 WantedBy=multi-user.target
