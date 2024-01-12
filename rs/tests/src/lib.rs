@@ -9,6 +9,7 @@ pub mod canister_sig_verification_cache_test;
 pub mod certificate_orchestrator;
 pub mod ckbtc;
 pub mod consensus;
+pub mod cross_chain;
 pub mod crypto;
 pub mod custom_domains_integration;
 pub mod driver;

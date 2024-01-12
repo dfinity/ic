@@ -57,11 +57,14 @@ ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-http-utils = { path = "../http_utils" }
 ic-ic00-types = { path = "../types/ic00_types" }
 ic-icrc1 = { path = "../rosetta-api/icrc1" }
+ic-icrc1-index-ng = { path = "../rosetta-api/icrc1/index-ng" }
 ic-icrc1-ledger = { path = "../rosetta-api/icrc1/ledger" }
 ic-ledger-core = { path = "../rosetta-api/ledger_core" }
 rosetta-core = { path = "../rosetta-api/rosetta_core" }
 ic-ledger-canister-blocks-synchronizer-test-utils = { path = "../rosetta-api/ledger_canister_blocks_synchronizer/test_utils" }
+ic-ledger-suite-orchestrator = { path = "../ethereum/ledger-suite-orchestrator" }
 ic-message = { path = "./test_canisters/message" }
+ic-nervous-system-clients = { path = "../nervous_system/clients" }
 ic-nervous-system-common = { path = "../nervous_system/common" }
 ic-nervous-system-common-test-keys = { path = "../nervous_system/common/test_keys" }
 ic-nervous-system-proto = { path = "../nervous_system/proto" }
@@ -625,3 +628,7 @@ path = "nested/registration.rs"
 [[bin]]
 name = "ic-systest-ipv4-integration"
 path = "node/ipv4_integration_test.rs"
+
+[[bin]]
+name = "ic-xc-ledger-suite-orchestrator"
+path = "cross_chain/ic_xc_ledger_suite_orchestrator_test.rs"

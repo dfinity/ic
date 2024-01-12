@@ -1,0 +1,35 @@
+type OrchestratorArg = variant {
+    UpgradeArg : UpgradeArg;
+    InitArg : InitArg;
+    AddErc20Arg : AddErc20Arg;
+};
+
+type InitArg = record {
+    ledger_wasm: blob;
+    index_wasm: blob;
+    archive_wasm: blob;
+};
+
+type UpgradeArg = record {};
+
+type AddErc20Arg = record {
+   contract: Erc20Contract;
+};
+
+type Erc20Contract = record {
+   chain_id: nat;
+   address: text;
+};
+
+type ManagedCanisterIds = record {
+   ledger: principal;
+   index: principal;
+   archives: vec principal;
+};
+
+service : (OrchestratorArg) -> {
+
+   // Managed canister IDs for a given ERC20 contract
+   canister_ids : (Erc20Contract) -> (opt ManagedCanisterIds) query;
+
+}

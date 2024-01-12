@@ -260,6 +260,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/tests/src/certificate_orchestrator.rs               @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/boundarynode-team
 /rs/tests/src/ckbtc/                                    @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/cross-chain-team
 /rs/tests/src/consensus/                                @dfinity-lab/teams/consensus-owners @dfinity-lab/teams/ic-testing-verification
+/rs/tests/src/cross_chain/                              @dfinity-lab/teams/cross-chain-team
 /rs/tests/src/crypto/                                   @dfinity-lab/teams/crypto-owners @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/custom_domains_integration/               @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/boundarynode-team
 /rs/tests/src/execution/                                @dfinity-lab/teams/execution-owners @dfinity-lab/teams/runtime-owners
