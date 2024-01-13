@@ -11,8 +11,10 @@ use ic_ledger_core::Tokens;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1::{Canister, Countries};
 use ic_nns_constants::{
-    GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID,
-    LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID, EXCHANGE_RATE_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID,
+    LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID,
+    REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_sns_governance::{
     init::GovernanceCanisterInitPayloadBuilder,
@@ -1555,6 +1557,42 @@ impl SnsInitPayload {
             return Err("Error: Duplicate ids found in dapp_canisters".to_string());
         }
 
+        let nns_canisters = &[
+            NNS_GOVERNANCE_CANISTER_ID,
+            ICP_LEDGER_CANISTER_ID,
+            REGISTRY_CANISTER_ID,
+            ROOT_CANISTER_ID,
+            CYCLES_MINTING_CANISTER_ID,
+            LIFELINE_CANISTER_ID,
+            GENESIS_TOKEN_CANISTER_ID,
+            IDENTITY_CANISTER_ID,
+            NNS_UI_CANISTER_ID,
+            SNS_WASM_CANISTER_ID,
+            EXCHANGE_RATE_CANISTER_ID,
+        ]
+        .map(|id| PrincipalId::from(id));
+
+        let nns_canisters_listed_as_dapp = dapp_canisters
+            .canisters
+            .iter()
+            .filter_map(|canister| {
+                // Will not fail because of previous check
+                let id = canister.id.unwrap();
+                if nns_canisters.contains(&id) {
+                    Some(id)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        if !nns_canisters_listed_as_dapp.is_empty() {
+            return Err(format!(
+                "Error: The following canisters are listed as dapp canisters, but are \
+                NNS canisters: {:?}",
+                nns_canisters_listed_as_dapp
+            ));
+        }
+
         Ok(())
     }
 
@@ -2182,6 +2220,12 @@ mod test {
     use ic_base_types::{CanisterId, PrincipalId};
     use ic_icrc1_ledger::LedgerArgument;
     use ic_nervous_system_proto::pb::v1::{Canister, Countries};
+    use ic_nns_constants::{
+        CYCLES_MINTING_CANISTER_ID, EXCHANGE_RATE_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
+        GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID,
+        LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID,
+        REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    };
     use ic_sns_governance::{
         governance::ValidGovernanceProto, pb::v1::governance::SnsMetadata, types::ONE_MONTH_SECONDS,
     };
@@ -2223,7 +2267,7 @@ mod test {
     fn generate_unique_dapp_canisters(count: usize) -> DappCanisters {
         let canisters = (0..count)
             .map(|i| Canister {
-                id: Some(CanisterId::from_u64(i as u64).get()),
+                id: Some(CanisterId::from_u64(i as u64 + 100).get()),
             })
             .collect();
 
@@ -3818,5 +3862,38 @@ mod test {
                 },
             ).into(),
         );
+    }
+
+    // NNS canisters cannot be added as dapp canisters
+    #[test]
+    fn test_dapp_canisters_cannot_be_nns_canisters() {
+        let nns_canisters = &[
+            NNS_GOVERNANCE_CANISTER_ID,
+            ICP_LEDGER_CANISTER_ID,
+            REGISTRY_CANISTER_ID,
+            ROOT_CANISTER_ID,
+            CYCLES_MINTING_CANISTER_ID,
+            LIFELINE_CANISTER_ID,
+            GENESIS_TOKEN_CANISTER_ID,
+            IDENTITY_CANISTER_ID,
+            NNS_UI_CANISTER_ID,
+            SNS_WASM_CANISTER_ID,
+            EXCHANGE_RATE_CANISTER_ID,
+        ]
+        .map(|id: CanisterId| PrincipalId::from(id));
+        for nns_canister in nns_canisters {
+            let sns_init_payload = SnsInitPayload {
+                dapp_canisters: Some(DappCanisters {
+                    canisters: vec![Canister {
+                        id: Some(*nns_canister),
+                    }],
+                }),
+                ..SnsInitPayload::with_valid_values_for_testing()
+            };
+
+            assert!(
+                sns_init_payload.validate_pre_execution().unwrap_err().contains("Error: The following canisters are listed as dapp canisters, but are NNS canisters:"),
+            );
+        }
     }
 }

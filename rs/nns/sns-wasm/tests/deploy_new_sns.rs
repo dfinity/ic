@@ -486,6 +486,10 @@ fn test_deploy_sns_and_transfer_dapps() {
     sns_wasm::add_real_wasms_to_sns_wasms(&machine);
 
     // Create a dapp_canister and add NNS Root as a controller of it
+    // But first, generate a few phony canister IDs to make sure the one we use for the dapp canister doesn't collide with NNS canister IDs
+    set_up_universal_canister(&machine, None);
+    set_up_universal_canister(&machine, None);
+    set_up_universal_canister(&machine, None);
     let dapp_canister = set_up_universal_canister(&machine, None);
     set_controllers(
         &machine,
@@ -515,11 +519,11 @@ fn test_deploy_sns_and_transfer_dapps() {
     );
 
     // SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 1 is the ID of the wallet canister
-    let root_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 2);
-    let governance_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 3);
-    let ledger_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 4);
-    let swap_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 5);
-    let index_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 6);
+    let root_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 5);
+    let governance_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 6);
+    let ledger_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 7);
+    let swap_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 8);
+    let index_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 9);
 
     assert_eq!(
         response,

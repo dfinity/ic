@@ -217,6 +217,12 @@ impl SnsInitializationFlowTestSetup {
         state_machine.add_cycles(SNS_WASM_CANISTER_ID, 2_000 * ONE_TRILLION as u128);
 
         // Create a dapp_canister and add NNS Root as a controller of it
+        {
+            // but first let's set up some phony canisters just to make sure the dapp canister's canister ID doesn't collide with a "real" canister
+            set_up_universal_canister(&state_machine, None);
+            set_up_universal_canister(&state_machine, None);
+            set_up_universal_canister(&state_machine, None);
+        }
         let dapp_canister = set_up_universal_canister(&state_machine, None);
         set_controllers(
             &state_machine,
