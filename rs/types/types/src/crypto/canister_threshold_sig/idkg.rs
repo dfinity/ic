@@ -261,16 +261,8 @@ impl IDkgDealers {
         Ok(())
     }
 
-    /// Returns the position of the given `node_id` in the dealers. Returns
-    /// `None` if the `node_id` is not a dealer.
-    pub fn position(&self, node_id: NodeId) -> Option<NodeIndex> {
-        self.iter().find_map(|(node_index, this_node_id)| {
-            if node_id == this_node_id {
-                Some(node_index)
-            } else {
-                None
-            }
-        })
+    pub fn contains(&self, node_id: NodeId) -> bool {
+        self.dealers.contains(&node_id)
     }
 
     pub fn get(&self) -> &BTreeSet<NodeId> {
@@ -402,23 +394,28 @@ impl IDkgTranscriptParams {
     /// For a Random transcript, the index of a dealer correspond to the position of `node_id` in the dealer set.
     /// For all other transcript operations, the dealer index corresponds to its position of `node_id` in the previous set of receivers.
     pub fn dealer_index(&self, node_id: NodeId) -> Option<NodeIndex> {
-        match self.dealers().position(node_id) {
-            None => None,
-            Some(index) => {
-                match &self.operation_type {
-                    IDkgTranscriptOperation::Random => Some(index),
-                    IDkgTranscriptOperation::ReshareOfMasked(transcript) => {
-                        transcript.receivers.position(node_id)
-                    }
-                    IDkgTranscriptOperation::ReshareOfUnmasked(transcript) => {
-                        transcript.receivers.position(node_id)
-                    }
-                    IDkgTranscriptOperation::UnmaskedTimesMasked(transcript_1, _transcript_2) => {
-                        // transcript_1.receivers == transcript_2.receivers already checked by
-                        // IDkgTranscriptParams::new
-                        transcript_1.receivers.position(node_id)
-                    }
+        let index = self
+            .dealers()
+            .iter()
+            .find_map(|(node_index, this_node_id)| {
+                if node_id == this_node_id {
+                    Some(node_index)
+                } else {
+                    None
                 }
+            })?;
+        match &self.operation_type {
+            IDkgTranscriptOperation::Random => Some(index),
+            IDkgTranscriptOperation::ReshareOfMasked(transcript) => {
+                transcript.receivers.position(node_id)
+            }
+            IDkgTranscriptOperation::ReshareOfUnmasked(transcript) => {
+                transcript.receivers.position(node_id)
+            }
+            IDkgTranscriptOperation::UnmaskedTimesMasked(transcript_1, _transcript_2) => {
+                // transcript_1.receivers == transcript_2.receivers already checked by
+                // IDkgTranscriptParams::new
+                transcript_1.receivers.position(node_id)
             }
         }
     }
