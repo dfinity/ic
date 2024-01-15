@@ -179,6 +179,7 @@ pub struct EcdsaStats {
     pub signature_agreements: usize,
     pub ongoing_signatures: usize,
     pub available_quadruples: usize,
+    pub available_quadruples_with_key_transcript: usize,
     pub quadruples_in_creation: usize,
     pub ongoing_xnet_reshares: usize,
     pub xnet_reshare_agreements: usize,
@@ -210,6 +211,11 @@ impl From<&EcdsaPayload> for EcdsaStats {
                 .count(),
             ongoing_signatures: payload.ongoing_signatures.len(),
             available_quadruples: payload.available_quadruples.len(),
+            available_quadruples_with_key_transcript: payload
+                .available_quadruples
+                .values()
+                .filter(|quadruple| quadruple.key_unmasked_ref.is_some())
+                .count(),
             quadruples_in_creation: payload.quadruples_in_creation.len(),
             ongoing_xnet_reshares: payload.ongoing_xnet_reshares.len(),
             xnet_reshare_agreements: payload
@@ -233,6 +239,7 @@ pub struct FinalizerMetrics {
     pub ecdsa_signature_agreements: IntCounter,
     pub ecdsa_ongoing_signatures: IntGauge,
     pub ecdsa_available_quadruples: IntGauge,
+    pub ecdsa_available_quadruples_with_key_transcript: IntGauge,
     pub ecdsa_quadruples_in_creation: IntGauge,
     pub ecdsa_ongoing_xnet_reshares: IntGauge,
     pub ecdsa_xnet_reshare_agreements: IntCounter,
@@ -292,6 +299,10 @@ impl FinalizerMetrics {
                 "consensus_ecdsa_available_quadruples",
                 "The number of available ECDSA quadruples",
             ),
+            ecdsa_available_quadruples_with_key_transcript: metrics_registry.int_gauge(
+                "consensus_ecdsa_available_quadruples_with_key_transcript",
+                "The number of available ECDSA quadruples with key transcript",
+            ),
             ecdsa_quadruples_in_creation: metrics_registry.int_gauge(
                 "consensus_ecdsa_quadruples_in_creation",
                 "The number of ECDSA quadruples in creation",
@@ -346,6 +357,8 @@ impl FinalizerMetrics {
                 .set(ecdsa.ongoing_signatures as i64);
             self.ecdsa_available_quadruples
                 .set(ecdsa.available_quadruples as i64);
+            self.ecdsa_available_quadruples_with_key_transcript
+                .set(ecdsa.available_quadruples_with_key_transcript as i64);
             self.ecdsa_quadruples_in_creation
                 .set(ecdsa.quadruples_in_creation as i64);
             self.ecdsa_ongoing_xnet_reshares
