@@ -310,7 +310,7 @@ impl RosettaApiHandle {
         transaction: String,
     ) -> Result<Result<ConstructionParseResponse, RosettaError>, String> {
         let req = ConstructionParseRequest {
-            network_identifier: self.network_id(),
+            network_identifier: self.network_id().into(),
             signed,
             transaction,
         };

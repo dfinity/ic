@@ -363,95 +363,29 @@ impl TryFrom<Option<ObjectMap>> for ConstructionMetadataRequestOptions {
     }
 }
 
-/// ConstructionParseRequest is the input to the `/construction/parse` endpoint.
-/// It allows the caller to parse either an unsigned or signed transaction.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct ConstructionParseRequest {
-    #[serde(rename = "network_identifier")]
-    pub network_identifier: NetworkIdentifier,
-
-    /// Signed is a boolean indicating whether the transaction is signed.
-    #[serde(rename = "signed")]
-    pub signed: bool,
-
-    /// This must be either the unsigned transaction blob returned by
-    /// `/construction/payloads` or the signed transaction blob returned by
-    /// `/construction/combine`.
-    #[serde(rename = "transaction")]
-    pub transaction: String,
-}
-
 pub enum ParsedTransaction {
     Signed(SignedTransaction),
     Unsigned(UnsignedTransaction),
 }
 
-impl ConstructionParseRequest {
-    pub fn new(
-        network_identifier: NetworkIdentifier,
-        signed: bool,
-        transaction: String,
-    ) -> ConstructionParseRequest {
-        ConstructionParseRequest {
-            network_identifier,
-            signed,
-            transaction,
-        }
-    }
-
-    pub fn transaction(&self) -> Result<ParsedTransaction, ApiError> {
-        if self.signed {
+impl TryFrom<ConstructionParseRequest> for ParsedTransaction {
+    type Error = ApiError;
+    fn try_from(value: ConstructionParseRequest) -> Result<Self, Self::Error> {
+        if value.signed {
             Ok(ParsedTransaction::Signed(
-                serde_cbor::from_slice(&from_hex(&self.transaction)?).map_err(|e| {
+                serde_cbor::from_slice(&from_hex(&value.transaction)?).map_err(|e| {
                     ApiError::invalid_request(format!("Could not decode signed transaction: {}", e))
                 })?,
             ))
         } else {
             Ok(ParsedTransaction::Unsigned(
-                serde_cbor::from_slice(&from_hex(&self.transaction)?).map_err(|e| {
+                serde_cbor::from_slice(&from_hex(&value.transaction)?).map_err(|e| {
                     ApiError::invalid_request(format!(
                         "Could not decode unsigned transaction: {}",
                         e
                     ))
                 })?,
             ))
-        }
-    }
-}
-
-/// ConstructionParseResponse contains an array of operations that occur in a
-/// transaction blob. This should match the array of operations provided to
-/// `/construction/preprocess` and `/construction/payloads`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct ConstructionParseResponse {
-    #[serde(rename = "operations")]
-    pub operations: Vec<Operation>,
-
-    /// [DEPRECATED by `account_identifier_signers` in `v1.4.4`] All signers
-    /// (addresses) of a particular transaction. If the transaction is unsigned,
-    /// it should be empty.
-    #[serde(rename = "signers")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub signers: Option<Vec<String>>,
-
-    #[serde(rename = "account_identifier_signers")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub account_identifier_signers: Option<Vec<AccountIdentifier>>,
-
-    #[serde(rename = "metadata")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<ObjectMap>,
-}
-
-impl ConstructionParseResponse {
-    pub fn new(operations: Vec<Operation>) -> ConstructionParseResponse {
-        ConstructionParseResponse {
-            operations,
-            signers: None,
-            account_identifier_signers: None,
-            metadata: None,
         }
     }
 }
