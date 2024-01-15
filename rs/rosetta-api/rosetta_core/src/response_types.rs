@@ -271,3 +271,28 @@ impl ConstructionPayloadsResponse {
         }
     }
 }
+
+/// ConstructionParseResponse contains an array of operations that occur in a
+/// transaction blob. This should match the array of operations provided to
+/// `/construction/preprocess` and `/construction/payloads`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct ConstructionParseResponse {
+    pub operations: Vec<Operation>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account_identifier_signers: Option<Vec<AccountIdentifier>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<ObjectMap>,
+}
+
+impl ConstructionParseResponse {
+    pub fn new(operations: Vec<Operation>) -> ConstructionParseResponse {
+        ConstructionParseResponse {
+            operations,
+            account_identifier_signers: None,
+            metadata: None,
+        }
+    }
+}

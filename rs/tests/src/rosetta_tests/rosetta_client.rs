@@ -266,7 +266,7 @@ impl RosettaApiClient {
         transaction: String,
     ) -> Result<Result<ConstructionParseResponse, Error>, String> {
         let req = ConstructionParseRequest {
-            network_identifier: ic_rosetta_api::models::NetworkIdentifier(self.network_id()),
+            network_identifier: ic_rosetta_api::models::NetworkIdentifier(self.network_id()).into(),
             signed,
             transaction,
         };

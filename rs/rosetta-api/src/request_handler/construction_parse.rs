@@ -28,9 +28,12 @@ impl RosettaRequestHandler {
         &self,
         msg: ConstructionParseRequest,
     ) -> Result<ConstructionParseResponse, ApiError> {
-        verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
+        verify_network_id(
+            self.ledger.ledger_canister_id(),
+            &msg.network_identifier.clone().into(),
+        )?;
 
-        let updates: Vec<_> = match msg.transaction()? {
+        let updates: Vec<_> = match ParsedTransaction::try_from(msg.clone())? {
             ParsedTransaction::Signed(envelopes) => envelopes
                 .iter()
                 .map(
@@ -110,7 +113,6 @@ impl RosettaRequestHandler {
 
         Ok(ConstructionParseResponse {
             operations: Request::requests_to_operations(&requests, self.ledger.token_symbol())?,
-            signers: None,
             account_identifier_signers: Some(from_ai),
             metadata: Some(metadata),
         })
@@ -787,7 +789,7 @@ mod tests {
 
             // parse the unsigned transaction and check the result
             let parsed = handler.construction_parse(ConstructionParseRequest {
-                network_identifier: network_identifier.clone(),
+                network_identifier: network_identifier.clone().into(),
                 signed: false,
                 transaction: unsigned_transaction,
             }).unwrap();
@@ -837,7 +839,7 @@ mod tests {
 
             // parse the signed transaction and check the result
             let parsed = handler.construction_parse(ConstructionParseRequest {
-                network_identifier: network_identifier.clone(),
+                network_identifier: network_identifier.clone().into(),
                 signed: true,
                 transaction: signed_transaction,
             }).unwrap();
