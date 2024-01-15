@@ -11,6 +11,7 @@
 #   build_lvm_image -v volumes.csv -o partition-hostlvm.tar part1.tar part2.tar ...
 #
 import argparse
+import atexit
 import os
 import subprocess
 import sys
@@ -51,7 +52,8 @@ def main():
         lvm_entries = read_volume_description(f.read())
     validate_volume_table(lvm_entries)
 
-    tmpdir = tempfile.mkdtemp()
+    tmpdir = tempfile.mkdtemp(prefix="icosbuild")
+    atexit.register(lambda: subprocess.run(["rm", "-rf", tmpdir], check=True))
 
     lvm_image = os.path.join(tmpdir, "partition.img")
     prepare_lvm_image(lvm_entries, lvm_image, vg_name, vg_uuid, pv_uuid)

@@ -6,6 +6,7 @@
 #   build_upgrade_image -o upgrade.tar.gz -b boot.img.tar -r root.img.tar -v version.txt -c gzip
 #
 import argparse
+import atexit
 import shutil
 import subprocess
 import sys
@@ -35,7 +36,8 @@ def main():
     version_file = args.versionfile
     compression = args.compression
 
-    tmpdir = tempfile.mkdtemp()
+    tmpdir = tempfile.mkdtemp(prefix="icosbuild")
+    atexit.register(lambda: subprocess.run(["rm", "-rf", tmpdir], check=True))
 
     subprocess.run(["tar", "xf", boot_image, "--transform=s/partition.img/boot.img/", "-C", tmpdir], check=True)
 
