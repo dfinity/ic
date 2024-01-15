@@ -30,6 +30,8 @@ use prometheus::IntCounter;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+const INGRESS_MESSAGE_ARTIFACT_TYPE: &str = "ingress_message";
+
 #[derive(Clone)]
 struct IngressPoolSection<T: AsRef<IngressPoolObject>> {
     /// Do not insert or remove elements in this map directly. Use this struct's
@@ -63,12 +65,14 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
             .with_label_values(&["insert"])
             .start_timer();
         let new_artifact_size = artifact.as_ref().count_bytes();
-        self.metrics.observe_insert(new_artifact_size);
+        self.metrics
+            .observe_insert(new_artifact_size, INGRESS_MESSAGE_ARTIFACT_TYPE);
         if let Some(previous) = self.artifacts.insert(message_id, artifact) {
             let prev_size = previous.as_ref().count_bytes();
             self.byte_size -= prev_size;
             self.byte_size += new_artifact_size;
-            self.metrics.observe_duplicate(prev_size);
+            self.metrics
+                .observe_duplicate(prev_size, INGRESS_MESSAGE_ARTIFACT_TYPE);
         } else {
             self.byte_size += new_artifact_size;
         }
@@ -85,7 +89,10 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
         let removed = self.artifacts.remove(message_id);
         if let Some(artifact) = &removed {
             self.byte_size -= artifact.as_ref().count_bytes();
-            self.metrics.observe_remove(artifact.as_ref().count_bytes());
+            self.metrics.observe_remove(
+                artifact.as_ref().count_bytes(),
+                INGRESS_MESSAGE_ARTIFACT_TYPE,
+            );
         }
         // SAFETY: Checking byte size invariant
         section_ok(self);
@@ -116,7 +123,8 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
         for artifact in to_remove.values() {
             let artifact_size = artifact.as_ref().count_bytes();
             self.byte_size -= artifact_size;
-            self.metrics.observe_remove(artifact_size);
+            self.metrics
+                .observe_remove(artifact_size, INGRESS_MESSAGE_ARTIFACT_TYPE);
         }
         // SAFETY: Checking byte size invariant
         section_ok(self);

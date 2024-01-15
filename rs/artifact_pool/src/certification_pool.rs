@@ -1,5 +1,6 @@
 use crate::height_index::HeightIndex;
 use crate::metrics::{PoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED};
+use crate::pool_common::HasLabel;
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
 use ic_interfaces::{
     certification::{CertificationPool, ChangeAction, ChangeSet},
@@ -45,6 +46,8 @@ pub struct CertificationPoolImpl {
 }
 
 const POOL_CERTIFICATION: &str = "certification";
+const CERTIFICATION_ARTIFACT_TYPE: &str = "certification";
+const CERTIFICATION_SHARE_ARTIFACT_TYPE: &str = "certification_share";
 
 impl CertificationPoolImpl {
     pub fn new(
@@ -116,6 +119,28 @@ impl CertificationPoolImpl {
                 .insert(CertificationMessage::Certification(certification))
         }
     }
+
+    fn update_metrics(&self) {
+        // Validated artifacts metrics
+        self.validated_pool_metrics
+            .pool_artifacts
+            .with_label_values(&[CERTIFICATION_ARTIFACT_TYPE])
+            .set(self.persistent_pool.certifications().size() as i64);
+        self.validated_pool_metrics
+            .pool_artifacts
+            .with_label_values(&[CERTIFICATION_SHARE_ARTIFACT_TYPE])
+            .set(self.persistent_pool.certification_shares().size() as i64);
+
+        // Unvalidated artifacts metrics
+        self.unvalidated_pool_metrics
+            .pool_artifacts
+            .with_label_values(&[CERTIFICATION_ARTIFACT_TYPE])
+            .set(self.unvalidated_certifications.size() as i64);
+        self.unvalidated_pool_metrics
+            .pool_artifacts
+            .with_label_values(&[CERTIFICATION_SHARE_ARTIFACT_TYPE])
+            .set(self.unvalidated_shares.size() as i64);
+    }
 }
 
 impl MutablePool<CertificationArtifact> for CertificationPoolImpl {
@@ -123,11 +148,13 @@ impl MutablePool<CertificationArtifact> for CertificationPoolImpl {
 
     fn insert(&mut self, msg: UnvalidatedArtifact<CertificationMessage>) {
         let height = msg.message.height();
+        let label = msg.message.label();
         match &msg.message {
             CertificationMessage::CertificationShare(share) => {
                 if self.unvalidated_shares.insert(height, share) {
                     self.unvalidated_pool_metrics
                         .received_artifact_bytes
+                        .with_label_values(&[label])
                         .observe(std::mem::size_of_val(share) as f64);
                 }
             }
@@ -135,6 +162,7 @@ impl MutablePool<CertificationArtifact> for CertificationPoolImpl {
                 if self.unvalidated_certifications.insert(height, cert) {
                     self.unvalidated_pool_metrics
                         .received_artifact_bytes
+                        .with_label_values(&[label])
                         .observe(std::mem::size_of_val(cert) as f64);
                 }
             }
@@ -160,11 +188,13 @@ impl MutablePool<CertificationArtifact> for CertificationPoolImpl {
         let changed = !change_set.is_empty();
         let mut adverts = Vec::new();
         let mut purged = Vec::new();
+
         change_set.into_iter().for_each(|action| match action {
             ChangeAction::AddToValidated(msg) => {
                 adverts.push(CertificationArtifact::message_to_advert(&msg));
                 self.validated_pool_metrics
                     .received_artifact_bytes
+                    .with_label_values(&[msg.label()])
                     .observe(std::mem::size_of_val(&msg) as f64);
                 self.persistent_pool.insert(msg);
             }
@@ -174,11 +204,13 @@ impl MutablePool<CertificationArtifact> for CertificationPoolImpl {
                     adverts.push(CertificationArtifact::message_to_advert(&msg));
                 }
                 let height = msg.height();
+                let label = msg.label().to_owned();
                 match msg {
                     CertificationMessage::CertificationShare(share) => {
                         self.unvalidated_shares.remove(height, &share);
                         self.validated_pool_metrics
                             .received_artifact_bytes
+                            .with_label_values(&[&label])
                             .observe(std::mem::size_of_val(&share) as f64);
                         self.persistent_pool
                             .insert(CertificationMessage::CertificationShare(share));
@@ -187,6 +219,7 @@ impl MutablePool<CertificationArtifact> for CertificationPoolImpl {
                         self.unvalidated_certifications.remove(height, &cert);
                         self.validated_pool_metrics
                             .received_artifact_bytes
+                            .with_label_values(&[&label])
                             .observe(std::mem::size_of_val(&cert) as f64);
                         self.insert_validated_certification(cert);
                     }
@@ -228,6 +261,11 @@ impl MutablePool<CertificationArtifact> for CertificationPoolImpl {
                 };
             }
         });
+
+        if changed {
+            self.update_metrics();
+        }
+
         ChangeResult {
             purged,
             adverts,
@@ -390,6 +428,15 @@ impl ValidatedPoolReader<CertificationArtifact> for CertificationPoolImpl {
         });
 
         Box::new(iterator)
+    }
+}
+
+impl HasLabel for CertificationMessage {
+    fn label(&self) -> &str {
+        match self {
+            CertificationMessage::Certification(_) => CERTIFICATION_ARTIFACT_TYPE,
+            CertificationMessage::CertificationShare(_) => CERTIFICATION_SHARE_ARTIFACT_TYPE,
+        }
     }
 }
 
