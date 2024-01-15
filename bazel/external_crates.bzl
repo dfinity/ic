@@ -696,8 +696,14 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "libusb": crate.spec(
                 version = "^0.3.0",
             ),
+            "libnss": crate.spec(
+                version = "^0.5.0",
+            ),
             "linked-hash-map": crate.spec(
                 version = "^0.5.3",
+            ),
+            "local-ip-address": crate.spec(
+                version = "^0.5.6",
             ),
             "log": crate.spec(
                 version = "^0.4.14",
