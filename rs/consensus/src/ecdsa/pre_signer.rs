@@ -99,7 +99,7 @@ impl EcdsaPreSignerImpl {
                 {
                     // Issue a dealing if we are in the dealer list and we haven't
                     //already issued a dealing for this transcript
-                    if transcript_params.dealers().position(self.node_id).is_some()
+                    if transcript_params.dealers().contains(self.node_id)
                         && !self.has_dealer_issued_dealing(
                             ecdsa_pool,
                             &transcript_params.transcript_id(),
@@ -202,10 +202,9 @@ impl EcdsaPreSignerImpl {
                         }
                     };
 
-                    if transcript_params
+                    if !transcript_params
                         .dealers()
-                        .position(signed_dealing.dealer_id())
-                        .is_none()
+                        .contains(signed_dealing.dealer_id())
                     {
                         // The node is not in the dealer list for this transcript
                         self.metrics.pre_sign_errors_inc("unexpected_dealing");
@@ -475,11 +474,7 @@ impl EcdsaPreSignerImpl {
                         }
                     } else {
                         // If the dealer_id in the share is invalid, drop it.
-                        if transcript_params
-                            .dealers()
-                            .position(support.dealer_id)
-                            .is_none()
-                        {
+                        if !transcript_params.dealers().contains(support.dealer_id) {
                             self.metrics
                                 .pre_sign_errors_inc("missing_hash_invalid_dealer");
                             ret.push(EcdsaChangeAction::RemoveUnvalidated(id));

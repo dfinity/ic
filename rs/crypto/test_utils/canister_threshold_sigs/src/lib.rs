@@ -727,7 +727,7 @@ pub mod node {
             idkg_dealers: T,
         ) -> impl Iterator<Item = &Node> + 'a {
             self.iter()
-                .filter(move |node| idkg_dealers.as_ref().get().contains(&node.id))
+                .filter(move |node| idkg_dealers.as_ref().contains(node.id))
         }
 
         pub fn random_subset_with_min_size<'a, R: RngCore + CryptoRng>(
