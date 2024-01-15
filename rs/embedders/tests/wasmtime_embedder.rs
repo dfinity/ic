@@ -244,19 +244,17 @@ mod test {
                 ic_types::methods::WasmMethod::Update("test_performance_counter".to_string()),
             ))
             .unwrap();
-        let performance_counter1 = match res.exported_globals[0] {
-            Global::I64(c) => c as u64,
-            _ => panic!("Error getting performance_counter1"),
+        let Global::I64(performance_counter1) = res.exported_globals[0] else {
+            panic!("Error getting performance_counter1");
         };
-        let performance_counter2 = match res.exported_globals[1] {
-            Global::I64(c) => c as u64,
-            _ => panic!("Error getting performance_counter2"),
+        let Global::I64(performance_counter2) = res.exported_globals[1] else {
+            panic!("Error getting performance_counter2");
         };
         let instruction_counter = instance.instruction_counter();
         let system_api = &instance.store_data().system_api().unwrap();
         let instructions_used = system_api.slice_instructions_executed(instruction_counter);
-        assert_eq!(performance_counter1, expected_instructions_counter1);
-        assert_eq!(performance_counter2, expected_instructions_counter2);
+        assert_eq!(performance_counter1 as u64, expected_instructions_counter1);
+        assert_eq!(performance_counter2 as u64, expected_instructions_counter2);
 
         assert_eq!(instructions_used.get(), expected_instructions);
     }

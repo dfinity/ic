@@ -272,15 +272,14 @@ impl WasmExecutor for WasmExecutorImpl {
     ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)> {
         // Compile Wasm binary and cache it.
         let wasm_binary = WasmBinary::new(canister_module);
-        let (embedder_cache, serialized_module, compilation_result) =
-            match self.get_embedder_cache(&wasm_binary, compilation_cache)? {
-                CacheLookup {
-                    cache,
-                    serialized_module: Some(serialized_module),
-                    compilation_result,
-                } => (cache, serialized_module, compilation_result),
-                _ => panic!("Newly created WasmBinary must be compiled or deserialized."),
-            };
+        let CacheLookup {
+            cache: embedder_cache,
+            serialized_module: Some(serialized_module),
+            compilation_result,
+        } = self.get_embedder_cache(&wasm_binary, compilation_cache)?
+        else {
+            panic!("Newly created WasmBinary must be compiled or deserialized.")
+        };
         self.observe_metrics(&serialized_module.imports_details);
         let exported_functions = serialized_module.exported_functions.clone();
         let wasm_metadata = serialized_module.wasm_metadata.clone();

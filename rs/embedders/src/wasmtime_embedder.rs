@@ -1064,13 +1064,13 @@ impl WasmtimeInstance {
 
     /// Returns the current instruction counter.
     pub fn instruction_counter(&mut self) -> i64 {
-        match self.store.data().num_instructions_global {
-            Some(num_instructions) => match num_instructions.get(&mut self.store) {
-                Val::I64(instruction_counter) => instruction_counter,
-                _ => panic!("invalid instruction counter type"),
-            },
-            None => panic!("couldn't find the instruction counter in the canister globals"),
-        }
+        let Some(num_instructions) = self.store.data().num_instructions_global else {
+            panic!("couldn't find the instruction counter in the canister globals");
+        };
+        let Val::I64(instruction_counter) = num_instructions.get(&mut self.store) else {
+            panic!("invalid instruction counter type");
+        };
+        instruction_counter
     }
 
     /// Returns the heap size.

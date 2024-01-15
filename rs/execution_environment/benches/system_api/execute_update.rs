@@ -358,16 +358,14 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 ExecuteMessageResult::Finished { response, .. } => response,
                 ExecuteMessageResult::Paused { .. } => panic!("Unexpected paused execution"),
             };
-            match response {
-                ExecutionResponse::Ingress((_, status)) => match status {
-                    IngressStatus::Known { state, .. } => {
-                        if let IngressState::Failed(err) = state {
-                            assert_eq!(err.code(), ErrorCode::CanisterDidNotReply)
-                        }
-                    }
-                    _ => panic!("Unexpected ingress status"),
-                },
-                _ => panic!("Expected ingress result"),
+            let ExecutionResponse::Ingress((_, status)) = response else {
+                panic!("Expected ingress result");
+            };
+            let IngressStatus::Known { state, .. } = status else {
+                panic!("Unexpected ingress status");
+            };
+            if let IngressState::Failed(err) = state {
+                assert_eq!(err.code(), ErrorCode::CanisterDidNotReply)
             }
             assert_eq!(
                 expected_instructions,

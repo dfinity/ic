@@ -1156,23 +1156,11 @@ fn dts_and_nondts_cycles_match_after_response() {
     let status_a = test_a.ingress_status(&amsg_id);
     let status_b = test_b.ingress_status(&bmsg_id);
     assert_eq!(status_a, status_b);
-    let time_a = match status_a {
-        IngressStatus::Known {
-            receiver: _,
-            user_id: _,
-            time,
-            state: _,
-        } => time,
-        _ => unreachable!(),
+    let IngressStatus::Known { time: time_a, .. } = status_a else {
+        unreachable!();
     };
-    let time_b = match status_b {
-        IngressStatus::Known {
-            receiver: _,
-            user_id: _,
-            time,
-            state: _,
-        } => time,
-        _ => unreachable!(),
+    let IngressStatus::Known { time: time_b, .. } = status_b else {
+        unreachable!();
     };
     assert_eq!(time_a, time_b);
     assert_eq!(start_time, time_a);

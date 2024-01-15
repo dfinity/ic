@@ -1405,18 +1405,15 @@ fn create_canister_xnet_called_from_nns() {
     );
     test.execute_all();
     let response = test.xnet_messages()[0].clone();
-    match response {
-        RequestOrResponse::Response(response) => {
-            assert_eq!(response.originator, nns_canister);
-            assert_eq!(response.respondent, CanisterId::from(own_subnet));
-            assert_eq!(response.refund, Cycles::new(0));
-            match response.response_payload {
-                Payload::Data(_) => (),
-                _ => panic!("Failed creating the canister."),
-            }
-        }
-        _ => panic!("Type should be RequestOrResponse::Response"),
-    }
+    let RequestOrResponse::Response(response) = response else {
+        panic!("Type should be RequestOrResponse::Response");
+    };
+    assert_eq!(response.originator, nns_canister);
+    assert_eq!(response.respondent, CanisterId::from(own_subnet));
+    assert_eq!(response.refund, Cycles::new(0));
+    let Payload::Data(_) = response.response_payload else {
+        panic!("Failed creating the canister.");
+    };
 }
 
 #[test]
