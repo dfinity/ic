@@ -55,7 +55,8 @@ Arguments:
        --logging-url                    specify an endpoint for our logging backend
        --logging-user                   specify a user for our logging backend
        --logging-password               specify a password for our logging backend
-       --logging-2xx-sample-rate        specify a sampling rate for logging 2XX requests (1 / N)
+       --crowdsec-api-url               speficy a Crowdsec API URL
+       --crowdsec-api-key               speficy a Crowdsec API key
   -x,  --debug                          enable verbose console output
 '
     exit 1
@@ -138,8 +139,11 @@ for argument in "${@}"; do
         --logging-password=*)
             LOGGING_PASSWORD="${argument#*=}"
             ;;
-        --logging-2xx-sample-rate=*)
-            LOGGING_2XX_SAMPLE_RATE="${argument#*=}"
+        --crowdsec-api-url=*)
+            CROWDSEC_API_URL="${argument#*=}"
+            ;;
+        --crowdsec-api-key=*)
+            CROWDSEC_API_KEY="${argument#*=}"
             ;;
         *)
             echo "Error: Argument \"${argument#}\" is not supported for $0"
@@ -603,13 +607,30 @@ function copy_logging_credentials() {
         local NODE_IDX="${NODE["node_idx"]}"
         local NODE_PREFIX="${DEPLOYMENT}.${SUBNET_IDX}.${NODE_IDX}"
 
-        # Default values
-        LOGGING_2XX_SAMPLE_RATE=${LOGGING_2XX_SAMPLE_RATE:-1}
-
         echo "logging_url=${LOGGING_URL}" >>"${CONFIG_DIR}/${NODE_PREFIX}/bn_vars.conf"
         echo "logging_user=${LOGGING_USER}" >>"${CONFIG_DIR}/${NODE_PREFIX}/bn_vars.conf"
         echo "logging_password=${LOGGING_PASSWORD}" >>"${CONFIG_DIR}/${NODE_PREFIX}/bn_vars.conf"
-        echo "logging_2xx_sample_rate=${LOGGING_2XX_SAMPLE_RATE}" >>"${CONFIG_DIR}/${NODE_PREFIX}/bn_vars.conf"
+    done
+}
+
+function copy_crowdsec_credentials() {
+    if [[ -z "${CROWDSEC_API_URL:-}" || -z "${CROWDSEC_API_KEY:-}" ]]; then
+        err "Crowdsec credentials have not been provided, continuing without configuring crowdsec"
+        return
+    fi
+
+    for n in $NODES; do
+        declare -n NODE=$n
+        if [[ "${NODE["type"]}" != "boundary" ]]; then
+            continue
+        fi
+
+        local SUBNET_IDX="${NODE["subnet_idx"]}"
+        local NODE_IDX="${NODE["node_idx"]}"
+        local NODE_PREFIX="${DEPLOYMENT}.${SUBNET_IDX}.${NODE_IDX}"
+
+        echo "crowdsec_api_url=${CROWDSEC_API_URL}" >>"${CONFIG_DIR}/${NODE_PREFIX}/bn_vars.conf"
+        echo "crowdsec_api_key=${CROWDSEC_API_KEY}" >>"${CONFIG_DIR}/${NODE_PREFIX}/bn_vars.conf"
     done
 }
 
@@ -668,6 +689,7 @@ function main() {
     copy_pre_isolation_canisters
     copy_ip_hash_salt
     copy_logging_credentials
+    copy_crowdsec_credentials
     build_tarball
     build_removable_media
     remove_temporary_directories
