@@ -3,12 +3,10 @@ set -xeuo pipefail
 
 cd "$CI_PROJECT_DIR"
 cargo fmt -- --check
-cargo clippy --locked --all-features --tests --benches -- \
+cargo clippy --locked --all-features --workspace --all-targets -- \
     -D warnings \
     -D clippy::all \
     -D clippy::mem_forget \
-    -A clippy::manual_clamp \
-    -A clippy::redundant_closure \
     -A clippy::too_many_arguments \
     -C debug-assertions=off
 
@@ -18,6 +16,3 @@ if cargo tree -e features | grep -q 'serde feature "rc"'; then
 fi
 
 cargo run -q -p depcheck
-
-cd "$CI_PROJECT_DIR/rs/replica"
-cargo check --features malicious_code --locked

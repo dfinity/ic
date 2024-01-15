@@ -216,10 +216,7 @@ mod sns {
                 if proposal_data.executed_timestamp_seconds > 0 {
                     return Ok(proposal_data);
                 }
-                proposal_data
-                    .failure_reason
-                    .clone()
-                    .map_or(Ok(()), |err| Err(err))?;
+                proposal_data.failure_reason.clone().map_or(Ok(()), Err)?;
                 last_proposal_data = Some(proposal_data);
                 pocket_ic.advance_time(Duration::from_millis(100));
             }

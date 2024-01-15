@@ -1377,7 +1377,7 @@ impl StateMachine {
         // Run `IngressFilter` on the ingress message.
         self.ingress_filter
             .should_accept_ingress_message(state, &provisional_whitelist, msg.content())
-            .map_err(|e| SubmitIngressError::UserError(e))?;
+            .map_err(SubmitIngressError::UserError)?;
 
         // All checks were successful at this point so we can push the ingress message to the ingress pool.
         let message_id = msg.id();
