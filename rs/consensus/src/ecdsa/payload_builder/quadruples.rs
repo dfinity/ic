@@ -240,6 +240,8 @@ pub(super) fn purge_old_key_quadruples(
 pub(super) fn make_new_quadruples_if_needed(
     ecdsa_config: &EcdsaConfig,
     ecdsa_payload: &mut ecdsa::EcdsaPayload,
+    //TODO(CON-1149): Pass value to helper
+    _matched_quadruples: usize,
 ) {
     if let Some(key_transcript) = &ecdsa_payload.key_transcript.current {
         let node_ids: Vec<_> = key_transcript.receivers().iter().copied().collect();
@@ -248,6 +250,7 @@ pub(super) fn make_new_quadruples_if_needed(
             key_transcript.registry_version(),
             ecdsa_config,
             ecdsa_payload,
+            0,
         )
     }
 }
@@ -257,8 +260,12 @@ fn make_new_quadruples_if_needed_helper(
     registry_version: RegistryVersion,
     ecdsa_config: &EcdsaConfig,
     ecdsa_payload: &mut ecdsa::EcdsaPayload,
+    matched_quadruples: usize,
 ) {
-    let unassigned_quadruples = ecdsa_payload.unassigned_quadruple_ids().count();
+    let unassigned_quadruples = ecdsa_payload
+        .unassigned_quadruple_ids()
+        .count()
+        .saturating_sub(matched_quadruples);
     let quadruples_to_create = ecdsa_config.quadruples_to_create_in_advance as usize;
     if quadruples_to_create > unassigned_quadruples {
         let quadruples_in_creation = &mut ecdsa_payload.quadruples_in_creation;
@@ -393,24 +400,41 @@ pub(super) mod tests {
     #[test]
     fn test_ecdsa_make_new_quadruples_if_needed() {
         let mut rng = reproducible_rng();
-        let quadruples_to_create_in_advance = 3;
         let subnet_id = subnet_test_id(1);
         let height = Height::new(10);
         let (mut ecdsa_payload, env, _block_reader) = set_up(&mut rng, subnet_id, height);
+
+        // 4 Quadruples should be created in advance (in creation + unmatched available = 4)
+        let quadruples_to_create_in_advance = 4;
         let ecdsa_config = EcdsaConfig {
             quadruples_to_create_in_advance,
             ..EcdsaConfig::default()
         };
+
+        // Add 3 available quadruples
+        for i in 0..3 {
+            create_available_quadruple(&mut ecdsa_payload, i);
+        }
+
+        // 2 available quadruples are already matched
+        let quadruples_already_matched = 2;
+
+        // We expect 3 quadruples in creation to be added
+        let expected_quadruples_in_creation = quadruples_to_create_in_advance as usize
+            - (ecdsa_payload.available_quadruples.len() - quadruples_already_matched);
+        assert_eq!(expected_quadruples_in_creation, 3);
 
         make_new_quadruples_if_needed_helper(
             &env.nodes.ids::<Vec<_>>(),
             env.newest_registry_version,
             &ecdsa_config,
             &mut ecdsa_payload,
+            quadruples_already_matched,
         );
 
         assert_eq!(
-            ecdsa_payload.quadruples_in_creation.len(),
+            ecdsa_payload.quadruples_in_creation.len() + ecdsa_payload.available_quadruples.len()
+                - quadruples_already_matched,
             quadruples_to_create_in_advance as usize
         );
         // Verify the generated transcript ids.
@@ -419,10 +443,7 @@ pub(super) mod tests {
             transcript_ids.insert(quadruple.1.kappa_config.as_ref().transcript_id);
             transcript_ids.insert(quadruple.1.lambda_config.as_ref().transcript_id);
         }
-        assert_eq!(
-            transcript_ids.len(),
-            2 * quadruples_to_create_in_advance as usize
-        );
+        assert_eq!(transcript_ids.len(), 2 * expected_quadruples_in_creation);
         assert_eq!(
             transcript_ids,
             BTreeSet::from([
@@ -435,8 +456,8 @@ pub(super) mod tests {
             ])
         );
         assert_eq!(
-            ecdsa_payload.peek_next_transcript_id().id() as u32,
-            2 * quadruples_to_create_in_advance,
+            ecdsa_payload.peek_next_transcript_id().id() as usize,
+            2 * expected_quadruples_in_creation,
         );
     }
 

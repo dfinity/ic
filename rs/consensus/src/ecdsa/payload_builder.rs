@@ -632,7 +632,12 @@ pub(crate) fn create_data_payload_helper_2(
         quadruples::purge_old_key_quadruples(ecdsa_payload, all_signing_requests);
     }
 
-    quadruples::make_new_quadruples_if_needed(ecdsa_config, ecdsa_payload);
+    let matched_quadruples = all_signing_requests
+        .values()
+        .filter_map(|context| context.matched_quadruple.as_ref())
+        .filter(|(qid, _)| ecdsa_payload.available_quadruples.contains_key(qid))
+        .count();
+    quadruples::make_new_quadruples_if_needed(ecdsa_config, ecdsa_payload, matched_quadruples);
 
     let mut new_transcripts =
         quadruples::update_quadruples_in_creation(ecdsa_payload, transcript_builder, height, log)?;
