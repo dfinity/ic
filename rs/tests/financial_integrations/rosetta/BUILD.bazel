@@ -225,3 +225,19 @@ system_test(
         ],
     deps = DEPENDENCIES + ["//rs/tests"],
 )
+
+system_test(
+    name = "rosetta_list_known_neurons_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        NNS_CANISTER_RUNTIME_DEPS + [
+            "//rs/rosetta-api:ic-rosetta-api",
+            "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/tests:rosetta_workspace",
+            "@rosetta-cli//:rosetta-cli",
+        ],
+    deps = DEPENDENCIES + ["//rs/tests"],
+)

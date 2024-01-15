@@ -5,7 +5,7 @@ use ic_ledger_canister_blocks_synchronizer_test_utils::sample_data::{acc_id, Scr
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::timestamp::TimeStamp;
-use ic_nns_governance::pb::v1::ProposalInfo;
+use ic_nns_governance::pb::v1::{KnownNeuron, ProposalInfo};
 use ic_rosetta_api::errors::ApiError;
 use ic_rosetta_api::models::{
     AccountBalanceRequest, EnvelopePair, PartialBlockIdentifier, SignedTransaction,
@@ -122,6 +122,10 @@ impl LedgerAccess for TestLedger {
     }
 
     async fn proposal_info(&self, _proposal_id: u64) -> Result<ProposalInfo, ApiError> {
+        Err(ApiError::InternalError(false, Default::default()))
+    }
+
+    async fn list_known_neurons(&self) -> Result<Vec<KnownNeuron>, ApiError> {
         Err(ApiError::InternalError(false, Default::default()))
     }
 
