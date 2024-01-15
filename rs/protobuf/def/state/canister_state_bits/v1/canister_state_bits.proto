@@ -32,6 +32,7 @@ message CallContext {
   bool deleted = 8;
   uint64 time_nanos = 9;
   uint64 instructions_executed = 10;
+  state.queues.v1.RequestMetadata metadata = 11;
 }
 
 message CallContextEntry {

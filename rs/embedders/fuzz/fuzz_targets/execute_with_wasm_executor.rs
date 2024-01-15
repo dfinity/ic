@@ -27,6 +27,7 @@ use ic_test_utilities::{
     types::ids::user_test_id,
 };
 use ic_types::{
+    messages::RequestMetadata,
     methods::{FuncRef, WasmMethod},
     ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
 };
@@ -114,6 +115,7 @@ fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
         &network_topology,
         dirty_page_overhead,
         ComputeAllocation::default(),
+        RequestMetadata::new(0, mock_time()),
     );
 
     let canister_current_memory_usage = NumBytes::new(0);

@@ -26,7 +26,10 @@ use ic_replicated_state::{
 };
 use ic_system_api::ApiType;
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
-use ic_types::{funds::Cycles, messages::CanisterCall};
+use ic_types::{
+    funds::Cycles,
+    messages::{CanisterCall, RequestMetadata},
+};
 
 #[cfg(test)]
 mod tests;
@@ -149,6 +152,7 @@ pub(crate) fn execute_upgrade(
             helper.canister_message_memory_usage(),
             helper.execution_parameters().clone(),
             FuncRef::Method(method),
+            RequestMetadata::for_new_call_tree(original.time),
             round_limits,
             round.network_topology,
         );
@@ -316,6 +320,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
             helper.canister_message_memory_usage(),
             helper.execution_parameters().clone(),
             FuncRef::Method(method),
+            RequestMetadata::for_new_call_tree(original.time),
             round_limits,
             round.network_topology,
         );
@@ -432,6 +437,7 @@ fn upgrade_stage_4a_call_post_upgrade(
         helper.canister_message_memory_usage(),
         helper.execution_parameters().clone(),
         FuncRef::Method(method),
+        RequestMetadata::for_new_call_tree(original.time),
         round_limits,
         round.network_topology,
     );

@@ -105,10 +105,10 @@ prop_compose! {
         call_tree_depth in any::<u64>(),
         call_tree_start_time_nanos in any::<u64>(),
     ) -> RequestMetadata {
-        RequestMetadata {
+        RequestMetadata::new(
             call_tree_depth,
-            call_tree_start_time: Time::from_nanos_since_unix_epoch(call_tree_start_time_nanos),
-        }
+            Time::from_nanos_since_unix_epoch(call_tree_start_time_nanos),
+        )
     }
 }
 

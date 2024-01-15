@@ -14,7 +14,7 @@ use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ExecutionParameters, InstructionLimits,
     ModificationTracking, SystemApiImpl,
 };
-use ic_types::{ComputeAllocation, MemoryAllocation, NumInstructions};
+use ic_types::{messages::RequestMetadata, ComputeAllocation, MemoryAllocation, NumInstructions};
 use ic_wasm_types::BinaryEncodedWasm;
 
 use crate::{
@@ -133,6 +133,7 @@ impl WasmtimeInstanceBuilder {
             &self.network_topology,
             dirty_page_overhead,
             ComputeAllocation::default(),
+            RequestMetadata::new(0, mock_time()),
         );
 
         let subnet_memory_capacity = i64::MAX / 2;

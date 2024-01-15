@@ -40,11 +40,38 @@ pub type CallContextId = Id<CallContextIdTag, u64>;
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct RequestMetadata {
     /// Indicates how many steps down the call tree a request is, starting at 0.
-    pub call_tree_depth: u64,
+    call_tree_depth: u64,
     /// The block time (on the respective subnet) at the start of the call at the
-    /// root of the call tree that this request is part of. This is used for metrics
-    /// only.
-    pub call_tree_start_time: Time,
+    /// root of the call tree that this request is part of.
+    call_tree_start_time: Time,
+}
+
+impl RequestMetadata {
+    pub fn new(call_tree_depth: u64, call_tree_start_time: Time) -> Self {
+        Self {
+            call_tree_depth,
+            call_tree_start_time,
+        }
+    }
+
+    /// Creates `RequestMetadata` for a new call tree, i.e. with a given start time and depth 0.
+    pub fn for_new_call_tree(time: Time) -> Self {
+        Self::new(0, time)
+    }
+
+    /// Creates `RequestMetadata` for a downstream call from another metadata, i.e. with depth
+    /// increased by 1 and the same `call_tree_start_time`.
+    pub fn for_downstream_call(&self) -> Self {
+        Self::new(self.call_tree_depth + 1, self.call_tree_start_time)
+    }
+
+    pub fn call_tree_depth(&self) -> &u64 {
+        &self.call_tree_depth
+    }
+
+    pub fn call_tree_start_time(&self) -> &Time {
+        &self.call_tree_start_time
+    }
 }
 
 /// Canister-to-canister request message.

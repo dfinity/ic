@@ -24,7 +24,7 @@ use ic_replicated_state::{
 };
 use ic_system_api::ApiType;
 use ic_types::funds::Cycles;
-use ic_types::messages::CanisterCall;
+use ic_types::messages::{CanisterCall, RequestMetadata};
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 
 /// Installs a new code in canister. The algorithm consists of five stages:
@@ -156,6 +156,7 @@ pub(crate) fn execute_install(
             helper.canister_message_memory_usage(),
             helper.execution_parameters().clone(),
             FuncRef::Method(method),
+            RequestMetadata::for_new_call_tree(original.time),
             round_limits,
             round.network_topology,
         );
@@ -269,6 +270,7 @@ fn install_stage_2b_continue_install_after_start(
         helper.canister_message_memory_usage(),
         helper.execution_parameters().clone(),
         FuncRef::Method(method),
+        RequestMetadata::for_new_call_tree(original.time),
         round_limits,
         round.network_topology,
     );

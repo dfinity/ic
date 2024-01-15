@@ -20,7 +20,7 @@ use ic_replicated_state::{
     CallOrigin, CanisterStatus, NetworkTopology, SystemState,
 };
 use ic_types::{
-    messages::{CallContextId, CallbackId, RejectContext, Request},
+    messages::{CallContextId, CallbackId, RejectContext, Request, RequestMetadata},
     methods::Callback,
     CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, NumPages, Time,
 };
@@ -286,13 +286,13 @@ impl SystemStateChanges {
         network_topology: &NetworkTopology,
         own_subnet_id: SubnetId,
         logger: &ReplicaLogger,
-    ) -> HypervisorResult<()> {
+    ) -> HypervisorResult<RequestMetadataStats> {
         // Verify total cycle change is not positive and update cycles balance.
         self.validate_cycle_change(system_state.canister_id == CYCLES_MINTING_CANISTER_ID)?;
         self.apply_balance_changes(system_state);
 
         // Verify we don't accept more cycles than are available from each call
-        // context and update each call context balance
+        // context and update each call context balance.
         if !self.call_context_balance_taken.is_empty() {
             let own_canister_id = system_state.canister_id;
             let call_context_manager = system_state
@@ -322,6 +322,16 @@ impl SystemStateChanges {
                 }
             }
         }
+
+        // Get a clone of the request metadata of outgoing requests (they are all equivalent)
+        // and their number. This will be used for call tree metrics.
+        let request_stats = RequestMetadataStats {
+            metadata: self
+                .requests
+                .first()
+                .and_then(|request| request.metadata.clone()),
+            count: self.requests.len() as u64,
+        };
 
         // Push outgoing messages.
         let mut callback_changes = BTreeMap::new();
@@ -440,7 +450,7 @@ impl SystemStateChanges {
             system_state.global_timer = new_global_timer;
         }
 
-        Ok(())
+        Ok(request_stats)
     }
 
     /// Applies the balance change to the given state.
@@ -546,6 +556,7 @@ pub struct SandboxSafeSystemState {
     global_timer: CanisterTimer,
     canister_version: u64,
     controllers: BTreeSet<PrincipalId>,
+    pub(super) request_metadata: RequestMetadata,
 }
 
 impl SandboxSafeSystemState {
@@ -572,6 +583,7 @@ impl SandboxSafeSystemState {
         global_timer: CanisterTimer,
         canister_version: u64,
         controllers: BTreeSet<PrincipalId>,
+        request_metadata: RequestMetadata,
     ) -> Self {
         Self {
             canister_id,
@@ -595,6 +607,7 @@ impl SandboxSafeSystemState {
             global_timer,
             canister_version,
             controllers,
+            request_metadata,
         }
     }
 
@@ -604,6 +617,7 @@ impl SandboxSafeSystemState {
         network_topology: &NetworkTopology,
         dirty_page_overhead: NumInstructions,
         compute_allocation: ComputeAllocation,
+        request_metadata: RequestMetadata,
     ) -> Self {
         let call_context_balances = match system_state.call_context_manager() {
             Some(call_context_manager) => call_context_manager
@@ -659,6 +673,7 @@ impl SandboxSafeSystemState {
             system_state.global_timer,
             system_state.canister_version,
             system_state.controllers.clone(),
+            request_metadata,
         )
     }
 
@@ -1156,6 +1171,16 @@ impl SandboxSafeSystemState {
             }
         }
     }
+}
+
+/// Holds the metadata and the number of downstream requests. Requests created during the same
+/// execution have the same metadata. This fact is reflected by the use of a counter, rather than
+/// a list of identical metadata.
+///      
+/// This is used for call tree metrics.
+pub struct RequestMetadataStats {
+    pub metadata: Option<RequestMetadata>,
+    pub count: u64,
 }
 
 #[cfg(test)]
