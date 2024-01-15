@@ -7,6 +7,7 @@ mod construction_payloads;
 mod construction_preprocess;
 mod construction_submit;
 
+use crate::ledger_client::list_known_neurons_response::ListKnownNeuronsResponse;
 use crate::ledger_client::pending_proposals_response::PendingProposalsResponse;
 use crate::ledger_client::proposal_info_response::ProposalInfoResponse;
 use crate::models::{CallResponse, NetworkIdentifier};
@@ -183,6 +184,13 @@ impl RosettaRequestHandler {
                 let pending_proposals_response = PendingProposalsResponse::from(pending_proposals);
                 Ok(CallResponse::new(ObjectMap::from(
                     pending_proposals_response,
+                )))
+            }
+            "list_known_neurons" => {
+                let known_neurons = self.ledger.list_known_neurons().await?;
+                let list_known_neurons_response = ListKnownNeuronsResponse { known_neurons };
+                Ok(CallResponse::new(ObjectMap::from(
+                    list_known_neurons_response,
                 )))
             }
             _ => Err(ApiError::InvalidRequest(

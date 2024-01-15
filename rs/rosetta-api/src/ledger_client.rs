@@ -14,6 +14,7 @@ mod handle_stake;
 mod handle_stake_maturity;
 mod handle_start_dissolve;
 mod handle_stop_dissolve;
+pub mod list_known_neurons_response;
 pub mod list_neurons_response;
 mod neuron_response;
 pub mod pending_proposals_response;
@@ -23,7 +24,7 @@ use core::ops::Deref;
 
 use candid::{Decode, Encode};
 use ic_agent::agent::{RejectCode, RejectResponse};
-use ic_nns_governance::pb::v1::ProposalInfo;
+use ic_nns_governance::pb::v1::{KnownNeuron, ListKnownNeuronsResponse, ProposalInfo};
 use std::convert::TryFrom;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -107,6 +108,7 @@ pub trait LedgerAccess {
     ) -> Result<NeuronInfo, ApiError>;
     async fn proposal_info(&self, proposal_id: u64) -> Result<ProposalInfo, ApiError>;
     async fn pending_proposals(&self) -> Result<Vec<ProposalInfo>, ApiError>;
+    async fn list_known_neurons(&self) -> Result<Vec<KnownNeuron>, ApiError>;
     async fn transfer_fee(&self) -> Result<TransferFee, ApiError>;
 }
 
@@ -355,6 +357,30 @@ impl LedgerAccess for LedgerClient {
                 )),
             )
         })
+    }
+    async fn list_known_neurons(&self) -> Result<Vec<KnownNeuron>, ApiError> {
+        if self.offline {
+            return Err(ApiError::NotAvailableOffline(false, Details::default()));
+        }
+        let agent = &self.canister_access.as_ref().unwrap().agent;
+        let arg = Encode!().unwrap();
+        let bytes = agent
+            .query(&self.governance_canister_id.get().0, "list_known_neurons")
+            .with_arg(arg)
+            .call()
+            .await
+            .map_err(|e| ApiError::invalid_request(format!("{}", e)))?;
+        Decode!(bytes.as_slice(), ListKnownNeuronsResponse)
+            .map_err(|err| {
+                ApiError::InvalidRequest(
+                    false,
+                    Details::from(format!(
+                        "Could not decode ListKnownNeuronsResponse response: {}",
+                        err
+                    )),
+                )
+            })
+            .map(|res| res.known_neurons)
     }
     async fn neuron_info(
         &self,
