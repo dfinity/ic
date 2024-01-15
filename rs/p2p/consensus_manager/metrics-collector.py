@@ -14,15 +14,16 @@ instances = sys.argv[1:]
 def scrape_metrics():
     for instance in instances:
         try:
-            with urllib.request.urlopen(f"http://{instance}:9090") as response:
+            with urllib.request.urlopen(f"http://{instance}:9090/metrics") as response:
                 data = response.read().decode('utf-8').split(',')
+                print(data)
                 current_time = datetime.now().isoformat()
                 with open(f"data_{timestamp}/{instance}_metrics.csv", "a") as file:
-                    file.write(f"{current_time},{','.join(data)}\n")
+                    file.write(f"{current_time}, {','.join(data)}\n")
         except Exception as e:
             print(f"Error scraping {instance}: {e}")
 
 while True:
     scrape_metrics()
-    time.sleep(10)
+    time.sleep(8)
 

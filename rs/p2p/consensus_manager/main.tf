@@ -203,6 +203,8 @@ resource "aws_instance" "deletable-instance-af_south_1" {
   user_data = <<EOF
 #!/bin/bash
 
+sudo sysctl -w net.core.rmem_max=500000000
+sudo sysctl -w net.core.wmem_max=500000000
 # Download the binary from the pre-signed S3 URL
 curl -o /tmp/binary "${var.runner_url}"
 
@@ -224,10 +226,11 @@ resource "null_resource" "deletable-prov-af_south_1" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 0 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
+      "/tmp/binary --id 0 --message-size 10000000 --message-rate 7 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
     ]
   }
 }
+
 
 resource "aws_security_group" "deletable-sg-ap_east_1" {
   provider        = aws.ap_east_1
@@ -272,6 +275,8 @@ resource "aws_instance" "deletable-instance-ap_east_1" {
   user_data = <<EOF
 #!/bin/bash
 
+sudo sysctl -w net.core.rmem_max=500000000
+sudo sysctl -w net.core.wmem_max=500000000
 # Download the binary from the pre-signed S3 URL
 curl -o /tmp/binary "${var.runner_url}"
 
@@ -293,10 +298,11 @@ resource "null_resource" "deletable-prov-ap_east_1" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 1 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
+      "/tmp/binary --id 1 --message-size 10000000 --message-rate 7 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
     ]
   }
 }
+
 
 resource "aws_security_group" "deletable-sg-eu_central_1" {
   provider        = aws.eu_central_1
@@ -341,6 +347,8 @@ resource "aws_instance" "deletable-instance-eu_central_1" {
   user_data = <<EOF
 #!/bin/bash
 
+sudo sysctl -w net.core.rmem_max=500000000
+sudo sysctl -w net.core.wmem_max=500000000
 # Download the binary from the pre-signed S3 URL
 curl -o /tmp/binary "${var.runner_url}"
 
@@ -362,10 +370,11 @@ resource "null_resource" "deletable-prov-eu_central_1" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 2 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
+      "/tmp/binary --id 2 --message-size 10000000 --message-rate 7 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
     ]
   }
 }
+
 
 resource "aws_security_group" "deletable-sg-eu_central_2" {
   provider        = aws.eu_central_2
@@ -410,6 +419,8 @@ resource "aws_instance" "deletable-instance-eu_central_2" {
   user_data = <<EOF
 #!/bin/bash
 
+sudo sysctl -w net.core.rmem_max=500000000
+sudo sysctl -w net.core.wmem_max=500000000
 # Download the binary from the pre-signed S3 URL
 curl -o /tmp/binary "${var.runner_url}"
 
@@ -431,10 +442,11 @@ resource "null_resource" "deletable-prov-eu_central_2" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 3 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
+      "/tmp/binary --id 3 --message-size 10000000 --message-rate 7 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
     ]
   }
 }
+
 
 resource "aws_security_group" "deletable-sg-eu_north_1" {
   provider        = aws.eu_north_1
@@ -479,6 +491,8 @@ resource "aws_instance" "deletable-instance-eu_north_1" {
   user_data = <<EOF
 #!/bin/bash
 
+sudo sysctl -w net.core.rmem_max=500000000
+sudo sysctl -w net.core.wmem_max=500000000
 # Download the binary from the pre-signed S3 URL
 curl -o /tmp/binary "${var.runner_url}"
 
@@ -500,10 +514,11 @@ resource "null_resource" "deletable-prov-eu_north_1" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 4 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
+      "/tmp/binary --id 4 --message-size 10000000 --message-rate 7 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
     ]
   }
 }
+
 
 resource "aws_security_group" "deletable-sg-eu_south_2" {
   provider        = aws.eu_south_2
@@ -548,6 +563,8 @@ resource "aws_instance" "deletable-instance-eu_south_2" {
   user_data = <<EOF
 #!/bin/bash
 
+sudo sysctl -w net.core.rmem_max=500000000
+sudo sysctl -w net.core.wmem_max=500000000
 # Download the binary from the pre-signed S3 URL
 curl -o /tmp/binary "${var.runner_url}"
 
@@ -569,10 +586,11 @@ resource "null_resource" "deletable-prov-eu_south_2" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 5 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
+      "/tmp/binary --id 5 --message-size 10000000 --message-rate 7 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
     ]
   }
 }
+
 
 resource "aws_security_group" "deletable-sg-eu_west_1" {
   provider        = aws.eu_west_1
@@ -617,6 +635,8 @@ resource "aws_instance" "deletable-instance-eu_west_1" {
   user_data = <<EOF
 #!/bin/bash
 
+sudo sysctl -w net.core.rmem_max=500000000
+sudo sysctl -w net.core.wmem_max=500000000
 # Download the binary from the pre-signed S3 URL
 curl -o /tmp/binary "${var.runner_url}"
 
@@ -638,10 +658,11 @@ resource "null_resource" "deletable-prov-eu_west_1" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 6 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
+      "/tmp/binary --id 6 --message-size 10000000 --message-rate 7 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
     ]
   }
 }
+
 
 resource "aws_security_group" "deletable-sg-eu_west_2" {
   provider        = aws.eu_west_2
@@ -686,6 +707,8 @@ resource "aws_instance" "deletable-instance-eu_west_2" {
   user_data = <<EOF
 #!/bin/bash
 
+sudo sysctl -w net.core.rmem_max=500000000
+sudo sysctl -w net.core.wmem_max=500000000
 # Download the binary from the pre-signed S3 URL
 curl -o /tmp/binary "${var.runner_url}"
 
@@ -707,10 +730,11 @@ resource "null_resource" "deletable-prov-eu_west_2" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 7 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
+      "/tmp/binary --id 7 --message-size 10000000 --message-rate 7 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
     ]
   }
 }
+
 
 resource "aws_security_group" "deletable-sg-eu_west_3" {
   provider        = aws.eu_west_3
@@ -755,6 +779,8 @@ resource "aws_instance" "deletable-instance-eu_west_3" {
   user_data = <<EOF
 #!/bin/bash
 
+sudo sysctl -w net.core.rmem_max=500000000
+sudo sysctl -w net.core.wmem_max=500000000
 # Download the binary from the pre-signed S3 URL
 curl -o /tmp/binary "${var.runner_url}"
 
@@ -776,10 +802,11 @@ resource "null_resource" "deletable-prov-eu_west_3" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 8 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
+      "/tmp/binary --id 8 --message-size 10000000 --message-rate 7 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
     ]
   }
 }
+
 
 resource "aws_security_group" "deletable-sg-us_east_1" {
   provider        = aws.us_east_1
@@ -824,6 +851,8 @@ resource "aws_instance" "deletable-instance-us_east_1" {
   user_data = <<EOF
 #!/bin/bash
 
+sudo sysctl -w net.core.rmem_max=500000000
+sudo sysctl -w net.core.wmem_max=500000000
 # Download the binary from the pre-signed S3 URL
 curl -o /tmp/binary "${var.runner_url}"
 
@@ -845,10 +874,11 @@ resource "null_resource" "deletable-prov-us_east_1" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 9 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
+      "/tmp/binary --id 9 --message-size 10000000 --message-rate 7 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
     ]
   }
 }
+
 
 resource "aws_security_group" "deletable-sg-us_east_2" {
   provider        = aws.us_east_2
@@ -893,6 +923,8 @@ resource "aws_instance" "deletable-instance-us_east_2" {
   user_data = <<EOF
 #!/bin/bash
 
+sudo sysctl -w net.core.rmem_max=500000000
+sudo sysctl -w net.core.wmem_max=500000000
 # Download the binary from the pre-signed S3 URL
 curl -o /tmp/binary "${var.runner_url}"
 
@@ -914,10 +946,11 @@ resource "null_resource" "deletable-prov-us_east_2" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 10 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
+      "/tmp/binary --id 10 --message-size 10000000 --message-rate 7 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
     ]
   }
 }
+
 
 resource "aws_security_group" "deletable-sg-us_west_2" {
   provider        = aws.us_west_2
@@ -962,6 +995,8 @@ resource "aws_instance" "deletable-instance-us_west_2" {
   user_data = <<EOF
 #!/bin/bash
 
+sudo sysctl -w net.core.rmem_max=500000000
+sudo sysctl -w net.core.wmem_max=500000000
 # Download the binary from the pre-signed S3 URL
 curl -o /tmp/binary "${var.runner_url}"
 
@@ -983,7 +1018,16 @@ resource "null_resource" "deletable-prov-us_west_2" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 11 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100"
+      "/tmp/binary --id 11 --message-size 10000000 --message-rate 7 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100"
     ]
+  }
+}
+
+
+resource "null_resource" "deletable-local-prov-REGION" {
+  depends_on = [aws_instance.deletable-instance-af_south_1, aws_instance.deletable-instance-ap_east_1, aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_2]
+
+  provisioner "local-exec" {
+    command = "python3 metrics-collector.py ${aws_instance.deletable-instance-af_south_1.public_ip} ${aws_instance.deletable-instance-ap_east_1.public_ip} ${aws_instance.deletable-instance-eu_central_1.public_ip} ${aws_instance.deletable-instance-eu_central_2.public_ip} ${aws_instance.deletable-instance-eu_north_1.public_ip} ${aws_instance.deletable-instance-eu_south_2.public_ip} ${aws_instance.deletable-instance-eu_west_1.public_ip} ${aws_instance.deletable-instance-eu_west_2.public_ip} ${aws_instance.deletable-instance-eu_west_3.public_ip} ${aws_instance.deletable-instance-us_east_1.public_ip} ${aws_instance.deletable-instance-us_east_2.public_ip} ${aws_instance.deletable-instance-us_west_2.public_ip}"
   }
 }

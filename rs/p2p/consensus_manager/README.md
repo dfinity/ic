@@ -80,3 +80,12 @@ disable_sessions        = false" > /tmp/saml2aws_conf
 saml2aws -r eu-central-2 --config /tmp/saml2aws_conf login -a ic-backups
 eval $(saml2aws --config /tmp/saml2aws_conf script -a ic-backups)
 ```
+
+
+## plot BW usage
+
+
+```
+sudo pip3 install pandas matplotlib
+python3 plot-bw.py data_20240115_093554
+```

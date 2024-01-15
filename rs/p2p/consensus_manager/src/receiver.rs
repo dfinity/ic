@@ -37,8 +37,8 @@ use tokio::{
     time::{self, sleep_until, timeout_at, Instant, MissedTickBehavior},
 };
 
-const MIN_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(5);
-const MAX_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(120);
+const MIN_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(3600);
+const MAX_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(3600 * 2);
 const PRIORITY_FUNCTION_UPDATE_INTERVAL: Duration = Duration::from_secs(3);
 
 type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + Sync>>;

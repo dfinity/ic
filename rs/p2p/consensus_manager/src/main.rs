@@ -85,7 +85,7 @@ impl ArtifactKind for TestArtifact {
 
         Advert {
             attribute,
-            size: msg.len(),
+            size: 1024 * 1024,
             id,
             integrity_hash: CryptoHash(vec![]),
         }

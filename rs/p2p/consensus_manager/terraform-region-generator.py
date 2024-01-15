@@ -103,6 +103,8 @@ resource "aws_instance" "deletable-instance-REGION" {
   user_data = <<EOF
 #!/bin/bash
 
+sudo sysctl -w net.core.rmem_max=500000000
+sudo sysctl -w net.core.wmem_max=500000000
 # Download the binary from the pre-signed S3 URL
 curl -o /tmp/binary "${var.runner_url}"
 
@@ -129,14 +131,18 @@ resource "null_resource" "deletable-prov-REGION" {
   }
 }
 
+"""
+
+local_template = """
 resource "null_resource" "deletable-local-prov-REGION" {
   depends_on = DEPENDS_ON
 
-  provisioner "local-exe" {
-    command = "python scrape_metrics.py ALL_ADDRS",
+  provisioner "local-exec" {
+    command = "python3 metrics-collector.py ALL_ADDRS"
   }
 }
 """
+
 
 merged = ""
 
@@ -163,10 +169,15 @@ for region, ami in sorted(region_map.items()):
   depends_on = [f"aws_instance.deletable-instance-{region}" for region in sorted(region_map)]
   depends_on = f"[{', '.join(depends_on)}]"
   peers_addrs = [f"${{aws_instance.deletable-instance-{r}.public_ip}}:4100" for r in sorted(region_map) if r != region]
-  all_addrs = [f"${{aws_instance.deletable-instance-{r}.public_ip}}:9090" for r in sorted(region_map)]
   peers_addrs = ' '.join(peers_addrs)
-  merged += template.replace("REGION", region).replace("AMI",ami[0]).replace("DEPENDS_ON",depends_on).replace("PEERS_ADDRS", peers_addrs).replace("ID", str(id)).replace("MESSAGE_SIZE", message_size).replace("MESSAGE_RATE", message_rate).replace("MACHINE", ami[1]).replace("ALL_ADDRS", all_addrs)
+  merged += template.replace("REGION", region).replace("AMI",ami[0]).replace("DEPENDS_ON",depends_on).replace("PEERS_ADDRS", peers_addrs).replace("ID", str(id)).replace("MESSAGE_SIZE", message_size).replace("MESSAGE_RATE", message_rate).replace("MACHINE", ami[1])
   id += 1 
+
+depends_on = [f"aws_instance.deletable-instance-{region}" for region in sorted(region_map)]
+depends_on = f"[{', '.join(depends_on)}]"
+all_addrs = [f"${{aws_instance.deletable-instance-{r}.public_ip}}" for r in sorted(region_map)]
+all_addrs = ' '.join(all_addrs)
+merged += local_template.replace("ALL_ADDRS", all_addrs).replace("DEPENDS_ON",depends_on)
  
 with open("providers.txt") as f:
     data = f.read()
