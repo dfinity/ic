@@ -133,6 +133,7 @@ members = [
   "rs/ic_os/hostos_tool",
   "rs/ic_os/launch-single-vm",
   "rs/ic_os/network",
+  "rs/ic_os/nss_icos",
   "rs/ic_os/setupos-inject-configuration",
   "rs/ic_os/partition_tools",
   "rs/ic_os/setupos-disable-checks",
@@ -475,6 +476,8 @@ k256 = { version = "0.13.3", default_features = false, features = [
   "precomputed-tables",
   "std",
 ] }
+libnss = "0.5.0"
+local-ip-address = "0.5.6"
 mockall = "0.11.4"
 mockito = "1.2.0"
 minicbor = { version = "0.19.1", features = ["alloc", "derive"] }

@@ -63,6 +63,9 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /ic-os/hostos/rootfs/etc/metrics-proxy.yaml                             @dfinity-lab/teams/DRE
 /ic-os/hostos/rootfs/etc/systemd/system/metrics-proxy.service           @dfinity-lab/teams/DRE
 
+# [nss_icos]
+/rs/ic_os/nss_icos/                                                           @dfinity-lab/teams/DRE
+
 # [GitLab-CI]
 /.pre-commit-config.yaml                                                @dfinity-lab/teams/idx
 /pre-commit/                                                            @dfinity-lab/teams/idx

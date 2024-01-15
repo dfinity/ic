@@ -1,5 +1,5 @@
 {
-  "checksum": "9401d7861bd9923ae8408d1c6a7880d69a44d14919a7ad10a877fb11b1ee01ae",
+  "checksum": "54ca1c27064cc161cf79cec75ae5c9f85fab3e57feb2c29ecc0d7ea618ab6ffd",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -15352,6 +15352,10 @@
               "target": "libfuzzer_sys"
             },
             {
+              "id": "libnss 0.5.0",
+              "target": "libnss"
+            },
+            {
               "id": "libsecp256k1 0.7.1",
               "target": "libsecp256k1"
             },
@@ -15362,6 +15366,10 @@
             {
               "id": "linked-hash-map 0.5.6",
               "target": "linked_hash_map"
+            },
+            {
+              "id": "local-ip-address 0.5.6",
+              "target": "local_ip_address"
             },
             {
               "id": "log 0.4.20",
@@ -29776,6 +29784,58 @@
       },
       "license": "MIT OR Apache-2.0"
     },
+    "libnss 0.5.0": {
+      "name": "libnss",
+      "version": "0.5.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/libnss/0.5.0/download",
+          "sha256": "41bcbddc10dc229d4119553cc8dc61968cdd134286a4669ba31184f8e9efa442"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "libnss",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "libnss",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "lazy_static 1.4.0",
+              "target": "lazy_static"
+            },
+            {
+              "id": "libc 0.2.149",
+              "target": "libc"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "paste 1.0.14",
+              "target": "paste"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.5.0"
+      },
+      "license": "LGPL-3.0"
+    },
     "librocksdb-sys 0.11.0+8.1.1": {
       "name": "librocksdb-sys",
       "version": "0.11.0+8.1.1",
@@ -30786,6 +30846,64 @@
         },
         "edition": "2021",
         "version": "0.1.4"
+      },
+      "license": "MIT OR Apache-2.0"
+    },
+    "local-ip-address 0.5.6": {
+      "name": "local-ip-address",
+      "version": "0.5.6",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/local-ip-address/0.5.6/download",
+          "sha256": "66357e687a569abca487dc399a9c9ac19beb3f13991ed49f00c144e02cbd42ab"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "local_ip_address",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "local_ip_address",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "thiserror 1.0.56",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {
+            "cfg(target_os = \"linux\")": [
+              {
+                "id": "neli 0.6.4",
+                "target": "neli"
+              }
+            ],
+            "cfg(unix)": [
+              {
+                "id": "libc 0.2.149",
+                "target": "libc"
+              }
+            ],
+            "cfg(windows)": [
+              {
+                "id": "windows-sys 0.48.0",
+                "target": "windows_sys"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "version": "0.5.6"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -33224,6 +33342,123 @@
         "version": "0.8.3"
       },
       "license": "MIT/Apache-2.0"
+    },
+    "neli 0.6.4": {
+      "name": "neli",
+      "version": "0.6.4",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/neli/0.6.4/download",
+          "sha256": "1100229e06604150b3becd61a4965d5c70f3be1759544ea7274166f4be41ef43"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "neli",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "neli",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "byteorder 1.5.0",
+              "target": "byteorder"
+            },
+            {
+              "id": "libc 0.2.149",
+              "target": "libc"
+            },
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "neli-proc-macros 0.1.3",
+              "target": "neli_proc_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.6.4"
+      },
+      "license": "BSD-3-Clause"
+    },
+    "neli-proc-macros 0.1.3": {
+      "name": "neli-proc-macros",
+      "version": "0.1.3",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/neli-proc-macros/0.1.3/download",
+          "sha256": "c168194d373b1e134786274020dae7fc5513d565ea2ebb9bc9ff17ffb69106d4"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "neli_proc_macros",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "neli_proc_macros",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "either 1.9.0",
+              "target": "either"
+            },
+            {
+              "id": "proc-macro2 1.0.76",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.35",
+              "target": "quote"
+            },
+            {
+              "id": "serde 1.0.195",
+              "target": "serde"
+            },
+            {
+              "id": "syn 1.0.109",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.1.3"
+      },
+      "license": "BSD-3-Clause"
     },
     "net2 0.2.39": {
       "name": "net2",
@@ -61483,6 +61718,7 @@
             "Win32_Globalization",
             "Win32_NetworkManagement",
             "Win32_NetworkManagement_IpHelper",
+            "Win32_NetworkManagement_Ndis",
             "Win32_Networking",
             "Win32_Networking_WinSock",
             "Win32_Security",

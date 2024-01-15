@@ -58,6 +58,10 @@ RUN sed -e 's/\(backup *= *\)1/\10/' -e 's/\(archive *= *\)1/\10/' -i /etc/lvm/l
 # Deactivate systemd userdb. We don't use it.
 RUN sed -e 's/ *systemd//' -i /etc/nsswitch.conf
 
+# Activate the NSS IC OS Name Service Switch plugin.
+# See ../../../rs/ic_os/nss_icos/README.md for context.
+RUN sed -r -e 's/hosts:( *)files/hosts:\1files icos/' -i /etc/nsswitch.conf
+
 # Divert symbolic link for dynamically generated nftables
 # ruleset.
 RUN ln -sf /run/ic-node/nftables-ruleset/nftables.conf /etc/nftables.conf

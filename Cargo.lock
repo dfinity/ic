@@ -147,7 +147,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3b894941f818cfdc7ccc4b9e60fa7e53b5042a2e8567270f9147d5591893373a"
 dependencies = [
  "futures-core",
- "paste 1.0.12",
+ "paste 1.0.14",
  "pin-project-lite",
 ]
 
@@ -1628,7 +1628,7 @@ dependencies = [
  "leb128",
  "num-bigint 0.4.4",
  "num-traits",
- "paste 1.0.12",
+ "paste 1.0.14",
  "pretty 0.12.1",
  "serde",
  "serde_bytes",
@@ -6480,7 +6480,7 @@ dependencies = [
  "itertools 0.12.0",
  "lazy_static",
  "pairing",
- "paste 1.0.12",
+ "paste 1.0.14",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "sha2 0.9.9",
@@ -6602,7 +6602,7 @@ dependencies = [
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-protobuf",
  "ic-types",
- "paste 1.0.12",
+ "paste 1.0.14",
  "proptest",
  "strum 0.25.0",
 ]
@@ -6767,7 +6767,7 @@ dependencies = [
  "lazy_static",
  "num-traits",
  "p256",
- "paste 1.0.12",
+ "paste 1.0.14",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "serde",
@@ -13139,9 +13139,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.149"
+version = "0.2.152"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a08173bc88b7955d1b3145aa561539096c421ac8debde8cbc3612ec635fee29b"
+checksum = "13e3bf6590cbc649f4d1a3eefc9d5d6eb746f5200ffb04e5e142700b8faa56e7"
 
 [[package]]
 name = "libflate"
@@ -13178,6 +13178,17 @@ name = "libm"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "348108ab3fba42ec82ff6e9564fc4ca0247bdccdc68dd8af9764bbc79c3c8ffb"
+
+[[package]]
+name = "libnss"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "41bcbddc10dc229d4119553cc8dc61968cdd134286a4669ba31184f8e9efa442"
+dependencies = [
+ "lazy_static",
+ "libc",
+ "paste 1.0.14",
+]
 
 [[package]]
 name = "librocksdb-sys"
@@ -13379,6 +13390,18 @@ dependencies = [
  "futures-sink",
  "futures-util",
  "local-waker",
+]
+
+[[package]]
+name = "local-ip-address"
+version = "0.5.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "66357e687a569abca487dc399a9c9ac19beb3f13991ed49f00c144e02cbd42ab"
+dependencies = [
+ "libc",
+ "neli",
+ "thiserror",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -13945,6 +13968,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "neli"
+version = "0.6.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1100229e06604150b3becd61a4965d5c70f3be1759544ea7274166f4be41ef43"
+dependencies = [
+ "byteorder",
+ "libc",
+ "log",
+ "neli-proc-macros",
+]
+
+[[package]]
+name = "neli-proc-macros"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c168194d373b1e134786274020dae7fc5513d565ea2ebb9bc9ff17ffb69106d4"
+dependencies = [
+ "either",
+ "proc-macro2 1.0.75",
+ "quote 1.0.35",
+ "serde",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "network"
 version = "1.0.0"
 dependencies = [
@@ -14049,6 +14097,17 @@ name = "normalize-line-endings"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "61807f77802ff30975e01f4f071c8ba10c022052f98b3294119f3e615d13e5be"
+
+[[package]]
+name = "nss_icos"
+version = "0.9.0"
+dependencies = [
+ "lazy_static",
+ "libc",
+ "libnss",
+ "local-ip-address",
+ "paste 1.0.14",
+]
 
 [[package]]
 name = "nu-ansi-term"
@@ -14640,9 +14699,9 @@ dependencies = [
 
 [[package]]
 name = "paste"
-version = "1.0.12"
+version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f746c4065a8fa3fe23974dd82f15431cc8d40779821001404d10d2e79ca7d79"
+checksum = "de3145af08024dea9fa9914f381a17b8fc6034dfb00f3a84013f7ff43f29ed4c"
 
 [[package]]
 name = "paste-impl"
@@ -19595,7 +19654,7 @@ dependencies = [
  "log",
  "object 0.32.1",
  "once_cell",
- "paste 1.0.12",
+ "paste 1.0.14",
  "psm",
  "rayon",
  "serde",
@@ -19738,7 +19797,7 @@ dependencies = [
  "mach",
  "memfd",
  "memoffset 0.9.0",
- "paste 1.0.12",
+ "paste 1.0.14",
  "rand 0.8.5",
  "rustix 0.38.21",
  "sptr",
