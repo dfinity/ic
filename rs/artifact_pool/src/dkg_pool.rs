@@ -1,6 +1,6 @@
 use crate::{
     metrics::{POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},
-    pool_common::PoolSection,
+    pool_common::{HasLabel, PoolSection},
 };
 use ic_interfaces::{
     dkg::{ChangeAction, ChangeSet, DkgPool},
@@ -172,6 +172,18 @@ impl DkgPool for DkgPoolImpl {
 
     fn validated_contains(&self, msg: &dkg::Message) -> bool {
         self.validated.contains_key(&DkgMessageId::from(msg))
+    }
+}
+
+impl HasLabel for dkg::Message {
+    fn label(&self) -> &str {
+        "dkg_message"
+    }
+}
+
+impl HasLabel for UnvalidatedArtifact<dkg::Message> {
+    fn label(&self) -> &str {
+        self.message.label()
     }
 }
 
