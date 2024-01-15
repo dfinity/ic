@@ -10,6 +10,8 @@ apiVersion: cdi.kubevirt.io/v1beta1
 kind: DataVolume
 metadata:
   name: {name}
+  annotations:
+    cdi.kubevirt.io/storage.usePopulator: "false"
 spec:
   contentType: {type}
   pvc:
@@ -28,6 +30,8 @@ apiVersion: cdi.kubevirt.io/v1beta1
 kind: DataVolume
 metadata:
   name: {name}
+  annotations:
+    cdi.kubevirt.io/storage.usePopulator: "false"
 spec:
   contentType: {type}
   pvc:
