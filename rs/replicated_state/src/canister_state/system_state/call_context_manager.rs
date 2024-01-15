@@ -10,7 +10,10 @@ use ic_protobuf::types::v1 as pb_types;
 use ic_types::NumInstructions;
 use ic_types::{
     ingress::WasmResult,
-    messages::{CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, MessageId, Response},
+    messages::{
+        CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, MessageId, RequestMetadata,
+        Response,
+    },
     methods::Callback,
     user_id_into_protobuf, user_id_try_from_protobuf, CanisterId, Cycles, Funds, PrincipalId, Time,
     UserId,
@@ -43,6 +46,9 @@ pub struct CallContext {
     /// Point in time at which the `CallContext` was created.
     time: Time,
 
+    /// Metadata for requests generated within this `CallContext`.
+    metadata: RequestMetadata,
+
     /// The total number of instructions executed in the given call context.
     /// This value is used for the `ic0.performance_counter` type 1.
     instructions_executed: NumInstructions,
@@ -55,6 +61,7 @@ impl CallContext {
         deleted: bool,
         available_cycles: Cycles,
         time: Time,
+        metadata: RequestMetadata,
     ) -> Self {
         Self {
             call_origin,
@@ -62,6 +69,7 @@ impl CallContext {
             deleted,
             available_cycles,
             time,
+            metadata,
             instructions_executed: NumInstructions::default(),
         }
     }
@@ -115,6 +123,11 @@ impl CallContext {
         self.time
     }
 
+    /// Metadata for requests generated within this `CallContext`.
+    pub fn metadata(&self) -> &RequestMetadata {
+        &self.metadata
+    }
+
     /// Return the total number of instructions executed in the given call context.
     /// This value is used for the `ic0.performance_counter` type 1.
     pub fn instructions_executed(&self) -> NumInstructions {
@@ -131,6 +144,7 @@ impl From<&CallContext> for pb::CallContext {
             deleted: item.deleted,
             available_funds: Some((&funds).into()),
             time_nanos: item.time.as_nanos_since_unix_epoch(),
+            metadata: Some((&item.metadata).into()),
             instructions_executed: item.instructions_executed.get(),
         }
     }
@@ -148,6 +162,12 @@ impl TryFrom<pb::CallContext> for CallContext {
             deleted: value.deleted,
             available_cycles: funds.cycles(),
             time: Time::from_nanos_since_unix_epoch(value.time_nanos),
+            metadata: value
+                .metadata
+                .map(From::from)
+                .unwrap_or(RequestMetadata::for_new_call_tree(
+                    Time::from_nanos_since_unix_epoch(0),
+                )),
             instructions_executed: value.instructions_executed.into(),
         })
     }
@@ -323,6 +343,7 @@ impl CallContextManager {
         call_origin: CallOrigin,
         cycles: Cycles,
         time: Time,
+        metadata: RequestMetadata,
     ) -> CallContextId {
         self.next_call_context_id += 1;
         let id = CallContextId::from(self.next_call_context_id);
@@ -334,6 +355,7 @@ impl CallContextManager {
                 deleted: false,
                 available_cycles: cycles,
                 time,
+                metadata,
                 instructions_executed: NumInstructions::default(),
             },
         );

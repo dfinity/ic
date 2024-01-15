@@ -19,7 +19,8 @@ use ic_sys::PAGE_SIZE;
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
-    CallContextId, CallbackId, CanisterMessage, CanisterMessageOrTask, Payload, Response,
+    CallContextId, CallbackId, CanisterMessage, CanisterMessageOrTask, Payload, RequestMetadata,
+    Response,
 };
 use ic_types::methods::{Callback, FuncRef, WasmClosure};
 use ic_types::Cycles;
@@ -32,6 +33,7 @@ use crate::execution::common::{
 use crate::execution_environment::{
     ExecuteMessageResult, ExecutionResponse, PausedExecution, RoundContext, RoundLimits,
 };
+use crate::metrics::CallTreeMetrics;
 
 #[cfg(test)]
 mod tests;
@@ -353,6 +355,7 @@ impl ResponseHelper {
         round: &RoundContext,
         round_limits: &mut RoundLimits,
         reserved_cleanup_instructions: NumInstructions,
+        call_tree_metrics: &dyn CallTreeMetrics,
     ) -> Result<ExecuteMessageResult, (Self, HypervisorError, NumInstructions)> {
         self.canister
             .system_state
@@ -402,7 +405,10 @@ impl ResponseHelper {
             round.hypervisor.subnet_id(),
             round.log,
             round.counters.state_changes_error,
+            call_tree_metrics,
+            original.call_context_creation_time,
         );
+
         // Return total instructions: wasm executor leftovers + cleanup reservation.
         let instructions_available = output.num_instructions_left + reserved_cleanup_instructions;
         match output.wasm_result {
@@ -428,6 +434,7 @@ impl ResponseHelper {
         original: &OriginalContext,
         round: &RoundContext,
         round_limits: &mut RoundLimits,
+        call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
         self.canister
             .system_state
@@ -454,6 +461,8 @@ impl ResponseHelper {
             round.hypervisor.subnet_id(),
             round.log,
             round.counters.state_changes_error,
+            call_tree_metrics,
+            original.call_context_creation_time,
         );
 
         match output.wasm_result {
@@ -631,6 +640,8 @@ struct OriginalContext {
     callback_id: CallbackId,
     call_origin: CallOrigin,
     time: Time,
+    call_context_creation_time: Time,
+    request_metadata: RequestMetadata,
     message_instruction_limit: NumInstructions,
     message: Arc<Response>,
     subnet_size: usize,
@@ -667,6 +678,7 @@ impl PausedExecution for PausedResponseExecution {
         round: RoundContext,
         round_limits: &mut RoundLimits,
         _subnet_size: usize,
+        call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
         info!(
             round.log,
@@ -714,6 +726,7 @@ impl PausedExecution for PausedResponseExecution {
             self.original,
             round,
             round_limits,
+            call_tree_metrics,
         )
     }
 
@@ -756,6 +769,7 @@ impl PausedExecution for PausedCleanupExecution {
         round: RoundContext,
         round_limits: &mut RoundLimits,
         _subnet_size: usize,
+        call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
         info!(
             round.log,
@@ -806,6 +820,7 @@ impl PausedExecution for PausedCleanupExecution {
             self.original,
             round,
             round_limits,
+            call_tree_metrics,
         )
     }
 
@@ -838,6 +853,7 @@ pub fn execute_response(
     round_limits: &mut RoundLimits,
     subnet_size: usize,
     subnet_memory_reservation: NumBytes,
+    call_tree_metrics: &dyn CallTreeMetrics,
 ) -> ExecuteMessageResult {
     let (callback, callback_id, call_context, call_context_id) =
         match common::get_call_context_and_callback(
@@ -875,6 +891,8 @@ pub fn execute_response(
         callback_id,
         call_origin: call_context.call_origin().clone(),
         time,
+        call_context_creation_time: call_context.time(),
+        request_metadata: call_context.metadata().clone(),
         message_instruction_limit: execution_parameters.instruction_limits.message(),
         message: Arc::clone(&response),
         subnet_size,
@@ -940,6 +958,7 @@ pub fn execute_response(
         helper.canister().message_memory_usage(),
         execution_parameters.clone(),
         func_ref,
+        original.request_metadata.clone(),
         round_limits,
         round.network_topology,
     );
@@ -953,6 +972,7 @@ pub fn execute_response(
         original,
         round,
         round_limits,
+        call_tree_metrics,
     )
 }
 
@@ -982,6 +1002,7 @@ fn execute_response_cleanup(
     original: OriginalContext,
     round: RoundContext,
     round_limits: &mut RoundLimits,
+    call_tree_metrics: &dyn CallTreeMetrics,
 ) -> ExecuteMessageResult {
     execution_parameters
         .instruction_limits
@@ -1006,6 +1027,7 @@ fn execute_response_cleanup(
         helper.canister().message_memory_usage(),
         execution_parameters.clone(),
         func_ref,
+        original.request_metadata.clone(),
         round_limits,
         round.network_topology,
     );
@@ -1018,6 +1040,7 @@ fn execute_response_cleanup(
         original,
         round,
         round_limits,
+        call_tree_metrics,
     )
 }
 
@@ -1033,6 +1056,7 @@ fn process_response_result(
     original: OriginalContext,
     round: RoundContext,
     round_limits: &mut RoundLimits,
+    call_tree_metrics: &dyn CallTreeMetrics,
 ) -> ExecuteMessageResult {
     match result {
         WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
@@ -1080,6 +1104,7 @@ fn process_response_result(
                 &round,
                 round_limits,
                 reserved_cleanup_instructions,
+                call_tree_metrics,
             ) {
                 Ok(result) => result,
                 Err((helper, err, instructions_left)) => {
@@ -1096,6 +1121,7 @@ fn process_response_result(
                             original,
                             round,
                             round_limits,
+                            call_tree_metrics,
                         ),
                         None => {
                             // No cleanup closure present. Return the callback error as-is.
@@ -1125,6 +1151,7 @@ fn process_cleanup_result(
     original: OriginalContext,
     round: RoundContext,
     round_limits: &mut RoundLimits,
+    call_tree_metrics: &dyn CallTreeMetrics,
 ) -> ExecuteMessageResult {
     match result {
         WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
@@ -1172,6 +1199,7 @@ fn process_cleanup_result(
                 &original,
                 &round,
                 round_limits,
+                call_tree_metrics,
             )
         }
     }

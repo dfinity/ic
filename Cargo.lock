@@ -3297,6 +3297,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1435fa1053d8b2fbbe9be7e97eca7f33d37b28409959813daefc1446a14247f1"
 
 [[package]]
+name = "downstream-calls-test"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "dfn_core",
+ "ic-base-types",
+ "ic-cdk",
+ "ic-cdk-macros",
+ "serde",
+]
+
+[[package]]
 name = "drawille"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8697,6 +8709,7 @@ dependencies = [
  "assert_matches",
  "candid",
  "canister-test",
+ "downstream-calls-test",
  "ic-base-types",
  "ic-certification-version",
  "ic-config",
@@ -8743,6 +8756,7 @@ dependencies = [
  "prometheus",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "serde",
  "slog",
  "tempfile",
  "xnet-test",

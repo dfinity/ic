@@ -1,7 +1,7 @@
 use crate::Hypervisor;
 use crate::{
     execution_environment::{as_round_instructions, RoundLimits},
-    metrics::IngressFilterMetrics,
+    metrics::{CallTreeMetricsNoOp, IngressFilterMetrics},
 };
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
@@ -28,7 +28,7 @@ pub fn execute_inspect_message(
     network_topology: &NetworkTopology,
     logger: &ReplicaLogger,
     state_changes_error: &IntCounter,
-    metrics: &IngressFilterMetrics,
+    ingress_filter_metrics: &IngressFilterMetrics,
 ) -> (NumInstructions, Result<(), UserError>) {
     let canister_id = canister.canister_id();
     let memory_usage = canister.memory_usage();
@@ -69,7 +69,9 @@ pub fn execute_inspect_message(
         // Ignore compute allocation
         compute_allocation_used: 0,
     };
-    let inspect_message_timer = metrics.inspect_message_duration_seconds.start_timer();
+    let inspect_message_timer = ingress_filter_metrics
+        .inspect_message_duration_seconds
+        .start_timer();
     let (output, _output_execution_state, _system_state_accessor) = hypervisor.execute(
         system_api,
         time,
@@ -82,10 +84,12 @@ pub fn execute_inspect_message(
         network_topology,
         &mut round_limits,
         state_changes_error,
+        &CallTreeMetricsNoOp,
+        time,
     );
     drop(inspect_message_timer);
-    metrics.inspect_message_count.inc();
-    metrics
+    ingress_filter_metrics.inspect_message_count.inc();
+    ingress_filter_metrics
         .inspect_message_instructions
         .observe((message_instruction_limit.get() - output.num_instructions_left.get()) as f64);
     match output.wasm_result {

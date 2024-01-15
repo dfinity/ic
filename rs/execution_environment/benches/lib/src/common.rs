@@ -32,7 +32,7 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_execution_environment::generate_network_topology;
 use ic_types::{
-    messages::{CallbackId, CanisterMessage, Payload, RejectContext},
+    messages::{CallbackId, CanisterMessage, Payload, RejectContext, RequestMetadata},
     methods::{Callback, WasmClosure},
     Cycles, MemoryAllocation, NumBytes, NumInstructions, Time,
 };
@@ -113,7 +113,12 @@ where
         .system_state
         .call_context_manager_mut()
         .unwrap()
-        .new_call_context(call_origin.clone(), Cycles::new(10), mock_time());
+        .new_call_context(
+            call_origin.clone(),
+            Cycles::new(10),
+            mock_time(),
+            RequestMetadata::new(0, mock_time()),
+        );
     let callback = Callback::new(
         call_context_id,
         canister_test_id(LOCAL_CANISTER_ID),

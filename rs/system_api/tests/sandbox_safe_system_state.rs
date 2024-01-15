@@ -22,7 +22,7 @@ use ic_test_utilities::{
 };
 use ic_types::nominal_cycles::NominalCycles;
 use ic_types::{
-    messages::{CanisterMessage, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
+    messages::{CanisterMessage, RequestMetadata, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
     ComputeAllocation, Cycles, NumInstructions,
 };
 use prometheus::IntCounter;
@@ -64,6 +64,7 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
+        RequestMetadata::new(0, mock_time()),
     );
 
     assert_eq!(
@@ -115,6 +116,7 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
+        RequestMetadata::new(0, mock_time()),
     );
 
     assert_eq!(
@@ -148,6 +150,7 @@ fn push_output_request_succeeds_with_enough_cycles() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
+        RequestMetadata::new(0, mock_time()),
     );
 
     let prepayment_for_response_execution =
@@ -191,6 +194,7 @@ fn correct_charging_source_canister_for_a_request() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
+        RequestMetadata::new(0, mock_time()),
     );
 
     let request = RequestBuilder::default()
@@ -339,6 +343,7 @@ fn is_controller_test() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
+        RequestMetadata::new(0, mock_time()),
     );
 
     // Users IDs 1 and 2 are controllers, hence is_controller should return true,
@@ -423,6 +428,7 @@ fn test_inter_canister_call(
         topo,
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
+        RequestMetadata::new(0, mock_time()),
     );
 
     let request = RequestBuilder::default()

@@ -25,8 +25,8 @@ use ic_test_utilities::types::{
 };
 use ic_types::{
     messages::{
-        CallContextId, CallbackId, CanisterCall, StopCanisterCallId, StopCanisterContext,
-        MAX_RESPONSE_COUNT_BYTES,
+        CallContextId, CallbackId, CanisterCall, RequestMetadata, StopCanisterCallId,
+        StopCanisterContext, MAX_RESPONSE_COUNT_BYTES,
     },
     methods::{Callback, WasmClosure},
     nominal_cycles::NominalCycles,
@@ -98,6 +98,7 @@ impl CanisterStateFixture {
                 CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1)),
                 Cycles::zero(),
                 Time::from_nanos_since_unix_epoch(0),
+                RequestMetadata::new(0, mock_time()),
             );
         self.canister_state
             .system_state
@@ -813,6 +814,7 @@ fn reverts_stopping_status_after_split() {
         CallOrigin::Ingress(user_test_id(1), message_test_id(2)),
         Cycles::from(0u128),
         Time::from_nanos_since_unix_epoch(0),
+        RequestMetadata::new(0, mock_time()),
     );
     canister_state.system_state.status = CanisterStatus::Stopping {
         call_context_manager: call_context_manager.clone(),

@@ -300,6 +300,7 @@ members = [
   "rs/rust_canisters/dfn_json",
   "rs/rust_canisters/dfn_macro",
   "rs/rust_canisters/dfn_protobuf",
+  "rs/rust_canisters/downstream_calls_test",
   "rs/rust_canisters/ecdsa",
   "rs/rust_canisters/http_types",
   "rs/rust_canisters/memory_test",

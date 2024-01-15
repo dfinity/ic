@@ -684,10 +684,10 @@ mod tests {
     fn serialize_request_via_bincode() {
         for metadata in [
             None,
-            Some(RequestMetadata {
-                call_tree_depth: 13,
-                call_tree_start_time: Time::from_nanos_since_unix_epoch(17),
-            }),
+            Some(RequestMetadata::new(
+                13,
+                Time::from_nanos_since_unix_epoch(17),
+            )),
         ] {
             let request = Request {
                 receiver: CanisterId::from(13),

@@ -15,7 +15,7 @@ use crate::{
     },
     hypervisor::Hypervisor,
     ic00_permissions::Ic00MethodPermissions,
-    metrics::IngressFilterMetrics,
+    metrics::{CallTreeMetrics, CallTreeMetricsImpl, IngressFilterMetrics},
     NonReplicatedQueryKind,
 };
 use candid::Encode;
@@ -245,6 +245,7 @@ pub trait PausedExecution: std::fmt::Debug + Send {
         round_context: RoundContext,
         round_limits: &mut RoundLimits,
         subnet_size: usize,
+        call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult;
 
     /// Aborts the paused execution.
@@ -285,6 +286,7 @@ pub struct ExecutionEnvironment {
     canister_manager: CanisterManager,
     ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
     metrics: ExecutionEnvironmentMetrics,
+    call_tree_metrics: CallTreeMetricsImpl,
     config: ExecutionConfig,
     cycles_account_manager: Arc<CyclesAccountManager>,
     own_subnet_id: SubnetId,
@@ -369,6 +371,7 @@ impl ExecutionEnvironment {
             canister_manager,
             ingress_history_writer,
             metrics,
+            call_tree_metrics: CallTreeMetricsImpl::new(metrics_registry),
             config,
             cycles_account_manager,
             own_subnet_id,
@@ -1367,6 +1370,7 @@ impl ExecutionEnvironment {
                     round,
                     round_limits,
                     subnet_size,
+                    &self.call_tree_metrics,
                 )
             }
             WasmMethod::System(_) => {
@@ -1403,6 +1407,7 @@ impl ExecutionEnvironment {
             round,
             round_limits,
             subnet_size,
+            &self.call_tree_metrics,
         )
     }
 
@@ -1774,6 +1779,7 @@ impl ExecutionEnvironment {
             round_limits,
             subnet_size,
             scaled_subnet_memory_reservation,
+            &self.call_tree_metrics,
         )
     }
 
@@ -3193,7 +3199,13 @@ pub fn execute_canister(
                     log: &exec_env.log,
                     time,
                 };
-                let result = paused.resume(canister, round_context, round_limits, subnet_size);
+                let result = paused.resume(
+                    canister,
+                    round_context,
+                    round_limits,
+                    subnet_size,
+                    &exec_env.call_tree_metrics,
+                );
                 let (canister, instructions_used, heap_delta, ingress_status) =
                     exec_env.process_result(result);
                 return ExecuteCanisterResult {

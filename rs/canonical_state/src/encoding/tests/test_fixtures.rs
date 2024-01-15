@@ -33,10 +33,10 @@ pub fn request(certification_version: CertificationVersion) -> RequestOrResponse
         .method_name("test".to_string())
         .method_payload(vec![6])
         .metadata(
-            (certification_version >= CertificationVersion::V14).then_some(RequestMetadata {
-                call_tree_depth: 1,
-                call_tree_start_time: Time::from_nanos_since_unix_epoch(100_000),
-            }),
+            (certification_version >= CertificationVersion::V14).then_some(RequestMetadata::new(
+                1,
+                Time::from_nanos_since_unix_epoch(100_000),
+            )),
         )
         .build()
         .into()

@@ -46,6 +46,7 @@ ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks"
 ic-state-machine-tests = { path = "../state_machine_tests" }
 xnet-test = { path = "../rust_canisters/xnet_test" }
 canister-test = { path = "../rust_canisters/canister_test" }
+downstream-calls-test = { path = "../rust_canisters/downstream_calls_test" }
 ic-registry-local-registry = { path = "../registry/local_registry" }
 ic-registry-local-store = { path = "../registry/local_store" }
 ic-registry-local-store-artifacts = { path = "../registry/local_store/artifacts" }
@@ -60,6 +61,7 @@ maplit = "1.0.2"
 mockall = { workspace = true }
 rand = "0.8"
 rand_chacha = "0.3"
+serde = "1.0"
 tempfile = "3.0"
 
 [features]
