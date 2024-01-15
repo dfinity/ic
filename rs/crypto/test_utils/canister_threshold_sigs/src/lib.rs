@@ -149,6 +149,46 @@ pub fn swap_two_dealings_in_transcript(
     transcript
 }
 
+/// Copies the dealing from `dealer_from` to `dealer_to` and outputs the result
+/// in a new transcript.
+pub fn copy_dealing_in_transcript(
+    params: &IDkgTranscriptParams,
+    transcript: IDkgTranscript,
+    env: &CanisterThresholdSigTestEnvironment,
+    dealer_from: &Node,
+    dealer_to: &Node,
+) -> IDkgTranscript {
+    assert_ne!(dealer_from, dealer_to);
+
+    let from_idx = transcript.index_for_dealer_id(dealer_from.id()).unwrap();
+    let to_idx = transcript.index_for_dealer_id(dealer_to.id()).unwrap();
+
+    let dealing_from = transcript
+        .verified_dealings
+        .get(&from_idx)
+        .expect("Dealing exists")
+        .clone();
+
+    let dealing_to = dealing_from
+        .content
+        .into_builder()
+        .with_dealer_id(dealer_to.id())
+        .build_with_signature(params, dealer_to, dealer_to.id());
+
+    let dealing_to_signed = env
+        .nodes
+        .support_dealing_from_all_receivers(dealing_to, params);
+
+    let mut transcript = transcript;
+
+    assert!(transcript
+        .verified_dealings
+        .insert(to_idx, dealing_to_signed)
+        .is_some());
+
+    transcript
+}
+
 pub fn generate_key_transcript<R: RngCore + CryptoRng>(
     env: &CanisterThresholdSigTestEnvironment,
     dealers: &IDkgDealers,
