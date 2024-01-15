@@ -1570,7 +1570,7 @@ impl SnsInitPayload {
             SNS_WASM_CANISTER_ID,
             EXCHANGE_RATE_CANISTER_ID,
         ]
-        .map(|id| PrincipalId::from(id));
+        .map(PrincipalId::from);
 
         let nns_canisters_listed_as_dapp = dapp_canisters
             .canisters

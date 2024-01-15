@@ -652,9 +652,7 @@ fn should_resubmit_new_transaction_when_price_increased() {
         })
         .expect_pending_transaction()
         .retry_processing_withdrawals()
-        .retrieve_fee_history(|mock| {
-            mock.modify_response_for_all(&mut |fee_history| increment_base_fee_per_gas(fee_history))
-        })
+        .retrieve_fee_history(|mock| mock.modify_response_for_all(&mut increment_base_fee_per_gas))
         .expect_status(RetrieveEthStatus::TxSent(EthTransaction {
             transaction_hash: DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string(),
         }))

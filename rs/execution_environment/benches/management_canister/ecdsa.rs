@@ -140,21 +140,21 @@ fn sign_with_ecdsa_benchmark(c: &mut Criterion) {
         method,
         "calls:10/derivation_paths:1/buf_size:1",
         (10, 1, 1),
-        |result| expect_reply(result),
+        expect_reply,
     );
     run_bench(
         &mut group,
         method,
         "calls:10/derivation_paths:1/buf_size:2M",
         (10, 1, 2_000_000),
-        |result| expect_reply(result),
+        expect_reply,
     );
     run_bench(
         &mut group,
         method,
         "calls:10/derivation_paths:250/buf_size:8k",
         (10, 250, 8_000),
-        |result| expect_reply(result),
+        expect_reply,
     );
     run_bench(
         &mut group,

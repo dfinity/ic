@@ -62,7 +62,7 @@ async fn create_icrc_canisters_for_erc20(contract: &Erc20Contract) -> Result<(),
     //TODO real logic to install canisters, in particular retrying should not necessarily re-create canisters.
     let ledger_canister_id = create_canister(100_000_000_000)
         .await
-        .map_err(|e| TaskError::CanisterCreationError(e))?;
+        .map_err(TaskError::CanisterCreationError)?;
     //TODO init args should come from `contract` argument
     let ledger_arg = LedgerArgument::Init(LedgerInitArgs {
         minting_account: Account {
@@ -97,11 +97,11 @@ async fn create_icrc_canisters_for_erc20(contract: &Erc20Contract) -> Result<(),
         Encode!(&ledger_arg).expect("BUG: failed to encode ledger init arg"),
     )
     .await
-    .map_err(|e| TaskError::InstallCodeError(e))?;
+    .map_err(TaskError::InstallCodeError)?;
 
     let index_canister_id = create_canister(100_000_000_000)
         .await
-        .map_err(|e| TaskError::CanisterCreationError(e))?;
+        .map_err(TaskError::CanisterCreationError)?;
     let index_arg = Encode!(&Some(IndexArg::Init(IndexInitArg {
         ledger_id: ledger_canister_id
     })))
@@ -112,7 +112,7 @@ async fn create_icrc_canisters_for_erc20(contract: &Erc20Contract) -> Result<(),
         index_arg,
     )
     .await
-    .map_err(|e| TaskError::InstallCodeError(e))?;
+    .map_err(TaskError::InstallCodeError)?;
 
     let created_canisters = Canisters::new(ledger_canister_id, index_canister_id);
     mutate_state(|s| s.record_managed_canisters(contract.clone(), created_canisters));

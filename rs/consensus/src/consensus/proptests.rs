@@ -101,10 +101,7 @@ fn prop_ingress_vec(
     max_messages: usize,
     max_size: usize,
 ) -> impl Strategy<Value = Vec<SignedIngress>> {
-    prop::collection::vec(
-        (0..max_size).prop_map(|size| make_ingress(size)),
-        1..max_messages,
-    )
+    prop::collection::vec((0..max_size).prop_map(make_ingress), 1..max_messages)
 }
 
 fn make_ingress(size: usize) -> SignedIngress {
@@ -118,8 +115,8 @@ fn prop_xnet_slice(
     max_size: usize,
 ) -> impl Strategy<Value = BTreeMap<SubnetId, CertifiedStreamSlice>> {
     prop::collection::btree_map(
-        (0..3u64).prop_map(|id| subnet_test_id(id)),
-        (0..max_size).prop_map(|size| make_xnet_slice(size)),
+        (0..3u64).prop_map(subnet_test_id),
+        (0..max_size).prop_map(make_xnet_slice),
         1..max_messages,
     )
 }

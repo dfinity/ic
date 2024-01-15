@@ -22,7 +22,7 @@ impl RosettaClient {
         Ok(response
             .network_identifiers
             .into_iter()
-            .map(|ni| NetworkIdentifier(ni))
+            .map(NetworkIdentifier)
             .collect::<Vec<NetworkIdentifier>>())
     }
 
