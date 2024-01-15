@@ -511,6 +511,8 @@ pub trait IDkgProtocol {
     ///   an RPC error communicating with a remote CSP vault occurs
     /// * [`IDkgRetainThresholdKeysError::SerializationError`] if a transcript cannot
     ///   be serialized into a key id to identify the IDKG threshold secret key
+    /// * [`IDkgRetainKeysError::TransientInternalError`] if there is a transient error
+    ///   retaining the active transcripts
     fn retain_active_transcripts(
         &self,
         active_transcripts: &HashSet<IDkgTranscript>,
