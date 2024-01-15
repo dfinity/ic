@@ -11,6 +11,7 @@
 #   build_disk_image -p partitions.csv -o disk.img.tar part1.tar part2.tar ...
 #
 import argparse
+import atexit
 import os
 import subprocess
 import sys
@@ -149,7 +150,8 @@ def main():
         gpt_entries = read_partition_description(f.read())
     validate_partition_table(gpt_entries)
 
-    tmpdir = tempfile.mkdtemp()
+    tmpdir = tempfile.mkdtemp(prefix="icosbuild")
+    atexit.register(lambda: subprocess.run(["rm", "-rf", tmpdir], check=True))
 
     disk_image = os.path.join(tmpdir, "disk.img")
     prepare_diskimage(gpt_entries, disk_image)
