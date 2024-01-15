@@ -49,6 +49,7 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_execution_environment::{generate_subnets, test_registry_settings};
 use ic_types::{
+    consensus::ecdsa::QuadrupleId,
     crypto::{canister_threshold_sig::MasterEcdsaPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus},
     messages::{CallContextId, Ingress, MessageId, Request, RequestOrResponse, Response},
@@ -109,6 +110,8 @@ pub(crate) struct SchedulerTest {
     metrics_registry: MetricsRegistry,
     // ECDSA subnet public keys.
     ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+    // ECDSA quadruple IDs.
+    ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>>,
 }
 
 impl std::fmt::Debug for SchedulerTest {
@@ -470,6 +473,7 @@ impl SchedulerTest {
             state,
             Randomness::from([0; 32]),
             self.ecdsa_subnet_public_keys.clone(),
+            self.ecdsa_quadruple_ids.clone(),
             self.round,
             round_type,
             self.registry_settings(),
@@ -588,6 +592,13 @@ impl SchedulerTest {
             .cycles_account_manager
             .memory_cost(bytes, duration, self.subnet_size())
     }
+
+    pub(crate) fn deliver_quadruple_ids(
+        &mut self,
+        ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>>,
+    ) {
+        self.ecdsa_quadruple_ids = ecdsa_quadruple_ids;
+    }
 }
 
 /// A builder for `SchedulerTest`.
@@ -605,7 +616,7 @@ pub(crate) struct SchedulerTestBuilder {
     rate_limiting_of_heap_delta: bool,
     deterministic_time_slicing: bool,
     log: ReplicaLogger,
-    ecdsa_key: Option<EcdsaKeyId>,
+    ecdsa_keys: Vec<EcdsaKeyId>,
     metrics_registry: MetricsRegistry,
 }
 
@@ -628,7 +639,7 @@ impl Default for SchedulerTestBuilder {
             rate_limiting_of_heap_delta: false,
             deterministic_time_slicing: false,
             log: no_op_logger(),
-            ecdsa_key: None,
+            ecdsa_keys: vec![],
             metrics_registry: MetricsRegistry::new(),
         }
     }
@@ -685,9 +696,13 @@ impl SchedulerTestBuilder {
 
     pub fn with_ecdsa_key(self, ecdsa_key: EcdsaKeyId) -> Self {
         Self {
-            ecdsa_key: Some(ecdsa_key),
+            ecdsa_keys: vec![ecdsa_key],
             ..self
         }
+    }
+
+    pub fn with_ecdsa_keys(self, ecdsa_keys: Vec<EcdsaKeyId>) -> Self {
+        Self { ecdsa_keys, ..self }
     }
 
     pub fn with_batch_time(self, batch_time: Time) -> Self {
@@ -715,7 +730,7 @@ impl SchedulerTestBuilder {
         state.metadata.batch_time = self.batch_time;
 
         let config = SubnetConfig::new(self.subnet_type).cycles_account_manager_config;
-        if let Some(ecdsa_key) = &self.ecdsa_key {
+        for ecdsa_key in &self.ecdsa_keys {
             state
                 .metadata
                 .network_topology
@@ -731,7 +746,7 @@ impl SchedulerTestBuilder {
                 .insert(ecdsa_key.clone());
         }
         let ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey> = self
-            .ecdsa_key
+            .ecdsa_keys
             .into_iter()
             .map(|key| {
                 (
@@ -834,6 +849,7 @@ impl SchedulerTestBuilder {
             registry_settings: self.registry_settings,
             metrics_registry: self.metrics_registry,
             ecdsa_subnet_public_keys,
+            ecdsa_quadruple_ids: BTreeMap::new(),
         }
     }
 }

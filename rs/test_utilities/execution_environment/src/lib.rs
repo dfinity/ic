@@ -134,6 +134,7 @@ pub fn test_registry_settings() -> RegistryExecutionSettings {
         max_number_of_canisters: 0x2000,
         provisional_whitelist: ProvisionalWhitelist::Set(BTreeSet::new()),
         max_ecdsa_queue_size: 20,
+        quadruples_to_create_in_advance: 5,
         subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
     }
 }

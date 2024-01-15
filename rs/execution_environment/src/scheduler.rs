@@ -28,6 +28,7 @@ use ic_replicated_state::{
 };
 use ic_system_api::InstructionLimits;
 use ic_types::{
+    consensus::ecdsa::QuadrupleId,
     crypto::canister_threshold_sig::MasterEcdsaPublicKey,
     ingress::{IngressState, IngressStatus},
     messages::{CanisterMessage, Ingress, MessageId, StopCanisterContext},
@@ -50,6 +51,8 @@ mod round_schedule;
 use crate::util::debug_assert_or_critical_error;
 pub use round_schedule::RoundSchedule;
 use round_schedule::*;
+mod tecdsa;
+use tecdsa::*;
 
 /// Only log potentially spammy messages this often (in rounds). With a block
 /// rate around 1.0, this will result in logging about once every 10 minutes.
@@ -1390,6 +1393,7 @@ impl Scheduler for SchedulerImpl {
         mut state: ReplicatedState,
         randomness: Randomness,
         ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+        ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>>,
         current_round: ExecutionRound,
         current_round_type: ExecutionRoundType,
         registry_settings: &RegistryExecutionSettings,
@@ -1651,6 +1655,19 @@ impl Scheduler for SchedulerImpl {
             &mut scheduler_round_limits,
             registry_settings,
             &ecdsa_subnet_public_keys,
+        );
+
+        // Update [`SignWithEcdsaContext`]s by assigning randomness and matching quadruples.
+        update_sign_with_ecdsa_contexts(
+            current_round,
+            ecdsa_quadruple_ids,
+            &mut state
+                .metadata
+                .subnet_call_context_manager
+                .sign_with_ecdsa_contexts,
+            &mut csprng,
+            registry_settings,
+            self.metrics.as_ref(),
         );
 
         // Finalization.
