@@ -36,6 +36,7 @@ pub fn init_query_stats(
         },
         QueryStatsPayloadBuilderParams {
             rx,
+            metrics_registry: metrics_registry.clone(),
             epoch_length: config.query_stats_epoch_length,
             enabled: config.query_stats_aggregation == FlagStatus::Enabled,
         },
