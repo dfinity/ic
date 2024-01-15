@@ -42,7 +42,6 @@ use ic_types::crypto::canister_threshold_sig::{
     ThresholdEcdsaSigShare,
 };
 use ic_types::crypto::AlgorithmId;
-use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::messages::CallbackId;
 use ic_types::{signature::*, Time};
 use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId};
@@ -520,7 +519,6 @@ pub(crate) fn create_pre_signer_dependencies_with_crypto(
         consensus_crypto.unwrap_or(crypto),
         metrics_registry.clone(),
         logger.clone(),
-        MaliciousBehaviour::new(false).malicious_flags,
     );
     let ecdsa_pool = EcdsaPoolImpl::new(pool_config, logger, metrics_registry);
 
