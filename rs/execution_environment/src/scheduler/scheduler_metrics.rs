@@ -69,6 +69,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) round_postponed_raw_rand_queue: ScopedMetrics,
     pub(super) round_subnet_queue: ScopedMetrics,
     pub(super) round_scheduling_duration: Histogram,
+    pub(super) round_update_sign_with_ecdsa_contexts_duration: Histogram,
     pub(super) round_inner: ScopedMetrics,
     pub(super) round_inner_heartbeat_overhead_duration: Histogram,
     pub(super) round_inner_iteration: ScopedMetrics,
@@ -393,6 +394,11 @@ impl SchedulerMetrics {
             round_scheduling_duration: duration_histogram(
                 "execution_round_scheduling_duration_seconds",
                 "The duration of execution round scheduling in seconds.",
+                metrics_registry,
+            ),
+            round_update_sign_with_ecdsa_contexts_duration: duration_histogram(
+                "execution_round_update_sign_with_ecdsa_contexts_duration_seconds",
+                "The duration of updating sign with ecdsa contexts in seconds.",
                 metrics_registry,
             ),
             round_inner: ScopedMetrics {

@@ -492,6 +492,7 @@ fn make_batch_processor(
         max_number_of_canisters: 0,
         provisional_whitelist: ProvisionalWhitelist::All,
         max_ecdsa_queue_size: 0,
+        quadruples_to_create_in_advance: 0,
         subnet_size: 0,
     }));
     let batch_processor = BatchProcessorImpl {

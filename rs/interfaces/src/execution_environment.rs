@@ -10,6 +10,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::{PageBytes, PageIndex};
 use ic_types::{
+    consensus::ecdsa::QuadrupleId,
     crypto::canister_threshold_sig::MasterEcdsaPublicKey,
     ingress::{IngressStatus, WasmResult},
     messages::{
@@ -19,9 +20,9 @@ use ic_types::{
     Cycles, ExecutionRound, Height, NumInstructions, NumPages, Randomness, Time,
 };
 use serde::{Deserialize, Serialize};
-use std::convert::TryFrom;
 use std::sync::Arc;
 use std::{collections::BTreeMap, ops};
+use std::{collections::BTreeSet, convert::TryFrom};
 use std::{convert::Infallible, fmt};
 use tower::util::BoxCloneService;
 
@@ -1108,6 +1109,7 @@ pub struct RegistryExecutionSettings {
     pub max_number_of_canisters: u64,
     pub provisional_whitelist: ProvisionalWhitelist,
     pub max_ecdsa_queue_size: u32,
+    pub quadruples_to_create_in_advance: u32,
     pub subnet_size: usize,
 }
 
@@ -1166,6 +1168,7 @@ pub trait Scheduler: Send {
         state: Self::State,
         randomness: Randomness,
         ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+        ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>>,
         current_round: ExecutionRound,
         current_round_type: ExecutionRoundType,
         registry_settings: &RegistryExecutionSettings,
