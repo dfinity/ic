@@ -477,12 +477,11 @@ pub(crate) fn create_data_payload(
             )
         };
         if is_key_transcript_created(ecdsa_payload)
-            && parent_block
+            && !parent_block
                 .payload
                 .as_ref()
                 .as_ecdsa()
-                .map(is_key_transcript_created)
-                .unwrap_or(false)
+                .is_some_and(is_key_transcript_created)
         {
             ecdsa_payload_metrics.payload_metrics_inc("key_transcripts_created");
         }
