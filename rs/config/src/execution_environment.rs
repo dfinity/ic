@@ -101,7 +101,7 @@ const QUERY_SCHEDULING_TIME_SLICE_PER_CANISTER: Duration = Duration::from_millis
 const QUERY_CACHE_CAPACITY: NumBytes = NumBytes::new(200 * MIB);
 
 /// The upper limit on how long the cache entry stays valid in the query cache.
-const QUERY_CACHE_MAX_EXPIRY_TIME: Duration = Duration::from_secs(60);
+const QUERY_CACHE_MAX_EXPIRY_TIME: Duration = Duration::from_secs(300);
 
 /// Length of an epoch of query statistics in blocks
 pub const QUERY_STATS_EPOCH_LENGTH: u64 = 2000;
