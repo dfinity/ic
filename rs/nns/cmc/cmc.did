@@ -1,14 +1,15 @@
 type Cycles = nat;
 type BlockIndex = nat64;
 type CanisterSettings = record {
+  controller : opt principal;
   controllers : opt vec principal;
   compute_allocation : opt nat;
   memory_allocation : opt nat;
   freezing_threshold : opt nat;
   reserved_cycles_limit: opt nat;
 };
-type Subaccount = blob;
-type Memo = nat64;
+type Subaccount = opt blob;
+type Memo = opt blob;
 
 // The argument of the [notify_top_up] method.
 type NotifyTopUpArg = record {
@@ -63,7 +64,7 @@ type NotifyCreateCanisterArg = record {
 
   // Optional instructions to select on which subnet the new canister will be created on.
   // vec may contain no more than one element.
-  subnet_selection: opt vec SubnetSelection;
+  subnet_selection: opt SubnetSelection;
 
   // Optional canister settings that, if set, are applied to the newly created canister.
   // If not specified, the caller is the controller of the canister and the other settings are set to default values.
@@ -175,9 +176,7 @@ type PrincipalsAuthorizedToCreateCanistersToSubnetsResponse = record {
   data: vec record { principal; vec principal };
 };
 
-type AccountIdentifier = record {
-  bytes: blob;
-};
+type AccountIdentifier = text;
 
 type ExchangeRateCanister = variant {
     /// Enables the exchange rate canister with the given canister ID.
@@ -192,6 +191,7 @@ type CyclesCanisterInitPayload = record {
     minting_account_id: opt AccountIdentifier;
     last_purged_notification: opt nat64;
     exchange_rate_canister: opt ExchangeRateCanister;
+    cycles_ledger_canister_id: opt principal;
 };
 
 type NotifyMintCyclesArg = record {
@@ -237,4 +237,6 @@ service : (opt CyclesCanisterInitPayload) -> {
   // Returns the mapping from principals to subnets in which they are authorized
   // to create canisters.
   get_principals_authorized_to_create_canisters_to_subnets : () -> (PrincipalsAuthorizedToCreateCanistersToSubnetsResponse) query;
+
+  get_build_metadata : () -> (text) query;
 }

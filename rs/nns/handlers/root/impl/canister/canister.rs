@@ -249,7 +249,7 @@ fn main() {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use candid_parser::utils::{service_compatible, CandidSource};
+    use candid_parser::utils::{service_equal, CandidSource};
     use lazy_static::lazy_static;
     use pretty_assertions::assert_eq;
     use std::{env::var_os, path::PathBuf};
@@ -289,7 +289,7 @@ mod tests {
     ///   [use-did-file]: https://mmapped.blog/posts/01-effective-rust-canisters.html#canister-interfaces
     #[test]
     fn test_implementation_conforms_to_declared_interface() {
-        let result = service_compatible(
+        let result = service_equal(
             CandidSource::Text(&IMPLEMENTED_INTERFACE),
             CandidSource::Text(&DECLARED_INTERFACE),
         );

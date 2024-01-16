@@ -475,6 +475,7 @@ fn init_timers_fn() {
 // Init / Upgrade
 
 #[init]
+#[candid_method(init)]
 fn init_fn(
     InitArg {
         root_principals,
@@ -933,12 +934,12 @@ mod tests {
 
     #[test]
     fn check_candid_interface() {
-        use candid_parser::utils::{service_compatible, CandidSource};
+        use candid_parser::utils::{service_equal, CandidSource};
 
         candid::export_service!();
         let new_interface = __export_service();
 
-        service_compatible(
+        service_equal(
             CandidSource::Text(&new_interface),
             CandidSource::Text(include_str!("../interface.did")),
         )
