@@ -471,7 +471,6 @@ impl CanisterManager {
                 format!("Only canisters can call ic00 method {}", method_name),
             )),
 
-
             // These methods are only valid if they are sent by the controller
             // of the canister. We assume that the canister always wants to
             // accept messages from its controller.

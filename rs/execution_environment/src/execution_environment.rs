@@ -497,6 +497,7 @@ impl ExecutionEnvironment {
                     registry_settings.subnet_size,
                 );
             }
+
             Ok(Ic00Method::InstallChunkedCode)
                 if self.config.wasm_chunk_store == FlagStatus::Enabled =>
             {
@@ -802,6 +803,7 @@ impl ExecutionEnvironment {
                 Err(err) => Some((Err(err), msg.take_cycles())),
                 Ok(args) => Some(self.deposit_cycles(args.get_canister_id(), &mut msg, &mut state)),
             },
+
             Ok(Ic00Method::HttpRequest) => match state.metadata.own_subnet_features.http_requests {
                 true => match &msg {
                     CanisterCall::Request(request) => {
@@ -874,6 +876,7 @@ impl ExecutionEnvironment {
                     Some((err, msg.take_cycles()))
                 }
             },
+
             Ok(Ic00Method::SetupInitialDKG) => match &msg {
                 CanisterCall::Request(request) => self
                     .setup_initial_dkg(payload, request, &mut state, rng)
@@ -1097,6 +1100,7 @@ impl ExecutionEnvironment {
                 )),
                 msg.take_cycles(),
             )),
+
             Ok(Ic00Method::TakeCanisterSnapshot) => match self.config.canister_snapshots {
                 FlagStatus::Enabled => {
                     // TODO(EXC-1529): Implement take_canister_snapshot.
@@ -1116,6 +1120,7 @@ impl ExecutionEnvironment {
                     Some((err, msg.take_cycles()))
                 }
             },
+
             Ok(Ic00Method::LoadCanisterSnapshot) => match self.config.canister_snapshots {
                 FlagStatus::Enabled => {
                     // TODO(EXC-1530): Implement load_canister_snapshot.
@@ -1135,6 +1140,7 @@ impl ExecutionEnvironment {
                     Some((err, msg.take_cycles()))
                 }
             },
+
             Ok(Ic00Method::ListCanisterSnapshots) => match self.config.canister_snapshots {
                 FlagStatus::Enabled => {
                     // TODO(EXC-1531): Implement list_canister_snapshot.
@@ -1154,6 +1160,7 @@ impl ExecutionEnvironment {
                     Some((err, msg.take_cycles()))
                 }
             },
+
             Ok(Ic00Method::DeleteCanisterSnapshot) => match self.config.canister_snapshots {
                 FlagStatus::Enabled => {
                     // TODO(EXC-1532): Implement delete_canister_snapshot.
@@ -1173,6 +1180,7 @@ impl ExecutionEnvironment {
                     Some((err, msg.take_cycles()))
                 }
             },
+
             Err(ParseError::VariantNotFound) => {
                 let res = Err(UserError::new(
                     ErrorCode::CanisterMethodNotFound,
