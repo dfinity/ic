@@ -189,6 +189,7 @@ impl std::fmt::Display for ConnectionEstablishError {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn start_connection_manager(
     log: &ReplicaLogger,
     metrics_registry: &MetricsRegistry,

@@ -1,5 +1,3 @@
-#![allow(clippy::redundant_closure)]
-
 use ic_protobuf::registry::firewall::v1::FirewallRule;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -17,10 +15,7 @@ pub const FIREWALL_FILE_DEFAULT_PATH: &str = "/This/must/not/be/a/real/path";
 #[cfg_attr(test, derive(Arbitrary))]
 pub struct Config {
     /// Path to use for storing state on the file system
-    #[cfg_attr(
-        test,
-        proptest(strategy = "any::<String>().prop_map(|x| PathBuf::from(x))")
-    )]
+    #[cfg_attr(test, proptest(strategy = "any::<String>().prop_map(PathBuf::from)"))]
     pub config_file: PathBuf,
     pub file_template: String,
     pub ipv4_tcp_rule_template: String,
