@@ -18,6 +18,8 @@ mod status;
 mod threads;
 mod types;
 
+pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
+
 cfg_if::cfg_if! {
     if #[cfg(feature = "fuzzing_code")] {
         pub mod validator_executor;
@@ -46,7 +48,7 @@ use crate::{
     },
     pprof::{PprofFlamegraphService, PprofHomeService, PprofProfileService},
     query::QueryService,
-    read_state::{canister::CanisterReadStateService, subnet::SubnetReadStateService},
+    read_state::subnet::SubnetReadStateService,
     state_reader_executor::StateReaderExecutor,
     status::StatusService,
     types::*,
@@ -294,6 +296,7 @@ pub fn start_server(
 
     let delegation_from_nns = Arc::new(RwLock::new(delegation_from_nns));
     let health_status = Arc::new(AtomicCell::new(ReplicaHealthStatus::Starting));
+    let state_reader_clone = state_reader.clone();
     let state_reader_executor = StateReaderExecutor::new(state_reader);
     let call_service = CallService::new_service(
         config.clone(),
@@ -329,21 +332,27 @@ pub fn start_server(
         Arc::clone(&registry_client),
         query_execution_service,
     );
-    let canister_read_state_service = CanisterReadStateService::new_service(
-        config.clone(),
-        log.clone(),
-        metrics.clone(),
-        Arc::clone(&health_status),
-        Arc::clone(&delegation_from_nns),
-        state_reader_executor.clone(),
-        ValidatorExecutor::new(
-            Arc::clone(&registry_client),
-            ingress_verifier.clone(),
-            &malicious_flags,
-            log.clone(),
-        ),
-        Arc::clone(&registry_client),
+
+    let canister_read_state_service = BoxCloneService::new(
+        ServiceBuilder::new()
+            .layer(GlobalConcurrencyLimitLayer::new(
+                config.max_read_state_concurrent_requests,
+            ))
+            .service(
+                CanisterReadStateServiceBuilder::builder(
+                    state_reader_clone,
+                    registry_client.clone(),
+                    ingress_verifier,
+                    delegation_from_nns.clone(),
+                )
+                .with_logger(log.clone())
+                .with_health_status(health_status.clone())
+                .with_metrics(metrics.clone())
+                .with_malicious_flags(malicious_flags)
+                .build(),
+            ),
     );
+
     let subnet_read_state_service = SubnetReadStateService::new_service(
         config.clone(),
         log.clone(),
