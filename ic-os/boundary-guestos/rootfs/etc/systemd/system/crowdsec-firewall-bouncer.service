@@ -2,13 +2,12 @@
 Description=Crowdsec nftables bouncer
 After=network-online.target
 Wants=network-online.target
-After=setup-crowdsec.service
+After=setup-crowdsec.service nftables.service
 BindsTo=setup-crowdsec.service
 
 [Service]
 Type=notify
 ExecStart=/usr/bin/crowdsec-firewall-bouncer -c /etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml
-ExecStartPre=/usr/bin/crowdsec-firewall-bouncer -c /etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml -t
 ExecStartPost=/bin/sleep 0.1
 Restart=always
 RestartSec=10
