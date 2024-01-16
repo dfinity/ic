@@ -18,7 +18,6 @@
 # [Bazel]
 /bazel/                   @dfinity-lab/teams/idx
 /third_party/             @dfinity-lab/teams/idx
-/toolchains/              @dfinity-lab/teams/idx
 /WORKSPACE.bazel          @dfinity-lab/teams/idx
 /BUILD.bazel              @dfinity-lab/teams/idx
 .bazelrc                  @dfinity-lab/teams/idx
@@ -58,6 +57,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /ic-os/                                          @dfinity-lab/teams/node-team
 /ic-os/boundary-guestos/                         @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/node-team
 /ic-os/guestos/tests/e2e-benchmarking-suite.py   @dfinity-lab/teams/runtime-owners
+/toolchains/                                     @dfinity-lab/teams/node-team
 
 # [metrics-proxy]
 /ic-os/hostos/rootfs/etc/metrics-proxy.yaml                             @dfinity-lab/teams/DRE
