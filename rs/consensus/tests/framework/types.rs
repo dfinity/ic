@@ -13,6 +13,7 @@ use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
     certification::ChangeSet,
     consensus_pool::ChangeSet as ConsensusChangeSet,
+    ecdsa::EcdsaChangeSet,
     ingress_manager::IngressSelector,
     messaging::XNetPayloadBuilder,
     p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
@@ -292,12 +293,50 @@ impl<Artifact: ArtifactKind> PriorityFnState<Artifact> {
     }
 }
 
-/// Consensus modifier that can potentially change its behavior.
-pub type ConsensusModifier = Box<
-    dyn Fn(
-        ConsensusImpl,
-    ) -> Box<dyn ChangeSetProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>>,
->;
+/// Modifier that can potentially change a component's behavior.
+pub struct ComponentModifier {
+    pub(crate) consensus: Box<
+        dyn Fn(
+            ConsensusImpl,
+        )
+            -> Box<dyn ChangeSetProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>>,
+    >,
+    pub(crate) ecdsa: Box<
+        dyn Fn(
+            ecdsa::EcdsaImpl,
+        )
+            -> Box<dyn ChangeSetProducer<ecdsa_pool::EcdsaPoolImpl, ChangeSet = EcdsaChangeSet>>,
+    >,
+}
+
+impl Default for ComponentModifier {
+    fn default() -> Self {
+        Self {
+            consensus: Box::new(|x: ConsensusImpl| Box::new(x)),
+            ecdsa: Box::new(|x: ecdsa::EcdsaImpl| Box::new(x)),
+        }
+    }
+}
+
+pub fn apply_modifier_consensus(
+    modifier: &Option<ComponentModifier>,
+    consensus: ConsensusImpl,
+) -> Box<dyn ChangeSetProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>> {
+    match modifier {
+        Some(f) => (f.consensus)(consensus),
+        _ => Box::new(consensus),
+    }
+}
+
+pub fn apply_modifier_ecdsa(
+    modifier: &Option<ComponentModifier>,
+    ecdsa: ecdsa::EcdsaImpl,
+) -> Box<dyn ChangeSetProducer<ecdsa_pool::EcdsaPoolImpl, ChangeSet = EcdsaChangeSet>> {
+    match modifier {
+        Some(f) => (f.ecdsa)(ecdsa),
+        _ => Box::new(ecdsa),
+    }
+}
 
 /// A ConsensusDriver mainly consists of the consensus component, and the
 /// consensus artifact pool and timer.
@@ -306,7 +345,8 @@ pub struct ConsensusDriver<'a> {
         Box<dyn ChangeSetProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>>,
     pub(crate) consensus_gossip: ConsensusGossipImpl,
     pub(crate) dkg: dkg::DkgImpl,
-    pub(crate) ecdsa: ecdsa::EcdsaImpl,
+    pub(crate) ecdsa:
+        Box<dyn ChangeSetProducer<ecdsa_pool::EcdsaPoolImpl, ChangeSet = EcdsaChangeSet>>,
     pub(crate) certifier:
         Box<dyn ChangeSetProducer<CertificationPoolImpl, ChangeSet = ChangeSet> + 'a>,
     pub(crate) logger: ReplicaLogger,

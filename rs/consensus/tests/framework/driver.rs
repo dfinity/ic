@@ -9,7 +9,7 @@ use ic_interfaces::{
     certification,
     consensus_pool::{ChangeAction, ChangeSet as ConsensusChangeSet},
     dkg::ChangeAction as DkgChangeAction,
-    ecdsa::EcdsaChangeAction,
+    ecdsa::{EcdsaChangeAction, EcdsaChangeSet},
     p2p::consensus::{ChangeSetProducer, MutablePool},
 };
 use ic_logger::{debug, ReplicaLogger};
@@ -30,7 +30,7 @@ impl<'a> ConsensusDriver<'a> {
         consensus: Box<dyn ChangeSetProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>>,
         consensus_gossip: ConsensusGossipImpl,
         dkg: ic_consensus::dkg::DkgImpl,
-        ecdsa: ic_consensus::ecdsa::EcdsaImpl,
+        ecdsa: Box<dyn ChangeSetProducer<EcdsaPoolImpl, ChangeSet = EcdsaChangeSet>>,
         certifier: Box<
             dyn ChangeSetProducer<CertificationPoolImpl, ChangeSet = certification::ChangeSet> + 'a,
         >,

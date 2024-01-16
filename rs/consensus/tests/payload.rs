@@ -184,7 +184,7 @@ fn consensus_produces_expected_batches() {
             Box::new(consensus),
             consensus_gossip,
             dkg,
-            ecdsa,
+            Box::new(ecdsa),
             Box::new(certifier),
             consensus_pool,
             dkg_pool,

@@ -37,7 +37,8 @@ pub(crate) trait EcdsaPreSigner: Send {
     ) -> EcdsaChangeSet;
 }
 
-pub(crate) struct EcdsaPreSignerImpl {
+/// Pre-Signer subcomponent.
+pub struct EcdsaPreSignerImpl {
     pub(crate) node_id: NodeId,
     pub(crate) consensus_block_cache: Arc<dyn ConsensusBlockCache>,
     pub(crate) crypto: Arc<dyn ConsensusCrypto>,

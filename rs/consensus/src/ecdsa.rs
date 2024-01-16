@@ -205,8 +205,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 pub(crate) mod complaints;
-#[cfg(any(feature = "malicious_code", test))]
-pub(crate) mod malicious_pre_signer;
+pub mod malicious_pre_signer;
 pub(crate) mod payload_builder;
 pub(crate) mod payload_verifier;
 pub(crate) mod pre_signer;
@@ -230,7 +229,8 @@ pub const INACTIVE_TRANSCRIPT_PURGE_SECS: Duration = Duration::from_secs(60);
 /// `EcdsaImpl` is the consensus component responsible for processing threshold
 /// ECDSA payloads.
 pub struct EcdsaImpl {
-    pre_signer: Box<EcdsaPreSignerImpl>,
+    /// The Pre-Signer subcomponent
+    pub pre_signer: Box<EcdsaPreSignerImpl>,
     signer: Box<dyn EcdsaSigner>,
     complaint_handler: Box<dyn EcdsaComplaintHandler>,
     consensus_block_cache: Arc<dyn ConsensusBlockCache>,
