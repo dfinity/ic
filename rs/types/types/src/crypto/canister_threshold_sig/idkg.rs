@@ -163,11 +163,19 @@ impl IDkgReceivers {
 
     /// Returns the position of the given `node_id` in the receivers. Returns
     /// `None` if the `node_id` is not a receiver.
-    pub fn position(&self, node_id: NodeId) -> Option<NodeIndex> {
+    ///
+    /// This method is intended to be PRIVATE. For public methods for obtaining
+    /// a receiver's index, the methods of the objects like [`IDkgTranscript`],
+    /// [`IDkgTranscriptParams`], or [`ThresholdEcdsaSigInputs`] should be used.
+    fn position(&self, node_id: NodeId) -> Option<NodeIndex> {
         self.receivers
             .iter()
             .position(|receiver| node_id == *receiver)
             .map(|index| NodeIndex::try_from(index).expect("node index overflow"))
+    }
+
+    pub fn contains(&self, node_id: NodeId) -> bool {
+        self.receivers.contains(&node_id)
     }
 
     pub fn get(&self) -> &BTreeSet<NodeId> {
@@ -407,15 +415,15 @@ impl IDkgTranscriptParams {
         match &self.operation_type {
             IDkgTranscriptOperation::Random => Some(index),
             IDkgTranscriptOperation::ReshareOfMasked(transcript) => {
-                transcript.receivers.position(node_id)
+                transcript.index_for_signer_id(node_id)
             }
             IDkgTranscriptOperation::ReshareOfUnmasked(transcript) => {
-                transcript.receivers.position(node_id)
+                transcript.index_for_signer_id(node_id)
             }
             IDkgTranscriptOperation::UnmaskedTimesMasked(transcript_1, _transcript_2) => {
                 // transcript_1.receivers == transcript_2.receivers already checked by
                 // IDkgTranscriptParams::new
-                transcript_1.receivers.position(node_id)
+                transcript_1.index_for_signer_id(node_id)
             }
         }
     }
@@ -936,7 +944,7 @@ impl IDkgTranscript {
 
     /// Checks if the specified `NodeId` is a receiver of the transcript.
     pub fn has_receiver(&self, receiver_id: NodeId) -> bool {
-        self.receivers.position(receiver_id).is_some()
+        self.receivers.contains(receiver_id)
     }
 
     /// Returns a copy of the raw internal transcript.
