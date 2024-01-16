@@ -7,7 +7,6 @@ cargo clippy --locked --all-features --workspace --all-targets -- \
     -D warnings \
     -D clippy::all \
     -D clippy::mem_forget \
-    -A clippy::too_many_arguments \
     -C debug-assertions=off
 
 if cargo tree -e features | grep -q 'serde feature "rc"'; then

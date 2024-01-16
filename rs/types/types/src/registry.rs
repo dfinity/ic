@@ -1,7 +1,7 @@
 // (DFN-467): We disable the clippy warning for the whole module because they
 // apply to generated code, meaning we can't locally disable the warnings (the
 // code is defined in another module).
-#![allow(clippy::redundant_closure)]
+
 //! Types for working with the registry.
 
 use crate::RegistryVersion;
