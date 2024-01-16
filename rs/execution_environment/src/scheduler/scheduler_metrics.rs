@@ -6,7 +6,9 @@ use ic_metrics::{
 };
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_types::nominal_cycles::NominalCycles;
-use prometheus::{Gauge, GaugeVec, Histogram, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
+use prometheus::{
+    Gauge, GaugeVec, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
+};
 
 use crate::metrics::{
     cycles_histogram, dts_pause_or_abort_histogram, duration_histogram, instructions_histogram,
@@ -105,6 +107,8 @@ pub(super) struct SchedulerMetrics {
     pub(super) canister_aborted_install_code: Histogram,
     pub(super) inducted_messages: IntCounterVec,
     pub(super) ecdsa_signature_agreements: IntGauge,
+    pub(super) ecdsa_delivered_quadruples: HistogramVec,
+    pub(super) ecdsa_completed_contexts: IntCounterVec,
     // TODO(EXC-1466): Remove metric once all calls have `call_id` present.
     pub(super) stop_canister_calls_without_call_id: IntGauge,
 }
@@ -218,6 +222,17 @@ impl SchedulerMetrics {
             ecdsa_signature_agreements: metrics_registry.int_gauge(
                 "replicated_state_ecdsa_signature_agreements_total",
                 "Total number of ECDSA signature agreements created",
+            ),
+            ecdsa_delivered_quadruples: metrics_registry.histogram_vec(
+                "execution_ecdsa_delivered_quadruples",
+                "Number of ECDSA quadruples delivered to execution by key ID",
+                vec![0.0, 1.0, 2.0, 5.0, 10.0, 15.0, 20.0],
+                &["key_id"],
+            ),
+            ecdsa_completed_contexts: metrics_registry.int_counter_vec(
+                "execution_completed_sign_with_ecdsa_contexts_total",
+                "Total number of completed sign with ECDSA contexts by key ID",
+                &["key_id"],
             ),
             input_queue_messages: metrics_registry.int_gauge_vec(
                 "execution_input_queue_messages",

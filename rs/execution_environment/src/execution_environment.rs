@@ -542,26 +542,32 @@ impl ExecutionEnvironment {
                                 &args.key_id,
                             ) {
                                 Err(err) => Some((Err(err), msg.take_cycles())),
-                                Ok(_) => self
-                                    .sign_with_ecdsa(
-                                        (**request).clone(),
-                                        args.message_hash,
-                                        args.derivation_path
-                                            .get()
-                                            .clone()
-                                            .into_iter()
-                                            .map(|x| x.into_vec())
-                                            .collect(),
-                                        args.key_id,
-                                        registry_settings.max_ecdsa_queue_size,
-                                        &mut state,
-                                        rng,
-                                        registry_settings.subnet_size,
-                                    )
-                                    .map_or_else(
-                                        |err| Some((Err(err), msg.take_cycles())),
-                                        |()| None,
-                                    ),
+                                Ok(_) => match self.sign_with_ecdsa(
+                                    (**request).clone(),
+                                    args.message_hash,
+                                    args.derivation_path
+                                        .get()
+                                        .clone()
+                                        .into_iter()
+                                        .map(|x| x.into_vec())
+                                        .collect(),
+                                    args.key_id,
+                                    registry_settings.max_ecdsa_queue_size,
+                                    &mut state,
+                                    rng,
+                                    registry_settings.subnet_size,
+                                ) {
+                                    Err(err) => Some((Err(err), msg.take_cycles())),
+                                    Ok(()) => {
+                                        self.metrics.observe_message_with_label(
+                                            &request.method_name,
+                                            since.elapsed().as_secs_f64(),
+                                            SUBMITTED_OUTCOME_LABEL.into(),
+                                            SUCCESS_STATUS_LABEL.into(),
+                                        );
+                                        None
+                                    }
+                                },
                             }
                         }
                     }

@@ -34,12 +34,20 @@ pub(crate) fn update_sign_with_ecdsa_contexts(
             let mut nonce = [0u8; 32];
             csprng.fill_bytes(&mut nonce);
             context.nonce = Some(nonce);
+            metrics
+                .ecdsa_completed_contexts
+                .with_label_values(&[&context.key_id.to_string()])
+                .inc();
         }
     }
 
     // Match up to the maximum number of contexts per key ID to delivered quadruples.
     let max_ongoing_signatures = registry_settings.quadruples_to_create_in_advance as usize;
     for (key_id, quadruple_ids) in ecdsa_quadruple_ids {
+        metrics
+            .ecdsa_delivered_quadruples
+            .with_label_values(&[&key_id.to_string()])
+            .observe(quadruple_ids.len() as f64);
         match_quadruples_by_key_id(
             key_id,
             quadruple_ids,
