@@ -1250,7 +1250,11 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
             format!("Failed to get a LEDGER for read: {}", err),
         )
     })?;
-
+    let archive_guard = ledger.blockchain.archive.read().unwrap();
+    let num_archives = archive_guard
+        .as_ref()
+        .iter()
+        .fold(0, |sum, archive| sum + archive.nodes().iter().len());
     w.encode_gauge(
         "ledger_max_message_size_bytes",
         *MAX_MESSAGE_SIZE_BYTES.read().unwrap() as f64,
@@ -1314,6 +1318,11 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "ledger_notify_method_calls",
         NOTIFY_METHOD_CALLS.with(|n| *n.borrow()) as f64,
         "Total number of calls to the notify-method method.",
+    )?;
+    w.encode_counter(
+        "ledger_num_archives",
+        num_archives as f64,
+        "Total number of archives.",
     )?;
     Ok(())
 }
