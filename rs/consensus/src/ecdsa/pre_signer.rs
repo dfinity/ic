@@ -21,20 +21,12 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams, SignedIDkgDealing,
 };
 use ic_types::crypto::CryptoHashOf;
-use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::signature::BasicSignatureBatch;
 use ic_types::{Height, NodeId};
 use std::cell::RefCell;
 use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 use std::fmt::{self, Debug, Formatter};
 use std::sync::Arc;
-
-#[cfg(feature = "malicious_code")]
-use {
-    ic_interfaces::crypto::BasicSigner, ic_registry_client_helpers::node::RegistryVersion,
-    ic_types::crypto::canister_threshold_sig::idkg::IDkgDealing, ic_types::crypto::BasicSigOf,
-    ic_types::crypto::CryptoResult,
-};
 
 pub(crate) trait EcdsaPreSigner: Send {
     /// The on_state_change() called from the main ECDSA path.
@@ -45,15 +37,14 @@ pub(crate) trait EcdsaPreSigner: Send {
     ) -> EcdsaChangeSet;
 }
 
-pub(crate) struct EcdsaPreSignerImpl {
-    node_id: NodeId,
-    consensus_block_cache: Arc<dyn ConsensusBlockCache>,
-    crypto: Arc<dyn ConsensusCrypto>,
+/// Pre-Signer subcomponent.
+pub struct EcdsaPreSignerImpl {
+    pub(crate) node_id: NodeId,
+    pub(crate) consensus_block_cache: Arc<dyn ConsensusBlockCache>,
+    pub(crate) crypto: Arc<dyn ConsensusCrypto>,
     schedule: RoundRobin,
-    metrics: EcdsaPreSignerMetrics,
-    log: ReplicaLogger,
-    #[cfg_attr(not(feature = "malicious_code"), allow(dead_code))]
-    malicious_flags: MaliciousFlags,
+    pub(crate) metrics: EcdsaPreSignerMetrics,
+    pub(crate) log: ReplicaLogger,
 }
 
 impl EcdsaPreSignerImpl {
@@ -63,7 +54,6 @@ impl EcdsaPreSignerImpl {
         crypto: Arc<dyn ConsensusCrypto>,
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
-        malicious_flags: MaliciousFlags,
     ) -> Self {
         Self {
             node_id,
@@ -72,7 +62,6 @@ impl EcdsaPreSignerImpl {
             schedule: RoundRobin::default(),
             metrics: EcdsaPreSignerMetrics::new(metrics_registry),
             log,
-            malicious_flags,
         }
     }
 
@@ -99,7 +88,7 @@ impl EcdsaPreSignerImpl {
                 {
                     // Issue a dealing if we are in the dealer list and we haven't
                     //already issued a dealing for this transcript
-                    if transcript_params.dealers().position(self.node_id).is_some()
+                    if transcript_params.dealers().contains(self.node_id)
                         && !self.has_dealer_issued_dealing(
                             ecdsa_pool,
                             &transcript_params.transcript_id(),
@@ -202,10 +191,9 @@ impl EcdsaPreSignerImpl {
                         }
                     };
 
-                    if transcript_params
+                    if !transcript_params
                         .dealers()
-                        .position(signed_dealing.dealer_id())
-                        .is_none()
+                        .contains(signed_dealing.dealer_id())
                     {
                         // The node is not in the dealer list for this transcript
                         self.metrics.pre_sign_errors_inc("unexpected_dealing");
@@ -475,11 +463,7 @@ impl EcdsaPreSignerImpl {
                         }
                     } else {
                         // If the dealer_id in the share is invalid, drop it.
-                        if transcript_params
-                            .dealers()
-                            .position(support.dealer_id)
-                            .is_none()
-                        {
+                        if !transcript_params.dealers().contains(support.dealer_id) {
                             self.metrics
                                 .pre_sign_errors_inc("missing_hash_invalid_dealer");
                             ret.push(EcdsaChangeAction::RemoveUnvalidated(id));
@@ -624,10 +608,6 @@ impl EcdsaPreSignerImpl {
         match IDkgProtocol::create_dealing(&*self.crypto, transcript_params) {
             Ok(idkg_dealing) => {
                 self.metrics.pre_sign_metrics_inc("dealing_created");
-
-                #[cfg(feature = "malicious_code")]
-                let idkg_dealing = self.crypto_corrupt_dealing(idkg_dealing, transcript_params);
-
                 self.metrics.pre_sign_metrics_inc("dealing_sent");
                 vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaSignedDealing(idkg_dealing),
@@ -694,51 +674,6 @@ impl EcdsaPreSignerImpl {
                 Some(EcdsaChangeAction::MoveToValidated(
                     EcdsaMessage::EcdsaSignedDealing(signed_dealing),
                 ))
-            }
-        }
-    }
-
-    /// Helper to corrupt the signed crypto dealing for malicious testing
-    #[cfg(feature = "malicious_code")]
-    fn crypto_corrupt_dealing(
-        &self,
-        idkg_dealing: SignedIDkgDealing,
-        transcript_params: &IDkgTranscriptParams,
-    ) -> SignedIDkgDealing {
-        if !self.malicious_flags.maliciously_corrupt_ecdsa_dealings {
-            return idkg_dealing;
-        }
-
-        let mut rng = rand::thread_rng();
-        let mut exclude_set = BTreeSet::new();
-        exclude_set.insert(self.node_id);
-        match ic_crypto_test_utils_canister_threshold_sigs::corrupt_signed_idkg_dealing(
-            idkg_dealing,
-            transcript_params,
-            self,
-            self.node_id,
-            &exclude_set,
-            &mut rng,
-        ) {
-            Ok(dealing) => {
-                warn!(
-                     every_n_seconds => 2,
-                     self.log,
-                    "Corrupted dealing: transcript_id = {:?}", transcript_params.transcript_id()
-                );
-                self.metrics.pre_sign_metrics_inc("dealing_corrupted");
-                dealing
-            }
-            Err(err) => {
-                warn!(
-                    self.log,
-                    "Failed to corrupt dealing: transcript_id = {:?}, type = {:?}, error = {:?}",
-                    transcript_params.transcript_id(),
-                    transcript_op_summary(transcript_params.operation_type()),
-                    err
-                );
-                self.metrics.pre_sign_errors_inc("corrupt_dealing");
-                panic!("Failed to corrupt dealing")
             }
         }
     }
@@ -936,7 +871,7 @@ impl EcdsaPreSignerImpl {
     }
 
     /// Resolves the IDkgTranscriptParamsRef -> IDkgTranscriptParams.
-    fn resolve_ref(
+    pub(crate) fn resolve_ref(
         &self,
         transcript_params_ref: &IDkgTranscriptParamsRef,
         block_reader: &dyn EcdsaBlockReader,
@@ -1030,32 +965,6 @@ impl EcdsaPreSigner for EcdsaPreSignerImpl {
             &purge_artifacts,
         ];
         self.schedule.call_next(&calls)
-    }
-}
-
-// A dealing is corrupted by changing some internal value.
-// Since a dealing is signed, the signature must be re-computed so that the corrupted dealing
-// is not trivially discarded and a proper complaint can be generated.
-// To sign a dealing we only need something that implements the trait BasicSigner<IDkgDealing>,
-// which `ConsensusCrypto` does.
-// However, for Rust something of type dyn ConsensusCrypto (self.crypto is of type
-// Arc<dyn ConsensusCrypto>, but the Arc<> is not relevant here) cannot be coerced into
-// something of type dyn BasicSigner<IDkgDealing>. This is true for any sub trait implemented
-// by ConsensusCrypto and is not specific to Crypto traits.
-// Doing so would require `dyn upcasting coercion`, see
-// https://github.com/rust-lang/rust/issues/65991 and
-// https://articles.bchlr.de/traits-dynamic-dispatch-upcasting.
-// As workaround a trivial implementation of BasicSigner<IDkgDealing> is provided by delegating to
-// self.crypto.
-#[cfg(feature = "malicious_code")]
-impl BasicSigner<IDkgDealing> for EcdsaPreSignerImpl {
-    fn sign_basic(
-        &self,
-        message: &IDkgDealing,
-        signer: NodeId,
-        registry_version: RegistryVersion,
-    ) -> CryptoResult<BasicSigOf<IDkgDealing>> {
-        self.crypto.sign_basic(message, signer, registry_version)
     }
 }
 

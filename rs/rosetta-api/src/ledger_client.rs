@@ -2,6 +2,7 @@ mod handle_add_hotkey;
 mod handle_change_auto_stake_maturity;
 mod handle_disburse;
 mod handle_follow;
+mod handle_list_neurons;
 mod handle_merge_maturity;
 mod handle_neuron_info;
 mod handle_register_vote;
@@ -13,6 +14,8 @@ mod handle_stake;
 mod handle_stake_maturity;
 mod handle_start_dissolve;
 mod handle_stop_dissolve;
+pub mod list_known_neurons_response;
+pub mod list_neurons_response;
 mod neuron_response;
 pub mod pending_proposals_response;
 pub mod proposal_info_response;
@@ -21,7 +24,7 @@ use core::ops::Deref;
 
 use candid::{Decode, Encode};
 use ic_agent::agent::{RejectCode, RejectResponse};
-use ic_nns_governance::pb::v1::ProposalInfo;
+use ic_nns_governance::pb::v1::{KnownNeuron, ListKnownNeuronsResponse, ProposalInfo};
 use std::convert::TryFrom;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -68,6 +71,8 @@ use crate::request_types::{RequestType, Status};
 use crate::transaction_id::TransactionIdentifier;
 use rosetta_core::objects::ObjectMap;
 
+use self::handle_list_neurons::handle_list_neurons;
+use self::list_neurons_response::ListNeuronsResponse;
 use self::proposal_info_response::ProposalInfoResponse;
 
 struct LedgerBlocksSynchronizerMetricsImpl {}
@@ -103,6 +108,7 @@ pub trait LedgerAccess {
     ) -> Result<NeuronInfo, ApiError>;
     async fn proposal_info(&self, proposal_id: u64) -> Result<ProposalInfo, ApiError>;
     async fn pending_proposals(&self) -> Result<Vec<ProposalInfo>, ApiError>;
+    async fn list_known_neurons(&self) -> Result<Vec<KnownNeuron>, ApiError>;
     async fn transfer_fee(&self) -> Result<TransferFee, ApiError>;
 }
 
@@ -122,6 +128,7 @@ pub enum OperationOutput {
     NeuronId(u64),
     NeuronResponse(NeuronResponse),
     ProposalInfoResponse(ProposalInfoResponse),
+    ListNeuronsResponse(ListNeuronsResponse),
 }
 
 fn public_key_to_der(key: ThresholdSigPublicKey) -> Result<Vec<u8>, ApiError> {
@@ -350,6 +357,30 @@ impl LedgerAccess for LedgerClient {
                 )),
             )
         })
+    }
+    async fn list_known_neurons(&self) -> Result<Vec<KnownNeuron>, ApiError> {
+        if self.offline {
+            return Err(ApiError::NotAvailableOffline(false, Details::default()));
+        }
+        let agent = &self.canister_access.as_ref().unwrap().agent;
+        let arg = Encode!().unwrap();
+        let bytes = agent
+            .query(&self.governance_canister_id.get().0, "list_known_neurons")
+            .with_arg(arg)
+            .call()
+            .await
+            .map_err(|e| ApiError::invalid_request(format!("{}", e)))?;
+        Decode!(bytes.as_slice(), ListKnownNeuronsResponse)
+            .map_err(|err| {
+                ApiError::InvalidRequest(
+                    false,
+                    Details::from(format!(
+                        "Could not decode ListKnownNeuronsResponse response: {}",
+                        err
+                    )),
+                )
+            })
+            .map(|res| res.known_neurons)
     }
     async fn neuron_info(
         &self,
@@ -617,6 +648,9 @@ impl LedgerClient {
                     OperationOutput::ProposalInfoResponse(response) => {
                         result.response = Some(ObjectMap::from(response));
                     }
+                    OperationOutput::ListNeuronsResponse(response) => {
+                        result.response = Some(ObjectMap::from(response))
+                    }
                 }
                 result.status = Status::Completed;
                 Ok(())
@@ -766,6 +800,7 @@ impl LedgerClient {
             RequestType::RegisterVote { .. } => handle_register_vote(bytes),
             RequestType::StakeMaturity { .. } => handle_stake_maturity(bytes),
             RequestType::NeuronInfo { .. } => handle_neuron_info(bytes),
+            RequestType::ListNeurons { .. } => handle_list_neurons(bytes),
             RequestType::RemoveHotKey { .. } => handle_remove_hotkey(bytes),
             RequestType::Send => handle_send(bytes),
             RequestType::SetDissolveTimestamp { .. } => handle_set_dissolve_timestamp(bytes),

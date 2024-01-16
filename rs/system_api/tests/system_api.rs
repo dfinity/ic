@@ -27,7 +27,9 @@ use ic_test_utilities::{
     },
 };
 use ic_types::{
-    messages::{CallContextId, CallbackId, RejectContext, MAX_RESPONSE_COUNT_BYTES},
+    messages::{
+        CallContextId, CallbackId, RejectContext, RequestMetadata, MAX_RESPONSE_COUNT_BYTES,
+    },
     methods::{Callback, WasmClosure},
     time, CanisterTimer, CountBytes, Cycles, NumInstructions, PrincipalId, Time,
 };
@@ -1165,6 +1167,7 @@ fn test_canister_balance() {
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
+            RequestMetadata::new(0, mock_time()),
         );
 
     let mut api = get_system_api(
@@ -1193,6 +1196,7 @@ fn test_canister_cycle_balance() {
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
+            RequestMetadata::new(0, mock_time()),
         );
 
     let mut api = get_system_api(
@@ -1227,6 +1231,7 @@ fn test_msg_cycles_available_traps() {
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
             available_cycles,
             Time::from_nanos_since_unix_epoch(0),
+            RequestMetadata::new(0, mock_time()),
         );
 
     let api = get_system_api(
@@ -1388,6 +1393,7 @@ fn msg_cycles_accept_all_cycles_in_call_context() {
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
             Cycles::from(amount),
             Time::from_nanos_since_unix_epoch(0),
+            RequestMetadata::new(0, mock_time()),
         );
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
@@ -1411,6 +1417,7 @@ fn msg_cycles_accept_all_cycles_in_call_context_when_more_asked() {
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
             Cycles::new(40),
             Time::from_nanos_since_unix_epoch(0),
+            RequestMetadata::new(0, mock_time()),
         );
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
@@ -1443,6 +1450,7 @@ fn call_perform_not_enough_cycles_does_not_trap() {
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
             Cycles::new(40),
             Time::from_nanos_since_unix_epoch(0),
+            RequestMetadata::new(0, mock_time()),
         );
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
@@ -1493,6 +1501,7 @@ fn update_available_memory_updates_subnet_available_memory() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters().compute_allocation,
+        RequestMetadata::new(0, mock_time()),
     );
     let mut api = SystemApiImpl::new(
         ApiTypeBuilder::build_update_api(),
@@ -1547,6 +1556,7 @@ fn push_output_request_respects_memory_limits() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters().compute_allocation,
+        RequestMetadata::new(0, mock_time()),
     );
     let own_canister_id = system_state.canister_id;
     let callback_id = sandbox_safe_system_state
@@ -1652,6 +1662,7 @@ fn push_output_request_oversized_request_memory_limits() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters().compute_allocation,
+        RequestMetadata::new(0, mock_time()),
     );
     let own_canister_id = system_state.canister_id;
     let callback_id = sandbox_safe_system_state

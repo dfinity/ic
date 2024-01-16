@@ -616,15 +616,23 @@ impl Subnet {
     }
 
     pub fn add_malicious_nodes(
-        mut self,
+        self,
         no_of_nodes: usize,
         malicious_behaviour: MaliciousBehaviour,
     ) -> Self {
-        for _ in 0..no_of_nodes {
-            let node = Node::new().with_malicious_behaviour(malicious_behaviour.clone());
-            self.nodes.push(node);
-        }
-        self
+        (0..no_of_nodes).fold(self, |subnet, _| {
+            let default_vm_resources = subnet.default_vm_resources;
+            let vm_allocation = subnet.vm_allocation.clone();
+            let required_host_features = subnet.required_host_features.clone();
+            subnet.add_node(
+                Node::new_with_settings(
+                    default_vm_resources,
+                    vm_allocation,
+                    required_host_features,
+                )
+                .with_malicious_behaviour(malicious_behaviour.clone()),
+            )
+        })
     }
 
     pub fn add_node_with_ipv4(self, ipv4_config: Ipv4Config) -> Self {

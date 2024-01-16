@@ -348,7 +348,7 @@ fn ensure_dealers_allowed_by_params(
     dealings: &BatchSignedIDkgDealings,
 ) -> Result<(), IDkgCreateTranscriptError> {
     for id in dealings.dealer_ids() {
-        if !params.dealers().get().contains(id) {
+        if !params.dealers().contains(*id) {
             return Err(IDkgCreateTranscriptError::DealerNotAllowed { node_id: *id });
         }
     }

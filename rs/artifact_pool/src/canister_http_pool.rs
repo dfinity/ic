@@ -1,10 +1,8 @@
 //! Canister Http Artifact Pool implementation.
 
-// TODO: Remove
-#![allow(dead_code)]
 use crate::{
     metrics::{POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},
-    pool_common::PoolSection,
+    pool_common::{HasLabel, PoolSection},
 };
 use ic_interfaces::{
     canister_http::{CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPool},
@@ -176,6 +174,12 @@ impl ValidatedPoolReader<CanisterHttpArtifact> for CanisterHttpPoolImpl {
         _filter: &(),
     ) -> Box<dyn Iterator<Item = CanisterHttpResponseShare> + '_> {
         Box::new(std::iter::empty())
+    }
+}
+
+impl HasLabel for CanisterHttpResponse {
+    fn label(&self) -> &str {
+        "canister_http_response"
     }
 }
 

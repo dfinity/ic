@@ -74,8 +74,12 @@ rust_test(
 rust_test_suite(
     name = "messaging_integration",
     srcs = glob(["tests/**/*.rs"]),
-    data = ["//rs/rust_canisters/xnet_test:xnet-test-canister"],
+    data = [
+        "//rs/rust_canisters/downstream_calls_test:downstream-calls-test-canister",
+        "//rs/rust_canisters/xnet_test:xnet-test-canister",
+    ],
     env = {
+        "DOWNSTREAM_CALLS_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/downstream_calls_test:downstream-calls-test-canister)",
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
     deps = [
@@ -85,6 +89,7 @@ rust_test_suite(
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
         "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/downstream_calls_test",
         "//rs/rust_canisters/xnet_test",
         "//rs/state_machine_tests",
         "//rs/test_utilities",
@@ -95,5 +100,6 @@ rust_test_suite(
         "@crate_index//:assert_matches",
         "@crate_index//:candid",
         "@crate_index//:maplit",
+        "@crate_index//:serde",
     ],
 )

@@ -2,8 +2,10 @@ use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero},
     MetricsRegistry,
 };
+use ic_system_api::sandbox_safe_system_state::RequestMetadataStats;
 use ic_types::{
-    NumInstructions, NumMessages, NumSlices, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES,
+    NumInstructions, NumMessages, NumSlices, Time, MAX_STABLE_MEMORY_IN_BYTES,
+    MAX_WASM_MEMORY_IN_BYTES,
 };
 use prometheus::{Histogram, IntCounter, IntCounterVec};
 use std::{cell::RefCell, rc::Rc, time::Instant};
@@ -38,6 +40,96 @@ impl IngressFilterMetrics {
                 "execution_inspect_message_count",
                 "The total number of executed canister_inspect_messages.",
             ),
+        }
+    }
+}
+
+/// Trait for observing metrics concerning call trees.
+///
+/// New call trees are created by ingress messages or canister tasks; canister requests are found
+/// on each branch in the call tree.
+///
+/// The age and depth of a call tree is measured relative to the root.
+pub trait CallTreeMetrics {
+    fn observe(
+        &self,
+        request_stats: RequestMetadataStats,
+        call_context_creation_time: Time,
+        time: Time,
+    );
+}
+
+/// Implementation of `CallTreeMetrics` that doesn't record anything.
+pub(crate) struct CallTreeMetricsNoOp;
+
+impl CallTreeMetrics for CallTreeMetricsNoOp {
+    fn observe(
+        &self,
+        _request_stats: RequestMetadataStats,
+        _call_context_creation_time: Time,
+        _time: Time,
+    ) {
+    }
+}
+
+#[derive(Clone)]
+pub struct CallTreeMetricsImpl {
+    /// The depth down the call tree requests were created at (starting at 0).
+    pub(crate) request_call_tree_depth: Histogram,
+    /// Call tree age at the point when each new request was created.
+    pub(crate) request_call_tree_age_seconds: Histogram,
+    /// Call context age at the point when each new request was created.
+    pub(crate) request_call_context_age_seconds: Histogram,
+}
+
+impl CallTreeMetricsImpl {
+    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+        Self {
+            request_call_tree_depth: metrics_registry.histogram(
+                "execution_environment_request_call_tree_depth",
+                "The depth down the call tree that new requests were created at (0 based).",
+                decimal_buckets_with_zero(0, 2),
+            ),
+            request_call_tree_age_seconds: metrics_registry.histogram(
+                "execution_environment_request_call_tree_age_seconds",
+                "Call tree age at the point when each new request was created.",
+                decimal_buckets_with_zero(0, 6),
+            ),
+            request_call_context_age_seconds: metrics_registry.histogram(
+                "execution_environment_request_call_context_age_seconds",
+                "Call context age at the point when each new request was created.",
+                decimal_buckets_with_zero(0, 6),
+            ),
+        }
+    }
+}
+
+impl CallTreeMetrics for CallTreeMetricsImpl {
+    fn observe(
+        &self,
+        request_stats: RequestMetadataStats,
+        call_context_creation_time: Time,
+        time: Time,
+    ) {
+        // Observe call-tree related metrics.
+        if let Some(ref metadata) = request_stats.metadata {
+            for _ in 0..request_stats.count {
+                self.request_call_tree_depth
+                    .observe(*metadata.call_tree_depth() as f64);
+            }
+            let duration = time.saturating_sub(*metadata.call_tree_start_time());
+            for _ in 0..request_stats.count {
+                self.request_call_tree_age_seconds
+                    .observe(duration.as_secs_f64());
+            }
+        }
+
+        // Observe new requests vs. original context.
+        for _ in 0..request_stats.count {
+            self.request_call_context_age_seconds.observe(
+                time.saturating_sub(call_context_creation_time)
+                    .as_secs_f64(),
+            );
         }
     }
 }

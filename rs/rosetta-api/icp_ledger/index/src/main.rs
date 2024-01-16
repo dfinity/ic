@@ -725,7 +725,7 @@ fn test_account_identifier_data_type_storable() {
 
 #[test]
 fn check_candid_interface_compatibility() {
-    use candid_parser::utils::{service_compatible, CandidSource};
+    use candid_parser::utils::{service_equal, CandidSource};
 
     candid::export_service!();
 
@@ -735,7 +735,7 @@ fn check_candid_interface_compatibility() {
     let old_interface =
         std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("index.did");
 
-    service_compatible(
+    service_equal(
         CandidSource::Text(&new_interface),
         CandidSource::File(old_interface.as_path()),
     )

@@ -24,7 +24,7 @@ icrc-ledger-types = { path = "../../../../../packages/icrc-ledger-types" }
 ic-ledger-hash-of = { path = "../../../../../packages/ic-ledger-hash-of" }
 num-traits = "0.2.14"
 proptest = "1.0"
-cddl = "0.9.0-beta.1"
+cddl = "0.9.4"
 hex = "0.4.2"
 serde = { workspace = true }
 futures = { workspace = true }

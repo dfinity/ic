@@ -9,12 +9,13 @@ use ic_crypto_test_utils_canister_threshold_sigs::node::Node;
 use ic_crypto_test_utils_canister_threshold_sigs::node::Nodes;
 use ic_crypto_test_utils_canister_threshold_sigs::IDkgParticipants;
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    build_params_from_previous, corrupt_single_dealing_and_generate_complaint,
-    generate_key_transcript, generate_presig_quadruple, node_id,
-    random_crypto_component_not_in_receivers, random_dealer_id, random_dealer_id_excluding,
-    random_node_id_excluding, random_receiver_for_inputs, random_receiver_id,
-    random_receiver_id_excluding, run_tecdsa_protocol, sig_share_from_each_receiver,
-    swap_two_dealings_in_transcript, CanisterThresholdSigTestEnvironment, IntoBuilder,
+    build_params_from_previous, copy_dealing_in_transcript,
+    corrupt_single_dealing_and_generate_complaint, generate_key_transcript,
+    generate_presig_quadruple, node_id, random_crypto_component_not_in_receivers, random_dealer_id,
+    random_dealer_id_excluding, random_node_id_excluding, random_receiver_for_inputs,
+    random_receiver_id, random_receiver_id_excluding, run_tecdsa_protocol,
+    sig_share_from_each_receiver, swap_two_dealings_in_transcript,
+    CanisterThresholdSigTestEnvironment, IntoBuilder,
 };
 use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
 use ic_interfaces::crypto::{IDkgProtocol, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner};
@@ -1233,21 +1234,14 @@ mod verify_transcript {
         }
     }
 
-    //TODO CRP-2110: This test is currently ignored because it's flaky and the fix is not trivial.
-    #[ignore]
     #[test]
-    fn should_verify_transcript_reject_reshared_transcript_with_dealings_swapped() {
+    fn should_verify_transcript_reject_reshared_transcript_with_a_duplicated_dealing() {
         const MIN_NUM_NODES: usize = 4;
         let rng = &mut reproducible_rng();
         let subnet_size = rng.gen_range(MIN_NUM_NODES..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
-        let (dealers, receivers) = env.choose_dealers_and_receivers(
-            &IDkgParticipants::RandomWithAtLeast {
-                min_num_dealers: MIN_NUM_NODES,
-                min_num_receivers: 1,
-            },
-            rng,
-        );
+        let (dealers, receivers) =
+            env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let masked_key_params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
@@ -1273,7 +1267,7 @@ mod verify_transcript {
                 .choose_multiple(rng, 2);
 
             let transcript =
-                swap_two_dealings_in_transcript(&params, transcript, &env, dealers[0], dealers[1]);
+                copy_dealing_in_transcript(&params, transcript, &env, dealers[0], dealers[1]);
 
             let r = env
                 .nodes

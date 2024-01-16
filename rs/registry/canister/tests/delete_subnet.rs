@@ -35,6 +35,13 @@ use registry_canister::{
 };
 use std::collections::BTreeMap;
 
+/// Tests that subnets can only be deleted when appropriate, by doing the following:
+/// 1. Create three subnets (two system subnets and one application subnet)
+/// 2. Verify that deleting a non-existent subnet fails
+/// 3. Verify that deleting the (hard-coded) NNS system subnet fails (no subnet with the mainnet NNS subnet ID exists in the test)
+/// 4. Verify that deleting the second system subnet succeeds
+/// 5. Verify that deleting the application subnet succeeds
+/// 6. Verify that deleting the only system subnet that is left fails
 #[test]
 fn test_subnet_is_only_deleted_when_appropriate() {
     local_test_on_nns_subnet(|runtime| async move {
@@ -267,12 +274,12 @@ fn test_subnet_is_only_deleted_when_appropriate() {
         );
 
         let payload = DeleteSubnetPayload {
-            subnet_id: Some(subnet_id.get()),
+            subnet_id: Some(second_system_subnet_id.get()),
         };
 
-        // Cannot delete the only system Subnet
+        // Deleting second system Subnet succeeds
         assert!(
-            !forward_call_via_universal_canister(
+            forward_call_via_universal_canister(
                 &fake_governance_canister,
                 &registry,
                 "delete_subnet",
@@ -297,12 +304,12 @@ fn test_subnet_is_only_deleted_when_appropriate() {
         );
 
         let payload = DeleteSubnetPayload {
-            subnet_id: Some(second_system_subnet_id.get()),
+            subnet_id: Some(subnet_id.get()),
         };
 
-        // Deleting second system Subnet succeeds
+        // Cannot delete the only system Subnet
         assert!(
-            forward_call_via_universal_canister(
+            !forward_call_via_universal_canister(
                 &fake_governance_canister,
                 &registry,
                 "delete_subnet",

@@ -1,14 +1,15 @@
 //! The file contains the synchronous interface used from P2P, to drive the StateSync protocol.  
 use ic_types::artifact::StateSyncArtifactId;
 use phantom_newtype::Id;
+use thiserror::Error;
 
 pub type Chunk = Vec<u8>;
 
 /// Error codes returned by the `Chunkable` interface.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum ArtifactErrorCode {
-    ChunksMoreNeeded,
-    ChunkVerificationFailed,
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Error)]
+pub enum AddChunkError {
+    #[error("bad chunk")]
+    Invalid,
 }
 
 /// The chunk type.
@@ -17,7 +18,8 @@ pub type ChunkId = Id<ChunkIdTag, u32>;
 
 pub trait Chunkable<T> {
     fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>>;
-    fn add_chunk(&mut self, chunk_id: ChunkId, chunk: Chunk) -> Result<T, ArtifactErrorCode>;
+    fn add_chunk(&mut self, chunk_id: ChunkId, chunk: Chunk) -> Result<(), AddChunkError>;
+    fn completed(&self) -> Option<T>;
 }
 
 pub trait StateSyncClient: Send + Sync {

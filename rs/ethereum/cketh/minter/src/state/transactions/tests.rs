@@ -1734,7 +1734,7 @@ pub mod arbitrary {
     }
 
     fn arb_address() -> impl Strategy<Value = Address> {
-        uniform20(any::<u8>()).prop_map(|bytes| Address::new(bytes))
+        uniform20(any::<u8>()).prop_map(Address::new)
     }
 
     fn arb_principal() -> impl Strategy<Value = Principal> {

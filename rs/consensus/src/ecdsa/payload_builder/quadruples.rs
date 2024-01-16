@@ -3,13 +3,15 @@ use super::EcdsaPayloadError;
 use crate::ecdsa::pre_signer::EcdsaTranscriptBuilder;
 use ic_logger::{debug, error, ReplicaLogger};
 use ic_registry_subnet_features::EcdsaConfig;
+use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
 use ic_types::{
     consensus::ecdsa::{self, TranscriptAttributes},
     crypto::{canister_threshold_sig::idkg::IDkgTranscript, AlgorithmId},
+    messages::CallbackId,
     Height, NodeId, RegistryVersion,
 };
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Update the quadruples in the payload by:
 /// - making new configs when pre-conditions are met;
@@ -206,12 +208,40 @@ pub(super) fn update_quadruples_in_creation(
     Ok(new_transcripts)
 }
 
+/// Purge all available but unmatched quadruples that are referencing a different key transcript
+/// than the one currently used.
+pub(super) fn purge_old_key_quadruples(
+    ecdsa_payload: &mut ecdsa::EcdsaPayload,
+    all_signing_requests: &BTreeMap<CallbackId, SignWithEcdsaContext>,
+) {
+    let Some(unmasked_transcript) = ecdsa_payload.key_transcript.current.as_ref() else {
+        return;
+    };
+    let current_key_transcript_id = unmasked_transcript.transcript_id();
+
+    let matched_quadruples = all_signing_requests
+        .values()
+        .flat_map(|context| context.matched_quadruple.clone())
+        .map(|(quadruple_id, _)| quadruple_id)
+        .collect::<BTreeSet<_>>();
+
+    ecdsa_payload.available_quadruples.retain(|id, quadruple| {
+        matched_quadruples.contains(id)
+            || match quadruple.key_unmasked_ref.as_ref() {
+                Some(transcript) => transcript.as_ref().transcript_id == current_key_transcript_id,
+                None => true,
+            }
+    });
+}
+
 /// Creating new quadruples if necessary by updating quadruples_in_creation,
 /// considering currently available quadruples, quadruples in creation, and
 /// ecdsa configs.
 pub(super) fn make_new_quadruples_if_needed(
     ecdsa_config: &EcdsaConfig,
     ecdsa_payload: &mut ecdsa::EcdsaPayload,
+    //TODO(CON-1149): Pass value to helper
+    _matched_quadruples: usize,
 ) {
     if let Some(key_transcript) = &ecdsa_payload.key_transcript.current {
         let node_ids: Vec<_> = key_transcript.receivers().iter().copied().collect();
@@ -220,6 +250,7 @@ pub(super) fn make_new_quadruples_if_needed(
             key_transcript.registry_version(),
             ecdsa_config,
             ecdsa_payload,
+            0,
         )
     }
 }
@@ -229,8 +260,12 @@ fn make_new_quadruples_if_needed_helper(
     registry_version: RegistryVersion,
     ecdsa_config: &EcdsaConfig,
     ecdsa_payload: &mut ecdsa::EcdsaPayload,
+    matched_quadruples: usize,
 ) {
-    let unassigned_quadruples = ecdsa_payload.unassigned_quadruple_ids().count();
+    let unassigned_quadruples = ecdsa_payload
+        .unassigned_quadruple_ids()
+        .count()
+        .saturating_sub(matched_quadruples);
     let quadruples_to_create = ecdsa_config.quadruples_to_create_in_advance as usize;
     if quadruples_to_create > unassigned_quadruples {
         let quadruples_in_creation = &mut ecdsa_payload.quadruples_in_creation;
@@ -275,7 +310,7 @@ pub(super) mod test_utils {
     use std::collections::BTreeMap;
 
     use ic_types::{
-        consensus::ecdsa::{self, EcdsaPayload, QuadrupleId},
+        consensus::ecdsa::{self, EcdsaPayload, QuadrupleId, UnmaskedTranscript},
         NodeId, RegistryVersion,
     };
 
@@ -295,12 +330,27 @@ pub(super) mod test_utils {
     }
 
     pub fn create_available_quadruple(ecdsa_payload: &mut EcdsaPayload, caller: u8) -> QuadrupleId {
+        create_available_quadruple_with_key_transcript(ecdsa_payload, caller, None)
+    }
+
+    pub fn create_available_quadruple_with_key_transcript(
+        ecdsa_payload: &mut EcdsaPayload,
+        caller: u8,
+        key_transcript: Option<UnmaskedTranscript>,
+    ) -> QuadrupleId {
         let sig_inputs = create_sig_inputs(caller);
         let quadruple_id = ecdsa_payload.uid_generator.next_quadruple_id();
-        let quadruple_ref = &sig_inputs.sig_inputs_ref.presig_quadruple_ref;
+        let mut quadruple_ref = sig_inputs.sig_inputs_ref.presig_quadruple_ref.clone();
+        quadruple_ref.key_unmasked_ref = key_transcript;
         ecdsa_payload
             .available_quadruples
-            .insert(quadruple_id.clone(), quadruple_ref.clone());
+            .insert(quadruple_id.clone(), quadruple_ref);
+
+        for (t_ref, transcript) in sig_inputs.idkg_transcripts {
+            ecdsa_payload
+                .idkg_transcripts
+                .insert(t_ref.transcript_id, transcript);
+        }
 
         quadruple_id
     }
@@ -312,15 +362,18 @@ pub(super) mod tests {
     use super::*;
 
     use crate::ecdsa::test_utils::{
-        set_up_ecdsa_payload, EcdsaPayloadTestHelper, TestEcdsaBlockReader,
-        TestEcdsaTranscriptBuilder,
+        fake_sign_with_ecdsa_context_with_quadruple, set_up_ecdsa_payload, EcdsaPayloadTestHelper,
+        TestEcdsaBlockReader, TestEcdsaTranscriptBuilder,
     };
-    use ic_crypto_test_utils_canister_threshold_sigs::CanisterThresholdSigTestEnvironment;
+    use ic_crypto_test_utils_canister_threshold_sigs::{
+        generate_key_transcript, CanisterThresholdSigTestEnvironment, IDkgParticipants,
+    };
     use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::types::ids::subnet_test_id;
     use ic_types::{
-        consensus::ecdsa::EcdsaPayload, crypto::canister_threshold_sig::idkg::IDkgTranscriptId,
+        consensus::ecdsa::{EcdsaPayload, UnmaskedTranscript},
+        crypto::canister_threshold_sig::idkg::IDkgTranscriptId,
         SubnetId,
     };
 
@@ -347,24 +400,41 @@ pub(super) mod tests {
     #[test]
     fn test_ecdsa_make_new_quadruples_if_needed() {
         let mut rng = reproducible_rng();
-        let quadruples_to_create_in_advance = 3;
         let subnet_id = subnet_test_id(1);
         let height = Height::new(10);
         let (mut ecdsa_payload, env, _block_reader) = set_up(&mut rng, subnet_id, height);
+
+        // 4 Quadruples should be created in advance (in creation + unmatched available = 4)
+        let quadruples_to_create_in_advance = 4;
         let ecdsa_config = EcdsaConfig {
             quadruples_to_create_in_advance,
             ..EcdsaConfig::default()
         };
+
+        // Add 3 available quadruples
+        for i in 0..3 {
+            create_available_quadruple(&mut ecdsa_payload, i);
+        }
+
+        // 2 available quadruples are already matched
+        let quadruples_already_matched = 2;
+
+        // We expect 3 quadruples in creation to be added
+        let expected_quadruples_in_creation = quadruples_to_create_in_advance as usize
+            - (ecdsa_payload.available_quadruples.len() - quadruples_already_matched);
+        assert_eq!(expected_quadruples_in_creation, 3);
 
         make_new_quadruples_if_needed_helper(
             &env.nodes.ids::<Vec<_>>(),
             env.newest_registry_version,
             &ecdsa_config,
             &mut ecdsa_payload,
+            quadruples_already_matched,
         );
 
         assert_eq!(
-            ecdsa_payload.quadruples_in_creation.len(),
+            ecdsa_payload.quadruples_in_creation.len() + ecdsa_payload.available_quadruples.len()
+                - quadruples_already_matched,
             quadruples_to_create_in_advance as usize
         );
         // Verify the generated transcript ids.
@@ -373,10 +443,7 @@ pub(super) mod tests {
             transcript_ids.insert(quadruple.1.kappa_config.as_ref().transcript_id);
             transcript_ids.insert(quadruple.1.lambda_config.as_ref().transcript_id);
         }
-        assert_eq!(
-            transcript_ids.len(),
-            2 * quadruples_to_create_in_advance as usize
-        );
+        assert_eq!(transcript_ids.len(), 2 * expected_quadruples_in_creation);
         assert_eq!(
             transcript_ids,
             BTreeSet::from([
@@ -389,8 +456,8 @@ pub(super) mod tests {
             ])
         );
         assert_eq!(
-            ecdsa_payload.peek_next_transcript_id().id() as u32,
-            2 * quadruples_to_create_in_advance,
+            ecdsa_payload.peek_next_transcript_id().id() as usize,
+            2 * expected_quadruples_in_creation,
         );
     }
 
@@ -580,5 +647,147 @@ pub(super) mod tests {
         assert_eq!(payload.available_quadruples.len(), 1);
         assert_eq!(payload.peek_next_transcript_id().id(), 5);
         assert!(config_ids(&payload).is_empty());
+    }
+
+    fn get_current_unmasked_key_transcript(payload: &EcdsaPayload) -> UnmaskedTranscript {
+        let transcript = payload.key_transcript.current.clone();
+        transcript.unwrap().unmasked_transcript()
+    }
+
+    #[test]
+    fn test_matched_quadruples_are_not_purged() {
+        let mut rng = reproducible_rng();
+        let (mut payload, env, _) = set_up(&mut rng, subnet_test_id(1), Height::from(100));
+        let key_id = payload.key_transcript.key_id.clone();
+        let key_transcript = get_current_unmasked_key_transcript(&payload);
+
+        let (dealers, receivers) = env.choose_dealers_and_receivers(
+            &IDkgParticipants::AllNodesAsDealersAndReceivers,
+            &mut rng,
+        );
+        let transcript = generate_key_transcript(
+            &env,
+            &dealers,
+            &receivers,
+            AlgorithmId::ThresholdEcdsaSecp256k1,
+            &mut rng,
+        );
+        let key_transcript2 =
+            UnmaskedTranscript::try_from((Height::from(200), &transcript)).unwrap();
+
+        // Create three quadruples, with the current, a different, no key transcript.
+        let quadruple_ids = vec![
+            create_available_quadruple_with_key_transcript(&mut payload, 1, Some(key_transcript)),
+            create_available_quadruple_with_key_transcript(&mut payload, 2, Some(key_transcript2)),
+            create_available_quadruple_with_key_transcript(&mut payload, 3, None),
+        ];
+
+        // All three quadruples are matched with a context
+        let contexts = BTreeMap::from_iter(quadruple_ids.into_iter().map(|id| {
+            fake_sign_with_ecdsa_context_with_quadruple(id.id() as u8, key_id.clone(), Some(id))
+        }));
+
+        // None of them should be purged
+        assert_eq!(payload.available_quadruples.len(), 3);
+        purge_old_key_quadruples(&mut payload, &contexts);
+        assert_eq!(payload.available_quadruples.len(), 3);
+    }
+
+    #[test]
+    fn test_unmatched_quadruples_of_current_key_are_not_purged() {
+        let mut rng = reproducible_rng();
+        let (mut payload, _, _) = set_up(&mut rng, subnet_test_id(1), Height::from(100));
+        let key_id = payload.key_transcript.key_id.clone();
+        let key_transcript = get_current_unmasked_key_transcript(&payload);
+
+        // Create three quadruples of the current key transcript
+        for i in 0..3 {
+            create_available_quadruple_with_key_transcript(&mut payload, i, Some(key_transcript));
+        }
+
+        // None of them are matched to a context
+        let contexts = BTreeMap::from_iter([fake_sign_with_ecdsa_context_with_quadruple(
+            1,
+            key_id.clone(),
+            None,
+        )]);
+
+        // None of them should be purged
+        assert_eq!(payload.available_quadruples.len(), 3);
+        purge_old_key_quadruples(&mut payload, &contexts);
+        assert_eq!(payload.available_quadruples.len(), 3);
+    }
+
+    #[test]
+    fn test_unmatched_quadruples_without_key_are_not_purged() {
+        let mut rng = reproducible_rng();
+        let (mut payload, _, _) = set_up(&mut rng, subnet_test_id(1), Height::from(100));
+        let key_id = payload.key_transcript.key_id.clone();
+
+        // Create three quadruples without key transcript
+        for i in 0..3 {
+            create_available_quadruple_with_key_transcript(&mut payload, i, None);
+        }
+
+        // None of them are matched to a context
+        let contexts = BTreeMap::from_iter([fake_sign_with_ecdsa_context_with_quadruple(
+            1,
+            key_id.clone(),
+            None,
+        )]);
+
+        // None of them should be purged
+        assert_eq!(payload.available_quadruples.len(), 3);
+        purge_old_key_quadruples(&mut payload, &contexts);
+        assert_eq!(payload.available_quadruples.len(), 3);
+    }
+
+    #[test]
+    fn test_unmatched_quadruples_of_different_key_are_purged() {
+        let mut rng = reproducible_rng();
+        let (mut payload, env, _) = set_up(&mut rng, subnet_test_id(1), Height::from(100));
+        let key_id = payload.key_transcript.key_id.clone();
+
+        let (dealers, receivers) = env.choose_dealers_and_receivers(
+            &IDkgParticipants::AllNodesAsDealersAndReceivers,
+            &mut rng,
+        );
+        let transcript = generate_key_transcript(
+            &env,
+            &dealers,
+            &receivers,
+            AlgorithmId::ThresholdEcdsaSecp256k1,
+            &mut rng,
+        );
+        let other_key_transcript =
+            UnmaskedTranscript::try_from((Height::from(200), &transcript)).unwrap();
+
+        // Create two quadruples of the other key transcript
+        let quadruple_ids = (0..2)
+            .map(|i| {
+                create_available_quadruple_with_key_transcript(
+                    &mut payload,
+                    i,
+                    Some(other_key_transcript),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        // The first one is matched to a context
+        let contexts = BTreeMap::from_iter([fake_sign_with_ecdsa_context_with_quadruple(
+            1,
+            key_id.clone(),
+            Some(quadruple_ids[0].clone()),
+        )]);
+
+        // The second one should be purged
+        assert_eq!(payload.available_quadruples.len(), 2);
+        purge_old_key_quadruples(&mut payload, &contexts);
+        assert_eq!(payload.available_quadruples.len(), 1);
+
+        assert_eq!(
+            payload.available_quadruples.into_keys().next().unwrap(),
+            quadruple_ids[0]
+        );
     }
 }

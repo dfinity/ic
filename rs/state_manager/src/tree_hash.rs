@@ -210,10 +210,10 @@ mod tests {
                     RequestBuilder::new()
                         .metadata(
                             (certification_version >= CertificationVersion::V14 && i % 5 != 0)
-                                .then_some(RequestMetadata {
-                                    call_tree_depth: i % 3,
-                                    call_tree_start_time: Time::from_nanos_since_unix_epoch(i % 2),
-                                }),
+                                .then_some(RequestMetadata::new(
+                                    i % 3,
+                                    Time::from_nanos_since_unix_epoch(i % 2),
+                                )),
                         )
                         .build()
                         .into(),

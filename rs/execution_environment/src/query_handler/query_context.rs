@@ -5,7 +5,7 @@ use crate::{
     execution_environment::{as_round_instructions, RoundLimits},
     hypervisor::Hypervisor,
     metrics::{
-        MeasurementScope, QueryHandlerMetrics, QUERY_HANDLER_CRITICAL_ERROR,
+        CallTreeMetricsNoOp, MeasurementScope, QueryHandlerMetrics, QUERY_HANDLER_CRITICAL_ERROR,
         SYSTEM_API_CALL_PERFORM, SYSTEM_API_CANISTER_CYCLE_BALANCE,
         SYSTEM_API_CANISTER_CYCLE_BALANCE128, SYSTEM_API_TIME,
     },
@@ -585,6 +585,8 @@ impl<'a> QueryContext<'a> {
             &self.network_topology,
             &mut self.round_limits,
             self.query_critical_error,
+            &CallTreeMetricsNoOp,
+            call_context.time(),
         );
 
         self.system_api_call_counters
@@ -685,6 +687,8 @@ impl<'a> QueryContext<'a> {
                 &self.network_topology,
                 &mut self.round_limits,
                 self.query_critical_error,
+                &CallTreeMetricsNoOp,
+                time,
             );
 
         self.system_api_call_counters

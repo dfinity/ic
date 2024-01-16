@@ -134,6 +134,7 @@ pub fn test_registry_settings() -> RegistryExecutionSettings {
         max_number_of_canisters: 0x2000,
         provisional_whitelist: ProvisionalWhitelist::Set(BTreeSet::new()),
         max_ecdsa_queue_size: 20,
+        quadruples_to_create_in_advance: 5,
         subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
     }
 }
@@ -1914,6 +1915,13 @@ impl ExecutionTestBuilder {
 
     pub fn with_heap_delta_rate_limit(mut self, heap_delta_rate_limit: NumBytes) -> Self {
         self.heap_delta_rate_limit = heap_delta_rate_limit;
+        self
+    }
+
+    pub fn with_max_dirty_pages_optimization_embedder_config(mut self, no_pages: usize) -> Self {
+        self.execution_config
+            .embedders_config
+            .max_dirty_pages_without_optimization = no_pages;
         self
     }
 

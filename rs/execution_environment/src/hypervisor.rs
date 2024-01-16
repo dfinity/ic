@@ -15,13 +15,17 @@ use ic_replicated_state::NetworkTopology;
 use ic_replicated_state::{page_map::allocated_pages_count, ExecutionState, SystemState};
 use ic_system_api::ExecutionParameters;
 use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType};
-use ic_types::{methods::FuncRef, CanisterId, NumBytes, NumInstructions, SubnetId, Time};
+use ic_types::{
+    messages::RequestMetadata, methods::FuncRef, CanisterId, NumBytes, NumInstructions, SubnetId,
+    Time,
+};
 use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, IntCounter, IntGauge};
 use std::{path::PathBuf, sync::Arc};
 
 use crate::execution::common::{apply_canister_state_changes, update_round_limits};
 use crate::execution_environment::{as_round_instructions, CompilationCostHandling, RoundLimits};
+use crate::metrics::CallTreeMetrics;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 
 #[cfg(test)]
@@ -317,6 +321,8 @@ impl Hypervisor {
         network_topology: &NetworkTopology,
         round_limits: &mut RoundLimits,
         state_changes_error: &IntCounter,
+        call_tree_metrics: &dyn CallTreeMetrics,
+        call_context_creation_time: Time,
     ) -> (WasmExecutionOutput, ExecutionState, SystemState) {
         assert_eq!(
             execution_parameters.instruction_limits.message(),
@@ -330,6 +336,7 @@ impl Hypervisor {
             canister_current_message_memory_usage,
             execution_parameters,
             func_ref,
+            RequestMetadata::for_new_call_tree(time),
             round_limits,
             network_topology,
         );
@@ -353,6 +360,8 @@ impl Hypervisor {
             self.own_subnet_id,
             &self.log,
             state_changes_error,
+            call_tree_metrics,
+            call_context_creation_time,
         );
         (output, execution_state, system_state)
     }
@@ -368,6 +377,7 @@ impl Hypervisor {
         canister_current_message_memory_usage: NumBytes,
         execution_parameters: ExecutionParameters,
         func_ref: FuncRef,
+        request_metadata: RequestMetadata,
         round_limits: &mut RoundLimits,
         network_topology: &NetworkTopology,
     ) -> WasmExecutionResult {
@@ -387,6 +397,7 @@ impl Hypervisor {
             network_topology,
             self.dirty_page_overhead,
             execution_parameters.compute_allocation,
+            request_metadata,
         );
         let (compilation_result, execution_result) = Arc::clone(&self.wasm_executor).execute(
             WasmExecutionInput {

@@ -222,7 +222,7 @@ pub(crate) fn into_request(
         method_payload,
         sender_reply_callback: callback_id,
         payment: cycles,
-        metadata: None,
+        metadata: Some(sandbox_safe_system_state.request_metadata.clone()),
     };
     // We cannot call `Request::payload_size_bytes()` before constructing the
     // request, so ensure our separate calculation matches the actual size.

@@ -25,6 +25,18 @@ ARG snp_kernel_pkg=linux-image-${snp_kernel_version_guest}_${snp_kernel_version_
 ARG snp_kernel_libc_host=linux-libc-dev_${snp_kernel_version_host}-1_amd64.deb
 ARG snp_kernel_libc_guest=linux-libc-dev_${snp_kernel_version_guest}-1_amd64.deb
 
+# Crowdsec bouncer version to install
+ARG CROWDSEC_BOUNCER_VERSION=1.0.12
+ARG CROWDSEC_BOUNCER_SHA=ff3f23bb2ac81cd28cd96a7e119b3f86594d5991a28690af1ed4ddc14a531127
+
+# Vector version to install
+ARG VECTOR_VERSION=0.35.0
+ARG VECTOR_SHA=2b62b09d1e54ef30e4b4e639a8dd4240d9b52e85ab5764aeb300d897b3b223eb
+
+# Node exporter version to install
+ARG NODE_EXPORTER_VERSION=1.7.0
+ARG NODE_EXPORTER_SHA=a550cd5c05f760b7934a2d0afad66d2e92e681482f5f57a917465b1fba3b02a6
+
 #
 # First build stage: download software, build and verify it (such that it
 # does not change under our noses).
@@ -64,6 +76,13 @@ ARG snp_kernel_pkg
 ARG snp_kernel_libc_host
 ARG snp_kernel_libc_guest
 
+ARG CROWDSEC_BOUNCER_VERSION
+ARG CROWDSEC_BOUNCER_SHA
+ARG VECTOR_VERSION
+ARG VECTOR_SHA
+ARG NODE_EXPORTER_VERSION
+ARG NODE_EXPORTER_SHA
+
 RUN curl -L -O https://github.com/dfinity/AMDSEV/releases/download/${snp_tag}/${snp_kernel_pkg} && \
     echo "${snp_sha}  ${snp_kernel_pkg}" | shasum -c
 RUN curl -L -O https://github.com/dfinity/AMDSEV/releases/download/${snp_tag}/${snp_kernel_libc_guest} && \
@@ -73,13 +92,18 @@ RUN curl -L -O https://github.com/dfinity/AMDSEV/releases/download/${snp_tag}/${
 
 # Download and verify vector
 RUN \
-    curl -L -O https://packages.timber.io/vector/0.34.1/vector_0.34.1-1_amd64.deb && \
-    echo "5d837815c1d70539211b141a57217fd8f84d174e57a2aa2a8367af2e6374e15c  vector_0.34.1-1_amd64.deb" | shasum -c
+    curl -L -O https://packages.timber.io/vector/${VECTOR_VERSION}/vector_${VECTOR_VERSION}-1_amd64.deb && \
+    echo "${VECTOR_SHA}  vector_${VECTOR_VERSION}-1_amd64.deb" | shasum -c
 
 # Download and verify node_exporter
 RUN \
-    curl -L -O https://github.com/prometheus/node_exporter/releases/download/v1.7.0/node_exporter-1.7.0.linux-amd64.tar.gz && \
-    echo "a550cd5c05f760b7934a2d0afad66d2e92e681482f5f57a917465b1fba3b02a6  node_exporter-1.7.0.linux-amd64.tar.gz" | shasum -c
+    curl -L -O https://github.com/prometheus/node_exporter/releases/download/v${NODE_EXPORTER_VERSION}/node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz && \
+    echo "${NODE_EXPORTER_SHA}  node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz" | shasum -c
+
+# Download and verify crowdsec bouncer
+RUN \
+    curl -L -O https://github.com/blind-oracle/cs-firewall-bouncer/releases/download/${CROWDSEC_BOUNCER_VERSION}/crowdsec-firewall-bouncer-nftables_${CROWDSEC_BOUNCER_VERSION}_amd64.deb && \
+    echo "${CROWDSEC_BOUNCER_SHA}  crowdsec-firewall-bouncer-nftables_${CROWDSEC_BOUNCER_VERSION}_amd64.deb" | shasum -c
 
 # Download and build sev-guest tool
 RUN \
@@ -127,10 +151,10 @@ RUN \
         https://github.com/leev/ngx_http_geoip2_module/archive/refs/tags/${NGX_HTTP_GEOIP2_MODULE_TAG}.tar.gz \
     | tar -xzf -
 
-ARG NGINX_VERSION=1.24.0
+ARG NGINX_VERSION=1.25.3
 RUN \
     curl -sLv \
-        http://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz \
+        https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz \
     | tar -xzf -
 
 WORKDIR /nginx-${NGINX_VERSION}
@@ -161,8 +185,8 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommends install gnupg 
 RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys ABF5BD827BD9BF62
 
-RUN echo "deb http://nginx.org/packages/ubuntu/ focal nginx" >> /etc/apt/sources.list.d/nginx.list &&\
-    echo "deb-src http://nginx.org/packages/ubuntu/ focal nginx" >> /etc/apt/sources.list.d/nginx.list 
+RUN echo "deb http://nginx.org/packages/mainline/ubuntu/ focal nginx" >> /etc/apt/sources.list.d/nginx.list && \
+    echo "deb-src http://nginx.org/packages/mainline/ubuntu/ focal nginx" >> /etc/apt/sources.list.d/nginx.list 
 
 # GeoIP repository
 RUN \
@@ -187,6 +211,7 @@ RUN \
         dante-server \
         faketime \
         fdisk \
+        gettext-base \
         haveged \
         initramfs-tools \
         inotify-tools \
@@ -205,8 +230,8 @@ RUN \
         net-tools \
         netbase \
         nftables \
-        nginx-module-njs=1.24.0+0.8.2-1~focal \
-        nginx=1.24.0-1~focal \
+        nginx-module-njs=1.25.3+0.8.2-1~focal \
+        nginx=1.25.3-1~focal \
         opensc \
         openssh-client openssh-server \
         parted \
@@ -267,16 +292,24 @@ RUN \
 RUN rm /tmp/${snp_kernel_pkg}
 
 # Install vector
-COPY --from=download /tmp/vector_0.34.1-1_amd64.deb /tmp/vector_0.34.1-1_amd64.deb
-RUN dpkg -i --force-confold /tmp/vector_0.34.1-1_amd64.deb && \
-    rm /tmp/vector_0.34.1-1_amd64.deb
+ARG VECTOR_VERSION
+COPY --from=download /tmp/vector_${VECTOR_VERSION}-1_amd64.deb /tmp/vector_${VECTOR_VERSION}-1_amd64.deb
+RUN dpkg -i --force-confold /tmp/vector_${VECTOR_VERSION}-1_amd64.deb && \
+    rm /tmp/vector_${VECTOR_VERSION}-1_amd64.deb
 
 # Install node_exporter
-COPY --from=download /tmp/node_exporter-1.7.0.linux-amd64.tar.gz /tmp/node_exporter-1.7.0.linux-amd64.tar.gz
+ARG NODE_EXPORTER_VERSION
+COPY --from=download /tmp/node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz /tmp/node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz
 RUN cd /tmp/ && \
     mkdir -p /etc/node_exporter && \
-    tar --strip-components=1 -C /usr/local/bin/ -zvxf node_exporter-1.7.0.linux-amd64.tar.gz node_exporter-1.7.0.linux-amd64/node_exporter && \
-    rm /tmp/node_exporter-1.7.0.linux-amd64.tar.gz
+    tar --strip-components=1 -C /usr/local/bin/ -zvxf node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64/node_exporter && \
+    rm /tmp/node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz
+
+# Install crowdsec bouncer
+ARG CROWDSEC_BOUNCER_VERSION
+COPY --from=download /tmp/crowdsec-firewall-bouncer-nftables_${CROWDSEC_BOUNCER_VERSION}_amd64.deb /tmp/crowdsec-firewall-bouncer-nftables_${CROWDSEC_BOUNCER_VERSION}_amd64.deb
+RUN dpkg -i --force-confold /tmp/crowdsec-firewall-bouncer-nftables_${CROWDSEC_BOUNCER_VERSION}_amd64.deb && \
+    rm /tmp/crowdsec-firewall-bouncer-nftables_${CROWDSEC_BOUNCER_VERSION}_amd64.deb
 
 ### Nginx Modules
 

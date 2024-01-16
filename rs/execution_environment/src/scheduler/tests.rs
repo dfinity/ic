@@ -40,12 +40,15 @@ use ic_test_utilities_metrics::{
     fetch_counter, fetch_gauge, fetch_gauge_vec, fetch_histogram_stats, fetch_int_gauge,
     fetch_int_gauge_vec, metric_vec, HistogramStats,
 };
-use ic_types::messages::{
-    CallbackId, Payload, RejectContext, Response, StopCanisterCallId, MAX_RESPONSE_COUNT_BYTES,
-};
 use ic_types::methods::SystemMethod;
 use ic_types::methods::WasmMethod;
 use ic_types::time::expiry_time_from_now;
+use ic_types::{
+    messages::{
+        CallbackId, Payload, RejectContext, Response, StopCanisterCallId, MAX_RESPONSE_COUNT_BYTES,
+    },
+    Height,
+};
 use ic_types::{time::UNIX_EPOCH, ComputeAllocation, Cycles, NumBytes};
 use ic_types_test_utils::ids::user_test_id;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
@@ -2075,6 +2078,7 @@ fn can_record_metrics_for_a_round() {
     assert_eq!(metrics.round_scheduling_duration.get_sample_count(), 1);
     assert_eq!(metrics.round_scheduling_duration.get_sample_count(), 1);
     assert!(metrics.round_inner_iteration_prep.get_sample_count() >= 1);
+    assert!(metrics.round_inner_iteration_exe.get_sample_count() >= 1);
     assert!(metrics.round_inner_iteration_fin.get_sample_count() >= 1);
     assert_eq!(metrics.round_finalization_duration.get_sample_count(), 1);
     assert_eq!(
@@ -4838,6 +4842,168 @@ fn test_is_next_method_added_to_task_queue() {
         .pop_front();
 
     assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
+}
+
+pub(crate) fn make_key_id(id: u64) -> EcdsaKeyId {
+    EcdsaKeyId::from_str(&format!("Secp256k1:key_{:?}", id)).unwrap()
+}
+
+fn inject_ecdsa_signing_request(test: &mut SchedulerTest, key_id: &EcdsaKeyId) {
+    let canister_id = test.create_canister();
+
+    let payload = Encode!(&SignWithECDSAArgs {
+        message_hash: [0; 32],
+        derivation_path: DerivationPath::new(Vec::new()),
+        key_id: key_id.clone()
+    })
+    .unwrap();
+
+    test.inject_call_to_ic00(
+        Method::SignWithECDSA,
+        payload.clone(),
+        test.ecdsa_signature_fee(),
+        canister_id,
+        InputQueueType::RemoteSubnet,
+    );
+}
+
+#[test]
+fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples() {
+    let key_id = make_key_id(0);
+    let mut test = SchedulerTestBuilder::new()
+        .with_ecdsa_key(key_id.clone())
+        .build();
+
+    inject_ecdsa_signing_request(&mut test, &key_id);
+
+    // Check that nonce isn't set in the following round
+    for _ in 0..2 {
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+        let sign_with_ecdsa_context = &test
+            .state()
+            .sign_with_ecdsa_contexts()
+            .values()
+            .next()
+            .expect("Context should exist");
+
+        // Check that quadruple and nonce are none
+        assert!(sign_with_ecdsa_context.nonce.is_none());
+        assert!(sign_with_ecdsa_context.matched_quadruple.is_none());
+    }
+}
+
+#[test]
+fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
+    let key_id = make_key_id(0);
+    let mut test = SchedulerTestBuilder::new()
+        .with_ecdsa_key(key_id.clone())
+        .build();
+    let quadruple_id = QuadrupleId(0, Some(key_id.clone()));
+    let quadruple_ids = BTreeSet::from_iter([quadruple_id.clone()]);
+
+    inject_ecdsa_signing_request(&mut test, &key_id);
+    test.deliver_quadruple_ids(BTreeMap::from_iter([(key_id, quadruple_ids)]));
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    let sign_with_ecdsa_context = &test
+        .state()
+        .sign_with_ecdsa_contexts()
+        .values()
+        .next()
+        .expect("Context should exist");
+
+    let expected_height = Height::from(test.last_round().get());
+
+    // Check that quadruple was matched
+    assert_eq!(
+        sign_with_ecdsa_context.matched_quadruple,
+        Some((quadruple_id.clone(), expected_height))
+    );
+    // Check that nonce is still none
+    assert!(sign_with_ecdsa_context.nonce.is_none());
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    let sign_with_ecdsa_context = &test
+        .state()
+        .sign_with_ecdsa_contexts()
+        .values()
+        .next()
+        .expect("Context should exist");
+
+    // Check that quadruple is still matched
+    assert_eq!(
+        sign_with_ecdsa_context.matched_quadruple,
+        Some((quadruple_id, expected_height))
+    );
+    // Check that nonce is set
+    let nonce = sign_with_ecdsa_context.nonce;
+    assert!(nonce.is_some());
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    let sign_with_ecdsa_context = &test
+        .state()
+        .sign_with_ecdsa_contexts()
+        .values()
+        .next()
+        .expect("Context should exist");
+
+    // Check that nonce wasn't changed
+    let nonce = sign_with_ecdsa_context.nonce;
+    assert_eq!(sign_with_ecdsa_context.nonce, nonce);
+}
+
+#[test]
+fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
+    let key_ids: Vec<_> = (0..3).map(make_key_id).collect();
+    let mut test = SchedulerTestBuilder::new()
+        .with_ecdsa_keys(key_ids.clone())
+        .build();
+
+    // Deliver 2 quadruples for the first key, 1 for the second, 0 for the third
+    let quadruple_ids0 = BTreeSet::from_iter([
+        QuadrupleId(0, Some(key_ids[0].clone())),
+        QuadrupleId(1, Some(key_ids[0].clone())),
+    ]);
+    let quadruple_ids1 = BTreeSet::from_iter([QuadrupleId(2, Some(key_ids[1].clone()))]);
+    let quadruple_id_map = BTreeMap::from_iter([
+        (key_ids[0].clone(), quadruple_ids0.clone()),
+        (key_ids[1].clone(), quadruple_ids1.clone()),
+    ]);
+    test.deliver_quadruple_ids(quadruple_id_map);
+
+    // Inject 3 contexts requesting the third, second and first key in order
+    for i in (0..3).rev() {
+        inject_ecdsa_signing_request(&mut test, &key_ids[i])
+    }
+
+    // Execute two rounds
+    for _ in 0..2 {
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    }
+
+    let sign_with_ecdsa_contexts = &test.state().sign_with_ecdsa_contexts();
+
+    // First context (requesting key 3) should be unmatched
+    let context0 = sign_with_ecdsa_contexts.get(&CallbackId::from(0)).unwrap();
+    assert!(context0.nonce.is_none());
+    assert!(context0.matched_quadruple.is_none());
+
+    // Remaining contexts should have been matched
+    let expected_height = Height::from(test.last_round().get() - 1);
+    let context1 = sign_with_ecdsa_contexts.get(&CallbackId::from(1)).unwrap();
+    assert!(context1.nonce.is_some());
+    assert_eq!(
+        context1.matched_quadruple,
+        Some((quadruple_ids1.first().unwrap().clone(), expected_height))
+    );
+
+    let context2 = sign_with_ecdsa_contexts.get(&CallbackId::from(2)).unwrap();
+    assert!(context2.nonce.is_some());
+    assert_eq!(
+        context2.matched_quadruple,
+        Some((quadruple_ids0.first().unwrap().clone(), expected_height))
+    );
 }
 
 #[test]

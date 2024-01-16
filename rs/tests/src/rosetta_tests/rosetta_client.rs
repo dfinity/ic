@@ -266,7 +266,7 @@ impl RosettaApiClient {
         transaction: String,
     ) -> Result<Result<ConstructionParseResponse, Error>, String> {
         let req = ConstructionParseRequest {
-            network_identifier: ic_rosetta_api::models::NetworkIdentifier(self.network_id()),
+            network_identifier: ic_rosetta_api::models::NetworkIdentifier(self.network_id()).into(),
             signed,
             transaction,
         };
@@ -455,6 +455,27 @@ impl RosettaApiClient {
             ic_rosetta_api::models::NetworkIdentifier(self.network_id()),
             "get_proposal_info".to_owned(),
             ObjectMap::from(GetProposalInfo { proposal_id }),
+        );
+        debug!(&self.logger, "[Rosetta client] Call Request: {:?}", req);
+        debug!(
+            &self.logger,
+            "[Rosetta client] Call: {}",
+            &format!("{}/call", self.api_url)
+        );
+        to_rosetta_response::<CallResponse>(
+            self.post_json_request(
+                &format!("{}/call", self.api_url),
+                serde_json::to_vec(&req).unwrap(),
+            )
+            .await,
+        )
+    }
+
+    pub async fn get_known_neurons(&self) -> Result<Result<CallResponse, Error>, String> {
+        let req = CallRequest::new(
+            ic_rosetta_api::models::NetworkIdentifier(self.network_id()),
+            "list_known_neurons".to_owned(),
+            ObjectMap::new(),
         );
         debug!(&self.logger, "[Rosetta client] Call Request: {:?}", req);
         debug!(

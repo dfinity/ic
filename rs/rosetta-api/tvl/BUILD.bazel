@@ -1,5 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -57,8 +58,6 @@ rust_test(
 
 DEV_ENV = {
     "CARGO_MANIFEST_DIR": "rs/nns/integration_tests",
-    "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-    "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     "GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister)",
     "GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister-test)",
     "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
@@ -95,8 +94,6 @@ DEPENDENCIES_TEST = [
 DEV_DATA = [
     "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
     "//rs/rosetta-api/tvl:tvl_canister",
-    "//rs/canister_sandbox",
-    "//rs/canister_sandbox/sandbox_launcher",
     "//rs/nns/cmc:cycles-minting-canister",
     "//rs/nns/governance:governance-canister",
     "//rs/nns/governance:governance-canister-test",
@@ -115,7 +112,7 @@ DEV_DATA = [
     "//rs/sns/swap:sns-swap-canister",
 ]
 
-rust_test(
+rust_ic_test(
     name = "tvl_test",
     srcs = ["tests/tests.rs"],
     data = DEV_DATA,

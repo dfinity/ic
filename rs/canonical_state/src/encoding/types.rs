@@ -55,9 +55,9 @@ pub struct RequestMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub call_tree_depth: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub call_tree_start_time: Option<Time>,
+    pub call_tree_start_time_u64: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub call_subtree_deadline: Option<Time>,
+    pub call_subtree_deadline_u64: Option<u64>,
 }
 
 /// Canonical representation of `ic_types::messages::Request`.
@@ -260,9 +260,11 @@ impl TryFrom<RequestOrResponse> for ic_types::messages::RequestOrResponse {
 impl From<&ic_types::messages::RequestMetadata> for RequestMetadata {
     fn from(metadata: &ic_types::messages::RequestMetadata) -> Self {
         RequestMetadata {
-            call_tree_depth: Some(metadata.call_tree_depth),
-            call_tree_start_time: Some(metadata.call_tree_start_time),
-            call_subtree_deadline: None,
+            call_tree_depth: Some(*metadata.call_tree_depth()),
+            call_tree_start_time_u64: Some(
+                metadata.call_tree_start_time().as_nanos_since_unix_epoch(),
+            ),
+            call_subtree_deadline_u64: None,
         }
     }
 }
@@ -293,12 +295,10 @@ impl From<(&ic_types::messages::Request, CertificationVersion)> for Request {
 
 impl From<RequestMetadata> for ic_types::messages::RequestMetadata {
     fn from(metadata: RequestMetadata) -> Self {
-        ic_types::messages::RequestMetadata {
-            call_tree_depth: metadata.call_tree_depth.unwrap_or(0),
-            call_tree_start_time: metadata
-                .call_tree_start_time
-                .unwrap_or(Time::from_nanos_since_unix_epoch(0)),
-        }
+        ic_types::messages::RequestMetadata::new(
+            metadata.call_tree_depth.unwrap_or(0),
+            Time::from_nanos_since_unix_epoch(metadata.call_tree_start_time_u64.unwrap_or(0)),
+        )
     }
 }
 

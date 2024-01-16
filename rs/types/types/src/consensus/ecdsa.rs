@@ -1841,3 +1841,39 @@ impl From<&EcdsaMessage> for EcdsaArtifactId {
         }
     }
 }
+
+pub trait HasEcdsaKeyId {
+    /// Returns a reference to the [`EcdsaKeyId`] associated with the object.
+    // TODO(kpop): remove the Option once it's safe
+    fn key_id(&self) -> Option<&EcdsaKeyId>;
+}
+
+impl HasEcdsaKeyId for QuadrupleId {
+    fn key_id(&self) -> Option<&EcdsaKeyId> {
+        self.key_id()
+    }
+}
+
+impl HasEcdsaKeyId for EcdsaReshareRequest {
+    fn key_id(&self) -> Option<&EcdsaKeyId> {
+        Some(&self.key_id)
+    }
+}
+
+impl HasEcdsaKeyId for RequestId {
+    fn key_id(&self) -> Option<&EcdsaKeyId> {
+        self.quadruple_id.key_id()
+    }
+}
+
+impl<T: HasEcdsaKeyId, U> HasEcdsaKeyId for (T, U) {
+    fn key_id(&self) -> Option<&EcdsaKeyId> {
+        self.0.key_id()
+    }
+}
+
+impl<T: HasEcdsaKeyId> HasEcdsaKeyId for &T {
+    fn key_id(&self) -> Option<&EcdsaKeyId> {
+        (*self).key_id()
+    }
+}

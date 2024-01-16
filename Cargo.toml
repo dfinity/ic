@@ -36,9 +36,10 @@ members = [
   "rs/boundary_node/systemd_journal_gatewayd_shim",
   "rs/canister_client",
   "rs/canister_client/sender",
-  "rs/ethereum/cketh/minter",
   "rs/cross-chain/proposal-cli",
   "rs/cycles_account_manager",
+  "rs/ethereum/cketh/minter",
+  "rs/ethereum/ledger-suite-orchestrator",
   "rs/https_outcalls/adapter",
   "rs/https_outcalls/client",
   "rs/https_outcalls/consensus",
@@ -132,6 +133,7 @@ members = [
   "rs/ic_os/hostos_tool",
   "rs/ic_os/launch-single-vm",
   "rs/ic_os/network",
+  "rs/ic_os/nss_icos",
   "rs/ic_os/setupos-inject-configuration",
   "rs/ic_os/partition_tools",
   "rs/ic_os/setupos-disable-checks",
@@ -299,6 +301,7 @@ members = [
   "rs/rust_canisters/dfn_json",
   "rs/rust_canisters/dfn_macro",
   "rs/rust_canisters/dfn_protobuf",
+  "rs/rust_canisters/downstream_calls_test",
   "rs/rust_canisters/ecdsa",
   "rs/rust_canisters/http_types",
   "rs/rust_canisters/memory_test",
@@ -474,6 +477,8 @@ k256 = { version = "0.13.3", default_features = false, features = [
   "precomputed-tables",
   "std",
 ] }
+libnss = "0.5.0"
+local-ip-address = "0.5.6"
 mockall = "0.11.4"
 mockito = "1.2.0"
 minicbor = { version = "0.19.1", features = ["alloc", "derive"] }

@@ -2,6 +2,7 @@ pub mod global_reboot_test;
 pub mod malicious_slices;
 pub mod rejoin_test;
 pub mod rejoin_test_large_state;
+pub mod state_sync_malicious_chunk;
 pub mod xnet_slo_test;
 
 mod common {

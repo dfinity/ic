@@ -20,6 +20,7 @@ use ic_test_utilities::{
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types::MemoryAllocation;
 use ic_types::{
+    messages::RequestMetadata,
     methods::{FuncRef, WasmMethod},
     ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId,
 };
@@ -69,6 +70,7 @@ fn test_api_for_update(
         }
         .dirty_page_overhead,
         ComputeAllocation::default(),
+        RequestMetadata::new(0, mock_time()),
     );
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);

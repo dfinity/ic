@@ -6,6 +6,8 @@ use lazy_static::lazy_static;
 use prometheus::IntCounter;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use crate::execution_environment::ExecutionResponse;
+use crate::{as_round_instructions, metrics::CallTreeMetrics, ExecuteMessageResult, RoundLimits};
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
 use ic_embedders::wasm_executor::{CanisterStateChanges, SliceExecutionOutput};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
@@ -18,7 +20,7 @@ use ic_replicated_state::{
     CallContext, CallContextAction, CallOrigin, CanisterState, ExecutionState, NetworkTopology,
     SystemState,
 };
-use ic_system_api::sandbox_safe_system_state::SystemStateChanges;
+use ic_system_api::sandbox_safe_system_state::{RequestMetadataStats, SystemStateChanges};
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, MessageId, Payload, RejectContext,
@@ -26,9 +28,6 @@ use ic_types::messages::{
 };
 use ic_types::methods::{Callback, WasmMethod};
 use ic_types::{Cycles, NumInstructions, Time, UserId};
-
-use crate::execution_environment::ExecutionResponse;
-use crate::{as_round_instructions, ExecuteMessageResult, RoundLimits};
 
 lazy_static! {
     /// Track how many system task errors have been encountered
@@ -414,7 +413,7 @@ fn try_apply_canister_state_changes(
     network_topology: &NetworkTopology,
     subnet_id: SubnetId,
     log: &ReplicaLogger,
-) -> HypervisorResult<()> {
+) -> HypervisorResult<RequestMetadataStats> {
     subnet_available_memory
         .try_decrement(
             output.allocated_bytes,
@@ -446,6 +445,8 @@ pub fn apply_canister_state_changes(
     subnet_id: SubnetId,
     log: &ReplicaLogger,
     state_changes_error: &IntCounter,
+    call_tree_metrics: &dyn CallTreeMetrics,
+    call_context_creation_time: Time,
 ) {
     if let Some(CanisterStateChanges {
         globals,
@@ -468,7 +469,7 @@ pub fn apply_canister_state_changes(
             subnet_id,
             log,
         ) {
-            Ok(()) => {
+            Ok(request_stats) => {
                 execution_state.wasm_memory = wasm_memory;
                 execution_state.stable_memory = stable_memory;
                 execution_state.exported_globals = globals;
@@ -477,6 +478,8 @@ pub fn apply_canister_state_changes(
                 // i.e., `(start)`, `canister_init`, `canister_pre_upgrade`, and `canister_post_upgrade`)
                 // call this `apply_canister_state_change` to finish execution.
                 system_state.canister_version += 1;
+
+                call_tree_metrics.observe(request_stats, call_context_creation_time, time);
             }
             Err(err) => {
                 debug_assert_eq!(err, HypervisorError::OutOfMemory);

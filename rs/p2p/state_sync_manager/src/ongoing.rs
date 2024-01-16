@@ -20,7 +20,7 @@ use crate::metrics::OngoingStateSyncMetrics;
 use crate::routes::{build_chunk_handler_request, parse_chunk_handler_response};
 
 use ic_async_utils::JoinMap;
-use ic_interfaces::p2p::state_sync::{ArtifactErrorCode, ChunkId, Chunkable, StateSyncClient};
+use ic_interfaces::p2p::state_sync::{ChunkId, Chunkable, StateSyncClient};
 use ic_logger::{error, info, ReplicaLogger};
 use ic_quic_transport::Transport;
 use ic_types::{artifact::StateSyncArtifactId, NodeId};
@@ -72,6 +72,7 @@ struct OngoingStateSync<T: Send> {
 
 pub(crate) struct OngoingStateSyncHandle {
     pub sender: Sender<NodeId>,
+    pub artifact_id: StateSyncArtifactId,
     pub jh: JoinHandle<()>,
 }
 
@@ -94,7 +95,7 @@ pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
     let ongoing = OngoingStateSync {
         log,
         rt: rt.clone(),
-        artifact_id,
+        artifact_id: artifact_id.clone(),
         metrics,
         transport,
         cancellation,
@@ -111,6 +112,7 @@ pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
     let jh = rt.spawn(ongoing.run());
     OngoingStateSyncHandle {
         sender: new_peers_tx,
+        artifact_id,
         jh,
     }
 }
@@ -148,7 +150,6 @@ impl<T: 'static + Send> OngoingStateSync<T> {
                             // Usually it is discouraged to use await in the event loop.
                             // In this case it is ok because the function only is async if state sync completed.
                             self.handle_downloaded_chunk_result(result).await;
-
                             self.spawn_chunk_downloads();
                         }
                         Err(err) => {
@@ -329,9 +330,16 @@ impl<T: 'static + Send> OngoingStateSync<T> {
             }
         };
 
-        let chunk_add_result = tokio::task::spawn_blocking(move || {
+        let result = tokio::task::spawn_blocking(move || {
             let chunk = parse_chunk_handler_response(response, chunk_id, metrics)?;
-            Ok(tracker.lock().unwrap().add_chunk(chunk_id, chunk))
+            let mut tracker_guard = tracker.lock().unwrap();
+            tracker_guard.add_chunk(chunk_id, chunk).map_err(|err| {
+                DownloadChunkError::RequestError {
+                    chunk_id,
+                    err: err.to_string(),
+                }
+            })?;
+            Ok(tracker_guard.completed())
         })
         .await
         .map_err(|err| DownloadChunkError::RequestError {
@@ -340,17 +348,6 @@ impl<T: 'static + Send> OngoingStateSync<T> {
         })
         .and_then(std::convert::identity);
 
-        let result = match chunk_add_result {
-            Ok(Ok(msg)) => Ok(Some(msg)),
-            Ok(Err(ArtifactErrorCode::ChunksMoreNeeded)) => Ok(None),
-            Ok(Err(ArtifactErrorCode::ChunkVerificationFailed)) => {
-                Err(DownloadChunkError::RequestError {
-                    chunk_id,
-                    err: String::from("Chunk verification failed."),
-                })
-            }
-            Err(err) => Err(err),
-        };
         DownloadResult { peer_id, result }
     }
 }
@@ -377,6 +374,7 @@ mod tests {
 
     use axum::http::{Response, StatusCode};
     use bytes::{Bytes, BytesMut};
+    use ic_interfaces::p2p::state_sync::AddChunkError;
     use ic_metrics::MetricsRegistry;
     use ic_p2p_test_utils::mocks::{MockChunkable, MockStateSync, MockTransport};
     use ic_test_utilities_logger::with_test_replica_logger;
@@ -386,7 +384,6 @@ mod tests {
     use tokio::runtime::Runtime;
 
     use super::*;
-
     #[derive(Clone)]
     struct TestMessage;
 
@@ -457,7 +454,7 @@ mod tests {
             c.expect_chunks_to_download()
                 .returning(|| Box::new(std::iter::once(ChunkId::from(1))));
             c.expect_add_chunk()
-                .return_const(Err(ArtifactErrorCode::ChunkVerificationFailed));
+                .return_const(Err(AddChunkError::Invalid));
 
             let rt = Runtime::new().unwrap();
             let ongoing = start_ongoing_state_sync(
@@ -504,8 +501,7 @@ mod tests {
             // Endless iterator
             c.expect_chunks_to_download()
                 .returning(|| Box::new(std::iter::once(ChunkId::from(1))));
-            c.expect_add_chunk()
-                .return_const(Err(ArtifactErrorCode::ChunksMoreNeeded));
+            c.expect_add_chunk().return_const(Ok(()));
 
             let rt = Runtime::new().unwrap();
             let ongoing = start_ongoing_state_sync(

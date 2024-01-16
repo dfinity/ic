@@ -1,5 +1,6 @@
 use ic_consensus_utils::{get_block_hash_string, pool_reader::PoolReader};
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpBatchStats;
+use ic_ic00_types::EcdsaKeyId;
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
     MetricsRegistry,
@@ -7,7 +8,10 @@ use ic_metrics::{
 use ic_types::{
     batch::BatchPayload,
     consensus::{
-        ecdsa::{CompletedReshareRequest, CompletedSignature, EcdsaPayload, KeyTranscriptCreation},
+        ecdsa::{
+            CompletedReshareRequest, CompletedSignature, EcdsaPayload, HasEcdsaKeyId,
+            KeyTranscriptCreation,
+        },
         Block, BlockProposal, ConsensusMessageHashable, HasHeight, HasRank,
     },
     CountBytes, Height,
@@ -15,7 +19,7 @@ use ic_types::{
 use prometheus::{
     GaugeVec, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
 };
-use std::sync::RwLock;
+use std::{collections::BTreeMap, sync::RwLock};
 
 // For certain metrics, we record metrics based on block's rank.
 // Since we can only record limited number of them, the follow is
@@ -173,20 +177,24 @@ impl BatchStats {
     }
 }
 
+// TODO(kpop): remove this Option eventually
+type CounterPerEcdsaKeyId = BTreeMap<Option<EcdsaKeyId>, usize>;
+
 // Ecdsa payload stats
 pub struct EcdsaStats {
-    pub key_transcript_created: u64,
     pub signature_agreements: usize,
-    pub ongoing_signatures: usize,
-    pub available_quadruples: usize,
-    pub quadruples_in_creation: usize,
-    pub ongoing_xnet_reshares: usize,
-    pub xnet_reshare_agreements: usize,
+    pub key_transcript_created: CounterPerEcdsaKeyId,
+    pub ongoing_signatures: CounterPerEcdsaKeyId,
+    pub available_quadruples: CounterPerEcdsaKeyId,
+    pub quadruples_in_creation: CounterPerEcdsaKeyId,
+    pub ongoing_xnet_reshares: CounterPerEcdsaKeyId,
+    pub xnet_reshare_agreements: CounterPerEcdsaKeyId,
+    pub available_quadruples_with_key_transcript: usize,
 }
 
 impl From<&EcdsaPayload> for EcdsaStats {
     fn from(payload: &EcdsaPayload) -> Self {
-        let mut key_transcript_created = 0;
+        let mut key_transcript_created = CounterPerEcdsaKeyId::new();
         if let KeyTranscriptCreation::Created(transcript) = payload.key_transcript.next_in_creation
         {
             let transcript_id = &transcript.as_ref().transcript_id;
@@ -198,9 +206,14 @@ impl From<&EcdsaPayload> for EcdsaStats {
             if Some(transcript_id) != current_transcript_id
                 && payload.idkg_transcripts.get(transcript_id).is_some()
             {
-                key_transcript_created = 1;
+                *key_transcript_created
+                    .entry(Some(payload.key_transcript.key_id.clone()))
+                    .or_default() += 1;
             }
         }
+
+        let keys = vec![None, Some(payload.key_transcript.key_id.clone())];
+
         Self {
             key_transcript_created,
             signature_agreements: payload
@@ -208,17 +221,51 @@ impl From<&EcdsaPayload> for EcdsaStats {
                 .values()
                 .filter(|status| matches!(status, CompletedSignature::Unreported(_)))
                 .count(),
-            ongoing_signatures: payload.ongoing_signatures.len(),
-            available_quadruples: payload.available_quadruples.len(),
-            quadruples_in_creation: payload.quadruples_in_creation.len(),
-            ongoing_xnet_reshares: payload.ongoing_xnet_reshares.len(),
-            xnet_reshare_agreements: payload
-                .xnet_reshare_agreements
+            ongoing_signatures: count_by_ecdsa_key_id(payload.ongoing_signatures.keys(), &keys),
+            available_quadruples: count_by_ecdsa_key_id(payload.available_quadruples.keys(), &keys),
+            quadruples_in_creation: count_by_ecdsa_key_id(
+                payload.quadruples_in_creation.keys(),
+                &keys,
+            ),
+            ongoing_xnet_reshares: count_by_ecdsa_key_id(
+                payload.ongoing_xnet_reshares.keys(),
+                &keys,
+            ),
+            xnet_reshare_agreements: count_by_ecdsa_key_id(
+                payload
+                    .xnet_reshare_agreements
+                    .iter()
+                    .filter(|(_, status)| matches!(status, CompletedReshareRequest::Unreported(_))),
+                &keys,
+            ),
+            available_quadruples_with_key_transcript: payload
+                .available_quadruples
                 .values()
-                .filter(|status| matches!(status, CompletedReshareRequest::Unreported(_)))
+                .filter(|quadruple| quadruple.key_unmasked_ref.is_some())
                 .count(),
         }
     }
+}
+
+fn count_by_ecdsa_key_id<T: HasEcdsaKeyId>(
+    collection: impl Iterator<Item = T>,
+    expected_keys: &Vec<Option<EcdsaKeyId>>,
+) -> CounterPerEcdsaKeyId {
+    let mut counter_per_key_id = CounterPerEcdsaKeyId::new();
+
+    // To properly report `0` for ecdsa keys which do not appear in the `collection`, we insert the
+    // default values for all the ecdsa keys which we expect to see in the payload.
+    for key in expected_keys {
+        counter_per_key_id.insert(key.clone(), 0);
+    }
+
+    for item in collection {
+        *counter_per_key_id
+            .entry(item.key_id().cloned())
+            .or_default() += 1;
+    }
+
+    counter_per_key_id
 }
 
 pub struct FinalizerMetrics {
@@ -229,18 +276,21 @@ pub struct FinalizerMetrics {
     pub xnet_bytes_delivered: Histogram,
     pub finalization_certified_state_difference: IntGauge,
     // ecdsa payload related metrics
-    pub ecdsa_key_transcript_created: IntCounter,
+    pub ecdsa_key_transcript_created: IntCounterVec,
     pub ecdsa_signature_agreements: IntCounter,
-    pub ecdsa_ongoing_signatures: IntGauge,
-    pub ecdsa_available_quadruples: IntGauge,
-    pub ecdsa_quadruples_in_creation: IntGauge,
-    pub ecdsa_ongoing_xnet_reshares: IntGauge,
-    pub ecdsa_xnet_reshare_agreements: IntCounter,
+    pub ecdsa_ongoing_signatures: IntGaugeVec,
+    pub ecdsa_available_quadruples: IntGaugeVec,
+    pub ecdsa_quadruples_in_creation: IntGaugeVec,
+    pub ecdsa_ongoing_xnet_reshares: IntGaugeVec,
+    pub ecdsa_xnet_reshare_agreements: IntCounterVec,
+    pub ecdsa_available_quadruples_with_key_transcript: IntGauge,
     // canister http payload metrics
     pub canister_http_success_delivered: IntCounter,
     pub canister_http_timeouts_delivered: IntCounter,
     pub canister_http_divergences_delivered: IntCounter,
 }
+
+const ECDSA_KEY_ID_LABEL: &str = "key_id";
 
 impl FinalizerMetrics {
     pub fn new(metrics_registry: MetricsRegistry) -> Self {
@@ -276,34 +326,46 @@ impl FinalizerMetrics {
                 // 0, 1, 2, 5, 10, 20, 50, 100, ..., 10MB, 20MB, 50MB
                 decimal_buckets_with_zero(0, 7),
             ),
-            ecdsa_key_transcript_created: metrics_registry.int_counter(
+            // ecdsa payload related metrics
+            ecdsa_key_transcript_created: metrics_registry.int_counter_vec(
                 "consensus_ecdsa_key_transcript_created",
                 "The number of times ECDSA key transcript is created",
+                &[ECDSA_KEY_ID_LABEL],
             ),
             ecdsa_signature_agreements: metrics_registry.int_counter(
                 "consensus_ecdsa_signature_agreements",
                 "Total number of ECDSA signature agreements created",
             ),
-            ecdsa_ongoing_signatures: metrics_registry.int_gauge(
+            ecdsa_ongoing_signatures: metrics_registry.int_gauge_vec(
                 "consensus_ecdsa_ongoing_signatures",
                 "The number of ongoing ECDSA signatures",
+                &[ECDSA_KEY_ID_LABEL],
             ),
-            ecdsa_available_quadruples: metrics_registry.int_gauge(
+            ecdsa_available_quadruples: metrics_registry.int_gauge_vec(
                 "consensus_ecdsa_available_quadruples",
                 "The number of available ECDSA quadruples",
+                &[ECDSA_KEY_ID_LABEL],
             ),
-            ecdsa_quadruples_in_creation: metrics_registry.int_gauge(
+            ecdsa_available_quadruples_with_key_transcript: metrics_registry.int_gauge(
+                "consensus_ecdsa_available_quadruples_with_key_transcript",
+                "The number of available ECDSA quadruples with key transcript",
+            ),
+            ecdsa_quadruples_in_creation: metrics_registry.int_gauge_vec(
                 "consensus_ecdsa_quadruples_in_creation",
                 "The number of ECDSA quadruples in creation",
+                &[ECDSA_KEY_ID_LABEL],
             ),
-            ecdsa_ongoing_xnet_reshares: metrics_registry.int_gauge(
+            ecdsa_ongoing_xnet_reshares: metrics_registry.int_gauge_vec(
                 "consensus_ecdsa_ongoing_xnet_reshares",
                 "The number of ongoing ECDSA xnet reshares",
+                &[ECDSA_KEY_ID_LABEL],
             ),
-            ecdsa_xnet_reshare_agreements: metrics_registry.int_counter(
+            ecdsa_xnet_reshare_agreements: metrics_registry.int_counter_vec(
                 "consensus_ecdsa_reshare_agreements",
                 "Total number of ECDSA reshare agreements created",
+                &[ECDSA_KEY_ID_LABEL],
             ),
+            // canister http payload metrics
             canister_http_success_delivered: metrics_registry.int_counter(
                 "canister_http_success_delivered",
                 "Total number of canister http messages successfully delivered",
@@ -337,21 +399,56 @@ impl FinalizerMetrics {
             .inc_by(batch_stats.canister_http.timeouts as u64);
         self.canister_http_divergences_delivered
             .inc_by(batch_stats.canister_http.divergence_responses as u64);
+
         if let Some(ecdsa) = &block_stats.ecdsa_stats {
-            self.ecdsa_key_transcript_created
-                .inc_by(ecdsa.key_transcript_created);
+            let key_id_label = |key_id: &Option<EcdsaKeyId>| {
+                key_id
+                    .as_ref()
+                    .map(|key_id| key_id.to_string())
+                    .unwrap_or_default()
+            };
+
+            let set = |metric: &IntGaugeVec, counts: &CounterPerEcdsaKeyId| {
+                for (key_id, count) in counts.iter() {
+                    metric
+                        .with_label_values(&[&key_id_label(key_id)])
+                        .set(*count as i64);
+                }
+            };
+
+            let inc_by = |metric: &IntCounterVec, counts: &CounterPerEcdsaKeyId| {
+                for (key_id, count) in counts.iter() {
+                    metric
+                        .with_label_values(&[&key_id_label(key_id)])
+                        .inc_by(*count as u64);
+                }
+            };
+
+            inc_by(
+                &self.ecdsa_key_transcript_created,
+                &ecdsa.key_transcript_created,
+            );
+            set(&self.ecdsa_ongoing_signatures, &ecdsa.ongoing_signatures);
             self.ecdsa_signature_agreements
                 .inc_by(ecdsa.signature_agreements as u64);
-            self.ecdsa_ongoing_signatures
-                .set(ecdsa.ongoing_signatures as i64);
-            self.ecdsa_available_quadruples
-                .set(ecdsa.available_quadruples as i64);
-            self.ecdsa_quadruples_in_creation
-                .set(ecdsa.quadruples_in_creation as i64);
-            self.ecdsa_ongoing_xnet_reshares
-                .set(ecdsa.ongoing_xnet_reshares as i64);
-            self.ecdsa_xnet_reshare_agreements
-                .inc_by(ecdsa.xnet_reshare_agreements as u64);
+            set(
+                &self.ecdsa_available_quadruples,
+                &ecdsa.available_quadruples,
+            );
+            set(
+                &self.ecdsa_quadruples_in_creation,
+                &ecdsa.quadruples_in_creation,
+            );
+            set(
+                &self.ecdsa_ongoing_xnet_reshares,
+                &ecdsa.ongoing_xnet_reshares,
+            );
+            inc_by(
+                &self.ecdsa_xnet_reshare_agreements,
+                &ecdsa.xnet_reshare_agreements,
+            );
+            self.ecdsa_available_quadruples_with_key_transcript
+                .set(ecdsa.available_quadruples_with_key_transcript as i64);
         }
     }
 }

@@ -33,7 +33,7 @@ use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::UNIX_EPOCH;
 use ic_types::{batch::RawQueryStats, messages::CallbackId};
 use ic_types::{
-    messages::{Ingress, Request, RequestOrResponse},
+    messages::{Ingress, Request, RequestMetadata, RequestOrResponse},
     nominal_cycles::NominalCycles,
     xnet::{StreamHeader, StreamIndex, StreamIndexedQueue},
     CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumBytes, PrincipalId,
@@ -307,6 +307,7 @@ impl CanisterStateBuilder {
                 call_context.call_origin().clone(),
                 call_context.available_cycles(),
                 call_context.time(),
+                call_context.metadata().clone(),
             );
 
             let call_context_in_call_context_manager = call_context_manager
@@ -468,6 +469,7 @@ impl CallContextBuilder {
             false,
             Cycles::zero(),
             self.time,
+            RequestMetadata::new(0, mock_time()),
         )
     }
 }
@@ -741,6 +743,7 @@ pub fn register_callback(
         CallOrigin::CanisterUpdate(originator, callback_id),
         Cycles::zero(),
         Time::from_nanos_since_unix_epoch(0),
+        RequestMetadata::new(0, mock_time()),
     );
 
     call_context_manager.register_callback(Callback::new(

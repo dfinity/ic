@@ -85,6 +85,7 @@ type GetInitResponse = record { init : opt Init };
 type GetLifecycleResponse = record {
   decentralization_sale_open_timestamp_seconds : opt nat64;
   lifecycle : opt int32;
+  decentralization_swap_termination_timestamp_seconds : opt nat64;
 };
 type GetOpenTicketResponse = record { result : opt Result_1 };
 type GetSaleParametersResponse = record { params : opt Params };
@@ -251,6 +252,7 @@ type Swap = record {
   direct_participation_icp_e8s : opt nat64;
   lifecycle : int32;
   purge_old_tickets_next_principal : opt vec nat8;
+  decentralization_swap_termination_timestamp_seconds : opt nat64;
   buyers : vec record { text; BuyerState };
   params : opt Params;
   open_sns_token_swap_proposal_id : opt nat64;

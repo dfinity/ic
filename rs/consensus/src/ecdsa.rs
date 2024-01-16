@@ -205,6 +205,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 pub(crate) mod complaints;
+pub mod malicious_pre_signer;
 pub(crate) mod payload_builder;
 pub(crate) mod payload_verifier;
 pub(crate) mod pre_signer;
@@ -228,7 +229,8 @@ pub const INACTIVE_TRANSCRIPT_PURGE_SECS: Duration = Duration::from_secs(60);
 /// `EcdsaImpl` is the consensus component responsible for processing threshold
 /// ECDSA payloads.
 pub struct EcdsaImpl {
-    pre_signer: Box<dyn EcdsaPreSigner>,
+    /// The Pre-Signer subcomponent
+    pub pre_signer: Box<EcdsaPreSignerImpl>,
     signer: Box<dyn EcdsaSigner>,
     complaint_handler: Box<dyn EcdsaComplaintHandler>,
     consensus_block_cache: Arc<dyn ConsensusBlockCache>,
@@ -237,6 +239,8 @@ pub struct EcdsaImpl {
     last_transcript_purge_ts: RefCell<Instant>,
     metrics: EcdsaClientMetrics,
     logger: ReplicaLogger,
+    #[cfg_attr(not(feature = "malicious_code"), allow(dead_code))]
+    malicious_flags: MaliciousFlags,
 }
 
 impl EcdsaImpl {
@@ -256,7 +260,6 @@ impl EcdsaImpl {
             crypto.clone(),
             metrics_registry.clone(),
             logger.clone(),
-            malicious_flags,
         ));
         let signer = Box::new(EcdsaSignerImpl::new(
             node_id,
@@ -283,6 +286,7 @@ impl EcdsaImpl {
             last_transcript_purge_ts: RefCell::new(Instant::now()),
             metrics: EcdsaClientMetrics::new(metrics_registry),
             logger,
+            malicious_flags,
         }
     }
 
@@ -351,14 +355,23 @@ impl<T: EcdsaPool> ChangeSetProducer<T> for EcdsaImpl {
     fn on_state_change(&self, ecdsa_pool: &T) -> EcdsaChangeSet {
         let metrics = self.metrics.clone();
         let pre_signer = || {
-            timed_call(
+            let changeset = timed_call(
                 "pre_signer",
                 || {
                     self.pre_signer
                         .on_state_change(ecdsa_pool, self.complaint_handler.as_transcript_loader())
                 },
                 &metrics.on_state_change_duration,
-            )
+            );
+            #[cfg(any(feature = "malicious_code", test))]
+            if self.malicious_flags.is_ecdsa_malicious() {
+                return super::ecdsa::malicious_pre_signer::maliciously_alter_changeset(
+                    changeset,
+                    &self.pre_signer,
+                    &self.malicious_flags,
+                );
+            }
+            changeset
         };
         let signer = || {
             timed_call(

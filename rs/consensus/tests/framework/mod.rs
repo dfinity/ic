@@ -9,7 +9,7 @@ mod types;
 
 pub use runner::ConsensusRunner;
 pub use types::{
-    ConsensusDependencies, ConsensusDriver, ConsensusInstance, ConsensusModifier,
+    ComponentModifier, ConsensusDependencies, ConsensusDriver, ConsensusInstance,
     ConsensusRunnerConfig, StopPredicate,
 };
 

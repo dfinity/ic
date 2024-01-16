@@ -1,5 +1,5 @@
 use candid::{CandidType, Principal};
-use candid_parser::utils::{service_compatible, CandidSource};
+use candid_parser::utils::{service_equal, CandidSource};
 use canister_test::*;
 use dfn_candid::{candid, candid_one, CandidOne};
 use dfn_protobuf::protobuf;
@@ -2018,7 +2018,7 @@ fn test_ledger_candid_interface_endpoint() {
         let candid_interface: String = fetch_candid_interface(&ledger).await.unwrap();
         let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
         let old_interface = manifest_dir.join("ledger.did");
-        service_compatible(
+        service_equal(
             CandidSource::Text(&candid_interface),
             CandidSource::File(old_interface.as_path()),
         )

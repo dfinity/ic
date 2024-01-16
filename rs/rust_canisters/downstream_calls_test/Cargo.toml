@@ -1,0 +1,16 @@
+[package]
+name = "downstream-calls-test"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "downstream-calls-test-canister"
+path = "src/main.rs"
+
+[dependencies]
+candid = { workspace = true }
+dfn_core = { path = "../dfn_core" }
+ic-base-types = { path = "../../types/base_types" }
+ic-cdk = { workspace = true }
+ic-cdk-macros = { workspace = true }
+serde = "1.0"

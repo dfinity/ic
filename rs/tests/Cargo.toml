@@ -57,11 +57,14 @@ ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-http-utils = { path = "../http_utils" }
 ic-ic00-types = { path = "../types/ic00_types" }
 ic-icrc1 = { path = "../rosetta-api/icrc1" }
+ic-icrc1-index-ng = { path = "../rosetta-api/icrc1/index-ng" }
 ic-icrc1-ledger = { path = "../rosetta-api/icrc1/ledger" }
 ic-ledger-core = { path = "../rosetta-api/ledger_core" }
 rosetta-core = { path = "../rosetta-api/rosetta_core" }
 ic-ledger-canister-blocks-synchronizer-test-utils = { path = "../rosetta-api/ledger_canister_blocks_synchronizer/test_utils" }
+ic-ledger-suite-orchestrator = { path = "../ethereum/ledger-suite-orchestrator" }
 ic-message = { path = "./test_canisters/message" }
+ic-nervous-system-clients = { path = "../nervous_system/clients" }
 ic-nervous-system-common = { path = "../nervous_system/common" }
 ic-nervous-system-common-test-keys = { path = "../nervous_system/common/test_keys" }
 ic-nervous-system-proto = { path = "../nervous_system/proto" }
@@ -147,7 +150,7 @@ serde_json = { workspace = true }
 slog = { workspace = true }
 slog-async = { version = "2.5", features = ["nested-values"] }
 slog-term = "2.6.0"
-ssh2 = { git = "https://github.com/dfinity-lab/ssh2-rs", rev = "f842906afaa2443206b8365d51950ed3ef85c940"}
+ssh2 = "0.9.4"
 tempfile = "3.1.0"
 thiserror = "1.0"
 time = "^0.3.20"
@@ -559,6 +562,10 @@ name = "ic-systest-xnet-malicious-slices"
 path = "message_routing/xnet/xnet_malicious_slices.rs"
 
 [[bin]]
+name = "ic-systest-state-sync-malicious-chunk-test"
+path = "message_routing/state_sync_malicious_chunk_test.rs"
+
+[[bin]]
 name = "ic-systest-canister-global-reboot-test"
 path = "message_routing/global_reboot_test.rs"
 
@@ -621,3 +628,7 @@ path = "nested/registration.rs"
 [[bin]]
 name = "ic-systest-ipv4-integration"
 path = "node/ipv4_integration_test.rs"
+
+[[bin]]
+name = "ic-xc-ledger-suite-orchestrator"
+path = "cross_chain/ic_xc_ledger_suite_orchestrator_test.rs"

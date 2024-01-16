@@ -30,14 +30,14 @@ type DefiniteCanisterSettings = record {
 type RetrieveBtcArgs = record {
     // The address to which the ckBTC minter should deposit BTC.
     address : text;
-    // The amount of BTC in Satoshis that the client wants to withdraw.
+    // The amount of ckBTC in Satoshis that the client wants to withdraw.
     amount : nat64;
 };
 
 type RetrieveBtcWithApprovalArgs = record {
     // The address to which the ckBTC minter should deposit BTC.
     address : text;
-    // The amount of BTC in Satoshis that the client wants to withdraw.
+    // The amount of ckBTC in Satoshis that the client wants to withdraw.
     amount : nat64;
     // The subaccount to burn ckBTC from.
     from_subaccount : opt blob;

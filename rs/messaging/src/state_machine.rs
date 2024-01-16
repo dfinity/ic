@@ -149,6 +149,7 @@ impl StateMachine for StateMachineImpl {
             state_with_messages,
             batch.randomness,
             batch.ecdsa_subnet_public_keys,
+            batch.ecdsa_quadruple_ids,
             ExecutionRound::from(batch.batch_number.get()),
             execution_round_type,
             registry_settings,

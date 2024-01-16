@@ -701,10 +701,10 @@ impl BatchProcessorImpl {
 
         let subnet_features = subnet_record.features.unwrap_or_default().into();
         let max_number_of_canisters = subnet_record.max_number_of_canisters;
-        let max_ecdsa_queue_size = subnet_record
+        let (max_ecdsa_queue_size, quadruples_to_create_in_advance) = subnet_record
             .ecdsa_config
-            .map(|c| c.max_queue_size)
-            .unwrap_or(0);
+            .map(|c| (c.max_queue_size, c.quadruples_to_create_in_advance))
+            .unwrap_or_default();
 
         let subnet_size = if subnet_record.membership.is_empty() {
             self.metrics.critical_error_missing_subnet_size.inc();
@@ -729,6 +729,7 @@ impl BatchProcessorImpl {
                 max_number_of_canisters,
                 provisional_whitelist,
                 max_ecdsa_queue_size,
+                quadruples_to_create_in_advance,
                 subnet_size,
             },
             node_public_keys,

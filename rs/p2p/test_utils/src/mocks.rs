@@ -4,7 +4,7 @@ use axum::http::{Request, Response};
 use bytes::Bytes;
 use ic_interfaces::p2p::{
     consensus::{PriorityFnAndFilterProducer, ValidatedPoolReader},
-    state_sync::{ArtifactErrorCode, Chunk, ChunkId, Chunkable, StateSyncClient},
+    state_sync::{AddChunkError, Chunk, ChunkId, Chunkable, StateSyncClient},
 };
 use ic_quic_transport::{ConnId, SendError, Transport};
 use ic_types::artifact::PriorityFn;
@@ -58,7 +58,8 @@ mock! {
 
     impl<T> Chunkable<T> for Chunkable<T> {
         fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>>;
-        fn add_chunk(&mut self, chunk_id: ChunkId, chunk: Chunk) -> Result<T, ArtifactErrorCode>;
+        fn add_chunk(&mut self, chunk_id: ChunkId, chunk: Chunk) -> Result<(), AddChunkError>;
+        fn completed(&self) -> Option<T>;
     }
 }
 
