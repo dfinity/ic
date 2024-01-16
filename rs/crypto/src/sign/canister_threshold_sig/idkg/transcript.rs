@@ -148,7 +148,7 @@ pub fn load_transcript<C: CspIDkgProtocol>(
     registry: &dyn RegistryClient,
     transcript: &IDkgTranscript,
 ) -> Result<Vec<IDkgComplaint>, IDkgLoadTranscriptError> {
-    let self_index = match transcript.receivers.position(*self_node_id) {
+    let self_index = match transcript.index_for_signer_id(*self_node_id) {
         Some(index) => index,
         None => {
             return Ok(vec![]); // This is not a receiver: nothing to do.
@@ -180,7 +180,7 @@ pub fn load_transcript_with_openings<C: CspIDkgProtocol>(
     transcript: &IDkgTranscript,
     openings: &BTreeMap<IDkgComplaint, BTreeMap<NodeId, IDkgOpening>>,
 ) -> Result<(), IDkgLoadTranscriptError> {
-    let self_index = match transcript.receivers.position(*self_node_id) {
+    let self_index = match transcript.index_for_signer_id(*self_node_id) {
         Some(index) => index,
         None => {
             return Ok(()); // This is not a receiver: nothing to do.
@@ -199,7 +199,7 @@ pub fn load_transcript_with_openings<C: CspIDkgProtocol>(
     for (complaint, openings_by_opener_id) in openings {
         let mut internal_openings_by_opener_index = BTreeMap::new();
         for (opener_id, opening) in openings_by_opener_id {
-            let opener_index = transcript.receivers.position(*opener_id).ok_or_else(|| {
+            let opener_index = transcript.index_for_signer_id(*opener_id).ok_or_else(|| {
                 IDkgLoadTranscriptError::InvalidArguments {
                     internal_error: format!(
                         "invalid opener: node with ID {:?} is not a receiver",
@@ -266,7 +266,7 @@ pub fn open_transcript<C: CspIDkgProtocol>(
     let (dealer_index, signed_dealing) =
         index_and_batch_signed_dealing_of_dealer(complaint.dealer_id, transcript)?;
     let context_data = transcript.context_data();
-    let opener_index = match transcript.receivers.position(*self_node_id) {
+    let opener_index = match transcript.index_for_signer_id(*self_node_id) {
         None => {
             return Err(IDkgOpenTranscriptError::InternalError {
                 internal_error: "This node is not a receiver of the given transcript".to_string(),
@@ -317,8 +317,7 @@ pub fn verify_opening<C: CspIDkgProtocol>(
     // Extract the accused dealing from the transcript
     let (_, internal_dealing) = index_and_dealing_of_dealer(complaint.dealer_id, transcript)?;
     let opener_index = transcript
-        .receivers
-        .position(opener_id)
+        .index_for_signer_id(opener_id)
         .ok_or(IDkgVerifyOpeningError::MissingOpenerInReceivers { opener_id })?;
     let internal_opening = CommitmentOpening::try_from(opening).map_err(|e| {
         IDkgVerifyOpeningError::InternalError {
@@ -362,7 +361,7 @@ fn ensure_signers_allowed_by_params(
 ) -> Result<(), IDkgCreateTranscriptError> {
     for dealing in dealings {
         for signer in dealing.signers() {
-            if !params.receivers().get().contains(&signer) {
+            if !params.receivers().contains(signer) {
                 return Err(IDkgCreateTranscriptError::SignerNotAllowed { node_id: signer });
             }
         }

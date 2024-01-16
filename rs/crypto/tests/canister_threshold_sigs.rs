@@ -3737,7 +3737,7 @@ mod verify_opening {
             let verifier = env.nodes.random_receiver(&transcript.receivers, rng);
             let wrong_opener_id = node_id(123456789);
             assert!(
-                !transcript.receivers.get().contains(&wrong_opener_id),
+                !transcript.receivers.contains(wrong_opener_id),
                 "Wrong opener_id unexpectedly in receivers"
             );
             let result =

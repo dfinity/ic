@@ -751,7 +751,7 @@ pub mod node {
         ) -> impl Iterator<Item = Node> + 'a {
             self.nodes
                 .into_iter()
-                .filter(move |node| idkg_receivers.as_ref().get().contains(&node.id))
+                .filter(move |node| idkg_receivers.as_ref().contains(node.id))
         }
 
         pub fn receivers<'a, T: AsRef<IDkgReceivers> + 'a>(
@@ -759,7 +759,7 @@ pub mod node {
             idkg_receivers: T,
         ) -> impl Iterator<Item = &Node> + 'a {
             self.iter()
-                .filter(move |node| idkg_receivers.as_ref().get().contains(&node.id))
+                .filter(move |node| idkg_receivers.as_ref().contains(node.id))
         }
 
         pub fn dealers<'a, T: AsRef<IDkgDealers> + 'a>(
@@ -1456,7 +1456,7 @@ pub fn corrupt_signed_idkg_dealing<R: CryptoRng + RngCore, T: BasicSigner<IDkgDe
     let receiver =
         random_receiver_id_excluding_set(transcript_params.receivers(), excluded_receivers, rng)
             .ok_or(CorruptSignedIDkgDealingError::NoReceivers)?;
-    let node_index = transcript_params.receivers().position(*receiver).unwrap();
+    let node_index = transcript_params.receiver_index(*receiver).unwrap();
 
     Ok(idkg_dealing
         .into_builder()

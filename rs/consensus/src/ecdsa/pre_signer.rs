@@ -278,8 +278,7 @@ impl EcdsaPreSignerImpl {
                     self.resolve_ref(transcript_params_ref, block_reader, "send_dealing_support")
                         .and_then(|transcript_params| {
                             transcript_params
-                                .receivers()
-                                .position(self.node_id)
+                                .receiver_index(self.node_id)
                                 .map(|_| (id, transcript_params, signed_dealing))
                         })
                 } else {
@@ -404,10 +403,9 @@ impl EcdsaPreSignerImpl {
                         }
                     };
 
-                    if transcript_params
+                    if !transcript_params
                         .receivers()
-                        .position(support.sig_share.signer)
-                        .is_none()
+                        .contains(support.sig_share.signer)
                     {
                         // The node is not in the receiver list for this transcript,
                         // support share is not expected from it
