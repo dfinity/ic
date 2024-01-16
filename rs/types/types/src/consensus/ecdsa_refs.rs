@@ -1364,7 +1364,9 @@ impl From<&PreSignatureQuadrupleRef> for pb::PreSignatureQuadrupleRef {
             lambda_masked_ref: Some((&quadruple.lambda_masked_ref).into()),
             kappa_times_lambda_ref: Some((&quadruple.kappa_times_lambda_ref).into()),
             key_times_lambda_ref: Some((&quadruple.key_times_lambda_ref).into()),
-            key_unmasked_ref: None,
+            key_unmasked_ref: quadruple
+                .key_unmasked_ref
+                .map(|transcript| (&transcript).into()),
         }
     }
 }
