@@ -237,7 +237,7 @@ async fn load_generator(
         "Generating event every {:?}",
         produce_and_send_artifact.period()
     );
-    let mut log_interval = tokio::time::interval(Duration::from_secs(10));
+    let mut log_interval = tokio::time::interval(Duration::from_secs(30));
 
     let mut received_bytes = 0;
     let mut received_artifact_count: u64 = 0;
@@ -303,25 +303,23 @@ async fn load_generator(
             }
             _ = log_interval.tick() => {
                 info!(log, "Sent artifacts total {}", sent_artifacts as u64 - metrics.sent_artifacts.load(Relaxed));
-                info!(log, "Rate of message sent {}", (sent_artifacts as u64 - metrics.sent_artifacts.load(Relaxed))/10);
-                info!(log, "Rate of messages received {}", (received_artifact_count as u64 - metrics.received_artifact_count.load(Relaxed))/10);
-                info!(log, "Rate of bytes received {}", (received_bytes as u64 - metrics.received_bytes.load(Relaxed))/10);
-                metrics
-                    .received_bytes
-                    .store(received_bytes.try_into().unwrap(), Relaxed);
-
-                metrics
-                    .received_artifact_count
-                    .store(received_artifact_count, Relaxed);
-
-                metrics
-                    .sent_artifacts
-                    .store(sent_artifacts, Relaxed);
+                info!(log, "Rate of message sent {}", (sent_artifacts as u64 - metrics.sent_artifacts.load(Relaxed))/30);
+                info!(log, "Rate of messages received {}", (received_artifact_count as u64 - metrics.received_artifact_count.load(Relaxed))/30);
+                info!(log, "Rate of bytes received {}", (received_bytes as u64 - metrics.received_bytes.load(Relaxed))/30);
             }
             // Some(n) = purge_queue.next() => {
             //     let _ = artifact_processor_rx.send(ArtifactProcessorEvent::Purge(n.into_inner().id)).await.unwrap();
             // }
         }
+        metrics
+            .received_bytes
+            .store(received_bytes.try_into().unwrap(), Relaxed);
+
+        metrics
+            .received_artifact_count
+            .store(received_artifact_count, Relaxed);
+
+        metrics.sent_artifacts.store(sent_artifacts, Relaxed);
     }
 }
 
