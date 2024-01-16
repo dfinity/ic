@@ -72,6 +72,7 @@ struct OngoingStateSync<T: Send> {
 
 pub(crate) struct OngoingStateSyncHandle {
     pub sender: Sender<NodeId>,
+    pub artifact_id: StateSyncArtifactId,
     pub jh: JoinHandle<()>,
 }
 
@@ -94,7 +95,7 @@ pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
     let ongoing = OngoingStateSync {
         log,
         rt: rt.clone(),
-        artifact_id,
+        artifact_id: artifact_id.clone(),
         metrics,
         transport,
         cancellation,
@@ -111,6 +112,7 @@ pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
     let jh = rt.spawn(ongoing.run());
     OngoingStateSyncHandle {
         sender: new_peers_tx,
+        artifact_id,
         jh,
     }
 }
@@ -148,7 +150,6 @@ impl<T: 'static + Send> OngoingStateSync<T> {
                             // Usually it is discouraged to use await in the event loop.
                             // In this case it is ok because the function only is async if state sync completed.
                             self.handle_downloaded_chunk_result(result).await;
-
                             self.spawn_chunk_downloads();
                         }
                         Err(err) => {
@@ -383,7 +384,6 @@ mod tests {
     use tokio::runtime::Runtime;
 
     use super::*;
-
     #[derive(Clone)]
     struct TestMessage;
 
