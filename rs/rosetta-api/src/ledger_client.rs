@@ -20,15 +20,15 @@ mod neuron_response;
 pub mod pending_proposals_response;
 pub mod proposal_info_response;
 
-use core::ops::Deref;
-
 use candid::{Decode, Encode};
+use core::ops::Deref;
 use ic_agent::agent::{RejectCode, RejectResponse};
 use ic_nns_governance::pb::v1::{KnownNeuron, ListKnownNeuronsResponse, ProposalInfo};
 use std::convert::TryFrom;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use std::{thread, time};
 use url::Url;
 
 use async_trait::async_trait;
@@ -611,6 +611,8 @@ impl LedgerClient {
                 }
             }
 
+            // Sleep for 100 milliseconds to avoid spamming the ICP ledger in case of repeated errors
+            thread::sleep(time::Duration::from_millis(100));
             // Bump the poll interval and compute the next poll time (based on current wall
             // time, so we don't spin without delay after a slow poll).
             poll_interval = poll_interval
