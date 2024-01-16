@@ -404,13 +404,6 @@ pub fn lookup_replica_version(
     }
 }
 
-// Data we usually pull from the latest relevant DKG summary block.
-struct DkgData {
-    registry_version: RegistryVersion,
-    low_threshold_transcript: NiDkgTranscript,
-    high_threshold_transcript: NiDkgTranscript,
-}
-
 /// Return the registry version to be used for the given height.
 /// Note that this can only look up for height that is greater than or equal
 /// to the latest catch-up package height, otherwise an error is returned.
@@ -418,7 +411,7 @@ pub fn registry_version_at_height(
     reader: &dyn ConsensusPoolCache,
     height: Height,
 ) -> Option<RegistryVersion> {
-    get_active_data_at(reader, height).map(|data| data.registry_version)
+    get_active_data_at(reader, height, get_registry_version_at_given_summary)
 }
 
 /// Return the current low transcript for the given height if it was found.
@@ -426,7 +419,9 @@ pub fn active_low_threshold_transcript(
     reader: &dyn ConsensusPoolCache,
     height: Height,
 ) -> Option<NiDkgTranscript> {
-    get_active_data_at(reader, height).map(|data| data.low_threshold_transcript)
+    get_active_data_at(reader, height, |block, height| {
+        get_transcript_at_given_summary(block, height, NiDkgTag::LowThreshold)
+    })
 }
 
 /// Return the current high transcript for the given height if it was found.
@@ -434,11 +429,17 @@ pub fn active_high_threshold_transcript(
     reader: &dyn ConsensusPoolCache,
     height: Height,
 ) -> Option<NiDkgTranscript> {
-    get_active_data_at(reader, height).map(|data| data.high_threshold_transcript)
+    get_active_data_at(reader, height, |block, height| {
+        get_transcript_at_given_summary(block, height, NiDkgTag::HighThreshold)
+    })
 }
 
 /// Return the active DKGData active at the given height if it was found.
-fn get_active_data_at(reader: &dyn ConsensusPoolCache, height: Height) -> Option<DkgData> {
+fn get_active_data_at<T>(
+    reader: &dyn ConsensusPoolCache,
+    height: Height,
+    getter: impl Fn(&Block, Height) -> Option<T>,
+) -> Option<T> {
     // Note that we cannot always use the latest finalized DKG summary to determine
     // the active DKG data: Suppose we have CUPs every 100th block, and we just
     // finalized DKG summary block 300. With that block, we can find the active
@@ -458,43 +459,45 @@ fn get_active_data_at(reader: &dyn ConsensusPoolCache, height: Height) -> Option
     // As a solution, we try to establish the active DKG data using the summary
     // block from the CUP first, and if that does not work, we try the latest
     // finalized summary block. This way we avoid both ways of getting stuck.
-    get_active_data_at_given_summary(reader.catch_up_package().content.block.get_value(), height)
-        .or_else(|| get_active_data_at_given_summary(&reader.summary_block(), height))
+    getter(reader.catch_up_package().content.block.get_value(), height)
+        .or_else(|| getter(&reader.summary_block(), height))
 }
 
-/// Return the active DKGData active at the given height using the given summary
-/// block.
-fn get_active_data_at_given_summary(summary_block: &Block, height: Height) -> Option<DkgData> {
+fn get_registry_version_at_given_summary(
+    summary_block: &Block,
+    height: Height,
+) -> Option<RegistryVersion> {
     let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
     if dkg_summary.current_interval_includes(height) {
-        Some(DkgData {
-            registry_version: dkg_summary.registry_version,
-            high_threshold_transcript: dkg_summary
-                .current_transcript(&NiDkgTag::HighThreshold)
-                .clone(),
-            low_threshold_transcript: dkg_summary
-                .current_transcript(&NiDkgTag::LowThreshold)
-                .clone(),
-        })
+        Some(dkg_summary.registry_version)
     } else if dkg_summary.next_interval_includes(height) {
-        let get_transcript_for = |tag| {
-            dkg_summary
-                .next_transcript(&tag)
-                .unwrap_or_else(|| dkg_summary.current_transcript(&tag))
-                .clone()
-        };
-        Some(DkgData {
-            registry_version: summary_block.context.registry_version,
-            high_threshold_transcript: get_transcript_for(NiDkgTag::HighThreshold),
-            low_threshold_transcript: get_transcript_for(NiDkgTag::LowThreshold),
-        })
+        Some(summary_block.context.registry_version)
     } else {
         None
     }
 }
 
-/// Get the [`SubnetRecord`] of this subnet with the
-/// specified [`RegistryVersion`]
+fn get_transcript_at_given_summary(
+    summary_block: &Block,
+    height: Height,
+    tag: NiDkgTag,
+) -> Option<NiDkgTranscript> {
+    let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
+    if dkg_summary.current_interval_includes(height) {
+        Some(dkg_summary.current_transcript(&tag).clone())
+    } else if dkg_summary.next_interval_includes(height) {
+        Some(
+            dkg_summary
+                .next_transcript(&tag)
+                .unwrap_or_else(|| dkg_summary.current_transcript(&tag))
+                .clone(),
+        )
+    } else {
+        None
+    }
+}
+
+/// Get the [`SubnetRecord`] of this subnet with the specified [`RegistryVersion`]
 pub fn get_subnet_record(
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
