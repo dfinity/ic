@@ -245,6 +245,9 @@ bazel-system-test-hourly:
   extends:
     - .bazel-test-all
     - .rules-post-master
+  tags:
+    - dfinity-ic
+    - zh # only run in zh until e2e-scalability test issues have been resolved
   variables:
     BAZEL_EXTRA_ARGS: "--test_tag_filters=system_test_hourly"
   timeout: 120 minutes
