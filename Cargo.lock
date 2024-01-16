@@ -8606,6 +8606,8 @@ dependencies = [
  "ic-icrc1-index-ng",
  "ic-icrc1-ledger",
  "ic-stable-structures",
+ "ic-state-machine-tests",
+ "ic-test-utilities-load-wasm",
  "icrc-ledger-types",
  "minicbor",
  "minicbor-derive",

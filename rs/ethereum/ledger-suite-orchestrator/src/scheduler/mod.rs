@@ -1,6 +1,8 @@
+use crate::logs::INFO;
 use crate::management::{create_canister, install_code, CallError};
 use crate::state::{mutate_state, read_state, Canisters};
 use candid::{Encode, Principal};
+use ic_canister_log::log;
 use ic_icrc1_index_ng::{IndexArg, InitArg as IndexInitArg};
 use ic_icrc1_ledger::{ArchiveOptions, InitArgs as LedgerInitArgs, LedgerArgument};
 use icrc_ledger_types::icrc1::account::Account;
@@ -60,9 +62,21 @@ impl Task {
 
 async fn create_icrc_canisters_for_erc20(contract: &Erc20Contract) -> Result<(), TaskError> {
     //TODO real logic to install canisters, in particular retrying should not necessarily re-create canisters.
-    let ledger_canister_id = create_canister(100_000_000_000)
-        .await
-        .map_err(TaskError::CanisterCreationError)?;
+    let ledger_canister_id = match create_canister(100_000_000_000).await {
+        Ok(id) => {
+            log!(
+                INFO,
+                "created ledger canister for {:?} at '{}'",
+                contract,
+                id
+            );
+            id
+        }
+        Err(e) => {
+            log!(INFO, "failed to create ledger canister {}", e);
+            return Err(TaskError::CanisterCreationError(e));
+        }
+    };
     //TODO init args should come from `contract` argument
     let ledger_arg = LedgerArgument::Init(LedgerInitArgs {
         minting_account: Account {
@@ -91,28 +105,81 @@ async fn create_icrc_canisters_for_erc20(contract: &Erc20Contract) -> Result<(),
         maximum_number_of_accounts: None,
         accounts_overflow_trim_quantity: None,
     });
-    install_code(
+    match install_code(
         ledger_canister_id,
         read_state(|s| s.ledger_wasm().clone()),
         Encode!(&ledger_arg).expect("BUG: failed to encode ledger init arg"),
     )
     .await
-    .map_err(TaskError::InstallCodeError)?;
+    {
+        Ok(_) => {
+            log!(
+                INFO,
+                "successfully installed ledger canister for {:?} at '{}' with init args {:?}",
+                contract,
+                ledger_canister_id,
+                ledger_arg
+            );
+        }
+        Err(e) => {
+            log!(
+                INFO,
+                "failed to install ledger canister for {:?} at '{}' with init args {:?}: {}",
+                contract,
+                ledger_canister_id,
+                ledger_arg,
+                e
+            );
+            return Err(TaskError::InstallCodeError(e));
+        }
+    };
 
-    let index_canister_id = create_canister(100_000_000_000)
-        .await
-        .map_err(TaskError::CanisterCreationError)?;
-    let index_arg = Encode!(&Some(IndexArg::Init(IndexInitArg {
-        ledger_id: ledger_canister_id
-    })))
-    .expect("BUG: failed to encode index init arg");
-    install_code(
+    let index_canister_id = match create_canister(100_000_000_000).await {
+        Ok(id) => {
+            log!(
+                INFO,
+                "created index canister for {:?} at '{}'",
+                contract,
+                id
+            );
+            id
+        }
+        Err(e) => {
+            log!(INFO, "failed to create index canister {}", e);
+            return Err(TaskError::CanisterCreationError(e));
+        }
+    };
+    let index_arg = Some(IndexArg::Init(IndexInitArg {
+        ledger_id: ledger_canister_id,
+    }));
+    match install_code(
         index_canister_id,
         read_state(|s| s.index_wasm().clone()),
-        index_arg,
+        Encode!(&index_arg).expect("BUG: failed to encode index init arg"),
     )
     .await
-    .map_err(TaskError::InstallCodeError)?;
+    {
+        Ok(_) => {
+            log!(
+                INFO,
+                "successfully installed index canister for {:?} at '{}' with init args {:?}",
+                contract,
+                index_canister_id,
+                index_arg
+            );
+        }
+        Err(e) => {
+            log!(
+                INFO,
+                "failed to install index canister for {:?} at '{}' with init args {:?}: {}",
+                contract,
+                index_canister_id,
+                index_arg,
+                e
+            );
+            return Err(TaskError::InstallCodeError(e));
+        }
+    };
 
     let created_canisters = Canisters::new(ledger_canister_id, index_canister_id);
     mutate_state(|s| s.record_managed_canisters(contract.clone(), created_canisters));

@@ -17,12 +17,11 @@ use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, LabeledTree::SubTree};
 use ic_cycles_account_manager::CyclesAccountManager;
 pub use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::{ExecutionServices, IngressHistoryReaderImpl};
-use ic_ic00_types::{
-    self as ic00, CanisterIdRecord, CanisterStatusResultV2, InstallCodeArgs, Method, Payload,
-};
+use ic_ic00_types::{self as ic00, CanisterIdRecord, InstallCodeArgs, Method, Payload};
 pub use ic_ic00_types::{
-    CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs, ECDSAPublicKeyResponse,
-    EcdsaCurve, EcdsaKeyId, HttpHeader, HttpMethod, SignWithECDSAReply, UpdateSettingsArgs,
+    CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs, CanisterStatusResultV2,
+    ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId, HttpHeader, HttpMethod, SignWithECDSAReply,
+    UpdateSettingsArgs,
 };
 use ic_ingress_manager::{CustomRandomState, IngressManager};
 use ic_interfaces::ingress_pool::{
@@ -2190,7 +2189,18 @@ impl StateMachine {
         &self,
         canister_id: CanisterId,
     ) -> Result<Result<CanisterStatusResultV2, String>, UserError> {
-        self.execute_ingress(
+        self.canister_status_as(PrincipalId::new_anonymous(), canister_id)
+    }
+
+    /// Calls the `canister_status` endpoint on the management canister of the specified sender.
+    /// Use this if the `canister_id`` is controlled by `sender``.
+    pub fn canister_status_as(
+        &self,
+        sender: PrincipalId,
+        canister_id: CanisterId,
+    ) -> Result<Result<CanisterStatusResultV2, String>, UserError> {
+        self.execute_ingress_as(
+            sender,
             CanisterId::ic_00(),
             "canister_status",
             (CanisterIdRecord::from(canister_id)).encode(),
