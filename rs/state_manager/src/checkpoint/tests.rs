@@ -597,11 +597,14 @@ fn can_recover_subnet_queues() {
 
         // Add an ingress message to the subnet queues to later verify
         // it gets recovered.
-        state.subnet_queues_mut().push_ingress(
-            IngressBuilder::new()
-                .receiver(subnet_id_as_canister_id)
-                .build(),
-        );
+        state
+            .subnet_queues_mut()
+            .push_ingress(
+                IngressBuilder::new()
+                    .receiver(subnet_id_as_canister_id)
+                    .build(),
+            )
+            .unwrap();
 
         let original_state = state.clone();
         let _state = make_checkpoint_and_get_state(&state, HEIGHT, &tip_channel, &log);

@@ -256,7 +256,7 @@ impl Iterator for CanisterOutputQueuesIterator<'_> {
 
 impl CanisterQueues {
     /// Pushes an ingress message into the induction pool.
-    pub fn push_ingress(&mut self, msg: Ingress) {
+    pub fn push_ingress(&mut self, msg: Ingress) -> Result<(), StateError> {
         self.ingress_queue.push(msg)
     }
 

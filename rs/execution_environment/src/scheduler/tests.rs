@@ -4714,7 +4714,8 @@ fn test_is_next_method_added_to_task_queue() {
             method_payload: vec![1_u8],
             message_id: message_test_id(555),
             expiry_time: expiry_time_from_now(),
-        });
+        })
+        .unwrap();
 
     assert!(test
         .canister_state_mut(canister)

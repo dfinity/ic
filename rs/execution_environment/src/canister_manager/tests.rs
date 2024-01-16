@@ -5684,7 +5684,7 @@ fn delete_canister_with_non_empty_input_queue_fails() {
             .method_payload(vec![])
             .build();
 
-        canister.push_ingress(ingress);
+        canister.push_ingress(ingress).unwrap();
 
         state.put_canister_state(canister);
         state.put_canister_state(controller_canister);

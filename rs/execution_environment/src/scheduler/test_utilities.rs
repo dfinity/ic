@@ -340,19 +340,22 @@ impl SchedulerTest {
             let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
             wasm_executor.next_message_id()
         };
-        self.state_mut().subnet_queues_mut().push_ingress(
-            (
-                SignedIngressBuilder::new()
-                    .canister_id(IC_00)
-                    .method_name(method_name)
-                    .method_payload(method_payload)
-                    .nonce(ingress_id as u64)
-                    .expiry_time(expiry_time)
-                    .build(),
-                None,
+        self.state_mut()
+            .subnet_queues_mut()
+            .push_ingress(
+                (
+                    SignedIngressBuilder::new()
+                        .canister_id(IC_00)
+                        .method_name(method_name)
+                        .method_payload(method_payload)
+                        .nonce(ingress_id as u64)
+                        .expiry_time(expiry_time)
+                        .build(),
+                    None,
+                )
+                    .into(),
             )
-                .into(),
-        );
+            .unwrap();
     }
 
     /// Similar to `inject_call_to_ic00()` but supports `InstallCode` messages.
@@ -1332,7 +1335,7 @@ impl TestWasmExecutorCore {
         )
             .into();
         let message_id = ingress.message_id.clone();
-        canister.push_ingress(ingress);
+        canister.push_ingress(ingress).unwrap();
         message_id
     }
 

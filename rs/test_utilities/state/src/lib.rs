@@ -321,7 +321,7 @@ impl CanisterStateBuilder {
 
         // Add ingress messages to the canister's queues.
         for ingress in self.ingress_queue.into_iter() {
-            system_state.queues_mut().push_ingress(ingress)
+            system_state.queues_mut().push_ingress(ingress).unwrap()
         }
 
         // Set call contexts. Because there is no way pass in a `CallContext`

@@ -733,7 +733,7 @@ fn empty_and_len_agree_on_empty() {
 #[test]
 fn empty_and_len_agree_on_non_empty() {
     let mut q = IngressQueue::default();
-    q.push(msg_from_number(1));
+    q.push(msg_from_number(1)).expect("could not push");
     assert_eq!(q.size(), 1);
     assert!(!q.is_empty());
 }
@@ -744,9 +744,9 @@ fn ingress_filter() {
     let msg1 = msg_from_number(1);
     let msg2 = msg_from_number(2);
     let msg3 = msg_from_number(3);
-    queue.push(msg1.clone());
-    queue.push(msg2.clone());
-    queue.push(msg3.clone());
+    queue.push(msg1.clone()).expect("could not push");
+    queue.push(msg2.clone()).expect("could not push");
+    queue.push(msg3.clone()).expect("could not push");
 
     queue.filter_messages(|ingress| *ingress != Arc::new(msg2.clone()));
     assert_eq!(queue.size(), 2);

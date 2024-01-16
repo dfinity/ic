@@ -311,7 +311,7 @@ impl CanisterState {
 
     /// Unconditionally pushes an ingress message into the ingress pool of the
     /// canister.
-    pub fn push_ingress(&mut self, msg: Ingress) {
+    pub fn push_ingress(&mut self, msg: Ingress) -> Result<(), StateError> {
         self.system_state.push_ingress(msg)
     }
 

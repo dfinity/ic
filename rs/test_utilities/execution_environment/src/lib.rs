@@ -962,7 +962,8 @@ impl ExecutionTest {
         state
             .canister_state_mut(&canister_id)
             .unwrap()
-            .push_ingress(ingress);
+            .push_ingress(ingress)
+            .unwrap();
         self.state = Some(state);
         if !self.manual_execution {
             self.execute_all();
@@ -1154,7 +1155,7 @@ impl ExecutionTest {
             .method_payload(method_payload)
             .build();
 
-        state.subnet_queues_mut().push_ingress(message);
+        state.subnet_queues_mut().push_ingress(message).unwrap();
 
         self.state = Some(state);
 

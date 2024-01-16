@@ -137,12 +137,14 @@ impl ValidSetRuleImpl {
     /// Tries to induct a single ingress message and sets the message status in
     /// `state` accordingly (to `Received` if successful; or to `Failed` with
     /// the relevant error code on failure).
+    ///
+    /// Returns whether the induction of the messages was successful or not.
     fn induct_message(
         &self,
         state: &mut ReplicatedState,
         msg: SignedIngressContent,
         subnet_size: usize,
-    ) {
+    ) -> Result<(), StateError> {
         trace!(self.log, "induct_message");
         let message_id = msg.id();
         let source = msg.sender();
@@ -151,7 +153,7 @@ impl ValidSetRuleImpl {
         let time = state.time();
         let ingress_expiry = msg.ingress_expiry();
 
-        let status = match self.enqueue(state, msg, subnet_size) {
+        let (res, status) = match self.enqueue(state, msg, subnet_size) {
             Ok(()) => {
                 self.observe_inducted_ingress_payload_size(payload_bytes);
                 self.ingress_history_writer.set_status(
@@ -164,7 +166,7 @@ impl ValidSetRuleImpl {
                         state: IngressState::Received,
                     },
                 );
-                LABEL_VALUE_SUCCESS
+                (Ok(()), LABEL_VALUE_SUCCESS)
             }
             Err(err) => {
                 if let StateError::CanisterNotFound(canister_id) = &err {
@@ -186,11 +188,12 @@ impl ValidSetRuleImpl {
                         state: IngressState::Failed(UserError::new(error_code, err.to_string())),
                     },
                 );
-                err.to_label_value()
+                (Err(err.clone()), err.to_label_value())
             }
         };
         self.observe_inducted_ingress_status(status);
         self.observe_unreliable_induct_ingress_message_duration(status, ingress_expiry);
+        res
     }
 
     /// Checks whether the given message has already been inducted.
@@ -331,7 +334,7 @@ impl ValidSetRule for ValidSetRuleImpl {
         for msg in msgs {
             let message_id = msg.id();
             if !self.is_duplicate(state, &msg) {
-                self.induct_message(state, msg, subnet_size);
+                let _ = self.induct_message(state, msg, subnet_size);
             } else {
                 self.observe_inducted_ingress_status(LABEL_VALUE_DUPLICATE);
                 debug!(self.log, "Didn't induct duplicate message {}", message_id);

@@ -15,6 +15,8 @@ use std::{
     sync::Arc,
 };
 
+use super::DEFAULT_QUEUE_CAPACITY;
+
 /// Trait for queue items in `InputQueue` and `OutputQueue`. Such items must
 /// either be a response or a request (including timed out requests).
 /// Since an item is either a request or a response, implementing
@@ -815,8 +817,7 @@ impl TryFrom<pb_queues::InputOutputQueue> for OutputQueue {
     }
 }
 
-/// Representation of the Ingress queue. There is no upper bound on
-/// the number of messages it can store.
+/// Representation of the Ingress queue.
 ///
 /// `IngressQueue` has a separate queue of Ingress messages for each
 /// target canister based on `effective_canister_id`, and `schedule`
@@ -846,6 +847,8 @@ pub(super) struct IngressQueue {
     total_ingress_count: usize,
     /// Estimated size in bytes.
     size_bytes: usize,
+    /// Maximum number of ingress messages allowed by a single queue at any one time.
+    capacity: usize,
 }
 
 const PER_CANISTER_QUEUE_OVERHEAD_BYTES: usize =
@@ -853,21 +856,28 @@ const PER_CANISTER_QUEUE_OVERHEAD_BYTES: usize =
 
 impl IngressQueue {
     /// Pushes a new ingress message to the back of the queue.
-    pub(super) fn push(&mut self, msg: Ingress) {
+    pub(super) fn push(&mut self, msg: Ingress) -> Result<(), StateError> {
         let msg_size = Self::ingress_size_bytes(&msg);
         let receiver_ingress_queue = self.queues.entry(msg.effective_canister_id).or_default();
 
-        if receiver_ingress_queue.is_empty() {
-            self.schedule.push_back(msg.effective_canister_id);
-            self.size_bytes += PER_CANISTER_QUEUE_OVERHEAD_BYTES;
+        if receiver_ingress_queue.len() < self.capacity {
+            if receiver_ingress_queue.is_empty() {
+                self.schedule.push_back(msg.effective_canister_id);
+                self.size_bytes += PER_CANISTER_QUEUE_OVERHEAD_BYTES;
+            }
+
+            receiver_ingress_queue.push_back(Arc::new(msg));
+
+            self.size_bytes += msg_size;
+            debug_assert_eq!(Self::size_bytes(&self.queues), self.size_bytes);
+
+            self.total_ingress_count += 1;
+            Ok(())
+        } else {
+            Err(StateError::QueueFull {
+                capacity: self.capacity,
+            })
         }
-
-        receiver_ingress_queue.push_back(Arc::new(msg));
-
-        self.size_bytes += msg_size;
-        debug_assert_eq!(Self::size_bytes(&self.queues), self.size_bytes);
-
-        self.total_ingress_count += 1;
     }
 
     /// Returns `None` if the queue is empty, otherwise removes the first Ingress
@@ -1001,6 +1011,7 @@ impl Default for IngressQueue {
             queues,
             total_ingress_count: 0,
             size_bytes,
+            capacity: DEFAULT_QUEUE_CAPACITY,
         }
     }
 }
@@ -1039,7 +1050,8 @@ impl TryFrom<Vec<pb_ingress::Ingress>> for IngressQueue {
             // Because the contents of `Self::queues` were serialized in `Self::schedule`
             // order, pushing the messages in that same order will implicitly reconstruct
             // `Self::schedule`.
-            res.push(ingress_pb.try_into()?);
+            res.push(ingress_pb.try_into()?)
+                .map_err(|err| ProxyDecodeError::Other(format!("IngressQueue: {}", err)))?;
         }
 
         Ok(res)

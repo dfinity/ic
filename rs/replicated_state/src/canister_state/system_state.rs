@@ -1131,7 +1131,7 @@ impl SystemState {
     }
 
     /// Pushes an ingress message into the induction pool.
-    pub(crate) fn push_ingress(&mut self, msg: Ingress) {
+    pub(crate) fn push_ingress(&mut self, msg: Ingress) -> Result<(), StateError> {
         self.queues.push_ingress(msg)
     }
 

@@ -138,7 +138,9 @@ fn induct_message_with_successful_history_update() {
         let mut state = ReplicatedState::new(subnet_test_id(1), subnet_type);
         insert_canister(&mut state, canister_id);
 
-        valid_set_rule.induct_message(&mut state, msg, SMALL_APP_SUBNET_MAX_SIZE);
+        valid_set_rule
+            .induct_message(&mut state, msg, SMALL_APP_SUBNET_MAX_SIZE)
+            .unwrap();
         assert_eq!(ingress_queue_size(&state, canister_id), 1);
         assert_inducted_ingress_messages_eq(
             metric_vec(&[(&[(LABEL_STATUS, LABEL_VALUE_SUCCESS)], 1)]),
@@ -197,7 +199,8 @@ fn induct_message_fails_for_stopping_canister() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.put_canister_state(get_stopping_canister(canister_id));
 
-        valid_set_rule.induct_message(&mut state, msg, SMALL_APP_SUBNET_MAX_SIZE);
+        let res = valid_set_rule.induct_message(&mut state, msg, SMALL_APP_SUBNET_MAX_SIZE);
+        assert_eq!(res, Err(StateError::CanisterStopping(canister_id)));
         assert_eq!(ingress_queue_size(&state, canister_id), 0);
         assert_inducted_ingress_messages_eq(
             metric_vec(&[(&[(LABEL_STATUS, LABEL_VALUE_CANISTER_STOPPING)], 1)]),
@@ -254,7 +257,8 @@ fn induct_message_fails_for_stopped_canister() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.put_canister_state(get_stopped_canister(canister_id));
 
-        valid_set_rule.induct_message(&mut state, msg, SMALL_APP_SUBNET_MAX_SIZE);
+        let res = valid_set_rule.induct_message(&mut state, msg, SMALL_APP_SUBNET_MAX_SIZE);
+        assert_eq!(res, Err(StateError::CanisterStopped(canister_id)));
         assert_eq!(ingress_queue_size(&state, canister_id), 0);
         assert_inducted_ingress_messages_eq(
             metric_vec(&[(&[(LABEL_STATUS, LABEL_VALUE_CANISTER_STOPPED)], 1)]),
@@ -303,7 +307,9 @@ fn try_to_induct_a_message_marked_as_already_inducted() {
             state: IngressState::Received,
         };
         state.set_ingress_status(msg.id(), status, NumBytes::from(u64::MAX));
-        valid_set_rule.induct_message(&mut state, msg, SMALL_APP_SUBNET_MAX_SIZE);
+        valid_set_rule
+            .induct_message(&mut state, msg, SMALL_APP_SUBNET_MAX_SIZE)
+            .unwrap();
     });
 }
 
@@ -350,7 +356,8 @@ fn update_history_if_induction_failed() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         // The induction is expected to fail because there is no canister 0 in the
         // ReplicatedState.
-        valid_set_rule.induct_message(&mut state, msg.clone(), SMALL_APP_SUBNET_MAX_SIZE);
+        let res = valid_set_rule.induct_message(&mut state, msg.clone(), SMALL_APP_SUBNET_MAX_SIZE);
+        assert_eq!(res, Err(StateError::CanisterNotFound(canister_id)));
         assert!(state.canister_state(&canister_id).is_none());
         assert_eq!(state.get_ingress_status(&msg.id()), status_clone);
         assert_inducted_ingress_messages_eq(
@@ -670,7 +677,9 @@ fn running_canister_on_application_subnet_accepts_and_charges_for_ingress() {
             .build()
             .ingress_induction_cost(&ingress, effective_canister_id, SMALL_APP_SUBNET_MAX_SIZE)
             .cost();
-        valid_set_rule.induct_message(&mut state, ingress, SMALL_APP_SUBNET_MAX_SIZE);
+        valid_set_rule
+            .induct_message(&mut state, ingress, SMALL_APP_SUBNET_MAX_SIZE)
+            .unwrap();
 
         let balance_after = state
             .canister_state(&canister_id)
@@ -710,7 +719,9 @@ fn running_canister_on_system_subnet_accepts_and_does_not_charge_for_ingress() {
         state.put_canister_state(canister);
 
         let ingress = SignedIngressBuilder::new().build().into();
-        valid_set_rule.induct_message(&mut state, ingress, SMALL_APP_SUBNET_MAX_SIZE);
+        valid_set_rule
+            .induct_message(&mut state, ingress, SMALL_APP_SUBNET_MAX_SIZE)
+            .unwrap();
 
         let balance_after = state
             .canister_state(&canister_id)

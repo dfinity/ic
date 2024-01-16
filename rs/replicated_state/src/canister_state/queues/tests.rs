@@ -305,15 +305,17 @@ fn test_message_picking_ingress_only() {
     assert!(queues.pop_input().is_none());
 
     for i in 0..10 {
-        queues.push_ingress(Ingress {
-            source: user_test_id(77),
-            receiver: this,
-            effective_canister_id: None,
-            method_name: String::from("test"),
-            method_payload: vec![i as u8],
-            message_id: message_test_id(555),
-            expiry_time: expiry_time_from_now(),
-        });
+        queues
+            .push_ingress(Ingress {
+                source: user_test_id(77),
+                receiver: this,
+                effective_canister_id: None,
+                method_name: String::from("test"),
+                method_payload: vec![i as u8],
+                message_id: message_test_id(555),
+                expiry_time: expiry_time_from_now(),
+            })
+            .expect("could not push");
     }
 
     let mut expected_byte = 0;
@@ -376,7 +378,7 @@ impl CanisterQueuesMultiFixture {
         )
     }
 
-    fn push_ingress(&mut self, msg: Ingress) {
+    fn push_ingress(&mut self, msg: Ingress) -> Result<(), StateError> {
         self.queues.push_ingress(msg)
     }
 
@@ -444,15 +446,17 @@ fn test_message_picking_round_robin() {
         .push_input_request(other_2, LocalSubnet)
         .expect("could not push");
 
-    queues.push_ingress(Ingress {
-        source: user_test_id(77),
-        receiver: this,
-        effective_canister_id: None,
-        method_name: String::from("test"),
-        method_payload: Vec::new(),
-        message_id: message_test_id(555),
-        expiry_time: expiry_time_from_now(),
-    });
+    queues
+        .push_ingress(Ingress {
+            source: user_test_id(77),
+            receiver: this,
+            effective_canister_id: None,
+            method_name: String::from("test"),
+            method_payload: Vec::new(),
+            message_id: message_test_id(555),
+            expiry_time: expiry_time_from_now(),
+        })
+        .expect("could not push");
 
     // POPPING
     // Due to the round-robin across Local, Ingress, and Remote subnet messages;
@@ -632,7 +636,9 @@ fn test_peek_round_robin() {
         message_id: message_test_id(555),
         expiry_time: expiry_time_from_now(),
     };
-    queues.push_ingress(ingress.clone());
+    queues
+        .push_ingress(ingress.clone())
+        .expect("could not push");
 
     assert!(queues.has_input());
     /* Peek */
@@ -702,7 +708,9 @@ fn test_skip_round_robin() {
         message_id: message_test_id(555),
         expiry_time: expiry_time_from_now(),
     };
-    queues.push_ingress(ingress.clone());
+    queues
+        .push_ingress(ingress.clone())
+        .expect("could not push");
     let ingress_input = CanisterMessage::Ingress(Arc::new(ingress));
     assert!(queues.has_input());
 
@@ -818,7 +826,9 @@ fn encode_roundtrip() {
     queues
         .pop_canister_input(InputQueueType::RemoteSubnet)
         .unwrap();
-    queues.push_ingress(IngressBuilder::default().receiver(this).build());
+    queues
+        .push_ingress(IngressBuilder::default().receiver(this).build())
+        .expect("could not push");
 
     let encoded: pb_queues::CanisterQueues = (&queues).into();
     let decoded = encoded.try_into().unwrap();
@@ -1424,7 +1434,9 @@ fn test_garbage_collect_restores_defaults() {
     assert_eq!(CanisterQueues::default(), queues);
 
     // Push and pop an ingress message.
-    queues.push_ingress(IngressBuilder::default().receiver(this).build());
+    queues
+        .push_ingress(IngressBuilder::default().receiver(this).build())
+        .expect("could not push");
     assert!(queues.pop_input().is_some());
     // `next_input_queue` has now advanced to `RemoteSubnet`.
     assert_ne!(CanisterQueues::default(), queues);

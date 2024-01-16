@@ -755,14 +755,14 @@ impl ReplicatedState {
     /// ingress queue).
     pub fn push_ingress(&mut self, msg: Ingress) -> Result<(), StateError> {
         if msg.is_addressed_to_subnet(self.metadata.own_subnet_id) {
-            self.subnet_queues.push_ingress(msg);
+            self.subnet_queues.push_ingress(msg)?;
         } else {
             let canister_id = msg.receiver;
             let canister = match self.canister_states.get_mut(&canister_id) {
                 Some(canister) => canister,
                 None => return Err(StateError::CanisterNotFound(canister_id)),
             };
-            canister.push_ingress(msg);
+            canister.push_ingress(msg)?;
         }
         Ok(())
     }
