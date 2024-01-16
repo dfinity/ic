@@ -23,13 +23,13 @@ region_map = {
     # Ohio
     "us_east_2": ["ami-05fb0b8c1424f266b", "m7i.8xlarge"],
     # N. Cali
-    # "us_west_1": ["ami-0ce2cb35386fc22e9", "m7i.8xlarge"],
+    "us_west_1": ["ami-0ce2cb35386fc22e9", "m7i.8xlarge"],
     # Oregon
     "us_west_2": ["ami-008fe2fc65df48dac", "m7i.8xlarge"],
     # Capetown
-    "af_south_1": ["ami-0e878fcddf2937686", "m6i.8xlarge"],
+    # "af_south_1": ["ami-0e878fcddf2937686", "m6i.8xlarge"],
     # Hong Kong
-    "ap_east_1": ["ami-0d96ec8a788679eb2", "m6i.8xlarge"],
+    # "ap_east_1": ["ami-0d96ec8a788679eb2", "m6i.8xlarge"],
     # Tokio 
     # "ap_northeast_1": ["ami-07c589821f2b353aa", "m6i.8xlarge"],
     # Seoul

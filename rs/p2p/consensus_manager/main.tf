@@ -160,150 +160,6 @@ resource "tls_private_key" "experiment" {
 }
 
 
-resource "aws_security_group" "deletable-sg-af_south_1" {
-  provider        = aws.af_south_1
-  name        = "allow_all"
-
-  ingress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "experiment"
-  }
-}
-
-resource "aws_key_pair" "deletable-key-af_south_1" {
-  provider        = aws.af_south_1
-  key_name   = "my-terraform-key-af_south_1"
-  public_key = tls_private_key.experiment.public_key_openssh
-}
-
-resource "aws_instance" "deletable-instance-af_south_1" {
-  provider        = aws.af_south_1
-  ami             = "ami-0e878fcddf2937686"
-  instance_type   = "m6i.8xlarge"
-  monitoring = true
-  key_name = aws_key_pair.deletable-key-af_south_1.key_name
-  vpc_security_group_ids = [aws_security_group.deletable-sg-af_south_1.id]
-
-  tags = {
-    Name = "experiment"
-  }
-  user_data = <<EOF
-#!/bin/bash
-
-sudo sysctl -w net.core.rmem_max=500000000
-sudo sysctl -w net.core.wmem_max=500000000
-# Download the binary from the pre-signed S3 URL
-curl -o /tmp/binary "${var.runner_url}"
-
-# Make binary executable
-chmod +x /tmp/binary
-EOF
-}
-
-
-resource "null_resource" "deletable-prov-af_south_1" {
-  depends_on = [aws_instance.deletable-instance-af_south_1, aws_instance.deletable-instance-ap_east_1, aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_2]
-
-  provisioner "remote-exec" {
-    connection {
-      host        = aws_instance.deletable-instance-af_south_1.public_ip
-      user        = "ubuntu"
-      private_key = tls_private_key.experiment.private_key_pem
-    }
-
-    inline = [
-      "sleep 30",
-      "/tmp/binary --id 0 --message-size 10000000 --message-rate 7 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
-    ]
-  }
-}
-
-
-resource "aws_security_group" "deletable-sg-ap_east_1" {
-  provider        = aws.ap_east_1
-  name        = "allow_all"
-
-  ingress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "experiment"
-  }
-}
-
-resource "aws_key_pair" "deletable-key-ap_east_1" {
-  provider        = aws.ap_east_1
-  key_name   = "my-terraform-key-ap_east_1"
-  public_key = tls_private_key.experiment.public_key_openssh
-}
-
-resource "aws_instance" "deletable-instance-ap_east_1" {
-  provider        = aws.ap_east_1
-  ami             = "ami-0d96ec8a788679eb2"
-  instance_type   = "m6i.8xlarge"
-  monitoring = true
-  key_name = aws_key_pair.deletable-key-ap_east_1.key_name
-  vpc_security_group_ids = [aws_security_group.deletable-sg-ap_east_1.id]
-
-  tags = {
-    Name = "experiment"
-  }
-  user_data = <<EOF
-#!/bin/bash
-
-sudo sysctl -w net.core.rmem_max=500000000
-sudo sysctl -w net.core.wmem_max=500000000
-# Download the binary from the pre-signed S3 URL
-curl -o /tmp/binary "${var.runner_url}"
-
-# Make binary executable
-chmod +x /tmp/binary
-EOF
-}
-
-
-resource "null_resource" "deletable-prov-ap_east_1" {
-  depends_on = [aws_instance.deletable-instance-af_south_1, aws_instance.deletable-instance-ap_east_1, aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_2]
-
-  provisioner "remote-exec" {
-    connection {
-      host        = aws_instance.deletable-instance-ap_east_1.public_ip
-      user        = "ubuntu"
-      private_key = tls_private_key.experiment.private_key_pem
-    }
-
-    inline = [
-      "sleep 30",
-      "/tmp/binary --id 1 --message-size 10000000 --message-rate 7 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
-    ]
-  }
-}
-
-
 resource "aws_security_group" "deletable-sg-eu_central_1" {
   provider        = aws.eu_central_1
   name        = "allow_all"
@@ -359,7 +215,7 @@ EOF
 
 
 resource "null_resource" "deletable-prov-eu_central_1" {
-  depends_on = [aws_instance.deletable-instance-af_south_1, aws_instance.deletable-instance-ap_east_1, aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_2]
+  depends_on = [aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_1, aws_instance.deletable-instance-us_west_2]
 
   provisioner "remote-exec" {
     connection {
@@ -370,7 +226,7 @@ resource "null_resource" "deletable-prov-eu_central_1" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 2 --message-size 10000000 --message-rate 7 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
+      "/tmp/binary --id 0 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
     ]
   }
 }
@@ -431,7 +287,7 @@ EOF
 
 
 resource "null_resource" "deletable-prov-eu_central_2" {
-  depends_on = [aws_instance.deletable-instance-af_south_1, aws_instance.deletable-instance-ap_east_1, aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_2]
+  depends_on = [aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_1, aws_instance.deletable-instance-us_west_2]
 
   provisioner "remote-exec" {
     connection {
@@ -442,7 +298,7 @@ resource "null_resource" "deletable-prov-eu_central_2" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 3 --message-size 10000000 --message-rate 7 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
+      "/tmp/binary --id 1 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
     ]
   }
 }
@@ -503,7 +359,7 @@ EOF
 
 
 resource "null_resource" "deletable-prov-eu_north_1" {
-  depends_on = [aws_instance.deletable-instance-af_south_1, aws_instance.deletable-instance-ap_east_1, aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_2]
+  depends_on = [aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_1, aws_instance.deletable-instance-us_west_2]
 
   provisioner "remote-exec" {
     connection {
@@ -514,7 +370,7 @@ resource "null_resource" "deletable-prov-eu_north_1" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 4 --message-size 10000000 --message-rate 7 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
+      "/tmp/binary --id 2 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
     ]
   }
 }
@@ -575,7 +431,7 @@ EOF
 
 
 resource "null_resource" "deletable-prov-eu_south_2" {
-  depends_on = [aws_instance.deletable-instance-af_south_1, aws_instance.deletable-instance-ap_east_1, aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_2]
+  depends_on = [aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_1, aws_instance.deletable-instance-us_west_2]
 
   provisioner "remote-exec" {
     connection {
@@ -586,7 +442,7 @@ resource "null_resource" "deletable-prov-eu_south_2" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 5 --message-size 10000000 --message-rate 7 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
+      "/tmp/binary --id 3 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
     ]
   }
 }
@@ -647,7 +503,7 @@ EOF
 
 
 resource "null_resource" "deletable-prov-eu_west_1" {
-  depends_on = [aws_instance.deletable-instance-af_south_1, aws_instance.deletable-instance-ap_east_1, aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_2]
+  depends_on = [aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_1, aws_instance.deletable-instance-us_west_2]
 
   provisioner "remote-exec" {
     connection {
@@ -658,7 +514,7 @@ resource "null_resource" "deletable-prov-eu_west_1" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 6 --message-size 10000000 --message-rate 7 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
+      "/tmp/binary --id 4 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
     ]
   }
 }
@@ -719,7 +575,7 @@ EOF
 
 
 resource "null_resource" "deletable-prov-eu_west_2" {
-  depends_on = [aws_instance.deletable-instance-af_south_1, aws_instance.deletable-instance-ap_east_1, aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_2]
+  depends_on = [aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_1, aws_instance.deletable-instance-us_west_2]
 
   provisioner "remote-exec" {
     connection {
@@ -730,7 +586,7 @@ resource "null_resource" "deletable-prov-eu_west_2" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 7 --message-size 10000000 --message-rate 7 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
+      "/tmp/binary --id 5 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
     ]
   }
 }
@@ -791,7 +647,7 @@ EOF
 
 
 resource "null_resource" "deletable-prov-eu_west_3" {
-  depends_on = [aws_instance.deletable-instance-af_south_1, aws_instance.deletable-instance-ap_east_1, aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_2]
+  depends_on = [aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_1, aws_instance.deletable-instance-us_west_2]
 
   provisioner "remote-exec" {
     connection {
@@ -802,7 +658,7 @@ resource "null_resource" "deletable-prov-eu_west_3" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 8 --message-size 10000000 --message-rate 7 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
+      "/tmp/binary --id 6 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
     ]
   }
 }
@@ -863,7 +719,7 @@ EOF
 
 
 resource "null_resource" "deletable-prov-us_east_1" {
-  depends_on = [aws_instance.deletable-instance-af_south_1, aws_instance.deletable-instance-ap_east_1, aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_2]
+  depends_on = [aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_1, aws_instance.deletable-instance-us_west_2]
 
   provisioner "remote-exec" {
     connection {
@@ -874,7 +730,7 @@ resource "null_resource" "deletable-prov-us_east_1" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 9 --message-size 10000000 --message-rate 7 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
+      "/tmp/binary --id 7 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
     ]
   }
 }
@@ -935,7 +791,7 @@ EOF
 
 
 resource "null_resource" "deletable-prov-us_east_2" {
-  depends_on = [aws_instance.deletable-instance-af_south_1, aws_instance.deletable-instance-ap_east_1, aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_2]
+  depends_on = [aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_1, aws_instance.deletable-instance-us_west_2]
 
   provisioner "remote-exec" {
     connection {
@@ -946,7 +802,79 @@ resource "null_resource" "deletable-prov-us_east_2" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 10 --message-size 10000000 --message-rate 7 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
+      "/tmp/binary --id 8 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
+    ]
+  }
+}
+
+
+resource "aws_security_group" "deletable-sg-us_west_1" {
+  provider        = aws.us_west_1
+  name        = "allow_all"
+
+  ingress {
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "experiment"
+  }
+}
+
+resource "aws_key_pair" "deletable-key-us_west_1" {
+  provider        = aws.us_west_1
+  key_name   = "my-terraform-key-us_west_1"
+  public_key = tls_private_key.experiment.public_key_openssh
+}
+
+resource "aws_instance" "deletable-instance-us_west_1" {
+  provider        = aws.us_west_1
+  ami             = "ami-0ce2cb35386fc22e9"
+  instance_type   = "m7i.8xlarge"
+  monitoring = true
+  key_name = aws_key_pair.deletable-key-us_west_1.key_name
+  vpc_security_group_ids = [aws_security_group.deletable-sg-us_west_1.id]
+
+  tags = {
+    Name = "experiment"
+  }
+  user_data = <<EOF
+#!/bin/bash
+
+sudo sysctl -w net.core.rmem_max=500000000
+sudo sysctl -w net.core.wmem_max=500000000
+# Download the binary from the pre-signed S3 URL
+curl -o /tmp/binary "${var.runner_url}"
+
+# Make binary executable
+chmod +x /tmp/binary
+EOF
+}
+
+
+resource "null_resource" "deletable-prov-us_west_1" {
+  depends_on = [aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_1, aws_instance.deletable-instance-us_west_2]
+
+  provisioner "remote-exec" {
+    connection {
+      host        = aws_instance.deletable-instance-us_west_1.public_ip
+      user        = "ubuntu"
+      private_key = tls_private_key.experiment.private_key_pem
+    }
+
+    inline = [
+      "sleep 30",
+      "/tmp/binary --id 9 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
     ]
   }
 }
@@ -1007,7 +935,7 @@ EOF
 
 
 resource "null_resource" "deletable-prov-us_west_2" {
-  depends_on = [aws_instance.deletable-instance-af_south_1, aws_instance.deletable-instance-ap_east_1, aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_2]
+  depends_on = [aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_1, aws_instance.deletable-instance-us_west_2]
 
   provisioner "remote-exec" {
     connection {
@@ -1018,16 +946,16 @@ resource "null_resource" "deletable-prov-us_west_2" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 11 --message-size 10000000 --message-rate 7 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-af_south_1.public_ip}:4100 ${aws_instance.deletable-instance-ap_east_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100"
+      "/tmp/binary --id 10 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100"
     ]
   }
 }
 
 
 resource "null_resource" "deletable-local-prov-REGION" {
-  depends_on = [aws_instance.deletable-instance-af_south_1, aws_instance.deletable-instance-ap_east_1, aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_2]
+  depends_on = [aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_1, aws_instance.deletable-instance-us_west_2]
 
   provisioner "local-exec" {
-    command = "python3 metrics-collector.py ${aws_instance.deletable-instance-af_south_1.public_ip} ${aws_instance.deletable-instance-ap_east_1.public_ip} ${aws_instance.deletable-instance-eu_central_1.public_ip} ${aws_instance.deletable-instance-eu_central_2.public_ip} ${aws_instance.deletable-instance-eu_north_1.public_ip} ${aws_instance.deletable-instance-eu_south_2.public_ip} ${aws_instance.deletable-instance-eu_west_1.public_ip} ${aws_instance.deletable-instance-eu_west_2.public_ip} ${aws_instance.deletable-instance-eu_west_3.public_ip} ${aws_instance.deletable-instance-us_east_1.public_ip} ${aws_instance.deletable-instance-us_east_2.public_ip} ${aws_instance.deletable-instance-us_west_2.public_ip}"
+    command = "python3 metrics-collector.py ${aws_instance.deletable-instance-eu_central_1.public_ip} ${aws_instance.deletable-instance-eu_central_2.public_ip} ${aws_instance.deletable-instance-eu_north_1.public_ip} ${aws_instance.deletable-instance-eu_south_2.public_ip} ${aws_instance.deletable-instance-eu_west_1.public_ip} ${aws_instance.deletable-instance-eu_west_2.public_ip} ${aws_instance.deletable-instance-eu_west_3.public_ip} ${aws_instance.deletable-instance-us_east_1.public_ip} ${aws_instance.deletable-instance-us_east_2.public_ip} ${aws_instance.deletable-instance-us_west_1.public_ip} ${aws_instance.deletable-instance-us_west_2.public_ip}"
   }
 }

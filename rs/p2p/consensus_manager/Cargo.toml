@@ -36,6 +36,7 @@ tokio = { workspace = true }
 ic-crypto-test-utils-tls = { path = "../../crypto/test_utils/tls" }
 tokio-rustls = { version = "0.24.0", features = ["dangerous_configuration"] }
 tokio-util = { workspace = true }
+libp2p = { version = "0.53.1", features = ["full"]}
 
 [dev-dependencies]
 ic-p2p-test-utils = { path = "../test_utils" }

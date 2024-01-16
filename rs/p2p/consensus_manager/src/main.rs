@@ -1,5 +1,7 @@
 use std::{
+    collections::hash_map::DefaultHasher,
     convert::Infallible,
+    hash::Hasher,
     net::{IpAddr, SocketAddr},
     str::FromStr,
     sync::{
@@ -12,7 +14,7 @@ use std::{
 use axum::{
     extract::State,
     http::StatusCode,
-    routing::{any, get},
+    routing::{get, post},
     Router,
 };
 use clap::Parser;
@@ -35,12 +37,18 @@ use ic_types::{
     NodeId, RegistryVersion,
 };
 use ic_types_test_utils::ids::node_test_id;
+use libp2p::{
+    core::ConnectedPoint, gossipsub::IdentTopic, swarm::SwarmEvent, Multiaddr, PeerId, Swarm,
+    SwarmBuilder,
+};
 use rand::Rng;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
+    runtime::Handle,
     select,
+    sync::watch,
 };
 use tokio_rustls::rustls::{
     client::{ServerCertVerified, ServerCertVerifier},
@@ -179,6 +187,9 @@ struct Args {
     metrics_port: u16,
 
     #[arg(long)]
+    libp2p: bool,
+
+    #[arg(long)]
     relaying: bool,
 
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
@@ -205,6 +216,7 @@ async fn load_generator(
     message_rate: usize,
     relaying: bool,
     metrics: Arc<Metrics>,
+    mut rps_rx: watch::Receiver<usize>,
 ) {
     let (tx, mut received_artifacts_rx) = tokio::sync::mpsc::channel(1000);
 
@@ -223,14 +235,14 @@ async fn load_generator(
 
     let mut produce_and_send_artifact = tokio::time::interval(
         Duration::from_secs(1)
-            .checked_div(message_rate as u32)
-            .unwrap(),
+            .checked_div(*rps_rx.borrow() as u32)
+            .unwrap_or(Duration::from_secs(1)),
     );
 
     // Calculated such that not exceed 20000 active adverts
-    let removal_delay_secs = 20000 / message_rate as u64;
-    let removal_delay = Duration::from_secs(removal_delay_secs);
-    info!(log, "Using removal delay of {removal_delay_secs}s");
+    // let removal_delay_secs = 20000 / message_rate as u64;
+    // let ggggggggggggg = Duration::from_secs(removal_delay_secs);
+    // info!(log, "Using removal delay of {removal_delay_secs}s");
 
     info!(
         log,
@@ -276,6 +288,18 @@ async fn load_generator(
                     }
                 }
             }
+            Ok(()) = rps_rx.changed() => {
+                produce_and_send_artifact = tokio::time::interval(
+                    Duration::from_secs(1)
+                        .checked_div(*rps_rx.borrow() as u32)
+                        .unwrap_or(Duration::from_secs(u64::MAX)),
+                );
+                info!(
+                    log,
+                    "Generating event every {:?}",
+                    produce_and_send_artifact.period()
+                );
+            }
             // Outgoing Artifact to peers
             _ = produce_and_send_artifact.tick() => {
 
@@ -302,7 +326,8 @@ async fn load_generator(
 
             }
             _ = log_interval.tick() => {
-                info!(log, "Sent artifacts total {}", sent_artifacts as u64 - metrics.sent_artifacts.load(Relaxed));
+                info!(log, "Sent artifacts total {}", metrics.sent_artifacts.load(Relaxed));
+                info!(log, "Received artifacts total {}", metrics.received_artifact_count.load(Relaxed));
                 info!(log, "Rate of message sent {}", (sent_artifacts as u64 - metrics.sent_artifacts.load(Relaxed))/30);
                 info!(log, "Rate of messages received {}", (received_artifact_count as u64 - metrics.received_artifact_count.load(Relaxed))/30);
                 info!(log, "Rate of bytes received {}", (received_bytes as u64 - metrics.received_bytes.load(Relaxed))/30);
@@ -332,31 +357,29 @@ async fn metrics_handler(State(metrics): State<Arc<Metrics>>) -> String {
     )
 }
 
+async fn interval_handler(State(w): State<Arc<tokio::sync::watch::Sender<usize>>>, msg: String) {
+    let rps = msg.parse::<usize>().unwrap();
+    w.send(rps);
+}
+
+fn peerid_to_nodeid(p: PeerId) -> NodeId {
+    let s = p.to_bytes().into_iter().fold(0_u64, |mut acc, x| {
+        acc += x as u64;
+        acc
+    });
+    node_test_id(s)
+}
+
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
 
-    // generate deterministic crypto based on id
-    let mut seeded_rng = ChaCha20Rng::seed_from_u64(args.id);
-    let node_id_u64 = seeded_rng.gen_range(0..u64::MAX);
-    let node_id = node_test_id(node_id_u64);
-    let cert = CertWithPrivateKey::builder()
-        .cn(node_id.to_string())
-        .build_ed25519(&mut seeded_rng);
-
     // TODO: some input verification
-
     let rt_handle = tokio::runtime::Handle::current();
     let metrics = Arc::new(Metrics::default());
 
     let (log, _async_log_guard) =
         new_replica_logger_from_config(&ic_config::logger::Config::default());
-
-    let mut new_p2p_consensus = ic_consensus_manager::ConsensusManagerBuilder::new(
-        log.clone(),
-        rt_handle.clone(),
-        MetricsRegistry::default(),
-    );
 
     let (artifact_processor_tx, artifact_processor_rx) = tokio::sync::mpsc::channel(100000);
     let (cb_tx, cb_rx) = crossbeam_channel::unbounded();
@@ -364,34 +387,110 @@ async fn main() {
     let test_consensus = TestConsensus {
         log: log.clone(),
         message_size: args.message_size,
-        node_id: node_id_u64,
+        node_id: args.id,
     };
-
-    new_p2p_consensus.add_client(
-        artifact_processor_rx,
-        Arc::new(RwLock::new(test_consensus.clone())) as Arc<_>,
-        Arc::new(test_consensus.clone()) as Arc<_>,
-        cb_tx,
-    );
     let transport_addr: SocketAddr =
         (IpAddr::from_str("0.0.0.0").expect("Invalid IP"), args.port).into();
 
     let mut peers_addrs = args.peers_addrs;
     peers_addrs.insert(args.id as usize, transport_addr);
 
+    if args.libp2p {
+        start_libp2p(
+            log.clone(),
+            rt_handle.clone(),
+            args.id,
+            peers_addrs,
+            transport_addr,
+            test_consensus,
+            cb_tx,
+            artifact_processor_rx,
+        );
+    } else {
+        println!("CONSENSUS_MANAGRE");
+        start_cm(
+            log.clone(),
+            rt_handle.clone(),
+            args.id,
+            peers_addrs,
+            transport_addr,
+            test_consensus,
+            cb_tx,
+            artifact_processor_rx,
+        );
+    }
+
+    let (rps_tx, rps_rx) = tokio::sync::watch::channel(0);
+
+    rt_handle.spawn(load_generator(
+        args.id,
+        log.clone(),
+        artifact_processor_tx,
+        cb_rx,
+        args.message_rate as usize,
+        args.relaying,
+        metrics.clone(),
+        rps_rx,
+    ));
+
+    let metrics_address: SocketAddr = (
+        IpAddr::from_str("0.0.0.0").expect("Invalid IP"),
+        args.metrics_port,
+    )
+        .into();
+
+    let metric_listener = tokio::net::TcpListener::bind(metrics_address)
+        .await
+        .expect("Unable to bind metrics listener.");
+
+    let metrics_router = Router::new()
+        .route("/metrics", get(metrics_handler))
+        .with_state(metrics)
+        .route("/setrate", post(interval_handler))
+        .with_state(Arc::new(rps_tx));
+
+    axum::serve(metric_listener, metrics_router).await.unwrap();
+}
+
+fn start_cm(
+    log: ReplicaLogger,
+    rt_handle: Handle,
+    id: u64,
+    peers_addrs: Vec<SocketAddr>,
+    transport_addr: SocketAddr,
+    test_consensus: TestConsensus,
+    cb_tx: crossbeam_channel::Sender<UnvalidatedArtifactMutation<TestArtifact>>,
+    mut ap_rx: tokio::sync::mpsc::Receiver<ArtifactProcessorEvent<TestArtifact>>,
+) {
+    // generate deterministic crypto based on id
+    let mut seeded_rng = ChaCha20Rng::seed_from_u64(id);
+    let node_id = node_test_id(id);
+    let cert = CertWithPrivateKey::builder()
+        .cn(node_id.to_string())
+        .build_ed25519(&mut seeded_rng);
+
+    let mut new_p2p_consensus = ic_consensus_manager::ConsensusManagerBuilder::new(
+        log.clone(),
+        rt_handle.clone(),
+        MetricsRegistry::default(),
+    );
     let mut topology: Vec<(NodeId, SocketAddr)> = peers_addrs
         .into_iter()
         .enumerate()
         .map(|(id, v)| {
-            let mut seeded_rng = ChaCha20Rng::seed_from_u64(id as u64);
-            let node_id = node_test_id(seeded_rng.gen_range(0..u64::MAX));
+            let node_id = node_test_id(id as u64);
             (node_id, v)
         })
         .collect();
     let (tx, watcher) =
         tokio::sync::watch::channel(SubnetTopology::new(Vec::new(), 1.into(), 2.into()));
 
-    error!(log, "test error");
+    new_p2p_consensus.add_client(
+        ap_rx,
+        Arc::new(RwLock::new(test_consensus.clone())) as Arc<_>,
+        Arc::new(test_consensus.clone()) as Arc<_>,
+        cb_tx,
+    );
 
     info!(log, "Running on {:?} with id {}", transport_addr, node_id);
     info!(log, "Connecting to {:?}", watcher);
@@ -413,35 +512,230 @@ async fn main() {
     ));
     new_p2p_consensus.run(quic_transport, watcher);
 
-    rt_handle.spawn(load_generator(
-        node_id_u64,
-        log.clone(),
-        artifact_processor_tx,
-        cb_rx,
-        args.message_rate as usize,
-        args.relaying,
-        metrics.clone(),
-    ));
-
     let _ = tx
         .send(SubnetTopology::new(topology, 1.into(), 2.into()))
         .unwrap();
+}
 
-    let metrics_address: SocketAddr = (
-        IpAddr::from_str("0.0.0.0").expect("Invalid IP"),
-        args.metrics_port,
-    )
-        .into();
+fn start_libp2p(
+    log: ReplicaLogger,
+    rt_handle: Handle,
+    id: u64,
+    peers_addrs: Vec<SocketAddr>,
+    transport_addr: SocketAddr,
+    pool: TestConsensus,
+    cb_tx: crossbeam_channel::Sender<UnvalidatedArtifactMutation<TestArtifact>>,
+    mut ap_rx: tokio::sync::mpsc::Receiver<ArtifactProcessorEvent<TestArtifact>>,
+) {
+    let sk: [u8; 32] = [id as u8; 32];
+    let libp2p_sk = libp2p::identity::ed25519::SecretKey::try_from_bytes(sk).unwrap();
+    let libp2p_kp = libp2p::identity::ed25519::Keypair::from(libp2p_sk);
+    let node_id = peerid_to_nodeid(PeerId::from_public_key(&libp2p::identity::PublicKey::from(
+        libp2p_kp.public(),
+    )));
+    let peer_id = PeerId::from_public_key(&libp2p::identity::PublicKey::from(libp2p_kp.public()));
 
-    let metric_listener = tokio::net::TcpListener::bind(metrics_address)
-        .await
-        .expect("Unable to bind metrics listener.");
+    let mut topology: Vec<(NodeId, PeerId, SocketAddr)> = peers_addrs
+        .into_iter()
+        .enumerate()
+        .map(|(id, v)| {
+            let sk: [u8; 32] = [id as u8; 32];
+            let libp2p_sk = libp2p::identity::ed25519::SecretKey::try_from_bytes(sk).unwrap();
+            let libp2p_kp = libp2p::identity::ed25519::Keypair::from(libp2p_sk);
+            let node_id = peerid_to_nodeid(PeerId::from_public_key(
+                &libp2p::identity::PublicKey::from(libp2p_kp.public()),
+            ));
+            (
+                node_id,
+                PeerId::from_public_key(&libp2p::identity::PublicKey::from(libp2p_kp.public())),
+                v,
+            )
+        })
+        .collect();
 
-    let metrics_router = Router::new()
-        .route("/metrics", get(metrics_handler))
-        .with_state(metrics);
+    info!(
+        log,
+        "Running libp2p on {:?} with id {} {:?}", transport_addr, node_id, peer_id,
+    );
 
-    axum::serve(metric_listener, metrics_router).await.unwrap();
+    let mut swarm = SwarmBuilder::with_existing_identity(libp2p_kp.clone().into())
+        .with_tokio()
+        .with_quic()
+        .with_behaviour(|_| MainBehaviour {
+            gossip_sub: libp2p::gossipsub::Behaviour::new(
+                libp2p::gossipsub::MessageAuthenticity::Signed(libp2p_kp.clone().into()),
+                libp2p::gossipsub::ConfigBuilder::default()
+                    .max_transmit_size(20 * 1024 * 1024)
+                    .published_message_ids_cache_time(Duration::from_secs(180))
+                    .history_length(10)
+                    .history_gossip(10)
+                    .message_id_fn(|x| {
+                        let mut s = DefaultHasher::new();
+                        s.write(&x.data);
+                        libp2p::gossipsub::MessageId(s.finish().to_be_bytes().to_vec())
+                    })
+                    .build()
+                    .unwrap(),
+            )
+            .unwrap(),
+        })
+        .unwrap()
+        .with_swarm_config(|mut cfg| cfg.with_idle_connection_timeout(Duration::from_secs(100000)))
+        .build();
+
+    rt_handle.spawn(async move {
+        let ip_addr = match transport_addr {
+            SocketAddr::V4(v4) => *v4.ip(),
+            SocketAddr::V6(v6) => panic!("AH"),
+        };
+        let multiaddr = Multiaddr::empty()
+            .with(libp2p::multiaddr::Protocol::Ip4(ip_addr))
+            .with(libp2p::multiaddr::Protocol::Udp(transport_addr.port()))
+            .with(libp2p::multiaddr::Protocol::QuicV1);
+        info!(log, "Listenting on my multi {:?}", multiaddr);
+        swarm.listen_on(multiaddr).unwrap();
+
+        swarm
+            .behaviour_mut()
+            .gossip_sub
+            .subscribe(&IdentTopic::new("exp"))
+            .unwrap();
+
+        for (p, peer_id, addr) in &topology {
+            if node_id == *p {
+                continue;
+            }
+            let ip_addr = match addr {
+                SocketAddr::V4(v4) => *v4.ip(),
+                SocketAddr::V6(v6) => panic!("AH"),
+            };
+            swarm
+                .dial(
+                    Multiaddr::empty()
+                        .with(libp2p::multiaddr::Protocol::Ip4(ip_addr))
+                        .with(libp2p::multiaddr::Protocol::Udp(addr.port()))
+                        .with(libp2p::multiaddr::Protocol::QuicV1)
+                        .with_p2p(*peer_id)
+                        .unwrap(),
+                )
+                .unwrap();
+            info!(log, "DIALING {:?}", peer_id);
+        }
+
+        fn handle_swarm_event(
+            log: &ReplicaLogger,
+            swarm: &mut Swarm<MainBehaviour>,
+            topology: &Vec<(NodeId, PeerId, SocketAddr)>,
+            event: SwarmEvent<MainBehaviourEvent>,
+            cb_tx: &crossbeam_channel::Sender<UnvalidatedArtifactMutation<TestArtifact>>,
+        ) {
+            if !matches!(event, SwarmEvent::Behaviour(_)) {
+                info!(log, "libp2p event {:?}", event);
+            }
+            match event {
+                SwarmEvent::Behaviour(MainBehaviourEvent::GossipSub(
+                    libp2p::gossipsub::Event::Message {
+                        propagation_source,
+                        message_id,
+                        message,
+                    },
+                )) => match message.topic.into_string() {
+                    x if x == "exp" => {
+                        let peer_id = peerid_to_nodeid(propagation_source);
+                        let msg = bincode::deserialize(&message.data).unwrap();
+                        cb_tx
+                            .send(UnvalidatedArtifactMutation::Insert((msg, peer_id)))
+                            .unwrap();
+                    }
+                    _ => {
+                        unreachable!()
+                    }
+                },
+                SwarmEvent::ConnectionClosed {
+                    peer_id,
+                    connection_id,
+                    endpoint,
+                    num_established,
+                    cause,
+                } => {
+                    if let ConnectedPoint::Dialer { address, .. } = endpoint {
+                        swarm.dial(address).unwrap()
+                    };
+                }
+                SwarmEvent::OutgoingConnectionError {
+                    connection_id,
+                    peer_id,
+                    error,
+                } => {
+                    let peer_id = peer_id.unwrap();
+                    let x = topology.iter().find(|(_, p, s)| *p == peer_id).unwrap();
+                    let ip_addr = match x.2 {
+                        SocketAddr::V4(v4) => *v4.ip(),
+                        SocketAddr::V6(v6) => panic!("AH"),
+                    };
+                    swarm
+                        .dial(
+                            Multiaddr::empty()
+                                .with(libp2p::multiaddr::Protocol::Ip4(ip_addr))
+                                .with(libp2p::multiaddr::Protocol::Udp(x.2.port()))
+                                .with(libp2p::multiaddr::Protocol::QuicV1)
+                                .with_p2p(x.1)
+                                .unwrap(),
+                        )
+                        .unwrap()
+                }
+                _ => {
+                    // todo!()
+                }
+            }
+        }
+
+        async fn handle_advert_send(
+            swarm: &mut Swarm<MainBehaviour>,
+            msg: ArtifactProcessorEvent<TestArtifact>,
+            pool: &TestConsensus,
+        ) {
+            match msg {
+                ArtifactProcessorEvent::Advert(advert) => {
+                    let id = advert.id.clone();
+                    let pool = pool.clone();
+                    let artifact =
+                        tokio::task::spawn_blocking(move || pool.get_validated_by_identifier(&id))
+                            .await;
+
+                    let a = match artifact {
+                        Ok(Some(artifact)) => artifact,
+                        _ => return,
+                    };
+
+                    let _ = swarm
+                        .behaviour_mut()
+                        .gossip_sub
+                        .publish(IdentTopic::new("exp"), bincode::serialize(&a).unwrap());
+                }
+                _ => {}
+            }
+        }
+
+        let mut interval = tokio::time::interval(Duration::from_secs(10));
+        loop {
+            select! {
+                _ = interval.tick() => {
+                }
+                Some(event) = swarm.next() => {
+                    handle_swarm_event(&log, &mut swarm, &topology, event, &cb_tx);
+                }
+                Some(msg) = ap_rx.recv(), if swarm.connected_peers().count() > 0 => {
+                    handle_advert_send(&mut swarm, msg, &pool).await;
+                }
+            }
+        }
+    });
+}
+
+#[derive(libp2p::swarm::NetworkBehaviour)]
+struct MainBehaviour {
+    gossip_sub: libp2p::gossipsub::Behaviour,
 }
 
 struct SevImpl;

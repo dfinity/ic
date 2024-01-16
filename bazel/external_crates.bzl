@@ -519,6 +519,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "rustls",
                 ],
             ),
+            "libp2p": crate.spec(
+                version = "^0.53.0",
+                features = ["full"],
+            ),
             "ic0": crate.spec(
                 version = "^0.18.11",
             ),
