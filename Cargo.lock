@@ -8967,6 +8967,7 @@ dependencies = [
  "lazy_static",
  "lifeline",
  "maplit",
+ "num-traits",
  "pocket-ic",
  "prost",
  "registry-canister",
