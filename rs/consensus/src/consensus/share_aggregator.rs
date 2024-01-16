@@ -202,14 +202,16 @@ mod tests {
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_types::{
         consensus::{
-            Block, CatchUpPackageShare, CatchUpShareContent, FinalizationShare, HashedBlock,
-            HashedRandomBeacon, NotarizationShare, RandomBeacon, RandomBeaconShare,
+            CatchUpPackage, CatchUpPackageShare, CatchUpShareContent, FinalizationShare,
+            HashedBlock, HashedRandomBeacon, NotarizationShare, RandomBeaconShare,
         },
         crypto::{CryptoHash, CryptoHashOf},
         signature::ThresholdSignatureShare,
         NodeId, RegistryVersion,
     };
     use std::sync::Arc;
+
+    const INITIAL_REGISTRY_VERSION: u64 = 1;
 
     #[test]
     /// Adds a random beacon and notarization share to a pool
@@ -279,8 +281,51 @@ mod tests {
     }
 
     #[test]
+    fn test_catch_up_aggregation_without_oldest_registry_version() {
+        let cup = catch_up_package_aggregation(None);
+        assert_eq!(
+            cup.content
+                .oldest_registry_version_in_use_by_replicated_state,
+            None
+        );
+        assert_eq!(
+            cup.get_oldest_registry_version_in_use(),
+            RegistryVersion::from(INITIAL_REGISTRY_VERSION)
+        );
+    }
+
+    #[test]
+    fn test_catch_up_aggregation_with_smaller_oldest_registry_version() {
+        let cup = catch_up_package_aggregation(Some(RegistryVersion::from(0)));
+        assert_eq!(
+            cup.content
+                .oldest_registry_version_in_use_by_replicated_state,
+            Some(RegistryVersion::from(0))
+        );
+        assert_eq!(
+            cup.get_oldest_registry_version_in_use(),
+            RegistryVersion::from(0),
+        );
+    }
+
+    #[test]
+    fn test_catch_up_aggregation_with_larger_oldest_registry_version() {
+        let cup = catch_up_package_aggregation(Some(RegistryVersion::from(1234)));
+        assert_eq!(
+            cup.content
+                .oldest_registry_version_in_use_by_replicated_state,
+            Some(RegistryVersion::from(1234))
+        );
+        assert_eq!(
+            cup.get_oldest_registry_version_in_use(),
+            RegistryVersion::from(INITIAL_REGISTRY_VERSION)
+        );
+    }
+
     /// Test the aggregation of 'CatchUpPackageShare's
-    fn test_catch_up_package_aggregation() {
+    fn catch_up_package_aggregation(
+        oldest_registry_version_in_use_by_replicated_state: Option<RegistryVersion>,
+    ) -> CatchUpPackage {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let node_ids: Vec<_> = (0..3).map(node_test_id).collect();
             let interval_length = 3;
@@ -293,7 +338,7 @@ mod tests {
                 pool_config,
                 subnet_test_id(0),
                 vec![(
-                    1,
+                    INITIAL_REGISTRY_VERSION,
                     SubnetRecordBuilder::from(&node_ids)
                         .with_dkg_interval_length(interval_length)
                         .build(),
@@ -316,29 +361,25 @@ mod tests {
             pool.finalize(&block);
 
             // Insert a few CUP shares
-            fn new_cup_share(
-                start_block: &Block,
-                random_beacon: &RandomBeacon,
-                node_id: NodeId,
-            ) -> CatchUpPackageShare {
+            let new_cup_share = |node_id: NodeId| -> CatchUpPackageShare {
                 let state_hash = CryptoHashOf::from(CryptoHash(Vec::new()));
                 CatchUpPackageShare {
                     content: (&CatchUpContent::new(
-                        HashedBlock::new(ic_types::crypto::crypto_hash, start_block.clone()),
-                        HashedRandomBeacon::new(
+                        HashedBlock::new(
                             ic_types::crypto::crypto_hash,
-                            random_beacon.clone(),
+                            block.content.as_ref().clone(),
                         ),
+                        HashedRandomBeacon::new(ic_types::crypto::crypto_hash, beacon.clone()),
                         state_hash,
-                        Some(RegistryVersion::from(1234)),
+                        oldest_registry_version_in_use_by_replicated_state,
                     ))
                         .into(),
                     signature: ThresholdSignatureShare::fake(node_id),
                 }
-            }
-            let share0 = new_cup_share(block.content.as_ref(), &beacon, node_test_id(0));
-            let share1 = new_cup_share(block.content.as_ref(), &beacon, node_test_id(1));
-            let share2 = new_cup_share(block.content.as_ref(), &beacon, node_test_id(2));
+            };
+            let share0 = new_cup_share(node_test_id(0));
+            let share1 = new_cup_share(node_test_id(1));
+            let share2 = new_cup_share(node_test_id(2));
             pool.insert_validated(share0.clone());
             pool.insert_validated(share1);
             pool.insert_validated(share2);
@@ -352,6 +393,7 @@ mod tests {
             };
 
             assert_eq!(CatchUpShareContent::from(&cup.content), share0.content);
+            cup
         })
     }
 }
