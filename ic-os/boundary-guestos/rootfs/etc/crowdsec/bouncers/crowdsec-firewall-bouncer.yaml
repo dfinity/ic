@@ -1,6 +1,6 @@
 mode: nftables
 
-update_frequency: 1s
+update_frequency: 5s
 
 log_mode: stdout
 log_level: info

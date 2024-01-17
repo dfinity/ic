@@ -26,8 +26,8 @@ ARG snp_kernel_libc_host=linux-libc-dev_${snp_kernel_version_host}-1_amd64.deb
 ARG snp_kernel_libc_guest=linux-libc-dev_${snp_kernel_version_guest}-1_amd64.deb
 
 # Crowdsec bouncer version to install
-ARG CROWDSEC_BOUNCER_VERSION=1.0.12
-ARG CROWDSEC_BOUNCER_SHA=ff3f23bb2ac81cd28cd96a7e119b3f86594d5991a28690af1ed4ddc14a531127
+ARG CROWDSEC_BOUNCER_VERSION=1.0.13
+ARG CROWDSEC_BOUNCER_SHA=d6b8db252fdd36cc9597d9494e076a37082ddebeec26ad36932c09023077772b
 
 # Vector version to install
 ARG VECTOR_VERSION=0.35.0
@@ -102,7 +102,7 @@ RUN \
 
 # Download and verify crowdsec bouncer
 RUN \
-    curl -L -O https://github.com/blind-oracle/cs-firewall-bouncer/releases/download/${CROWDSEC_BOUNCER_VERSION}/crowdsec-firewall-bouncer-nftables_${CROWDSEC_BOUNCER_VERSION}_amd64.deb && \
+    curl -L -O https://github.com/blind-oracle/cs-firewall-bouncer/releases/download/v${CROWDSEC_BOUNCER_VERSION}/crowdsec-firewall-bouncer-nftables_${CROWDSEC_BOUNCER_VERSION}_amd64.deb && \
     echo "${CROWDSEC_BOUNCER_SHA}  crowdsec-firewall-bouncer-nftables_${CROWDSEC_BOUNCER_VERSION}_amd64.deb" | shasum -c
 
 # Download and build sev-guest tool
