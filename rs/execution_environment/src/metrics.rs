@@ -142,6 +142,9 @@ pub(crate) struct QueryHandlerMetrics {
     pub query_critical_error: IntCounter,
     /// The total number of tracked System API calls invoked during the query execution.
     pub query_system_api_calls: IntCounterVec,
+    /// The number of canisters evaluated and executed at least once
+    /// during the call graph evaluation.
+    pub query_evaluated_canisters: Histogram,
 }
 
 impl QueryHandlerMetrics {
@@ -251,6 +254,11 @@ impl QueryHandlerMetrics {
                 "The total number of tracked System API calls invoked \
                         during the query execution",
                 &["system_api_call_counter"],
+            ),
+            query_evaluated_canisters: metrics_registry.histogram(
+                "execution_query_evaluated_canisters",
+                "The number of canisters evaluated and executed at least once during the call graph evaluation",
+                vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 10.0],
             ),
         }
     }

@@ -145,7 +145,7 @@ pub(super) fn evaluate_query_call_graph(
         }
     }
 
-    // Each iteraton of the loop above either pushes an entry onto the call
+    // Each iteration of the loop above either pushes an entry onto the call
     // stack or sets the callee result. At this point the call stack is empty,
     // so the callee result must have been set and `unwrap` is safe here.
     callee_result.unwrap()
