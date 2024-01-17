@@ -15,9 +15,7 @@ Wants=ic-crypto-csp.service
 # of dynamic assignment they only become available once all
 # network interfaces are up.
 After=network-online.target
-BindsTo=network-online.target
-After=systemd-networkd.service
-PartOf=systemd-networkd.service
+Wants=network-online.target
 StartLimitBurst=5
 StartLimitIntervalSec=60
 
