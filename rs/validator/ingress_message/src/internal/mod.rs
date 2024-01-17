@@ -305,7 +305,8 @@ impl RootOfTrustProvider for ConstantRootOfTrustProvider {
     }
 }
 
-struct StandaloneIngressSigVerifier;
+/// A zero-sized struct that implements the `IngressSigVerifier` trait.
+pub struct StandaloneIngressSigVerifier;
 
 impl<S: Signable> BasicSigVerifierByPublicKey<S> for StandaloneIngressSigVerifier {
     fn verify_basic_sig_by_public_key(
