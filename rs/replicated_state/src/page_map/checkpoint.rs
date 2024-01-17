@@ -12,7 +12,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 lazy_static! {
-    static ref ZEROED_PAGE: Box<PageBytes> = Box::new([0; PAGE_SIZE]);
+    pub(crate) static ref ZEROED_PAGE: Box<PageBytes> = Box::new([0; PAGE_SIZE]);
 }
 
 /// Checkpoint represents a full snapshot of the heap of a single Wasm
