@@ -30,25 +30,25 @@ const BUCKET_SIZE: u64 = 10000;
 /// will be moved to the cold storage.
 const DAYS_TO_KEEP_STATES_IN_HOT_STORAGE: usize = 3;
 
-pub struct BackupHelper {
-    pub subnet_id: SubnetId,
-    pub initial_replica_version: ReplicaVersion,
-    pub root_dir: PathBuf,
-    pub excluded_dirs: Vec<String>,
-    pub ssh_private_key: String,
-    pub registry_client: Arc<RegistryClientImpl>,
-    pub notification_client: NotificationClient,
-    pub downloads_guard: Arc<Mutex<bool>>,
-    pub hot_disk_resource_threshold_percentage: u32,
-    pub cold_disk_resource_threshold_percentage: u32,
-    pub cold_storage_dir: PathBuf,
-    pub versions_hot: usize,
-    pub artifacts_guard: Mutex<bool>,
-    pub daily_replays: usize,
-    pub do_cold_storage: bool,
-    pub thread_id: u32,
-    pub blacklisted_nodes: Arc<Vec<IpAddr>>,
-    pub log: Logger,
+pub(crate) struct BackupHelper {
+    pub(crate) subnet_id: SubnetId,
+    pub(crate) initial_replica_version: ReplicaVersion,
+    pub(crate) root_dir: PathBuf,
+    pub(crate) excluded_dirs: Vec<String>,
+    pub(crate) ssh_private_key: String,
+    pub(crate) registry_client: Arc<RegistryClientImpl>,
+    pub(crate) notification_client: NotificationClient,
+    pub(crate) downloads_guard: Arc<Mutex<bool>>,
+    pub(crate) hot_disk_resource_threshold_percentage: u32,
+    pub(crate) cold_disk_resource_threshold_percentage: u32,
+    pub(crate) cold_storage_dir: PathBuf,
+    pub(crate) versions_hot: usize,
+    pub(crate) artifacts_guard: Mutex<bool>,
+    pub(crate) daily_replays: usize,
+    pub(crate) do_cold_storage: bool,
+    pub(crate) thread_id: u32,
+    pub(crate) blacklisted_nodes: Arc<Vec<IpAddr>>,
+    pub(crate) log: Logger,
 }
 
 enum ReplayResult {
