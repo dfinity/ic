@@ -1127,7 +1127,7 @@ pub enum IngressInductionCostError {
 mod tests {
     use super::*;
     use candid::Encode;
-    use ic_ic00_types::{CanisterSettingsArgs, UpdateSettingsArgs};
+    use ic_ic00_types::{CanisterSettingsArgsBuilder, UpdateSettingsArgs};
     use ic_test_utilities::types::ids::subnet_test_id;
 
     fn create_cycles_account_manager(reference_subnet_size: usize) -> CyclesAccountManager {
@@ -1148,13 +1148,9 @@ mod tests {
         let default_freezing_limit = 30 * 24 * 3600; // 30 days
         let payload = UpdateSettingsArgs {
             canister_id: CanisterId::from_u64(0).into(),
-            settings: CanisterSettingsArgs::new(
-                None,
-                None,
-                None,
-                Some(default_freezing_limit),
-                None,
-            ),
+            settings: CanisterSettingsArgsBuilder::new()
+                .with_freezing_threshold(default_freezing_limit)
+                .build(),
             sender_canister_version: None, // ingress messages are not supposed to set this field
         };
         assert!(2 * Encode!(&payload).unwrap().len() <= MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE);
