@@ -3,7 +3,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::{QueryStats, QueryStatsPayload, RawQueryStats},
     consensus::get_faults_tolerated,
-    epoch_from_height, CanisterId, Height,
+    CanisterId, Height,
 };
 use std::collections::BTreeMap;
 
@@ -72,12 +72,12 @@ fn apply_query_stats_to_canister(
 pub fn deliver_query_stats(
     query_stats: &QueryStatsPayload,
     state: &mut ReplicatedState,
-    height: Height,
+    _height: Height,
     logger: &ReplicaLogger,
-    epoch_length: u64,
+    _epoch_length: u64,
     metrics: &QueryStatsAggregatorMetrics,
 ) {
-    let epoch = epoch_from_height(height, epoch_length);
+    let epoch = query_stats.epoch;
 
     // If current epoch doesn't match the epoch we received
     if Some(epoch) != state.epoch_query_stats.epoch {
