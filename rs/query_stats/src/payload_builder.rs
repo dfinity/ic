@@ -182,7 +182,11 @@ impl QueryStatsPayloadBuilderImpl {
             .iter()
             .filter(|stats| !previous_ids.contains(&stats.canister_id))
             .cloned()
-            .collect();
+            .collect::<Vec<_>>();
+
+        if messages.is_empty() {
+            return vec![];
+        }
 
         self.metrics
             .query_stats_payload_builder_current_epoch
