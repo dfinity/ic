@@ -8,10 +8,9 @@ use axum::{
     http::{Request, Response, StatusCode},
 };
 use bytes::BytesMut;
-use ic_interfaces::p2p::state_sync::{Chunk, ChunkId, StateSyncClient};
+use ic_interfaces::p2p::state_sync::{Chunk, ChunkId, StateSyncArtifactId, StateSyncClient};
 use ic_logger::ReplicaLogger;
 use ic_protobuf::p2p::v1 as pb;
-use ic_types::artifact::StateSyncArtifactId;
 use prost::Message;
 
 pub const STATE_SYNC_CHUNK_PATH: &str = "/state-sync/chunk";

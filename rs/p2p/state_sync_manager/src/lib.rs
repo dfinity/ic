@@ -21,11 +21,11 @@ use std::{
 };
 
 use axum::{routing::any, Router};
-use ic_interfaces::p2p::state_sync::StateSyncClient;
+use ic_base_types::NodeId;
+use ic_interfaces::p2p::state_sync::{StateSyncArtifactId, StateSyncClient};
 use ic_logger::{info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_quic_transport::Transport;
-use ic_types::{artifact::StateSyncArtifactId, NodeId};
 use metrics::{StateSyncManagerHandlerMetrics, StateSyncManagerMetrics};
 use ongoing::OngoingStateSyncHandle;
 use routes::{
@@ -249,7 +249,7 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_p2p_test_utils::mocks::{MockChunkable, MockStateSync, MockTransport};
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_types::{crypto::CryptoHash, CryptoHashOfState, Height};
+    use ic_types::{crypto::CryptoHash, Height};
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
     use mockall::Sequence;
     use prost::Message;
@@ -330,11 +330,11 @@ mod tests {
             let rt = Runtime::new().unwrap();
             let old_id = StateSyncArtifactId {
                 height: Height::from(0),
-                hash: CryptoHashOfState::new(CryptoHash(vec![])),
+                hash: CryptoHash(vec![]),
             };
             let id = StateSyncArtifactId {
                 height: Height::from(1),
-                hash: CryptoHashOfState::new(CryptoHash(vec![])),
+                hash: CryptoHash(vec![]),
             };
 
             let (handler_tx, handler_rx) = tokio::sync::mpsc::channel(100);

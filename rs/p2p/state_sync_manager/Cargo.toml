@@ -16,7 +16,7 @@ ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-protobuf = { path = "../../protobuf" }
 ic-quic-transport = { path = "../quic_transport" }
-ic-types = { path = "../../types/types" }
+ic-base-types = { path = "../../types/base_types" }
 prometheus = { workspace = true }
 prost = { workspace = true }
 rand = "0.8.5"
@@ -33,6 +33,7 @@ ic-memory-transport = { path = "../memory_transport" }
 ic-p2p-test-utils = { path = "../test_utils" }
 ic-state-manager = { path = "../../state_manager" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
+ic-types = { path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 mockall = { workspace = true }
 turmoil = { workspace = true }

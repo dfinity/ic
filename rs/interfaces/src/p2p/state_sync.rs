@@ -1,7 +1,33 @@
 //! The file contains the synchronous interface used from P2P, to drive the StateSync protocol.  
-use ic_types::artifact::StateSyncArtifactId;
+use ic_protobuf::p2p::v1 as p2p_pb;
+use ic_types::{crypto::CryptoHash, Height};
 use phantom_newtype::Id;
 use thiserror::Error;
+
+/// Identifier of a state sync artifact.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct StateSyncArtifactId {
+    pub height: Height,
+    pub hash: CryptoHash,
+}
+
+impl From<StateSyncArtifactId> for p2p_pb::StateSyncId {
+    fn from(id: StateSyncArtifactId) -> Self {
+        Self {
+            height: id.height.get(),
+            hash: id.hash.0,
+        }
+    }
+}
+
+impl From<p2p_pb::StateSyncId> for StateSyncArtifactId {
+    fn from(id: p2p_pb::StateSyncId) -> Self {
+        Self {
+            height: Height::from(id.height),
+            hash: CryptoHash(id.hash),
+        }
+    }
+}
 
 pub type Chunk = Vec<u8>;
 

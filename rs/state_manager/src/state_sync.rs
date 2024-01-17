@@ -7,9 +7,11 @@ use crate::{
     state_sync::types::{FileGroupChunks, StateSyncMessage},
     StateSyncRefs, EXTRA_CHECKPOINTS_TO_KEEP, NUMBER_OF_CHECKPOINT_THREADS,
 };
-use ic_interfaces::p2p::state_sync::{Chunk, ChunkId, Chunkable, StateSyncClient};
+use ic_interfaces::p2p::state_sync::{
+    Chunk, ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient,
+};
 use ic_logger::{info, warn, ReplicaLogger};
-use ic_types::{artifact::StateSyncArtifactId, Height};
+use ic_types::{CryptoHashOfState, Height};
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
@@ -37,7 +39,7 @@ impl StateSync {
         Box::new(crate::state_sync::chunkable::IncompleteState::new(
             self.log.clone(),
             id.height,
-            id.hash.clone(),
+            CryptoHashOfState::from(id.hash.clone()),
             self.state_manager.state_layout.clone(),
             self.state_manager.latest_manifest(),
             self.state_manager.metrics.clone(),
@@ -64,7 +66,7 @@ impl StateSync {
             .states_metadata
             .iter()
             .find_map(|(height, metadata)| {
-                if metadata.root_hash() == Some(&msg_id.hash) {
+                if metadata.root_hash().map(|v| v.get_ref()) == Some(&msg_id.hash) {
                     let manifest = metadata.manifest()?;
                     let meta_manifest = metadata.meta_manifest()?;
                     let checkpoint_root =
@@ -82,7 +84,7 @@ impl StateSync {
 
                     Some(StateSyncMessage {
                         height: *height,
-                        root_hash: msg_id.hash.clone(),
+                        root_hash: CryptoHashOfState::from(msg_id.hash.clone()),
                         checkpoint_root: checkpoint_root.raw_path().to_path_buf(),
                         meta_manifest,
                         manifest: manifest.clone(),
@@ -142,7 +144,7 @@ impl StateSync {
                     };
                     Some(StateSyncArtifactId {
                         height: msg.height,
-                        hash: msg.root_hash.clone(),
+                        hash: msg.root_hash.clone().get(),
                     })
                 } else {
                     None
@@ -165,7 +167,7 @@ impl StateSync {
             if let Some(recorded_root_hash) = self.state_sync_refs.get(&artifact_id.height) {
                 // If this advert@h is for an ongoing state sync, we check if the hash is the
                 // same as the hash that consensus gave us.
-                if recorded_root_hash != artifact_id.hash {
+                if recorded_root_hash.get_ref() != &artifact_id.hash {
                     warn!(
                             self.log,
                             "Received an advert for state @{} with a hash that does not match the hash of the state we are fetching: expected {:?}, got {:?}",
@@ -190,7 +192,7 @@ impl StateSync {
             return match artifact_id.height.cmp(max_sync_height) {
                 Ordering::Less => false,
                 // Drop the advert if the hashes do not match.
-                Ordering::Equal if *hash != artifact_id.hash => {
+                Ordering::Equal if hash.get_ref() != &artifact_id.hash => {
                     warn!(
                             self.log,
                             "Received an advert for state {} with a hash that does not match the hash passed to fetch_state: expected {:?}, got {:?}",
