@@ -1319,6 +1319,10 @@ impl<T: HasDependencies> HasWasm for T {
                 .to_vec();
         }
 
+        if wasm_bytes.is_empty() {
+            panic!("WASM read from {:?} was empty", p.as_ref());
+        }
+
         if !(wasm_bytes.starts_with(WASM_MAGIC_BYTES)
             || wasm_bytes.starts_with(GZIPPED_WASM_MAGIC_BYTES))
         {

@@ -114,7 +114,7 @@ pub fn install_ii_and_nns_dapp(
             ("API_HOST".to_string(), https_farm_url.clone()),
             ("CYCLES_MINTING_CANISTER_ID".to_string(), "rkp4c-7iaaa-aaaaa-aaaca-cai".to_string()),
             ("DFX_NETWORK".to_string(), "farm".to_string()),
-            ("FEATURE_FLAGS".to_string(), "{\"ENABLE_CKBTC\":false,\"ENABLE_CKTESTBTC\":false,\"ENABLE_SNS_2\":false,\"ENABLE_SNS_AGGREGATOR\":false,\"ENABLE_SNS_VOTING\":false}".to_string()),
+            ("FEATURE_FLAGS".to_string(), "{\"ENABLE_CKBTC\":false,\"ENABLE_CKTESTBTC\":false,\"ENABLE_SNS_2\":false,\"ENABLE_SNS_AGGREGATOR\":false,\"ENABLE_SNS_VOTING\":false,\"ENABLE_MY_TOKENS\":true}".to_string()),
             ("FETCH_ROOT_KEY".to_string(), "true".to_string()),
             ("GOVERNANCE_CANISTER_ID".to_string(), "rrkah-fqaaa-aaaaa-aaaaq-cai".to_string()),
             ("GOVERNANCE_CANISTER_URL".to_string(), format!("https://rrkah-fqaaa-aaaaa-aaaaq-cai.{}", farm_url)),
