@@ -11257,6 +11257,7 @@ dependencies = [
  "bytes",
  "futures",
  "ic-async-utils",
+ "ic-base-types",
  "ic-interfaces",
  "ic-logger",
  "ic-memory-transport",

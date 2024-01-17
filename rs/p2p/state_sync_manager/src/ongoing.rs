@@ -20,10 +20,10 @@ use crate::metrics::OngoingStateSyncMetrics;
 use crate::routes::{build_chunk_handler_request, parse_chunk_handler_response};
 
 use ic_async_utils::JoinMap;
-use ic_interfaces::p2p::state_sync::{ChunkId, Chunkable, StateSyncClient};
+use ic_base_types::NodeId;
+use ic_interfaces::p2p::state_sync::{ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient};
 use ic_logger::{error, info, ReplicaLogger};
 use ic_quic_transport::Transport;
-use ic_types::{artifact::StateSyncArtifactId, NodeId};
 use rand::{
     distributions::{Distribution, WeightedIndex},
     rngs::SmallRng,
@@ -378,7 +378,7 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_p2p_test_utils::mocks::{MockChunkable, MockStateSync, MockTransport};
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_types::{crypto::CryptoHash, CryptoHashOfState, Height};
+    use ic_types::{crypto::CryptoHash, Height};
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
     use prost::Message;
     use tokio::runtime::Runtime;
@@ -422,7 +422,7 @@ mod tests {
                 Arc::new(Mutex::new(Box::new(c))),
                 StateSyncArtifactId {
                     height: Height::from(1),
-                    hash: CryptoHashOfState::new(CryptoHash(vec![])),
+                    hash: CryptoHash(vec![]),
                 },
                 Arc::new(s),
                 Arc::new(t),
@@ -464,7 +464,7 @@ mod tests {
                 Arc::new(Mutex::new(Box::new(c))),
                 StateSyncArtifactId {
                     height: Height::from(1),
-                    hash: CryptoHashOfState::new(CryptoHash(vec![])),
+                    hash: CryptoHash(vec![]),
                 },
                 Arc::new(s),
                 Arc::new(t),
@@ -511,7 +511,7 @@ mod tests {
                 Arc::new(Mutex::new(Box::new(c))),
                 StateSyncArtifactId {
                     height: Height::from(1),
-                    hash: CryptoHashOfState::new(CryptoHash(vec![])),
+                    hash: CryptoHash(vec![]),
                 },
                 Arc::new(s),
                 Arc::new(t),

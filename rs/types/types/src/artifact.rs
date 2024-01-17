@@ -27,12 +27,11 @@ use crate::{
     filetree_sync::{FileTreeSyncArtifact, FileTreeSyncId},
     messages::{HttpRequestError, MessageId, SignedIngress, SignedRequestBytes},
     p2p::GossipAdvert,
-    CryptoHashOfState, Height, NodeId, Time,
+    Height, NodeId, Time,
 };
 use derive_more::{AsMut, AsRef, From, TryInto};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_protobuf::p2p::v1 as p2p_pb;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::types::{v1 as pb, v1::artifact::Kind};
 use serde::{Deserialize, Serialize};
@@ -571,16 +570,6 @@ pub type EcdsaMessageId = EcdsaArtifactId;
 pub type CanisterHttpResponseId = CanisterHttpResponseShare;
 
 // ------------------------------------------------------------------------------
-// StateSync artifacts.
-
-/// Identifier of a state sync artifact.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct StateSyncArtifactId {
-    pub height: Height,
-    pub hash: CryptoHashOfState,
-}
-
-// ------------------------------------------------------------------------------
 // Conversions
 
 impl From<Artifact> for pb::Artifact {
@@ -678,23 +667,5 @@ impl TryFrom<pb::CertificationMessageFilter> for CertificationMessageFilter {
         Ok(Self {
             height: Height::from(filter.height),
         })
-    }
-}
-
-impl From<StateSyncArtifactId> for p2p_pb::StateSyncId {
-    fn from(id: StateSyncArtifactId) -> Self {
-        Self {
-            height: id.height.get(),
-            hash: id.hash.get().0,
-        }
-    }
-}
-
-impl From<p2p_pb::StateSyncId> for StateSyncArtifactId {
-    fn from(id: p2p_pb::StateSyncId) -> Self {
-        Self {
-            height: Height::from(id.height),
-            hash: CryptoHashOfState::new(CryptoHash(id.hash)),
-        }
     }
 }

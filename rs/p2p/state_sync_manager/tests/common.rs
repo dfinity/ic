@@ -9,15 +9,17 @@ use std::{
     time::Duration,
 };
 
-use ic_interfaces::p2p::state_sync::{AddChunkError, Chunk, ChunkId, Chunkable, StateSyncClient};
+use ic_interfaces::p2p::state_sync::{
+    AddChunkError, Chunk, ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient,
+};
 use ic_logger::ReplicaLogger;
 use ic_memory_transport::TransportRouter;
 use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::mocks::{MockChunkable, MockStateSync};
 use ic_state_manager::state_sync::types::{Manifest, MetaManifest, StateSyncMessage};
 use ic_types::{
-    artifact::StateSyncArtifactId, crypto::CryptoHash, state_sync::StateSyncVersion,
-    CryptoHashOfState, Height, NodeId, PrincipalId,
+    crypto::CryptoHash, state_sync::StateSyncVersion, CryptoHashOfState, Height, NodeId,
+    PrincipalId,
 };
 use tokio::{runtime::Handle, task::JoinHandle};
 
@@ -108,7 +110,7 @@ impl State {
         state.chunks.hash(&mut hasher);
         StateSyncArtifactId {
             height: state.height,
-            hash: CryptoHashOfState::from(CryptoHash(hasher.finish().to_be_bytes().to_vec())),
+            hash: CryptoHash(hasher.finish().to_be_bytes().to_vec()),
         }
     }
 
@@ -429,7 +431,7 @@ fn state_sync_artifact(id: StateSyncArtifactId) -> StateSyncMessage {
 
     StateSyncMessage {
         height: id.height,
-        root_hash: id.hash,
+        root_hash: CryptoHashOfState::from(id.hash),
         checkpoint_root: PathBuf::new(),
         manifest,
         meta_manifest: Arc::new(meta_manifest),
