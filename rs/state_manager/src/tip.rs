@@ -517,7 +517,11 @@ impl MergeCandidateAndMetrics {
             None => 0,
             Some(m) => m.input_size_bytes()?,
         };
-        let write_size_bytes = std::cmp::min(page_map_size_bytes, merge_input_bytes as usize);
+        let write_size_bytes = if merge_all {
+            page_map_size_bytes
+        } else {
+            std::cmp::min(page_map_size_bytes, merge_input_bytes as usize)
+        };
         Ok(MergeCandidateAndMetrics {
             merge_candidate,
             num_files_before,
@@ -672,11 +676,7 @@ fn merge(
             0
         }
     });
-    let storage_to_save = if max_storage < storage_size {
-        storage_size - max_storage
-    } else {
-        0
-    };
+    let storage_to_save = storage_size as i64 - max_storage as i64;
     // For a full merge the resulting base file can be larger than sum of the overlays,
     // so we need a signed accumulator.
     let mut storage_saved: i64 = scheduled_merges
@@ -684,7 +684,7 @@ fn merge(
         .map(|m| m.storage_size_bytes_before as i64 - m.storage_size_bytes_after as i64)
         .sum();
     for m in merges_with_metrics.into_iter() {
-        if storage_saved >= storage_to_save as i64 {
+        if storage_saved >= storage_to_save {
             break;
         }
 

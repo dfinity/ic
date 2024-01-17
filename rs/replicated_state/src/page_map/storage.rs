@@ -11,7 +11,7 @@ use std::{
 };
 
 use crate::page_map::{
-    checkpoint::{Checkpoint, Mapping},
+    checkpoint::{Checkpoint, Mapping, ZEROED_PAGE},
     CheckpointSerialization, FileDescriptor, FileOffset, MappingSerialization, MemoryInstruction,
     MemoryInstructions, MemoryMapOrData, PageDelta, PersistDestination, PersistenceError,
     StorageMetrics, LABEL_OP_FLUSH, LABEL_OP_MERGE, LABEL_TYPE_INDEX, LABEL_TYPE_PAGE_DATA,
@@ -1099,37 +1099,18 @@ fn create_file_for_write(path: &Path) -> Result<File, PersistenceError> {
         })
 }
 
-/// A buffer to write data to file at offset based on `PageIndex` of the start.
-struct LinearWriteBuffer {
-    /// Content to write.
-    content: Vec<u8>,
-    /// `PageIndex` of offset in the destination file.
-    start_index: PageIndex,
-}
-
-impl LinearWriteBuffer {
-    fn apply_to_file(&mut self, file: &mut File, path: &Path) -> Result<(), PersistenceError> {
-        let offset = self.start_index.get() * PAGE_SIZE as u64;
-        file.seek(SeekFrom::Start(offset))
-            .map_err(|err| PersistenceError::FileSystemError {
-                path: path.display().to_string(),
-                context: format!("Failed to seek to {}", offset),
-                internal_error: err.to_string(),
-            })?;
-
-        file.write_all(&self.content)
-            .map_err(|err| PersistenceError::FileSystemError {
-                path: path.display().to_string(),
-                context: format!(
-                    "Failed to write page range #{}..{}",
-                    self.start_index,
-                    self.start_index.get() + self.content.len() as u64
-                ),
-                internal_error: err.to_string(),
-            })?;
-
-        Ok(())
+fn expand_with_zeroes<'a>(pages: &[&'a [u8]], indices: &[PageIndex]) -> Vec<&'a [u8]> {
+    if indices.is_empty() {
+        return Vec::new();
     }
+
+    let mut result =
+        vec![&ZEROED_PAGE as &PageBytes as &[u8]; indices.last().unwrap().get() as usize + 1];
+    assert_eq!(pages.len(), indices.len());
+    for (page, index) in pages.iter().zip(indices) {
+        result[index.get() as usize] = page;
+    }
+    result
 }
 
 /// Write all the pages into their corresponding indices as a base file (dense storage).
@@ -1145,27 +1126,16 @@ fn write_base(
         return Ok(());
     }
     let mut file = create_file_for_write(path)?;
-    let mut data_size = 0;
-    let mut buffer = LinearWriteBuffer {
-        content: pages[0].to_vec(),
-        start_index: indices[0],
-    };
-    let mut last_index = indices[0];
-    for (page, index) in pages.iter().zip(indices).skip(1) {
-        if index.get() != last_index.get() + 1 || buffer.content.len() + page.len() > BUF_SIZE {
-            buffer.apply_to_file(&mut file, path)?;
-            buffer.start_index = *index;
-            buffer.content.clear();
-        }
-        buffer.content.extend(*page);
-        data_size += page.len();
-        last_index = *index;
-    }
-    buffer.apply_to_file(&mut file, path)?;
+    let pages = expand_with_zeroes(pages, indices);
+    write_pages(&mut file, &pages).map_err(|err| PersistenceError::FileSystemError {
+        path: path.display().to_string(),
+        context: format!("Failed to write base file {}", path.display()),
+        internal_error: err.to_string(),
+    })?;
     metrics
         .write_bytes
         .with_label_values(&[op_label, LABEL_TYPE_PAGE_DATA])
-        .inc_by(data_size as u64);
+        .inc_by((pages.len() * PAGE_SIZE) as u64);
     Ok(())
 }
 
