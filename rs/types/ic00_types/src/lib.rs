@@ -1466,20 +1466,16 @@ pub struct CanisterSettingsArgs {
 impl Payload<'_> for CanisterSettingsArgs {}
 
 impl CanisterSettingsArgs {
-    pub fn new(
-        controllers: Option<Vec<PrincipalId>>,
-        compute_allocation: Option<u64>,
-        memory_allocation: Option<u64>,
-        freezing_threshold: Option<u64>,
-        reserved_cycles_limit: Option<u128>,
-    ) -> Self {
+    /// Note: do not use `new(...)` with passing all the arguments, use corresponding builder instead.
+    #[deprecated(note = "please use `CanisterSettingsArgsBuilder` instead")]
+    pub fn new() -> Self {
         Self {
             controller: None,
-            controllers: controllers.map(BoundedControllers::new),
-            compute_allocation: compute_allocation.map(candid::Nat::from),
-            memory_allocation: memory_allocation.map(candid::Nat::from),
-            freezing_threshold: freezing_threshold.map(candid::Nat::from),
-            reserved_cycles_limit: reserved_cycles_limit.map(candid::Nat::from),
+            controllers: None,
+            compute_allocation: None,
+            memory_allocation: None,
+            freezing_threshold: None,
+            reserved_cycles_limit: None,
         }
     }
 
