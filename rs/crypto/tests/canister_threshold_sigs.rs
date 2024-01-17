@@ -30,7 +30,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     InitialIDkgDealings, SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, ThresholdEcdsaSigInputs};
-use ic_types::crypto::{AlgorithmId, BasicSigOf, CryptoError};
+use ic_types::crypto::{AlgorithmId, CryptoError};
 use ic_types::{NodeId, Randomness};
 use maplit::hashset;
 use rand::distributions::uniform::SampleRange;
@@ -3496,15 +3496,10 @@ mod verify_initial_dealings {
                 .load_previous_transcripts_and_create_signed_dealings(&reshare_params);
             let mut signed_dealings_vec = signed_dealings.into_values().collect::<Vec<_>>();
             if corrupt_first_dealing {
-                if let Some(first_signed_dealing) = signed_dealings_vec.first_mut() {
-                    let corrupted_sig = {
-                        let mut sig_clone =
-                            first_signed_dealing.signature.signature.get_ref().clone();
-                        sig_clone.0.push(0xff);
-                        BasicSigOf::new(sig_clone)
-                    };
-                    first_signed_dealing.signature.signature = corrupted_sig;
-                }
+                signed_dealings_vec
+                    .first_mut()
+                    .map(|sd| *sd = sd.clone().into_builder().corrupt_signature().build())
+                    .expect("no dealings");
             }
 
             InitialIDkgDealings::new(reshare_params.clone(), signed_dealings_vec)

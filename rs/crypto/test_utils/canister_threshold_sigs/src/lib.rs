@@ -3,7 +3,7 @@
 use crate::node::{Node, Nodes};
 use ic_crypto_internal_threshold_sig_ecdsa::test_utils::{corrupt_dealing, ComplaintCorrupter};
 use ic_crypto_internal_threshold_sig_ecdsa::{
-    EccScalar, IDkgComplaintInternal, IDkgDealingInternal, MEGaCiphertext, NodeIndex, Seed,
+    IDkgComplaintInternal, IDkgDealingInternal, NodeIndex, Seed,
 };
 use ic_crypto_temp_crypto::{TempCryptoComponent, TempCryptoComponentGeneric};
 use ic_interfaces::crypto::IDkgProtocol;
@@ -2124,6 +2124,7 @@ pub fn corrupt_dealings_and_generate_complaints<'a, R: RngCore + CryptoRng>(
                 *index_to_corrupt,
                 &mut transcript.verified_dealings,
                 complainer_index,
+                rng,
             )
         });
 
@@ -2179,38 +2180,30 @@ fn generate_and_verify_opening(
     opening
 }
 
-fn corrupt_signed_dealing_for_one_receiver(
+fn corrupt_signed_dealing_for_one_receiver<R: Rng + CryptoRng>(
     dealing_index_to_corrupt: NodeIndex,
     dealings: &mut BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
     receiver_index: NodeIndex,
+    rng: &mut R,
 ) {
     let signed_dealing = dealings
         .get_mut(&dealing_index_to_corrupt)
         .unwrap_or_else(|| panic!("Missing dealing at index {:?}", dealing_index_to_corrupt));
     let invalidated_internal_dealing_raw = {
-        let mut internal_dealing =
+        let internal_dealing =
             IDkgDealingInternal::deserialize(&signed_dealing.idkg_dealing().internal_dealing_raw)
                 .expect("failed to deserialize internal dealing");
-        match internal_dealing.ciphertext {
-            MEGaCiphertext::Single(ref mut ctext) => {
-                let corrupted_ctext = corrupt_ecc_scalar(&ctext.ctexts[receiver_index as usize]);
-                ctext.ctexts[receiver_index as usize] = corrupted_ctext;
-            }
-            MEGaCiphertext::Pairs(ref mut ctext) => {
-                let (ctext_1, ctext_2) = ctext.ctexts[receiver_index as usize].clone();
-                let corrupted_ctext_1 = corrupt_ecc_scalar(&ctext_1);
-                ctext.ctexts[receiver_index as usize] = (corrupted_ctext_1, ctext_2);
-            }
-        };
-        internal_dealing
+
+        let corrupted_internal_dealing =
+            ic_crypto_internal_threshold_sig_ecdsa::test_utils::corrupt_dealing(
+                &internal_dealing,
+                &[receiver_index],
+                Seed::from_rng(rng),
+            )
+            .expect("failed to corrupt dealing");
+        corrupted_internal_dealing
             .serialize()
             .expect("failed to serialize internal dealing")
     };
     signed_dealing.content.content.internal_dealing_raw = invalidated_internal_dealing_raw;
-}
-
-fn corrupt_ecc_scalar(value: &EccScalar) -> EccScalar {
-    value
-        .add(&EccScalar::one(value.curve_type()))
-        .expect("Corruption for testing failed")
 }
