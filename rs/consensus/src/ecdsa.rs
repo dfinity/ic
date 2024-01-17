@@ -190,6 +190,7 @@ use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
+use ic_types::crypto::canister_threshold_sig::error::IDkgRetainKeysError;
 use ic_types::{
     artifact::{EcdsaMessageId, Priority, PriorityFn},
     artifact_kind::EcdsaArtifact,
@@ -328,23 +329,35 @@ impl EcdsaImpl {
             return;
         }
 
-        if let Err(error) =
-            IDkgProtocol::retain_active_transcripts(&*self.crypto, &active_transcripts)
-        {
-            error!(
-                self.logger,
-                "{}: failed with error = {:?}",
-                CRITICAL_ERROR_ECDSA_RETAIN_ACTIVE_TRANSCRIPTS,
-                error
-            );
-            self.metrics
-                .critical_error_ecdsa_retain_active_transcripts
-                .inc();
-        } else {
-            self.metrics
-                .client_metrics
-                .with_label_values(&["retain_active_transcripts"])
-                .inc();
+        match IDkgProtocol::retain_active_transcripts(&*self.crypto, &active_transcripts) {
+            Err(IDkgRetainKeysError::TransientInternalError { internal_error }) => {
+                warn!(
+                    self.logger,
+                    "purge_inactive_transcripts(): failed due to transient error: {}",
+                    internal_error
+                );
+                self.metrics
+                    .client_errors
+                    .with_label_values(&["retain_active_transcripts_transient"])
+                    .inc();
+            }
+            Err(error) => {
+                error!(
+                    self.logger,
+                    "{}: failed with error = {:?}",
+                    CRITICAL_ERROR_ECDSA_RETAIN_ACTIVE_TRANSCRIPTS,
+                    error
+                );
+                self.metrics
+                    .critical_error_ecdsa_retain_active_transcripts
+                    .inc();
+            }
+            Ok(()) => {
+                self.metrics
+                    .client_metrics
+                    .with_label_values(&["retain_active_transcripts"])
+                    .inc();
+            }
         }
     }
 }
