@@ -3,7 +3,8 @@ name = "pocket-ic"
 version = "2.0.1"
 license = "Apache-2.0"
 description = "PocketIC: A Canister Smart Contract Testing Platform"
-repository = "https://github.com/dfinity/ic"
+repository = "https://github.com/dfinity/ic/packages/pocket-ic"
+documentation = "https://docs.rs/pocket-ic/latest/pocket_ic/"
 readme = "README.md"
 categories = ["emulators", "development-tools::testing", "wasm"]
 keywords = ["icp", "canister", "testing", "smart-contract", "internet-computer"]
@@ -17,7 +18,6 @@ include = [
 ]
 authors.workspace = true
 edition.workspace = true
-documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
