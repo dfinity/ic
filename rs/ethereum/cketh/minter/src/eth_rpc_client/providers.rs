@@ -1,6 +1,6 @@
 use candid::CandidType;
 use ic_cdk::api::management_canister::http_request::HttpHeader;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 pub(crate) const MAINNET_PROVIDERS: &[RpcService] = &[
     RpcService::EthMainnet(EthMainnetService::Alchemy),
@@ -22,13 +22,17 @@ pub struct RpcApi {
     pub headers: Vec<HttpHeader>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize, CandidType)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize, CandidType,
+)]
 pub enum RpcService {
     EthMainnet(EthMainnetService),
     EthSepolia(EthSepoliaService),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize, CandidType)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize, CandidType,
+)]
 pub enum EthMainnetService {
     Alchemy,
     Ankr,
@@ -37,7 +41,9 @@ pub enum EthMainnetService {
     Cloudflare,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize, CandidType)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize, CandidType,
+)]
 pub enum EthSepoliaService {
     Alchemy,
     Ankr,
