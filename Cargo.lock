@@ -6117,6 +6117,7 @@ dependencies = [
  "ic-consensus",
  "ic-consensus-mocks",
  "ic-crypto-prng",
+ "ic-ic00-types",
  "ic-interfaces",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
