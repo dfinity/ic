@@ -9,6 +9,8 @@ IC-OS is an umbrella term for all the operating systems within the IC, including
 * GuestOS: The operating system that runs inside a virtual machine on the HostOS. The core IC protocol is executed within the GuestOS.
 * Boundary-guestOS: The operating system that runs on boundary nodes.
 
+Here`s all the images on Docker Hub: `https://hub.docker.com/u/dfinity`
+
 == Building IC-OS images
 
 All the IC-OS images can be built though Bazel.
