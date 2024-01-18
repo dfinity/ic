@@ -1,5 +1,5 @@
 {
-  "checksum": "54ca1c27064cc161cf79cec75ae5c9f85fab3e57feb2c29ecc0d7ea618ab6ffd",
+  "checksum": "4499f827e535ec9cce6c33d08eefe6371741c49999e9cd0c3887be88de5648a5",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -305,7 +305,7 @@
               "target": "futures_core"
             },
             {
-              "id": "h2 0.3.21",
+              "id": "h2 0.3.24",
               "target": "h2"
             },
             {
@@ -15104,7 +15104,7 @@
               "target": "glob"
             },
             {
-              "id": "h2 0.3.21",
+              "id": "h2 0.3.24",
               "target": "h2"
             },
             {
@@ -21329,13 +21329,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "h2 0.3.21": {
+    "h2 0.3.24": {
       "name": "h2",
-      "version": "0.3.21",
+      "version": "0.3.24",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/h2/0.3.21/download",
-          "sha256": "91fc23aa11be92976ef4729127f1a74adf36d8436f7816b185d18df956790833"
+          "url": "https://crates.io/api/v1/crates/h2/0.3.24/download",
+          "sha256": "bb2c4422095b67ee78da96fbb51a4cc413b3b25883c7717ff7ca1ab31022c9c9"
         }
       },
       "targets": [
@@ -21381,7 +21381,7 @@
               "target": "http"
             },
             {
-              "id": "indexmap 1.9.3",
+              "id": "indexmap 2.1.0",
               "target": "indexmap"
             },
             {
@@ -21404,17 +21404,17 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.21"
+        "version": "0.3.24"
       },
       "license": "MIT"
     },
-    "h2 0.4.1": {
+    "h2 0.4.2": {
       "name": "h2",
-      "version": "0.4.1",
+      "version": "0.4.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/h2/0.4.1/download",
-          "sha256": "991910e35c615d8cab86b5ab04be67e6ad24d2bf5f4f11fdbbed26da999bbeab"
+          "url": "https://crates.io/api/v1/crates/h2/0.4.2/download",
+          "sha256": "31d030e59af851932b72ceebadf4a2b5986dba4c3b99dd2493f8273a0f151943"
         }
       },
       "targets": [
@@ -21483,7 +21483,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.4.1"
+        "version": "0.4.2"
       },
       "license": "MIT"
     },
@@ -23291,7 +23291,7 @@
               "target": "futures_util"
             },
             {
-              "id": "h2 0.3.21",
+              "id": "h2 0.3.24",
               "target": "h2"
             },
             {
@@ -23397,7 +23397,7 @@
               "target": "futures_util"
             },
             {
-              "id": "h2 0.4.1",
+              "id": "h2 0.4.2",
               "target": "h2"
             },
             {
@@ -30722,78 +30722,34 @@
         ],
         "crate_features": {
           "common": [
-            "elf",
-            "errno",
             "general",
+            "if_ether",
             "ioctl",
-            "no_std"
+            "net",
+            "netlink",
+            "no_std",
+            "prctl"
           ],
           "selects": {
-            "aarch64-linux-android": [
-              "if_ether",
-              "net",
-              "netlink",
-              "prctl"
-            ],
             "aarch64-unknown-linux-gnu": [
-              "if_ether",
-              "net",
-              "netlink",
-              "prctl"
+              "elf",
+              "errno"
             ],
             "arm-unknown-linux-gnueabi": [
-              "if_ether",
-              "net",
-              "netlink",
-              "prctl"
-            ],
-            "armv7-linux-androideabi": [
-              "if_ether",
-              "net",
-              "netlink",
-              "prctl"
+              "elf",
+              "errno"
             ],
             "armv7-unknown-linux-gnueabi": [
-              "if_ether",
-              "net",
-              "netlink",
-              "prctl"
-            ],
-            "i686-linux-android": [
-              "if_ether",
-              "net",
-              "netlink",
-              "prctl"
+              "elf",
+              "errno"
             ],
             "i686-unknown-linux-gnu": [
-              "if_ether",
-              "net",
-              "netlink",
-              "prctl"
-            ],
-            "powerpc-unknown-linux-gnu": [
-              "if_ether",
-              "net",
-              "netlink",
-              "prctl"
-            ],
-            "s390x-unknown-linux-gnu": [
-              "if_ether",
-              "net",
-              "netlink",
-              "prctl"
-            ],
-            "x86_64-linux-android": [
-              "if_ether",
-              "net",
-              "netlink",
-              "prctl"
+              "elf",
+              "errno"
             ],
             "x86_64-unknown-linux-gnu": [
-              "if_ether",
-              "net",
-              "netlink",
-              "prctl"
+              "elf",
+              "errno"
             ]
           }
         },
@@ -44630,7 +44586,7 @@
                 "target": "encoding_rs"
               },
               {
-                "id": "h2 0.3.21",
+                "id": "h2 0.3.24",
                 "target": "h2"
               },
               {
@@ -55200,7 +55156,7 @@
               "target": "bytes"
             },
             {
-              "id": "h2 0.3.21",
+              "id": "h2 0.3.24",
               "target": "h2"
             },
             {
