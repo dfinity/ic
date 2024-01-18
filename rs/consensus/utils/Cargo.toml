@@ -25,3 +25,4 @@ ic-consensus = { path = "../" }
 ic-consensus-mocks = { path = "../mocks" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-registry = { path = "../../test_utilities/registry" }
+ic-ic00-types = { path = "../../types/ic00_types" }
