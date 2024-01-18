@@ -189,7 +189,8 @@ resource "aws_key_pair" "deletable-key-eu_central_1" {
   public_key = tls_private_key.experiment.public_key_openssh
 }
 
-resource "aws_instance" "deletable-instance-eu_central_1" {
+
+resource "aws_instance" "deletable-instance-0" {
   provider        = aws.eu_central_1
   ami             = "ami-0faab6bdbac9486fb"
   instance_type   = "m7i.8xlarge"
@@ -214,132 +215,32 @@ EOF
 }
 
 
-resource "null_resource" "deletable-prov-eu_central_1" {
-  depends_on = [aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_1, aws_instance.deletable-instance-us_west_2]
+resource "null_resource" "deletable-prov-0" {
+  depends_on = [aws_instance.deletable-instance-0, aws_instance.deletable-instance-1, aws_instance.deletable-instance-2, aws_instance.deletable-instance-3, aws_instance.deletable-instance-4, aws_instance.deletable-instance-5, aws_instance.deletable-instance-6, aws_instance.deletable-instance-7, aws_instance.deletable-instance-8, aws_instance.deletable-instance-9, aws_instance.deletable-instance-10]
 
   provisioner "remote-exec" {
     connection {
-      host        = aws_instance.deletable-instance-eu_central_1.public_ip
+      host        = aws_instance.deletable-instance-0.public_ip
       user        = "ubuntu"
       private_key = tls_private_key.experiment.private_key_pem
     }
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 0 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100 --libp2p"
+      "ip addr show",
+      "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
+      "/tmp/binary --id 0 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100 ${aws_instance.deletable-instance-9.private_ip}:4100 ${aws_instance.deletable-instance-10.private_ip}:4100 "
     ]
   }
 }
 
-
-resource "aws_security_group" "deletable-sg-eu_central_2" {
-  provider        = aws.eu_central_2
-  name        = "allow_all"
-
-  ingress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "experiment"
-  }
-}
-
-resource "aws_key_pair" "deletable-key-eu_central_2" {
-  provider        = aws.eu_central_2
-  key_name   = "my-terraform-key-eu_central_2"
-  public_key = tls_private_key.experiment.public_key_openssh
-}
-
-resource "aws_instance" "deletable-instance-eu_central_2" {
-  provider        = aws.eu_central_2
-  ami             = "ami-02e901e47eb942582"
-  instance_type   = "m6i.8xlarge"
-  monitoring = true
-  key_name = aws_key_pair.deletable-key-eu_central_2.key_name
-  vpc_security_group_ids = [aws_security_group.deletable-sg-eu_central_2.id]
-
-  tags = {
-    Name = "experiment"
-  }
-  user_data = <<EOF
-#!/bin/bash
-
-sudo sysctl -w net.core.rmem_max=500000000
-sudo sysctl -w net.core.wmem_max=500000000
-# Download the binary from the pre-signed S3 URL
-curl -o /tmp/binary "${var.runner_url}"
-
-# Make binary executable
-chmod +x /tmp/binary
-EOF
-}
-
-
-resource "null_resource" "deletable-prov-eu_central_2" {
-  depends_on = [aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_1, aws_instance.deletable-instance-us_west_2]
-
-  provisioner "remote-exec" {
-    connection {
-      host        = aws_instance.deletable-instance-eu_central_2.public_ip
-      user        = "ubuntu"
-      private_key = tls_private_key.experiment.private_key_pem
-    }
-
-    inline = [
-      "sleep 30",
-      "/tmp/binary --id 1 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100 --libp2p"
-    ]
-  }
-}
-
-
-resource "aws_security_group" "deletable-sg-eu_north_1" {
-  provider        = aws.eu_north_1
-  name        = "allow_all"
-
-  ingress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "experiment"
-  }
-}
-
-resource "aws_key_pair" "deletable-key-eu_north_1" {
-  provider        = aws.eu_north_1
-  key_name   = "my-terraform-key-eu_north_1"
-  public_key = tls_private_key.experiment.public_key_openssh
-}
-
-resource "aws_instance" "deletable-instance-eu_north_1" {
-  provider        = aws.eu_north_1
-  ami             = "ami-0014ce3e52359afbd"
+resource "aws_instance" "deletable-instance-1" {
+  provider        = aws.eu_central_1
+  ami             = "ami-0faab6bdbac9486fb"
   instance_type   = "m7i.8xlarge"
   monitoring = true
-  key_name = aws_key_pair.deletable-key-eu_north_1.key_name
-  vpc_security_group_ids = [aws_security_group.deletable-sg-eu_north_1.id]
+  key_name = aws_key_pair.deletable-key-eu_central_1.key_name
+  vpc_security_group_ids = [aws_security_group.deletable-sg-eu_central_1.id]
 
   tags = {
     Name = "experiment"
@@ -358,60 +259,32 @@ EOF
 }
 
 
-resource "null_resource" "deletable-prov-eu_north_1" {
-  depends_on = [aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_1, aws_instance.deletable-instance-us_west_2]
+resource "null_resource" "deletable-prov-1" {
+  depends_on = [aws_instance.deletable-instance-0, aws_instance.deletable-instance-1, aws_instance.deletable-instance-2, aws_instance.deletable-instance-3, aws_instance.deletable-instance-4, aws_instance.deletable-instance-5, aws_instance.deletable-instance-6, aws_instance.deletable-instance-7, aws_instance.deletable-instance-8, aws_instance.deletable-instance-9, aws_instance.deletable-instance-10]
 
   provisioner "remote-exec" {
     connection {
-      host        = aws_instance.deletable-instance-eu_north_1.public_ip
+      host        = aws_instance.deletable-instance-1.public_ip
       user        = "ubuntu"
       private_key = tls_private_key.experiment.private_key_pem
     }
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 2 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100 --libp2p"
+      "ip addr show",
+      "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
+      "/tmp/binary --id 1 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100 ${aws_instance.deletable-instance-9.private_ip}:4100 ${aws_instance.deletable-instance-10.private_ip}:4100 "
     ]
   }
 }
 
-
-resource "aws_security_group" "deletable-sg-eu_south_2" {
-  provider        = aws.eu_south_2
-  name        = "allow_all"
-
-  ingress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "experiment"
-  }
-}
-
-resource "aws_key_pair" "deletable-key-eu_south_2" {
-  provider        = aws.eu_south_2
-  key_name   = "my-terraform-key-eu_south_2"
-  public_key = tls_private_key.experiment.public_key_openssh
-}
-
-resource "aws_instance" "deletable-instance-eu_south_2" {
-  provider        = aws.eu_south_2
-  ami             = "ami-0a9e7160cebfd8c12"
+resource "aws_instance" "deletable-instance-2" {
+  provider        = aws.eu_central_1
+  ami             = "ami-0faab6bdbac9486fb"
   instance_type   = "m7i.8xlarge"
   monitoring = true
-  key_name = aws_key_pair.deletable-key-eu_south_2.key_name
-  vpc_security_group_ids = [aws_security_group.deletable-sg-eu_south_2.id]
+  key_name = aws_key_pair.deletable-key-eu_central_1.key_name
+  vpc_security_group_ids = [aws_security_group.deletable-sg-eu_central_1.id]
 
   tags = {
     Name = "experiment"
@@ -430,60 +303,32 @@ EOF
 }
 
 
-resource "null_resource" "deletable-prov-eu_south_2" {
-  depends_on = [aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_1, aws_instance.deletable-instance-us_west_2]
+resource "null_resource" "deletable-prov-2" {
+  depends_on = [aws_instance.deletable-instance-0, aws_instance.deletable-instance-1, aws_instance.deletable-instance-2, aws_instance.deletable-instance-3, aws_instance.deletable-instance-4, aws_instance.deletable-instance-5, aws_instance.deletable-instance-6, aws_instance.deletable-instance-7, aws_instance.deletable-instance-8, aws_instance.deletable-instance-9, aws_instance.deletable-instance-10]
 
   provisioner "remote-exec" {
     connection {
-      host        = aws_instance.deletable-instance-eu_south_2.public_ip
+      host        = aws_instance.deletable-instance-2.public_ip
       user        = "ubuntu"
       private_key = tls_private_key.experiment.private_key_pem
     }
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 3 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100 --libp2p"
+      "ip addr show",
+      "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
+      "/tmp/binary --id 2 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100 ${aws_instance.deletable-instance-9.private_ip}:4100 ${aws_instance.deletable-instance-10.private_ip}:4100 "
     ]
   }
 }
 
-
-resource "aws_security_group" "deletable-sg-eu_west_1" {
-  provider        = aws.eu_west_1
-  name        = "allow_all"
-
-  ingress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "experiment"
-  }
-}
-
-resource "aws_key_pair" "deletable-key-eu_west_1" {
-  provider        = aws.eu_west_1
-  key_name   = "my-terraform-key-eu_west_1"
-  public_key = tls_private_key.experiment.public_key_openssh
-}
-
-resource "aws_instance" "deletable-instance-eu_west_1" {
-  provider        = aws.eu_west_1
-  ami             = "ami-0905a3c97561e0b69"
+resource "aws_instance" "deletable-instance-3" {
+  provider        = aws.eu_central_1
+  ami             = "ami-0faab6bdbac9486fb"
   instance_type   = "m7i.8xlarge"
   monitoring = true
-  key_name = aws_key_pair.deletable-key-eu_west_1.key_name
-  vpc_security_group_ids = [aws_security_group.deletable-sg-eu_west_1.id]
+  key_name = aws_key_pair.deletable-key-eu_central_1.key_name
+  vpc_security_group_ids = [aws_security_group.deletable-sg-eu_central_1.id]
 
   tags = {
     Name = "experiment"
@@ -502,60 +347,32 @@ EOF
 }
 
 
-resource "null_resource" "deletable-prov-eu_west_1" {
-  depends_on = [aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_1, aws_instance.deletable-instance-us_west_2]
+resource "null_resource" "deletable-prov-3" {
+  depends_on = [aws_instance.deletable-instance-0, aws_instance.deletable-instance-1, aws_instance.deletable-instance-2, aws_instance.deletable-instance-3, aws_instance.deletable-instance-4, aws_instance.deletable-instance-5, aws_instance.deletable-instance-6, aws_instance.deletable-instance-7, aws_instance.deletable-instance-8, aws_instance.deletable-instance-9, aws_instance.deletable-instance-10]
 
   provisioner "remote-exec" {
     connection {
-      host        = aws_instance.deletable-instance-eu_west_1.public_ip
+      host        = aws_instance.deletable-instance-3.public_ip
       user        = "ubuntu"
       private_key = tls_private_key.experiment.private_key_pem
     }
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 4 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100 --libp2p"
+      "ip addr show",
+      "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
+      "/tmp/binary --id 3 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100 ${aws_instance.deletable-instance-9.private_ip}:4100 ${aws_instance.deletable-instance-10.private_ip}:4100 "
     ]
   }
 }
 
-
-resource "aws_security_group" "deletable-sg-eu_west_2" {
-  provider        = aws.eu_west_2
-  name        = "allow_all"
-
-  ingress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "experiment"
-  }
-}
-
-resource "aws_key_pair" "deletable-key-eu_west_2" {
-  provider        = aws.eu_west_2
-  key_name   = "my-terraform-key-eu_west_2"
-  public_key = tls_private_key.experiment.public_key_openssh
-}
-
-resource "aws_instance" "deletable-instance-eu_west_2" {
-  provider        = aws.eu_west_2
-  ami             = "ami-0e5f882be1900e43b"
+resource "aws_instance" "deletable-instance-4" {
+  provider        = aws.eu_central_1
+  ami             = "ami-0faab6bdbac9486fb"
   instance_type   = "m7i.8xlarge"
   monitoring = true
-  key_name = aws_key_pair.deletable-key-eu_west_2.key_name
-  vpc_security_group_ids = [aws_security_group.deletable-sg-eu_west_2.id]
+  key_name = aws_key_pair.deletable-key-eu_central_1.key_name
+  vpc_security_group_ids = [aws_security_group.deletable-sg-eu_central_1.id]
 
   tags = {
     Name = "experiment"
@@ -574,60 +391,32 @@ EOF
 }
 
 
-resource "null_resource" "deletable-prov-eu_west_2" {
-  depends_on = [aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_1, aws_instance.deletable-instance-us_west_2]
+resource "null_resource" "deletable-prov-4" {
+  depends_on = [aws_instance.deletable-instance-0, aws_instance.deletable-instance-1, aws_instance.deletable-instance-2, aws_instance.deletable-instance-3, aws_instance.deletable-instance-4, aws_instance.deletable-instance-5, aws_instance.deletable-instance-6, aws_instance.deletable-instance-7, aws_instance.deletable-instance-8, aws_instance.deletable-instance-9, aws_instance.deletable-instance-10]
 
   provisioner "remote-exec" {
     connection {
-      host        = aws_instance.deletable-instance-eu_west_2.public_ip
+      host        = aws_instance.deletable-instance-4.public_ip
       user        = "ubuntu"
       private_key = tls_private_key.experiment.private_key_pem
     }
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 5 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100 --libp2p"
+      "ip addr show",
+      "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
+      "/tmp/binary --id 4 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100 ${aws_instance.deletable-instance-9.private_ip}:4100 ${aws_instance.deletable-instance-10.private_ip}:4100 "
     ]
   }
 }
 
-
-resource "aws_security_group" "deletable-sg-eu_west_3" {
-  provider        = aws.eu_west_3
-  name        = "allow_all"
-
-  ingress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "experiment"
-  }
-}
-
-resource "aws_key_pair" "deletable-key-eu_west_3" {
-  provider        = aws.eu_west_3
-  key_name   = "my-terraform-key-eu_west_3"
-  public_key = tls_private_key.experiment.public_key_openssh
-}
-
-resource "aws_instance" "deletable-instance-eu_west_3" {
-  provider        = aws.eu_west_3
-  ami             = "ami-01d21b7be69801c2f"
+resource "aws_instance" "deletable-instance-5" {
+  provider        = aws.eu_central_1
+  ami             = "ami-0faab6bdbac9486fb"
   instance_type   = "m7i.8xlarge"
   monitoring = true
-  key_name = aws_key_pair.deletable-key-eu_west_3.key_name
-  vpc_security_group_ids = [aws_security_group.deletable-sg-eu_west_3.id]
+  key_name = aws_key_pair.deletable-key-eu_central_1.key_name
+  vpc_security_group_ids = [aws_security_group.deletable-sg-eu_central_1.id]
 
   tags = {
     Name = "experiment"
@@ -646,60 +435,32 @@ EOF
 }
 
 
-resource "null_resource" "deletable-prov-eu_west_3" {
-  depends_on = [aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_1, aws_instance.deletable-instance-us_west_2]
+resource "null_resource" "deletable-prov-5" {
+  depends_on = [aws_instance.deletable-instance-0, aws_instance.deletable-instance-1, aws_instance.deletable-instance-2, aws_instance.deletable-instance-3, aws_instance.deletable-instance-4, aws_instance.deletable-instance-5, aws_instance.deletable-instance-6, aws_instance.deletable-instance-7, aws_instance.deletable-instance-8, aws_instance.deletable-instance-9, aws_instance.deletable-instance-10]
 
   provisioner "remote-exec" {
     connection {
-      host        = aws_instance.deletable-instance-eu_west_3.public_ip
+      host        = aws_instance.deletable-instance-5.public_ip
       user        = "ubuntu"
       private_key = tls_private_key.experiment.private_key_pem
     }
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 6 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100 --libp2p"
+      "ip addr show",
+      "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
+      "/tmp/binary --id 5 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100 ${aws_instance.deletable-instance-9.private_ip}:4100 ${aws_instance.deletable-instance-10.private_ip}:4100 "
     ]
   }
 }
 
-
-resource "aws_security_group" "deletable-sg-us_east_1" {
-  provider        = aws.us_east_1
-  name        = "allow_all"
-
-  ingress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "experiment"
-  }
-}
-
-resource "aws_key_pair" "deletable-key-us_east_1" {
-  provider        = aws.us_east_1
-  key_name   = "my-terraform-key-us_east_1"
-  public_key = tls_private_key.experiment.public_key_openssh
-}
-
-resource "aws_instance" "deletable-instance-us_east_1" {
-  provider        = aws.us_east_1
-  ami             = "ami-0c7217cdde317cfec"
+resource "aws_instance" "deletable-instance-6" {
+  provider        = aws.eu_central_1
+  ami             = "ami-0faab6bdbac9486fb"
   instance_type   = "m7i.8xlarge"
   monitoring = true
-  key_name = aws_key_pair.deletable-key-us_east_1.key_name
-  vpc_security_group_ids = [aws_security_group.deletable-sg-us_east_1.id]
+  key_name = aws_key_pair.deletable-key-eu_central_1.key_name
+  vpc_security_group_ids = [aws_security_group.deletable-sg-eu_central_1.id]
 
   tags = {
     Name = "experiment"
@@ -718,60 +479,32 @@ EOF
 }
 
 
-resource "null_resource" "deletable-prov-us_east_1" {
-  depends_on = [aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_1, aws_instance.deletable-instance-us_west_2]
+resource "null_resource" "deletable-prov-6" {
+  depends_on = [aws_instance.deletable-instance-0, aws_instance.deletable-instance-1, aws_instance.deletable-instance-2, aws_instance.deletable-instance-3, aws_instance.deletable-instance-4, aws_instance.deletable-instance-5, aws_instance.deletable-instance-6, aws_instance.deletable-instance-7, aws_instance.deletable-instance-8, aws_instance.deletable-instance-9, aws_instance.deletable-instance-10]
 
   provisioner "remote-exec" {
     connection {
-      host        = aws_instance.deletable-instance-us_east_1.public_ip
+      host        = aws_instance.deletable-instance-6.public_ip
       user        = "ubuntu"
       private_key = tls_private_key.experiment.private_key_pem
     }
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 7 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100 --libp2p"
+      "ip addr show",
+      "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
+      "/tmp/binary --id 6 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100 ${aws_instance.deletable-instance-9.private_ip}:4100 ${aws_instance.deletable-instance-10.private_ip}:4100 "
     ]
   }
 }
 
-
-resource "aws_security_group" "deletable-sg-us_east_2" {
-  provider        = aws.us_east_2
-  name        = "allow_all"
-
-  ingress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "experiment"
-  }
-}
-
-resource "aws_key_pair" "deletable-key-us_east_2" {
-  provider        = aws.us_east_2
-  key_name   = "my-terraform-key-us_east_2"
-  public_key = tls_private_key.experiment.public_key_openssh
-}
-
-resource "aws_instance" "deletable-instance-us_east_2" {
-  provider        = aws.us_east_2
-  ami             = "ami-05fb0b8c1424f266b"
+resource "aws_instance" "deletable-instance-7" {
+  provider        = aws.eu_central_1
+  ami             = "ami-0faab6bdbac9486fb"
   instance_type   = "m7i.8xlarge"
   monitoring = true
-  key_name = aws_key_pair.deletable-key-us_east_2.key_name
-  vpc_security_group_ids = [aws_security_group.deletable-sg-us_east_2.id]
+  key_name = aws_key_pair.deletable-key-eu_central_1.key_name
+  vpc_security_group_ids = [aws_security_group.deletable-sg-eu_central_1.id]
 
   tags = {
     Name = "experiment"
@@ -790,60 +523,32 @@ EOF
 }
 
 
-resource "null_resource" "deletable-prov-us_east_2" {
-  depends_on = [aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_1, aws_instance.deletable-instance-us_west_2]
+resource "null_resource" "deletable-prov-7" {
+  depends_on = [aws_instance.deletable-instance-0, aws_instance.deletable-instance-1, aws_instance.deletable-instance-2, aws_instance.deletable-instance-3, aws_instance.deletable-instance-4, aws_instance.deletable-instance-5, aws_instance.deletable-instance-6, aws_instance.deletable-instance-7, aws_instance.deletable-instance-8, aws_instance.deletable-instance-9, aws_instance.deletable-instance-10]
 
   provisioner "remote-exec" {
     connection {
-      host        = aws_instance.deletable-instance-us_east_2.public_ip
+      host        = aws_instance.deletable-instance-7.public_ip
       user        = "ubuntu"
       private_key = tls_private_key.experiment.private_key_pem
     }
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 8 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100 --libp2p"
+      "ip addr show",
+      "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
+      "/tmp/binary --id 7 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100 ${aws_instance.deletable-instance-9.private_ip}:4100 ${aws_instance.deletable-instance-10.private_ip}:4100 "
     ]
   }
 }
 
-
-resource "aws_security_group" "deletable-sg-us_west_1" {
-  provider        = aws.us_west_1
-  name        = "allow_all"
-
-  ingress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "experiment"
-  }
-}
-
-resource "aws_key_pair" "deletable-key-us_west_1" {
-  provider        = aws.us_west_1
-  key_name   = "my-terraform-key-us_west_1"
-  public_key = tls_private_key.experiment.public_key_openssh
-}
-
-resource "aws_instance" "deletable-instance-us_west_1" {
-  provider        = aws.us_west_1
-  ami             = "ami-0ce2cb35386fc22e9"
+resource "aws_instance" "deletable-instance-8" {
+  provider        = aws.eu_central_1
+  ami             = "ami-0faab6bdbac9486fb"
   instance_type   = "m7i.8xlarge"
   monitoring = true
-  key_name = aws_key_pair.deletable-key-us_west_1.key_name
-  vpc_security_group_ids = [aws_security_group.deletable-sg-us_west_1.id]
+  key_name = aws_key_pair.deletable-key-eu_central_1.key_name
+  vpc_security_group_ids = [aws_security_group.deletable-sg-eu_central_1.id]
 
   tags = {
     Name = "experiment"
@@ -862,60 +567,32 @@ EOF
 }
 
 
-resource "null_resource" "deletable-prov-us_west_1" {
-  depends_on = [aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_1, aws_instance.deletable-instance-us_west_2]
+resource "null_resource" "deletable-prov-8" {
+  depends_on = [aws_instance.deletable-instance-0, aws_instance.deletable-instance-1, aws_instance.deletable-instance-2, aws_instance.deletable-instance-3, aws_instance.deletable-instance-4, aws_instance.deletable-instance-5, aws_instance.deletable-instance-6, aws_instance.deletable-instance-7, aws_instance.deletable-instance-8, aws_instance.deletable-instance-9, aws_instance.deletable-instance-10]
 
   provisioner "remote-exec" {
     connection {
-      host        = aws_instance.deletable-instance-us_west_1.public_ip
+      host        = aws_instance.deletable-instance-8.public_ip
       user        = "ubuntu"
       private_key = tls_private_key.experiment.private_key_pem
     }
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 9 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100 --libp2p"
+      "ip addr show",
+      "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
+      "/tmp/binary --id 8 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-9.private_ip}:4100 ${aws_instance.deletable-instance-10.private_ip}:4100 "
     ]
   }
 }
 
-
-resource "aws_security_group" "deletable-sg-us_west_2" {
-  provider        = aws.us_west_2
-  name        = "allow_all"
-
-  ingress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "experiment"
-  }
-}
-
-resource "aws_key_pair" "deletable-key-us_west_2" {
-  provider        = aws.us_west_2
-  key_name   = "my-terraform-key-us_west_2"
-  public_key = tls_private_key.experiment.public_key_openssh
-}
-
-resource "aws_instance" "deletable-instance-us_west_2" {
-  provider        = aws.us_west_2
-  ami             = "ami-008fe2fc65df48dac"
+resource "aws_instance" "deletable-instance-9" {
+  provider        = aws.eu_central_1
+  ami             = "ami-0faab6bdbac9486fb"
   instance_type   = "m7i.8xlarge"
   monitoring = true
-  key_name = aws_key_pair.deletable-key-us_west_2.key_name
-  vpc_security_group_ids = [aws_security_group.deletable-sg-us_west_2.id]
+  key_name = aws_key_pair.deletable-key-eu_central_1.key_name
+  vpc_security_group_ids = [aws_security_group.deletable-sg-eu_central_1.id]
 
   tags = {
     Name = "experiment"
@@ -934,28 +611,73 @@ EOF
 }
 
 
-resource "null_resource" "deletable-prov-us_west_2" {
-  depends_on = [aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_1, aws_instance.deletable-instance-us_west_2]
+resource "null_resource" "deletable-prov-9" {
+  depends_on = [aws_instance.deletable-instance-0, aws_instance.deletable-instance-1, aws_instance.deletable-instance-2, aws_instance.deletable-instance-3, aws_instance.deletable-instance-4, aws_instance.deletable-instance-5, aws_instance.deletable-instance-6, aws_instance.deletable-instance-7, aws_instance.deletable-instance-8, aws_instance.deletable-instance-9, aws_instance.deletable-instance-10]
 
   provisioner "remote-exec" {
     connection {
-      host        = aws_instance.deletable-instance-us_west_2.public_ip
+      host        = aws_instance.deletable-instance-9.public_ip
       user        = "ubuntu"
       private_key = tls_private_key.experiment.private_key_pem
     }
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 10 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 --libp2p"
+      "ip addr show",
+      "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
+      "/tmp/binary --id 9 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100 ${aws_instance.deletable-instance-10.private_ip}:4100 "
     ]
   }
 }
 
+resource "aws_instance" "deletable-instance-10" {
+  provider        = aws.eu_central_1
+  ami             = "ami-0faab6bdbac9486fb"
+  instance_type   = "m7i.8xlarge"
+  monitoring = true
+  key_name = aws_key_pair.deletable-key-eu_central_1.key_name
+  vpc_security_group_ids = [aws_security_group.deletable-sg-eu_central_1.id]
+
+  tags = {
+    Name = "experiment"
+  }
+  user_data = <<EOF
+#!/bin/bash
+
+sudo sysctl -w net.core.rmem_max=500000000
+sudo sysctl -w net.core.wmem_max=500000000
+# Download the binary from the pre-signed S3 URL
+curl -o /tmp/binary "${var.runner_url}"
+
+# Make binary executable
+chmod +x /tmp/binary
+EOF
+}
+
+
+resource "null_resource" "deletable-prov-10" {
+  depends_on = [aws_instance.deletable-instance-0, aws_instance.deletable-instance-1, aws_instance.deletable-instance-2, aws_instance.deletable-instance-3, aws_instance.deletable-instance-4, aws_instance.deletable-instance-5, aws_instance.deletable-instance-6, aws_instance.deletable-instance-7, aws_instance.deletable-instance-8, aws_instance.deletable-instance-9, aws_instance.deletable-instance-10]
+
+  provisioner "remote-exec" {
+    connection {
+      host        = aws_instance.deletable-instance-10.public_ip
+      user        = "ubuntu"
+      private_key = tls_private_key.experiment.private_key_pem
+    }
+
+    inline = [
+      "sleep 30",
+      "ip addr show",
+      "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
+      "/tmp/binary --id 10 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100 ${aws_instance.deletable-instance-9.private_ip}:4100 "
+    ]
+  }
+}
 
 resource "null_resource" "deletable-local-prov-REGION" {
-  depends_on = [aws_instance.deletable-instance-eu_central_1, aws_instance.deletable-instance-eu_central_2, aws_instance.deletable-instance-eu_north_1, aws_instance.deletable-instance-eu_south_2, aws_instance.deletable-instance-eu_west_1, aws_instance.deletable-instance-eu_west_2, aws_instance.deletable-instance-eu_west_3, aws_instance.deletable-instance-us_east_1, aws_instance.deletable-instance-us_east_2, aws_instance.deletable-instance-us_west_1, aws_instance.deletable-instance-us_west_2]
+  depends_on = [aws_instance.deletable-instance-0, aws_instance.deletable-instance-1, aws_instance.deletable-instance-2, aws_instance.deletable-instance-3, aws_instance.deletable-instance-4, aws_instance.deletable-instance-5, aws_instance.deletable-instance-6, aws_instance.deletable-instance-7, aws_instance.deletable-instance-8, aws_instance.deletable-instance-9, aws_instance.deletable-instance-10]
 
   provisioner "local-exec" {
-    command = "python3 metrics-collector.py ${aws_instance.deletable-instance-eu_central_1.public_ip} ${aws_instance.deletable-instance-eu_central_2.public_ip} ${aws_instance.deletable-instance-eu_north_1.public_ip} ${aws_instance.deletable-instance-eu_south_2.public_ip} ${aws_instance.deletable-instance-eu_west_1.public_ip} ${aws_instance.deletable-instance-eu_west_2.public_ip} ${aws_instance.deletable-instance-eu_west_3.public_ip} ${aws_instance.deletable-instance-us_east_1.public_ip} ${aws_instance.deletable-instance-us_east_2.public_ip} ${aws_instance.deletable-instance-us_west_1.public_ip} ${aws_instance.deletable-instance-us_west_2.public_ip}"
+    command = "python3 metrics-collector.py ${aws_instance.deletable-instance-0.public_ip} ${aws_instance.deletable-instance-1.public_ip} ${aws_instance.deletable-instance-2.public_ip} ${aws_instance.deletable-instance-3.public_ip} ${aws_instance.deletable-instance-4.public_ip} ${aws_instance.deletable-instance-5.public_ip} ${aws_instance.deletable-instance-6.public_ip} ${aws_instance.deletable-instance-7.public_ip} ${aws_instance.deletable-instance-8.public_ip} ${aws_instance.deletable-instance-9.public_ip} ${aws_instance.deletable-instance-10.public_ip}"
   }
 }

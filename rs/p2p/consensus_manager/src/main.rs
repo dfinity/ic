@@ -41,6 +41,7 @@ use libp2p::{
     core::ConnectedPoint, gossipsub::IdentTopic, swarm::SwarmEvent, Multiaddr, PeerId, Swarm,
     SwarmBuilder,
 };
+use prometheus::TextEncoder;
 use rand::Rng;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
@@ -367,6 +368,14 @@ async fn libp2p_metrics_handler(
     buffer
 }
 
+async fn cm_metrics_handler(State(metrics): State<MetricsRegistry>) -> String {
+    let encoder = TextEncoder::new();
+    let metrics = encoder
+        .encode_to_string(&metrics.prometheus_registry().gather())
+        .unwrap();
+    metrics
+}
+
 async fn interval_handler(State(w): State<Arc<tokio::sync::watch::Sender<usize>>>, msg: String) {
     let rps = msg.parse::<usize>().unwrap();
     w.send(rps);
@@ -406,6 +415,7 @@ async fn main() {
     peers_addrs.insert(args.id as usize, transport_addr);
 
     let registry = Arc::new(Mutex::new(prometheus_client::registry::Registry::default()));
+    let metrics_reg = MetricsRegistry::default();
 
     if args.libp2p {
         start_libp2p(
@@ -430,6 +440,7 @@ async fn main() {
             test_consensus,
             cb_tx,
             artifact_processor_rx,
+            metrics_reg.clone(),
         );
     }
 
@@ -462,7 +473,9 @@ async fn main() {
         .route("/libp2pmetrics", get(libp2p_metrics_handler))
         .with_state(registry)
         .route("/setrate", post(interval_handler))
-        .with_state(Arc::new(rps_tx));
+        .with_state(Arc::new(rps_tx))
+        .route("/cmmetrics", get(cm_metrics_handler))
+        .with_state(metrics_reg);
 
     axum::serve(metric_listener, metrics_router).await.unwrap();
 }
@@ -476,6 +489,7 @@ fn start_cm(
     test_consensus: TestConsensus,
     cb_tx: crossbeam_channel::Sender<UnvalidatedArtifactMutation<TestArtifact>>,
     mut ap_rx: tokio::sync::mpsc::Receiver<ArtifactProcessorEvent<TestArtifact>>,
+    metrics: MetricsRegistry,
 ) {
     // generate deterministic crypto based on id
     let mut seeded_rng = ChaCha20Rng::seed_from_u64(id);
@@ -487,7 +501,7 @@ fn start_cm(
     let mut new_p2p_consensus = ic_consensus_manager::ConsensusManagerBuilder::new(
         log.clone(),
         rt_handle.clone(),
-        MetricsRegistry::default(),
+        metrics.clone(),
     );
     let mut topology: Vec<(NodeId, SocketAddr)> = peers_addrs
         .into_iter()
@@ -515,7 +529,7 @@ fn start_cm(
     };
     let quic_transport = Arc::new(ic_quic_transport::QuicTransport::start(
         &log,
-        &MetricsRegistry::default(),
+        &metrics,
         &rt_handle,
         Arc::new(tls) as Arc<_>,
         Arc::new(MockReg) as Arc<_>,
