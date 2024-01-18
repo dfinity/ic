@@ -111,7 +111,7 @@ ENV PYTHONPATH=/ic/gitlab-ci/src:/ic/gitlab-ci/src/dependencies:$PYTHONPATH
 RUN cd /tmp/bazel && bazel version
 
 # Add Rust/Cargo support
-ARG RUST_VERSION=1.74.0
+ARG RUST_VERSION=1.75.0
 RUN curl --fail https://sh.rustup.rs -sSf \
     | sh -s -- -y --default-toolchain ${RUST_VERSION}-x86_64-unknown-linux-gnu --no-modify-path && \
     rustup default ${RUST_VERSION}-x86_64-unknown-linux-gnu && \
@@ -120,9 +120,9 @@ RUN curl --fail https://sh.rustup.rs -sSf \
 
 # Add buf
 ARG BUF_BIN="/usr/local/bin/buf"
-ARG BUF_VERSION="1.25.1"
+ARG BUF_VERSION="1.28.1"
 RUN curl -sSL "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-$(uname -s)-$(uname -m)" -o "${BUF_BIN}" && \
-    echo "3e013b7b7d204ee0ca2952da076fd3fd6e014d11aa92e6262a4343bd61747f34  ${BUF_BIN}" | shasum -a 256 -c - && \
+    echo "855a055c8615a03ee93219f287bd7f652586c6b6b8d2b01079782cba54ee6033  ${BUF_BIN}" | shasum -a 256 -c - && \
     chmod +x "${BUF_BIN}"
 
 # Add zshrc generated from zsh-newuser-install (option 2)

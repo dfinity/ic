@@ -27,7 +27,7 @@ jobs:
       labels: bazel-runner
     timeout-minutes: 80
     container:
-      image: dfinity/ic-build:faf4659295a243194eba5d02a551c0a703d9f0983febf53fe833672ffde5143d
+      image: dfinity/ic-build:ec3fe9e47a7d85b134067994aa7b9d92bc256082a22ddd1c127a15aa65d45c23
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
