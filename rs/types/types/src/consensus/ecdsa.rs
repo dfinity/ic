@@ -691,12 +691,11 @@ impl EcdsaUIDGenerator {
         id
     }
 
-    pub fn next_quadruple_id(&mut self) -> QuadrupleId {
+    pub fn next_quadruple_id(&mut self, key_id: EcdsaKeyId) -> QuadrupleId {
         let id = self.next_unused_quadruple_id;
         self.next_unused_quadruple_id += 1;
 
-        // TODO(kpop): fill this with an appropriate EcdsaKeyId
-        QuadrupleId(id, None)
+        QuadrupleId(id, Some(key_id))
     }
 }
 
@@ -1875,5 +1874,45 @@ impl<T: HasEcdsaKeyId, U> HasEcdsaKeyId for (T, U) {
 impl<T: HasEcdsaKeyId> HasEcdsaKeyId for &T {
     fn key_id(&self) -> Option<&EcdsaKeyId> {
         (*self).key_id()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn uid_generator_quadruple_ids_are_globally_unique_test() {
+        let mut uid_generator =
+            EcdsaUIDGenerator::new(ic_types_test_utils::ids::SUBNET_0, Height::new(100));
+
+        let quadruple_id_0 = uid_generator.next_quadruple_id(fake_ecdsa_key_id("key_id_0"));
+        let quadruple_id_1 = uid_generator.next_quadruple_id(fake_ecdsa_key_id("key_id_1"));
+        let quadruple_id_2 = uid_generator.next_quadruple_id(fake_ecdsa_key_id("key_id_2"));
+
+        assert_eq!(quadruple_id_0.id(), 0);
+        assert_eq!(quadruple_id_1.id(), 1);
+        assert_eq!(quadruple_id_2.id(), 2);
+    }
+
+    #[test]
+    fn uid_generator_quadruple_id_test() {
+        let key_id_1 = fake_ecdsa_key_id("key_id_1");
+        let key_id_2 = fake_ecdsa_key_id("key_id_2");
+        let mut uid_generator =
+            EcdsaUIDGenerator::new(ic_types_test_utils::ids::SUBNET_0, Height::new(100));
+
+        let quadruple_id_0 = uid_generator.next_quadruple_id(key_id_1.clone());
+        let quadruple_id_1 = uid_generator.next_quadruple_id(key_id_2.clone());
+
+        assert_eq!(quadruple_id_0.key_id(), Some(&key_id_1));
+        assert_eq!(quadruple_id_1.key_id(), Some(&key_id_2));
+    }
+
+    fn fake_ecdsa_key_id(name: &str) -> EcdsaKeyId {
+        EcdsaKeyId {
+            curve: ic_ic00_types::EcdsaCurve::Secp256k1,
+            name: name.to_string(),
+        }
     }
 }

@@ -45,6 +45,7 @@ hex-literal = "0.4.1"
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../../crypto/test_utils/canister_threshold_sigs" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-exhaustive-derive = { path = "../exhaustive_derive" }
+ic-types-test-utils = { path = "../types_test_utils" }
 pretty_assertions = { workspace = true }
 rand = "0.8"
 rand_chacha = "0.3.1"

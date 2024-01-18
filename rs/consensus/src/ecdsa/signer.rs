@@ -619,7 +619,7 @@ mod tests {
                     warn!(
                         log,
                         "Failed to resolve sig input ref: reason = {}, \
-                     sig_inputs_ref = {:?}, error = {:?}",
+                         sig_inputs_ref = {:?}, error = {:?}",
                         reason,
                         sig_inputs_ref,
                         error
@@ -632,7 +632,7 @@ mod tests {
     }
 
     fn create_request_id(generator: &mut EcdsaUIDGenerator, height: Height) -> RequestId {
-        let quadruple_id = generator.next_quadruple_id();
+        let quadruple_id = generator.next_quadruple_id(fake_ecdsa_key_id());
         let pseudo_random_id = [0; 32];
         RequestId {
             quadruple_id,

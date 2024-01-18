@@ -11739,6 +11739,7 @@ dependencies = [
  "ic-exhaustive-derive",
  "ic-ic00-types",
  "ic-protobuf",
+ "ic-types-test-utils",
  "ic-utils 0.9.0",
  "maplit",
  "once_cell",

@@ -274,7 +274,7 @@ fn make_new_quadruples_if_needed_helper(
             let kappa_config = new_random_config(subnet_nodes, registry_version, uid_generator);
             let lambda_config = new_random_config(subnet_nodes, registry_version, uid_generator);
             quadruples_in_creation.insert(
-                uid_generator.next_quadruple_id(),
+                uid_generator.next_quadruple_id(ecdsa_payload.key_transcript.key_id.clone()),
                 ecdsa::QuadrupleInCreation::new(kappa_config, lambda_config),
             );
         }
@@ -309,6 +309,7 @@ pub(super) mod test_utils {
 
     use std::collections::BTreeMap;
 
+    use ic_ic00_types::EcdsaKeyId;
     use ic_types::{
         consensus::ecdsa::{self, EcdsaPayload, QuadrupleId, UnmaskedTranscript},
         NodeId, RegistryVersion,
@@ -318,28 +319,39 @@ pub(super) mod test_utils {
         subnet_nodes: &[NodeId],
         registry_version: RegistryVersion,
         uid_generator: &mut ecdsa::EcdsaUIDGenerator,
+        key_id: EcdsaKeyId,
         quadruples_in_creation: &mut BTreeMap<ecdsa::QuadrupleId, ecdsa::QuadrupleInCreation>,
     ) -> (ecdsa::RandomTranscriptParams, ecdsa::RandomTranscriptParams) {
         let kappa_config_ref = new_random_config(subnet_nodes, registry_version, uid_generator);
         let lambda_config_ref = new_random_config(subnet_nodes, registry_version, uid_generator);
         quadruples_in_creation.insert(
-            uid_generator.next_quadruple_id(),
+            uid_generator.next_quadruple_id(key_id),
             ecdsa::QuadrupleInCreation::new(kappa_config_ref.clone(), lambda_config_ref.clone()),
         );
         (kappa_config_ref, lambda_config_ref)
     }
 
-    pub fn create_available_quadruple(ecdsa_payload: &mut EcdsaPayload, caller: u8) -> QuadrupleId {
-        create_available_quadruple_with_key_transcript(ecdsa_payload, caller, None)
+    pub fn create_available_quadruple(
+        ecdsa_payload: &mut EcdsaPayload,
+        key_id: EcdsaKeyId,
+        caller: u8,
+    ) -> QuadrupleId {
+        create_available_quadruple_with_key_transcript(
+            ecdsa_payload,
+            caller,
+            key_id,
+            /*key_transcript=*/ None,
+        )
     }
 
     pub fn create_available_quadruple_with_key_transcript(
         ecdsa_payload: &mut EcdsaPayload,
         caller: u8,
+        key_id: EcdsaKeyId,
         key_transcript: Option<UnmaskedTranscript>,
     ) -> QuadrupleId {
         let sig_inputs = create_sig_inputs(caller);
-        let quadruple_id = ecdsa_payload.uid_generator.next_quadruple_id();
+        let quadruple_id = ecdsa_payload.uid_generator.next_quadruple_id(key_id);
         let mut quadruple_ref = sig_inputs.sig_inputs_ref.presig_quadruple_ref.clone();
         quadruple_ref.key_unmasked_ref = key_transcript;
         ecdsa_payload
@@ -403,6 +415,7 @@ pub(super) mod tests {
         let subnet_id = subnet_test_id(1);
         let height = Height::new(10);
         let (mut ecdsa_payload, env, _block_reader) = set_up(&mut rng, subnet_id, height);
+        let key_id = ecdsa_payload.key_transcript.key_id.clone();
 
         // 4 Quadruples should be created in advance (in creation + unmatched available = 4)
         let quadruples_to_create_in_advance = 4;
@@ -413,7 +426,7 @@ pub(super) mod tests {
 
         // Add 3 available quadruples
         for i in 0..3 {
-            create_available_quadruple(&mut ecdsa_payload, i);
+            create_available_quadruple(&mut ecdsa_payload, key_id.clone(), i);
         }
 
         // 2 available quadruples are already matched
@@ -473,6 +486,7 @@ pub(super) mod tests {
             &env.nodes.ids::<Vec<_>>(),
             env.newest_registry_version,
             &mut payload.uid_generator,
+            payload.key_transcript.key_id.clone(),
             &mut payload.quadruples_in_creation,
         );
 
@@ -677,9 +691,19 @@ pub(super) mod tests {
 
         // Create three quadruples, with the current, a different, no key transcript.
         let quadruple_ids = vec![
-            create_available_quadruple_with_key_transcript(&mut payload, 1, Some(key_transcript)),
-            create_available_quadruple_with_key_transcript(&mut payload, 2, Some(key_transcript2)),
-            create_available_quadruple_with_key_transcript(&mut payload, 3, None),
+            create_available_quadruple_with_key_transcript(
+                &mut payload,
+                1,
+                key_id.clone(),
+                Some(key_transcript),
+            ),
+            create_available_quadruple_with_key_transcript(
+                &mut payload,
+                2,
+                key_id.clone(),
+                Some(key_transcript2),
+            ),
+            create_available_quadruple_with_key_transcript(&mut payload, 3, key_id.clone(), None),
         ];
 
         // All three quadruples are matched with a context
@@ -702,7 +726,12 @@ pub(super) mod tests {
 
         // Create three quadruples of the current key transcript
         for i in 0..3 {
-            create_available_quadruple_with_key_transcript(&mut payload, i, Some(key_transcript));
+            create_available_quadruple_with_key_transcript(
+                &mut payload,
+                i,
+                key_id.clone(),
+                Some(key_transcript),
+            );
         }
 
         // None of them are matched to a context
@@ -726,7 +755,7 @@ pub(super) mod tests {
 
         // Create three quadruples without key transcript
         for i in 0..3 {
-            create_available_quadruple_with_key_transcript(&mut payload, i, None);
+            create_available_quadruple_with_key_transcript(&mut payload, i, key_id.clone(), None);
         }
 
         // None of them are matched to a context
@@ -768,6 +797,7 @@ pub(super) mod tests {
                 create_available_quadruple_with_key_transcript(
                     &mut payload,
                     i,
+                    key_id.clone(),
                     Some(other_key_transcript),
                 )
             })

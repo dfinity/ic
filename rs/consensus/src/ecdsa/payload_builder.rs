@@ -1244,20 +1244,22 @@ mod tests {
         assert!(signing_requets.is_empty());
 
         // Add two quadruples in creation
-        let quadruple_id_0 = ecdsa_payload.peek_next_quadruple_id();
+        let quadruple_id_0 = ecdsa_payload.peek_next_quadruple_id(key_id.clone());
         let (_kappa_config_ref, _lambda_config_ref) =
             quadruples::test_utils::create_new_quadruple_in_creation(
                 &subnet_nodes,
                 registry_version,
                 &mut ecdsa_payload.uid_generator,
+                key_id.clone(),
                 &mut ecdsa_payload.quadruples_in_creation,
             );
-        let quadruple_id_1 = ecdsa_payload.peek_next_quadruple_id();
+        let quadruple_id_1 = ecdsa_payload.peek_next_quadruple_id(key_id.clone());
         let (_kappa_config_ref, _lambda_config_ref) =
             quadruples::test_utils::create_new_quadruple_in_creation(
                 &subnet_nodes,
                 registry_version,
                 &mut ecdsa_payload.uid_generator,
+                key_id.clone(),
                 &mut ecdsa_payload.quadruples_in_creation,
             );
         let new_requests = get_signing_requests(
@@ -1350,8 +1352,10 @@ mod tests {
                 (key_id.clone(), [1; 32], non_expired_time),
             ]);
         // Add quadruples
-        let _discarded_quadruple_id = create_available_quadruple(&mut ecdsa_payload, 10);
-        let matched_quadruple_id = create_available_quadruple(&mut ecdsa_payload, 11);
+        let _discarded_quadruple_id =
+            create_available_quadruple(&mut ecdsa_payload, key_id.clone(), 10);
+        let matched_quadruple_id =
+            create_available_quadruple(&mut ecdsa_payload, key_id.clone(), 11);
 
         let result = get_signing_requests(
             Height::from(1),
@@ -1390,8 +1394,8 @@ mod tests {
         assert!(result.is_empty());
 
         // Add quadruples
-        create_available_quadruple(&mut ecdsa_payload, 10);
-        create_available_quadruple(&mut ecdsa_payload, 11);
+        create_available_quadruple(&mut ecdsa_payload, valid_key_id.clone(), 10);
+        create_available_quadruple(&mut ecdsa_payload, valid_key_id.clone(), 11);
 
         let result = get_signing_requests(
             height,
@@ -1830,7 +1834,7 @@ mod tests {
         let transcript_builder = TestEcdsaTranscriptBuilder::new();
         let max_ongoing_signatures = 1;
 
-        create_available_quadruple(&mut ecdsa_payload, 13);
+        create_available_quadruple(&mut ecdsa_payload, key_id.clone(), 13);
 
         let all_requests = get_signing_requests(
             Height::from(0),
@@ -2009,10 +2013,15 @@ mod tests {
 
             // Create a payload block with references to these past blocks
             let mut ecdsa_payload = empty_ecdsa_payload(subnet_id);
+            let key_id = ecdsa_payload.key_transcript.key_id.clone();
             ecdsa_payload.key_transcript.current = Some(current_key_transcript.clone());
             let (quadruple_id_1, quadruple_id_2) = (
-                ecdsa_payload.uid_generator.next_quadruple_id(),
-                ecdsa_payload.uid_generator.next_quadruple_id(),
+                ecdsa_payload
+                    .uid_generator
+                    .next_quadruple_id(key_id.clone()),
+                ecdsa_payload
+                    .uid_generator
+                    .next_quadruple_id(key_id.clone()),
             );
             let req_id_1 = ecdsa::RequestId {
                 quadruple_id: quadruple_id_1.clone(),
@@ -2050,13 +2059,13 @@ mod tests {
             add_expected_transcripts(reshare_params_1.as_ref().get_refs());
 
             // Add some quadruples in creation
-            // let next_quadruple_id = ecdsa_payload.uid_generator.next_quadruple_id();
             let block_reader = TestEcdsaBlockReader::new();
             let (kappa_config_ref, _lambda_config_ref) =
                 quadruples::test_utils::create_new_quadruple_in_creation(
                     &subnet_nodes,
                     env.newest_registry_version,
                     &mut ecdsa_payload.uid_generator,
+                    key_id.clone(),
                     &mut ecdsa_payload.quadruples_in_creation,
                 );
             let kappa_transcript = {
@@ -2297,8 +2306,9 @@ mod tests {
             // Create a payload block with references to these past blocks
             let mut ecdsa_payload = empty_ecdsa_payload(subnet_id);
             let uid_generator = &mut ecdsa_payload.uid_generator;
-            let quadruple_id_1 = uid_generator.next_quadruple_id();
-            let quadruple_id_2 = uid_generator.next_quadruple_id();
+            let key_id = ecdsa_payload.key_transcript.key_id.clone();
+            let quadruple_id_1 = uid_generator.next_quadruple_id(key_id.clone());
+            let quadruple_id_2 = uid_generator.next_quadruple_id(key_id.clone());
             ecdsa_payload.key_transcript.current = Some(current_key_transcript.clone());
             let req_id_1 = ecdsa::RequestId {
                 quadruple_id: quadruple_id_1.clone(),
@@ -2336,6 +2346,7 @@ mod tests {
                     &subnet_nodes,
                     env.newest_registry_version,
                     &mut ecdsa_payload.uid_generator,
+                    key_id.clone(),
                     &mut ecdsa_payload.quadruples_in_creation,
                 );
             let kappa_transcript = {
@@ -2748,7 +2759,7 @@ mod tests {
             );
             let test_inputs = TestSigInputs::from(&sig_inputs);
             payload_0.available_quadruples.insert(
-                payload_0.uid_generator.next_quadruple_id(),
+                payload_0.uid_generator.next_quadruple_id(key_id.clone()),
                 test_inputs.sig_inputs_ref.presig_quadruple_ref.clone(),
             );
             for (transcript_ref, transcript) in test_inputs.idkg_transcripts {
@@ -2758,6 +2769,7 @@ mod tests {
                 &env.nodes.ids::<Vec<_>>(),
                 env.newest_registry_version,
                 &mut payload_0.uid_generator,
+                key_id.clone(),
                 &mut payload_0.quadruples_in_creation,
             );
             payload_0.ongoing_xnet_reshares.insert(
