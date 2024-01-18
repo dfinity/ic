@@ -7,19 +7,23 @@ use crate::{common::LOG_PREFIX, registry::Registry};
 use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use ic_base_types::NodeId;
-use ic_registry_keys::make_subnet_record_key;
+use ic_base_types::{NodeId, PrincipalId};
+use ic_registry_keys::{make_api_boundary_node_record_key, make_subnet_record_key};
 
 impl Registry {
     /// Removes an existing node from the registry.
     ///
     /// This method is called directly by the node operator tied to the node.
     pub fn do_remove_node_directly(&mut self, payload: RemoveNodeDirectlyPayload) {
+        let caller_id = dfn_core::api::caller();
         println!(
-            "{}do_remove_node_directly started: {:?}",
-            LOG_PREFIX, payload
+            "{}do_remove_node_directly started: {:?} caller: {:?}",
+            LOG_PREFIX, payload, caller_id
         );
+        self.do_remove_node(payload, caller_id);
+    }
 
+    fn do_remove_node(&mut self, payload: RemoveNodeDirectlyPayload, caller_id: PrincipalId) {
         // 1. Find the node operator id for this record
         // and abort if the node record is not found
         let node_operator_id = get_node_operator_id_for_node(self, payload.node_id)
@@ -32,11 +36,10 @@ impl Registry {
             .unwrap();
 
         // 2. Get the caller ID and check that it matches the node's NO
-        let caller = dfn_core::api::caller();
         assert_eq!(
-            node_operator_id, caller,
+            node_operator_id, caller_id,
             "The caller {}, does not match this Node's Operator id.",
-            caller
+            caller_id
         );
 
         // 3. Ensure node is not in a subnet
@@ -49,8 +52,19 @@ impl Registry {
             );
         }
 
-        // 4. Retrieve the NO record and increment its node allowance by 1
-        let mut new_node_operator_record = get_node_operator_record(self, caller)
+        // 4. Ensure the node is not an API Boundary Node.
+        // In order to succeed, a corresponding ApiBoundaryNodeRecord should be removed first via proposal.
+        let api_bn_id = self.get_api_boundary_node_record(payload.node_id);
+        if api_bn_id.is_some() {
+            panic!(
+                "{}do_remove_node_directly: Cannot remove a node, as it has ApiBoundaryNodeRecord with record_key: {}",
+                LOG_PREFIX,
+                make_api_boundary_node_record_key(payload.node_id)
+            );
+        }
+
+        // 5. Retrieve the NO record and increment its node allowance by 1
+        let mut new_node_operator_record = get_node_operator_record(self, caller_id)
             .map_err(|err| {
                 format!(
                     "{}do_remove_node_directly: Aborting node removal: {}",
@@ -60,7 +74,7 @@ impl Registry {
             .unwrap();
         new_node_operator_record.node_allowance += 1;
 
-        // 5. Finally, generate the following mutations:
+        // 6. Finally, generate the following mutations:
         //   * Delete the node
         //   * Delete entries for node encryption keys
         //   * Increment NO's allowance by 1
@@ -71,7 +85,7 @@ impl Registry {
             &new_node_operator_record,
         ));
 
-        // 6. Apply mutations after checking invariants
+        // 7. Apply mutations after checking invariants
         self.maybe_apply_mutation_internal(mutations);
 
         println!(
@@ -85,4 +99,79 @@ impl Registry {
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct RemoveNodeDirectlyPayload {
     pub node_id: NodeId,
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use ic_base_types::PrincipalId;
+    use ic_protobuf::registry::{
+        api_boundary_node::v1::ApiBoundaryNodeRecord, node_operator::v1::NodeOperatorRecord,
+    };
+    use ic_registry_keys::make_node_operator_record_key;
+    use ic_registry_transport::insert;
+
+    use crate::{
+        common::test_helpers::{invariant_compliant_registry, prepare_registry_with_nodes},
+        mutations::common::{encode_or_panic, test::TEST_NODE_ID},
+    };
+
+    use super::*;
+
+    #[test]
+    #[should_panic(expected = "Node Id 2vxsx-fae not found in the registry")]
+    fn should_panic_if_node_is_not_found() {
+        let mut registry = invariant_compliant_registry(0);
+        let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
+        let node_id = NodeId::from(node_operator_id);
+        let payload = RemoveNodeDirectlyPayload { node_id };
+
+        registry.do_remove_node(payload, node_operator_id);
+    }
+
+    #[test]
+    #[should_panic(expected = "Cannot remove a node, as it has ApiBoundaryNodeRecord")]
+    fn should_panic_if_node_is_api_boundary_node() {
+        let mut registry = invariant_compliant_registry(0);
+        // Add node to registry
+        let (mutate_request, node_ids) =
+            prepare_registry_with_nodes(1 /* mutation id */, 1 /* node count */);
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+        let node_id = node_ids.first().unwrap().to_owned();
+        let node_operator_id =
+            PrincipalId::try_from(registry.get_node_or_panic(node_id).node_operator_id).unwrap();
+        // Add API BN to registry
+        let api_bn = ApiBoundaryNodeRecord {
+            version: "version".into(),
+        };
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_api_boundary_node_record_key(node_id),
+            encode_or_panic(&api_bn),
+        )]);
+        let payload = RemoveNodeDirectlyPayload { node_id };
+
+        registry.do_remove_node(payload, node_operator_id);
+    }
+
+    #[test]
+    fn should_succeed() {
+        let mut registry = invariant_compliant_registry(0);
+        // Add node to registry
+        let (mutate_request, node_ids) =
+            prepare_registry_with_nodes(1 /* mutation id */, 1 /* node count */);
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+        let node_id = node_ids.first().unwrap().to_owned();
+        let node_operator_id =
+            PrincipalId::try_from(registry.get_node_or_panic(node_id).node_operator_id).unwrap();
+        // Add node operator record
+        let node_operator_record = NodeOperatorRecord::default();
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_node_operator_record_key(node_operator_id),
+            encode_or_panic(&node_operator_record),
+        )]);
+        let payload = RemoveNodeDirectlyPayload { node_id };
+
+        registry.do_remove_node(payload, node_operator_id);
+    }
 }
