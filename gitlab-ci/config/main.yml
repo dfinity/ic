@@ -869,3 +869,29 @@ zz-generated-gitlab:
       else
           echo "git working tree clean - no changes to be committed"
       fi
+
+bazel-test-bare-metal:
+  extends:
+    - .bazel-test-all
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "setupos-bare-metal-smoke-test"'
+  tags:
+    - dfinity-ic
+    - bazel
+    - zh
+  needs: [] # don't wait on other jobs
+  script:
+    - |
+      bazel run //ic-os/setupos/envs/dev:launch_bare_metal -- \
+      --config_path "$(realpath  ./ic-os/utils/bare_metal_deployment/zh2-dll01.yaml)" \
+      --csv_filename "$(realpath "$ZH2_DLL01_CSV_SECRETS_PATH")" \
+      --file_share_ssh_key "$(realpath "$ZH2_FILE_SHARE_KEY_PATH")" \
+      --file_share_username ci_interim \
+      --ci_mode
+
+      bazel run //ic-os/setupos/envs/prod:launch_bare_metal -- \
+      --config_path "$(realpath  ./ic-os/utils/bare_metal_deployment/zh2-dll01.yaml)" \
+      --csv_filename "$(realpath "$ZH2_DLL01_CSV_SECRETS_PATH")" \
+      --file_share_ssh_key "$(realpath "$ZH2_FILE_SHARE_KEY_PATH")" \
+      --file_share_username ci_interim \
+      --ci_mode

@@ -16,12 +16,12 @@ from tempfile import mkdtemp
 from typing import Any, List, Optional
 
 import fabric
-import icmplib
 import invoke
 import requests
 import tqdm
 from loguru import logger as log
 from simple_parsing import field, parse
+from simple_parsing.helpers import flag
 
 DEFAULT_IDRAC_SCRIPT_DIR = f"{site.getuserbase()}/bin"
 
@@ -32,6 +32,8 @@ NEWER_IDRAC_VERSION_THRESHOLD = 6000000
 DEFAULT_SETUPOS_WAIT_TIME_MINS = 20
 
 BMC_INFO_ENV_VAR = "BMC_INFO_CSV_FILENAME"
+
+DISABLE_PROGRESS_BAR = True
 
 
 @dataclass
@@ -90,6 +92,8 @@ class Args:
     # Directory where idrac scripts are held. If None, pip bin directory will be used.
     idrac_script_dir_file: Optional[str] = None
 
+    # Disable progress bars if True
+    ci_mode: bool = flag(default=False)
 
     def __post_init__(self):
         assert self.upload_img is None or self.upload_img.endswith(
@@ -180,31 +184,36 @@ def assert_ssh_connectivity(target_url: str, ssh_key_file: Optional[Path]):
     ssh_opts = "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
     result = invoke.run(f"ssh {ssh_opts} {ssh_key_arg} {target_url} 'echo Testing connection'", warn=True)
     assert result and result.ok, \
-        f"SSH connection test failed: {result.stderr.strip().splitlines()[0]}"
+        f"SSH connection test failed: {result.stderr.strip()}"
 
 
-def get_url_content(url: str) -> Optional[str]:
+def get_url_content(url: str, timeout_secs: int = 1) -> Optional[str]:
     try:
-        response = requests.get(url, verify=False, timeout=1)
+        response = requests.get(url, verify=False, timeout=timeout_secs)
         if not response.ok:
             log.warning(f"Response from {url}: {response.status_code} - {response.reason}")
             return None
         return response.text
-    except requests.ConnectTimeoutError:
+    except requests.Timeout:
         log.warning(f"Timed out while connecting to {url}")
         return None
 
 
-def check_guestos_connectivity(ip_address: IPv6Address, timeout_secs: int) -> bool:
+def check_guestos_ping_connectivity(ip_address: IPv6Address, timeout_secs: int) -> bool:
     # Ping target with count of 1, STRICT timeout of `timeout_secs`.
     # This will break if latency is > `timeout_secs`.
-    result = icmplib.ping(str(ip_address), count=1, timeout=timeout_secs, privileged=False)
-    if not result.is_alive:
+    result = invoke.run(f"ping6 -c1 -w{timeout_secs} {ip_address}", warn=True, hide=True)
+    if not result or not result.ok:
         return False
 
-    log.info("Got ping result from GuestOS. Attempting metrics endpoint...")
+    log.info("Ping success.")
+    return True
+
+
+def check_guestos_metrics_version(ip_address: IPv6Address, timeout_secs: int) -> bool:
+    log.info("Attempting to curl metrics endpoint...")
     metrics_endpoint = f"https://[{ip_address.exploded}]:9100/metrics"
-    metrics_output = get_url_content(metrics_endpoint)
+    metrics_output = get_url_content(metrics_endpoint, timeout_secs)
     if not metrics_output:
         log.warning(f"Request to {metrics_endpoint} failed.")
         return False
@@ -250,7 +259,7 @@ def gen_failure(result: invoke.Result, bmc_info: BMCInfo) -> DeploymentError:
 def run_script(idrac_script_dir: Path,
                bmc_info: BMCInfo,
                script_and_args: str,
-               quiet: bool = True) -> None:
+               quiet: bool = False) -> None:
     """Run a given script from the given bin dir and raise an exception if anything went wrong"""
     command = f"python3 {idrac_script_dir}/{script_and_args}"
     result = invoke.run(command, hide="stdout" if quiet else None)
@@ -294,9 +303,9 @@ def deploy_server(bmc_info: BMCInfo, wait_time_mins: int, idrac_script_dir: Path
         # Get a reference point
         log.info("Turning off machine")
         run_func(
-            f"GetSetPowerStateREDFISH.py {cli_creds} -p {bmc_info.password} --set GracefulShutdown",
+            f"GetSetPowerStateREDFISH.py {cli_creds} -p {bmc_info.password} --set ForceOff",
         )
-        for i in tqdm.tqdm(range(int(60))):
+        for i in tqdm.tqdm(range(int(60)), disable=DISABLE_PROGRESS_BAR):
             time.sleep(1)
 
         log.info(
@@ -314,22 +323,19 @@ def deploy_server(bmc_info: BMCInfo, wait_time_mins: int, idrac_script_dir: Path
         )
         network_image_attached = True
 
+        log.info("Setting next boot device to virtual floppy, and restarting")
+        run_func(
+            f"SetNextOneTimeBootVirtualMediaDeviceOemREDFISH.py {cli_creds} --device 2"
+        ) # Device 2 for virtual Floppy
+
         log.info("Turning on machine")
         run_func(
             f"GetSetPowerStateREDFISH.py {cli_creds} -p {bmc_info.password} --set On",
         )
-        # Waiting to make sure the machine gets back to a steady state, so that next reboot is done consistently
-        for i in tqdm.tqdm(range(int(300))):  # 1/10 seconds
-            time.sleep(1)
-
-        log.info("Setting next boot device to virtual floppy, and restarting")
-        run_func(
-            f"SetNextOneTimeBootVirtualMediaDeviceOemREDFISH.py {cli_creds} --device 2 --reboot",  # Device 2 for virtual Floppy
-        )
 
         # If guestos ipv6 address is present, loop on checking connectivity.
         # Otherwise, just wait.
-        timeout_secs = 2
+        timeout_secs = 5
 
         def wait_func() -> bool:
             wait(timeout_secs)
@@ -337,7 +343,9 @@ def deploy_server(bmc_info: BMCInfo, wait_time_mins: int, idrac_script_dir: Path
 
         def check_connectivity_func() -> bool:
             assert bmc_info.guestos_ipv6_address is not None, "Logic error"
-            return check_guestos_connectivity(
+            return check_guestos_ping_connectivity(
+                bmc_info.guestos_ipv6_address, timeout_secs
+            ) and check_guestos_metrics_version(
                 bmc_info.guestos_ipv6_address, timeout_secs
             )
 
@@ -348,7 +356,7 @@ def deploy_server(bmc_info: BMCInfo, wait_time_mins: int, idrac_script_dir: Path
         log.info(
             f"Machine booting. Checking on SetupOS completion periodically. Timeout (mins): {wait_time_mins}"
         )
-        for i in tqdm.tqdm(range(int(60 * (wait_time_mins / timeout_secs)))):
+        for i in tqdm.tqdm(range(int(60 * (wait_time_mins / timeout_secs))),disable=DISABLE_PROGRESS_BAR):
             if iterate_func():
                 break
 
@@ -407,11 +415,13 @@ def upload_to_file_share(
     file_share_endpoint: str,
     file_share_dir: str,
     file_share_image_name: str,
-    file_share_ssh_key: str,
+    file_share_ssh_key: Optional[str] = None,
 ):
     log.info(f'''Uploading "{upload_img}" to "{file_share_endpoint}"''')
 
-    conn = fabric.Connection(file_share_endpoint)
+    connect_kw_args = {"key_filename": file_share_ssh_key} if file_share_ssh_key else None
+    conn = fabric.Connection(host=file_share_endpoint,
+                             connect_kwargs=connect_kw_args)
     tmp_dir = None
     try:
         result = conn.run("mktemp --directory", hide="both", echo=True)
@@ -423,10 +433,12 @@ def upload_to_file_share(
         upload_img_filename = upload_img.name
         # Decompress in place. disk.img should appear in the same directory
         conn.run(f"tar --extract --zstd --file {tmp_dir}/{upload_img_filename} --directory {tmp_dir}", echo=True)
+        image_destination = f"/{file_share_dir}/{file_share_image_name}"
         conn.run(
-            f"sudo mv {tmp_dir}/disk.img /{file_share_dir}/{file_share_image_name}",
+            f"mv {tmp_dir}/disk.img {image_destination}",
             echo=True
         )
+        conn.run(f"chmod a+r {image_destination}", echo=True)
     finally:
         # Clean up remote dir
         if tmp_dir:
@@ -485,6 +497,8 @@ def get_idrac_script_dir(idrac_script_dir_file: Optional[str]) -> Path:
 def main():
     print(sys.argv)
     args: Args = parse(Args, add_config_path_arg=True) # Parse from config file too
+
+    DISABLE_PROGRESS_BAR = args.ci_mode # noqa - ruff format wants to erroneously delete this
 
     network_image_url: str = (
         f"{args.file_share_url}:{args.file_share_dir}/{args.file_share_image_filename}"
