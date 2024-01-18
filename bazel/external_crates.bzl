@@ -872,6 +872,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "process",
                 ],
             ),
+            "prometheus-client": crate.spec(
+                version = "^0.22.0",
+            ),
             "prometheus-http-query": crate.spec(
                 version = "^0.6.6",
                 default_features = False,

@@ -23,6 +23,7 @@ DEPENDENCIES = [
     "//rs/crypto/test_utils/tls",
     "//rs/types/types_test_utils",
     "@crate_index//:rand_chacha",
+    "@crate_index//:prometheus-client",
     "@crate_index//:either",
     "@crate_index//:bincode",
     "@crate_index//:tokio-util",

@@ -126,7 +126,7 @@ resource "null_resource" "deletable-prov-REGION" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id ID --message-size MESSAGE_SIZE --message-rate MESSAGE_RATE --port 4100 --metrics-port 9090 --peers-addrs PEERS_ADDRS"
+      "/tmp/binary --id ID --message-size MESSAGE_SIZE --message-rate MESSAGE_RATE --port 4100 --metrics-port 9090 --peers-addrs PEERS_ADDRS LIBP2P"
     ]
   }
 }
@@ -156,9 +156,16 @@ def keep_n_elements(d, n):
     return new_dict
 
 
+
 num_regions = sys.argv[1]
 message_size = sys.argv[2]
 message_rate = sys.argv[3]
+libp2p = sys.argv[4]
+if libp2p == "true":
+    libp2p_option = "--libp2p"
+else:
+    libp2p_option = ""
+
 
 region_map = keep_n_elements(region_map,int(num_regions))
 
@@ -170,7 +177,7 @@ for region, ami in sorted(region_map.items()):
   depends_on = f"[{', '.join(depends_on)}]"
   peers_addrs = [f"${{aws_instance.deletable-instance-{r}.public_ip}}:4100" for r in sorted(region_map) if r != region]
   peers_addrs = ' '.join(peers_addrs)
-  merged += template.replace("REGION", region).replace("AMI",ami[0]).replace("DEPENDS_ON",depends_on).replace("PEERS_ADDRS", peers_addrs).replace("ID", str(id)).replace("MESSAGE_SIZE", message_size).replace("MESSAGE_RATE", message_rate).replace("MACHINE", ami[1])
+  merged += template.replace("REGION", region).replace("AMI",ami[0]).replace("DEPENDS_ON",depends_on).replace("PEERS_ADDRS", peers_addrs).replace("ID", str(id)).replace("MESSAGE_SIZE", message_size).replace("MESSAGE_RATE", message_rate).replace("MACHINE", ami[1]).replace("LIBP2P",libp2p_option)
   id += 1 
 
 depends_on = [f"aws_instance.deletable-instance-{region}" for region in sorted(region_map)]

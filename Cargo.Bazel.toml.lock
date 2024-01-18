@@ -3329,6 +3329,7 @@ dependencies = [
  "proc-macro2 1.0.76",
  "procfs 0.9.1",
  "prometheus",
+ "prometheus-client",
  "prometheus-http-query",
  "prometheus-parse",
  "proptest",

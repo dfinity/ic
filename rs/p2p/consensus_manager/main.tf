@@ -226,7 +226,7 @@ resource "null_resource" "deletable-prov-eu_central_1" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 0 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
+      "/tmp/binary --id 0 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100 --libp2p"
     ]
   }
 }
@@ -298,7 +298,7 @@ resource "null_resource" "deletable-prov-eu_central_2" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 1 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
+      "/tmp/binary --id 1 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100 --libp2p"
     ]
   }
 }
@@ -370,7 +370,7 @@ resource "null_resource" "deletable-prov-eu_north_1" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 2 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
+      "/tmp/binary --id 2 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100 --libp2p"
     ]
   }
 }
@@ -442,7 +442,7 @@ resource "null_resource" "deletable-prov-eu_south_2" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 3 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
+      "/tmp/binary --id 3 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100 --libp2p"
     ]
   }
 }
@@ -514,7 +514,7 @@ resource "null_resource" "deletable-prov-eu_west_1" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 4 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
+      "/tmp/binary --id 4 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100 --libp2p"
     ]
   }
 }
@@ -586,7 +586,7 @@ resource "null_resource" "deletable-prov-eu_west_2" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 5 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
+      "/tmp/binary --id 5 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100 --libp2p"
     ]
   }
 }
@@ -658,7 +658,7 @@ resource "null_resource" "deletable-prov-eu_west_3" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 6 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
+      "/tmp/binary --id 6 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100 --libp2p"
     ]
   }
 }
@@ -730,7 +730,7 @@ resource "null_resource" "deletable-prov-us_east_1" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 7 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
+      "/tmp/binary --id 7 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100 --libp2p"
     ]
   }
 }
@@ -802,7 +802,7 @@ resource "null_resource" "deletable-prov-us_east_2" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 8 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
+      "/tmp/binary --id 8 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100 --libp2p"
     ]
   }
 }
@@ -874,7 +874,7 @@ resource "null_resource" "deletable-prov-us_west_1" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 9 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100"
+      "/tmp/binary --id 9 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_2.public_ip}:4100 --libp2p"
     ]
   }
 }
@@ -946,7 +946,7 @@ resource "null_resource" "deletable-prov-us_west_2" {
 
     inline = [
       "sleep 30",
-      "/tmp/binary --id 10 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100"
+      "/tmp/binary --id 10 --message-size 1000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-eu_central_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_central_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_north_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_south_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_1.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_2.public_ip}:4100 ${aws_instance.deletable-instance-eu_west_3.public_ip}:4100 ${aws_instance.deletable-instance-us_east_1.public_ip}:4100 ${aws_instance.deletable-instance-us_east_2.public_ip}:4100 ${aws_instance.deletable-instance-us_west_1.public_ip}:4100 --libp2p"
     ]
   }
 }

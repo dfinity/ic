@@ -6,7 +6,7 @@ use std::{
     str::FromStr,
     sync::{
         atomic::{AtomicU64, Ordering::Relaxed},
-        Arc, RwLock,
+        Arc, Mutex, RwLock,
     },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -19,7 +19,7 @@ use axum::{
 };
 use clap::Parser;
 use either::Either;
-use futures::StreamExt;
+use futures::{io::Read, StreamExt};
 use ic_crypto_test_utils_tls::x509_certificates::CertWithPrivateKey;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_icos_sev::{ValidateAttestationError, ValidateAttestedStream};
@@ -236,7 +236,7 @@ async fn load_generator(
     let mut produce_and_send_artifact = tokio::time::interval(
         Duration::from_secs(1)
             .checked_div(*rps_rx.borrow() as u32)
-            .unwrap_or(Duration::from_secs(1)),
+            .unwrap_or(Duration::from_secs(1000000)),
     );
 
     // Calculated such that not exceed 20000 active adverts
@@ -357,6 +357,16 @@ async fn metrics_handler(State(metrics): State<Arc<Metrics>>) -> String {
     )
 }
 
+async fn libp2p_metrics_handler(
+    State(metrics): State<Arc<Mutex<prometheus_client::registry::Registry>>>,
+) -> String {
+    let mut buffer = String::new();
+    let metrics = metrics.lock().unwrap();
+    prometheus_client::encoding::text::encode(&mut buffer, &metrics).unwrap();
+
+    buffer
+}
+
 async fn interval_handler(State(w): State<Arc<tokio::sync::watch::Sender<usize>>>, msg: String) {
     let rps = msg.parse::<usize>().unwrap();
     w.send(rps);
@@ -395,6 +405,8 @@ async fn main() {
     let mut peers_addrs = args.peers_addrs;
     peers_addrs.insert(args.id as usize, transport_addr);
 
+    let registry = Arc::new(Mutex::new(prometheus_client::registry::Registry::default()));
+
     if args.libp2p {
         start_libp2p(
             log.clone(),
@@ -405,6 +417,7 @@ async fn main() {
             test_consensus,
             cb_tx,
             artifact_processor_rx,
+            registry.clone(),
         );
     } else {
         println!("CONSENSUS_MANAGRE");
@@ -446,6 +459,8 @@ async fn main() {
     let metrics_router = Router::new()
         .route("/metrics", get(metrics_handler))
         .with_state(metrics)
+        .route("/libp2pmetrics", get(libp2p_metrics_handler))
+        .with_state(registry)
         .route("/setrate", post(interval_handler))
         .with_state(Arc::new(rps_tx));
 
@@ -526,6 +541,7 @@ fn start_libp2p(
     pool: TestConsensus,
     cb_tx: crossbeam_channel::Sender<UnvalidatedArtifactMutation<TestArtifact>>,
     mut ap_rx: tokio::sync::mpsc::Receiver<ArtifactProcessorEvent<TestArtifact>>,
+    metrics_registry: Arc<Mutex<prometheus_client::registry::Registry>>,
 ) {
     let sk: [u8; 32] = [id as u8; 32];
     let libp2p_sk = libp2p::identity::ed25519::SecretKey::try_from_bytes(sk).unwrap();
@@ -558,24 +574,38 @@ fn start_libp2p(
         "Running libp2p on {:?} with id {} {:?}", transport_addr, node_id, peer_id,
     );
 
+    let mut metrics_registry = metrics_registry.lock().unwrap();
     let mut swarm = SwarmBuilder::with_existing_identity(libp2p_kp.clone().into())
         .with_tokio()
-        .with_quic()
+        .with_quic_config(|mut cfg| {
+            // ms
+            // cfg.max_idle_timeout = 1_000_000;
+            cfg.max_connection_data = 1_000_000_000;
+            cfg.max_concurrent_stream_limit = 1000;
+            // cfg.handshake_timeout = Duration::from_secs(100000);
+            cfg
+        })
+        .with_bandwidth_metrics(&mut metrics_registry)
         .with_behaviour(|_| MainBehaviour {
-            gossip_sub: libp2p::gossipsub::Behaviour::new(
+            gossip_sub: libp2p::gossipsub::Behaviour::new_with_metrics(
                 libp2p::gossipsub::MessageAuthenticity::Signed(libp2p_kp.clone().into()),
                 libp2p::gossipsub::ConfigBuilder::default()
                     .max_transmit_size(20 * 1024 * 1024)
                     .published_message_ids_cache_time(Duration::from_secs(180))
                     .history_length(10)
                     .history_gossip(10)
-                    .message_id_fn(|x| {
-                        let mut s = DefaultHasher::new();
-                        s.write(&x.data);
-                        libp2p::gossipsub::MessageId(s.finish().to_be_bytes().to_vec())
-                    })
+                    .flood_publish(true)
+                    // .mesh_outbound_min(1)
+                    // .mesh_n_low(2)
+                    // .mesh_n(3)
+                    // .mesh_n_high(4)
+                    .gossip_lazy(10)
+                    .message_id_fn(|x| libp2p::gossipsub::MessageId(x.data[0..16].to_vec()))
+                    .validate_messages()
                     .build()
                     .unwrap(),
+                &mut metrics_registry,
+                libp2p::gossipsub::MetricsConfig::default(),
             )
             .unwrap(),
         })
@@ -602,7 +632,7 @@ fn start_libp2p(
             .unwrap();
 
         for (p, peer_id, addr) in &topology {
-            if node_id == *p {
+            if node_id <= *p {
                 continue;
             }
             let ip_addr = match addr {
@@ -721,6 +751,7 @@ fn start_libp2p(
         loop {
             select! {
                 _ = interval.tick() => {
+                    info!(log, "NUM Connected peers {} {} {}", swarm.connected_peers().count(), swarm.behaviour().gossip_sub.all_peers().count(), swarm.behaviour().gossip_sub.all_mesh_peers().count());
                 }
                 Some(event) = swarm.next() => {
                     handle_swarm_event(&log, &mut swarm, &topology, event, &cb_tx);

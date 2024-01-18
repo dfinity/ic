@@ -1,5 +1,5 @@
 {
-  "checksum": "d6744c2e81ecffe4dd237504d600b97994beac1a89825f3d7e40ae1ea9667de7",
+  "checksum": "80f917194aa49eaef964258b95c20da51a25ef8797d982299eb75ee5fe979a4b",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -16963,6 +16963,10 @@
             {
               "id": "prometheus 0.13.3",
               "target": "prometheus"
+            },
+            {
+              "id": "prometheus-client 0.22.0",
+              "target": "prometheus_client"
             },
             {
               "id": "prometheus-http-query 0.6.7",
