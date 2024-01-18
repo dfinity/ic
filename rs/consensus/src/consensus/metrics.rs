@@ -401,17 +401,10 @@ impl FinalizerMetrics {
             .inc_by(batch_stats.canister_http.divergence_responses as u64);
 
         if let Some(ecdsa) = &block_stats.ecdsa_stats {
-            let key_id_label = |key_id: &Option<EcdsaKeyId>| {
-                key_id
-                    .as_ref()
-                    .map(|key_id| key_id.to_string())
-                    .unwrap_or_default()
-            };
-
             let set = |metric: &IntGaugeVec, counts: &CounterPerEcdsaKeyId| {
                 for (key_id, count) in counts.iter() {
                     metric
-                        .with_label_values(&[&key_id_label(key_id)])
+                        .with_label_values(&[&key_id_label(key_id.as_ref())])
                         .set(*count as i64);
                 }
             };
@@ -419,7 +412,7 @@ impl FinalizerMetrics {
             let inc_by = |metric: &IntCounterVec, counts: &CounterPerEcdsaKeyId| {
                 for (key_id, count) in counts.iter() {
                     metric
-                        .with_label_values(&[&key_id_label(key_id)])
+                        .with_label_values(&[&key_id_label(key_id.as_ref())])
                         .inc_by(*count as u64);
                 }
             };
@@ -451,6 +444,10 @@ impl FinalizerMetrics {
                 .set(ecdsa.available_quadruples_with_key_transcript as i64);
         }
     }
+}
+
+fn key_id_label(key_id: Option<&EcdsaKeyId>) -> String {
+    key_id.map(|key_id| key_id.to_string()).unwrap_or_default()
 }
 
 pub struct NotaryMetrics {
@@ -793,23 +790,23 @@ impl EcdsaSignerMetrics {
     }
 }
 
-pub struct EcdsaPayloadMetrics {
-    pub payload_metrics: IntGaugeVec,
-    pub payload_errors: IntCounterVec,
-    pub transcript_builder_metrics: IntCounterVec,
-    pub transcript_builder_errors: IntCounterVec,
-    pub transcript_builder_duration: HistogramVec,
+pub(crate) struct EcdsaPayloadMetrics {
+    payload_metrics: IntGaugeVec,
+    payload_errors: IntCounterVec,
+    transcript_builder_metrics: IntCounterVec,
+    transcript_builder_errors: IntCounterVec,
+    pub(crate) transcript_builder_duration: HistogramVec,
     /// Critical error for failure to create/reshare key transcript
-    pub critical_error_ecdsa_key_transcript_missing: IntCounter,
+    pub(crate) critical_error_ecdsa_key_transcript_missing: IntCounter,
 }
 
 impl EcdsaPayloadMetrics {
-    pub fn new(metrics_registry: MetricsRegistry) -> Self {
+    pub(crate) fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
             payload_metrics: metrics_registry.int_gauge_vec(
                 "ecdsa_payload_metrics",
                 "ECDSA payload related metrics",
-                &["type"],
+                &["type", ECDSA_KEY_ID_LABEL],
             ),
             payload_errors: metrics_registry.int_counter_vec(
                 "ecdsa_payload_errors",
@@ -839,48 +836,72 @@ impl EcdsaPayloadMetrics {
         }
     }
 
-    pub fn report(&self, payload: &EcdsaPayload) {
-        self.payload_metrics_set("signature_agreements", payload.signature_agreements.len());
-        self.payload_metrics_set("ongoing_signatures", payload.ongoing_signatures.len());
-        self.payload_metrics_set("available_quadruples", payload.available_quadruples.len());
+    pub(crate) fn report(&self, payload: &EcdsaPayload) {
+        let expected_keys = vec![None, Some(payload.key_transcript.key_id.clone())];
+
+        self.payload_metrics_set_without_key_id_label(
+            "signature_agreements",
+            payload.signature_agreements.len(),
+        );
+        self.payload_metrics_set(
+            "ongoing_signatures",
+            count_by_ecdsa_key_id(payload.ongoing_signatures.keys(), &expected_keys),
+        );
+        self.payload_metrics_set(
+            "available_quadruples",
+            count_by_ecdsa_key_id(payload.available_quadruples.keys(), &expected_keys),
+        );
         self.payload_metrics_set(
             "quaruples_in_creation",
-            payload.quadruples_in_creation.len(),
+            count_by_ecdsa_key_id(payload.quadruples_in_creation.keys(), &expected_keys),
         );
-        self.payload_metrics_set("ongoing_xnet_reshares", payload.ongoing_xnet_reshares.len());
+        self.payload_metrics_set(
+            "ongoing_xnet_reshares",
+            count_by_ecdsa_key_id(payload.ongoing_xnet_reshares.keys(), &expected_keys),
+        );
         self.payload_metrics_set(
             "xnet_reshare_agreements",
-            payload.xnet_reshare_agreements.len(),
+            count_by_ecdsa_key_id(payload.xnet_reshare_agreements.keys(), &expected_keys),
         );
     }
 
-    fn payload_metrics_set(&self, label: &str, value: usize) {
+    fn payload_metrics_set_without_key_id_label(&self, label: &str, value: usize) {
         self.payload_metrics
-            .with_label_values(&[label])
+            .with_label_values(&[label, /*key_id=*/ ""])
             .set(value as i64);
     }
 
-    pub fn payload_metrics_inc(&self, label: &str) {
-        self.payload_metrics.with_label_values(&[label]).inc();
+    fn payload_metrics_set(&self, label: &str, values: CounterPerEcdsaKeyId) {
+        for (key_id, value) in values {
+            self.payload_metrics
+                .with_label_values(&[label, &key_id_label(key_id.as_ref())])
+                .set(value as i64);
+        }
     }
 
-    pub fn payload_errors_inc(&self, label: &str) {
+    pub(crate) fn payload_metrics_inc(&self, label: &str, key_id: Option<&EcdsaKeyId>) {
+        self.payload_metrics
+            .with_label_values(&[label, &key_id_label(key_id)])
+            .inc();
+    }
+
+    pub(crate) fn payload_errors_inc(&self, label: &str) {
         self.payload_errors.with_label_values(&[label]).inc();
     }
 
-    pub fn transcript_builder_metrics_inc(&self, label: &str) {
+    pub(crate) fn transcript_builder_metrics_inc(&self, label: &str) {
         self.transcript_builder_metrics
             .with_label_values(&[label])
             .inc();
     }
 
-    pub fn transcript_builder_metrics_inc_by(&self, value: u64, label: &str) {
+    pub(crate) fn transcript_builder_metrics_inc_by(&self, value: u64, label: &str) {
         self.transcript_builder_metrics
             .with_label_values(&[label])
             .inc_by(value);
     }
 
-    pub fn transcript_builder_errors_inc(&self, label: &str) {
+    pub(crate) fn transcript_builder_errors_inc(&self, label: &str) {
         self.transcript_builder_errors
             .with_label_values(&[label])
             .inc();

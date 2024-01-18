@@ -1865,6 +1865,12 @@ impl HasEcdsaKeyId for RequestId {
     }
 }
 
+impl HasEcdsaKeyId for EcdsaKeyTranscript {
+    fn key_id(&self) -> Option<&EcdsaKeyId> {
+        Some(&self.key_id)
+    }
+}
+
 impl<T: HasEcdsaKeyId, U> HasEcdsaKeyId for (T, U) {
     fn key_id(&self) -> Option<&EcdsaKeyId> {
         self.0.key_id()
