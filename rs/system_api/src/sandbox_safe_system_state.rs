@@ -630,13 +630,20 @@ impl SandboxSafeSystemState {
         let available_request_slots = system_state.available_output_request_slots();
 
         // Compute the available slots for IC_00 requests as the minimum of available
-        // slots across any queue to a subnet explicitly or IC_00 itself.
+        // slots across any queue to a subnet explicitly, the bitcoin canisters or
+        // IC_00 itself.
         let mut ic00_aliases: BTreeSet<CanisterId> = network_topology
             .subnets
             .keys()
             .map(|id| CanisterId::unchecked_from_principal(id.get()))
             .collect();
         ic00_aliases.insert(CanisterId::ic_00());
+        if let Some(bitcoin_testnet_canister_id) = network_topology.bitcoin_testnet_canister_id {
+            ic00_aliases.insert(bitcoin_testnet_canister_id);
+        }
+        if let Some(bitcoin_mainnet_canister_id) = network_topology.bitcoin_mainnet_canister_id {
+            ic00_aliases.insert(bitcoin_mainnet_canister_id);
+        }
         let ic00_available_request_slots = ic00_aliases
             .iter()
             .map(|id| {
@@ -928,7 +935,7 @@ impl SandboxSafeSystemState {
             Err(_) => return Err(msg),
         };
 
-        // If the request is targeted to IC_00 or one of the known subnets
+        // If the request is targeted to any of the known aliases of IC_00,
         // count it towards the available slots for IC_00 requests.
         if self.ic00_aliases.contains(&msg.receiver) {
             if self.ic00_available_request_slots == 0 {

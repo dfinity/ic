@@ -9,10 +9,11 @@ use ic_types::nominal_cycles::NominalCycles;
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
-    self as ic00, BoundedHttpHeaders, CanisterChange, CanisterHttpRequestArgs, CanisterIdRecord,
-    CanisterStatusResultV2, CanisterStatusType, DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob,
-    HttpMethod, Method, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    ProvisionalTopUpCanisterArgs, TransformContext, TransformFunc, IC_00,
+    self as ic00, BitcoinGetUtxosArgs, BitcoinNetwork, BoundedHttpHeaders, CanisterChange,
+    CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2, CanisterStatusType,
+    DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob, HttpMethod, Method, Payload as Ic00Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, TransformContext,
+    TransformFunc, IC_00,
 };
 use ic_registry_routing_table::canister_id_into_u64;
 use ic_registry_routing_table::CanisterIdRange;
@@ -2451,8 +2452,19 @@ fn canister_output_queue_does_not_overflow_when_calling_ic00() {
                 call_args().other_side(args.clone()),
             )
             .build();
-        test.ingress_raw(uc, "update", payload);
+        let (message_id, _) = test.ingress_raw(uc, "update", payload);
         test.execute_message(uc);
+        if i > DEFAULT_QUEUE_CAPACITY {
+            assert_eq!(
+                test.ingress_state(&message_id),
+                IngressState::Failed(UserError::new(
+                    ErrorCode::CanisterCalledTrap,
+                    format!("Canister {} trapped explicitly: call_perform failed", uc)
+                ))
+            );
+        } else {
+            assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
+        }
         let system_state = &mut test.canister_state_mut(uc).system_state;
         assert_eq!(1, system_state.queues().output_queues_len());
         assert_eq!(
@@ -2460,6 +2472,92 @@ fn canister_output_queue_does_not_overflow_when_calling_ic00() {
             system_state.queues().output_message_count()
         );
     }
+}
+
+fn send_messages_to_bitcoin_canister_until_capacity(
+    test: &mut ExecutionTest,
+    bitcoin_canister: CanisterId,
+    network: BitcoinNetwork,
+) {
+    let uc = test.universal_canister().unwrap();
+
+    for i in 1..=2 * DEFAULT_QUEUE_CAPACITY {
+        let target = if i < DEFAULT_QUEUE_CAPACITY / 2 {
+            bitcoin_canister.get()
+        } else {
+            ic00::IC_00.get()
+        };
+        let args = Encode!(&BitcoinGetUtxosArgs {
+            network: network.into(),
+            address: String::from(""),
+            filter: None,
+        })
+        .unwrap();
+        let payload = wasm()
+            .call_simple(
+                target,
+                Method::BitcoinGetUtxos,
+                call_args().other_side(args.clone()),
+            )
+            .build();
+        let (message_id, _) = test.ingress_raw(uc, "update", payload);
+        test.execute_message(uc);
+        if i > DEFAULT_QUEUE_CAPACITY {
+            assert_eq!(
+                test.ingress_state(&message_id),
+                IngressState::Failed(UserError::new(
+                    ErrorCode::CanisterCalledTrap,
+                    format!("Canister {} trapped explicitly: call_perform failed", uc)
+                ))
+            );
+        } else {
+            assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
+        }
+        let system_state = &mut test.canister_state_mut(uc).system_state;
+        assert_eq!(1, system_state.queues().output_queues_len());
+        assert_eq!(
+            i.min(DEFAULT_QUEUE_CAPACITY),
+            system_state.queues().output_message_count()
+        );
+    }
+}
+
+#[test]
+fn canister_output_queue_does_not_overflow_when_calling_bitcoin_mainnet_canister() {
+    let own_subnet = subnet_test_id(1);
+    let bitcoin_mainnet_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_nns_subnet_id(own_subnet)
+        .with_initial_canister_cycles(1_000_000_000_000_000_000)
+        .with_bitcoin_mainnet_canister_id(Some(bitcoin_mainnet_canister))
+        .with_manual_execution()
+        .build();
+
+    send_messages_to_bitcoin_canister_until_capacity(
+        &mut test,
+        bitcoin_mainnet_canister,
+        BitcoinNetwork::Mainnet,
+    );
+}
+
+#[test]
+fn canister_output_queue_does_not_overflow_when_calling_bitcoin_testnet_canister() {
+    let own_subnet = subnet_test_id(1);
+    let bitcoin_testnet_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_nns_subnet_id(own_subnet)
+        .with_initial_canister_cycles(1_000_000_000_000_000_000)
+        .with_bitcoin_testnet_canister_id(Some(bitcoin_testnet_canister))
+        .with_manual_execution()
+        .build();
+
+    send_messages_to_bitcoin_canister_until_capacity(
+        &mut test,
+        bitcoin_testnet_canister,
+        BitcoinNetwork::Testnet,
+    );
 }
 
 #[test]
