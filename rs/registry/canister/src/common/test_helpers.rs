@@ -5,6 +5,7 @@ use crate::mutations::node_management::do_add_node::connection_endpoint_from_str
 use crate::registry::Registry;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_nns_test_utils::registry::{invariant_compliant_mutation, new_node_keys_and_node_id};
+use ic_protobuf::registry::node::v1::IPv4InterfaceConfig;
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
@@ -96,8 +97,12 @@ pub fn prepare_registry_with_nodes(
                     "128.0.{effective_id}.1:1234"
                 ))),
                 http: Some(connection_endpoint_from_string(&format!(
-                    "128.0.{effective_id}.1:4321"
+                    "[fe80::{effective_id}]:4321"
                 ))),
+                public_ipv4_config: Some(IPv4InterfaceConfig {
+                    ip_addr: format!("128.0.{effective_id}.1"),
+                    ..Default::default()
+                }),
                 node_operator_id: PrincipalId::new_user_test_id(999).into_vec(),
                 // Preset this field to Some(), in order to allow seamless creation of ApiBoundaryNodeRecord if needed.
                 domain: Some("node-example.com".into()),
