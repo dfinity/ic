@@ -441,7 +441,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.0",
             ),
             "h2": crate.spec(
-                version = "^0.3.14",
+                version = "^0.3.24",
             ),
             "hashlink": crate.spec(
                 version = "^0.8.0",
