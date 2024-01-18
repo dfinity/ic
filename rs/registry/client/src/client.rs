@@ -348,18 +348,6 @@ impl RegistryClient for RegistryClientImpl {
     }
 }
 
-/// An empty registry data provider that emulates a static, empty registry.
-pub struct EmptyRegistryDataProvider();
-
-impl RegistryDataProvider for EmptyRegistryDataProvider {
-    fn get_updates_since(
-        &self,
-        _version: RegistryVersion,
-    ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
-        Ok(vec![])
-    }
-}
-
 #[cfg(test)]
 #[allow(dead_code, unused_imports)]
 mod tests {

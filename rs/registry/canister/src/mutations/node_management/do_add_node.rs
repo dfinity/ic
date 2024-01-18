@@ -79,8 +79,6 @@ impl Registry {
 
         println!("{}do_add_node: The node id is {:?}", LOG_PREFIX, node_id);
 
-        let mut p2p_endpoint = connection_endpoint_from_string(&payload.http_endpoint);
-        p2p_endpoint.port = 4100;
         // 5. create the Node Record
         let node_record = NodeRecord {
             xnet: Some(connection_endpoint_from_string(&payload.xnet_endpoint)),
