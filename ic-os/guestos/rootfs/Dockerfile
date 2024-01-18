@@ -97,7 +97,7 @@ RUN mkdir -p /mnt/var_old /mnt/var_new
 
 RUN \
     for SERVICE in /etc/systemd/system/*; do \
-        if [ -f "$SERVICE" -a ! -L "$SERVICE" ] ; then systemctl enable "${SERVICE#/etc/systemd/system/}" ; fi ; \
+    if [ -f "$SERVICE" -a ! -L "$SERVICE" ] && grep -q '^.Install.' "$SERVICE" ; then systemctl enable "${SERVICE#/etc/systemd/system/}" ; fi ; \
     done
 
 RUN systemctl enable \
