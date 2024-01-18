@@ -601,6 +601,7 @@ fn compute_priority(
 
 #[cfg(test)]
 mod tests {
+    use super::test_utils::fake_ecdsa_key_id;
     use super::*;
     use ic_types::consensus::ecdsa::EcdsaUIDGenerator;
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
@@ -689,22 +690,22 @@ mod tests {
         let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(2));
         let mut uid_generator = EcdsaUIDGenerator::new(subnet_id, Height::new(0));
         let request_id_fetch_1 = RequestId {
-            quadruple_id: uid_generator.next_quadruple_id(),
+            quadruple_id: uid_generator.next_quadruple_id(fake_ecdsa_key_id()),
             pseudo_random_id: [1; 32],
             height: Height::from(80),
         };
         let request_id_drop = RequestId {
-            quadruple_id: uid_generator.next_quadruple_id(),
+            quadruple_id: uid_generator.next_quadruple_id(fake_ecdsa_key_id()),
             pseudo_random_id: [2; 32],
             height: Height::from(70),
         };
         let request_id_fetch_2 = RequestId {
-            quadruple_id: uid_generator.next_quadruple_id(),
+            quadruple_id: uid_generator.next_quadruple_id(fake_ecdsa_key_id()),
             pseudo_random_id: [3; 32],
             height: Height::from(102),
         };
         let request_id_stash = RequestId {
-            quadruple_id: uid_generator.next_quadruple_id(),
+            quadruple_id: uid_generator.next_quadruple_id(fake_ecdsa_key_id()),
             pseudo_random_id: [4; 32],
             height: Height::from(200),
         };

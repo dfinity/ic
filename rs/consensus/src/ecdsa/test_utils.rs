@@ -1315,7 +1315,7 @@ pub(crate) fn set_up_ecdsa_payload(
 
 pub(crate) trait EcdsaPayloadTestHelper {
     fn peek_next_transcript_id(&self) -> IDkgTranscriptId;
-    fn peek_next_quadruple_id(&self) -> QuadrupleId;
+    fn peek_next_quadruple_id(&self, key_id: EcdsaKeyId) -> QuadrupleId;
 }
 
 impl EcdsaPayloadTestHelper for EcdsaPayload {
@@ -1323,7 +1323,7 @@ impl EcdsaPayloadTestHelper for EcdsaPayload {
         self.uid_generator.clone().next_transcript_id()
     }
 
-    fn peek_next_quadruple_id(&self) -> QuadrupleId {
-        self.uid_generator.clone().next_quadruple_id()
+    fn peek_next_quadruple_id(&self, key_id: EcdsaKeyId) -> QuadrupleId {
+        self.uid_generator.clone().next_quadruple_id(key_id)
     }
 }

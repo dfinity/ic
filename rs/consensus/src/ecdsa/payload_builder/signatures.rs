@@ -138,6 +138,7 @@ mod tests {
     use std::collections::BTreeSet;
 
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+    use ic_ic00_types::EcdsaKeyId;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::types::ids::subnet_test_id;
     use ic_types::{consensus::ecdsa::EcdsaPayload, Height};
@@ -182,9 +183,10 @@ mod tests {
 
     fn create_request_id_with_available_quadruple(
         ecdsa_payload: &mut EcdsaPayload,
+        key_id: EcdsaKeyId,
         pseudo_random_id: [u8; 32],
     ) -> ecdsa::RequestId {
-        let quadruple_id = create_available_quadruple(ecdsa_payload, pseudo_random_id[0]);
+        let quadruple_id = create_available_quadruple(ecdsa_payload, key_id, pseudo_random_id[0]);
 
         ecdsa::RequestId {
             quadruple_id,
@@ -228,8 +230,9 @@ mod tests {
         let valid_key_id = ecdsa_payload.key_transcript.key_id.clone();
         let valid_key_ids = BTreeSet::from([valid_key_id.clone()]);
         // Add a quadruple
-        let quadruple_id = create_available_quadruple(&mut ecdsa_payload, 10);
-        let _quadruple_id_2 = create_available_quadruple(&mut ecdsa_payload, 11);
+        let quadruple_id = create_available_quadruple(&mut ecdsa_payload, valid_key_id.clone(), 10);
+        let _quadruple_id_2 =
+            create_available_quadruple(&mut ecdsa_payload, valid_key_id.clone(), 11);
 
         let signing_requests = get_signing_requests(
             height,
@@ -258,10 +261,12 @@ mod tests {
             /*should_create_key_transcript=*/ false,
             /*pseudo_random_ids=*/ vec![pseudo_random_id(0), pseudo_random_id(1)],
         );
+        let key_id = ecdsa_payload.key_transcript.key_id.clone();
         let mut requests = BTreeMap::new();
         for context in contexts.values() {
             let request_id = create_request_id_with_available_quadruple(
                 &mut ecdsa_payload,
+                key_id.clone(),
                 context.pseudo_random_id,
             );
 
@@ -291,10 +296,12 @@ mod tests {
                 .map(|i| pseudo_random_id(i as u8))
                 .collect(),
         );
+        let key_id = ecdsa_payload.key_transcript.key_id.clone();
         let mut requests = BTreeMap::new();
         for context in contexts.values() {
             let request_id = create_request_id_with_available_quadruple(
                 &mut ecdsa_payload,
+                key_id.clone(),
                 context.pseudo_random_id,
             );
 
