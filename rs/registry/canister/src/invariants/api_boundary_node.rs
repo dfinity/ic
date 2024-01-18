@@ -1,4 +1,7 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    net::{Ipv4Addr, Ipv6Addr},
+};
 
 use ic_base_types::NodeId;
 
@@ -11,6 +14,7 @@ use super::common::{
 ///    * Ensure API Boundary Nodes have unique domain names
 ///    * Ensure each API Boundary Node record has a corresponding NodeRecord
 ///    * Ensure that both `domain` and `http` fields of the NodeRecord are not None
+///    * Ensure that both `ipv6`(required) and `ipv4`(optional) of the NodeRecord can be parsed
 pub(crate) fn check_api_boundary_node_invariants(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
@@ -43,12 +47,28 @@ pub(crate) fn check_api_boundary_node_invariants(
             });
         };
 
-        let Some(_http) = node_record.http else {
+        let Some(http) = node_record.http else {
             return Err(InvariantCheckError {
                 msg: format!("http field of the NodeRecord with id={api_bn_id} is None"),
                 source: None,
             });
         };
+
+        let Ok(_ipv6) = http.ip_addr.parse::<Ipv6Addr>() else {
+            return Err(InvariantCheckError {
+                msg: "failed to parse ipv6 address of the node".to_string(),
+                source: None,
+            });
+        };
+
+        if let Some(ipv4_config) = node_record.public_ipv4_config {
+            let Ok(_ipv4) = ipv4_config.ip_addr.parse::<Ipv4Addr>() else {
+                return Err(InvariantCheckError {
+                    msg: "failed to parse ipv4 address of the node".to_string(),
+                    source: None,
+                });
+            };
+        }
 
         if let Some(existing_api_bn) = domain_to_id.get(&domain) {
             return Err(InvariantCheckError {
@@ -67,7 +87,7 @@ mod tests {
     use ic_base_types::{NodeId, PrincipalId};
     use ic_protobuf::registry::{
         api_boundary_node::v1::ApiBoundaryNodeRecord,
-        node::v1::{ConnectionEndpoint, NodeRecord},
+        node::v1::{ConnectionEndpoint, IPv4InterfaceConfig, NodeRecord},
     };
     use ic_registry_keys::{make_api_boundary_node_record_key, make_node_record_key};
 
@@ -93,7 +113,14 @@ mod tests {
             snapshot.insert(
                 make_node_record_key(node_id).into_bytes(), // key
                 encode_or_panic(&NodeRecord {
-                    http: Some(ConnectionEndpoint::default()),
+                    public_ipv4_config: Some(IPv4InterfaceConfig {
+                        ip_addr: "127.0.0.1".to_string(),
+                        ..Default::default()
+                    }),
+                    http: Some(ConnectionEndpoint {
+                        ip_addr: "2001:db8:3333:4444:5555:6666:7777:8888".to_string(),
+                        ..Default::default()
+                    }),
                     domain: Some(domain.into()),
                     ..Default::default()
                 }), // record
@@ -198,7 +225,14 @@ mod tests {
             snapshot.insert(
                 make_node_record_key(node_id).into_bytes(), // key
                 encode_or_panic(&NodeRecord {
-                    http: Some(ConnectionEndpoint::default()),
+                    public_ipv4_config: Some(IPv4InterfaceConfig {
+                        ip_addr: "127.0.0.1".to_string(),
+                        ..Default::default()
+                    }),
+                    http: Some(ConnectionEndpoint {
+                        ip_addr: "2001:db8:3333:4444:5555:6666:7777:8888".to_string(),
+                        ..Default::default()
+                    }),
                     domain: Some(domain.into()),
                     ..Default::default()
                 }), // record
@@ -214,6 +248,74 @@ mod tests {
                 PrincipalId::new_node_test_id(1),
                 PrincipalId::new_node_test_id(2)
             )
+        );
+    }
+
+    #[test]
+    fn test_check_api_boundary_node_ipv6_parsing_error() {
+        let mut snapshot = RegistrySnapshot::new();
+        let (node_id, domain) = (0, "example-1.com");
+        let node_id: NodeId = PrincipalId::new_node_test_id(node_id).into();
+
+        snapshot.insert(
+            make_api_boundary_node_record_key(node_id).into_bytes(), // key
+            encode_or_panic(&ApiBoundaryNodeRecord::default()),      // record
+        );
+        snapshot.insert(
+            make_node_record_key(node_id).into_bytes(), // key
+            encode_or_panic(&NodeRecord {
+                public_ipv4_config: Some(IPv4InterfaceConfig {
+                    ip_addr: "127.0.0.1".to_string(),
+                    ..Default::default()
+                }),
+                http: Some(ConnectionEndpoint {
+                    ip_addr: "not_an_ipv6".to_string(),
+                    ..Default::default()
+                }),
+                domain: Some(domain.into()),
+                ..Default::default()
+            }), // record
+        );
+
+        assert_eq!(
+            check_api_boundary_node_invariants(&snapshot)
+                .unwrap_err()
+                .msg,
+            "failed to parse ipv6 address of the node".to_string(),
+        );
+    }
+
+    #[test]
+    fn test_check_api_boundary_node_ipv4_parsing_error() {
+        let mut snapshot = RegistrySnapshot::new();
+        let (node_id, domain) = (0, "example-1.com");
+        let node_id: NodeId = PrincipalId::new_node_test_id(node_id).into();
+
+        snapshot.insert(
+            make_api_boundary_node_record_key(node_id).into_bytes(), // key
+            encode_or_panic(&ApiBoundaryNodeRecord::default()),      // record
+        );
+        snapshot.insert(
+            make_node_record_key(node_id).into_bytes(), // key
+            encode_or_panic(&NodeRecord {
+                public_ipv4_config: Some(IPv4InterfaceConfig {
+                    ip_addr: "not_an_ipv4".to_string(),
+                    ..Default::default()
+                }),
+                http: Some(ConnectionEndpoint {
+                    ip_addr: "2001:db8:3333:4444:5555:6666:7777:8888".to_string(),
+                    ..Default::default()
+                }),
+                domain: Some(domain.into()),
+                ..Default::default()
+            }), // record
+        );
+
+        assert_eq!(
+            check_api_boundary_node_invariants(&snapshot)
+                .unwrap_err()
+                .msg,
+            "failed to parse ipv4 address of the node".to_string(),
         );
     }
 }
