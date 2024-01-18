@@ -16,8 +16,8 @@ use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::ecdsa::{
-    sig_share_prefix, EcdsaBlockReader, EcdsaMessage, EcdsaSigShare, EcdsaStats, RequestId,
-    ThresholdEcdsaSigInputsRef,
+    sig_share_prefix, EcdsaBlockReader, EcdsaMessage, EcdsaSigShare, EcdsaStats, HasEcdsaKeyId,
+    RequestId, ThresholdEcdsaSigInputsRef,
 };
 use ic_types::crypto::canister_threshold_sig::{
     error::ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaCombinedSignature,
@@ -476,7 +476,8 @@ impl<'a> EcdsaSignatureBuilderImpl<'a> {
                 Default::default()
             },
             |combined_signature| {
-                self.metrics.payload_metrics_inc("signatures_completed");
+                self.metrics
+                    .payload_metrics_inc("signatures_completed", request_id.key_id());
                 Some(combined_signature)
             },
         )

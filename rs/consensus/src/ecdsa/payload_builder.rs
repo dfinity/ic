@@ -28,7 +28,7 @@ use ic_types::{
     batch::ValidationContext,
     consensus::{
         ecdsa,
-        ecdsa::{EcdsaBlockReader, TranscriptAttributes},
+        ecdsa::{EcdsaBlockReader, HasEcdsaKeyId, TranscriptAttributes},
         Block, HasHeight,
     },
     crypto::{
@@ -483,7 +483,10 @@ pub(crate) fn create_data_payload(
                 .as_ecdsa()
                 .is_some_and(is_key_transcript_created)
         {
-            ecdsa_payload_metrics.payload_metrics_inc("key_transcripts_created");
+            ecdsa_payload_metrics.payload_metrics_inc(
+                "key_transcripts_created",
+                ecdsa_payload.key_transcript.key_id(),
+            );
         }
 
         ecdsa_payload_metrics.report(ecdsa_payload);
