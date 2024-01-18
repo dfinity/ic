@@ -43,7 +43,7 @@ def _zstd_compress(ctx):
     # TODO: install zstd as dependency.
     ctx.actions.run(
         executable = "zstd",
-        arguments = ["--threads=0", "-10", "-f", "-z", "-o", out.path] + [s.path for s in ctx.files.srcs],
+        arguments = ["-q", "--threads=0", "-10", "-f", "-z", "-o", out.path] + [s.path for s in ctx.files.srcs],
         inputs = ctx.files.srcs,
         outputs = [out],
         env = {"ZSTDMT_NBWORKERS_MAX": str(_COMPRESS_CONCURRENCY)},
