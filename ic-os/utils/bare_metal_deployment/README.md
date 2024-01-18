@@ -4,6 +4,7 @@ Deploy SetupOS to bare metal remotely using BMC.
 Works only for iDRAC (currently). 
 Reserve the target machine in Dee before deploying. 
 
+
 ## What do you need?
 
 * A Dell machine with iDRAC version 6 or higher
@@ -18,19 +19,21 @@ Must be run inside the devenv container. Use `./gitlab-ci/container/container-ru
 
 The config files must be accessible from inside the container - e.g., at the root of the ic directory, which maps to `/ic` inside the container.
 
-```
+```bash
 bazel run //ic-os/setupos/envs/dev:launch_bare_metal --config=local -- \
     --config_path $(realpath ./ic-os/utils/bare_metal_deployment/zh2-dll01.yaml) \
     --csv_filename $(realpath ./zh2-dll01.csv)
 ```
 
 If your current username does not match the username used to log into the file shares, you must specify it:
-```
+```bash
 bazel run //ic-os/setupos/envs/dev:launch_bare_metal --config=local -- \
-    --file_share_username <your username per infrasec>
-    --config_path $(realpath ./ic-os/utils/bare_metal_deployment/example_config.yaml) \
+    --file_share_username <your username per infrasec> \
+    # --file_share_ssh_key <custom ssh private key> # Specify if a special ssh key is needed \
+    --config_path $(realpath ./ic-os/utils/bare_metal_deployment/zh2-dll01.yaml) \
     --csv_filename $(realpath ./zh2-dll01.csv)
 ```
+
 
 #### What's in the yaml configuration file? 
 
@@ -60,6 +63,7 @@ See [CSV secrets file](#csv-secrets-file) for more info.
 
 Next to each machine entry in 1Pass. Ask node team for details.
 
+# To develop or use finer grained features, read on.
 
 #### Why two config files?
     
