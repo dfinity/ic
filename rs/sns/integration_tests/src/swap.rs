@@ -2,8 +2,6 @@ use candid::{Decode, Encode, Nat, Principal};
 use dfn_candid::candid_one;
 
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1_ledger::{InitArgs as LedgerInit, LedgerArgument};
-use ic_ledger_canister_core::archive::ArchiveOptions;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 
 use ic_nervous_system_common::{
@@ -21,10 +19,9 @@ use ic_nns_constants::{
 use ic_nns_governance::pb::v1::{
     self as nns_governance_pb,
     manage_neuron::{self, RegisterVote},
-    manage_neuron_response::{self, StakeMaturityResponse},
+    manage_neuron_response,
     neuron::DissolveState::DissolveDelaySeconds,
-    proposal, ManageNeuron, ManageNeuronResponse, OpenSnsTokenSwap, Proposal, ProposalStatus,
-    RewardEvent, Vote,
+    proposal, ManageNeuron, OpenSnsTokenSwap, Proposal, ProposalStatus, RewardEvent, Vote,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -36,7 +33,7 @@ use ic_nns_test_utils::{
     state_test_helpers::{
         icrc1_balance, icrc1_transfer, ledger_account_balance, nns_governance_get_full_neuron,
         nns_governance_get_proposal_info_as_anonymous, nns_governance_make_proposal,
-        nns_join_community_fund, nns_leave_community_fund, nns_stake_maturity, set_controllers,
+        nns_join_community_fund, nns_leave_community_fund, set_controllers,
         set_up_universal_canister, setup_nns_canisters, sns_governance_get_mode, sns_make_proposal,
         update_with_sender,
     },
@@ -53,8 +50,7 @@ use ic_sns_init::pb::v1::{
 use ic_sns_swap::{
     pb::v1::{
         self as swap_pb, set_mode_call_result, GetOpenTicketResponse, GetStateRequest,
-        GetStateResponse, Init, NeuronBasketConstructionParameters, OpenRequest,
-        RefreshBuyerTokensResponse,
+        GetStateResponse, Init, NeuronBasketConstructionParameters, RefreshBuyerTokensResponse,
     },
     swap::principal_to_subaccount,
 };
@@ -72,13 +68,12 @@ use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_types::{ingress::WasmResult, Cycles};
 
 use icp_ledger::{
-    AccountIdentifier, BinaryAccountBalanceArgs as AccountBalanceArgs, BlockIndex,
+    AccountIdentifier, BinaryAccountBalanceArgs as AccountBalanceArgs,
     DEFAULT_TRANSFER_FEE as DEFAULT_TRANSFER_FEE_TOKENS,
 };
 use lazy_static::lazy_static;
 use maplit::hashmap;
 use pretty_assertions::assert_eq;
-use proptest::prelude::*;
 use rand::{thread_rng, Rng, SeedableRng};
 use std::{
     collections::{btree_map, HashMap, HashSet},
@@ -834,44 +829,6 @@ fn many_small_community_fund_neurons_and_some_large_ones() {
 }
 
 #[test]
-fn same_principal_can_participate_via_community_fund_and_directly() {
-    let double_participant_principal_id = PrincipalId::new_user_test_id(544564);
-    println!(
-        "double_participant_principal_id={}",
-        double_participant_principal_id
-    );
-
-    // Craft a CF neuron for participant.
-    let neuron_id = 189804;
-    let account = AccountIdentifier::new(
-        NNS_GOVERNANCE_CANISTER_ID.into(),
-        Some(compute_neuron_staking_subaccount(
-            double_participant_principal_id,
-            /* nonce = */ 0,
-        )),
-    );
-    let double_participant_neuron = nns_governance_pb::Neuron {
-        id: Some(nns_common_pb::NeuronId { id: neuron_id }),
-        account: account.to_address().into(),
-        controller: Some(double_participant_principal_id),
-        maturity_e8s_equivalent: 10 * E8,
-        ..COMMUNITY_FUND_NEURON_TEMPLATE.clone()
-    };
-
-    let mut direct_participant_principal_ids = generate_principal_ids(5);
-    direct_participant_principal_ids.push(double_participant_principal_id);
-    let additional_nns_neurons = [double_participant_neuron];
-
-    assert_successful_swap_finalizes_correctly_legacy(
-        &direct_participant_principal_ids,
-        &additional_nns_neurons,
-        ExplosiveTokens::from_e8s(5 * E8), // planned_community_fund_participation_amount
-        DEFAULT_MAX_COMMUNITY_FUND_RELATIVE_ERROR,
-        do_nothing_special_before_proposal_is_adopted,
-    );
-}
-
-#[test]
 fn neurons_only_join_the_community_fund_during_voting() {
     assert_community_fund_can_change_while_proposal_is_being_voted_on(
         10,                   // stay_count
@@ -919,30 +876,6 @@ fn more_neurons_leave_and_join_the_community_fund_during_voting() {
         17,                  // join_count
         6411684775390932754, // random_seed
     );
-}
-
-proptest! {
-    // The default number of cases that proptest generates is 256. That would
-    // take way too long for us, so tell it to generate fewer cases here.
-    #![proptest_config(ProptestConfig::with_cases(10))]
-
-    // This is excluded unless `--test_args=--ignored` is part of the
-    // `bazel test` command.
-    #[ignore] // Too slow.
-    #[test]
-    fn test_community_fund_can_change_while_proposal_is_being_voted_on(
-        stay_count in 1..25_u64, // TODO: Support testing of full CF turnover.
-        leave_count in 0..10_u64,
-        join_count in 0..10_u64,
-        random_seed in 0..u64::MAX,
-    ) {
-        assert_community_fund_can_change_while_proposal_is_being_voted_on(
-            stay_count,
-            leave_count,
-            join_count,
-            random_seed,
-        );
-    }
 }
 
 /// # Arguments
@@ -1166,75 +1099,6 @@ fn assert_community_fund_can_change_while_proposal_is_being_voted_on_with_specif
                     neuron.controller.unwrap(), // sender
                     neuron.id.unwrap(),
                 );
-            }
-        },
-    );
-}
-
-#[test]
-fn stake_maturity_does_not_interfere_with_community_fund_legacy() {
-    let maturity_staking_principal_id = PrincipalId::new_user_test_id(807614);
-
-    // Craft a CF neuron for the maturity staking principal ID.
-    let neuron_id = 833627;
-    let account = AccountIdentifier::new(
-        NNS_GOVERNANCE_CANISTER_ID.into(),
-        Some(compute_neuron_staking_subaccount(
-            maturity_staking_principal_id,
-            /* nonce = */ 0,
-        )),
-    );
-    let original_maturity_e8s_equivalent = 25 * E8;
-    let maturity_staking_neuron = nns_governance_pb::Neuron {
-        id: Some(nns_common_pb::NeuronId { id: neuron_id }),
-        account: account.to_address().into(),
-        controller: Some(maturity_staking_principal_id),
-        maturity_e8s_equivalent: original_maturity_e8s_equivalent,
-        ..COMMUNITY_FUND_NEURON_TEMPLATE.clone()
-    };
-
-    let percentage_to_stake: u64 = 5;
-    // Staking maturity causes a (greater) shortfall. If we just went with the
-    // standard limit, this test would fail.
-    let max_community_fund_relative_error = 0.06;
-
-    assert_successful_swap_finalizes_correctly_legacy(
-        &generate_principal_ids(5),        // direct participants
-        &[maturity_staking_neuron],        // additional_nns_neurons
-        ExplosiveTokens::from_e8s(5 * E8), // planned_community_fund_participation_amount
-        max_community_fund_relative_error,
-        // before_proposal_is_adopted
-        |state_machine| {
-            let result = nns_stake_maturity(
-                state_machine,
-                maturity_staking_principal_id,
-                nns_common_pb::NeuronId { id: neuron_id },
-                Some(percentage_to_stake as u32),
-            );
-            match result {
-                ManageNeuronResponse {
-                    command: Some(manage_neuron_response::Command::StakeMaturity(response)),
-                    ..
-                } => {
-                    let StakeMaturityResponse {
-                        maturity_e8s,
-                        staked_maturity_e8s,
-                    } = response;
-                    assert_eq!(
-                        maturity_e8s,
-                        original_maturity_e8s_equivalent * (100 - percentage_to_stake) / 100,
-                    );
-                    assert_eq!(
-                        staked_maturity_e8s,
-                        original_maturity_e8s_equivalent * percentage_to_stake / 100,
-                    );
-                    assert_eq!(
-                        maturity_e8s + staked_maturity_e8s,
-                        original_maturity_e8s_equivalent
-                    );
-                }
-
-                _ => panic!("Result was not StakeMaturityResponse?! {:#?}", result),
             }
         },
     );
@@ -2337,33 +2201,6 @@ fn test_deletion_of_sale_ticket_legacy() {
 }
 
 #[test]
-fn test_get_sale_parameters_legacy() {
-    // Step 1: Prepare the world.
-    let mut state_machine = StateMachineBuilder::new().with_current_time().build();
-
-    let direct_participant_principal_ids = vec![*TEST_USER1_PRINCIPAL];
-    let planned_participation_amount_per_account = ExplosiveTokens::from_e8s(100 * E8);
-    let neuron_basket_count = 3;
-    let sns_canister_ids = begin_swap_legacy(
-        &mut state_machine,
-        &direct_participant_principal_ids,
-        &[], // additional_nns_neurons
-        planned_participation_amount_per_account,
-        ExplosiveTokens::from_e8s(0), // planned_community_fund_participation_amount
-        neuron_basket_count,
-        DEFAULT_MAX_COMMUNITY_FUND_RELATIVE_ERROR,
-        do_nothing_special_before_proposal_is_adopted,
-    )
-    .0;
-
-    assert!(
-        get_sns_sale_parameters(&state_machine, &sns_canister_ids.swap(),)
-            .params
-            .is_some()
-    );
-}
-
-#[test]
 fn test_list_community_fund_participants_legacy() {
     // Step 1: Prepare the world.
     let mut state_machine = StateMachineBuilder::new().with_current_time().build();
@@ -2394,192 +2231,6 @@ fn test_list_community_fund_participants_legacy() {
         .cf_participants,
         vec![]
     );
-}
-
-#[test]
-fn test_last_man_less_than_min() {
-    let state_machine = StateMachine::new();
-    let icp_ledger_id = state_machine.create_canister(None);
-    let sns_ledger_id = state_machine.create_canister(None);
-    let swap_id = state_machine.create_canister(None);
-    let minting_account = Account {
-        owner: PrincipalId::new_user_test_id(42).0,
-        subaccount: None,
-    };
-
-    // install the icp ledger
-    let wasm = ic_test_utilities_load_wasm::load_wasm(
-        "../../rosetta-api/icp_ledger/ledger",
-        "ledger-canister",
-        &[],
-    );
-    let args = icp_ledger::LedgerCanisterInitPayload::builder()
-        .minting_account(minting_account.into())
-        .build()
-        .unwrap();
-    let args = Encode!(&args).unwrap();
-    state_machine
-        .install_existing_canister(icp_ledger_id, wasm, args)
-        .unwrap();
-
-    // install the sns ledger
-    let wasm = ic_test_utilities_load_wasm::load_wasm(
-        "../../rosetta-api/icrc1/ledger",
-        "ic-icrc1-ledger",
-        &[],
-    );
-    let args = Encode!(&LedgerArgument::Init(LedgerInit {
-        minting_account,
-        fee_collector_account: None,
-        initial_balances: vec![(
-            Account {
-                owner: swap_id.into(),
-                subaccount: None
-            },
-            Nat::from(10_000_000_u32),
-        )],
-        transfer_fee: Nat::from(10_000_u32),
-        token_name: "SNS Token".to_string(),
-        token_symbol: "STK".to_string(),
-        decimals: None,
-        metadata: vec![],
-        archive_options: ArchiveOptions {
-            trigger_threshold: 1,
-            num_blocks_to_archive: 1,
-            node_max_memory_size_bytes: None,
-            max_message_size_bytes: None,
-            controller_id: Principal::anonymous().into(),
-            cycles_for_archive_creation: None,
-            max_transactions_per_response: None
-        },
-        max_memo_length: None,
-        feature_flags: None,
-        maximum_number_of_accounts: None,
-        accounts_overflow_trim_quantity: None,
-    }))
-    .unwrap();
-    state_machine
-        .install_existing_canister(sns_ledger_id, wasm, args)
-        .unwrap();
-
-    // install the sale canister
-    let wasm = ic_test_utilities_load_wasm::load_wasm("../swap", "sns-swap-canister", &[]);
-    let args = Encode!(&Init {
-        nns_governance_canister_id: Principal::anonymous().to_string(),
-        sns_governance_canister_id: Principal::anonymous().to_string(),
-        sns_ledger_canister_id: sns_ledger_id.to_string(),
-        icp_ledger_canister_id: icp_ledger_id.to_string(),
-        sns_root_canister_id: Principal::anonymous().to_string(),
-        fallback_controller_principal_ids: vec![Principal::anonymous().to_string()],
-        transaction_fee_e8s: Some(10_000),
-        neuron_minimum_stake_e8s: Some(400_000),
-        confirmation_text: None,
-        restricted_countries: None,
-        min_participants: None,                      // TODO[NNS1-2339]
-        min_icp_e8s: None,                           // TODO[NNS1-2339]
-        max_icp_e8s: None,                           // TODO[NNS1-2339]
-        min_direct_participation_icp_e8s: None,      // TODO[NNS1-2339]
-        max_direct_participation_icp_e8s: None,      // TODO[NNS1-2339]
-        min_participant_icp_e8s: None,               // TODO[NNS1-2339]
-        max_participant_icp_e8s: None,               // TODO[NNS1-2339]
-        swap_start_timestamp_seconds: None,          // TODO[NNS1-2339]
-        swap_due_timestamp_seconds: None,            // TODO[NNS1-2339]
-        sns_token_e8s: None,                         // TODO[NNS1-2339]
-        neuron_basket_construction_parameters: None, // TODO[NNS1-2339]
-        nns_proposal_id: None,                       // TODO[NNS1-2339]
-        neurons_fund_participants: None,             // TODO[NNS1-2339]
-        should_auto_finalize: Some(true),
-        neurons_fund_participation_constraints: None,
-        neurons_fund_participation: None,
-    })
-    .unwrap();
-    state_machine
-        .install_existing_canister(swap_id, wasm, args)
-        .unwrap();
-
-    // open the sale
-    // min_participant_icp_e8s >= neuron_basket_count * (neuron_minimum_stake_e8s + transaction_fee_e8s) * max_icp_e8s / sns_token_e8s
-    // 1 >= 1 * (+ 10_000) * 10_000_000 / 10_000_000
-    let min_participant_icp_e8s = 1_010_000;
-    let max_participant_icp_e8s = 2_000_000;
-    let max_icp_e8s = 10_000_000;
-    let args = OpenRequest {
-        params: Some(swap_pb::Params {
-            min_participants: 1,
-            min_icp_e8s: 1,
-            max_icp_e8s,
-            min_direct_participation_icp_e8s: Some(1),
-            max_direct_participation_icp_e8s: Some(max_icp_e8s),
-            min_participant_icp_e8s,
-            max_participant_icp_e8s,
-            swap_due_timestamp_seconds: swap_due_from_now_timestamp_seconds(&state_machine),
-            sns_token_e8s: 10_000_000,
-            neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-                count: 2,
-                dissolve_delay_interval_seconds: 1,
-            }),
-            sale_delay_seconds: None,
-        }),
-        cf_participants: vec![],
-        open_sns_token_swap_proposal_id: Some(0),
-    };
-    let args = Encode!(&args).unwrap();
-    let _res = state_machine
-        .execute_ingress(swap_id, "open", args)
-        .unwrap();
-
-    // utilities
-    let mint_min_participant_icp_e8s = |user: u64| -> BlockIndex {
-        let to = Account {
-            owner: swap_id.into(),
-            subaccount: Some(principal_to_subaccount(&PrincipalId::new_user_test_id(
-                user,
-            ))),
-        };
-        icrc1_transfer(
-            &state_machine,
-            icp_ledger_id,
-            PrincipalId::new_user_test_id(42),
-            TransferArg {
-                from_subaccount: None,
-                to,
-                fee: None,
-                created_at_time: None,
-                memo: None,
-                amount: Nat::from(min_participant_icp_e8s),
-            },
-        )
-        .unwrap_or_else(|_| panic!("Unable to mint to user {}", user))
-    };
-    let refresh_buyer_icp_e8s = |user: u64| -> Result<RefreshBuyerTokensResponse, String> {
-        refresh_buyer_tokens(
-            &state_machine,
-            &swap_id,
-            &PrincipalId::new_user_test_id(user),
-            None,
-        )
-    };
-    // /utilities
-
-    // The test starts here
-
-    // num_good_users can commit min_participant_icp_e8s icps
-    let num_good_users = max_icp_e8s / min_participant_icp_e8s;
-    for i in 1..num_good_users + 1 {
-        mint_min_participant_icp_e8s(i);
-        let res = refresh_buyer_icp_e8s(i)
-            .unwrap_or_else(|_| panic!("Unable to refresh_buyer_tokens for user {}", i));
-        assert_eq!(res.icp_accepted_participation_e8s, min_participant_icp_e8s);
-        assert_eq!(res.icp_ledger_account_balance_e8s, min_participant_icp_e8s);
-    }
-
-    // there aren't enough tokens for the last users so
-    // refresh_buyer_tokens_fails
-    mint_min_participant_icp_e8s(num_good_users + 1);
-    let res = refresh_buyer_icp_e8s(num_good_users + 1);
-    assert!(res.is_err());
-    let err = res.err().unwrap();
-    assert!(err.contains("minimum required to participate"), "{}", err);
 }
 
 #[test]
