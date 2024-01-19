@@ -1,7 +1,7 @@
 use crate::{
     canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
     governance::{bytes_to_subaccount, log_prefix, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER},
-    logs::INFO,
+    logs::{ERROR, INFO},
     pb::v1::{
         governance::{SnsMetadata, Version},
         nervous_system_function::{FunctionType, GenericNervousSystemFunction},
@@ -14,9 +14,6 @@ use crate::{
         ProposalRewardStatus, RegisterDappCanisters, Tally, TransferSnsTreasuryFunds,
         UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
     },
-};
-
-use crate::{
     sns_upgrade::{get_upgrade_params, UpgradeSnsParams},
     types::{Environment, DEFAULT_TRANSFER_FEE},
     validate_chars_count, validate_len, validate_required_field,
@@ -25,7 +22,7 @@ use dfn_core::api::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
-use ic_nervous_system_common::{i2d, E8};
+use ic_nervous_system_common::{i2d, E8, SECONDS_PER_DAY};
 use ic_nervous_system_proto::pb::v1::Percentage;
 use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::Account;
@@ -57,6 +54,12 @@ pub const MAX_NUMBER_OF_GENERIC_NERVOUS_SYSTEM_FUNCTIONS: usize = 200_000;
 /// The maximum number of dapps that can be registered in a single
 /// RegisterDappCanisters proposal.
 pub const MAX_NUMBER_OF_DAPPS_TO_REGISTER_PER_PROPOSAL: usize = 1_000;
+
+/// What the name says: how long to hang onto TreasurySnsTreasuryTransfer proposals that were
+/// successfully executed. (This is used by can_be_purged, and is generally used when calling
+/// total_treasury_transfer_amount_e8s to construct the min_executed_timestamp_seconds argument).
+pub const EXECUTED_TRANSFER_SNS_TREASURY_FUNDS_PROPOSAL_RETENTION_DURATION_SECONDS: u64 =
+    7 * SECONDS_PER_DAY;
 
 impl Proposal {
     /// Returns whether a proposal is allowed to be submitted when
@@ -1381,7 +1384,37 @@ impl ProposalData {
     /// Return true if the proposal can be purged from storage, e.g.,
     /// if it is allowed to be garbage collected.
     pub(crate) fn can_be_purged(&self, now_seconds: u64) -> bool {
-        self.status().is_final() && self.reward_status(now_seconds).is_final()
+        // Retain proposals that have not gone through the full lifecycle.
+        if !self.status().is_final() {
+            return false;
+        }
+        if !self.reward_status(now_seconds).is_final() {
+            return false;
+        }
+
+        // At this point, we can let go of most proposals. The only special case is
+        // TransferSnsTreasuryFunds. We want to hang onto those for at least 7 days after they have
+        // been successfully executed. This is because they are still needed for the purposes of
+        // limiting the total amount that is transferred out of the treasury in that time window.
+
+        let Some(proposal) = &self.proposal else {
+            log!(ERROR, "Proposal {:?} missing `proposal` field", self.id);
+            return true;
+        };
+        match &proposal.action {
+            Some(Action::TransferSnsTreasuryFunds(_)) => (),
+            _ => return true,
+        };
+
+        // No need to hang onto proposals that did not execute successfully.
+        if self.executed_timestamp_seconds == 0 {
+            return true;
+        }
+
+        // Only hang onto TransferSnsTreasuryFunds that were executed recently enough.
+        let earliest_unpurgeable_executed_timestamp_seconds =
+            now_seconds - EXECUTED_TRANSFER_SNS_TREASURY_FUNDS_PROPOSAL_RETENTION_DURATION_SECONDS;
+        self.executed_timestamp_seconds < earliest_unpurgeable_executed_timestamp_seconds
     }
 
     // Returns a clone of self, except that "large blob fields" are replaced
@@ -1418,6 +1451,79 @@ impl ProposalRewardStatus {
         matches!(self, ProposalRewardStatus::Settled)
     }
 }
+
+/// Returns the total amount (in e8s) that was transfered from the treasury via
+/// TransferSnsTreasuryFunds proposals, or None if there was an overflow.
+///
+/// Arguments:
+/// * `proposals` - Self-explanatory.
+/// * `filter_from_treasury` - Specify the token type (ICP or SNS). The name of this parameter is
+///   based on TransferSnsTreasuryFunds.from_treasury, which specifies which token the proposal is
+///   concerned about. Furthermore, that field is compared against this parameter.
+/// * `min_executed_timestamp_seconds` - Older proposals are not considered.
+#[allow(unused)] // TODO(NNS1-2808): Delete `allow(unused)`.
+fn total_treasury_transfer_amount_e8s(
+    proposals: &[ProposalData],
+    filter_from_treasury: TransferFrom,
+    min_executed_timestamp_seconds: u64,
+) -> Option<u64> {
+    let mut total_e8s: u64 = 0;
+
+    for proposal in proposals {
+        // Skip proposals that were not executed recently enough.
+        if proposal.executed_timestamp_seconds < min_executed_timestamp_seconds {
+            continue;
+        }
+
+        // Skip non-TransferSnsTreasuryFunds proposals.
+        let proposal_id = proposal.id;
+        let Some(proposal) = &proposal.proposal else {
+            log!(
+                ERROR,
+                "ProposalData {:?} is invalid, because its proposal field is empty!",
+                proposal_id,
+            );
+            continue;
+        };
+        let transfer_sns_treasury_funds = match &proposal.action {
+            Some(Action::TransferSnsTreasuryFunds(ok)) => ok,
+            _ => continue,
+        };
+
+        // Skip proposals that do not deal with the type of token that the caller asked for.
+        let observed_from_treasury =
+            TransferFrom::try_from(transfer_sns_treasury_funds.from_treasury);
+        if observed_from_treasury != Ok(filter_from_treasury) {
+            continue;
+        }
+
+        // At this point, the proposal was executed recently, and deals with the type of token that
+        // the caller is interested in. Therefore, increment result by the amount in the proposal.
+        let total_e8s_or_none = total_e8s.checked_add(transfer_sns_treasury_funds.amount_e8s);
+        total_e8s = match total_e8s_or_none {
+            Some(ok) => ok,
+
+            None => {
+                log!(
+                    ERROR,
+                    "Overflow while totaling treasury transfers since {}: \
+                     {} + {} (last proposal ID = {:?})",
+                    min_executed_timestamp_seconds,
+                    total_e8s,
+                    transfer_sns_treasury_funds.amount_e8s,
+                    proposal_id,
+                );
+
+                return None;
+            }
+        }
+    }
+
+    Some(total_e8s)
+}
+
+#[cfg(test)]
+mod treasury_tests;
 
 #[cfg(test)]
 mod tests {
