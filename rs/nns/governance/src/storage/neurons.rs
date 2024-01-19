@@ -351,6 +351,20 @@ where
         validate_stable_btree_map(&self.transfer_map);
     }
 
+    // TODO(NNS1-2813): remove after upgrade.
+    pub fn remove_deprecated_topic_from_followees(&mut self, deprecated_topic: Topic) {
+        let keys_to_remove: Vec<_> = self
+            .followees_map
+            .range(FolloweesKey::MIN..=FolloweesKey::MAX)
+            .filter(|(key, _)| key.topic == deprecated_topic)
+            .map(|(key, _)| key)
+            .collect();
+
+        for key in keys_to_remove {
+            self.followees_map.remove(&key);
+        }
+    }
+
     /// Internal function to take what's in the main map and fill in the remaining data from
     /// the other stable storage maps.
     fn reconstitute_neuron(&self, neuron_id: NeuronId, main_neuron_part: AbridgedNeuron) -> Neuron {

@@ -1,5 +1,5 @@
 use ic_stable_structures::{BoundedStorable, Memory, StableBTreeMap};
-use num_traits::bounds::LowerBounded;
+use num_traits::bounds::{LowerBounded, UpperBounded};
 use std::{
     cmp::Ord,
     collections::{BTreeMap, BTreeSet},
@@ -40,6 +40,10 @@ pub trait NeuronFollowingIndex<NeuronId, Category> {
         followee_neuron_id: &NeuronId,
         category: Category,
     ) -> Vec<NeuronId>;
+
+    /// Removes all followee entries related to the given category.
+    /// TODO(NNS1-2813): remove after upgrade.
+    fn remove_deprecated_category(&mut self, category: Category);
 }
 
 /// Adds a neuron's followees for each category and returns whether all of the followees
@@ -235,6 +239,11 @@ where
             .into_iter()
             .collect()
     }
+
+    // TODO(NNS1-2813): remove after upgrade.
+    fn remove_deprecated_category(&mut self, category: Category) {
+        self.category_to_followee_to_followers.remove(&category);
+    }
 }
 
 /// A stable memory implementation of the index.
@@ -290,7 +299,7 @@ where
 impl<NeuronId, Category, M> NeuronFollowingIndex<NeuronId, Category>
     for StableNeuronFollowingIndex<NeuronId, Category, M>
 where
-    NeuronId: BoundedStorable + Clone + Default + LowerBounded + Ord,
+    NeuronId: BoundedStorable + Clone + Default + LowerBounded + UpperBounded + Ord,
     Category: BoundedStorable + Copy + Default + Ord,
     M: Memory,
 {
@@ -337,6 +346,21 @@ where
             .map(|(k, _)| k.1)
             .collect()
     }
+
+    // TODO(NNS1-2813): remove after upgrade.
+    fn remove_deprecated_category(&mut self, category: Category) {
+        let min_key = ((category, NeuronId::min_value()), NeuronId::min_value());
+        let max_key = ((category, NeuronId::max_value()), NeuronId::max_value());
+        let keys_to_remove: Vec<_> = self
+            .category_followee_follower_to_null
+            .range(min_key..=max_key)
+            .map(|(key, _)| key.clone())
+            .collect();
+
+        for key in keys_to_remove {
+            self.category_followee_follower_to_null.remove(&key);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -368,6 +392,12 @@ mod tests {
     impl LowerBounded for TestNeuronId {
         fn min_value() -> Self {
             TestNeuronId([0u8; 32])
+        }
+    }
+
+    impl UpperBounded for TestNeuronId {
+        fn max_value() -> Self {
+            TestNeuronId([u8::MAX; 32])
         }
     }
 
