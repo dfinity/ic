@@ -126,12 +126,12 @@ impl<T: RpcTransport> EthRpcClient<T> {
                 Err(RpcError::JsonRpcError(json_rpc_error @ JsonRpcError { .. })) => {
                     log!(
                         INFO,
-                        "Provider {provider:?} returned JSON-RPC error {json_rpc_error:?}",
+                        "{provider:?} returned JSON-RPC error {json_rpc_error:?}",
                     );
                     last_result = Some(Err(json_rpc_error.into()));
                 }
                 Err(e) => {
-                    log!(INFO, "Querying provider {provider:?} returned error {e:?}");
+                    log!(INFO, "Querying {provider:?} returned error {e:?}");
                     last_result = Some(Err(e));
                 }
             };

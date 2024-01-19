@@ -70,7 +70,6 @@ fn setup_timers() {
 fn init(arg: MinterArg) {
     match arg {
         MinterArg::InitArg(init_arg) => {
-            log!(INFO, "[init]: initialized minter with arg: {:?}", init_arg);
             STATE.with(|cell| {
                 storage::record_event(EventType::Init(init_arg.clone()));
                 *cell.borrow_mut() =
