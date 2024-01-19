@@ -75,6 +75,8 @@ const HEADER_IC_REQUEST_TYPE: HeaderName = HeaderName::from_static("x-ic-request
 #[allow(clippy::declare_interior_mutable_const)]
 const HEADER_IC_RETRIES: HeaderName = HeaderName::from_static("x-ic-retries");
 #[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_ERROR_CAUSE: HeaderName = HeaderName::from_static("x-ic-error-cause");
+#[allow(clippy::declare_interior_mutable_const)]
 const HEADER_X_REQUEST_ID: HeaderName = HeaderName::from_static("x-request-id");
 
 const HEADERS_HIDE_HTTP_REQUEST: [&str; 4] =
@@ -642,13 +644,23 @@ pub async fn lookup_subnet(
 pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> impl IntoResponse {
     let mut response = next.run(request).await;
 
+    let error_cause = response
+        .extensions()
+        .get::<ErrorCause>()
+        .map(|x| x.to_string())
+        .unwrap_or("none".into());
+
     // Set the correct content-type for all replies if it's not an error
-    let error_cause = response.extensions().get::<ErrorCause>();
-    if error_cause.is_none() {
+    if error_cause == "none" && response.status().is_success() {
         response
             .headers_mut()
             .insert(CONTENT_TYPE, CONTENT_TYPE_CBOR);
     }
+
+    response.headers_mut().insert(
+        HEADER_IC_ERROR_CAUSE,
+        HeaderValue::from_maybe_shared(Bytes::from(error_cause)).unwrap(),
+    );
 
     // Add cache status if there's one
     let cache_status = response.extensions().get::<CacheStatus>().cloned();

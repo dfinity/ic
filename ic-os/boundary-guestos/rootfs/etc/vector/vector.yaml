@@ -5,28 +5,30 @@ sources:
   vector_metrics:
     type: internal_metrics
 
+  nginx_socket:
+    type: socket
+
+    mode: unix_datagram
+    socket_file_mode: 666
+    path: /var/lib/vector/nginx.socket
+
+    decoding:
+      codec: syslog
+
   journal:
     type: journald
     include_units:
     - certificate-issuer
     - certificate-syncer
     - ic-boundary
-    - nginx
     - danted
 
 transforms:
-  nginx_access:
-    type: filter
-    inputs:
-    - journal
-
-    condition: ._SYSTEMD_UNIT == "nginx.service" && .SYSLOG_IDENTIFIER == "access"
-
   nginx_access_parsed:
     type: remap
     inputs:
-    - nginx_access
-    
+    - nginx_socket
+
     source: |
       . = parse_json!(.message)
 
@@ -152,7 +154,7 @@ sinks:
     inputs:
     - vector_metrics
 
-    address: "${VECTOR_PROMETHUS_ADDR}"
+    address: "${VECTOR_PROMETHUS_ADDR:?VECTOR_PROMETHUS_ADDR must be provided}"
     default_namespace: vector
     suppress_timestamp: true
 
@@ -171,13 +173,11 @@ sinks:
     inputs:
     - nginx_access_parsed
     
-    # Hardcoded for now, should change to an env var after migration
-    uri: https://ch-proxy.dfinity.network/vector/nginx_ingest
-    
+    uri: "${LOGGING_URL:?LOGGING_URL must be provided}"
     auth:
       strategy: basic
-      user: "${CLICKHOUSE_USER:?CLICKHOUSE_USER must be provided}"
-      password: "${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD must be provided}"
+      user: "${LOGGING_USER:?LOGGING_USER must be provided}"
+      password: "${LOGGING_PASSWORD:?LOGGING_PASSWORD must be provided}"
 
     compression: zstd
     encoding:

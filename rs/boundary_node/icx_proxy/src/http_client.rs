@@ -110,10 +110,19 @@ const HEADER_IC_METHOD_NAME: HeaderName = HeaderName::from_static("x-ic-method-n
 const HEADER_IC_SENDER: HeaderName = HeaderName::from_static("x-ic-sender");
 #[allow(clippy::declare_interior_mutable_const)]
 const HEADER_IC_REQUEST_TYPE: HeaderName = HeaderName::from_static("x-ic-request-type");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_RETRIES: HeaderName = HeaderName::from_static("x-ic-retries");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_ERROR_CAUSE: HeaderName = HeaderName::from_static("x-ic-error-cause");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_CACHE: HeaderName = HeaderName::from_static("x-ic-cache-status");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_CACHE_BYPASS_REASON: HeaderName =
+    HeaderName::from_static("x-ic-cache-bypass-reason");
 
 // Headers to pass from replica to the caller
 #[allow(clippy::declare_interior_mutable_const)]
-pub const HEADERS_PASS_IN: [HeaderName; 7] = [
+pub const HEADERS_PASS_IN: [HeaderName; 11] = [
     HEADER_IC_SUBNET_ID,
     HEADER_IC_NODE_ID,
     HEADER_IC_SUBNET_TYPE,
@@ -121,6 +130,10 @@ pub const HEADERS_PASS_IN: [HeaderName; 7] = [
     HEADER_IC_METHOD_NAME,
     HEADER_IC_SENDER,
     HEADER_IC_REQUEST_TYPE,
+    HEADER_IC_RETRIES,
+    HEADER_IC_ERROR_CAUSE,
+    HEADER_IC_CACHE,
+    HEADER_IC_CACHE_BYPASS_REASON,
 ];
 
 // Headers to pass from caller to replica
