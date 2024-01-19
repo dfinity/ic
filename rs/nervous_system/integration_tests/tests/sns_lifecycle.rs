@@ -1879,6 +1879,18 @@ fn test_sns_lifecycle_happy_scenario_without_neurons_fund_participation() {
 }
 
 #[test]
+fn test_sns_lifecycle_happy_scenario_with_neurons_fund_participation_same_principal() {
+    test_sns_lifecycle(
+        false,
+        CreateServiceNervousSystemBuilder::default()
+            .neurons_fund_participation(true)
+            .build(),
+        // Direct participant has the same principal as the one controlling the Neurons' Fund neuron.
+        vec![*TEST_NEURON_1_OWNER_PRINCIPAL],
+    );
+}
+
+#[test]
 fn test_sns_lifecycle_swap_timeout_with_neurons_fund_participation() {
     test_sns_lifecycle(
         true,
