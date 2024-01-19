@@ -72,8 +72,23 @@ proxies:
     # The expectation is that clients will scrape at a
     # maximum rate of 1 per 10 seconds (6 / min).
     cache_duration: 8s
+  - listen_on:
+      url: https://[::]:42372/metrics/guestos_replica
+      # We reuse the SSL cert of node exporter.
+      certificate_file: /etc/node_exporter/node_exporter.crt
+      key_file: /etc/node_exporter/node_exporter.key
+    connect_to:
+      url: https://guestos:42372/metrics/guestos_replica
+      tolerate_bad_tls: true
+    # The GuestOS metrics proxy already does filtering.
+    # See ic-os/guestos/rootfs/etc/metrics-proxy.yaml
+    # for the filters.
+    label_filters: []
+    # The expectation is that clients will scrape at a
+    # maximum rate of 1 per 10 seconds (6 / min).
+    cache_duration: 8s
 metrics:
-  # Metrics clients only (see nftables.conf in HostOS).
+  # Telemetry of metrics-proxy itself (see nftables.conf in HostOS).
   url: https://[::]:19100/metrics
   # We reuse the SSL cert of node exporter.
   certificate_file: /etc/node_exporter/node_exporter.crt
