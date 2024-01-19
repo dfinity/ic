@@ -487,6 +487,7 @@ impl MetricParamsCheck {
 #[derive(Clone)]
 pub struct HttpMetricParams {
     pub action: String,
+    pub log_failed_requests_only: bool,
     pub counter: IntCounterVec,
     pub durationer: HistogramVec,
     pub request_sizer: HistogramVec,
@@ -494,7 +495,7 @@ pub struct HttpMetricParams {
 }
 
 impl HttpMetricParams {
-    pub fn new(registry: &Registry, action: &str) -> Self {
+    pub fn new(registry: &Registry, action: &str, log_failed_requests_only: bool) -> Self {
         const LABELS_HTTP: &[&str] = &[
             "request_type",
             "status_code",
@@ -507,6 +508,7 @@ impl HttpMetricParams {
 
         Self {
             action: action.to_string(),
+            log_failed_requests_only,
 
             counter: register_int_counter_vec_with_registry!(
                 format!("{action}_total"),
@@ -659,6 +661,7 @@ pub async fn metrics_middleware(
 
     let HttpMetricParams {
         action,
+        log_failed_requests_only,
         counter,
         durationer,
         request_sizer,
@@ -668,6 +671,7 @@ pub async fn metrics_middleware(
     // Closure that gets called when the response body is fully read (or an error occurs)
     let record_metrics = move |response_size: u64, body_result: Result<(), String>| {
         let full_duration = start_time.elapsed().as_secs_f64();
+        let failed = error_cause.is_some() || !status_code.is_success();
 
         let (error_cause, error_details) = match &error_cause {
             Some(v) => (Some(v.to_string()), v.details()),
@@ -732,37 +736,39 @@ pub async fn metrics_middleware(
             .get(USER_AGENT)
             .map(|v| v.to_str().unwrap_or("parsing_error"));
 
-        info!(
-            action,
-            request_id,
-            request_type = ctx.request_type.to_string(),
-            error_cause,
-            error_details,
-            status = status_code.as_u16(),
-            subnet_id,
-            node_id,
-            canister_id = canister_id.map(|x| x.to_string()),
-            canister_id_cbor = ctx.canister_id.map(|x| x.to_string()),
-            sender,
-            method_name = ctx.method_name,
-            proc_duration,
-            full_duration,
-            request_size = ctx.request_size,
-            response_size,
-            retry_count = &retry_result.as_ref().map(|x| x.retries),
-            retry_success = &retry_result.map(|x| x.success.to_string()),
-            body_error = body_result.err(),
-            %cache_status,
-            cache_bypass_reason = cache_bypass_reason.map(|x| x.to_string()),
-            nonce_len = ctx.nonce.clone().map(|x| x.len()),
-            arg_len = ctx.arg.clone().map(|x| x.len()),
-            ip_family,
-            query_string,
-            header_host,
-            header_origin,
-            header_referer,
-            header_user_agent,
-        );
+        if !log_failed_requests_only || failed {
+            info!(
+                action,
+                request_id,
+                request_type = ctx.request_type.to_string(),
+                error_cause,
+                error_details,
+                status = status_code.as_u16(),
+                subnet_id,
+                node_id,
+                canister_id = canister_id.map(|x| x.to_string()),
+                canister_id_cbor = ctx.canister_id.map(|x| x.to_string()),
+                sender,
+                method_name = ctx.method_name,
+                proc_duration,
+                full_duration,
+                request_size = ctx.request_size,
+                response_size,
+                retry_count = &retry_result.as_ref().map(|x| x.retries),
+                retry_success = &retry_result.map(|x| x.success.to_string()),
+                body_error = body_result.err(),
+                %cache_status,
+                cache_bypass_reason = cache_bypass_reason.map(|x| x.to_string()),
+                nonce_len = ctx.nonce.clone().map(|x| x.len()),
+                arg_len = ctx.arg.clone().map(|x| x.len()),
+                ip_family,
+                query_string,
+                header_host,
+                header_origin,
+                header_referer,
+                header_user_agent,
+            );
+        }
     };
 
     let (parts, body) = response.into_parts();

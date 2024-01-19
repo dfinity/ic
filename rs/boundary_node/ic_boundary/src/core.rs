@@ -465,7 +465,11 @@ pub fn setup_router(
             .layer(option_layer(
                 (!cli.monitoring.disable_request_logging).then_some(
                     middleware::from_fn_with_state(
-                        HttpMetricParams::new(metrics_registry, "http_request_in"),
+                        HttpMetricParams::new(
+                            metrics_registry,
+                            "http_request_in",
+                            cli.monitoring.log_failed_requests_only,
+                        ),
                         metrics::metrics_middleware,
                     ),
                 ),

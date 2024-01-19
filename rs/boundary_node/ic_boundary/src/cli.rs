@@ -172,6 +172,9 @@ pub struct MonitoringConfig {
     /// Disable per-request logging and metrics recording
     #[clap(long)]
     pub disable_request_logging: bool,
+    /// Log only failed (non-2xx status code or other problems) requests
+    #[clap(long)]
+    pub log_failed_requests_only: bool,
 }
 
 #[derive(Args)]

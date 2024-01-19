@@ -26,7 +26,6 @@ function read_variables() {
     while IFS="=" read -r key value; do
         case "${key}" in
             "env") ENV="${value}" ;;
-            "ip_hash_salt") IP_HASH_SALT="${value}" ;;
             "logging_url") LOGGING_URL="${value}" ;;
             "logging_user") LOGGING_USER="${value}" ;;
             "logging_password") LOGGING_PASSWORD="${value}" ;;
@@ -38,10 +37,9 @@ function generate_vector_config() {
     mkdir -p "${RUN_DIR}"
     cat >"${ENV_FILE}" <<EOF
 ENV=${ENV}
-IP_HASH_SALT=${IP_HASH_SALT:-}
-CLICKHOUSE_URL=${LOGGING_URL:-}
-CLICKHOUSE_USER=${LOGGING_USER:-}
-CLICKHOUSE_PASSWORD=${LOGGING_PASSWORD:-}
+LOGGING_URL=${LOGGING_URL:-}
+LOGGING_USER=${LOGGING_USER:-}
+LOGGING_PASSWORD=${LOGGING_PASSWORD:-}
 EOF
 }
 

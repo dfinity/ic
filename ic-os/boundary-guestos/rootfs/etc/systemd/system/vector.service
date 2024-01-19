@@ -3,6 +3,7 @@ Description=Vector
 After=network-online.target
 Wants=network-online.target
 After=setup-vector.service
+Before=nginx.service
 BindsTo=setup-vector.service
 
 [Service]
@@ -13,6 +14,8 @@ Environment="VECTOR_PROMETHUS_ADDR=[::]:9317"
 Environment="DANTED_PROMETHUS_ADDR=[::]:9323"
 EnvironmentFile=/run/ic-node/etc/default/vector
 ExecStart=/usr/bin/vector --config /etc/vector/vector.yaml
+# Wait a bit for socket files etc to be created before moving forward
+ExecStartPost=/usr/bin/sleep 1
 
 [Install]
 WantedBy=multi-user.target
