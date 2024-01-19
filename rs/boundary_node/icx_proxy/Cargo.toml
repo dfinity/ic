@@ -53,8 +53,8 @@ serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 sha2 = "0.10"
 tokio = { workspace = true }
-ic-response-verification = { git = "https://github.com/dfinity/response-verification", rev = "0d472818e35aff152ae8d1bf482da26b97334494" }
-ic-http-certification = { git = "https://github.com/dfinity/response-verification", rev = "0d472818e35aff152ae8d1bf482da26b97334494" }
+ic-response-verification = { workspace = true }
+ic-http-certification = { workspace = true }
 thiserror = "1.0.40"
 
 [features]
