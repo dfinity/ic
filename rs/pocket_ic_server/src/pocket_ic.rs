@@ -1,7 +1,7 @@
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
-use crate::BlobStore;
 use crate::OpId;
 use crate::Operation;
+use crate::{copy_dir, BlobStore};
 use ic_config::execution_environment;
 use ic_config::subnet_config::SubnetConfig;
 use ic_crypto_sha2::Sha256;
@@ -32,6 +32,7 @@ use std::{
     sync::{Arc, RwLock},
     time::SystemTime,
 };
+use tempfile::TempDir;
 use tokio::runtime::Runtime;
 
 /// We assume that the maximum number of subnets on the mainnet is 1024.
@@ -53,28 +54,47 @@ impl PocketIc {
     pub fn new(runtime: Arc<Runtime>, subnet_configs: SubnetConfigSet) -> Self {
         let fixed_range_subnets = subnet_configs.get_named();
         let flexible_subnets = {
-            let sys = repeat(SubnetKind::System).take(subnet_configs.system);
-            let app = repeat(SubnetKind::Application).take(subnet_configs.application);
+            let sys = repeat((SubnetKind::System, None)).take(subnet_configs.system);
+            let app = repeat((SubnetKind::Application, None)).take(subnet_configs.application);
             sys.chain(app)
         };
 
         let mut range_gen = RangeGen::new();
         let mut subnet_config_info: Vec<SubnetConfigInfo> = vec![];
-        let mut subnet_ids = Vec::new();
+        let mut subnet_ids = vec![];
         let mut routing_table = RoutingTable::new();
-        let mut nns_subnet_id = None;
 
-        for (subnet_counter, subnet_kind) in fixed_range_subnets
-            .into_iter()
-            .chain(flexible_subnets)
-            .enumerate()
+        let mut nns_subnet_id: Option<SubnetId> = subnet_configs
+            .nns_subnet_id
+            .map(|raw_nns_subnet_id| SubnetId::new(PrincipalId(raw_nns_subnet_id.into())));
+
+        let mut subnet_counter = 0_u64;
+        let mut apply_subnet_counter = move || -> u64 {
+            let current_subnet_counter = subnet_counter;
+            subnet_counter += 1;
+            current_subnet_counter
+        };
+
+        for (subnet_kind, subnet_state_dir) in
+            fixed_range_subnets.into_iter().chain(flexible_subnets)
         {
-            let subnet_id = subnet_test_id(subnet_counter as u64);
+            let subnet_id = match (subnet_kind, nns_subnet_id) {
+                (SubnetKind::NNS, Some(nns_subnet_id)) => nns_subnet_id,
+                (SubnetKind::NNS, None) => {
+                    let subnet_id = subnet_test_id(apply_subnet_counter());
+                    nns_subnet_id = Some(subnet_id);
+                    subnet_id
+                }
+                (_, None) => subnet_test_id(apply_subnet_counter()),
+                // Ensure that a generated `subnet_id` does not collide with `nns_subnet_id`.
+                (_, Some(nns_subnet_id)) => loop {
+                    let subnet_id = subnet_test_id(apply_subnet_counter());
+                    if subnet_id != nns_subnet_id {
+                        break subnet_id;
+                    }
+                },
+            };
             subnet_ids.push(subnet_id);
-
-            if subnet_kind == SubnetKind::NNS {
-                nns_subnet_id = Some(subnet_id);
-            }
 
             let RangeConfig {
                 canister_id_ranges: ranges,
@@ -89,10 +109,19 @@ impl PocketIc {
                 routing_table.insert(alloc_range, subnet_id).unwrap();
             }
 
+            let state_dir = if let Some(subnet_state_dir) = subnet_state_dir {
+                let tmp_dir = TempDir::new().expect("Failed to create temporary directory");
+                copy_dir(subnet_state_dir, tmp_dir.path()).expect("Failed to copy state directory");
+                Some(tmp_dir)
+            } else {
+                None
+            };
+
             subnet_config_info.push(SubnetConfigInfo {
                 subnet_id,
                 ranges,
                 subnet_kind,
+                state_dir,
             });
         }
 
@@ -106,13 +135,14 @@ impl PocketIc {
             subnet_id,
             ranges,
             subnet_kind,
+            state_dir,
         } in subnet_config_info
         {
             let subnet_config = SubnetConfig::new(conv_type(subnet_kind));
             let hypervisor_config = execution_environment::Config::default();
             let sm_config = StateMachineConfig::new(subnet_config, hypervisor_config);
             let subnet_size = subnet_size(subnet_kind);
-            StateMachineBuilder::new()
+            let mut builder = StateMachineBuilder::new()
                 .with_runtime(runtime.clone())
                 .with_config(Some(sm_config))
                 .with_subnet_id(subnet_id)
@@ -125,8 +155,13 @@ impl PocketIc {
                     curve: EcdsaCurve::Secp256k1,
                     name: format!("master_ecdsa_public_key_{}", subnet_id),
                 }])
-                .with_use_cost_scaling_flag(true)
-                .build_with_subnets(subnets.clone());
+                .with_use_cost_scaling_flag(true);
+
+            if let Some(state_dir) = state_dir {
+                builder = builder.with_state_dir(state_dir);
+            }
+
+            builder.build_with_subnets(subnets.clone());
 
             // What will be returned to the client:
             let subnet_config = pocket_ic::common::rest::SubnetConfig {
@@ -370,6 +405,7 @@ struct SubnetConfigInfo {
     pub subnet_id: SubnetId,
     pub ranges: Vec<CanisterIdRange>,
     pub subnet_kind: SubnetKind,
+    pub state_dir: Option<TempDir>,
 }
 
 // ---------------------------------------------------------------------------------------- //
