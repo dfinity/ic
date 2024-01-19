@@ -201,6 +201,12 @@ RUN addgroup node_exporter && \
     chmod 0644 /etc/default/node_exporter \
                /etc/node_exporter/web.yml
 
+# User which will run the metrics proxy service.
+# Needs access to the node exporter SSL certificate private key,
+# stored in /etc/node_exporter.
+RUN adduser --system --disabled-password --home /var/lib/metrics-proxy --group --no-create-home metrics-proxy && \
+    usermod -a -G node_exporter metrics-proxy
+
 # Clear all files that may lead to indeterministic build.
 RUN apt-get clean && \
     find /usr/local/share/fonts -name .uuid | xargs rm && \

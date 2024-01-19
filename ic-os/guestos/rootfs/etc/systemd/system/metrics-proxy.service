@@ -1,0 +1,16 @@
+[Unit]
+Description=Prometheus metrics proxy
+After=node_exporter.service
+
+[Service]
+User=metrics-proxy
+ExecStart=/opt/ic/bin/metrics-proxy /etc/metrics-proxy.yaml
+Restart=on-failure
+RestartSec=10
+KillSignal=SIGINT
+StartLimitBurst=5
+StartLimitInterval=60
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
