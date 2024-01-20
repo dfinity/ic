@@ -653,32 +653,6 @@ pub fn process(
         .min(message_instruction_limit);
     let message_instructions_left = message_instruction_limit - message_instructions_executed;
 
-    // In case the message dirtied too many pages, as a performance optimization we will
-    // yield the control to the replica and then resume copying dirty pages in a new execution slice.
-    if let Ok(ref res) = run_result {
-        if res.dirty_pages.len() > embedder.config().max_dirty_pages_without_optimization {
-            if let Err(err) = system_api.yield_for_dirty_memory_copy(instruction_counter) {
-                // If there was an error slicing, propagate this error to the main result and return.
-                // Otherwise, the regular message path takes place.
-                return (
-                    SliceExecutionOutput {
-                        executed_instructions: slice_instructions_executed,
-                    },
-                    WasmExecutionOutput {
-                        wasm_result: Err(err),
-                        num_instructions_left: message_instructions_left,
-                        allocated_bytes: NumBytes::from(0),
-                        allocated_message_bytes: NumBytes::from(0),
-                        instance_stats,
-                        system_api_call_counters,
-                    },
-                    None,
-                    Ok(instance),
-                );
-            }
-        }
-    }
-
     // Has the side effect of deallocating memory if message failed and
     // returning cycles from a request that wasn't sent.
     let mut wasm_result = system_api.take_execution_result(run_result.as_ref().err());

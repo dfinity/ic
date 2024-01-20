@@ -2386,33 +2386,6 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
-    /// Performance improvement:
-    /// This function is called after a message execution succeeded but the number of
-    /// dirty pages is large enough to warrant an extra round of execution.
-    /// Therefore, we yield control back to the replica and we wait for the
-    /// next round to start copying dirty pages.
-    fn yield_for_dirty_memory_copy(&mut self, instruction_counter: i64) -> HypervisorResult<i64> {
-        let result = self
-            .out_of_instructions_handler
-            .yield_for_dirty_memory_copy(instruction_counter);
-        if let Ok(new_slice_instruction_limit) = result {
-            // A new slice has started, update the instruction sum and limit.
-            let slice_instructions = self
-                .current_slice_instruction_limit
-                .saturating_sub(instruction_counter)
-                .max(0);
-            self.instructions_executed_before_current_slice += slice_instructions;
-            self.current_slice_instruction_limit = new_slice_instruction_limit;
-        }
-        trace_syscall!(
-            self,
-            yield_for_dirty_memory_copy,
-            result,
-            instruction_counter
-        );
-        result
-    }
-
     fn update_available_memory(
         &mut self,
         native_memory_grow_res: i64,
@@ -2985,10 +2958,6 @@ pub struct DefaultOutOfInstructionsHandler {}
 
 impl OutOfInstructionsHandler for DefaultOutOfInstructionsHandler {
     fn out_of_instructions(&self, _instruction_counter: i64) -> HypervisorResult<i64> {
-        Err(HypervisorError::InstructionLimitExceeded)
-    }
-
-    fn yield_for_dirty_memory_copy(&self, _instruction_counter: i64) -> HypervisorResult<i64> {
         Err(HypervisorError::InstructionLimitExceeded)
     }
 }
