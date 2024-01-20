@@ -29,7 +29,7 @@ pub struct WasmExecutionInput {
     pub compilation_cache: Arc<CompilationCache>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct InstanceRunResult {
     pub dirty_pages: Vec<PageIndex>,
     pub stable_memory_dirty_pages: Vec<PageIndex>,
