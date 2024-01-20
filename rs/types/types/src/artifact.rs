@@ -559,6 +559,19 @@ impl From<&CertificationMessage> for CertificationMessageId {
     }
 }
 
+impl From<&CertificationMessage> for CertificationMessageHash {
+    fn from(msg: &CertificationMessage) -> CertificationMessageHash {
+        match msg {
+            CertificationMessage::Certification(cert) => {
+                CertificationMessageHash::Certification(crypto_hash(cert))
+            }
+            CertificationMessage::CertificationShare(share) => {
+                CertificationMessageHash::CertificationShare(crypto_hash(share))
+            }
+        }
+    }
+}
+
 // -----------------------------------------------------------------------------
 // ECDSA artifacts
 

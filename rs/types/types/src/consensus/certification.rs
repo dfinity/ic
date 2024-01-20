@@ -105,7 +105,7 @@ impl TryFrom<pb::CertificationMessage> for CertificationMessage {
 }
 
 /// CertificationMessageHash contains the hash of a CertificationMessage.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash, PartialOrd, Ord)]
 pub enum CertificationMessageHash {
     /// Certification captures the hash of a full certification on behalf of a
     /// subnet

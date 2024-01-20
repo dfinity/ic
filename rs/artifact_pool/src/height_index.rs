@@ -40,14 +40,7 @@ impl<T: Eq + Clone> HeightIndex<T> {
     }
 
     pub fn remove_all_below(&mut self, height: Height) {
-        self.heights()
-            .take_while(|bucket_height| bucket_height < &&height)
-            .cloned()
-            .collect::<Vec<_>>()
-            .iter()
-            .for_each(|bucket_height| {
-                self.remove_all(*bucket_height);
-            });
+        self.buckets = self.buckets.split_off(&height);
     }
 
     /// Removes `value` from `height`. Returns `true` if `value` was removed,
@@ -74,11 +67,8 @@ impl<T: Eq + Clone> HeightIndex<T> {
         false
     }
 
-    pub fn lookup(&self, height: Height) -> Box<dyn Iterator<Item = &T> + '_> {
-        match self.buckets.get(&height) {
-            Some(bucket) => Box::new(bucket.iter()),
-            None => Box::new(std::iter::empty()),
-        }
+    pub fn lookup(&self, height: Height) -> impl Iterator<Item = &T> {
+        self.buckets.get(&height).into_iter().flatten()
     }
 
     pub fn get_all(&self) -> Box<dyn Iterator<Item = &T> + '_> {
