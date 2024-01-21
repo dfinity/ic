@@ -487,11 +487,11 @@ sync_height cid = forM subnets $ \sub -> do
   let ranges = map (\(a, b) -> (wordToId' a, wordToId' b)) (tc_canister_ranges sub)
   when (any (\(a, b) -> a <= cid && cid <= b) ranges) $ do
     hs <- get_heights (tc_node_addresses sub)
-    let h = maximum hs
     unless (length (nub hs) <= 1) $
-      waitFor $ do
-        hs <- get_heights (tc_node_addresses sub)
-        if h <= minimum hs then return (Just ()) else return Nothing
+      let h = maximum hs
+       in waitFor $ do
+            hs <- get_heights (tc_node_addresses sub)
+            if h <= minimum hs then return (Just ()) else return Nothing
   where
     get_heights ns =
       mapM

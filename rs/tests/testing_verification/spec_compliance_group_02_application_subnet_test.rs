@@ -31,7 +31,7 @@ pub fn test(env: TestEnv) {
         Some(SubnetType::Application),
         None,
         vec![],
-        vec!["($0 ~ /NNS canisters/)", "($0 ~ /API availability/)"],
+        vec!["($0 ~ /API availability/)"],
     );
 }
 
