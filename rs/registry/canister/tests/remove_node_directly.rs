@@ -1,32 +1,42 @@
 use dfn_candid::candid;
-use ic_base_types::{PrincipalId, SubnetId};
+use ic_base_types::{PrincipalId, RegistryVersion, SubnetId};
 use ic_canister_client_sender::Sender;
+use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+use ic_crypto_utils_ni_dkg::extract_threshold_sig_public_key;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL,
 };
 use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::registry::{
-    get_committee_signing_key, get_dkg_dealing_key, get_idkg_dealing_encryption_key,
-    get_node_record, get_node_signing_key, get_transport_tls_certificate,
-    new_node_keys_and_node_id,
+    generate_nidkg_initial_transcript, get_committee_signing_key, get_dkg_dealing_key,
+    get_idkg_dealing_encryption_key, get_node_record, get_node_signing_key,
+    get_transport_tls_certificate, new_node_keys_and_node_id,
 };
 use ic_nns_test_utils::{
     itest_helpers::{local_test_on_nns_subnet, set_up_registry_canister},
     registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
+use ic_protobuf::registry::crypto::v1::PublicKey;
+use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, InitialNiDkgTranscriptRecord};
 use ic_protobuf::registry::{
     node::v1::NodeRecord,
     node_operator::v1::NodeOperatorRecord,
     subnet::v1::{SubnetListRecord, SubnetRecord},
 };
 use ic_registry_keys::{
+    make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
     make_node_operator_record_key, make_subnet_list_record_key, make_subnet_record_key,
 };
+use ic_registry_transport::insert;
 use ic_registry_transport::pb::v1::{
     registry_mutation, RegistryAtomicMutateRequest, RegistryMutation,
 };
+use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTag;
 use ic_types::p2p::build_default_gossip_config;
 use ic_types::{NodeId, ReplicaVersion};
+use ic_types_test_utils::ids::subnet_test_id;
+use maplit::btreemap;
+use rand::RngCore;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use registry_canister::mutations::node_management::common::make_add_node_registry_mutations;
 use registry_canister::mutations::node_management::do_add_node::connection_endpoint_from_string;
@@ -43,7 +53,7 @@ fn node_is_removed_on_receiving_the_request() {
             http: Some(connection_endpoint_from_string("128.0.0.1:4321")),
             ..Default::default()
         };
-        let (node_id, mutation) = init_mutation(&test_node_record);
+        let (node_id, _dkg_dealing_encryption_pk, mutation) = init_mutation(&test_node_record);
         // Prepare the registry with a single node and make it callable by anyone
         let registry = set_up_registry_canister(
             &runtime,
@@ -119,7 +129,7 @@ fn node_cannot_be_removed_by_non_node_operator() {
             http: Some(connection_endpoint_from_string("128.0.0.1:4321")),
             ..Default::default()
         };
-        let (node_id, mutation) = init_mutation(&test_node_record);
+        let (node_id, _dkg_dealing_encryption_pk, mutation) = init_mutation(&test_node_record);
         // Prepare the registry with a single node and make it callable by anyone
         let registry = set_up_registry_canister(
             &runtime,
@@ -149,7 +159,7 @@ fn node_cannot_be_removed_if_in_subnet() {
             http: Some(connection_endpoint_from_string("128.0.0.1:4321")),
             ..Default::default()
         };
-        let (node_id, mutation) = init_mutation(&test_node_record);
+        let (node_id, dkg_dealing_encryption_pk, mutation) = init_mutation(&test_node_record);
         // Any Principal can be used here
         let test_subnet_id = SubnetId::from(*TEST_NEURON_1_OWNER_PRINCIPAL);
         let test_subnet_record = SubnetRecord {
@@ -167,6 +177,30 @@ fn node_cannot_be_removed_if_in_subnet() {
                 test_subnet_id.get().to_vec(),
             ],
         };
+
+        let mut mutations = vec![
+            // Insert Subnet record
+            RegistryMutation {
+                mutation_type: registry_mutation::Type::Insert as i32,
+                key: make_subnet_record_key(test_subnet_id).as_bytes().to_vec(),
+                value: encode_or_panic(&test_subnet_record),
+            },
+            // Overwrite Subnet List
+            RegistryMutation {
+                mutation_type: registry_mutation::Type::Update as i32,
+                key: make_subnet_list_record_key().as_bytes().to_vec(),
+                value: encode_or_panic(&test_subnet_list_record),
+            },
+        ];
+        let rng = &mut ReproducibleRng::new();
+        add_threshold_signing_pubkey_and_cup_to_mutations(
+            test_subnet_id,
+            dkg_dealing_encryption_pk,
+            node_id,
+            &mut mutations,
+            rng,
+        );
+
         // Prepare the registry with a single node and make it callable by anyone
         let registry = set_up_registry_canister(
             &runtime,
@@ -174,20 +208,7 @@ fn node_cannot_be_removed_if_in_subnet() {
                 .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(1))
                 .push_init_mutate_request(mutation)
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
-                    mutations: vec![
-                        // Insert Subnet record
-                        RegistryMutation {
-                            mutation_type: registry_mutation::Type::Insert as i32,
-                            key: make_subnet_record_key(test_subnet_id).as_bytes().to_vec(),
-                            value: encode_or_panic(&test_subnet_record),
-                        },
-                        // Overwrite Subnet List
-                        RegistryMutation {
-                            mutation_type: registry_mutation::Type::Update as i32,
-                            key: make_subnet_list_record_key().as_bytes().to_vec(),
-                            value: encode_or_panic(&test_subnet_list_record),
-                        },
-                    ],
+                    mutations,
                     preconditions: vec![],
                 })
                 .build(),
@@ -223,8 +244,42 @@ fn node_cannot_be_removed_if_in_subnet() {
     });
 }
 
-fn init_mutation(node_record: &NodeRecord) -> (NodeId, RegistryAtomicMutateRequest) {
+fn add_threshold_signing_pubkey_and_cup_to_mutations(
+    subnet_id: SubnetId,
+    dkg_dealing_encryption_pk: PublicKey,
+    node_id: NodeId,
+    mutations: &mut Vec<RegistryMutation>,
+    rng: &mut ReproducibleRng,
+) {
+    let subnet_transcript = generate_nidkg_initial_transcript(
+        &btreemap!(node_id => dkg_dealing_encryption_pk),
+        subnet_test_id(rng.next_u64()),
+        NiDkgTag::HighThreshold,
+        RegistryVersion::new(1),
+        rng,
+    );
+    // Threshold signing public key
+    let subnet_threshold_sig_pk =
+        extract_threshold_sig_public_key(&subnet_transcript.internal_csp_transcript)
+            .expect("error extracting threshold sig public key from internal CSP transcript");
+    mutations.push(insert(
+        make_crypto_threshold_signing_pubkey_key(subnet_id).as_bytes(),
+        encode_or_panic(&PublicKey::from(subnet_threshold_sig_pk)),
+    ));
+    // CUP contents
+    let cup_contents_key = make_catch_up_package_contents_key(subnet_id).into_bytes();
+    let cup_contents = CatchUpPackageContents {
+        initial_ni_dkg_transcript_high_threshold: Some(InitialNiDkgTranscriptRecord::from(
+            subnet_transcript,
+        )),
+        ..Default::default()
+    };
+    mutations.push(insert(cup_contents_key, encode_or_panic(&cup_contents)));
+}
+
+fn init_mutation(node_record: &NodeRecord) -> (NodeId, PublicKey, RegistryAtomicMutateRequest) {
     let (valid_pks, node_id) = new_node_keys_and_node_id();
+    let dkg_dealing_encryption_public_key = valid_pks.dkg_dealing_encryption_key().clone();
     let mut mutations = make_add_node_registry_mutations(node_id, node_record.clone(), valid_pks);
     // Insert the node's operator
     mutations.push(RegistryMutation {
@@ -239,6 +294,7 @@ fn init_mutation(node_record: &NodeRecord) -> (NodeId, RegistryAtomicMutateReque
     });
     (
         node_id,
+        dkg_dealing_encryption_public_key,
         RegistryAtomicMutateRequest {
             mutations,
             preconditions: vec![],
