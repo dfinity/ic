@@ -531,8 +531,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 rev = "26a80d777e079644cd69e883e18dad1a201f5b1a",
             ),
             "ic-agent": crate.spec(
-                git = "https://github.com/dfinity/agent-rs",
-                rev = "c498e1253520b1509924793af7e27b7b8b50fc0f",
+                version = "^0.32.0",
                 features = [
                     "hyper",
                     "reqwest",
@@ -555,8 +554,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2.0",
             ),
             "ic-cbor": crate.spec(
-                git = "https://github.com/dfinity/response-verification",
-                rev = "0d472818e35aff152ae8d1bf482da26b97334494",
+                version = "2.3.0",
             ),
             "ic-cdk": crate.spec(
                 version = "^0.12.0",
@@ -571,12 +569,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.1",
             ),
             "ic-certification": crate.spec(
-                git = "https://github.com/dfinity/response-verification",
-                rev = "0d472818e35aff152ae8d1bf482da26b97334494",
+                version = "2.3.0",
             ),
             "ic-http-certification": crate.spec(
-                git = "https://github.com/dfinity/response-verification",
-                rev = "0d472818e35aff152ae8d1bf482da26b97334494",
+                version = "2.3.0",
             ),
             "ic-metrics-encoder": crate.spec(
                 version = "^1.1.1",
@@ -585,14 +581,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.0",
             ),
             "ic-response-verification": crate.spec(
-                git = "https://github.com/dfinity/response-verification",
-                rev = "0d472818e35aff152ae8d1bf482da26b97334494",
+                version = "2.3.0",
             ),
             "ic-test-state-machine-client": crate.spec(
                 version = "^3.0.0",
             ),
             "ic-utils": crate.spec(
-                version = "^0.31.0",
+                version = "^0.32.0",
                 features = ["raw"],
             ),
             "ic-wasm": crate.spec(

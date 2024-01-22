@@ -38,6 +38,7 @@ impl From<&HttpResponse> for Response {
             status_code: http_response.status_code,
             headers: http_response.headers.clone(),
             body: http_response.body.clone(),
+            upgrade: None,
         }
     }
 }

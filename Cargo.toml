@@ -424,9 +424,6 @@ opt-level = 3
 # Current jsonrpc version (0.12.1) does not support ipv6 addressing. When new version is
 # released this can be removed.
 jsonrpc = { git = "https://github.com/apoelstra/rust-jsonrpc", rev = "e42044d" }
-ic-agent = { git = "https://github.com/dfinity/agent-rs", rev = "c498e1253520b1509924793af7e27b7b8b50fc0f" }
-ic-certification = { git = "https://github.com/dfinity/response-verification", rev = "0d472818e35aff152ae8d1bf482da26b97334494" }
-ic-cbor =  { git = "https://github.com/dfinity/response-verification", rev = "0d472818e35aff152ae8d1bf482da26b97334494" }
 
 [workspace.dependencies]
 arrayvec = "0.7.4"
@@ -459,13 +456,16 @@ futures = "0.3.28"
 hyper-socks2 = { version = "0.8.0", default_features = false, features = [
   "rustls",
 ] }
-ic-agent = { version = "0.31.0", features = ["hyper"] }
+ic-agent = { version = "0.32.0", features = ["hyper"] }
 ic-cdk = "0.12.0"
 ic-cdk-macros = "0.8.3"
 ic-cdk-timers = "0.6.0"
-ic-certification = "1.3.0"
+ic-response-verification = "2.3.0"
+ic-http-certification = "2.3.0"
+ic-certification = "2.3.0"
+ic-cbor = "2.3.0"
 ic-stable-structures = "0.5.4"
-ic-utils = { version = "0.31.0", features = ["raw"] }
+ic-utils = { version = "0.32.0", features = ["raw"] }
 ic-btc-interface = { git = "https://github.com/dfinity/bitcoin-canister", rev = "9b239d1d67253eb14a35be6061e3967d5ec9db9d" }
 indexmap = "2.1.0"
 itertools = "0.12.0"

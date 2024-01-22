@@ -702,7 +702,9 @@ pub fn managing_a_canister_with_wrong_controller_fails(env: TestEnv) {
             info!(logger, "Asserting that upgrading the canister fails.");
             assert_http_submit_fails(
                 mgr.install_code(&wallet_canister.canister_id(), UNIVERSAL_CANISTER_WASM)
-                    .with_mode(InstallMode::Upgrade)
+                    .with_mode(InstallMode::Upgrade {
+                        skip_pre_upgrade: false,
+                    })
                     .call()
                     .await,
                 RejectCode::CanisterError,

@@ -17,6 +17,6 @@ candid = { workspace = true }
 ciborium = { workspace = true }
 hex = "0.4.2"
 ic-agent = { workspace = true }
-ic-cbor = "1.3.0"
+ic-cbor = { workspace = true }
 ic-certification = { workspace = true }
 icrc-ledger-types = { path = "../icrc-ledger-types", version = "0.1.2" }

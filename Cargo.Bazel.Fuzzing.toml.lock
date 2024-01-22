@@ -1684,6 +1684,39 @@ dependencies = [
 ]
 
 [[package]]
+name = "cached"
+version = "0.47.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69b0116662497bc24e4b177c90eaf8870e39e2714c3fcfa296327a93f593fc21"
+dependencies = [
+ "ahash 0.8.3",
+ "cached_proc_macro",
+ "cached_proc_macro_types",
+ "hashbrown 0.14.1",
+ "instant",
+ "once_cell",
+ "thiserror",
+]
+
+[[package]]
+name = "cached_proc_macro"
+version = "0.18.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c878c71c2821aa2058722038a59a67583a4240524687c6028571c9b395ded61f"
+dependencies = [
+ "darling 0.14.4",
+ "proc-macro2 1.0.76",
+ "quote 1.0.35",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "cached_proc_macro_types"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3a4f925191b4367301851c6d99b09890311d74b0d43f274c0b34c86d308a3663"
+
+[[package]]
 name = "camino"
 version = "1.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2652,6 +2685,16 @@ dependencies = [
 
 [[package]]
 name = "darling"
+version = "0.14.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b750cb3417fd1b327431a470f388520309479ab0bf5e323505daf0290cd3850"
+dependencies = [
+ "darling_core 0.14.4",
+ "darling_macro 0.14.4",
+]
+
+[[package]]
+name = "darling"
 version = "0.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0209d94da627ab5605dcccf08bb18afa5009cfbef48d8a8b7d7bdbc79be25c5e"
@@ -2665,6 +2708,20 @@ name = "darling_core"
 version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "859d65a907b6852c9361e3185c862aae7fafd2887876799fa55f5f99dc40d610"
+dependencies = [
+ "fnv",
+ "ident_case",
+ "proc-macro2 1.0.76",
+ "quote 1.0.35",
+ "strsim",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "darling_core"
+version = "0.14.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "109c1ca6e6b7f82cc233a97004ea8ed7ca123a9af07a8230878fcfda9b158bf0"
 dependencies = [
  "fnv",
  "ident_case",
@@ -2695,6 +2752,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c972679f83bdf9c42bd905396b6c3588a843a17f0f16dfcfa3e2c5d57441835"
 dependencies = [
  "darling_core 0.13.4",
+ "quote 1.0.35",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "darling_macro"
+version = "0.14.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4aab4dbc9f7611d8b55048a3a16d2d010c2c8334e46304b40ac1cc14bf3b48e"
+dependencies = [
+ "darling_core 0.14.4",
  "quote 1.0.35",
  "syn 1.0.109",
 ]
@@ -4773,8 +4841,9 @@ dependencies = [
 
 [[package]]
 name = "ic-agent"
-version = "0.31.0"
-source = "git+https://github.com/dfinity/agent-rs?rev=c498e1253520b1509924793af7e27b7b8b50fc0f#c498e1253520b1509924793af7e27b7b8b50fc0f"
+version = "0.32.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "410a8c1bdd647dfc43978497e8f794378a18eeb3ec7c768b92c3885c999e1d1b"
 dependencies = [
  "backoff",
  "cached 0.46.1",
@@ -4848,8 +4917,9 @@ dependencies = [
 
 [[package]]
 name = "ic-cbor"
-version = "1.3.0"
-source = "git+https://github.com/dfinity/response-verification?rev=0d472818e35aff152ae8d1bf482da26b97334494#0d472818e35aff152ae8d1bf482da26b97334494"
+version = "2.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "027916ece94814fc7eebad43f91d691988ac8294121f54e8f22f4611c7d17f17"
 dependencies = [
  "candid",
  "ic-certification",
@@ -4901,22 +4971,28 @@ dependencies = [
 
 [[package]]
 name = "ic-certificate-verification"
-version = "1.3.0"
-source = "git+https://github.com/dfinity/response-verification?rev=0d472818e35aff152ae8d1bf482da26b97334494#0d472818e35aff152ae8d1bf482da26b97334494"
+version = "2.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "74807b58655db518e68de1d65e1734da76af43949569b752aa27237e206bd4ad"
 dependencies = [
+ "cached 0.47.0",
  "candid",
  "ic-cbor",
  "ic-certification",
+ "lazy_static",
  "leb128",
  "miracl_core_bls12381",
  "nom",
+ "parking_lot 0.12.1",
+ "sha2 0.10.8",
  "thiserror",
 ]
 
 [[package]]
 name = "ic-certification"
-version = "1.3.0"
-source = "git+https://github.com/dfinity/response-verification?rev=0d472818e35aff152ae8d1bf482da26b97334494#0d472818e35aff152ae8d1bf482da26b97334494"
+version = "2.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b79fd38f674173bd0af3c80b9dab6fedd3391b81a2fc0f87a2e393fb723fe13b"
 dependencies = [
  "hex",
  "serde",
@@ -4937,8 +5013,9 @@ dependencies = [
 
 [[package]]
 name = "ic-http-certification"
-version = "1.3.0"
-source = "git+https://github.com/dfinity/response-verification?rev=0d472818e35aff152ae8d1bf482da26b97334494#0d472818e35aff152ae8d1bf482da26b97334494"
+version = "2.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1920329afced339a770ca2a56b00fb8229a63ab0dcf1bb119bdeb54b5b70dbfd"
 dependencies = [
  "candid",
  "http 0.2.9",
@@ -4957,8 +5034,9 @@ checksum = "8b5c7628eac357aecda461130f8074468be5aa4d258a002032d82d817f79f1f8"
 
 [[package]]
 name = "ic-representation-independent-hash"
-version = "1.3.0"
-source = "git+https://github.com/dfinity/response-verification?rev=0d472818e35aff152ae8d1bf482da26b97334494#0d472818e35aff152ae8d1bf482da26b97334494"
+version = "2.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "be48db2f8b954b9b2a0f46424ddedda2728703d7b361bc65328ed17dcacd1e21"
 dependencies = [
  "leb128",
  "sha2 0.10.8",
@@ -4966,8 +5044,9 @@ dependencies = [
 
 [[package]]
 name = "ic-response-verification"
-version = "1.3.0"
-source = "git+https://github.com/dfinity/response-verification?rev=0d472818e35aff152ae8d1bf482da26b97334494#0d472818e35aff152ae8d1bf482da26b97334494"
+version = "2.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd4b20dcd2bc7b1098c79dd545fa9ff7cb8cdca4345e2a823ffa73ebaf542b2b"
 dependencies = [
  "base64 0.21.4",
  "candid",
@@ -5007,8 +5086,9 @@ dependencies = [
 
 [[package]]
 name = "ic-transport-types"
-version = "0.31.0"
-source = "git+https://github.com/dfinity/agent-rs?rev=c498e1253520b1509924793af7e27b7b8b50fc0f#c498e1253520b1509924793af7e27b7b8b50fc0f"
+version = "0.32.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2cb030f03ef8332fbf8eda6bb25e80d8354d2bef88b27e671b3c167d9ee8e7a7"
 dependencies = [
  "candid",
  "hex",
@@ -5023,17 +5103,19 @@ dependencies = [
 
 [[package]]
 name = "ic-utils"
-version = "0.31.0"
+version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed80ddbc930e278767a1f7ccb5ef051c76721db9f474539782b189a6be58682d"
+checksum = "2921308283f89a431872ba63f5ece9ffe6eadf7bc4cc5d12239eae146c7db8f0"
 dependencies = [
  "async-trait",
  "candid",
+ "futures-util",
  "ic-agent",
  "once_cell",
  "semver",
  "serde",
  "serde_bytes",
+ "sha2 0.10.8",
  "strum 0.24.1",
  "strum_macros 0.24.3",
  "thiserror",
