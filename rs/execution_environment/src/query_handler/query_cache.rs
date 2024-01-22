@@ -215,7 +215,7 @@ impl EntryValue {
 
     /// Check cache entry max expiration time.
     fn is_not_expired(&self, env: &EntryEnv, max_expiry_time: Duration) -> bool {
-        if let Some(duration) = env.batch_time.checked_sub(self.env.batch_time) {
+        if let Some(duration) = env.batch_time.checked_duration_since(self.env.batch_time) {
             duration <= max_expiry_time
         } else {
             true
@@ -245,7 +245,8 @@ impl EntryValue {
     }
 
     fn elapsed_seconds(&self, now: Time) -> f64 {
-        now.saturating_sub(self.env.batch_time).as_secs_f64()
+        now.saturating_duration_since(self.env.batch_time)
+            .as_secs_f64()
     }
 }
 

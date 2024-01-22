@@ -139,7 +139,7 @@ impl SimulatedIngressHistory {
         let set_limit = MAX_INGRESS_COUNT_PER_PAYLOAD * (MAX_INGRESS_TTL.as_secs() as usize) / 2;
         while time < end_time {
             let min_time = if start_time + MAX_INGRESS_TTL < time {
-                time.saturating_sub_duration(MAX_INGRESS_TTL)
+                time.saturating_sub(MAX_INGRESS_TTL)
             } else {
                 start_time
             };

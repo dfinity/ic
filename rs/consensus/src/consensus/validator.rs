@@ -2744,9 +2744,8 @@ pub mod test {
             pool.insert_validated(pool.make_next_beacon());
 
             let mut test_block = make_next_block(&pool, membership.as_ref(), &subnet_members);
-            test_block.content.as_mut().context.time = block_time
-                .checked_sub_duration(Duration::from_nanos(1))
-                .unwrap();
+            test_block.content.as_mut().context.time =
+                block_time.checked_sub(Duration::from_nanos(1)).unwrap();
             test_block.update_content();
             pool.insert_unvalidated(test_block.clone());
             let results = validator.on_state_change(&PoolReader::new(&pool));

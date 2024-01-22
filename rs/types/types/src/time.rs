@@ -128,10 +128,10 @@ impl Time {
     /// use ic_types::Time;
     /// use std::time::Duration;
     ///
-    /// assert_eq!(Time::from_nanos_since_unix_epoch(3).checked_sub(Time::from_nanos_since_unix_epoch(2)), Some(Duration::from_nanos(1)));
-    /// assert_eq!(Time::from_nanos_since_unix_epoch(2).checked_sub(Time::from_nanos_since_unix_epoch(3)), None);
+    /// assert_eq!(Time::from_nanos_since_unix_epoch(3).checked_duration_since(Time::from_nanos_since_unix_epoch(2)), Some(Duration::from_nanos(1)));
+    /// assert_eq!(Time::from_nanos_since_unix_epoch(2).checked_duration_since(Time::from_nanos_since_unix_epoch(3)), None);
     /// ```
-    pub const fn checked_sub(self, rhs: Time) -> Option<Duration> {
+    pub const fn checked_duration_since(self, rhs: Time) -> Option<Duration> {
         if let Some(result) = self.0.checked_sub(rhs.0) {
             Some(Duration::from_nanos(result))
         } else {
@@ -150,10 +150,10 @@ impl Time {
     /// use ic_types::Time;
     /// use std::time::Duration;
     ///
-    /// assert_eq!(Time::from_nanos_since_unix_epoch(3).checked_sub_duration(Duration::from_nanos(2)), Some(Time::from_nanos_since_unix_epoch(1)));
-    /// assert_eq!(Time::from_nanos_since_unix_epoch(2).checked_sub_duration(Duration::from_nanos(3)), None);
+    /// assert_eq!(Time::from_nanos_since_unix_epoch(3).checked_sub(Duration::from_nanos(2)), Some(Time::from_nanos_since_unix_epoch(1)));
+    /// assert_eq!(Time::from_nanos_since_unix_epoch(2).checked_sub(Duration::from_nanos(3)), None);
     /// ```
-    pub fn checked_sub_duration(self, rhs: Duration) -> Option<Time> {
+    pub fn checked_sub(self, rhs: Duration) -> Option<Time> {
         if let Ok(rhs_nanos) = u64::try_from(rhs.as_nanos()) {
             Some(Time(self.0.checked_sub(rhs_nanos)?))
         } else {
@@ -172,10 +172,10 @@ impl Time {
     /// use ic_types::Time;
     /// use std::time::Duration;
     ///
-    /// assert_eq!(Time::from_nanos_since_unix_epoch(3).saturating_sub(Time::from_nanos_since_unix_epoch(2)), Duration::from_nanos(1));
-    /// assert_eq!(Time::from_nanos_since_unix_epoch(2).saturating_sub(Time::from_nanos_since_unix_epoch(3)), Duration::from_nanos(0));
+    /// assert_eq!(Time::from_nanos_since_unix_epoch(3).saturating_duration_since(Time::from_nanos_since_unix_epoch(2)), Duration::from_nanos(1));
+    /// assert_eq!(Time::from_nanos_since_unix_epoch(2).saturating_duration_since(Time::from_nanos_since_unix_epoch(3)), Duration::from_nanos(0));
     /// ```
-    pub const fn saturating_sub(self, rhs: Time) -> Duration {
+    pub const fn saturating_duration_since(self, rhs: Time) -> Duration {
         Duration::from_nanos(self.0.saturating_sub(rhs.0))
     }
 
@@ -190,10 +190,10 @@ impl Time {
     /// use ic_types::Time;
     /// use std::time::Duration;
     ///
-    /// assert_eq!(Time::from_nanos_since_unix_epoch(3).saturating_sub_duration(Duration::from_nanos(2)), Time::from_nanos_since_unix_epoch(1));
-    /// assert_eq!(Time::from_nanos_since_unix_epoch(2).saturating_sub_duration(Duration::from_nanos(3)), Time::from_nanos_since_unix_epoch(0));
+    /// assert_eq!(Time::from_nanos_since_unix_epoch(3).saturating_sub(Duration::from_nanos(2)), Time::from_nanos_since_unix_epoch(1));
+    /// assert_eq!(Time::from_nanos_since_unix_epoch(2).saturating_sub(Duration::from_nanos(3)), Time::from_nanos_since_unix_epoch(0));
     /// ```
-    pub fn saturating_sub_duration(self, rhs: Duration) -> Time {
+    pub fn saturating_sub(self, rhs: Duration) -> Time {
         if let Ok(rhs_nanos) = u64::try_from(rhs.as_nanos()) {
             Time(self.0.saturating_sub(rhs_nanos))
         } else {

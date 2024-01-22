@@ -3412,7 +3412,7 @@ fn expired_ingress_messages_are_removed_from_ingress_queues() {
             test.send_ingress_with_expiry(
                 canister_id,
                 ingress(1000),
-                batch_time.saturating_sub_duration(Duration::from_secs(1)),
+                batch_time.saturating_sub(Duration::from_secs(1)),
             );
         } else {
             test.send_ingress_with_expiry(
@@ -3441,7 +3441,7 @@ fn expired_ingress_messages_are_removed_from_ingress_queues() {
             test.inject_ingress_to_ic00(
                 Method::CanisterStatus,
                 payload,
-                batch_time.saturating_sub_duration(Duration::from_secs(1)),
+                batch_time.saturating_sub(Duration::from_secs(1)),
             );
         }
     }
