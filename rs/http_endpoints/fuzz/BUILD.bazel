@@ -1,4 +1,4 @@
-load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary")
+load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary_afl")
 
 package(default_visibility = ["//visibility:private"])
 
@@ -16,12 +16,15 @@ CALLSERVICE_FUZZER_DEPENDENCIES = [
     "//rs/registry/keys",
     "//rs/registry/provisional_whitelist",
     "//rs/test_utilities",
+    "//rs/types/base_types",
     "//rs/types/error_types",
     "//rs/types/types",
+    "//rs/validator/http_request_arbitrary",
     "@crate_index//:arbitrary",
     "@crate_index//:crossbeam",
     "@crate_index//:bytes",
     "@crate_index//:hyper",
+    "@crate_index//:ic-agent",
     "@crate_index//:libfuzzer-sys",
     "@crate_index//:mockall",
     "@crate_index//:prost",
@@ -32,21 +35,20 @@ CALLSERVICE_FUZZER_DEPENDENCIES = [
 
 # required to compile tests/common
 DEV_DEPENDENCIES = [
-    "//rs/crypto/tree_hash",
-    "//rs/interfaces/state_manager",
-    "//rs/registry/subnet_type",
-    "//rs/replicated_state",
-    "//rs/monitoring/pprof",
     "//rs/certification/test-utils",
+    "//rs/crypto/tree_hash",
     "//rs/crypto/tls_interfaces/mocks",
     "//rs/interfaces/mocks",
+    "//rs/interfaces/state_manager",
     "//rs/interfaces/state_manager/mocks",
+    "//rs/monitoring/pprof",
     "//rs/registry/routing_table",
-    "@crate_index//:ic-agent",
+    "//rs/registry/subnet_type",
+    "//rs/replicated_state",
 ]
 
-rust_fuzz_test_binary(
-    name = "execute_call_service_libfuzzer",
+rust_fuzz_test_binary_afl(
+    name = "execute_call_service_afl",
     testonly = True,
     srcs = [
         "fuzz_targets/execute_call_service.rs",
