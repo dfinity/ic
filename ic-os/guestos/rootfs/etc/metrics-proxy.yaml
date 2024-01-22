@@ -1,5 +1,5 @@
 proxies:
-  # Allow proxying of certain metrics emitted by orchestrator.
+  # Expose consensus replica telemetry to chainloaded HostOS metrics proxy.
   - listen_on:
       url: https://[::]:42372/metrics/guestos_replica
       # We reuse the SSL cert of node exporter.
@@ -18,6 +18,24 @@ proxies:
           - drop
       # Consensus metrics.
       - regex: artifact_pool_consensus_height_stat
+        actions:
+          - keep
+  # Expose the GuestOS version to chainloaded HostOS metrics proxy.
+  - listen_on:
+      url: https://[::]:42372/metrics/guestos_node_exporter
+      # We reuse the SSL cert of node exporter.
+      certificate_file: /etc/node_exporter/node_exporter.crt
+      key_file: /etc/node_exporter/node_exporter.key
+    connect_to:
+      # Node exporter listens HTTPS on this port.
+      url: https://[::1]:9100/metrics
+      tolerate_bad_tls: true
+    label_filters:
+      - regex: .*
+        actions:
+          - drop
+      # GuestOS version metrics.
+      - regex: guestos_version
         actions:
           - keep
 metrics:
