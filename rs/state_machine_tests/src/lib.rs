@@ -891,12 +891,7 @@ impl StateMachine {
     /// will be considered during payload building.
     pub fn execute_round(&self) {
         // Make sure the latest state is certified and fetch it from `StateManager`.
-        if self.state_manager.latest_state_height() > self.state_manager.latest_certified_height() {
-            let state_hashes = self.state_manager.list_state_hashes_to_certify();
-            let (height, hash) = state_hashes.last().unwrap();
-            self.state_manager
-                .deliver_state_certification(self.certify_hash(height, hash));
-        }
+        self.certify_latest_state();
         let certified_height = self.state_manager.latest_certified_height();
         let state = self
             .state_manager
@@ -1269,12 +1264,7 @@ impl StateMachine {
         msg_limit: Option<usize>,
         byte_limit: Option<usize>,
     ) -> Result<CertifiedStreamSlice, EncodeStreamError> {
-        if self.state_manager.latest_state_height() > self.state_manager.latest_certified_height() {
-            let state_hashes = self.state_manager.list_state_hashes_to_certify();
-            let (height, hash) = state_hashes.last().unwrap();
-            self.state_manager
-                .deliver_state_certification(self.certify_hash(height, hash));
-        }
+        self.certify_latest_state();
         self.state_manager.encode_certified_stream_slice(
             remote_subnet_id,
             witness_begin,
@@ -1303,6 +1293,16 @@ impl StateMachine {
         .map(|certified_stream| XNetPayload {
             stream_slices: btreemap! { self.get_subnet_id() => certified_stream },
         })
+    }
+
+    /// Make sure the latest state is certified.
+    fn certify_latest_state(&self) {
+        if self.state_manager.latest_state_height() > self.state_manager.latest_certified_height() {
+            let state_hashes = self.state_manager.list_state_hashes_to_certify();
+            let (height, hash) = state_hashes.last().unwrap();
+            self.state_manager
+                .deliver_state_certification(self.certify_hash(height, hash));
+        }
     }
 
     /// Submit an ingress message into the ingress pool used by `PayloadBuilderImpl`
@@ -1335,14 +1335,17 @@ impl StateMachine {
             sender_delegation: None,
         })
         .unwrap();
+        self.submit_signed_ingress(msg)
+    }
 
+    /// Submit an ingress message into the ingress pool used by `PayloadBuilderImpl`
+    /// in `Self::execute_round`.
+    pub fn submit_signed_ingress(
+        &self,
+        msg: SignedIngress,
+    ) -> Result<MessageId, SubmitIngressError> {
         // Make sure the latest state is certified and fetch it from `StateManager`.
-        if self.state_manager.latest_state_height() > self.state_manager.latest_certified_height() {
-            let state_hashes = self.state_manager.list_state_hashes_to_certify();
-            let (height, hash) = state_hashes.last().unwrap();
-            self.state_manager
-                .deliver_state_certification(self.certify_hash(height, hash));
-        }
+        self.certify_latest_state();
         let certified_height = self.state_manager.latest_certified_height();
         let state = self
             .state_manager
@@ -2029,13 +2032,7 @@ impl StateMachine {
         method: impl ToString,
         method_payload: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
-        if self.state_manager.latest_state_height() > self.state_manager.latest_certified_height() {
-            let state_hashes = self.state_manager.list_state_hashes_to_certify();
-            let (height, hash) = state_hashes.last().unwrap();
-            self.state_manager
-                .deliver_state_certification(self.certify_hash(height, hash));
-        }
-
+        self.certify_latest_state();
         let path = SubTree(flatmap! {
             Label::from("canister") => SubTree(
                 flatmap! {
