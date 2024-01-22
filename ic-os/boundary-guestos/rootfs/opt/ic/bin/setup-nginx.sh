@@ -200,35 +200,6 @@ function setup_geolite2_dbs() {
     done
 }
 
-function setup_ic_router() {
-    local -r SNAKEOIL_PEM='/etc/ssl/certs/ssl-cert-snakeoil.pem'
-    local -r IC_ROUTING='/var/opt/nginx/ic'
-    local -r IC_LEGACY_ROUTING='/var/cache/ic_routes'
-    local -r TRUSTED_CERTS="${IC_ROUTING}/trusted_certs.pem"
-    local -r NGINX_TABLE="${IC_ROUTING}/ic_upstreams.conf"
-    local -r IC_ROUTER_TABLE="${IC_ROUTING}/ic_routes.js"
-
-    # Place to store the generated routing tables
-    mkdir -p "${IC_ROUTING}" "${IC_LEGACY_ROUTING}"
-
-    # trusted_cert.pem contains all certificates for the upstream replica. This file
-    # is periodically updated by the proxy+watcher service. To bootstrap the process
-    # we initially place a dummy trusted cert. This dummy is the copy of the
-    # snakeoil cert. This allows the nginx service to start, but upstream routing
-    # will only happen once the control plane pulls the initial set of routes
-    if [[ ! -f "${TRUSTED_CERTS}" ]]; then
-        cp "${SNAKEOIL_PEM}" "${TRUSTED_CERTS}"
-    fi
-
-    if [[ ! -f "${NGINX_TABLE}" ]]; then
-        echo '# PLACEHOLDER' >"${NGINX_TABLE}"
-    fi
-
-    if [[ ! -f "${IC_ROUTER_TABLE}" ]]; then
-        echo "${EMPTY_NJS_EXPORTS}" >"${IC_ROUTER_TABLE}"
-    fi
-}
-
 function setup_custom_domains() {
     local -r SERVER_BLOCKS='/var/opt/nginx/domains.conf'
     mkdir -p "$(dirname ${SERVER_BLOCKS})"
@@ -299,7 +270,6 @@ function main() {
     copy_deny_list
     setup_domains
     setup_geolite2_dbs
-    setup_ic_router
     setup_custom_domains
     setup_pre_isolation_canisters
     setup_canister_id_alises
