@@ -122,13 +122,10 @@ pub fn block(
         ..Default::default()
     };
 
-    Ok(BlockResponse {
-        block: Some(
-            icrc1_rosetta_block_to_rosetta_core_block(rosetta_block, currency)
-                .map_err(|err| Error::parsing_unsuccessful(&err))?,
-        ),
-        other_transactions: None,
-    })
+    Ok(BlockResponse::new(Some(
+        icrc1_rosetta_block_to_rosetta_core_block(rosetta_block, currency)
+            .map_err(|err| Error::parsing_unsuccessful(&err))?,
+    )))
 }
 
 #[cfg(test)]

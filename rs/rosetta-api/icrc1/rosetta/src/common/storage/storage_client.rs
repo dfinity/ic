@@ -182,7 +182,7 @@ mod tests {
     use ic_ledger_core::{block::BlockType, tokens::TokensType};
     use proptest::prelude::*;
 
-    pub fn create_tmp_dir() -> tempfile::TempDir {
+    fn create_tmp_dir() -> tempfile::TempDir {
         tempfile::Builder::new()
             .prefix("test_tmp_")
             .tempdir_in(".")

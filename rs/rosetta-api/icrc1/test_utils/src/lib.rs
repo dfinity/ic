@@ -16,6 +16,7 @@ use proptest::prelude::*;
 use proptest::sample::select;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
+use rosetta_core::objects::Currency;
 use serde_bytes::ByteBuf;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -553,7 +554,7 @@ fn basic_identity_and_account_strategy() -> impl Strategy<Value = SigningAccount
 ///       e.g. exponential distribution
 /// TODO: allow to pass the account distribution
 pub fn valid_transactions_strategy(
-    minter_identity: BasicIdentity,
+    minter_identity: Arc<BasicIdentity>,
     default_fee: u64,
     length: usize,
     now: SystemTime,
@@ -885,7 +886,7 @@ pub fn valid_transactions_strategy(
 
     generate_strategy(
         TransactionsAndBalances::default(),
-        Arc::new(minter_identity),
+        minter_identity.clone(),
         default_fee,
         length,
         now,
@@ -1059,6 +1060,14 @@ where
         )
 }
 
+pub fn currency_strategy() -> impl Strategy<Value = Currency> {
+    (decimals_strategy(), symbol_strategy()).prop_map(|(decimals, symbol)| Currency {
+        symbol,
+        decimals: decimals.into(),
+        metadata: None,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{minter_identity, valid_transactions_strategy};
@@ -1066,13 +1075,18 @@ mod tests {
         strategy::{Strategy, ValueTree},
         test_runner::TestRunner,
     };
+    use std::sync::Arc;
     use std::time::SystemTime;
 
     #[test]
     fn test_valid_transactions_strategy_generates_transaction() {
         let size = 10;
-        let strategy =
-            valid_transactions_strategy(minter_identity(), 10_000, size, SystemTime::now());
+        let strategy = valid_transactions_strategy(
+            Arc::new(minter_identity()),
+            10_000,
+            size,
+            SystemTime::now(),
+        );
         let tree = strategy
             .new_tree(&mut TestRunner::default())
             .expect("Unable to run valid_transactions_strategy");

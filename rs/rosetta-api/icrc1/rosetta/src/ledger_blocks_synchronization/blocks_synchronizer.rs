@@ -444,9 +444,8 @@ pub mod blocks_verifier {
 
 #[cfg(test)]
 mod tests {
-    use crate::common::storage::types::Tokens;
-
     use super::*;
+    use crate::common::storage::types::Tokens;
     use ic_icrc1_test_utils::valid_blockchain_strategy;
     use proptest::prelude::*;
     use rand::seq::SliceRandom;
