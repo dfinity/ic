@@ -50,6 +50,9 @@ pub enum VerifyError {
     #[error(transparent)]
     UnexpectedError(#[from] anyhow::Error),
 
+    #[error("invalid domain name: '{0}'")]
+    InvalidDomainName(String),
+
     #[error("package failed verification, name '{0}' mismatched common name '{1}'")]
     CommonNameMismatch(String, String),
 }
@@ -63,6 +66,14 @@ pub struct Verifier<P>(pub P);
 
 impl<P: Parse> Verify for Verifier<P> {
     fn verify(&self, pkg: &Package) -> Result<(), VerifyError> {
+        if !pkg
+            .name
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '-' || c == '.')
+        {
+            return Err(VerifyError::InvalidDomainName(pkg.name.to_owned()));
+        }
+
         // Parse common name from public certificate
         let cn = self
             .0
@@ -94,12 +105,12 @@ mod tests {
         parser
             .expect_parse()
             .times(1)
-            .returning(|_| Ok("name".into()));
+            .returning(|_| Ok("name-0.com".into()));
 
         let verifier = Verifier(parser);
 
         let out = verifier.verify(&Package {
-            name: "name".into(),
+            name: "name-0.com".into(),
             canister: Principal::from_text("aaaaa-aa").unwrap(),
             pair: Pair(vec![], vec![]),
         });
@@ -131,6 +142,24 @@ mod tests {
                 assert_eq!((name, cn), ("name-1".into(), "name-2".into()),);
             }
             other => panic!("expected CommonNameMismatch but got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn verify_bad_domain() {
+        let verifier = Verifier(MockParse::new());
+
+        let out = verifier.verify(&Package {
+            name: "bad_character".into(),
+            canister: Principal::from_text("aaaaa-aa").unwrap(),
+            pair: Pair(vec![], vec![]),
+        });
+
+        match out {
+            Err(VerifyError::InvalidDomainName(name)) => {
+                assert_eq!(name, String::from("bad_character"));
+            }
+            other => panic!("expected InvalidDomainName but got {other:?}"),
         }
     }
 }
