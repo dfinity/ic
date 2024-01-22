@@ -104,13 +104,17 @@ mod tests {
     fn should_panic_if_caller_is_not_node_operator() {
         let mut registry = invariant_compliant_registry(0);
         // Add node to registry
-        let (mutate_request, node_ids) = prepare_registry_with_nodes(
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
             1, // mutation id
             1, // node count
         );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
         let node_operator_id = PrincipalId::new_user_test_id(101);
-        let node_id = node_ids.first().expect("no node ids found").to_owned();
+        let node_id = node_ids_and_dkg_pks
+            .keys()
+            .next()
+            .expect("no node ids found")
+            .to_owned();
         let payload = UpdateNodeDomainDirectlyPayload {
             node_id,
             domain: None,
@@ -123,12 +127,16 @@ mod tests {
     fn should_succeed_if_proposal_is_valid() {
         let mut registry = invariant_compliant_registry(0);
         // Add node to registry
-        let (mutate_request, node_ids) = prepare_registry_with_nodes(
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
             1, // mutation id
             1, // node count
         );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
-        let node_id = node_ids.first().expect("no node ids found").to_owned();
+        let node_id = node_ids_and_dkg_pks
+            .keys()
+            .next()
+            .expect("no node ids found")
+            .to_owned();
         let node_operator_id =
             PrincipalId::try_from(registry.get_node_or_panic(node_id).node_operator_id)
                 .expect("failed to get the node operator id");

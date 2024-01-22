@@ -272,19 +272,22 @@ mod tests {
         let mut registry = invariant_compliant_registry(0);
 
         // Add nodes to the registry
-        let (mutate_request, source_node_ids) =
+        let (mutate_request, source_node_ids_and_dkg_pks) =
             prepare_registry_with_nodes(1, source_subnet.nodes_count);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
-        let (mutate_request, destination_node_ids) =
+        let (mutate_request, destination_node_ids_and_dkg_pks) =
             prepare_registry_with_nodes(2, destination_subnet.nodes_count);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         // Add subnets to the registry
         let mut subnet_list_record = registry.get_subnet_list_record();
-        let mut source_subnet_record = get_invariant_compliant_subnet_record(source_node_ids);
+        let mut source_subnet_record = get_invariant_compliant_subnet_record(
+            source_node_ids_and_dkg_pks.keys().copied().collect(),
+        );
         source_subnet_record.subnet_type = source_subnet.subnet_type as i32;
-        let mut destination_subnet_record =
-            get_invariant_compliant_subnet_record(destination_node_ids);
+        let mut destination_subnet_record = get_invariant_compliant_subnet_record(
+            destination_node_ids_and_dkg_pks.keys().copied().collect(),
+        );
         destination_subnet_record.subnet_type = destination_subnet.subnet_type as i32;
 
         let subnet_mutation = add_fake_subnet(

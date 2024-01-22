@@ -135,10 +135,14 @@ mod tests {
     fn should_panic_if_node_is_api_boundary_node() {
         let mut registry = invariant_compliant_registry(0);
         // Add node to registry
-        let (mutate_request, node_ids) =
+        let (mutate_request, node_ids_and_dkg_pks) =
             prepare_registry_with_nodes(1 /* mutation id */, 1 /* node count */);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
-        let node_id = node_ids.first().unwrap().to_owned();
+        let node_id = node_ids_and_dkg_pks
+            .keys()
+            .next()
+            .expect("should contain at least one node ID")
+            .to_owned();
         let node_operator_id =
             PrincipalId::try_from(registry.get_node_or_panic(node_id).node_operator_id).unwrap();
         // Add API BN to registry
@@ -158,10 +162,14 @@ mod tests {
     fn should_succeed() {
         let mut registry = invariant_compliant_registry(0);
         // Add node to registry
-        let (mutate_request, node_ids) =
+        let (mutate_request, node_ids_and_dkg_pks) =
             prepare_registry_with_nodes(1 /* mutation id */, 1 /* node count */);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
-        let node_id = node_ids.first().unwrap().to_owned();
+        let node_id = node_ids_and_dkg_pks
+            .keys()
+            .next()
+            .expect("should contain at least one node ID")
+            .to_owned();
         let node_operator_id =
             PrincipalId::try_from(registry.get_node_or_panic(node_id).node_operator_id).unwrap();
         // Add node operator record
