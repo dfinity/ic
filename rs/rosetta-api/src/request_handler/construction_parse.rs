@@ -28,13 +28,11 @@ impl RosettaRequestHandler {
         &self,
         msg: ConstructionParseRequest,
     ) -> Result<ConstructionParseResponse, ApiError> {
-        verify_network_id(
-            self.ledger.ledger_canister_id(),
-            &msg.network_identifier.clone().into(),
-        )?;
+        verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
 
         let updates: Vec<_> = match ParsedTransaction::try_from(msg.clone())? {
-            ParsedTransaction::Signed(envelopes) => envelopes
+            ParsedTransaction::Signed(signed_transaction) => signed_transaction
+                .requests
                 .iter()
                 .map(
                     |(request_type, updates)| match updates[0].update.content.clone() {
@@ -648,7 +646,7 @@ mod tests {
         };
         let account = handler
             .construction_derive(ConstructionDeriveRequest {
-                network_identifier: network_identifier.clone().into(),
+                network_identifier: network_identifier.clone(),
                 public_key: pub_key.clone(),
                 metadata: None,
             })
@@ -780,7 +778,7 @@ mod tests {
         proptest!(|(metadata in gen_metadata.clone())| {
             let handler = handler.clone();
             let construction_payloads_result = handler.construction_payloads(ConstructionPayloadsRequest {
-                network_identifier: network_identifier.clone().into(),
+                network_identifier: network_identifier.clone(),
                 operations: operations.clone(),
                 metadata: metadata.clone().map(|m|m.into()),
                 public_keys: Some(vec![pub_key.clone()]),
@@ -789,7 +787,7 @@ mod tests {
 
             // parse the unsigned transaction and check the result
             let parsed = handler.construction_parse(ConstructionParseRequest {
-                network_identifier: network_identifier.clone().into(),
+                network_identifier: network_identifier.clone(),
                 signed: false,
                 transaction: unsigned_transaction,
             }).unwrap();
@@ -810,7 +808,7 @@ mod tests {
         };
         proptest!(conf, |(metadata in gen_metadata.clone())| {
             let construction_payloads_result = handler.construction_payloads(ConstructionPayloadsRequest {
-                network_identifier: network_identifier.clone().into(),
+                network_identifier: network_identifier.clone(),
                 operations: operations.clone(),
                 metadata: metadata.clone().map(|m|m.into()),
                 public_keys: Some(vec![pub_key.clone()]),
@@ -832,14 +830,14 @@ mod tests {
             }
 
             let signed_transaction = handler.construction_combine(ConstructionCombineRequest {
-                network_identifier: network_identifier.clone(),
+                network_identifier:network_identifier.clone(),
                 unsigned_transaction,
                 signatures,
             }).unwrap().signed_transaction;
 
             // parse the signed transaction and check the result
             let parsed = handler.construction_parse(ConstructionParseRequest {
-                network_identifier: network_identifier.clone().into(),
+                network_identifier:network_identifier.clone(),
                 signed: true,
                 transaction: signed_transaction,
             }).unwrap();

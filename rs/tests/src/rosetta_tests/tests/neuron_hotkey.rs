@@ -7,6 +7,7 @@ use crate::rosetta_tests::rosetta_client::RosettaApiClient;
 use crate::rosetta_tests::setup::{setup, TRANSFER_FEE};
 use crate::util::block_on;
 use ic_ledger_core::Tokens;
+use ic_rosetta_api::models::SignedTransaction;
 use ic_rosetta_api::request::request_result::RequestResult;
 use ic_rosetta_api::request::Request;
 use ic_rosetta_api::request_types::{AddHotKey, PublicKeyOrPrincipal, RemoveHotKey, Status};
@@ -14,6 +15,7 @@ use ic_rosetta_test_utils::{EdKeypair, RequestInfo};
 use icp_ledger::Operation;
 use slog::Logger;
 use std::collections::{BTreeMap, HashMap};
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -244,11 +246,13 @@ async fn test_wrong_key(ros: &RosettaApiClient, _logger: &Logger) {
         .await
         .unwrap();
 
-    let signed = sign_txn(ros, &[Arc::new(wrong_kp)], payloads)
-        .await
-        .unwrap()
-        .signed_transaction()
-        .unwrap();
+    let signed = SignedTransaction::from_str(
+        &sign_txn(ros, &[Arc::new(wrong_kp)], payloads)
+            .await
+            .unwrap()
+            .signed_transaction,
+    )
+    .unwrap();
     let err = ros.construction_submit(signed).await.unwrap().unwrap_err();
     assert_ic_error(&err, 740, 403, "does not match the public key");
 }

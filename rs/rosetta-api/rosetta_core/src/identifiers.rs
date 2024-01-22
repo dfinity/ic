@@ -1,6 +1,7 @@
 use crate::objects::{Object, ObjectMap};
 use anyhow::{anyhow, Context};
 use candid::Principal;
+use ic_types::{CanisterId, PrincipalId};
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::str::FromStr;
@@ -30,6 +31,17 @@ impl NetworkIdentifier {
             network,
             sub_network_identifier: None,
         }
+    }
+}
+
+impl TryFrom<&NetworkIdentifier> for CanisterId {
+    type Error = anyhow::Error;
+    fn try_from(value: &NetworkIdentifier) -> Result<Self, Self::Error> {
+        let principal_bytes: Vec<u8> =
+            hex::decode(&value.network).context("Hex decoding of network string failed")?;
+        let principal_id =
+            PrincipalId::try_from(&principal_bytes).context("Invalid principal id")?;
+        CanisterId::try_from(principal_id).context("Invalid canister id")
     }
 }
 

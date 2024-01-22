@@ -205,10 +205,7 @@ impl RosettaRequestHandler {
 
     /// Get a Block
     pub async fn block(&self, msg: models::BlockRequest) -> Result<BlockResponse, ApiError> {
-        verify_network_id(
-            self.ledger.ledger_canister_id(),
-            &msg.network_identifier.into(),
-        )?;
+        verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
 
         let blocks = self.ledger.read_blocks().await;
         let hb = get_block(&blocks, Some(msg.block_identifier))?;
@@ -241,10 +238,7 @@ impl RosettaRequestHandler {
         &self,
         msg: models::BlockTransactionRequest,
     ) -> Result<BlockTransactionResponse, ApiError> {
-        verify_network_id(
-            self.ledger.ledger_canister_id(),
-            &msg.network_identifier.into(),
-        )?;
+        verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
         let blocks = self.ledger.read_blocks().await;
         let b_id = Some(PartialBlockIdentifier {
             index: Some(msg.block_identifier.index),
@@ -257,10 +251,7 @@ impl RosettaRequestHandler {
 
     /// Get All Mempool Transactions
     pub async fn mempool(&self, msg: models::NetworkRequest) -> Result<MempoolResponse, ApiError> {
-        verify_network_id(
-            self.ledger.ledger_canister_id(),
-            &msg.network_identifier.into(),
-        )?;
+        verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
         Ok(MempoolResponse::new(vec![]))
     }
 
@@ -282,7 +273,7 @@ impl RosettaRequestHandler {
         _metadata_request: MetadataRequest,
     ) -> Result<NetworkListResponse, ApiError> {
         let net_id = self.network_id();
-        Ok(NetworkListResponse::new(vec![net_id.0]))
+        Ok(NetworkListResponse::new(vec![net_id]))
     }
 
     /// Get Network Options
@@ -290,10 +281,7 @@ impl RosettaRequestHandler {
         &self,
         msg: models::NetworkRequest,
     ) -> Result<NetworkOptionsResponse, ApiError> {
-        verify_network_id(
-            self.ledger.ledger_canister_id(),
-            &msg.network_identifier.into(),
-        )?;
+        verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
 
         Ok(NetworkOptionsResponse::new(
             Version::new(
@@ -351,10 +339,7 @@ impl RosettaRequestHandler {
         &self,
         msg: models::NetworkRequest,
     ) -> Result<NetworkStatusResponse, ApiError> {
-        verify_network_id(
-            self.ledger.ledger_canister_id(),
-            &msg.network_identifier.into(),
-        )?;
+        verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
         let blocks = self.ledger.read_blocks().await;
         let first = blocks.get_first_verified_hashed_block()?;
         let tip = blocks.get_latest_verified_hashed_block()?;
@@ -722,7 +707,9 @@ fn get_block(
 
 fn verify_network_id(canister_id: &CanisterId, net_id: &NetworkIdentifier) -> Result<(), ApiError> {
     verify_network_blockchain(net_id)?;
-    let id: CanisterId = net_id.try_into()?;
+    let id: CanisterId = net_id
+        .try_into()
+        .map_err(|err| ApiError::InvalidNetworkId(false, format!("{:?}", err).into()))?;
     if *canister_id != id {
         return Err(ApiError::InvalidNetworkId(false, "unknown network".into()));
     }
@@ -730,7 +717,7 @@ fn verify_network_id(canister_id: &CanisterId, net_id: &NetworkIdentifier) -> Re
 }
 
 fn verify_network_blockchain(net_id: &NetworkIdentifier) -> Result<(), ApiError> {
-    match net_id.0.blockchain.as_str() {
+    match net_id.blockchain.as_str() {
         "Internet Computer" => Ok(()),
         _ => Err(ApiError::InvalidNetworkId(
             false,

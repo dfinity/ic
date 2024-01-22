@@ -1,6 +1,9 @@
 use crate::convert::{from_hex, make_read_state_from_update};
 use crate::errors::{ApiError, Details};
-use crate::models::{ConstructionCombineResponse, EnvelopePair, SignatureType, SignedTransaction};
+use crate::models::{
+    ConstructionCombineResponse, EnvelopePair, SignatureType, SignedTransaction,
+    UnsignedTransaction,
+};
 use crate::request_handler::{make_sig_data, verify_network_id, RosettaRequestHandler};
 use crate::{convert, models};
 use ic_canister_client_sender::Ed25519KeyPair as EdKeypair;
@@ -10,6 +13,7 @@ use ic_types::messages::{
 };
 use rosetta_core::models::RosettaSupportedKeyPair;
 use std::collections::HashMap;
+use std::str::FromStr;
 
 impl RosettaRequestHandler {
     /// Create Network Transaction from Signatures.
@@ -28,9 +32,14 @@ impl RosettaRequestHandler {
             signatures_by_sig_data.insert(sig_data, sig);
         }
 
-        let unsigned_transaction = msg.unsigned_transaction()?;
-
-        let mut envelopes: SignedTransaction = vec![];
+        let unsigned_transaction = UnsignedTransaction::from_str(&msg.unsigned_transaction)
+            .map_err(|e| {
+                ApiError::invalid_request(format!(
+                    "Cannot deserialize signed transaction in /construction/combine response: {}",
+                    e
+                ))
+            })?;
+        let mut requests = vec![];
 
         for (request_type, update) in unsigned_transaction.updates {
             let mut request_envelopes = vec![];
@@ -173,15 +182,23 @@ impl RosettaRequestHandler {
                 });
             }
 
-            envelopes.push((request_type, request_envelopes));
+            requests.push((request_type, request_envelopes));
         }
-
-        let envelopes = hex::encode(serde_cbor::to_vec(&envelopes).map_err(|_| {
-            ApiError::InternalError(false, "Serialization of envelope failed".into())
-        })?);
+        let signed_transaction = SignedTransaction { requests };
 
         Ok(ConstructionCombineResponse {
-            signed_transaction: envelopes,
+            signed_transaction: hex::encode(serde_cbor::to_vec(&signed_transaction).map_err(
+                |err| {
+                    ApiError::InternalError(
+                        false,
+                        format!(
+                            "Serialization of signed transaction {:?} failed: {:?}",
+                            signed_transaction, err
+                        )
+                        .into(),
+                    )
+                },
+            )?),
         })
     }
 }

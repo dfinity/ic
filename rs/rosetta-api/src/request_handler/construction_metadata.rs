@@ -14,10 +14,7 @@ impl RosettaRequestHandler {
         &self,
         msg: ConstructionMetadataRequest,
     ) -> Result<ConstructionMetadataResponse, ApiError> {
-        verify_network_id(
-            self.ledger.ledger_canister_id(),
-            &msg.network_identifier.into(),
-        )?;
+        verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
         let suggested_fee = match msg.options {
             Some(opts)
                 if ConstructionMetadataRequestOptions::try_from(opts.clone())?

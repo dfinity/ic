@@ -19,11 +19,7 @@ impl RosettaClient {
             .await?
             .json::<NetworkListResponse>()
             .await?;
-        Ok(response
-            .network_identifiers
-            .into_iter()
-            .map(NetworkIdentifier)
-            .collect::<Vec<NetworkIdentifier>>())
+        Ok(response.network_identifiers)
     }
 
     pub async fn block(
@@ -36,7 +32,7 @@ impl RosettaClient {
             hash: None,
         };
         let request = BlockRequest {
-            network_identifier: network_identifier.into(),
+            network_identifier,
             block_identifier,
         };
         let client = reqwest::Client::new();

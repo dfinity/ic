@@ -93,11 +93,11 @@ impl BlockTransactionRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct MempoolTransactionRequest {
-    // The network_identifier specifies which network a particular object is associated with.
+    /// The network_identifier specifies which network a particular object is associated with.
     #[serde(rename = "network_identifier")]
     pub network_identifier: NetworkIdentifier,
 
-    // The transaction_identifier uniquely identifies a transaction in a particular network and block or in the mempool.
+    /// The transaction_identifier uniquely identifies a transaction in a particular network and block or in the mempool.
     #[serde(rename = "transaction_identifier")]
     pub transaction_identifier: TransactionIdentifier,
 }
@@ -259,4 +259,20 @@ impl ConstructionParseRequest {
             transaction,
         }
     }
+}
+
+/// ConstructionCombineRequest is the input to the `/construction/combine`
+/// endpoint. It contains the unsigned transaction blob returned by
+/// `/construction/payloads` and all required signatures to create a network
+/// transaction.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct ConstructionCombineRequest {
+    /// The network_identifier specifies which network a particular object is associated with.
+    pub network_identifier: NetworkIdentifier,
+
+    /// CBOR+hex-encoded 'UnsignedTransaction'
+    pub unsigned_transaction: String,
+
+    pub signatures: Vec<Signature>,
 }
