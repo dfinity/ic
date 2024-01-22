@@ -1,5 +1,5 @@
 {
-  "checksum": "1aff316daf89c3ce6cc2da41e5418e212fe994e48fd9e3bf1d6752dd15373cbd",
+  "checksum": "fcacb6066d7af946da7ddb54c1fa559c12a3167f40f8831661c627d2e3fa7c32",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -5831,7 +5831,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "shlex 1.1.0",
+              "id": "shlex 1.3.0",
               "target": "shlex"
             },
             {
@@ -17795,84 +17795,10 @@
           "**"
         ],
         "crate_features": {
-          "common": [],
-          "selects": {
-            "aarch64-apple-darwin": [
-              "std"
-            ],
-            "aarch64-apple-ios": [
-              "std"
-            ],
-            "aarch64-apple-ios-sim": [
-              "std"
-            ],
-            "aarch64-fuchsia": [
-              "std"
-            ],
-            "aarch64-linux-android": [
-              "std"
-            ],
-            "aarch64-pc-windows-msvc": [
-              "std"
-            ],
-            "armv7-linux-androideabi": [
-              "std"
-            ],
-            "i686-apple-darwin": [
-              "std"
-            ],
-            "i686-linux-android": [
-              "std"
-            ],
-            "i686-pc-windows-msvc": [
-              "std"
-            ],
-            "i686-unknown-freebsd": [
-              "std"
-            ],
-            "powerpc-unknown-linux-gnu": [
-              "std"
-            ],
-            "riscv32imc-unknown-none-elf": [
-              "std"
-            ],
-            "riscv64gc-unknown-none-elf": [
-              "std"
-            ],
-            "s390x-unknown-linux-gnu": [
-              "std"
-            ],
-            "thumbv7em-none-eabi": [
-              "std"
-            ],
-            "thumbv8m.main-none-eabi": [
-              "std"
-            ],
-            "wasm32-wasi": [
-              "std"
-            ],
-            "x86_64-apple-darwin": [
-              "std"
-            ],
-            "x86_64-apple-ios": [
-              "std"
-            ],
-            "x86_64-fuchsia": [
-              "std"
-            ],
-            "x86_64-linux-android": [
-              "std"
-            ],
-            "x86_64-pc-windows-msvc": [
-              "std"
-            ],
-            "x86_64-unknown-freebsd": [
-              "std"
-            ],
-            "x86_64-unknown-none": [
-              "std"
-            ]
-          }
+          "common": [
+            "std"
+          ],
+          "selects": {}
         },
         "deps": {
           "common": [],
@@ -31004,12 +30930,27 @@
         ],
         "crate_features": {
           "common": [
-            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
-          "selects": {}
+          "selects": {
+            "aarch64-unknown-linux-gnu": [
+              "errno"
+            ],
+            "arm-unknown-linux-gnueabi": [
+              "errno"
+            ],
+            "armv7-unknown-linux-gnueabi": [
+              "errno"
+            ],
+            "i686-unknown-linux-gnu": [
+              "errno"
+            ],
+            "x86_64-unknown-linux-gnu": [
+              "errno"
+            ]
+          }
         },
         "edition": "2018",
         "version": "0.3.8"
@@ -31043,78 +30984,34 @@
         ],
         "crate_features": {
           "common": [
-            "elf",
-            "errno",
             "general",
+            "if_ether",
             "ioctl",
-            "no_std"
+            "net",
+            "netlink",
+            "no_std",
+            "prctl"
           ],
           "selects": {
-            "aarch64-linux-android": [
-              "if_ether",
-              "net",
-              "netlink",
-              "prctl"
-            ],
             "aarch64-unknown-linux-gnu": [
-              "if_ether",
-              "net",
-              "netlink",
-              "prctl"
+              "elf",
+              "errno"
             ],
             "arm-unknown-linux-gnueabi": [
-              "if_ether",
-              "net",
-              "netlink",
-              "prctl"
-            ],
-            "armv7-linux-androideabi": [
-              "if_ether",
-              "net",
-              "netlink",
-              "prctl"
+              "elf",
+              "errno"
             ],
             "armv7-unknown-linux-gnueabi": [
-              "if_ether",
-              "net",
-              "netlink",
-              "prctl"
-            ],
-            "i686-linux-android": [
-              "if_ether",
-              "net",
-              "netlink",
-              "prctl"
+              "elf",
+              "errno"
             ],
             "i686-unknown-linux-gnu": [
-              "if_ether",
-              "net",
-              "netlink",
-              "prctl"
-            ],
-            "powerpc-unknown-linux-gnu": [
-              "if_ether",
-              "net",
-              "netlink",
-              "prctl"
-            ],
-            "s390x-unknown-linux-gnu": [
-              "if_ether",
-              "net",
-              "netlink",
-              "prctl"
-            ],
-            "x86_64-linux-android": [
-              "if_ether",
-              "net",
-              "netlink",
-              "prctl"
+              "elf",
+              "errno"
             ],
             "x86_64-unknown-linux-gnu": [
-              "if_ether",
-              "net",
-              "netlink",
-              "prctl"
+              "elf",
+              "errno"
             ]
           }
         },
@@ -50083,13 +49980,13 @@
       },
       "license": "MIT"
     },
-    "shlex 1.1.0": {
+    "shlex 1.3.0": {
       "name": "shlex",
-      "version": "1.1.0",
+      "version": "1.3.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/shlex/1.1.0/download",
-          "sha256": "43b2853a4d09f215c24cc5489c992ce46052d359b5109343cbafbf26bc62f8a3"
+          "url": "https://crates.io/api/v1/crates/shlex/1.3.0/download",
+          "sha256": "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
         }
       },
       "targets": [
@@ -50116,7 +50013,7 @@
           "selects": {}
         },
         "edition": "2015",
-        "version": "1.1.0"
+        "version": "1.3.0"
       },
       "license": "MIT OR Apache-2.0"
     },
