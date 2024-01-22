@@ -15,8 +15,11 @@ use num_bigint::BigUint;
 use num_traits::Bounded;
 use rosetta_core::identifiers::BlockIdentifier;
 use rosetta_core::objects::Amount;
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult};
+use rusqlite::ToSql;
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
+use std::error::Error as StdError;
 use std::fmt;
 use std::str::FromStr;
 
@@ -139,7 +142,7 @@ impl FromStr for RosettaToken {
 
     fn from_str(s: &str) -> Result<RosettaToken, Self::Err> {
         Ok(Self(
-            Nat::from_str(s).with_context(|| "Cannot parse Nat from String.")?,
+            Nat::from_str(s).context("Cannot parse Nat from String")?,
         ))
     }
 }
@@ -235,5 +238,101 @@ impl TryFrom<Nat> for RosettaToken {
 impl std::fmt::Display for RosettaToken {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0 .0.fmt(f)
+    }
+}
+
+impl ToSql for RosettaToken {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        Ok(self.to_string().into())
+    }
+}
+
+impl FromSql for RosettaToken {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> FromSqlResult<Self> {
+        let s = value.as_str()?;
+        match Self::from_str(s) {
+            Ok(t) => Ok(t),
+            Err(err) => {
+                let err: Box<dyn StdError + Send + Sync + 'static> = err.into();
+                Err(FromSqlError::Other(err))
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use candid::Nat;
+    use ic_icrc1_tokens_u256::U256;
+    use ic_icrc1_tokens_u64::U64;
+    use num_bigint::BigUint;
+    use proptest::{
+        prelude::any, prop_assert_eq, proptest, strategy::Strategy, test_runner::TestCaseError,
+    };
+    use rusqlite::{
+        types::{FromSql, ValueRef},
+        ToSql,
+    };
+    use std::{fmt::Debug, str::FromStr};
+
+    use super::RosettaToken;
+
+    fn arb_rosetta_token() -> impl Strategy<Value = RosettaToken> {
+        proptest::collection::vec(any::<u32>(), 1..10)
+            .prop_map(|digits| RosettaToken(Nat(BigUint::new(digits))))
+    }
+
+    #[test]
+    fn test_display_from_str_roundtrip() {
+        proptest!(|(tokens in arb_rosetta_token())| {
+            prop_assert_eq!(Some(tokens.clone()), RosettaToken::from_str(&tokens.to_string()).ok())
+        })
+    }
+
+    fn test_from_sql_to_sql_roundtrip_helper<T>(tokens: T) -> Result<(), TestCaseError>
+    where
+        T: Clone + Debug + Into<RosettaToken> + PartialEq + TryFrom<RosettaToken>,
+        <T as TryFrom<RosettaToken>>::Error: Debug,
+    {
+        let rosetta_tokens: RosettaToken = tokens.clone().into();
+        let to_sql_output = rosetta_tokens
+            .to_sql()
+            .expect("Unable to convert token to sql");
+        let result = match to_sql_output {
+            rusqlite::types::ToSqlOutput::Borrowed(value_ref) => {
+                RosettaToken::column_result(value_ref)
+            }
+            rusqlite::types::ToSqlOutput::Owned(value) => {
+                RosettaToken::column_result(ValueRef::from(&value))
+            }
+            v => panic!("Unexpected to_sql output {:?}!", v),
+        };
+        prop_assert_eq!(
+            Ok(tokens),
+            result.map(|r| T::try_from(r).expect("Unable to convert to RosettaToken"))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_from_sql_to_sql_roundtrip() {
+        proptest!(|(tokens in arb_rosetta_token())| {
+            test_from_sql_to_sql_roundtrip_helper(tokens)?;
+        });
+    }
+
+    #[test]
+    fn test_from_sql_to_sql_roundtrip_64() {
+        proptest!(|(tokens in any::<u64>().prop_map(U64::new))| {
+            test_from_sql_to_sql_roundtrip_helper(tokens)?;
+        });
+    }
+
+    #[test]
+    fn test_from_sql_to_sql_roundtrip_256() {
+        let strategy = any::<(u128, u128)>().prop_map(|(hi, lo)| U256::from_words(hi, lo));
+        proptest!(|(tokens in strategy)| {
+            test_from_sql_to_sql_roundtrip_helper(tokens)?;
+        });
     }
 }
