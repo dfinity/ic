@@ -66,6 +66,9 @@ resource "aws_instance" "deletable-instance-REGION" {
 
 sudo sysctl -w net.core.rmem_max=500000000
 sudo sysctl -w net.core.wmem_max=500000000
+sudo sysctl -w net.ipv4.tcp_window_scaling = 1
+sudo sysctl -w net.ipv4.tcp_wmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_rmem= 10240 16777216 33554432 
 # Download the binary from the pre-signed S3 URL
 curl -o /tmp/binary "${var.runner_url}"
 
@@ -113,8 +116,8 @@ libp2p = sys.argv[4]
 if libp2p == "true":
     libp2p_option = "--libp2p"
 else:
-    # libp2p_option = "--relaying"
-    libp2p_option = ""
+    libp2p_option = "--relaying"
+    # libp2p_option = ""
 
 
 id = 0

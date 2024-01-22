@@ -6674,6 +6674,7 @@ dependencies = [
  "ic-logger",
  "ic-metrics",
  "ic-p2p-test-utils",
+ "ic-pprof",
  "ic-protobuf",
  "ic-quic-transport",
  "ic-test-utilities-logger",

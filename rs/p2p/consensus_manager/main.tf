@@ -206,6 +206,9 @@ resource "aws_instance" "deletable-instance-0" {
 
 sudo sysctl -w net.core.rmem_max=500000000
 sudo sysctl -w net.core.wmem_max=500000000
+sudo sysctl -w net.ipv4.tcp_window_scaling = 1
+sudo sysctl -w net.ipv4.tcp_wmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_rmem= 10240 16777216 33554432 
 # Download the binary from the pre-signed S3 URL
 curl -o /tmp/binary "${var.runner_url}"
 
@@ -229,7 +232,7 @@ resource "null_resource" "deletable-prov-0" {
       "sleep 30",
       "ip addr show",
       "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
-      "/tmp/binary --id 0 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100 ${aws_instance.deletable-instance-9.private_ip}:4100 ${aws_instance.deletable-instance-10.private_ip}:4100 "
+      "/tmp/binary --id 0 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100 ${aws_instance.deletable-instance-9.private_ip}:4100 ${aws_instance.deletable-instance-10.private_ip}:4100 --libp2p"
     ]
   }
 }
@@ -250,6 +253,9 @@ resource "aws_instance" "deletable-instance-1" {
 
 sudo sysctl -w net.core.rmem_max=500000000
 sudo sysctl -w net.core.wmem_max=500000000
+sudo sysctl -w net.ipv4.tcp_window_scaling = 1
+sudo sysctl -w net.ipv4.tcp_wmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_rmem= 10240 16777216 33554432 
 # Download the binary from the pre-signed S3 URL
 curl -o /tmp/binary "${var.runner_url}"
 
@@ -273,7 +279,7 @@ resource "null_resource" "deletable-prov-1" {
       "sleep 30",
       "ip addr show",
       "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
-      "/tmp/binary --id 1 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100 ${aws_instance.deletable-instance-9.private_ip}:4100 ${aws_instance.deletable-instance-10.private_ip}:4100 "
+      "/tmp/binary --id 1 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100 ${aws_instance.deletable-instance-9.private_ip}:4100 ${aws_instance.deletable-instance-10.private_ip}:4100 --libp2p"
     ]
   }
 }
@@ -294,6 +300,9 @@ resource "aws_instance" "deletable-instance-2" {
 
 sudo sysctl -w net.core.rmem_max=500000000
 sudo sysctl -w net.core.wmem_max=500000000
+sudo sysctl -w net.ipv4.tcp_window_scaling = 1
+sudo sysctl -w net.ipv4.tcp_wmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_rmem= 10240 16777216 33554432 
 # Download the binary from the pre-signed S3 URL
 curl -o /tmp/binary "${var.runner_url}"
 
@@ -317,7 +326,7 @@ resource "null_resource" "deletable-prov-2" {
       "sleep 30",
       "ip addr show",
       "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
-      "/tmp/binary --id 2 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100 ${aws_instance.deletable-instance-9.private_ip}:4100 ${aws_instance.deletable-instance-10.private_ip}:4100 "
+      "/tmp/binary --id 2 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100 ${aws_instance.deletable-instance-9.private_ip}:4100 ${aws_instance.deletable-instance-10.private_ip}:4100 --libp2p"
     ]
   }
 }
@@ -338,6 +347,9 @@ resource "aws_instance" "deletable-instance-3" {
 
 sudo sysctl -w net.core.rmem_max=500000000
 sudo sysctl -w net.core.wmem_max=500000000
+sudo sysctl -w net.ipv4.tcp_window_scaling = 1
+sudo sysctl -w net.ipv4.tcp_wmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_rmem= 10240 16777216 33554432 
 # Download the binary from the pre-signed S3 URL
 curl -o /tmp/binary "${var.runner_url}"
 
@@ -361,7 +373,7 @@ resource "null_resource" "deletable-prov-3" {
       "sleep 30",
       "ip addr show",
       "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
-      "/tmp/binary --id 3 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100 ${aws_instance.deletable-instance-9.private_ip}:4100 ${aws_instance.deletable-instance-10.private_ip}:4100 "
+      "/tmp/binary --id 3 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100 ${aws_instance.deletable-instance-9.private_ip}:4100 ${aws_instance.deletable-instance-10.private_ip}:4100 --libp2p"
     ]
   }
 }
@@ -382,6 +394,9 @@ resource "aws_instance" "deletable-instance-4" {
 
 sudo sysctl -w net.core.rmem_max=500000000
 sudo sysctl -w net.core.wmem_max=500000000
+sudo sysctl -w net.ipv4.tcp_window_scaling = 1
+sudo sysctl -w net.ipv4.tcp_wmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_rmem= 10240 16777216 33554432 
 # Download the binary from the pre-signed S3 URL
 curl -o /tmp/binary "${var.runner_url}"
 
@@ -405,7 +420,7 @@ resource "null_resource" "deletable-prov-4" {
       "sleep 30",
       "ip addr show",
       "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
-      "/tmp/binary --id 4 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100 ${aws_instance.deletable-instance-9.private_ip}:4100 ${aws_instance.deletable-instance-10.private_ip}:4100 "
+      "/tmp/binary --id 4 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100 ${aws_instance.deletable-instance-9.private_ip}:4100 ${aws_instance.deletable-instance-10.private_ip}:4100 --libp2p"
     ]
   }
 }
@@ -426,6 +441,9 @@ resource "aws_instance" "deletable-instance-5" {
 
 sudo sysctl -w net.core.rmem_max=500000000
 sudo sysctl -w net.core.wmem_max=500000000
+sudo sysctl -w net.ipv4.tcp_window_scaling = 1
+sudo sysctl -w net.ipv4.tcp_wmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_rmem= 10240 16777216 33554432 
 # Download the binary from the pre-signed S3 URL
 curl -o /tmp/binary "${var.runner_url}"
 
@@ -449,7 +467,7 @@ resource "null_resource" "deletable-prov-5" {
       "sleep 30",
       "ip addr show",
       "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
-      "/tmp/binary --id 5 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100 ${aws_instance.deletable-instance-9.private_ip}:4100 ${aws_instance.deletable-instance-10.private_ip}:4100 "
+      "/tmp/binary --id 5 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100 ${aws_instance.deletable-instance-9.private_ip}:4100 ${aws_instance.deletable-instance-10.private_ip}:4100 --libp2p"
     ]
   }
 }
@@ -470,6 +488,9 @@ resource "aws_instance" "deletable-instance-6" {
 
 sudo sysctl -w net.core.rmem_max=500000000
 sudo sysctl -w net.core.wmem_max=500000000
+sudo sysctl -w net.ipv4.tcp_window_scaling = 1
+sudo sysctl -w net.ipv4.tcp_wmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_rmem= 10240 16777216 33554432 
 # Download the binary from the pre-signed S3 URL
 curl -o /tmp/binary "${var.runner_url}"
 
@@ -493,7 +514,7 @@ resource "null_resource" "deletable-prov-6" {
       "sleep 30",
       "ip addr show",
       "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
-      "/tmp/binary --id 6 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100 ${aws_instance.deletable-instance-9.private_ip}:4100 ${aws_instance.deletable-instance-10.private_ip}:4100 "
+      "/tmp/binary --id 6 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100 ${aws_instance.deletable-instance-9.private_ip}:4100 ${aws_instance.deletable-instance-10.private_ip}:4100 --libp2p"
     ]
   }
 }
@@ -514,6 +535,9 @@ resource "aws_instance" "deletable-instance-7" {
 
 sudo sysctl -w net.core.rmem_max=500000000
 sudo sysctl -w net.core.wmem_max=500000000
+sudo sysctl -w net.ipv4.tcp_window_scaling = 1
+sudo sysctl -w net.ipv4.tcp_wmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_rmem= 10240 16777216 33554432 
 # Download the binary from the pre-signed S3 URL
 curl -o /tmp/binary "${var.runner_url}"
 
@@ -537,7 +561,7 @@ resource "null_resource" "deletable-prov-7" {
       "sleep 30",
       "ip addr show",
       "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
-      "/tmp/binary --id 7 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100 ${aws_instance.deletable-instance-9.private_ip}:4100 ${aws_instance.deletable-instance-10.private_ip}:4100 "
+      "/tmp/binary --id 7 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100 ${aws_instance.deletable-instance-9.private_ip}:4100 ${aws_instance.deletable-instance-10.private_ip}:4100 --libp2p"
     ]
   }
 }
@@ -558,6 +582,9 @@ resource "aws_instance" "deletable-instance-8" {
 
 sudo sysctl -w net.core.rmem_max=500000000
 sudo sysctl -w net.core.wmem_max=500000000
+sudo sysctl -w net.ipv4.tcp_window_scaling = 1
+sudo sysctl -w net.ipv4.tcp_wmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_rmem= 10240 16777216 33554432 
 # Download the binary from the pre-signed S3 URL
 curl -o /tmp/binary "${var.runner_url}"
 
@@ -581,7 +608,7 @@ resource "null_resource" "deletable-prov-8" {
       "sleep 30",
       "ip addr show",
       "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
-      "/tmp/binary --id 8 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-9.private_ip}:4100 ${aws_instance.deletable-instance-10.private_ip}:4100 "
+      "/tmp/binary --id 8 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-9.private_ip}:4100 ${aws_instance.deletable-instance-10.private_ip}:4100 --libp2p"
     ]
   }
 }
@@ -602,6 +629,9 @@ resource "aws_instance" "deletable-instance-9" {
 
 sudo sysctl -w net.core.rmem_max=500000000
 sudo sysctl -w net.core.wmem_max=500000000
+sudo sysctl -w net.ipv4.tcp_window_scaling = 1
+sudo sysctl -w net.ipv4.tcp_wmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_rmem= 10240 16777216 33554432 
 # Download the binary from the pre-signed S3 URL
 curl -o /tmp/binary "${var.runner_url}"
 
@@ -625,7 +655,7 @@ resource "null_resource" "deletable-prov-9" {
       "sleep 30",
       "ip addr show",
       "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
-      "/tmp/binary --id 9 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100 ${aws_instance.deletable-instance-10.private_ip}:4100 "
+      "/tmp/binary --id 9 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100 ${aws_instance.deletable-instance-10.private_ip}:4100 --libp2p"
     ]
   }
 }
@@ -646,6 +676,9 @@ resource "aws_instance" "deletable-instance-10" {
 
 sudo sysctl -w net.core.rmem_max=500000000
 sudo sysctl -w net.core.wmem_max=500000000
+sudo sysctl -w net.ipv4.tcp_window_scaling = 1
+sudo sysctl -w net.ipv4.tcp_wmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_rmem= 10240 16777216 33554432 
 # Download the binary from the pre-signed S3 URL
 curl -o /tmp/binary "${var.runner_url}"
 
@@ -669,7 +702,7 @@ resource "null_resource" "deletable-prov-10" {
       "sleep 30",
       "ip addr show",
       "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
-      "/tmp/binary --id 10 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100 ${aws_instance.deletable-instance-9.private_ip}:4100 "
+      "/tmp/binary --id 10 --message-size 5000000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100 ${aws_instance.deletable-instance-9.private_ip}:4100 --libp2p"
     ]
   }
 }

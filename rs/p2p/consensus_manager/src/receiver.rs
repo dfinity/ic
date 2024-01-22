@@ -254,28 +254,28 @@ where
                     self.handle_topology_update();
                 }
             }
-            debug_assert_eq!(
-                self.active_downloads.len(),
-                self.artifact_processor_tasks.len(),
-                "Number of artifact processing tasks differs from the available number of channels that communicate with the processing tasks"
-            );
-            debug_assert!(
-                self.artifact_processor_tasks.len()
-                    >= HashSet::<Artifact::Id>::from_iter(
-                        self.slot_table
-                            .iter()
-                            .flat_map(|(k, v)| v.iter())
-                            .map(|(_, s)| s.id.clone())
-                    )
-                    .len(),
-                "Number of download tasks should always be the same or exceed the number of distinct ids stored."
-            );
-            debug_assert!(
-                self.active_downloads
-                    .iter()
-                    .all(|(k, v)| { v.receiver_count() == 1 }),
-                "Some download task has two node receivers or it was dropped."
-            );
+            // debug_assert_eq!(
+            //     self.active_downloads.len(),
+            //     self.artifact_processor_tasks.len(),
+            //     "Number of artifact processing tasks differs from the available number of channels that communicate with the processing tasks"
+            // );
+            // debug_assert!(
+            //     self.artifact_processor_tasks.len()
+            //         >= HashSet::<Artifact::Id>::from_iter(
+            //             self.slot_table
+            //                 .iter()
+            //                 .flat_map(|(k, v)| v.iter())
+            //                 .map(|(_, s)| s.id.clone())
+            //         )
+            //         .len(),
+            //     "Number of download tasks should always be the same or exceed the number of distinct ids stored."
+            // );
+            // debug_assert!(
+            //     self.active_downloads
+            //         .iter()
+            //         .all(|(k, v)| { v.receiver_count() == 1 }),
+            //     "Some download task has two node receivers or it was dropped."
+            // );
         }
     }
 

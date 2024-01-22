@@ -1,5 +1,5 @@
 use std::{
-    collections::hash_map::DefaultHasher,
+    collections::{hash_map::DefaultHasher, HashSet},
     convert::Infallible,
     hash::Hasher,
     net::{IpAddr, SocketAddr},
@@ -14,6 +14,7 @@ use std::{
 use axum::{
     extract::State,
     http::StatusCode,
+    response::IntoResponse,
     routing::{get, post},
     Router,
 };
@@ -30,6 +31,7 @@ use ic_interfaces::p2p::{
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, new_replica_logger_from_config, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use ic_pprof::{Pprof, PprofCollector};
 use ic_quic_transport::{DummyUdpSocket, SubnetTopology};
 use ic_types::{
     artifact::{Advert, ArtifactKind, ArtifactTag, Priority, UnvalidatedArtifactMutation},
@@ -368,6 +370,20 @@ async fn libp2p_metrics_handler(
     buffer
 }
 
+async fn pprof_handler(State(collector): State<Arc<Pprof>>) -> impl IntoResponse {
+    let flame = collector
+        .flamegraph(Duration::from_secs(5), 250)
+        .await
+        .unwrap();
+    (
+        [(
+            axum::http::header::CONTENT_TYPE,
+            axum::http::header::HeaderValue::from_static("image/svg+xml"),
+        )],
+        flame,
+    )
+}
+
 async fn cm_metrics_handler(State(metrics): State<MetricsRegistry>) -> String {
     let encoder = TextEncoder::new();
     let metrics = encoder
@@ -466,6 +482,7 @@ async fn main() {
     let metric_listener = tokio::net::TcpListener::bind(metrics_address)
         .await
         .expect("Unable to bind metrics listener.");
+    let pprof = Arc::new(Pprof);
 
     let metrics_router = Router::new()
         .route("/metrics", get(metrics_handler))
@@ -475,7 +492,9 @@ async fn main() {
         .route("/setrate", post(interval_handler))
         .with_state(Arc::new(rps_tx))
         .route("/cmmetrics", get(cm_metrics_handler))
-        .with_state(metrics_reg);
+        .with_state(metrics_reg)
+        .route("/flamegraph", get(pprof_handler))
+        .with_state(pprof);
 
     axum::serve(metric_listener, metrics_router).await.unwrap();
 }
@@ -591,14 +610,20 @@ fn start_libp2p(
     let mut metrics_registry = metrics_registry.lock().unwrap();
     let mut swarm = SwarmBuilder::with_existing_identity(libp2p_kp.clone().into())
         .with_tokio()
-        .with_quic_config(|mut cfg| {
-            // ms
-            // cfg.max_idle_timeout = 1_000_000;
-            cfg.max_connection_data = 1_000_000_000;
-            cfg.max_concurrent_stream_limit = 1000;
-            // cfg.handshake_timeout = Duration::from_secs(100000);
-            cfg
-        })
+        // .with_quic_config(|mut cfg| {
+        //     // ms
+        //     cfg.max_idle_timeout = 1_000_000;
+        //     cfg.max_connection_data = 1_000_000_000;
+        //     cfg.max_concurrent_stream_limit = 1000;
+        //     cfg.handshake_timeout = Duration::from_secs(100000);
+        //     cfg
+        // })
+        .with_tcp(
+            libp2p::tcp::Config::default(),
+            libp2p::noise::Config::new,
+            libp2p::yamux::Config::default,
+        )
+        .unwrap()
         .with_bandwidth_metrics(&mut metrics_registry)
         .with_behaviour(|_| MainBehaviour {
             gossip_sub: libp2p::gossipsub::Behaviour::new_with_metrics(
@@ -615,7 +640,7 @@ fn start_libp2p(
                     // .mesh_n_high(4)
                     .gossip_lazy(10)
                     .message_id_fn(|x| libp2p::gossipsub::MessageId(x.data[0..16].to_vec()))
-                    .validate_messages()
+                    // .validate_messages()
                     .build()
                     .unwrap(),
                 &mut metrics_registry,
@@ -634,8 +659,7 @@ fn start_libp2p(
         };
         let multiaddr = Multiaddr::empty()
             .with(libp2p::multiaddr::Protocol::Ip4(ip_addr))
-            .with(libp2p::multiaddr::Protocol::Udp(transport_addr.port()))
-            .with(libp2p::multiaddr::Protocol::QuicV1);
+            .with(libp2p::multiaddr::Protocol::Tcp(transport_addr.port())).with_p2p(peer_id).unwrap();
         info!(log, "Listenting on my multi {:?}", multiaddr);
         swarm.listen_on(multiaddr).unwrap();
 
@@ -644,27 +668,6 @@ fn start_libp2p(
             .gossip_sub
             .subscribe(&IdentTopic::new("exp"))
             .unwrap();
-
-        for (p, peer_id, addr) in &topology {
-            if node_id <= *p {
-                continue;
-            }
-            let ip_addr = match addr {
-                SocketAddr::V4(v4) => *v4.ip(),
-                SocketAddr::V6(v6) => panic!("AH"),
-            };
-            swarm
-                .dial(
-                    Multiaddr::empty()
-                        .with(libp2p::multiaddr::Protocol::Ip4(ip_addr))
-                        .with(libp2p::multiaddr::Protocol::Udp(addr.port()))
-                        .with(libp2p::multiaddr::Protocol::QuicV1)
-                        .with_p2p(*peer_id)
-                        .unwrap(),
-                )
-                .unwrap();
-            info!(log, "DIALING {:?}", peer_id);
-        }
 
         fn handle_swarm_event(
             log: &ReplicaLogger,
@@ -686,7 +689,7 @@ fn start_libp2p(
                 )) => match message.topic.into_string() {
                     x if x == "exp" => {
                         let peer_id = peerid_to_nodeid(propagation_source);
-                        let msg = bincode::deserialize(&message.data).unwrap();
+                        let msg = message.data;
                         cb_tx
                             .send(UnvalidatedArtifactMutation::Insert((msg, peer_id)))
                             .unwrap();
@@ -701,33 +704,12 @@ fn start_libp2p(
                     endpoint,
                     num_established,
                     cause,
-                } => {
-                    if let ConnectedPoint::Dialer { address, .. } = endpoint {
-                        swarm.dial(address).unwrap()
-                    };
-                }
+                } => {}
                 SwarmEvent::OutgoingConnectionError {
                     connection_id,
                     peer_id,
                     error,
-                } => {
-                    let peer_id = peer_id.unwrap();
-                    let x = topology.iter().find(|(_, p, s)| *p == peer_id).unwrap();
-                    let ip_addr = match x.2 {
-                        SocketAddr::V4(v4) => *v4.ip(),
-                        SocketAddr::V6(v6) => panic!("AH"),
-                    };
-                    swarm
-                        .dial(
-                            Multiaddr::empty()
-                                .with(libp2p::multiaddr::Protocol::Ip4(ip_addr))
-                                .with(libp2p::multiaddr::Protocol::Udp(x.2.port()))
-                                .with(libp2p::multiaddr::Protocol::QuicV1)
-                                .with_p2p(x.1)
-                                .unwrap(),
-                        )
-                        .unwrap()
-                }
+                } => {}
                 _ => {
                     // todo!()
                 }
@@ -735,6 +717,7 @@ fn start_libp2p(
         }
 
         async fn handle_advert_send(
+            log: &ReplicaLogger,
             swarm: &mut Swarm<MainBehaviour>,
             msg: ArtifactProcessorEvent<TestArtifact>,
             pool: &TestConsensus,
@@ -752,10 +735,13 @@ fn start_libp2p(
                         _ => return,
                     };
 
-                    let _ = swarm
+                    if let Err(e) = swarm
                         .behaviour_mut()
                         .gossip_sub
-                        .publish(IdentTopic::new("exp"), bincode::serialize(&a).unwrap());
+                        .publish(IdentTopic::new("exp"), a)
+                    {
+                        info!(log, "Publish err {e:?}");
+                    }
                 }
                 _ => {}
             }
@@ -766,12 +752,33 @@ fn start_libp2p(
             select! {
                 _ = interval.tick() => {
                     info!(log, "NUM Connected peers {} {} {}", swarm.connected_peers().count(), swarm.behaviour().gossip_sub.all_peers().count(), swarm.behaviour().gossip_sub.all_mesh_peers().count());
+                    let connected: HashSet<_> = swarm.connected_peers().cloned().collect();
+                    for (n,p,s) in &topology {
+                        if !connected.contains(p) && n != &node_id{
+                            let ip_addr = match s {
+                                SocketAddr::V4(v4) => *v4.ip(),
+                                SocketAddr::V6(v6) => panic!("AH"),
+                            };
+                    info!(log, "CONNECTING");
+                            swarm
+                                .dial(
+                                    Multiaddr::empty()
+                                        .with(libp2p::multiaddr::Protocol::Ip4(ip_addr))
+                                        .with(libp2p::multiaddr::Protocol::Tcp(s.port()))
+                                        .with_p2p(p.clone())
+                                        .unwrap(),
+                                )
+                                .unwrap()
+                        }
+
+                    }
+
                 }
                 Some(event) = swarm.next() => {
                     handle_swarm_event(&log, &mut swarm, &topology, event, &cb_tx);
                 }
                 Some(msg) = ap_rx.recv(), if swarm.connected_peers().count() > 0 => {
-                    handle_advert_send(&mut swarm, msg, &pool).await;
+                    handle_advert_send(&log, &mut swarm, msg, &pool).await;
                 }
             }
         }

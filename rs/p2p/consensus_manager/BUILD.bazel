@@ -20,6 +20,7 @@ DEPENDENCIES = [
     "//rs/protobuf",
     "//rs/p2p/quic_transport",
     "//rs/types/types",
+    "//rs/monitoring/pprof",
     "//rs/crypto/test_utils/tls",
     "//rs/types/types_test_utils",
     "@crate_index//:rand_chacha",
