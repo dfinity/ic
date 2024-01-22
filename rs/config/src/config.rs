@@ -53,6 +53,7 @@ pub struct Config {
     pub adapters_config: AdaptersConfig,
     pub bitcoin_payload_builder_config: BitcoinPayloadBuilderConfig,
     pub ipv4_config: IPv4Config,
+    pub domain: String,
 }
 
 /// Mirrors the Config struct except that fields are made optional. This is
@@ -78,6 +79,7 @@ pub struct ConfigOptional {
     pub adapters_config: Option<AdaptersConfig>,
     pub bitcoin_payload_builder_config: Option<BitcoinPayloadBuilderConfig>,
     pub ipv4_config: Option<IPv4Config>,
+    pub domain: Option<String>,
 }
 
 impl Config {
@@ -108,6 +110,7 @@ impl Config {
             adapters_config: AdaptersConfig::default(),
             bitcoin_payload_builder_config: BitcoinPayloadBuilderConfig::default(),
             ipv4_config: IPv4Config::default(),
+            domain: String::default(),
         }
     }
 
@@ -164,6 +167,7 @@ impl Config {
                 .bitcoin_payload_builder_config
                 .unwrap_or(default.bitcoin_payload_builder_config),
             ipv4_config: cfg.ipv4_config.unwrap_or(default.ipv4_config),
+            domain: cfg.domain.unwrap_or_default(),
         })
     }
 

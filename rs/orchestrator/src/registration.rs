@@ -30,8 +30,10 @@ use ic_sys::utility_command::UtilityCommand;
 use ic_types::{crypto::KeyPurpose, messages::MessageId, NodeId, RegistryVersion, SubnetId};
 use prost::Message;
 use rand::prelude::*;
-use registry_canister::mutations::do_update_node_directly::UpdateNodeDirectlyPayload;
 use registry_canister::mutations::node_management::do_add_node::AddNodePayload;
+use registry_canister::mutations::{
+    common::is_valid_domain, do_update_node_directly::UpdateNodeDirectlyPayload,
+};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use std::{net::IpAddr, str::FromStr};
@@ -212,6 +214,8 @@ impl NodeRegistration {
             chip_id: get_snp_chip_id().expect("Failed to retrieve chip_id from snp firmware"),
             prometheus_metrics_endpoint: "".to_string(),
             public_ipv4_config: ipv4_config_to_vec(&self.log, &self.node_config.ipv4_config),
+            domain: process_domain_name(&self.log, &self.node_config.domain)
+                .expect("Domain name is invalid"),
         }
     }
 
@@ -643,6 +647,18 @@ fn ipv4_config_to_vec(log: &ReplicaLogger, ipv4_config: &IPv4Config) -> Option<V
         ]);
     }
     None
+}
+
+fn process_domain_name(log: &ReplicaLogger, domain: &str) -> OrchestratorResult<Option<String>> {
+    info!(log, "Reading domain name for registration");
+    match domain {
+        "" => Ok(None),
+        domain if is_valid_domain(domain) => Ok(Some(domain.into())),
+        _ => Err(OrchestratorError::invalid_configuration_error(format!(
+            "Provided domain name {} is invalid",
+            domain
+        ))),
+    }
 }
 
 /// Create a nonce to be included with the ingress message sent to the node

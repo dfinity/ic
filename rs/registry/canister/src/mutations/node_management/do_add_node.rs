@@ -1,4 +1,4 @@
-use crate::{common::LOG_PREFIX, registry::Registry};
+use crate::{common::LOG_PREFIX, mutations::common::is_valid_domain, registry::Registry};
 
 use std::net::SocketAddr;
 
@@ -77,9 +77,21 @@ impl Registry {
         // 4. Validate keys and get the node id
         let (node_id, valid_pks) = valid_keys_from_payload(&payload)?;
 
+        //5. Validate the domain is valid
+        let domain: Option<String> = payload
+            .domain
+            .as_ref()
+            .map(|domain| {
+                if !is_valid_domain(domain) {
+                    return Err(format!("Domain name {domain} has invalid format"));
+                }
+                Ok(domain.clone())
+            })
+            .transpose()?;
+
         println!("{}do_add_node: The node id is {:?}", LOG_PREFIX, node_id);
 
-        // 5. create the Node Record
+        // 6. create the Node Record
         let node_record = NodeRecord {
             xnet: Some(connection_endpoint_from_string(&payload.xnet_endpoint)),
             http: Some(connection_endpoint_from_string(&payload.http_endpoint)),
@@ -90,13 +102,13 @@ impl Registry {
                 .public_ipv4_config
                 .clone()
                 .map(make_valid_node_ivp4_config_or_panic),
-            domain: None,
+            domain,
         };
 
-        // 6. Insert node, public keys, and crypto keys
+        // 7. Insert node, public keys, and crypto keys
         let mut mutations = make_add_node_registry_mutations(node_id, node_record, valid_pks);
 
-        // Update the Node Operator record
+        // 8. Update the Node Operator record
         node_operator_record.node_allowance -= 1;
 
         let update_node_operator_record =
@@ -104,7 +116,7 @@ impl Registry {
 
         mutations.push(update_node_operator_record);
 
-        // 8. Check invariants before applying mutations
+        // 9. Check invariants before applying mutations
         self.maybe_apply_mutation_internal(mutations);
 
         println!("{}do_add_node finished: {:?}", LOG_PREFIX, payload);
@@ -134,6 +146,7 @@ pub struct AddNodePayload {
     pub prometheus_metrics_endpoint: String,
 
     pub public_ipv4_config: Option<Vec<String>>,
+    pub domain: Option<String>,
 }
 
 /// Parses the ConnectionEndpoint string
@@ -318,6 +331,7 @@ mod tests {
             prometheus_metrics_endpoint: "".to_string(),
             chip_id: None,
             public_ipv4_config: None,
+            domain: None,
         };
     }
 

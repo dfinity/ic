@@ -17,6 +17,7 @@ type AddNodePayload = record {
   prometheus_metrics_endpoint : text;
   http_endpoint : text;
   idkg_dealing_encryption_pk : opt vec nat8;
+  domain : opt text;
   public_ipv4_config : opt vec text;
   xnet_endpoint : text;
   chip_id : opt vec nat8;

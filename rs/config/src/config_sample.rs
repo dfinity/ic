@@ -88,6 +88,10 @@ pub const SAMPLE_CONFIG: &str = r#"
         public_gateway: "",
     },
     // ============================================
+    // Configuration of the domain name
+    // ============================================
+    domain: "",
+    // ============================================
     // Configuration of registry client
     // ============================================
     registry_client: {

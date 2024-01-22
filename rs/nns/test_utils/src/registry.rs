@@ -824,6 +824,7 @@ pub fn prepare_add_node_payload(mutation_id: u8) -> (AddNodePayload, ValidNodePu
         prometheus_metrics_endpoint: "".to_string(),
         chip_id: None,
         public_ipv4_config: None,
+        domain: None,
     };
 
     (payload, node_public_keys)
