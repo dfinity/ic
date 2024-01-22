@@ -12,7 +12,6 @@ use ic_crypto_internal_threshold_sig_bls12381::api::{
 };
 use ic_crypto_internal_threshold_sig_bls12381::types::SecretKeyBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
-use ic_crypto_test_utils_keys::public_keys::valid_node_signing_public_key;
 use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, LabeledTree::SubTree};
 use ic_cycles_account_manager::CyclesAccountManager;
 pub use ic_error_types::{ErrorCode, UserError};
@@ -42,6 +41,7 @@ use ic_interfaces_state_manager::{
 use ic_logger::ReplicaLogger;
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
+use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_protobuf::registry::{
     crypto::v1::EcdsaSigningSubnetList,
     node::v1::{ConnectionEndpoint, NodeRecord},
@@ -215,11 +215,11 @@ fn init_registry(
 fn make_nodes_registry(
     subnet_id: SubnetId,
     subnet_type: SubnetType,
-    subnet_size: usize,
     ecdsa_keys: &[EcdsaKeyId],
     features: SubnetFeatures,
     registry_version: RegistryVersion,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
+    nodes: &Vec<StateMachineNode>,
     is_root_subnet: bool,
 ) -> Arc<FakeRegistryClient> {
     // ECDSA subnet_id must be different from nns_subnet_id, otherwise
@@ -242,19 +242,7 @@ fn make_nodes_registry(
             .unwrap();
     }
 
-    // Every subnet should have unique node IDs so we first compute
-    // a hash of the subnet ID and interpret it as a base value
-    // for node ID generation.
-    let mut node_ids = vec![];
-    let mut s = DefaultHasher::new();
-    subnet_id.hash(&mut s);
-    let node_id_offset = s.finish();
-    for id in 0..subnet_size {
-        let node_id = NodeId::from(PrincipalId::new_node_test_id(node_id_offset + id as u64));
-        node_ids.push(node_id);
-    }
-
-    for node_id in &node_ids {
+    for node in nodes {
         let node_record = NodeRecord {
             node_operator_id: vec![0],
             xnet: None,
@@ -269,18 +257,24 @@ fn make_nodes_registry(
         };
         registry_data_provider
             .add(
-                &make_node_record_key(*node_id),
+                &make_node_record_key(node.node_id),
                 registry_version,
                 Some(node_record),
             )
             .unwrap();
 
-        let node_key = valid_node_signing_public_key();
+        let node_pk_proto = PublicKeyProto {
+            algorithm: AlgorithmId::Ed25519 as i32,
+            key_value: node.signing_key.verification_key().to_bytes().to_vec(),
+            version: 0,
+            proof_data: None,
+            timestamp: None,
+        };
         registry_data_provider
             .add(
-                &make_crypto_node_key(*node_id, KeyPurpose::NodeSigning),
+                &make_crypto_node_key(node.node_id, KeyPurpose::NodeSigning),
                 registry_version,
-                Some(node_key),
+                Some(node_pk_proto),
             )
             .unwrap();
     }
@@ -299,6 +293,7 @@ fn make_nodes_registry(
     let max_ingress_messages_per_block = if is_root_subnet { 400 } else { 1000 };
     let max_block_payload_size = 4 * 1024 * 1024;
 
+    let node_ids: Vec<_> = nodes.iter().map(|n| n.node_id).collect();
     let record = SubnetRecordBuilder::from(&node_ids)
         .with_subnet_type(subnet_type)
         .with_max_ingress_bytes_per_message(max_ingress_bytes_per_message)
@@ -528,6 +523,27 @@ impl XNetSlicePool for PocketXNetSlicePoolImpl {
     fn garbage_collect_slice(&self, _subnet_id: SubnetId, _stream_position: ExpectedIndices) {}
 }
 
+/// A replica node of the subnet with the corresponding `StateMachine`.
+struct StateMachineNode {
+    node_id: NodeId,
+    signing_key: ed25519_consensus::SigningKey,
+}
+
+impl From<u64> for StateMachineNode {
+    fn from(i: u64) -> Self {
+        let mut bytes = [0; 32];
+        bytes[..8].copy_from_slice(&i.to_le_bytes());
+        let signing_key: ed25519_consensus::SigningKey = bytes.into();
+        Self {
+            node_id: PrincipalId::new_self_authenticating(
+                &signing_key.verification_key().to_bytes(),
+            )
+            .into(),
+            signing_key,
+        }
+    }
+}
+
 /// Represents a replicated state machine detached from the network layer that
 /// can be used to test this part of the stack in isolation.
 pub struct StateMachine {
@@ -554,6 +570,7 @@ pub struct StateMachine {
     time: std::sync::atomic::AtomicU64,
     ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
     replica_logger: ReplicaLogger,
+    nodes: Vec<StateMachineNode>,
 }
 
 impl Default for StateMachine {
@@ -579,7 +596,6 @@ pub struct StateMachineBuilder {
     checkpoints_enabled: bool,
     subnet_type: SubnetType,
     subnet_size: usize,
-    node_id: NodeId,
     nns_subnet_id: Option<SubnetId>,
     subnet_id: SubnetId,
     /// The `subnet_list` should contain all subnet IDs with corresponding `SubnetRecord`s available in the registry
@@ -626,8 +642,6 @@ impl StateMachineBuilder {
         ];
         let (own_subnet_id, public_key, secret_key) =
             Self::compute_subnet_id_and_key_from_seed(seed);
-
-        let own_node_id = NodeId::from(PrincipalId::new_node_test_id(1));
         Self {
             state_dir: TempDir::new().expect("failed to create a temporary directory"),
             nonce: 0,
@@ -637,7 +651,6 @@ impl StateMachineBuilder {
             subnet_type: SubnetType::System,
             use_cost_scaling_flag: false,
             subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
-            node_id: own_node_id,
             nns_subnet_id: None,
             subnet_id: own_subnet_id,
             subnet_list: None,
@@ -705,10 +718,6 @@ impl StateMachineBuilder {
             subnet_size,
             ..self
         }
-    }
-
-    pub fn with_node_id(self, node_id: NodeId) -> Self {
-        Self { node_id, ..self }
     }
 
     pub fn with_nns_subnet_id(self, nns_subnet_id: SubnetId) -> Self {
@@ -867,7 +876,6 @@ impl StateMachineBuilder {
     ) -> Arc<StateMachine> {
         // Build a `StateMachine` for the subnet with `self.subnet_id`.
         let subnet_id = self.subnet_id;
-        let node_id = self.node_id;
         let sm = Arc::new(self.build());
 
         // Register this new `StateMachine` in the *shared* association
@@ -900,7 +908,7 @@ impl StateMachineBuilder {
         // which contains no `PayloadBuilderImpl` after creation.
         *sm.payload_builder.write().unwrap() = Some(PayloadBuilderImpl::new_for_testing(
             subnet_id,
-            node_id,
+            sm.nodes[0].node_id,
             sm.registry_client.clone(),
             sm.ingress_manager.clone(),
             Arc::new(xnet_payload_builder),
@@ -1058,14 +1066,24 @@ impl StateMachine {
             None => (SubnetConfig::new(subnet_type), HypervisorConfig::default()),
         };
 
+        // Every subnet should have unique node IDs so we first compute
+        // a hash of the subnet ID and interpret it as a base value
+        // for node ID generation.
+        let mut s = DefaultHasher::new();
+        subnet_id.hash(&mut s);
+        let node_offset = s.finish();
+
+        let nodes: Vec<StateMachineNode> = (0..subnet_size as u64)
+            .map(|i| (node_offset + i).into())
+            .collect();
         let registry_client = make_nodes_registry(
             subnet_id,
             subnet_type,
-            subnet_size,
             &ecdsa_keys,
             features,
             registry_version,
             registry_data_provider.clone(),
+            &nodes,
             is_root_subnet,
         );
 
@@ -1225,6 +1243,7 @@ impl StateMachine {
             time: std::sync::atomic::AtomicU64::new(time.as_nanos_since_unix_epoch()),
             ecdsa_subnet_public_keys,
             replica_logger,
+            nodes,
         }
     }
 
@@ -1240,6 +1259,28 @@ impl StateMachine {
     pub fn into_state_dir(self) -> TempDir {
         let (path, _, _, _) = self.into_components();
         path
+    }
+
+    /// Compute the node signature of provided data with respect to the i-th node signing key.
+    ///
+    /// Precondition: 0 <= i < subnet_size in StateMachineBuilder
+    pub fn compute_node_signature(
+        &self,
+        i: usize,
+        data: &[u8],
+    ) -> Result<(NodeId, [u8; 64]), String> {
+        if i < self.nodes.len() {
+            Ok((
+                self.nodes[i].node_id,
+                self.nodes[i].signing_key.sign(data).to_bytes(),
+            ))
+        } else {
+            Err(format!(
+                "The provided node index {} exceeds the number of nodes {} in this StateMachine.",
+                i,
+                self.nodes.len()
+            ))
+        }
     }
 
     /// Emulates a node restart, including checkpoint recovery.
