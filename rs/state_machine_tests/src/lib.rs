@@ -213,7 +213,6 @@ fn init_registry(
 /// Adds subnet-related records to registry.
 /// Pre-condition: `init_registry` was called before with `routing_table` containing `subnet_id`.
 fn make_nodes_registry(
-    nns_subnet_id: SubnetId,
     subnet_id: SubnetId,
     subnet_type: SubnetType,
     subnet_size: usize,
@@ -221,6 +220,7 @@ fn make_nodes_registry(
     features: SubnetFeatures,
     registry_version: RegistryVersion,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
+    is_root_subnet: bool,
 ) -> Arc<FakeRegistryClient> {
     // ECDSA subnet_id must be different from nns_subnet_id, otherwise
     // `sign_with_ecdsa` won't be charged.
@@ -296,11 +296,7 @@ fn make_nodes_registry(
         SubnetType::VerifiedApplication => 2 * 1024 * 1024,
         SubnetType::System => 3 * 1024 * 1024 + 512 * 1024,
     };
-    let max_ingress_messages_per_block = if subnet_id == nns_subnet_id {
-        400
-    } else {
-        1000
-    };
+    let max_ingress_messages_per_block = if is_root_subnet { 400 } else { 1000 };
     let max_block_payload_size = 4 * 1024 * 1024;
 
     let record = SubnetRecordBuilder::from(&node_ids)
@@ -584,7 +580,7 @@ pub struct StateMachineBuilder {
     subnet_type: SubnetType,
     subnet_size: usize,
     node_id: NodeId,
-    nns_subnet_id: SubnetId,
+    nns_subnet_id: Option<SubnetId>,
     subnet_id: SubnetId,
     /// The `subnet_list` should contain all subnet IDs with corresponding `SubnetRecord`s available in the registry
     /// (subnet IDs in the `routing_table` are independent of this `subnet_list`);
@@ -598,11 +594,39 @@ pub struct StateMachineBuilder {
     runtime: Option<Arc<Runtime>>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     lsmt_override: Option<FlagStatus>,
+    public_key: ThresholdSigPublicKey,
+    secret_key: SecretKeyBytes,
 }
 
 impl StateMachineBuilder {
+    fn compute_subnet_id_and_key_from_seed(
+        seed: [u8; 32],
+    ) -> (SubnetId, ThresholdSigPublicKey, SecretKeyBytes) {
+        let (public_coefficients, secret_key_bytes) = generate_threshold_key(
+            Seed::from_bytes(&seed),
+            NumberOfNodes::new(1),
+            NumberOfNodes::new(1),
+        )
+        .unwrap();
+        let public_key = ThresholdSigPublicKey::from(CspThresholdSigPublicKey::from(
+            combined_public_key(&public_coefficients).unwrap(),
+        ));
+        let secret_key = secret_key_bytes.first().unwrap().clone();
+        let own_subnet_id = SubnetId::from(PrincipalId::new_self_authenticating(
+            &public_key.into_bytes(),
+        ));
+        (own_subnet_id, public_key, secret_key)
+    }
+
     pub fn new() -> Self {
-        let own_subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(1));
+        // fixed seed to keep tests reproducible
+        let seed: [u8; 32] = [
+            3, 5, 31, 46, 53, 66, 100, 101, 109, 121, 126, 129, 133, 152, 163, 165, 167, 186, 198,
+            203, 206, 208, 211, 216, 229, 232, 233, 236, 242, 244, 246, 250,
+        ];
+        let (own_subnet_id, public_key, secret_key) =
+            Self::compute_subnet_id_and_key_from_seed(seed);
+
         let own_node_id = NodeId::from(PrincipalId::new_node_test_id(1));
         Self {
             state_dir: TempDir::new().expect("failed to create a temporary directory"),
@@ -614,7 +638,7 @@ impl StateMachineBuilder {
             use_cost_scaling_flag: false,
             subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
             node_id: own_node_id,
-            nns_subnet_id: own_subnet_id,
+            nns_subnet_id: None,
             subnet_id: own_subnet_id,
             subnet_list: None,
             routing_table: RoutingTable::new(),
@@ -629,6 +653,8 @@ impl StateMachineBuilder {
             runtime: None,
             registry_data_provider: Arc::new(ProtoRegistryDataProvider::new()),
             lsmt_override: None,
+            public_key,
+            secret_key,
         }
     }
 
@@ -687,7 +713,7 @@ impl StateMachineBuilder {
 
     pub fn with_nns_subnet_id(self, nns_subnet_id: SubnetId) -> Self {
         Self {
-            nns_subnet_id,
+            nns_subnet_id: Some(nns_subnet_id),
             ..self
         }
     }
@@ -772,7 +798,26 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_subnet_key_seed(self, seed: [u8; 32]) -> Self {
+        let (own_subnet_id, public_key, secret_key) =
+            Self::compute_subnet_id_and_key_from_seed(seed);
+        Self {
+            subnet_id: own_subnet_id,
+            public_key,
+            secret_key,
+            ..self
+        }
+    }
+
+    pub fn with_root_subnet(self) -> Self {
+        Self {
+            nns_subnet_id: Some(self.subnet_id),
+            ..self
+        }
+    }
+
     pub fn build(self) -> StateMachine {
+        let nns_subnet_id = self.nns_subnet_id.unwrap_or(self.subnet_id);
         let mut routing_table = self.routing_table;
         if routing_table.is_empty() {
             routing_table_insert_subnet(&mut routing_table, self.subnet_id).unwrap();
@@ -780,7 +825,7 @@ impl StateMachineBuilder {
         let registry_version = INITIAL_REGISTRY_VERSION;
         if self.registry_data_provider.is_empty() {
             init_registry(
-                self.nns_subnet_id,
+                nns_subnet_id,
                 self.subnet_list.unwrap_or(vec![self.subnet_id]),
                 routing_table,
                 registry_version,
@@ -795,7 +840,6 @@ impl StateMachineBuilder {
             self.checkpoints_enabled,
             self.subnet_type,
             self.subnet_size,
-            self.nns_subnet_id,
             self.subnet_id,
             self.use_cost_scaling_flag,
             self.ecdsa_keys,
@@ -809,6 +853,9 @@ impl StateMachineBuilder {
             registry_version,
             self.registry_data_provider,
             self.lsmt_override,
+            self.public_key,
+            self.secret_key,
+            self.subnet_id == nns_subnet_id,
         )
     }
 
@@ -995,7 +1042,6 @@ impl StateMachine {
         checkpoints_enabled: bool,
         subnet_type: SubnetType,
         subnet_size: usize,
-        nns_subnet_id: SubnetId,
         subnet_id: SubnetId,
         use_cost_scaling_flag: bool,
         ecdsa_keys: Vec<EcdsaKeyId>,
@@ -1004,6 +1050,9 @@ impl StateMachine {
         registry_version: RegistryVersion,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
         lsmt_override: Option<FlagStatus>,
+        public_key: ThresholdSigPublicKey,
+        secret_key: SecretKeyBytes,
+        is_root_subnet: bool,
     ) -> Self {
         let replica_logger = replica_logger();
 
@@ -1015,7 +1064,6 @@ impl StateMachine {
         };
 
         let registry_client = make_nodes_registry(
-            nns_subnet_id,
             subnet_id,
             subnet_type,
             subnet_size,
@@ -1023,6 +1071,7 @@ impl StateMachine {
             features,
             registry_version,
             registry_data_provider.clone(),
+            is_root_subnet,
         );
 
         let mut sm_config = ic_config::state_manager::Config::new(state_dir.path().to_path_buf());
@@ -1095,22 +1144,6 @@ impl StateMachine {
             malicious_flags.clone(),
         );
 
-        // fixed seed to keep tests reproducible
-        let seed: [u8; 32] = [
-            3, 5, 31, 46, 53, 66, 100, 101, 109, 121, 126, 129, 133, 152, 163, 165, 167, 186, 198,
-            203, 206, 208, 211, 216, 229, 232, 233, 236, 242, 244, 246, 250,
-        ];
-
-        let (public_coefficients, secret_key_bytes) = generate_threshold_key(
-            Seed::from_bytes(&seed),
-            NumberOfNodes::new(1),
-            NumberOfNodes::new(1),
-        )
-        .unwrap();
-        let public_key = ThresholdSigPublicKey::from(CspThresholdSigPublicKey::from(
-            combined_public_key(&public_coefficients).unwrap(),
-        ));
-
         // The following key has been randomly generated using:
         // https://sourcegraph.com/github.com/dfinity/ic/-/blob/rs/crypto/ecdsa_secp256k1/src/lib.rs
         // It's the sec1 representation of the key in a hex string.
@@ -1173,7 +1206,7 @@ impl StateMachine {
 
         Self {
             subnet_id,
-            secret_key: secret_key_bytes.first().unwrap().clone(),
+            secret_key,
             public_key,
             ecdsa_secret_key,
             registry_data_provider,
