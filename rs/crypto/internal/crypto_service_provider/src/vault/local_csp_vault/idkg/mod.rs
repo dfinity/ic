@@ -674,6 +674,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     ) -> Result<SecretShares, IDkgCreateDealingVaultError> {
         match transcript_operation {
             IDkgTranscriptOperationInternal::Random => Ok(SecretShares::Random),
+            IDkgTranscriptOperationInternal::RandomUnmasked => Ok(SecretShares::RandomUnmasked),
             IDkgTranscriptOperationInternal::ReshareOfUnmasked(commitment)
             | IDkgTranscriptOperationInternal::ReshareOfMasked(commitment) => {
                 let secret_share_bytes = self.commitment_opening_from_sks(commitment)?;

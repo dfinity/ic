@@ -1009,6 +1009,17 @@ impl EccPoint {
         EccFieldElement::from_bytes(curve_type, &z[1 + field_bytes..])
     }
 
+    /// Return if the affine Y coordinate of this point is even
+    pub fn is_y_even(&self) -> ThresholdEcdsaResult<bool> {
+        let compressed = self.serialize();
+
+        match compressed.first() {
+            Some(0x02) => Ok(true),
+            Some(0x03) => Ok(false),
+            _ => Err(ThresholdEcdsaError::InvalidPoint),
+        }
+    }
+
     /// Return true if this is the point at infinity
     pub fn is_infinity(&self) -> ThresholdEcdsaResult<bool> {
         match &self.point {

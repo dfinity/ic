@@ -37,7 +37,10 @@ fn derive_rho(
     presig_transcript: &IDkgTranscriptInternal,
 ) -> ThresholdEcdsaResult<(EccScalar, EccScalar, EccScalar, EccPoint)> {
     let pre_sig = match &presig_transcript.combined_commitment {
+        // random + reshare of masked case
         CombinedCommitment::ByInterpolation(PolynomialCommitment::Simple(c)) => c.constant_term(),
+        // random unmasked case
+        CombinedCommitment::BySummation(PolynomialCommitment::Simple(c)) => c.constant_term(),
         _ => return Err(ThresholdEcdsaError::UnexpectedCommitmentType),
     };
 

@@ -7,6 +7,7 @@ use std::convert::TryFrom;
 
 #[derive(Clone)]
 pub enum SecretShares {
+    RandomUnmasked,
     Random,
     ReshareOfUnmasked(EccScalar),
     ReshareOfMasked(EccScalar, EccScalar),
@@ -17,6 +18,7 @@ impl Debug for SecretShares {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
             Self::Random => write!(f, "SecretShares::Random"),
+            Self::RandomUnmasked => write!(f, "SecretShares::RandomUnmasked"),
             Self::ReshareOfUnmasked(EccScalar::K256(_)) => write!(
                 f,
                 "SecretShares::ReshareOfUnmasked(EccScalar::K256) - REDACTED"
@@ -214,6 +216,20 @@ impl IDkgDealingInternal {
 
                 (commitment, ciphertext, None)
             }
+            SecretShares::RandomUnmasked => {
+                let values = Polynomial::random(signature_curve, num_coefficients, &mut poly_rng);
+
+                let (ciphertext, commitment) = encrypt_and_commit_single_polynomial(
+                    &values,
+                    num_coefficients,
+                    recipients,
+                    dealer_index,
+                    associated_data,
+                    mega_seed,
+                )?;
+
+                (commitment, ciphertext, None)
+            }
             SecretShares::ReshareOfUnmasked(secret) => {
                 if secret.curve_type() != signature_curve {
                     return Err(ThresholdEcdsaError::InvalidSecretShare);
@@ -342,6 +358,17 @@ impl IDkgDealingInternal {
                     .verify_is(PolynomialCommitmentType::Pedersen, signature_curve)?;
                 self.ciphertext
                     .verify_is(MEGaCiphertextType::Pairs, key_curve, signature_curve)?;
+                // no ZK proof for this transcript type
+                Ok(())
+            }
+            (Op::RandomUnmasked, None) => {
+                self.commitment
+                    .verify_is(PolynomialCommitmentType::Simple, signature_curve)?;
+                self.ciphertext.verify_is(
+                    MEGaCiphertextType::Single,
+                    key_curve,
+                    signature_curve,
+                )?;
                 // no ZK proof for this transcript type
                 Ok(())
             }
