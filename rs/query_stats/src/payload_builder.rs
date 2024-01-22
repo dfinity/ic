@@ -11,7 +11,7 @@ use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    batch::{LocalQueryStats, QueryStatsPayload, ValidationContext, ENABLE_QUERY_STATS},
+    batch::{LocalQueryStats, QueryStatsPayload, ValidationContext},
     epoch_from_height, CanisterId, Height, NodeId, NumBytes, QueryStatsEpoch,
 };
 use std::{
@@ -94,10 +94,10 @@ impl BatchPayloadBuilder for QueryStatsPayloadBuilderImpl {
             }
         }
 
-        match ENABLE_QUERY_STATS {
-            true => self.build_payload_impl(height, max_size, past_payloads, context),
-            false => vec![],
+        if !self.enabled {
+            return vec![];
         }
+        self.build_payload_impl(height, max_size, past_payloads, context)
     }
 
     fn validate_payload(
@@ -120,7 +120,7 @@ impl BatchPayloadBuilder for QueryStatsPayloadBuilderImpl {
 
         // Check whether feature is enabled and reject if it isn't.
         // NOTE: All payloads that are processed at this point are non-empty
-        if !ENABLE_QUERY_STATS {
+        if !self.enabled {
             return Err(transient_error(
                 QueryStatsTransientValidationError::Disabled,
             ));
@@ -138,10 +138,6 @@ impl QueryStatsPayloadBuilderImpl {
         past_payloads: &[PastPayload],
         context: &ValidationContext,
     ) -> Vec<u8> {
-        if !self.enabled {
-            return vec![];
-        }
-
         let Ok(current_stats) = self.current_stats.read() else {
             return vec![];
         };

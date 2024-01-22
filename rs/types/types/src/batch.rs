@@ -29,13 +29,12 @@ use ic_btc_types_internal::BitcoinAdapterResponse;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_ic00_types::EcdsaKeyId;
+use ic_protobuf::proxy::ProxyDecodeError;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::TryInto,
 };
-
-pub const ENABLE_QUERY_STATS: bool = false;
 
 /// The `Batch` provided to Message Routing for deterministic processing.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -118,22 +117,28 @@ pub struct BatchMessages {
     pub query_stats: Option<QueryStatsPayload>,
 }
 
+/// Error type that can occur during an `BatchPayload::into_messages` call
+#[derive(Debug)]
+pub enum IntoMessagesError {
+    IngressPayloadError(IngressPayloadError),
+    QueryStatsPayloadError(ProxyDecodeError),
+}
+
 impl BatchPayload {
     /// Extract and return the set of ingress and xnet messages in a
     /// BatchPayload.
     /// Return error if deserialization of ingress payload fails.
     #[allow(clippy::result_large_err)]
-    pub fn into_messages(self) -> Result<BatchMessages, IngressPayloadError> {
+    pub fn into_messages(self) -> Result<BatchMessages, IntoMessagesError> {
         Ok(BatchMessages {
-            signed_ingress_msgs: self.ingress.try_into()?,
+            signed_ingress_msgs: self
+                .ingress
+                .try_into()
+                .map_err(IntoMessagesError::IngressPayloadError)?,
             certified_stream_slices: self.xnet.stream_slices,
             bitcoin_adapter_responses: self.self_validating.0,
-            query_stats: match ENABLE_QUERY_STATS {
-                true => QueryStatsPayload::deserialize(&self.query_stats)
-                    .ok()
-                    .flatten(),
-                false => None,
-            },
+            query_stats: QueryStatsPayload::deserialize(&self.query_stats)
+                .map_err(IntoMessagesError::QueryStatsPayloadError)?,
         })
     }
 
