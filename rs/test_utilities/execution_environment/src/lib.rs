@@ -1887,8 +1887,8 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_wasm_chunk_store(mut self) -> Self {
-        self.execution_config.wasm_chunk_store = FlagStatus::Enabled;
+    pub fn with_wasm_chunk_store(mut self, status: FlagStatus) -> Self {
+        self.execution_config.wasm_chunk_store = status;
         self
     }
 
