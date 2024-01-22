@@ -100,6 +100,7 @@ impl CombinedCommitment {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum IDkgTranscriptOperationInternal {
     Random,
+    RandomUnmasked,
     ReshareOfMasked(PolynomialCommitment),
     ReshareOfUnmasked(PolynomialCommitment),
     UnmaskedTimesMasked(PolynomialCommitment, PolynomialCommitment),
@@ -220,6 +221,24 @@ impl IDkgTranscriptInternal {
                 }
 
                 CombinedCommitment::BySummation(PedersenCommitment::new(combined).into())
+            }
+
+            IDkgTranscriptOperationInternal::RandomUnmasked => {
+                // Combine commitments via sum
+                let mut combined = vec![EccPoint::identity(curve); reconstruction_threshold];
+
+                for dealing in verified_dealings.values() {
+                    if dealing.commitment.ctype() != PolynomialCommitmentType::Simple {
+                        return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
+                    }
+
+                    let c = dealing.commitment.points();
+                    for i in 0..reconstruction_threshold {
+                        combined[i] = combined[i].add_points(&c[i])?;
+                    }
+                }
+
+                CombinedCommitment::BySummation(SimpleCommitment::new(combined).into())
             }
 
             IDkgTranscriptOperationInternal::ReshareOfMasked(reshared_commitment) => {
@@ -535,26 +554,44 @@ impl CommitmentOpening {
         match transcript_commitment {
             CombinedCommitment::BySummation(commitment) => {
                 // Recombine secret by summation
-                let mut combined_value = EccScalar::zero(curve);
-                let mut combined_mask = EccScalar::zero(curve);
 
-                for (_dealer_index, opening) in openings {
-                    if let Self::Pedersen(value, mask) = opening {
-                        combined_value = combined_value.add(value)?;
-                        combined_mask = combined_mask.add(mask)?;
-                    } else {
-                        return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
+                let combined_opening = match commitment {
+                    PolynomialCommitment::Simple(_) => {
+                        let mut combined_value = EccScalar::zero(curve);
+
+                        for (_dealer_index, opening) in openings {
+                            if let Self::Simple(value) = opening {
+                                combined_value = combined_value.add(value)?;
+                            } else {
+                                return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
+                            }
+                        }
+
+                        Self::Simple(combined_value)
                     }
-                }
+                    PolynomialCommitment::Pedersen(_) => {
+                        let mut combined_value = EccScalar::zero(curve);
+                        let mut combined_mask = EccScalar::zero(curve);
 
-                let combined_opening = Self::Pedersen(combined_value, combined_mask);
+                        for (_dealer_index, opening) in openings {
+                            if let Self::Pedersen(value, mask) = opening {
+                                combined_value = combined_value.add(value)?;
+                                combined_mask = combined_mask.add(mask)?;
+                            } else {
+                                return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
+                            }
+                        }
+
+                        Self::Pedersen(combined_value, combined_mask)
+                    }
+                };
 
                 // Check reconstructed opening matches the commitment
                 commitment.return_opening_if_consistent(receiver_index, &combined_opening)
             }
 
             CombinedCommitment::ByInterpolation(commitment) => {
-                let opening = match commitment {
+                let combined_opening = match commitment {
                     PolynomialCommitment::Simple(_) => {
                         let mut x_values = Vec::with_capacity(openings.len());
                         let mut values = Vec::with_capacity(openings.len());
@@ -597,7 +634,7 @@ impl CommitmentOpening {
                 };
 
                 // Check reconstructed opening matches the commitment
-                commitment.return_opening_if_consistent(receiver_index, &opening)
+                commitment.return_opening_if_consistent(receiver_index, &combined_opening)
             }
         }
     }

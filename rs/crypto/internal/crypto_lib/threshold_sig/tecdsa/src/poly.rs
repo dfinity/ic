@@ -600,7 +600,7 @@ impl PolynomialCommitment {
         self.points().len()
     }
 
-    pub(crate) fn evaluate_at(&self, eval_point: NodeIndex) -> ThresholdEcdsaResult<EccPoint> {
+    pub fn evaluate_at(&self, eval_point: NodeIndex) -> ThresholdEcdsaResult<EccPoint> {
         evaluate_at(self.points(), eval_point)
     }
 

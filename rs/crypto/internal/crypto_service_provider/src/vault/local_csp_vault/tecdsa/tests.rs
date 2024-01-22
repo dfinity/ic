@@ -233,43 +233,6 @@ mod ecdsa_sign_share {
     }
 
     #[test]
-    fn should_error_when_kappa_unmasked_commitment_type_wrong() {
-        let parameters = EcdsaSignShareParameters::default();
-        let mut canister_sks = MockSecretKeyStore::new();
-        parameters.with_lambda_masked_idkg_commitment(&mut canister_sks);
-        parameters.with_kappa_times_lambda_idkg_commitment(&mut canister_sks);
-        parameters.with_key_times_lambda_idkg_commitment(&mut canister_sks);
-        let vault = LocalCspVault::builder_for_test()
-            .with_mock_stores()
-            .with_canister_secret_key_store(canister_sks)
-            .build();
-
-        let params_with_wrong_commitment_type = {
-            let kappa_unmasked_by_summation = IDkgTranscriptInternal {
-                combined_commitment: CombinedCommitment::BySummation(
-                    parameters
-                        .kappa_unmasked
-                        .combined_commitment
-                        .commitment()
-                        .clone(),
-                ),
-            };
-            EcdsaSignShareParameters {
-                kappa_unmasked: kappa_unmasked_by_summation,
-                ..parameters
-            }
-        };
-
-        let result = params_with_wrong_commitment_type.ecdsa_sign_share(&vault);
-
-        assert_matches!(
-            result,
-            Err(ThresholdEcdsaSignShareError::InternalError { internal_error })
-            if internal_error.contains("UnexpectedCommitmentType")
-        )
-    }
-
-    #[test]
     fn should_error_when_lambda_masked_commitment_is_simple() {
         let params_with_wrong_lambda_masked_commitment = {
             let parameters = EcdsaSignShareParameters::default();
