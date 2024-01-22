@@ -7,10 +7,8 @@ use crate::errors::convert_to_error;
 use crate::request::transaction_operation_results::TransactionOperationResults;
 use crate::{convert::from_hex, errors, errors::ApiError, request_types::RequestType};
 pub use ic_canister_client_sender::Ed25519KeyPair as EdKeypair;
-use ic_types::PrincipalId;
-use ic_types::{
-    messages::{HttpCallContent, HttpCanisterUpdate, HttpReadStateContent, HttpRequestEnvelope},
-    CanisterId,
+use ic_types::messages::{
+    HttpCallContent, HttpCanisterUpdate, HttpReadStateContent, HttpRequestEnvelope,
 };
 pub use rosetta_core::identifiers::*;
 pub use rosetta_core::miscellaneous::*;
@@ -151,70 +149,24 @@ impl CallResponse {
     }
 }
 
-/// ConstructionCombineRequest is the input to the `/construction/combine`
-/// endpoint. It contains the unsigned transaction blob returned by
-/// `/construction/payloads` and all required signatures to create a network
-/// transaction.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct ConstructionCombineRequest {
-    #[serde(rename = "network_identifier")]
-    pub network_identifier: NetworkIdentifier,
-
-    #[serde(rename = "unsigned_transaction")]
-    pub unsigned_transaction: String, // = CBOR+hex-encoded 'UnsignedTransaction'
-
-    #[serde(rename = "signatures")]
-    pub signatures: Vec<Signature>,
-}
-
-impl ConstructionCombineRequest {
-    pub fn new(
-        network_identifier: NetworkIdentifier,
-        unsigned_transaction: String,
-        signatures: Vec<Signature>,
-    ) -> ConstructionCombineRequest {
-        ConstructionCombineRequest {
-            network_identifier,
-            unsigned_transaction,
-            signatures,
-        }
-    }
-
-    pub fn unsigned_transaction(&self) -> Result<UnsignedTransaction, ApiError> {
-        serde_cbor::from_slice(&from_hex(&self.unsigned_transaction)?).map_err(|e| {
-            ApiError::invalid_request(format!("Could not deserialize unsigned transaction: {}", e))
-        })
-    }
-}
-
-/// ConstructionCombineResponse is returned by `/construction/combine`. The
-/// network payload will be sent directly to the `construction/submit` endpoint.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct ConstructionCombineResponse {
-    #[serde(rename = "signed_transaction")]
-    pub signed_transaction: String, // = CBOR+hex-encoded 'SignedTransaction'
-}
-
-impl ConstructionCombineResponse {
-    pub fn new(signed_transaction: String) -> ConstructionCombineResponse {
-        ConstructionCombineResponse { signed_transaction }
-    }
-
-    pub fn signed_transaction(&self) -> Result<SignedTransaction, ApiError> {
-        serde_cbor::from_slice(&from_hex(&self.signed_transaction)?).map_err(|e| {
-            ApiError::invalid_request(format!(
-                "Cannot deserialize signed transaction in /construction/combine response: {}",
-                e
-            ))
-        })
-    }
-}
-
 /// The type (encoded as CBOR) returned by /construction/combine, containing the
 /// IC calls to submit the transaction and to check the result.
-pub type SignedTransaction = Vec<Request>;
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct SignedTransaction {
+    pub requests: Vec<Request>,
+}
+
+impl FromStr for SignedTransaction {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_cbor::from_slice(
+            hex::decode(s)
+                .map_err(|err| format!("{:?}", err))?
+                .as_slice(),
+        )
+        .map_err(|err| format!("{:?}", err))
+    }
+}
 
 /// A vector of update/read-state calls for different ingress windows
 /// of the same call.
@@ -561,76 +513,6 @@ impl MempoolTransactionRequest {
         MempoolTransactionRequest {
             network_identifier,
             transaction_identifier,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct NetworkIdentifier(pub rosetta_core::identifiers::NetworkIdentifier);
-impl TryInto<CanisterId> for &NetworkIdentifier {
-    type Error = ApiError;
-    fn try_into(self) -> Result<CanisterId, Self::Error> {
-        let principal_bytes = hex::decode(&self.0.network)
-            .map_err(|_| ApiError::InvalidNetworkId(false, "not hex".into()))?;
-        let principal_id = PrincipalId::try_from(&principal_bytes)
-            .map_err(|_| ApiError::InvalidNetworkId(false, "invalid principal id".into()))?;
-        CanisterId::try_from(principal_id)
-            .map_err(|_| ApiError::InvalidNetworkId(false, "invalid canister id".into()))
-    }
-}
-
-impl From<rosetta_core::identifiers::NetworkIdentifier> for NetworkIdentifier {
-    fn from(value: rosetta_core::identifiers::NetworkIdentifier) -> Self {
-        Self(value)
-    }
-}
-
-impl From<NetworkIdentifier> for rosetta_core::identifiers::NetworkIdentifier {
-    fn from(value: NetworkIdentifier) -> Self {
-        value.0
-    }
-}
-
-impl NetworkIdentifier {
-    pub fn new(blockchain: String, network: String) -> NetworkIdentifier {
-        Self(rosetta_core::identifiers::NetworkIdentifier::new(
-            blockchain, network,
-        ))
-    }
-}
-
-/// Signature contains the payload that was signed, the public keys of the
-/// keypairs used to produce the signature, the signature (encoded in hex), and
-/// the SignatureType.  PublicKey is often times not known during construction
-/// of the signing payloads but may be needed to combine signatures properly.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct Signature {
-    #[serde(rename = "signing_payload")]
-    pub signing_payload: SigningPayload,
-
-    #[serde(rename = "public_key")]
-    pub public_key: PublicKey,
-
-    #[serde(rename = "signature_type")]
-    pub signature_type: SignatureType,
-
-    #[serde(rename = "hex_bytes")]
-    pub hex_bytes: String,
-}
-
-impl Signature {
-    pub fn new(
-        signing_payload: SigningPayload,
-        public_key: PublicKey,
-        signature_type: SignatureType,
-        hex_bytes: String,
-    ) -> Signature {
-        Signature {
-            signing_payload,
-            public_key,
-            signature_type,
-            hex_bytes,
         }
     }
 }

@@ -21,10 +21,7 @@ impl RosettaRequestHandler {
         &self,
         msg: ConstructionPreprocessRequest,
     ) -> Result<ConstructionPreprocessResponse, ApiError> {
-        verify_network_id(
-            self.ledger.ledger_canister_id(),
-            &msg.network_identifier.into(),
-        )?;
+        verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
         let transfers =
             convert::operations_to_requests(&msg.operations, true, self.ledger.token_symbol())?;
         let options = Some(ConstructionMetadataRequestOptions {

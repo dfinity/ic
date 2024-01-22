@@ -41,10 +41,7 @@ impl RosettaRequestHandler {
         &self,
         msg: ConstructionPayloadsRequest,
     ) -> Result<ConstructionPayloadsResponse, ApiError> {
-        verify_network_id(
-            self.ledger.ledger_canister_id(),
-            &msg.network_identifier.into(),
-        )?;
+        verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
 
         let ops = msg.operations.clone();
 

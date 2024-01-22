@@ -255,14 +255,18 @@ impl LedgerAccess for LedgerClient {
         &self.token_symbol
     }
 
-    async fn submit(&self, envelopes: SignedTransaction) -> Result<TransactionResults, ApiError> {
+    async fn submit(
+        &self,
+        signed_transaction: SignedTransaction,
+    ) -> Result<TransactionResults, ApiError> {
         if self.offline {
             return Err(ApiError::NotAvailableOffline(false, Details::default()));
         }
         let start_time = Instant::now();
         let http_client = reqwest::Client::new();
 
-        let mut results: TransactionResults = envelopes
+        let mut results: TransactionResults = signed_transaction
+            .requests
             .iter()
             .map(|e| {
                 Request::try_from(e).map(|_type| RequestResult {
@@ -277,8 +281,10 @@ impl LedgerAccess for LedgerClient {
             .collect::<Result<Vec<_>, _>>()?
             .into();
 
-        for ((request_type, request), result) in
-            envelopes.into_iter().zip(results.operations.iter_mut())
+        for ((request_type, request), result) in signed_transaction
+            .requests
+            .into_iter()
+            .zip(results.operations.iter_mut())
         {
             if let Err(e) = self
                 .do_request(&http_client, start_time, request_type, request, result)

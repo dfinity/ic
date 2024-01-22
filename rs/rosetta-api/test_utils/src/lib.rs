@@ -9,6 +9,7 @@ use ic_rosetta_api::models::operation::OperationType;
 use ic_rosetta_api::models::{
     ConstructionCombineResponse, ConstructionParseResponse, ConstructionPayloadsRequestMetadata,
     ConstructionPayloadsResponse, CurveType, PublicKey, Signature, SignatureType,
+    SignedTransaction,
 };
 use ic_rosetta_api::models::{ConstructionSubmitResponse, Error as RosettaError};
 use ic_rosetta_api::request::request_result::RequestResult;
@@ -31,6 +32,7 @@ use rosetta_core::convert::principal_id_from_public_key;
 use rosetta_core::models::RosettaSupportedKeyPair;
 use std::collections::HashMap;
 use std::path::Path;
+use std::str::FromStr;
 use std::sync::Arc;
 
 pub mod rosetta_api_serv;
@@ -508,7 +510,9 @@ where
         .unwrap()?;
 
     let submit_res = ros
-        .construction_submit(signed.signed_transaction().unwrap())
+        .construction_submit(
+            SignedTransaction::from_str(&signed.signed_transaction.clone()).unwrap(),
+        )
         .await
         .unwrap()?;
 
@@ -519,18 +523,20 @@ where
 
     // check idempotency
     let submit_res2 = ros
-        .construction_submit(signed.signed_transaction().unwrap())
+        .construction_submit(
+            SignedTransaction::from_str(&signed.signed_transaction.clone()).unwrap(),
+        )
         .await
         .unwrap()?;
     assert_eq!(submit_res, submit_res2);
 
-    let mut txn = signed.signed_transaction().unwrap();
-    for (_, request) in txn.iter_mut() {
+    let mut txn = SignedTransaction::from_str(&signed.signed_transaction).unwrap();
+    for (_, request) in txn.requests.iter_mut() {
         *request = vec![request.last().unwrap().clone()];
     }
 
     let submit_res3 = ros
-        .construction_submit(signed.signed_transaction().unwrap())
+        .construction_submit(SignedTransaction::from_str(&signed.signed_transaction).unwrap())
         .await
         .unwrap()?;
     assert_eq!(submit_res, submit_res3);

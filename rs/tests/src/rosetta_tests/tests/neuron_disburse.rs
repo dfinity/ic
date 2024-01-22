@@ -13,6 +13,7 @@ use ic_ledger_core::Tokens;
 use ic_nns_governance::pb::v1::neuron::DissolveState;
 use ic_nns_governance::pb::v1::Neuron;
 use ic_rosetta_api::models::ConstructionPayloadsResponse;
+use ic_rosetta_api::models::SignedTransaction;
 use ic_rosetta_api::request::request_result::RequestResult;
 use ic_rosetta_api::request::Request;
 use ic_rosetta_api::request_types::{Disburse, Status};
@@ -22,6 +23,7 @@ use rosetta_core::objects::ObjectMap;
 use serde_json::json;
 use slog::Logger;
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::UNIX_EPOCH;
 
@@ -254,7 +256,7 @@ async fn test_disburse_raw(
         .unwrap()?;
 
     let submit_res = ros
-        .construction_submit(signed.signed_transaction().unwrap())
+        .construction_submit(SignedTransaction::from_str(&signed.signed_transaction).unwrap())
         .await
         .unwrap()?;
 

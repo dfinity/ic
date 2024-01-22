@@ -85,7 +85,7 @@ impl RosettaClient {
         self.call_endpoint(
             "/block",
             &BlockRequest {
-                network_identifier: network_identifier.clone(),
+                network_identifier,
                 block_identifier: block_identifier.clone(),
             },
         )

@@ -12,10 +12,7 @@ impl RosettaRequestHandler {
         &self,
         msg: models::ConstructionDeriveRequest,
     ) -> Result<ConstructionDeriveResponse, ApiError> {
-        verify_network_id(
-            self.ledger.ledger_canister_id(),
-            &msg.network_identifier.into(),
-        )?;
+        verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
 
         let account_identifier = if let Some(object) = msg.metadata {
             match ConstructionDeriveRequestMetadata::try_from(Some(object))? {

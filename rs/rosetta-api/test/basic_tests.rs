@@ -62,7 +62,7 @@ async fn smoke_test() {
         );
     }
 
-    let msg = NetworkRequest::new(req_handler.network_id().into());
+    let msg = NetworkRequest::new(req_handler.network_id());
     let res = req_handler.network_status(msg).await;
     assert_eq!(
         res,
@@ -116,7 +116,7 @@ async fn smoke_test() {
         .index;
     assert_eq!(b - a, 10);
 
-    let msg = NetworkRequest::new(req_handler.network_id().into());
+    let msg = NetworkRequest::new(req_handler.network_id());
     let res = req_handler.network_status(msg).await;
     assert_eq!(
         res.unwrap().oldest_block_identifier,
@@ -127,10 +127,10 @@ async fn smoke_test() {
     let res = req_handler.network_list(msg).await;
     assert_eq!(
         res,
-        Ok(NetworkListResponse::new(vec![req_handler.network_id().0]))
+        Ok(NetworkListResponse::new(vec![req_handler.network_id()]))
     );
 
-    let msg = NetworkRequest::new(req_handler.network_id().into());
+    let msg = NetworkRequest::new(req_handler.network_id());
     let network_options = req_handler
         .network_options(msg)
         .await
@@ -150,7 +150,7 @@ async fn smoke_test() {
     assert!(!network_options.allow.errors.is_empty());
     assert!(network_options.allow.historical_balance_lookup);
 
-    let msg = NetworkRequest::new(req_handler.network_id().into());
+    let msg = NetworkRequest::new(req_handler.network_id());
     let res = req_handler.mempool(msg).await;
     assert_eq!(res, Ok(MempoolResponse::new(vec![])));
 
@@ -185,7 +185,7 @@ async fn smoke_test() {
     );
 
     let (acc_id, _ed_kp, pk, _pid) = ic_rosetta_test_utils::make_user_ed25519(4);
-    let msg = ConstructionDeriveRequest::new(req_handler.network_id().into(), pk);
+    let msg = ConstructionDeriveRequest::new(req_handler.network_id(), pk);
     let res = req_handler.construction_derive(msg);
     assert_eq!(
         res,
@@ -198,12 +198,12 @@ async fn smoke_test() {
 
     let (_acc_id, _ed_kp, mut pk, _pid) = ic_rosetta_test_utils::make_user_ed25519(4);
     pk.curve_type = CurveType::Secp256K1;
-    let msg = ConstructionDeriveRequest::new(req_handler.network_id().into(), pk);
+    let msg = ConstructionDeriveRequest::new(req_handler.network_id(), pk);
     let res = req_handler.construction_derive(msg);
     assert!(res.is_err(), "This pk should not have been accepted");
 
     let msg = ConstructionMetadataRequest {
-        network_identifier: req_handler.network_id().into(),
+        network_identifier: req_handler.network_id(),
         options: None,
         public_keys: None,
     };
@@ -256,7 +256,7 @@ async fn blocks_test() {
         index: Some(h.try_into().unwrap()),
         hash: None,
     };
-    let msg = BlockRequest::new(req_handler.network_id().into(), block_id);
+    let msg = BlockRequest::new(req_handler.network_id(), block_id);
     let resp = req_handler.block(msg).await.unwrap();
 
     let block = resp.block.unwrap();
@@ -270,7 +270,7 @@ async fn blocks_test() {
         index: None,
         hash: Some(from_hash(&scribe.blockchain[h].hash)),
     };
-    let msg = BlockRequest::new(req_handler.network_id().into(), block_id);
+    let msg = BlockRequest::new(req_handler.network_id(), block_id);
     let resp = req_handler.block(msg).await.unwrap();
     let block = resp.block.unwrap();
 
@@ -289,7 +289,7 @@ async fn blocks_test() {
         hash: from_hash(&scribe.blockchain[h].hash),
     };
     let msg = BlockTransactionRequest::new(
-        req_handler.network_id().into(),
+        req_handler.network_id(),
         block_id.clone(),
         trans.transaction_identifier.clone(),
     );
@@ -361,7 +361,7 @@ async fn blocks_test() {
             index: Some(block.index),
             hash: None,
         };
-        let msg = BlockRequest::new(req_handler.network_id().into(), partial_block_id);
+        let msg = BlockRequest::new(req_handler.network_id(), partial_block_id);
         let resp = req_handler.block(msg).await.unwrap();
         let transactions = vec![ic_rosetta_api::convert::block_to_transaction(
             &block,
@@ -375,7 +375,7 @@ async fn blocks_test() {
             hash: from_hash(&block.hash),
         };
         let msg = BlockTransactionRequest::new(
-            req_handler.network_id().into(),
+            req_handler.network_id(),
             block_id.clone(),
             transaction.transaction_identifier.clone(),
         );

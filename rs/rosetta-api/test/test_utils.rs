@@ -163,10 +163,13 @@ impl LedgerAccess for TestLedger {
         &self.governance_canister_id
     }
 
-    async fn submit(&self, envelopes: SignedTransaction) -> Result<TransactionResults, ApiError> {
+    async fn submit(
+        &self,
+        signed_transaction: SignedTransaction,
+    ) -> Result<TransactionResults, ApiError> {
         let mut results = vec![];
 
-        for (request_type, request) in &envelopes {
+        for (request_type, request) in signed_transaction.requests.iter() {
             assert_eq!(request_type, &RequestType::Send);
 
             let EnvelopePair { update, .. } = &request[0];

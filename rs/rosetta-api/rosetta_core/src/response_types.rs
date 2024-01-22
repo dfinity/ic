@@ -255,7 +255,8 @@ pub struct ConstructionMetadataResponse {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct ConstructionPayloadsResponse {
-    pub unsigned_transaction: String, // = CBOR+hex-encoded 'UnsignedTransaction'
+    /// CBOR+hex-encoded 'UnsignedTransaction'
+    pub unsigned_transaction: String,
 
     pub payloads: Vec<SigningPayload>,
 }
@@ -295,4 +296,13 @@ impl ConstructionParseResponse {
             metadata: None,
         }
     }
+}
+
+/// ConstructionCombineResponse is returned by `/construction/combine`. The
+/// network payload will be sent directly to the `construction/submit` endpoint.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct ConstructionCombineResponse {
+    /// CBOR+hex-encoded 'SignedTransaction'
+    pub signed_transaction: String,
 }
