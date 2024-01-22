@@ -11210,6 +11210,7 @@ dependencies = [
  "candid",
  "ciborium",
  "clap 3.2.25",
+ "ed25519-consensus",
  "hex",
  "ic-base-types",
  "ic-config",
