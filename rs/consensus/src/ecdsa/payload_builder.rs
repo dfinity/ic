@@ -613,7 +613,7 @@ pub(crate) fn create_data_payload_helper_2(
 
     let request_expiry_time = ecdsa_config
         .signature_request_timeout_ns
-        .and_then(|timeout| context_time.checked_sub_duration(Duration::from_nanos(timeout)));
+        .and_then(|timeout| context_time.checked_sub(Duration::from_nanos(timeout)));
     signatures::update_signature_agreements(all_signing_requests, signature_builder, ecdsa_payload);
     let new_signing_requests = get_signing_requests(
         height,

@@ -1294,7 +1294,7 @@ mod validate_pks_and_sks {
         // validating with time one second earlier than `not_before` doesn't
         // work
         let one_sec_too_early_validation_time = valid_time
-            .checked_sub_duration(Duration::from_secs(1))
+            .checked_sub(Duration::from_secs(1))
             .expect("failed to compute too early validation time");
         let result = test_impl(required_node_public_keys, one_sec_too_early_validation_time);
 

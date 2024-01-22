@@ -607,7 +607,9 @@ impl ValidatorMetrics {
                     if timestamp >= start_time {
                         self.time_to_receive_block
                             .with_label_values(&[RANKS_TO_RECORD[rank]])
-                            .observe((timestamp.saturating_sub(start_time)).as_secs_f64());
+                            .observe(
+                                (timestamp.saturating_duration_since(start_time)).as_secs_f64(),
+                            );
                     }
                 }
             }

@@ -117,7 +117,7 @@ impl CallTreeMetrics for CallTreeMetricsImpl {
                 self.request_call_tree_depth
                     .observe(*metadata.call_tree_depth() as f64);
             }
-            let duration = time.saturating_sub(*metadata.call_tree_start_time());
+            let duration = time.saturating_duration_since(*metadata.call_tree_start_time());
             for _ in 0..request_stats.count {
                 self.request_call_tree_age_seconds
                     .observe(duration.as_secs_f64());
@@ -127,7 +127,7 @@ impl CallTreeMetrics for CallTreeMetricsImpl {
         // Observe new requests vs. original context.
         for _ in 0..request_stats.count {
             self.request_call_context_age_seconds.observe(
-                time.saturating_sub(call_context_creation_time)
+                time.saturating_duration_since(call_context_creation_time)
                     .as_secs_f64(),
             );
         }

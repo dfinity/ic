@@ -430,7 +430,8 @@ impl ExecutionEnvironment {
                 return match context {
                     None => (state, Some(NumInstructions::from(0))),
                     Some(context) => {
-                        let time_elapsed = state.time().saturating_sub(context.get_time());
+                        let time_elapsed =
+                            state.time().saturating_duration_since(context.get_time());
                         let request = context.get_request();
 
                         self.metrics.observe_subnet_message(
@@ -2882,7 +2883,9 @@ impl ExecutionEnvironment {
             match stop_canister_call {
                 Some(stop_canister_call) => {
                     let call = stop_canister_call.call;
-                    let time_elapsed = state.time().saturating_sub(stop_canister_call.time);
+                    let time_elapsed = state
+                        .time()
+                        .saturating_duration_since(stop_canister_call.time);
                     if let CanisterCall::Request(request) = call {
                         self.metrics.observe_subnet_message(
                             &request.method_name,

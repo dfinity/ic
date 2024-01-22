@@ -2121,7 +2121,7 @@ fn observe_replicated_state_metrics(
                         "Call context on canister {} with origin {:?} has been open for {:?}",
                         canister.canister_id(),
                         origin,
-                        state.time().saturating_sub(*origin_time),
+                        state.time().saturating_duration_since(*origin_time),
                     );
                 }
             }

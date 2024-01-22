@@ -109,7 +109,7 @@ fn query_cache_entry_value_elapsed_seconds_work() {
     assert_eq!(2.0, entry_value.elapsed_seconds(forward_time));
 
     // Negative time differences should give just 0.
-    let backward_time = current_time.saturating_sub_duration(Duration::from_secs(2));
+    let backward_time = current_time.saturating_sub(Duration::from_secs(2));
     assert_eq!(0.0, entry_value.elapsed_seconds(backward_time));
 }
 
