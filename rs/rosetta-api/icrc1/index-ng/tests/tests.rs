@@ -32,6 +32,7 @@ use std::convert::TryInto;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 const FEE: u64 = 10_000;
@@ -931,7 +932,7 @@ fn test_icrc1_balance_of() {
     // 1 case only because the test is expensive to run.
     let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
     let now = SystemTime::now();
-    let minter = minter_identity();
+    let minter = Arc::new(minter_identity());
     let minter_principal = minter.sender().unwrap();
     runner
         .run(
@@ -1286,7 +1287,7 @@ fn test_fee_collector() {
 fn test_get_account_transactions_vs_old_index() {
     let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
     let now = SystemTime::now();
-    let minter = minter_identity();
+    let minter = Arc::new(minter_identity());
     let minter_principal = minter.sender().unwrap();
     runner
         .run(
@@ -1335,7 +1336,7 @@ fn test_upgrade_index_to_index_ng() {
         ..Default::default()
     });
     let now = SystemTime::now();
-    let minter = minter_identity();
+    let minter = Arc::new(minter_identity());
     let minter_principal = minter.sender().unwrap();
     runner
         .run(
@@ -1390,7 +1391,7 @@ fn test_upgrade_index_to_index_ng() {
 fn test_index_ledger_coherence() {
     let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
     let now = SystemTime::now();
-    let minter = minter_identity();
+    let minter = Arc::new(minter_identity());
     let minter_principal = minter.sender().unwrap();
     runner
         .run(

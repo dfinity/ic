@@ -104,6 +104,7 @@ impl From<Value> for StoredValue {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct InitArgsBuilder(InitArgs);
 
 impl InitArgsBuilder {
