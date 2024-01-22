@@ -23,6 +23,9 @@ use ic_tests::execution::ingress_rate_limiting::*;
 use ic_tests::execution::malicious_input::malicious_input_test;
 use ic_tests::execution::nns_shielding::*;
 use ic_tests::execution::queries::query_reply_sizes;
+use ic_tests::execution::wasm_chunk_store::install_large_wasm;
+use ic_tests::execution::wasm_chunk_store::install_large_wasm_with_other_store;
+use ic_tests::execution::wasm_chunk_store::install_large_wasm_with_other_store_fails_cross_subnet;
 use ic_tests::systest;
 
 fn main() -> Result<()> {
@@ -103,13 +106,12 @@ fn main() -> Result<()> {
                     canister_heartbeat_can_call_multiple_canisters_xnet
                 ))
                 .add_test(systest!(canister_heartbeat_can_stop))
-                .add_test(systest!(canister_heartbeat_cannot_reply)),
-            // Enable tests when feature is enabled.
-            // .add_test(systest!(install_large_wasm))
-            // .add_test(systest!(install_large_wasm_with_other_store))
-            // .add_test(systest!(
-            //     install_large_wasm_with_other_store_fails_cross_subnet
-            // )),
+                .add_test(systest!(canister_heartbeat_cannot_reply))
+                .add_test(systest!(install_large_wasm))
+                .add_test(systest!(install_large_wasm_with_other_store))
+                .add_test(systest!(
+                    install_large_wasm_with_other_store_fails_cross_subnet
+                )),
         )
         .execute_from_args()?;
 

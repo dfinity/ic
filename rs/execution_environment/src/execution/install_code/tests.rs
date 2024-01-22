@@ -1,5 +1,6 @@
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
+use ic_config::flag_status::FlagStatus;
 use ic_error_types::{ErrorCode, UserError};
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store;
@@ -1436,7 +1437,9 @@ fn install_code_args(canister_id: CanisterId) -> InstallCodeArgs {
 fn install_chunked_works_from_whitelist() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
 
     let canister_id = test.create_canister(CYCLES);
 
@@ -1497,7 +1500,9 @@ fn install_chunked_works_from_whitelist() {
 fn install_chunked_defaults_to_using_target_as_store() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
 
     let canister_id = test.create_canister(CYCLES);
 
@@ -1545,7 +1550,9 @@ fn install_chunked_defaults_to_using_target_as_store() {
 fn install_chunked_recorded_in_history() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
 
     let canister_id = test.create_canister(CYCLES);
 
@@ -1613,7 +1620,9 @@ fn install_chunked_recorded_in_history() {
 fn install_chunked_works_from_other_canister() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
 
     let target_canister = test.create_canister(CYCLES);
     let store_canister = test.create_canister(CYCLES);
@@ -1660,7 +1669,9 @@ fn install_chunked_works_from_other_canister() {
 fn install_chunked_fails_with_wrong_chunk_hash() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
 
     let canister_id = test.create_canister(CYCLES);
 
@@ -1706,7 +1717,9 @@ fn install_chunked_fails_with_wrong_chunk_hash() {
 fn install_chunked_fails_with_wrong_wasm_hash() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
 
     let canister_id = test.create_canister(CYCLES);
 
@@ -1752,7 +1765,9 @@ fn install_chunked_fails_with_wrong_wasm_hash() {
 fn install_chunked_fails_when_store_canister_not_found() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
 
     let target_canister = test.create_canister(CYCLES);
     // Store canister doesn't actually exist.
@@ -1783,7 +1798,9 @@ fn install_chunked_fails_when_store_canister_not_found() {
 fn install_chunked_works_from_controller_of_store() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
 
     let store_canister = test.create_canister(CYCLES);
     let target_canister = test.create_canister(CYCLES);
@@ -1838,7 +1855,9 @@ fn install_chunked_works_from_controller_of_store() {
 fn install_chunked_fails_from_noncontroller_of_store() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
 
     let store_canister = test.create_canister(CYCLES);
     let target_canister = test.create_canister(CYCLES);
@@ -2167,7 +2186,9 @@ fn upgrade_with_dts_correctly_updates_system_state() {
 fn failed_install_chunked_charges_for_wasm_assembly() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
 
     let canister_id = test.create_canister(CYCLES);
 
@@ -2225,7 +2246,9 @@ fn failed_install_chunked_charges_for_wasm_assembly() {
 fn successful_install_chunked_charges_for_wasm_assembly() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
     let wasm = wat::parse_str("(module)").unwrap();
 
     // Get the charges for a normal install
