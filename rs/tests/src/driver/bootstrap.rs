@@ -257,6 +257,7 @@ pub fn setup_and_start_vms_k8s(
                 &node,
                 malicious_behaviour,
                 None,
+                None,
                 &t_env,
                 &group_name,
             )?;
@@ -313,6 +314,7 @@ pub fn setup_and_start_vms(
         let ic_name = ic.name();
         let malicious_behaviour = ic.get_malicious_behavior_of_node(node.node_id);
         let ipv4_config = ic.get_ipv4_config_of_node(node.node_id);
+        let domain = ic.get_domain_of_node(node.node_id);
         nodes_info.insert(node.node_id, malicious_behaviour.clone());
         join_handles.push(thread::spawn(move || {
             create_config_disk_image(
@@ -320,6 +322,7 @@ pub fn setup_and_start_vms(
                 &node,
                 malicious_behaviour,
                 ipv4_config,
+                domain,
                 &t_env,
                 &group_name,
             )?;
@@ -420,6 +423,7 @@ pub fn create_config_disk_image(
     node: &InitializedNode,
     malicious_behavior: Option<MaliciousBehaviour>,
     ipv4_config: Option<Ipv4Config>,
+    domain: Option<String>,
     test_env: &TestEnv,
     group_name: &str,
 ) -> anyhow::Result<()> {
@@ -475,6 +479,14 @@ pub fn create_config_disk_image(
         ));
         cmd.arg("--ipv4_gateway")
             .arg(ipv4_config.gateway_ip_addr.to_string());
+    }
+
+    if let Some(domain) = domain {
+        info!(
+            test_env.logger(),
+            "Node with id={} has domain_name {}", node.node_id, domain,
+        );
+        cmd.arg("--domain").arg(domain);
     }
 
     let ssh_authorized_pub_keys_dir: PathBuf = test_env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);

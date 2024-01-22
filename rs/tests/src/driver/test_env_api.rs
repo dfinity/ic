@@ -676,6 +676,11 @@ impl IcNodeSnapshot {
         node_record.public_ipv4_config
     }
 
+    pub fn get_domain(&self) -> Option<String> {
+        let node_record = self.raw_node_record();
+        node_record.domain
+    }
+
     /// Is it accessible via ssh with the `admin` user.
     /// Waits until connection is ready.
     pub fn await_can_login_as_admin_via_ssh(&self) -> Result<()> {

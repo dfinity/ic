@@ -45,6 +45,9 @@ options may be specified:
   --ipv4_gateway a.b.c.d
     (optional) Default IPv4 gateway (e.g. 18.208.190.33).
 
+    --domain domain
+    (optional) The domain name to assign to the guest.
+
   --hostname name
     Name to assign to the host. Will be used in logging.
 
@@ -133,7 +136,7 @@ function build_ic_bootstrap_tar() {
     local OUT_FILE="$1"
     shift
 
-    local IPV6_ADDRESS IPV6_GATEWAY IPV6_NAME_SERVERS IPV4_NAME_SERVERS HOSTNAME
+    local IPV6_ADDRESS IPV6_GATEWAY IPV6_NAME_SERVERS IPV4_NAME_SERVERS DOMAIN HOSTNAME
     local IC_CRYPTO IC_REGISTRY_LOCAL_STORE
     local NNS_URL NNS_PUBLIC_KEY NODE_OPERATOR_PRIVATE_KEY
     local BACKUP_RETENTION_TIME_SECS BACKUP_PURGING_INTERVAL_SECS
@@ -149,6 +152,7 @@ function build_ic_bootstrap_tar() {
             break
         fi
         case "$1" in
+
             --ipv6_address)
                 IPV6_ADDRESS="$2"
                 ;;
@@ -166,6 +170,9 @@ function build_ic_bootstrap_tar() {
                 ;;
             --ipv4_gateway)
                 IPV4_GATEWAY="$2"
+                ;;
+            --domain)
+                DOMAIN="$2"
                 ;;
             --hostname)
                 HOSTNAME="$2"
@@ -242,6 +249,7 @@ ipv4_name_servers=$IPV4_NAME_SERVERS
 hostname=$HOSTNAME
 ${IPV4_ADDRESS:+ipv4_address=$IPV4_ADDRESS}
 ${IPV4_GATEWAY:+ipv4_gateway=$IPV4_GATEWAY}
+${DOMAIN:+domain=$DOMAIN}
 EOF
     if [ "${ELASTICSEARCH_HOSTS}" != "" ]; then
         echo "elasticsearch_hosts=$ELASTICSEARCH_HOSTS" >"${BOOTSTRAP_TMPDIR}/filebeat.conf"

@@ -20,6 +20,7 @@ function read_variables() {
             "ipv4_address") ipv4_address="${value}" ;;
             "ipv4_prefix_length") ipv4_prefix_length="${value}" ;;
             "ipv4_gateway") ipv4_gateway="${value}" ;;
+            "domain") domain="${value}" ;;
         esac
     done <"${CONFIG}"
 }
@@ -124,10 +125,11 @@ function print_network_settings() {
     echo "  IPv6 Prefix : ${ipv6_prefix}"
     echo "  IPv6 Subnet : ${ipv6_subnet}"
     echo "  IPv6 Gateway: ${ipv6_gateway}"
-    if [[ -n ${ipv4_address} && -n ${ipv4_prefix_length} && -n ${ipv4_gateway} ]]; then
+    if [[ -n ${ipv4_address} && -n ${ipv4_prefix_length} && -n ${ipv4_gateway} && -n ${domain} ]]; then
         echo "  IPv4 Address: ${ipv4_address}"
         echo "  IPv4 Prefix Length: ${ipv4_prefix_length}"
         echo "  IPv4 Gateway: ${ipv4_gateway}"
+        echo "  Domain name : ${domain}"
     fi
     echo " "
 
@@ -142,6 +144,31 @@ function print_network_settings() {
     echo "  HostOS : ${HOSTOS_IPV6_ADDRESS}"
     echo "  GuestOS: ${GUESTOS_IPV6_ADDRESS}"
     echo " "
+}
+
+function validate_domain_name() {
+    local domain_part
+    local -a domain_parts
+
+    IFS='.' read -ra domain_parts <<<"${domain}"
+
+    if [ ${#domain_parts[@]} -lt 2 ]; then
+        log_and_reboot_on_error 1 "Domain validation error: less than two domain parts in domain"
+    fi
+
+    for domain_part in "${domain_parts[@]}"; do
+        if [ -z "$domain_part" ] || [ ${#domain_part} -gt 63 ]; then
+            log_and_reboot_on_error 1 "Domain validation error: domain part length violation"
+        fi
+
+        if [[ $domain_part == -* ]] || [[ $domain_part == *- ]]; then
+            log_and_reboot_on_error 1 "Domain validation error: domain part starts or ends with a hyphen"
+        fi
+
+        if ! [[ $domain_part =~ ^[a-zA-Z0-9-]+$ ]]; then
+            log_and_reboot_on_error 1 "Domain validation error: invalid characters in domain part"
+        fi
+    done
 }
 
 function setup_ipv4_network() {
@@ -216,6 +243,7 @@ main() {
     print_network_settings
 
     if [[ -n ${ipv4_address} && -n ${ipv4_prefix_length} && -n ${ipv4_gateway} ]]; then
+        validate_domain_name
         setup_ipv4_network
         ping_ipv4_gateway
     fi
