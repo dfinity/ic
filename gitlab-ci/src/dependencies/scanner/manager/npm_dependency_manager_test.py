@@ -242,6 +242,35 @@ def test_get_first_level_dependencies_from_npm_list_version_mismatch(npm_test):
     assert first_level_dependency[0].version == "0.10.2"
 
 
+def test_get_first_level_dependencies_from_npm_list_default_version_if_missing(npm_test):
+    first_level_dependency_tree = {
+        "version": "0.1.0",
+        "name": "wallet-ui",
+        "dependencies": {
+            "@dfinity/agent": {
+                "resolved": "../../../",
+                "overridden": False,
+                "dependencies": {
+                    "@dfinity/candid": {"version": "0.10.2"},
+                    "bignumber.js": {
+                        "version": "9.0.1",
+                        "resolved": "https://registry.npmjs.org/bignumber.js/-/bignumber.js-9.0.1.tgz",
+                        "overridden": False,
+                    },
+                },
+            },
+        },
+    }
+    first_level_dependency = npm_test._NPMDependencyManager__get_first_level_dependencies_from_npm_list(
+        first_level_dependency_tree, "bignumber.js", ["<10.0.0"]
+    )
+    assert len(first_level_dependency) == 1
+    assert isinstance(first_level_dependency[0], Dependency)
+    assert first_level_dependency[0].id == "https://www.npmjs.com/package/@dfinity/agent/v/0.0.0"
+    assert first_level_dependency[0].name == "@dfinity/agent"
+    assert first_level_dependency[0].version == "0.0.0"
+
+
 def test_get_vulnerable_dependency_from_npm_list(npm_test):
     first_level_dependency_tree = {
         "version": "0.1.0",
