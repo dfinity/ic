@@ -7,7 +7,7 @@ use ic_config::crypto::CryptoConfig;
 use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_test_utils_ni_dkg::{initial_dkg_transcript, InitialNiDkgConfig};
-use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
 use ic_crypto_utils_ni_dkg::extract_threshold_sig_public_key;
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL, TEST_USER4_PRINCIPAL,
@@ -239,6 +239,26 @@ pub fn invariant_compliant_mutation(mutation_id: u8) -> Vec<RegistryMutation> {
 
     let (valid_pks, node_id) = new_node_keys_and_node_id();
 
+    // TODO: CRP-2345: Refactor such that the `ReproducibleRng` is not instantiated here, but at
+    //  the test initialization, and passed down to this function.
+    let rng = &mut reproducible_rng();
+    let transcript = generate_nidkg_initial_transcript(
+        &btreemap!(node_id => valid_pks.dkg_dealing_encryption_key().clone()),
+        subnet_pid,
+        NiDkgTag::HighThreshold,
+        RegistryVersion::new(1),
+        rng,
+    );
+    let threshold_sig_pk = extract_threshold_sig_public_key(&transcript.internal_csp_transcript)
+        .expect("error extracting threshold sig public key from internal CSP transcript");
+    let cup_contents = CatchUpPackageContents {
+        initial_ni_dkg_transcript_high_threshold: Some(InitialNiDkgTranscriptRecord::from(
+            transcript,
+        )),
+        ..Default::default()
+    };
+    let threshold_sig_pk_value = PublicKey::from(threshold_sig_pk);
+
     let node_record = {
         let ip_addr = format!("128.0.{mutation_id}.1");
         let xnet_connection_endpoint = ConnectionEndpoint {
@@ -297,6 +317,14 @@ pub fn invariant_compliant_mutation(mutation_id: u8) -> Vec<RegistryMutation> {
         insert(
             make_blessed_replica_versions_key().as_bytes(),
             encode_or_panic(&blessed_replica_version),
+        ),
+        insert(
+            make_catch_up_package_contents_key(subnet_pid).into_bytes(),
+            encode_or_panic(&cup_contents),
+        ),
+        insert(
+            make_crypto_threshold_signing_pubkey_key(subnet_pid).into_bytes(),
+            encode_or_panic(&threshold_sig_pk_value),
         ),
     ];
     mutations.append(&mut make_add_node_registry_mutations(
@@ -601,6 +629,8 @@ pub fn prepare_registry_with_two_node_sets(
 
     let dealer_subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(187));
     let registry_version = RegistryVersion::new(1);
+    // TODO: CRP-2345: Refactor such that the `ReproducibleRng` is not instantiated here, but at
+    //  the test initialization, and passed down to this function.
     let rng = &mut ReproducibleRng::new();
     let subnet_transcript = generate_nidkg_initial_transcript(
         &node_ids_and_dkg_keys_subnet_1,
@@ -623,6 +653,7 @@ pub fn prepare_registry_with_two_node_sets(
     subnet_list.subnets.push(subnet_id.get().to_vec());
 
     let mut subnet2_id_option = None;
+    let mut subnet2_transcript_option = None;
     if assign_nodes_to_subnet2 {
         // Subnet record 2
         let subnet2_record = SubnetRecord {
@@ -660,6 +691,7 @@ pub fn prepare_registry_with_two_node_sets(
         ));
 
         subnet_list.subnets.push(subnet2_id.get().to_vec());
+        subnet2_transcript_option = Some(subnet2_transcript);
     }
 
     mutations.push(insert(
@@ -669,6 +701,11 @@ pub fn prepare_registry_with_two_node_sets(
 
     // CUP contents
     add_cup_to_mutations(&mut mutations, subnet_id, subnet_transcript);
+    if let (Some(subnet2_id), Some(subnet2_transcript)) =
+        (subnet2_id_option, subnet2_transcript_option)
+    {
+        add_cup_to_mutations(&mut mutations, subnet2_id, subnet2_transcript);
+    }
 
     let mutate_request = RegistryAtomicMutateRequest {
         mutations,
