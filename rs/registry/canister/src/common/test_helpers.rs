@@ -5,6 +5,7 @@ use crate::mutations::node_management::do_add_node::connection_endpoint_from_str
 use crate::registry::Registry;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_nns_test_utils::registry::{invariant_compliant_mutation, new_node_keys_and_node_id};
+use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::node::v1::IPv4InterfaceConfig;
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
@@ -16,6 +17,7 @@ use ic_registry_transport::pb::v1::{
 };
 use ic_registry_transport::upsert;
 use ic_types::ReplicaVersion;
+use std::collections::BTreeMap;
 
 pub fn invariant_compliant_registry(mutation_id: u8) -> Registry {
     let mut registry = Registry::new();
@@ -81,16 +83,17 @@ pub fn get_invariant_compliant_subnet_record(node_ids: Vec<NodeId>) -> SubnetRec
 }
 
 /// Prepare a mutate request to add the desired of nodes, and returned the IDs
-/// of the nodes to be added.
+/// of the nodes to be added, together with their NI-DKG dealing encryption public keys.
 pub fn prepare_registry_with_nodes(
     start_mutation_id: u8,
     nodes: u64,
-) -> (RegistryAtomicMutateRequest, Vec<NodeId>) {
+) -> (RegistryAtomicMutateRequest, BTreeMap<NodeId, PublicKey>) {
     // Prepare a transaction to add the nodes to the registry
     let mut mutations = Vec::<RegistryMutation>::default();
-    let node_ids: Vec<NodeId> = (0..nodes)
+    let node_ids_and_dkg_pks: BTreeMap<NodeId, PublicKey> = (0..nodes)
         .map(|id| {
             let (valid_pks, node_id) = new_node_keys_and_node_id();
+            let dkg_dealing_encryption_pk = valid_pks.dkg_dealing_encryption_key().clone();
             let effective_id: u8 = start_mutation_id + (id as u8);
             let node_record = NodeRecord {
                 xnet: Some(connection_endpoint_from_string(&format!(
@@ -113,7 +116,7 @@ pub fn prepare_registry_with_nodes(
                 node_record,
                 valid_pks,
             ));
-            node_id
+            (node_id, dkg_dealing_encryption_pk)
         })
         .collect();
 
@@ -121,5 +124,5 @@ pub fn prepare_registry_with_nodes(
         mutations,
         preconditions: vec![],
     };
-    (mutate_request, node_ids)
+    (mutate_request, node_ids_and_dkg_pks)
 }

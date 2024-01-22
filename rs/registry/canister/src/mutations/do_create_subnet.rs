@@ -416,12 +416,13 @@ mod test {
         let mut registry = invariant_compliant_registry(0);
 
         // add a node for our existing subnet that has the ECDSA key
-        let (mutate_request, node_ids) = prepare_registry_with_nodes(1, 1);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 1);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
 
-        let mut subnet_record: SubnetRecord = get_invariant_compliant_subnet_record(node_ids);
+        let mut subnet_record: SubnetRecord =
+            get_invariant_compliant_subnet_record(node_ids_and_dkg_pks.keys().copied().collect());
         subnet_record.ecdsa_config = Some(
             EcdsaConfig {
                 quadruples_to_create_in_advance: 1,
@@ -470,12 +471,13 @@ mod test {
         let mut registry = invariant_compliant_registry(0);
 
         // add a node for our existing subnet that has the ECDSA key
-        let (mutate_request, node_ids) = prepare_registry_with_nodes(1, 1);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 1);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
 
-        let mut subnet_record: SubnetRecord = get_invariant_compliant_subnet_record(node_ids);
+        let mut subnet_record: SubnetRecord =
+            get_invariant_compliant_subnet_record(node_ids_and_dkg_pks.keys().copied().collect());
         subnet_record.ecdsa_config = Some(
             EcdsaConfig {
                 quadruples_to_create_in_advance: 1,
@@ -519,7 +521,7 @@ mod test {
     fn test_disallow_duplicate_ecdsa_keys() {
         // Step 1.1: prepare registry.
         let mut registry = invariant_compliant_registry(0);
-        let (mutate_request, node_ids) = prepare_registry_with_nodes(1, 1);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 1);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         // Step 1.2: prepare a subnet with an ECDSA key.
@@ -529,7 +531,8 @@ mod test {
         };
         let signing_subnet = SubnetId::from(*TEST_USER1_PRINCIPAL);
         let mut subnet_list_record = registry.get_subnet_list_record();
-        let mut subnet_record: SubnetRecord = get_invariant_compliant_subnet_record(node_ids);
+        let mut subnet_record: SubnetRecord =
+            get_invariant_compliant_subnet_record(node_ids_and_dkg_pks.keys().copied().collect());
         subnet_record.ecdsa_config = Some(
             EcdsaConfig {
                 quadruples_to_create_in_advance: 1,

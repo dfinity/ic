@@ -135,14 +135,18 @@ mod tests {
         let mut registry = invariant_compliant_registry(0);
 
         // Add node to registry
-        let (mutate_request, node_ids) = prepare_registry_with_nodes(
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
             1, // mutation id
             1, // node count
         );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         // Add boundary node to registry
-        let node_id = node_ids.first().expect("no node ids found").to_owned();
+        let node_id = node_ids_and_dkg_pks
+            .keys()
+            .next()
+            .expect("no node ids found")
+            .to_owned();
 
         let payload = AddApiBoundaryNodePayload {
             node_id,
@@ -168,14 +172,15 @@ mod tests {
         let mut registry = invariant_compliant_registry(0);
 
         // Add node to registry
-        let (mutate_request, node_ids) = prepare_registry_with_nodes(
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
             1, // mutation id
             1, // node count
         );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         // Add subnet to registry and assign the node to it
-        let subnet_record = get_invariant_compliant_subnet_record(node_ids.clone());
+        let subnet_record =
+            get_invariant_compliant_subnet_record(node_ids_and_dkg_pks.keys().copied().collect());
 
         registry.maybe_apply_mutation_internal(
             // Mutation to insert SubnetRecord
@@ -187,7 +192,11 @@ mod tests {
         );
 
         // Validate proposal payload
-        let node_id = node_ids.first().expect("no node ids found").to_owned();
+        let node_id = node_ids_and_dkg_pks
+            .keys()
+            .next()
+            .expect("no node ids found")
+            .to_owned();
 
         let payload = AddApiBoundaryNodePayload {
             node_id,
@@ -203,14 +212,18 @@ mod tests {
         let mut registry = invariant_compliant_registry(0);
 
         // Add node to registry
-        let (mutate_request, node_ids) = prepare_registry_with_nodes(
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
             1, // mutation id
             1, // node count
         );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         // Validate proposal payload
-        let node_id = node_ids.first().expect("no node ids found").to_owned();
+        let node_id = node_ids_and_dkg_pks
+            .keys()
+            .next()
+            .expect("no node ids found")
+            .to_owned();
 
         let payload = AddApiBoundaryNodePayload {
             node_id,
@@ -225,7 +238,7 @@ mod tests {
         let mut registry = invariant_compliant_registry(0);
 
         // Add node to registry
-        let (mutate_request, node_ids) = prepare_registry_with_nodes(
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
             1, // mutation id
             1, // node count
         );
@@ -261,7 +274,11 @@ mod tests {
         ]);
 
         // Validate proposal payload
-        let node_id = node_ids.first().expect("no node ids found").to_owned();
+        let node_id = node_ids_and_dkg_pks
+            .keys()
+            .next()
+            .expect("no node ids found")
+            .to_owned();
 
         let payload = AddApiBoundaryNodePayload {
             node_id,

@@ -254,7 +254,7 @@ mod test {
     fn test_node_not_on_ecdsa_subnet() {
         let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, node_ids) = prepare_registry_with_nodes(1, 4);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 4);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -262,7 +262,8 @@ mod test {
         let subnet_id = subnet_test_id(1000);
 
         // Create the subnet record with disabled ecdsa feature.
-        let subnet_record: SubnetRecord = get_invariant_compliant_subnet_record(node_ids.clone());
+        let subnet_record: SubnetRecord =
+            get_invariant_compliant_subnet_record(node_ids_and_dkg_pks.keys().copied().collect());
         registry.maybe_apply_mutation_internal(add_fake_subnet(
             subnet_id,
             &mut subnet_list_record,
@@ -277,7 +278,10 @@ mod test {
         registry
             .do_update_node(
                 now,
-                node_ids[0],
+                *node_ids_and_dkg_pks
+                    .keys()
+                    .next()
+                    .expect("should have at least one node ID"),
                 UpdateNodeDirectlyPayload {
                     idkg_dealing_encryption_pk: Some(protobuf_to_vec(pk)),
                 },
@@ -290,7 +294,7 @@ mod test {
     fn test_idkg_key_update_disabled() {
         let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, node_ids) = prepare_registry_with_nodes(1, 4);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 4);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -299,7 +303,7 @@ mod test {
 
         // Create the subnet record with disabled key rotation feature.
         let mut subnet_record: SubnetRecord =
-            get_invariant_compliant_subnet_record(node_ids.clone());
+            get_invariant_compliant_subnet_record(node_ids_and_dkg_pks.keys().copied().collect());
         let key_id = EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
             name: "test_key_id".to_string(),
@@ -328,7 +332,10 @@ mod test {
         registry
             .do_update_node(
                 now,
-                node_ids[0],
+                *node_ids_and_dkg_pks
+                    .keys()
+                    .next()
+                    .expect("should have at least one node ID"),
                 UpdateNodeDirectlyPayload {
                     idkg_dealing_encryption_pk: Some(protobuf_to_vec(pk)),
                 },
@@ -341,7 +348,7 @@ mod test {
     fn test_idkg_key_update_fail() {
         let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, node_ids) = prepare_registry_with_nodes(1, 4);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 4);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -351,7 +358,7 @@ mod test {
 
         // Create the subnet record.
         let mut subnet_record: SubnetRecord =
-            get_invariant_compliant_subnet_record(node_ids.clone());
+            get_invariant_compliant_subnet_record(node_ids_and_dkg_pks.keys().copied().collect());
         let key_id = EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
             name: "test_key_id".to_string(),
@@ -373,10 +380,14 @@ mod test {
         ));
 
         let now = SystemTime::now();
+        let node_id0 = *node_ids_and_dkg_pks
+            .keys()
+            .next()
+            .expect("should have at least one node ID");
 
         match registry.do_update_node(
             now,
-            node_ids[0],
+            node_id0,
             UpdateNodeDirectlyPayload {
                 idkg_dealing_encryption_pk: Default::default(),
             },
@@ -387,7 +398,7 @@ mod test {
 
         match registry.do_update_node(
             now,
-            node_ids[0],
+            node_id0,
             UpdateNodeDirectlyPayload {
                 idkg_dealing_encryption_pk: Some(vec![1]),
             },
@@ -402,7 +413,7 @@ mod test {
     fn test_idkg_key_update_success() {
         let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, node_ids) = prepare_registry_with_nodes(1, 4);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 4);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -412,7 +423,7 @@ mod test {
 
         // Create the subnet record.
         let mut subnet_record: SubnetRecord =
-            get_invariant_compliant_subnet_record(node_ids.clone());
+            get_invariant_compliant_subnet_record(node_ids_and_dkg_pks.keys().copied().collect());
         let key_id = EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
             name: "test_key_id".to_string(),
@@ -437,8 +448,8 @@ mod test {
 
         // Update nodes' IDKG encryption public keys.
         registry.maybe_apply_mutation_internal(
-            node_ids
-                .iter()
+            node_ids_and_dkg_pks
+                .keys()
                 .map(|id| {
                     let node_pub_keys = valid_node_public_keys();
                     let mut idkg_public_key = node_pub_keys.idkg_dealing_encryption_key().clone();
@@ -460,12 +471,19 @@ mod test {
         // generate new key
         let keys = valid_node_public_keys();
         let pk2 = keys.idkg_dealing_encryption_key();
+        let mut node_ids_iter = node_ids_and_dkg_pks.keys();
+        let node_id0 = *node_ids_iter
+            .next()
+            .expect("should have at least one node ID");
+        let node_id1 = *node_ids_iter
+            .next()
+            .expect("should have at least two node IDs");
 
         // try to update the key of node 0 again
         assert_eq!(
             registry.do_update_node(
                 now,
-                node_ids[0],
+                node_id0,
                 UpdateNodeDirectlyPayload {
                     idkg_dealing_encryption_pk: Some(protobuf_to_vec(pk2.clone())),
                 }
@@ -480,7 +498,7 @@ mod test {
         assert_eq!(
             registry.do_update_node(
                 now,
-                node_ids[1],
+                node_id1,
                 UpdateNodeDirectlyPayload {
                     idkg_dealing_encryption_pk: Some(protobuf_to_vec(pk2.clone())),
                 }
@@ -490,14 +508,14 @@ mod test {
 
         // subnet limit passes
         now = now.add(Duration::from_millis(
-            idkg_key_rotation_period_ms / node_ids.len() as u64,
+            idkg_key_rotation_period_ms / node_ids_and_dkg_pks.len() as u64,
         ));
 
         // try to update the key of node 0 again
         assert_eq!(
             registry.do_update_node(
                 now,
-                node_ids[0],
+                node_id0,
                 UpdateNodeDirectlyPayload {
                     idkg_dealing_encryption_pk: Some(protobuf_to_vec(pk2.clone())),
                 }
@@ -514,7 +532,7 @@ mod test {
         assert_eq!(
             registry.do_update_node(
                 now,
-                node_ids[1],
+                node_id1,
                 UpdateNodeDirectlyPayload {
                     idkg_dealing_encryption_pk: Some(protobuf_to_vec(pk3.clone())),
                 }
