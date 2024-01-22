@@ -5,12 +5,15 @@ use dfn_core::{
     endpoint::{over, over_async},
     stable,
 };
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::CanisterStatusResult,
-    management_canister_client::{ManagementCanisterClient, ManagementCanisterClientImpl},
+    management_canister_client::{
+        LimitedOutstandingCallsManagementCanisterClient, ManagementCanisterClient,
+        ManagementCanisterClientImpl,
+    },
 };
 use ic_nervous_system_common::serve_metrics;
 use ic_nervous_system_root::{
@@ -22,7 +25,9 @@ use ic_nervous_system_root::{
 };
 use ic_nervous_system_runtime::DfnRuntime;
 use ic_nns_common::{access_control::check_caller_is_governance, types::CallCanisterProposal};
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_constants::{
+    ALL_NNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, ROOT_CANISTER_ID,
+};
 use ic_nns_handler_root::{
     canister_management, encode_metrics,
     root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot},
@@ -31,9 +36,32 @@ use ic_nns_handler_root::{
 use ic_nns_handler_root_interface::{
     ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
 };
+use std::cell::RefCell;
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
+
+thread_local! {
+    // How this value was chosen: queues become full at 500. This is 1/3 of that, which seems to be
+    // a reasonable balance.
+    static AVAILABLE_MANAGEMENT_CANISTER_CALL_SLOT_COUNT: RefCell<u64> = RefCell::new(167);
+}
+
+fn new_management_canister_client() -> impl ManagementCanisterClient {
+    let client =
+        ManagementCanisterClientImpl::<DfnRuntime>::new(Some(&PROXIED_CANISTER_CALLS_TRACKER));
+
+    // Here, VIP = is an NNS canister
+    let is_caller_vip = CanisterId::try_from(caller())
+        .map(|caller| ALL_NNS_CANISTER_IDS.contains(&&caller))
+        .unwrap_or(false);
+
+    LimitedOutstandingCallsManagementCanisterClient::new(
+        client,
+        &AVAILABLE_MANAGEMENT_CANISTER_CALL_SLOT_COUNT,
+        is_caller_vip,
+    )
+}
 
 // canister_init and canister_post_upgrade are needed here
 // to ensure that printer hook is set up, otherwise error
@@ -69,8 +97,8 @@ fn canister_status() {
 
 #[candid_method(update, rename = "canister_status")]
 async fn canister_status_(canister_id_record: CanisterIdRecord) -> CanisterStatusResult {
-    let client =
-        ManagementCanisterClientImpl::<DfnRuntime>::new(Some(&PROXIED_CANISTER_CALLS_TRACKER));
+    let client = new_management_canister_client();
+
     let canister_status_response = client
         .canister_status(canister_id_record)
         .await
@@ -208,7 +236,7 @@ async fn change_canister_controllers_(
     canister_management::change_canister_controllers(
         change_canister_controllers_request,
         caller(),
-        &mut ManagementCanisterClientImpl::<DfnRuntime>::new(Some(&PROXIED_CANISTER_CALLS_TRACKER)),
+        &mut new_management_canister_client(),
     )
     .await
 }
