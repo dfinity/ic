@@ -14,8 +14,8 @@
 //! block is considered finalized.
 
 use ic_consensus_utils::{
-    active_high_threshold_transcript, crypto::ConsensusCrypto, membership::Membership,
-    pool_reader::PoolReader,
+    active_high_threshold_transcript, crypto::ConsensusCrypto,
+    get_oldest_ecdsa_state_registry_version, membership::Membership, pool_reader::PoolReader,
 };
 use ic_interfaces::messaging::MessageRouting;
 use ic_interfaces_state_manager::{
@@ -208,12 +208,19 @@ impl CatchUpPackageMaker {
                 );
             }
             Ok(state_hash) => {
+                let summary = start_block.payload.as_ref().as_summary();
+                let registry_version = if let Some(ecdsa) = summary.ecdsa.as_ref() {
+                    // Should succeed as we already got the hash above
+                    let state = self.state_manager.get_state_at(height).ok()?;
+                    get_oldest_ecdsa_state_registry_version(ecdsa, state.get_ref())
+                } else {
+                    None
+                };
                 let content = CatchUpContent::new(
                     HashedBlock::new(ic_types::crypto::crypto_hash, start_block),
                     HashedRandomBeacon::new(ic_types::crypto::crypto_hash, random_beacon),
                     state_hash,
-                    //TODO(CON-1192): Fill with oldest version used by quadruples matched to ongoing tECDSA requests
-                    None,
+                    registry_version,
                 );
                 let share_content = CatchUpShareContent::from(&content);
                 if let Some(transcript) = active_high_threshold_transcript(pool.as_cache(), height)
@@ -248,15 +255,27 @@ impl CatchUpPackageMaker {
 #[cfg(test)]
 mod tests {
     //! CatchUpPackageMaker unit tests
+    use crate::ecdsa::test_utils::{
+        add_available_quadruple_to_payload, empty_ecdsa_payload, fake_ecdsa_key_id,
+        fake_sign_with_ecdsa_context_with_quadruple, fake_state_with_ecdsa_contexts,
+    };
+
     use super::*;
-    use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_mocks::{
+        dependencies_with_subnet_params, dependencies_with_subnet_records_with_raw_state_manager,
+        Dependencies,
+    };
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::{
         message_routing::FakeMessageRouting,
         types::ids::{node_test_id, subnet_test_id},
     };
     use ic_test_utilities_registry::SubnetRecordBuilder;
-    use ic_types::{crypto::CryptoHash, CryptoHashOfState, Height};
+    use ic_types::{
+        consensus::{ecdsa::QuadrupleId, Payload},
+        crypto::CryptoHash,
+        CryptoHashOfState, Height, RegistryVersion,
+    };
     use std::sync::{Arc, RwLock};
 
     #[test]
@@ -285,7 +304,7 @@ mod tests {
             state_manager
                 .get_mut()
                 .expect_get_state_hash_at()
-                .return_const(Ok(CryptoHashOfState::from(CryptoHash(Vec::new()))));
+                .return_const(Ok(CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]))));
 
             let message_routing = FakeMessageRouting::new();
             *message_routing.next_batch_height.write().unwrap() = Height::from(2);
@@ -295,7 +314,7 @@ mod tests {
                 replica_config,
                 membership,
                 crypto,
-                state_manager,
+                state_manager.clone(),
                 message_routing,
                 no_op_logger(),
             );
@@ -324,6 +343,128 @@ mod tests {
                 .expect("Expecting CatchUpPackageShare");
 
             assert_eq!(&share.content.block, proposal.content.get_hash());
+            assert_eq!(
+                share.content.state_hash,
+                state_manager.get_state_hash_at(Height::from(0)).unwrap()
+            );
+            assert_eq!(
+                share
+                    .content
+                    .oldest_registry_version_in_use_by_replicated_state,
+                None
+            );
+        })
+    }
+
+    #[test]
+    fn test_catch_up_package_maker_with_registry_version() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let interval_length = 5;
+            let committee: Vec<_> = (0..4).map(node_test_id).collect();
+            let Dependencies {
+                mut pool,
+                membership,
+                replica_config,
+                crypto,
+                state_manager,
+                ..
+            } = dependencies_with_subnet_records_with_raw_state_manager(
+                pool_config,
+                subnet_test_id(0),
+                vec![(
+                    1,
+                    SubnetRecordBuilder::from(&committee)
+                        .with_dkg_interval_length(interval_length)
+                        .build(),
+                )],
+            );
+
+            state_manager
+                .get_mut()
+                .expect_get_state_hash_at()
+                .return_const(Ok(CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]))));
+
+            let key_id = fake_ecdsa_key_id();
+
+            // Create three quadruple Ids and contexts, quadruple "2" will remain unmatched.
+            let quadruple_id1 = QuadrupleId(1, Some(key_id.clone()));
+            let quadruple_id2 = QuadrupleId(2, Some(key_id.clone()));
+            let quadruple_id3 = QuadrupleId(3, Some(key_id.clone()));
+
+            let contexts = vec![
+                fake_sign_with_ecdsa_context_with_quadruple(
+                    1,
+                    key_id.clone(),
+                    Some(quadruple_id1.clone()),
+                ),
+                fake_sign_with_ecdsa_context_with_quadruple(2, key_id.clone(), None),
+                fake_sign_with_ecdsa_context_with_quadruple(
+                    3,
+                    key_id.clone(),
+                    Some(quadruple_id3.clone()),
+                ),
+            ];
+
+            state_manager
+                .get_mut()
+                .expect_get_state_at()
+                .return_const(Ok(fake_state_with_ecdsa_contexts(
+                    Height::from(0),
+                    contexts.clone(),
+                )));
+
+            let message_routing = FakeMessageRouting::new();
+            *message_routing.next_batch_height.write().unwrap() = Height::from(2);
+            let message_routing = Arc::new(message_routing);
+
+            let cup_maker = CatchUpPackageMaker::new(
+                replica_config,
+                membership,
+                crypto,
+                state_manager.clone(),
+                message_routing,
+                no_op_logger(),
+            );
+
+            // Genesis CUP already exists, we won't make a new one
+            assert!(cup_maker.on_state_change(&PoolReader::new(&pool)).is_none());
+
+            // Skip the first DKG interval
+            pool.advance_round_normal_operation_n(interval_length);
+
+            let mut proposal = pool.make_next_block();
+            let block = proposal.content.as_mut();
+            block.context.certified_height = block.height();
+
+            let mut ecdsa = empty_ecdsa_payload(subnet_test_id(0));
+            // Add the three quadruples using registry version 3, 1 and 2 in order
+            add_available_quadruple_to_payload(&mut ecdsa, quadruple_id1, RegistryVersion::from(3));
+            add_available_quadruple_to_payload(&mut ecdsa, quadruple_id2, RegistryVersion::from(1));
+            add_available_quadruple_to_payload(&mut ecdsa, quadruple_id3, RegistryVersion::from(2));
+
+            let dkg = block.payload.as_ref().as_summary().dkg.clone();
+            block.payload = Payload::new(ic_types::crypto::crypto_hash, (dkg, Some(ecdsa)).into());
+            proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
+
+            pool.advance_round_with_block(&proposal);
+
+            let share = cup_maker
+                .on_state_change(&PoolReader::new(&pool))
+                .expect("Expecting CatchUpPackageShare");
+
+            assert_eq!(&share.content.block, proposal.content.get_hash());
+            assert_eq!(
+                share.content.state_hash,
+                state_manager.get_state_hash_at(Height::from(0)).unwrap()
+            );
+            // Since the quadruple using registry version 1 wasn't matched, the oldest one in use
+            // by the replicated state should be the registry version of quadruple 3, which is 2.
+            assert_eq!(
+                share
+                    .content
+                    .oldest_registry_version_in_use_by_replicated_state,
+                Some(RegistryVersion::from(2))
+            );
         })
     }
 

@@ -14,7 +14,7 @@ use crate::{
 use ic_consensus_utils::{
     active_high_threshold_transcript, active_low_threshold_transcript,
     crypto::ConsensusCrypto,
-    find_lowest_ranked_proposals, is_time_to_make_block,
+    find_lowest_ranked_proposals, get_oldest_ecdsa_state_registry_version, is_time_to_make_block,
     membership::{Membership, MembershipError},
     pool_reader::PoolReader,
     RoundRobin,
@@ -29,7 +29,7 @@ use ic_interfaces::{
     validation::{ValidationError, ValidationResult},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::{StateHashError, StateManager};
+use ic_interfaces_state_manager::{StateHashError, StateManager, StateManagerError};
 use ic_logger::{trace, warn, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -74,6 +74,7 @@ enum TransientError {
     DkgSummaryNotFound(Height),
     RandomBeaconNotFound(Height),
     StateHashError(StateHashError),
+    StateManagerError(StateManagerError),
     BlockNotFound(CryptoHashOf<Block>, Height),
     FinalizedBlockNotFound(Height),
     FailedToGetRegistryVersion,
@@ -99,6 +100,7 @@ enum PermanentError {
     NonStrictlyIncreasingValidationContext,
     MismatchedBlockInCatchUpPackageShare,
     DataPayloadBlockInCatchUpPackageShare,
+    MismatchedOldestRegistryVersionInCatchUpPackageShare,
     MismatchedStateHashInCatchUpPackageShare,
     MismatchedRandomBeaconInCatchUpPackageShare,
     RepeatedSigner,
@@ -1438,8 +1440,26 @@ impl Validator {
             .get_state_hash_at(height)
             .map_err(TransientError::StateHashError)?;
         if hash != share_content.state_hash {
-            warn!( self.log, "State hash from received CatchUpContent does not match local state hash: {:?} {:?}", share_content, hash);
+            warn!(self.log, "State hash from received CatchUpContent does not match local state hash: {:?} {:?}", share_content, hash);
             return Err(PermanentError::MismatchedStateHashInCatchUpPackageShare.into());
+        }
+
+        let summary = block.payload.as_ref().as_summary();
+        let registry_version = if let Some(ecdsa) = summary.ecdsa.as_ref() {
+            // Should succeed as we already got the hash above
+            let state = self
+                .state_manager
+                .get_state_at(height)
+                .map_err(TransientError::StateManagerError)?;
+            get_oldest_ecdsa_state_registry_version(ecdsa, state.get_ref())
+        } else {
+            None
+        };
+        if registry_version != share_content.oldest_registry_version_in_use_by_replicated_state {
+            warn!(self.log, "Oldest registry version from received CatchUpContent does not match local one: {:?} {:?}", share_content, registry_version);
+            return Err(
+                PermanentError::MismatchedOldestRegistryVersionInCatchUpPackageShare.into(),
+            );
         }
 
         Ok(block)
@@ -1575,6 +1595,11 @@ impl Validator {
 
 #[cfg(test)]
 pub mod test {
+    use crate::ecdsa::test_utils::{
+        add_available_quadruple_to_payload, empty_ecdsa_payload, fake_ecdsa_key_id,
+        fake_sign_with_ecdsa_context_with_quadruple, fake_state_with_ecdsa_contexts,
+    };
+
     use super::*;
     use assert_matches::assert_matches;
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
@@ -1603,8 +1628,8 @@ pub mod test {
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_types::{
         consensus::{
-            CatchUpPackageShare, Finalization, FinalizationShare, HashedBlock, HashedRandomBeacon,
-            NotarizationShare, RandomBeaconContent, RandomTapeContent,
+            ecdsa::QuadrupleId, CatchUpPackageShare, Finalization, FinalizationShare, HashedBlock,
+            HashedRandomBeacon, NotarizationShare, Payload, RandomBeaconContent, RandomTapeContent,
         },
         crypto::{CombinedMultiSig, CombinedMultiSigOf, CryptoHash},
         replica_config::ReplicaConfig,
@@ -1694,7 +1719,6 @@ pub mod test {
         ))
     }
 
-    #[allow(dead_code)]
     fn setup_dependencies_with_raw_state_manager(
         pool_config: ic_config::artifact_pool::ArtifactPoolConfig,
         node_ids: &[NodeId],
@@ -1771,6 +1795,161 @@ pub mod test {
             cup_from_old_replica_version.content.version =
                 ReplicaVersion::try_from("old_version").unwrap();
             pool.insert_unvalidated(cup_from_old_replica_version.clone());
+            let mut cup_with_registry_version = cup_share_summary_height.clone();
+            cup_with_registry_version
+                .content
+                .oldest_registry_version_in_use_by_replicated_state =
+                Some(RegistryVersion::from(1));
+            pool.insert_unvalidated(cup_with_registry_version.clone());
+
+            let validator = Validator::new(
+                replica_config,
+                membership,
+                registry_client,
+                crypto,
+                payload_builder,
+                state_manager,
+                message_routing,
+                dkg_pool,
+                no_op_logger(),
+                ValidatorMetrics::new(MetricsRegistry::new()),
+                Arc::clone(&time_source) as Arc<_>,
+            );
+
+            let pool_reader = PoolReader::new(&pool);
+            let change_set = validator.validate_catch_up_package_shares(&pool_reader);
+
+            // Check that the change set contains exactly the one `CatchUpPackageShare` we
+            // expect it to.
+            assert_eq!(change_set.len(), 4);
+            assert_matches!(&change_set[0], ChangeAction::HandleInvalid(ConsensusMessage::CatchUpPackageShare(s), m)
+                if s == &cup_share_data_height && m.contains("DataPayloadBlockInCatchUpPackageShare")
+            );
+            assert_matches!(&change_set[1], ChangeAction::MoveToValidated(ConsensusMessage::CatchUpPackageShare(s))
+                if s == &cup_share_summary_height
+            );
+            assert_matches!(&change_set[2], ChangeAction::RemoveFromUnvalidated(ConsensusMessage::CatchUpPackageShare(s))
+                if s == &cup_from_old_replica_version
+            );
+            assert_matches!(&change_set[3], ChangeAction::HandleInvalid(ConsensusMessage::CatchUpPackageShare(s), m)
+                if s == &cup_with_registry_version && m.contains("MismatchedOldestRegistryVersion")
+            );
+        })
+    }
+
+    #[test]
+    fn test_validate_catch_up_package_shares_with_registry_version() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let ValidatorDependencies {
+                payload_builder,
+                membership,
+                state_manager,
+                message_routing,
+                crypto,
+                registry_client,
+                mut pool,
+                dkg_pool,
+                time_source,
+                replica_config,
+                ..
+            } = setup_dependencies_with_raw_state_manager(
+                pool_config,
+                &(0..4).map(node_test_id).collect::<Vec<_>>(),
+            );
+
+            // The state manager is mocked and the `StateHash` is completely arbitrary. It
+            // must just be the same as in the `CatchUpPackageShare`.
+            let state_hash = CryptoHashOfState::from(CryptoHash(vec![1u8; 32]));
+            state_manager
+                .get_mut()
+                .expect_get_state_hash_at()
+                .return_const(Ok(state_hash.clone()));
+
+            let key_id = fake_ecdsa_key_id();
+            // Create three quadruple Ids and contexts, quadruple "2" will remain unmatched.
+            let quadruple_id1 = QuadrupleId(1, Some(key_id.clone()));
+            let quadruple_id2 = QuadrupleId(2, Some(key_id.clone()));
+            let quadruple_id3 = QuadrupleId(3, Some(key_id.clone()));
+
+            let contexts = vec![
+                fake_sign_with_ecdsa_context_with_quadruple(
+                    1,
+                    key_id.clone(),
+                    Some(quadruple_id1.clone()),
+                ),
+                fake_sign_with_ecdsa_context_with_quadruple(2, key_id.clone(), None),
+                fake_sign_with_ecdsa_context_with_quadruple(
+                    3,
+                    key_id.clone(),
+                    Some(quadruple_id3.clone()),
+                ),
+            ];
+
+            state_manager
+                .get_mut()
+                .expect_get_state_at()
+                .return_const(Ok(fake_state_with_ecdsa_contexts(
+                    Height::from(0),
+                    contexts.clone(),
+                )));
+
+            // Manually construct a cup share
+            let make_next_cup_share = |proposal: BlockProposal,
+                                       beacon: RandomBeacon,
+                                       oldest_registry_version: Option<RegistryVersion>|
+             -> CatchUpPackageShare {
+                let random_beacon_hash =
+                    HashedRandomBeacon::new(ic_types::crypto::crypto_hash, beacon);
+                let block = Block::from(proposal);
+                let block_hash = HashedBlock::new(ic_types::crypto::crypto_hash, block);
+
+                Signed {
+                    content: CatchUpShareContent::from(&CatchUpContent::new(
+                        block_hash,
+                        random_beacon_hash,
+                        state_hash.clone(),
+                        oldest_registry_version,
+                    )),
+                    signature: ThresholdSignatureShare::fake(node_test_id(0)),
+                }
+            };
+
+            // Skip to Summary height
+            pool.advance_round_normal_operation_no_cup_n(9);
+
+            let mut proposal = pool.make_next_block();
+            let block = proposal.content.as_mut();
+            block.context.certified_height = block.height();
+
+            let mut ecdsa = empty_ecdsa_payload(subnet_test_id(0));
+            // Add the three quadruples using registry version 3, 1 and 2 in order
+            add_available_quadruple_to_payload(&mut ecdsa, quadruple_id1, RegistryVersion::from(3));
+            add_available_quadruple_to_payload(&mut ecdsa, quadruple_id2, RegistryVersion::from(1));
+            add_available_quadruple_to_payload(&mut ecdsa, quadruple_id3, RegistryVersion::from(2));
+
+            let dkg = block.payload.as_ref().as_summary().dkg.clone();
+            block.payload = Payload::new(ic_types::crypto::crypto_hash, (dkg, Some(ecdsa)).into());
+            proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
+
+            let beacon = pool.make_next_beacon();
+            pool.advance_round_with_block(&proposal);
+
+            let cup_share_no_registry_version =
+                make_next_cup_share(proposal.clone(), beacon.clone(), None);
+            pool.insert_unvalidated(cup_share_no_registry_version.clone());
+
+            let cup_share_wrong_registry_version = make_next_cup_share(
+                proposal.clone(),
+                beacon.clone(),
+                Some(RegistryVersion::from(1)),
+            );
+            pool.insert_unvalidated(cup_share_wrong_registry_version.clone());
+
+            // Since the quadruple using registry version 1 wasn't matched, the oldest one in use
+            // by the replicated state should be the registry version of quadruple 3, which is 2.
+            let cup_share_valid =
+                make_next_cup_share(proposal, beacon, Some(RegistryVersion::from(2)));
+            pool.insert_unvalidated(cup_share_valid.clone());
 
             let validator = Validator::new(
                 replica_config,
@@ -1793,13 +1972,13 @@ pub mod test {
             // expect it to.
             assert_eq!(change_set.len(), 3);
             assert_matches!(&change_set[0], ChangeAction::HandleInvalid(ConsensusMessage::CatchUpPackageShare(s), m)
-                if s == &cup_share_data_height && m.contains("DataPayloadBlockInCatchUpPackageShare")
+                if s == &cup_share_no_registry_version && m.contains("MismatchedOldestRegistryVersion")
             );
-            assert_matches!(&change_set[1], ChangeAction::MoveToValidated(ConsensusMessage::CatchUpPackageShare(s))
-                if s == &cup_share_summary_height
+            assert_matches!(&change_set[1], ChangeAction::HandleInvalid(ConsensusMessage::CatchUpPackageShare(s), m)
+                if s == &cup_share_wrong_registry_version && m.contains("MismatchedOldestRegistryVersion")
             );
-            assert_matches!(&change_set[2], ChangeAction::RemoveFromUnvalidated(ConsensusMessage::CatchUpPackageShare(s))
-                if s == &cup_from_old_replica_version
+            assert_matches!(&change_set[2], ChangeAction::MoveToValidated(ConsensusMessage::CatchUpPackageShare(s))
+                if s == &cup_share_valid
             );
         })
     }
