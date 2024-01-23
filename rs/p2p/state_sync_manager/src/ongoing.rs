@@ -64,6 +64,7 @@ struct OngoingStateSync<T: Send> {
     chunks_to_download: Box<dyn Iterator<Item = ChunkId> + Send>,
     // Event tasks
     downloading_chunks: JoinMap<ChunkId, DownloadResult<T>>,
+    download_cancel_token: CancellationToken,
     // State sync
     state_sync: Arc<dyn StateSyncClient<Message = T>>,
     tracker: Arc<Mutex<Box<dyn Chunkable<T> + Send>>>,
@@ -104,6 +105,7 @@ pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
         allowed_downloads: 0,
         chunks_to_download: Box::new(std::iter::empty()),
         downloading_chunks: JoinMap::new(),
+        download_cancel_token: CancellationToken::new(),
         state_sync,
         tracker,
         state_sync_finished: false,
@@ -190,7 +192,10 @@ impl<T: 'static + Send> OngoingStateSync<T> {
             }
         }
 
-        self.downloading_chunks.shutdown().await;
+        self.download_cancel_token.cancel();
+        while let Some(Ok((finished, _))) = self.downloading_chunks.join_next().await {
+            self.handle_downloaded_chunk_result(finished).await;
+        }
     }
 
     async fn handle_downloaded_chunk_result(
@@ -225,6 +230,7 @@ impl<T: 'static + Send> OngoingStateSync<T> {
             }
             Err(DownloadChunkError::Overloaded) => {}
             Err(DownloadChunkError::Timeout) => {}
+            Err(DownloadChunkError::Cancelled) => {}
         }
     }
 
@@ -259,7 +265,6 @@ impl<T: 'static + Send> OngoingStateSync<T> {
                     let peer_id = *peers.get(dist.sample(&mut small_rng)).expect("Is present");
 
                     self.active_downloads.entry(peer_id).and_modify(|v| *v += 1);
-
                     self.downloading_chunks.spawn_on(
                         chunk,
                         self.metrics
@@ -270,6 +275,7 @@ impl<T: 'static + Send> OngoingStateSync<T> {
                                 self.tracker.clone(),
                                 self.artifact_id.clone(),
                                 chunk,
+                                self.download_cancel_token.child_token(),
                                 self.metrics.clone(),
                             )),
                         &self.rt,
@@ -301,15 +307,22 @@ impl<T: 'static + Send> OngoingStateSync<T> {
         tracker: Arc<Mutex<Box<dyn Chunkable<T> + Send>>>,
         artifact_id: StateSyncArtifactId,
         chunk_id: ChunkId,
+        download_cancel_token: CancellationToken,
         metrics: OngoingStateSyncMetrics,
     ) -> DownloadResult<T> {
         let _timer = metrics.chunk_download_duration.start_timer();
 
-        let response_result = tokio::time::timeout(
-            CHUNK_DOWNLOAD_TIMEOUT,
-            client.rpc(&peer_id, build_chunk_handler_request(artifact_id, chunk_id)),
-        )
-        .await;
+        let response_result = select! {
+            () = download_cancel_token.cancelled() => {
+                return DownloadResult {
+                    peer_id,
+                    result: Err(DownloadChunkError::Cancelled)
+                }
+            }
+            res = tokio::time::timeout(CHUNK_DOWNLOAD_TIMEOUT,client.rpc(&peer_id, build_chunk_handler_request(artifact_id, chunk_id))) => {
+                res
+            }
+        };
 
         let response = match response_result {
             Ok(Ok(response)) => response,
@@ -358,6 +371,8 @@ pub(crate) enum DownloadChunkError {
     /// Request was processed but requested content was not available.
     /// This error is permanent.
     NoContent,
+    /// Download was cancelled.
+    Cancelled,
     /// Request was not processed because peer endpoint is overloaded.
     /// This error is transient.
     Overloaded,
@@ -502,6 +517,7 @@ mod tests {
             c.expect_chunks_to_download()
                 .returning(|| Box::new(std::iter::once(ChunkId::from(1))));
             c.expect_add_chunk().return_const(Ok(()));
+            c.expect_completed().return_const(None);
 
             let rt = Runtime::new().unwrap();
             let ongoing = start_ongoing_state_sync(

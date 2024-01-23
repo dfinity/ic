@@ -290,7 +290,7 @@ mod tests {
             });
             s.expect_available_states().return_const(vec![]);
             let mut t = MockTransport::default();
-            t.expect_rpc().returning(|p, _| {
+            t.expect_rpc().times(50).returning(|p, _| {
                 if p == &NODE_2 {
                     panic!("NODE 2 should not be added to the state sync")
                 }
@@ -307,6 +307,7 @@ mod tests {
                 .returning(|| Box::new((0..50).map(ChunkId::from)));
             c.expect_chunks_to_download()
                 .returning(|| Box::new(std::iter::empty()));
+
             c.expect_add_chunk()
                 .times(49)
                 .return_const(Ok(()))
