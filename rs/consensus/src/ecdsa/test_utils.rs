@@ -15,11 +15,14 @@ use ic_crypto_test_utils_canister_threshold_sigs::{
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_ic00_types::EcdsaKeyId;
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaPool};
+use ic_interfaces_state_manager::Labeled;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
+use ic_replicated_state::ReplicatedState;
 use ic_test_utilities::consensus::fake::*;
 use ic_test_utilities::mock_time;
+use ic_test_utilities::state::ReplicatedStateBuilder;
 use ic_test_utilities::types::ids::{node_test_id, NODE_1, NODE_2};
 use ic_test_utilities::types::messages::RequestBuilder;
 use ic_types::artifact::EcdsaMessageId;
@@ -104,6 +107,19 @@ pub fn fake_sign_with_ecdsa_context_with_quadruple(
         nonce: None,
     };
     (CallbackId::from(id as u64), context)
+}
+
+pub fn fake_state_with_ecdsa_contexts(
+    height: Height,
+    contexts: Vec<(CallbackId, SignWithEcdsaContext)>,
+) -> Labeled<Arc<ReplicatedState>> {
+    let mut state = ReplicatedStateBuilder::default().build();
+    state
+        .metadata
+        .subnet_call_context_manager
+        .sign_with_ecdsa_contexts = BTreeMap::from_iter(contexts);
+
+    Labeled::new(height, Arc::new(state))
 }
 
 #[derive(Clone)]
@@ -1272,6 +1288,24 @@ pub(crate) fn create_reshare_request(num_nodes: u64, registry_version: u64) -> E
 
 pub(crate) fn crypto_without_keys() -> Arc<dyn ConsensusCrypto> {
     TempCryptoComponent::builder().build_arc()
+}
+
+pub(crate) fn add_available_quadruple_to_payload(
+    ecdsa_payload: &mut EcdsaPayload,
+    quadruple_id: QuadrupleId,
+    registry_version: RegistryVersion,
+) {
+    let sig_inputs = create_sig_inputs(quadruple_id.0 as u8);
+    let quadruple_ref = sig_inputs.sig_inputs_ref.presig_quadruple_ref.clone();
+    ecdsa_payload
+        .available_quadruples
+        .insert(quadruple_id, quadruple_ref.clone());
+    for (t_ref, mut transcript) in sig_inputs.idkg_transcripts {
+        transcript.registry_version = registry_version;
+        ecdsa_payload
+            .idkg_transcripts
+            .insert(t_ref.transcript_id, transcript);
+    }
 }
 
 pub(crate) fn set_up_ecdsa_payload(
