@@ -36,10 +36,6 @@ pub struct InstanceRunResult {
     pub exported_globals: Vec<Global>,
 }
 
-pub trait LinearMemory {
-    fn as_ptr(&self) -> *mut libc::c_void;
-}
-
 /// The results of compiling a Canister which need to be passed back to the main
 /// replica process.
 #[derive(Debug, Serialize, Deserialize, Clone)]

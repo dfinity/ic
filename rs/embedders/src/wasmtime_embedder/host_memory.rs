@@ -1,9 +1,7 @@
 use anyhow::bail;
 use ic_types::MAX_STABLE_MEMORY_IN_BYTES;
-use wasmtime::MemoryType;
+use wasmtime::{LinearMemory, MemoryType};
 use wasmtime_environ::{WASM32_MAX_PAGES, WASM_PAGE_SIZE};
-
-use crate::LinearMemory;
 
 use ic_sys::PAGE_SIZE;
 
@@ -60,7 +58,7 @@ unsafe impl wasmtime::MemoryCreator for WasmtimeMemoryCreator {
         _maximum: Option<usize>,
         reserved_size_in_bytes: Option<usize>,
         guard_size: usize,
-    ) -> Result<Box<dyn wasmtime::LinearMemory>, String> {
+    ) -> Result<Box<dyn LinearMemory>, String> {
         // We don't use the `reserved_size_in_bytes` because the size of the
         // memory allocation is determined based on the memory type: 64-bit
         // memories have size at most the maximum stable memory size and 32-bit
@@ -102,7 +100,7 @@ unsafe impl wasmtime::MemoryCreator for WasmtimeMemoryCreator {
                     epilogue_guard_size_in_bytes,
                 );
                 created_memories.insert(
-                    MemoryStart(wasmtime::LinearMemory::as_ptr(&new_memory) as usize),
+                    MemoryStart(LinearMemory::as_ptr(&new_memory) as usize),
                     MemoryPageSize(Arc::clone(&new_memory.used)),
                 );
                 Ok(Box::new(new_memory))
@@ -185,9 +183,7 @@ impl MmapMemory {
             epilogue_guard_size_in_bytes,
         }
     }
-}
 
-impl LinearMemory for MmapMemory {
     fn as_ptr(&self) -> *mut c_void {
         self.wasm_memory
     }
@@ -200,17 +196,17 @@ impl Drop for MmapMemory {
     }
 }
 
-pub struct WasmtimeMemory<M: LinearMemory> {
-    mem: M,
+pub struct WasmtimeMemory {
+    mem: MmapMemory,
     max_size_in_pages: usize,
     used: MemoryPageSize,
     prologue_guard_size_in_bytes: usize,
     epilogue_guard_size_in_bytes: usize,
 }
 
-impl<M: LinearMemory + Send> WasmtimeMemory<M> {
+impl WasmtimeMemory {
     fn new(
-        mem: M,
+        mem: MmapMemory,
         min_size_in_pages: usize,
         max_size_in_pages: usize,
         prologue_guard_size_in_bytes: usize,
@@ -234,7 +230,7 @@ fn convert_pages_to_bytes(pages: usize) -> usize {
     result
 }
 
-unsafe impl<M: LinearMemory + Send + Sync + 'static> wasmtime::LinearMemory for WasmtimeMemory<M> {
+unsafe impl LinearMemory for WasmtimeMemory {
     /// Returns the number of allocated wasm pages.
     fn byte_size(&self) -> usize {
         convert_pages_to_bytes(self.used.load(Ordering::SeqCst))
