@@ -1,7 +1,7 @@
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::CanisterSettingsArgs;
+use ic_ic00_types::{CanisterSettingsArgs, LogVisibility};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_types::{
     ComputeAllocation, Cycles, InvalidComputeAllocationError, InvalidMemoryAllocationError,
@@ -21,6 +21,7 @@ pub(crate) struct CanisterSettings {
     pub(crate) memory_allocation: Option<MemoryAllocation>,
     pub(crate) freezing_threshold: Option<NumSeconds>,
     pub(crate) reserved_cycles_limit: Option<Cycles>,
+    pub(crate) log_visibility: Option<LogVisibility>,
 }
 
 impl CanisterSettings {
@@ -31,6 +32,7 @@ impl CanisterSettings {
         memory_allocation: Option<MemoryAllocation>,
         freezing_threshold: Option<NumSeconds>,
         reserved_cycles_limit: Option<Cycles>,
+        log_visibility: Option<LogVisibility>,
     ) -> Self {
         Self {
             controller,
@@ -39,6 +41,7 @@ impl CanisterSettings {
             memory_allocation,
             freezing_threshold,
             reserved_cycles_limit,
+            log_visibility,
         }
     }
 
@@ -64,6 +67,10 @@ impl CanisterSettings {
 
     pub fn reserved_cycles_limit(&self) -> Option<Cycles> {
         self.reserved_cycles_limit
+    }
+
+    pub fn log_visibility(&self) -> Option<LogVisibility> {
+        self.log_visibility
     }
 }
 
@@ -111,6 +118,7 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             memory_allocation,
             freezing_threshold,
             reserved_cycles_limit,
+            input.log_visibility,
         ))
     }
 }
@@ -133,6 +141,7 @@ pub(crate) struct CanisterSettingsBuilder {
     memory_allocation: Option<MemoryAllocation>,
     freezing_threshold: Option<NumSeconds>,
     reserved_cycles_limit: Option<Cycles>,
+    log_visibility: Option<LogVisibility>,
 }
 
 #[allow(dead_code)]
@@ -145,6 +154,7 @@ impl CanisterSettingsBuilder {
             memory_allocation: None,
             freezing_threshold: None,
             reserved_cycles_limit: None,
+            log_visibility: None,
         }
     }
 
@@ -156,6 +166,7 @@ impl CanisterSettingsBuilder {
             memory_allocation: self.memory_allocation,
             freezing_threshold: self.freezing_threshold,
             reserved_cycles_limit: self.reserved_cycles_limit,
+            log_visibility: self.log_visibility,
         }
     }
 
@@ -197,6 +208,13 @@ impl CanisterSettingsBuilder {
     pub fn with_reserved_cycles_limit(self, reserved_cycles_limit: Cycles) -> Self {
         Self {
             reserved_cycles_limit: Some(reserved_cycles_limit),
+            ..self
+        }
+    }
+
+    pub fn with_log_visibility(self, log_visibility: LogVisibility) -> Self {
+        Self {
+            log_visibility: Some(log_visibility),
             ..self
         }
     }
@@ -266,6 +284,7 @@ pub(crate) struct ValidatedCanisterSettings {
     freezing_threshold: Option<NumSeconds>,
     reserved_cycles_limit: Option<Cycles>,
     reservation_cycles: Cycles,
+    log_visibility: Option<LogVisibility>,
 }
 
 impl ValidatedCanisterSettings {
@@ -295,6 +314,10 @@ impl ValidatedCanisterSettings {
 
     pub fn reservation_cycles(&self) -> Cycles {
         self.reservation_cycles
+    }
+
+    pub fn log_visibility(&self) -> Option<LogVisibility> {
+        self.log_visibility
     }
 }
 
@@ -492,5 +515,6 @@ pub(crate) fn validate_canister_settings(
         freezing_threshold: settings.freezing_threshold(),
         reserved_cycles_limit: settings.reserved_cycles_limit(),
         reservation_cycles,
+        log_visibility: settings.log_visibility(),
     })
 }

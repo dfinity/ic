@@ -1,7 +1,8 @@
 use super::*;
 
 use ic_ic00_types::{
-    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode, IC_00,
+    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode,
+    LogVisibility, IC_00,
 };
 use ic_replicated_state::canister_state::system_state::CanisterHistory;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
@@ -53,6 +54,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         canister_history: CanisterHistory::default(),
         wasm_chunk_store_metadata: WasmChunkStoreMetadata::default(),
         total_query_stats: TotalQueryStats::default(),
+        log_visibility: LogVisibility::default(),
     }
 }
 

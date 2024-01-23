@@ -439,6 +439,7 @@ impl InstallCodeHelper {
                 memory_allocation: original.requested_memory_allocation,
                 freezing_threshold: None,
                 reserved_cycles_limit: None,
+                log_visibility: None,
             },
             self.canister.memory_usage(),
             self.canister.message_memory_usage(),

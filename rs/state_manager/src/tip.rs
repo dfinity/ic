@@ -966,6 +966,7 @@ fn serialize_canister_to_tip(
                 .metadata()
                 .clone(),
             total_query_stats: canister_state.scheduler_state.total_query_stats.clone(),
+            log_visibility: canister_state.system_state.log_visibility,
         }
         .into(),
     )?;

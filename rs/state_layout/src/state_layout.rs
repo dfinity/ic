@@ -3,6 +3,7 @@ use crate::utils::do_copy;
 
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_config::flag_status::FlagStatus;
+use ic_ic00_types::LogVisibility;
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::{
@@ -161,6 +162,7 @@ pub struct CanisterStateBits {
     pub canister_history: CanisterHistory,
     pub wasm_chunk_store_metadata: WasmChunkStoreMetadata,
     pub total_query_stats: TotalQueryStats,
+    pub log_visibility: LogVisibility,
 }
 
 #[derive(Clone)]
@@ -1766,6 +1768,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             canister_history: Some((&item.canister_history).into()),
             wasm_chunk_store_metadata: Some((&item.wasm_chunk_store_metadata).into()),
             total_query_stats: Some((&item.total_query_stats).into()),
+            log_visibility: item.log_visibility.into(),
         }
     }
 }
@@ -1885,6 +1888,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 "CanisterStateBits::total_query_stats",
             )
             .unwrap_or_default(),
+            log_visibility: LogVisibility::from(value.log_visibility),
         })
     }
 }

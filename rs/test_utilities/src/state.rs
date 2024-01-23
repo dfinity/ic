@@ -8,7 +8,7 @@ use crate::{
 };
 use ic_base_types::NumSeconds;
 use ic_btc_types_internal::BitcoinAdapterRequestWrapper;
-use ic_ic00_types::CanisterStatusType;
+use ic_ic00_types::{CanisterStatusType, LogVisibility};
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -185,6 +185,7 @@ pub struct CanisterStateBuilder {
     inputs: Vec<RequestOrResponse>,
     time_of_last_allocation_charge: Time,
     certified_data: Vec<u8>,
+    log_visibility: LogVisibility,
 }
 
 impl CanisterStateBuilder {
@@ -265,6 +266,11 @@ impl CanisterStateBuilder {
 
     pub fn with_certified_data(mut self, certified_data: Vec<u8>) -> Self {
         self.certified_data = certified_data;
+        self
+    }
+
+    pub fn with_log_visibility(mut self, log_visibility: LogVisibility) -> Self {
+        self.log_visibility = log_visibility;
         self
     }
 
@@ -377,6 +383,7 @@ impl Default for CanisterStateBuilder {
             inputs: Vec::default(),
             time_of_last_allocation_charge: UNIX_EPOCH,
             certified_data: vec![],
+            log_visibility: LogVisibility::default(),
         }
     }
 }
