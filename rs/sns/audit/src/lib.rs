@@ -12,10 +12,10 @@ use ic_nns_governance::pb::v1::{
 use ic_sns_governance::pb::v1::{GetMetadataRequest, GetMetadataResponse};
 use ic_sns_swap::pb::v1::{
     sns_neuron_recipe::Investor, GetDerivedStateRequest, GetDerivedStateResponse, GetInitRequest,
-    GetInitResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse,
+    GetInitResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse, SnsNeuronRecipe,
 };
 use rgb::RGB8;
-use rust_decimal::Decimal;
+use rust_decimal::{prelude::FromPrimitive, Decimal};
 
 const GREEN: RGB8 = RGB8::new(0, 200, 30);
 const RED: RGB8 = RGB8::new(200, 0, 30);
@@ -46,25 +46,44 @@ fn audit_check(text: &str, condition: bool) {
     }
 }
 
-/// Validate that the NNS (identified by `nns_url`) and an SNS instance (identified by
-/// `swap_canister_id`) agree on how the SNS neurons of a sucessful swap have been allocated.
-///
-/// This function performs a best-effort audit, e.g., there is no completeness guarantee for
-/// the checks.
-///
-/// Currently, the following SNS-global aspects are checked:
-/// 1. Number of Neurons' Fund neurons whose maturity was initially reserved >= number of Neurons' Fund neurons who actually participated in the swap.
-/// 2. Number of Neurons' Fund neurons whose maturity was initially reserved >= number of Neurons' Fund neurons who have been refunded.
-///
-/// And the following neuron-local aspects are checked (only for Neurons' Fund neurons):
-/// 1. initial_amount_icp_e8s == final_amount_icp_e8s + refunded_amount_icp_e8s
-pub async fn validate_sns_swap(nns_url: &str, swap_canister_id: Principal) -> Result<(), String> {
-    let agent = Agent::builder()
-        .with_url(nns_url)
-        .with_verify_query_signatures(false)
-        .build()
-        .map_err(|e| e.to_string())?;
+async fn list_sns_neuron_recipes(
+    agent: &Agent,
+    swap_canister_id: &Principal,
+) -> Result<Vec<SnsNeuronRecipe>, String> {
+    let mut sns_neuron_recipes: Vec<SnsNeuronRecipe> = vec![];
+    let batch_size = 10_000_u64;
+    let num_calls = 100_u64;
+    for i in 0..num_calls {
+        let response = agent
+            .query(swap_canister_id, "list_sns_neuron_recipes")
+            .with_arg(
+                Encode!(&ListSnsNeuronRecipesRequest {
+                    limit: Some(batch_size as u32),
+                    offset: Some(batch_size * i),
+                })
+                .map_err(|e| e.to_string())?,
+            )
+            .call()
+            .await
+            .map_err(|e| e.to_string())?;
+        let new_sns_neuron_recipes = Decode!(response.as_slice(), ListSnsNeuronRecipesResponse)
+            .map_err(|e| e.to_string())?;
+        if new_sns_neuron_recipes.sns_neuron_recipes.is_empty() {
+            return Ok(sns_neuron_recipes);
+        } else {
+            sns_neuron_recipes.extend(new_sns_neuron_recipes.sns_neuron_recipes.into_iter())
+        }
+    }
+    Err(format!(
+        "There seem to be too many neuron recipes ({}).",
+        batch_size * num_calls
+    ))
+}
 
+async fn validate_neurons_fund_sns_swap_participation(
+    agent: &Agent,
+    swap_canister_id: Principal,
+) -> Result<(), String> {
     let swap_derived_state = {
         let response = agent
             .query(&swap_canister_id, "get_derived_state")
@@ -82,7 +101,8 @@ pub async fn validate_sns_swap(nns_url: &str, swap_canister_id: Principal) -> Re
             .call()
             .await
             .map_err(|e| e.to_string())?;
-        let response = Decode!(response.as_slice(), GetInitResponse).map_err(|e| e.to_string())?;
+        let response: GetInitResponse =
+            Decode!(response.as_slice(), GetInitResponse).map_err(|e| e.to_string())?;
         response.init.unwrap()
     };
 
@@ -136,23 +156,11 @@ pub async fn validate_sns_swap(nns_url: &str, swap_canister_id: Principal) -> Re
     let buyer_total_icp_e8s = swap_derived_state.buyer_total_icp_e8s.unwrap();
     let sns_token_e8s = swap_init.sns_token_e8s.unwrap();
     let sns_tokens_per_icp = u64_to_dec(sns_token_e8s)? / u64_to_dec(buyer_total_icp_e8s)?;
+    println!("sns_tokens_per_icp = {:?}", sns_tokens_per_icp);
 
-    let response = agent
-        .query(&swap_canister_id, "list_sns_neuron_recipes")
-        .with_arg(
-            Encode!(&ListSnsNeuronRecipesRequest {
-                limit: None,
-                offset: None,
-            })
-            .map_err(|e| e.to_string())?,
-        )
-        .call()
+    let sns_neuron_recipes: Vec<_> = list_sns_neuron_recipes(agent, &swap_canister_id)
         .await
-        .map_err(|e| e.to_string())?;
-    let sns_neuron_recipes =
-        Decode!(response.as_slice(), ListSnsNeuronRecipesResponse).map_err(|e| e.to_string())?;
-    let sns_neuron_recipes: Vec<_> = sns_neuron_recipes
-        .sns_neuron_recipes
+        .unwrap()
         .into_iter()
         .filter_map(|recipe| {
             if let Some(Investor::CommunityFund(ref investment)) = recipe.investor {
@@ -264,33 +272,83 @@ pub async fn validate_sns_swap(nns_url: &str, swap_canister_id: Principal) -> Re
             == (sns_neurons_per_backet as u128) * (num_nns_nf_neurons as u128),
     );
 
-    let mut sns_neuron_recipes_per_controller = BTreeMap::<String, u64>::new();
-    for (hotkey_principal, new_amount_sns_e8s) in sns_neuron_recipes.into_iter() {
+    let mut sns_neuron_recipes_per_controller = BTreeMap::<String, Vec<u64>>::new();
+    for (hotkey_principal, amount_sns_e8s) in sns_neuron_recipes.into_iter() {
         sns_neuron_recipes_per_controller
             .entry(hotkey_principal.clone())
-            .and_modify(|total_amount_sns_e8s| *total_amount_sns_e8s += new_amount_sns_e8s)
-            .or_insert(new_amount_sns_e8s);
+            .and_modify(|sns_neurons| {
+                sns_neurons.push(amount_sns_e8s);
+            })
+            .or_insert(vec![amount_sns_e8s]);
     }
 
+    let mut investment_per_controller_icp_e8s = BTreeMap::<String, Vec<u64>>::new();
     for expected_neuron_portion in final_neuron_portions {
         let hotkey_principal = expected_neuron_portion
             .hotkey_principal
             .unwrap()
             .to_string();
-        let amount_icp_e8s = u64_to_dec(*expected_neuron_portion.amount_icp_e8s.as_ref().unwrap())?;
-        let amount_sns_e8s = u64_to_dec(
-            *sns_neuron_recipes_per_controller
-                .get(&hotkey_principal)
-                .unwrap(),
-        )?;
+        let amount_icp_e8s = expected_neuron_portion.amount_icp_e8s.unwrap();
+        investment_per_controller_icp_e8s
+            .entry(hotkey_principal.clone())
+            .and_modify(|nns_neurons| {
+                nns_neurons.push(amount_icp_e8s);
+            })
+            .or_insert(vec![amount_icp_e8s]);
+    }
+
+    for (hotkey_principal, nns_neurons) in investment_per_controller_icp_e8s.iter() {
+        let amount_icp_e8s = nns_neurons.iter().sum::<u64>();
+        let amount_icp_e8s = u64_to_dec(amount_icp_e8s)?;
+        let sns_neurons = sns_neuron_recipes_per_controller
+            .get(hotkey_principal)
+            .expect("All Neuron's Fund participants should have SNS neuron recipes.");
+        let amount_sns_e8s = sns_neurons.iter().sum::<u64>();
+        let amount_sns_e8s = u64_to_dec(amount_sns_e8s)?;
         let absolute_error_sns_e8s = (amount_icp_e8s * sns_tokens_per_icp - amount_sns_e8s).abs();
         let error_per_cent = (Decimal::new(100, 0) * absolute_error_sns_e8s) / amount_sns_e8s;
+        let nns_neurons_str = nns_neurons
+            .iter()
+            .map(|nns_neuron| nns_neuron.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sns_neurons_str = sns_neurons
+            .iter()
+            .map(|sns_neuron| sns_neuron.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
         let msg = format!(
-            "Participation amount of {} ICP e8s results in {} SNS token e8s (error = {}% = {} SNS e8s)",
-            amount_icp_e8s, amount_sns_e8s, error_per_cent, absolute_error_sns_e8s,
+            "Neurons' Fund controller {} participated with {} ICP e8s ({}), receiving {} SNS token e8s ({}). Error = {}% = {} SNS e8s",
+            hotkey_principal, amount_icp_e8s, nns_neurons_str, amount_sns_e8s, sns_neurons_str, error_per_cent, absolute_error_sns_e8s,
         );
-        audit_check(&msg, absolute_error_sns_e8s < ERROR_TOLERANCE_ICP_E8S);
+        let cummulative_error_tolerance =
+            ERROR_TOLERANCE_ICP_E8S * Decimal::from_usize(nns_neurons.len()).unwrap();
+        audit_check(&msg, absolute_error_sns_e8s < cummulative_error_tolerance);
     }
+
+    Ok(())
+}
+
+/// Validate that the NNS (identified by `nns_url`) and an SNS instance (identified by
+/// `swap_canister_id`) agree on how the SNS neurons of a sucessful swap have been allocated.
+///
+/// This function performs a best-effort audit, e.g., there is no completeness guarantee for
+/// the checks.
+///
+/// Currently, the following SNS-global aspects are checked:
+/// 1. Number of Neurons' Fund neurons whose maturity was initially reserved >= number of Neurons' Fund neurons who actually participated in the swap.
+/// 2. Number of Neurons' Fund neurons whose maturity was initially reserved >= number of Neurons' Fund neurons who have been refunded.
+///
+/// And the following neuron-local aspects are checked (only for Neurons' Fund neurons):
+/// 1. initial_amount_icp_e8s == final_amount_icp_e8s + refunded_amount_icp_e8s
+pub async fn validate_sns_swap(nns_url: &str, swap_canister_id: Principal) -> Result<(), String> {
+    let agent = Agent::builder()
+        .with_url(nns_url)
+        .with_verify_query_signatures(false)
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    validate_neurons_fund_sns_swap_participation(&agent, swap_canister_id).await?;
 
     Ok(())
 }
