@@ -20,8 +20,10 @@ use ic_metrics::MetricsRegistry;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_query_stats::QueryStatsAggregatorMetrics;
 use ic_registry_client_helpers::{
+    api_boundary_node::ApiBoundaryNodeRegistry,
     crypto::CryptoRegistry,
     ecdsa_keys::EcdsaKeysRegistry,
+    node::NodeRegistry,
     provisional_whitelist::ProvisionalWhitelistRegistry,
     routing_table::RoutingTableRegistry,
     subnet::{get_node_ids_from_subnet_record, SubnetListRegistry, SubnetRegistry},
@@ -29,10 +31,12 @@ use ic_registry_client_helpers::{
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{NetworkTopology, ReplicatedState, SubnetTopology};
-use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
+use ic_replicated_state::{
+    metadata_state::ApiBoundaryNodeEntry, NetworkTopology, ReplicatedState, SubnetTopology,
+};
 use ic_types::{
     batch::Batch,
+    crypto::threshold_sig::ThresholdSigPublicKey,
     crypto::KeyPurpose,
     malicious_flags::MaliciousFlags,
     registry::RegistryClientError,
@@ -43,7 +47,6 @@ use ic_utils::thread::JoinOnDrop;
 #[cfg(test)]
 use mockall::automock;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
-use std::convert::TryFrom;
 use std::ops::Range;
 use std::sync::mpsc::{sync_channel, TrySendError};
 use std::sync::{Arc, Mutex, RwLock};
@@ -51,6 +54,10 @@ use std::thread::sleep;
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     time::Instant,
+};
+use std::{
+    convert::TryFrom,
+    net::{Ipv4Addr, Ipv6Addr},
 };
 
 #[cfg(test)]
@@ -91,6 +98,8 @@ const METRIC_CANISTER_HISTORY_TOTAL_NUM_CHANGES: &str = "mr_canister_history_tot
 const CRITICAL_ERROR_MISSING_SUBNET_SIZE: &str = "cycles_account_manager_missing_subnet_size_error";
 const CRITICAL_ERROR_MISSING_OR_INVALID_NODE_PUBLIC_KEYS: &str =
     "mr_missing_or_invalid_node_public_keys";
+const CRITICAL_ERROR_MISSING_OR_INVALID_API_BOUNDARY_NODES: &str =
+    "mr_missing_or_invalid_api_boundary_nodes";
 const CRITICAL_ERROR_NO_CANISTER_ALLOCATION_RANGE: &str = "mr_empty_canister_allocation_range";
 const CRITICAL_ERROR_FAILED_TO_READ_REGISTRY: &str = "mr_failed_to_read_registry_error";
 pub const CRITICAL_ERROR_BATCH_TIME_REGRESSION: &str = "mr_batch_time_regression";
@@ -293,6 +302,8 @@ pub(crate) struct MessageRoutingMetrics {
     /// Critical error: public keys of own subnet nodes are missing
     /// or they are not valid Ed25519 public keys.
     critical_error_missing_or_invalid_node_public_keys: IntCounter,
+    /// Critical error: information of api boundary nodes is broken or missing.
+    critical_error_missing_or_invalid_api_boundary_nodes: IntCounter,
     /// Critical error: subnet has no canister allocation range to generate new
     /// canister IDs from.
     critical_error_no_canister_allocation_range: IntCounter,
@@ -379,6 +390,8 @@ impl MessageRoutingMetrics {
                 .error_counter(CRITICAL_ERROR_MISSING_SUBNET_SIZE),
             critical_error_missing_or_invalid_node_public_keys: metrics_registry
                 .error_counter(CRITICAL_ERROR_MISSING_OR_INVALID_NODE_PUBLIC_KEYS),
+            critical_error_missing_or_invalid_api_boundary_nodes: metrics_registry
+                .error_counter(CRITICAL_ERROR_MISSING_OR_INVALID_API_BOUNDARY_NODES),
             critical_error_no_canister_allocation_range: metrics_registry
                 .error_counter(CRITICAL_ERROR_NO_CANISTER_ALLOCATION_RANGE),
             critical_error_failed_to_read_registry: metrics_registry
@@ -497,6 +510,9 @@ fn not_found_error(what: &str, subnet_id: Option<SubnetId>) -> ReadRegistryError
 /// A mapping from node IDs to public keys.
 /// The public key is a DER-encoded Ed25519 key.
 pub(crate) type NodePublicKeys = BTreeMap<NodeId, Vec<u8>>;
+
+/// A mapping from node IDs to ApiBoundaryNodeEntry.
+pub(crate) type ApiBoundaryNodes = BTreeMap<NodeId, ApiBoundaryNodeEntry>;
 
 impl BatchProcessorImpl {
     fn new(
@@ -625,6 +641,7 @@ impl BatchProcessorImpl {
         SubnetFeatures,
         RegistryExecutionSettings,
         NodePublicKeys,
+        ApiBoundaryNodes,
     ) {
         loop {
             match self.try_to_read_registry(registry_version, own_subnet_id) {
@@ -670,9 +687,11 @@ impl BatchProcessorImpl {
             SubnetFeatures,
             RegistryExecutionSettings,
             NodePublicKeys,
+            ApiBoundaryNodes,
         ),
         ReadRegistryError,
     > {
+        let api_boundary_nodes = self.try_to_populate_api_boundary_nodes(registry_version)?;
         let network_topology = self.try_to_populate_network_topology(registry_version)?;
 
         let provisional_whitelist = self
@@ -733,6 +752,7 @@ impl BatchProcessorImpl {
                 subnet_size,
             },
             node_public_keys,
+            api_boundary_nodes,
         ))
     }
 
@@ -926,6 +946,94 @@ impl BatchProcessorImpl {
         }
         Ok(node_public_keys)
     }
+
+    fn try_to_populate_api_boundary_nodes(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> Result<ApiBoundaryNodes, ReadRegistryError> {
+        let raise_critical_error_for_api_boundary_nodes = |err_msg: &str| {
+            self.metrics
+                .critical_error_missing_or_invalid_api_boundary_nodes
+                .inc();
+            warn!(
+                &self.log,
+                "{}: {}", CRITICAL_ERROR_MISSING_OR_INVALID_API_BOUNDARY_NODES, err_msg,
+            );
+        };
+
+        // 1. Get all API Boundary Node IDs from the registry.
+        // 2. For all obtained IDs, retrieve a corresponding NodeRecord from the registry. NOTE: If such NodeRecord doesn't exist, the registry is in a broken state.
+        // 3. From the NodeRecord we form the ApiBoundaryNodeEntry to be saved in the ReplicatedState.
+        let api_boundary_nodes_ids = self
+            .registry
+            .get_api_boundary_node_ids(registry_version)
+            .map_err(|err| registry_error("api boundary nodes ids", None, err))?;
+
+        let mut api_boundary_nodes: ApiBoundaryNodes = BTreeMap::new();
+
+        for api_bn_id in api_boundary_nodes_ids {
+            let node_record = self
+                .registry
+                .get_node_record(api_bn_id, registry_version)
+                .map_err(|err| {
+                    registry_error(&format!("NodeRecord for node_id {}", api_bn_id), None, err)
+                })?;
+
+            let Some(node_record) = node_record else {
+                raise_critical_error_for_api_boundary_nodes(&format!(
+                    "NodeRecord for node_id {} is missing in registry.",
+                    api_bn_id,
+                ));
+                continue;
+            };
+
+            let Some(domain) = node_record.domain else {
+                raise_critical_error_for_api_boundary_nodes(&format!(
+                    "domain field in NodeRecord for node_id {} is None.",
+                    api_bn_id,
+                ));
+                continue;
+            };
+
+            let Some(http) = node_record.http else {
+                raise_critical_error_for_api_boundary_nodes(&format!(
+                    "http field in NodeRecord for node_id {} is None.",
+                    api_bn_id,
+                ));
+                continue;
+            };
+
+            let Ok(ipv6_address) = http.ip_addr.parse::<Ipv6Addr>() else {
+                raise_critical_error_for_api_boundary_nodes(&format!(
+                    "failed to parse ipv6 field in NodeRecord for node_id {api_bn_id}",
+                ));
+                continue;
+            };
+
+            // ipv4 is not mandatory for the node record. No critical errors need to be raised if it is `None`.
+            let Ok(ipv4_address) = node_record
+                .public_ipv4_config
+                .map(|public_ipv4_config| public_ipv4_config.ip_addr.parse::<Ipv4Addr>())
+                .transpose()
+            else {
+                raise_critical_error_for_api_boundary_nodes(&format!(
+                    "failed to parse ipv4 address of node {api_bn_id}",
+                ));
+                continue;
+            };
+
+            api_boundary_nodes.insert(
+                api_bn_id,
+                ApiBoundaryNodeEntry {
+                    domain,
+                    ipv6_address,
+                    ipv4_address,
+                    pubkey: None,
+                },
+            );
+        }
+        Ok(api_boundary_nodes)
+    }
 }
 
 impl BatchProcessor for BatchProcessorImpl {
@@ -982,8 +1090,13 @@ impl BatchProcessor for BatchProcessorImpl {
         // TODO (MR-29) Cache network topology and subnet_features; and populate only
         // if version referenced in batch changes.
         let registry_version = batch.registry_version;
-        let (network_topology, subnet_features, registry_execution_settings, node_public_keys) =
-            self.read_registry(registry_version, state.metadata.own_subnet_id);
+        let (
+            network_topology,
+            subnet_features,
+            registry_execution_settings,
+            node_public_keys,
+            _api_boundary_nodes,
+        ) = self.read_registry(registry_version, state.metadata.own_subnet_id);
 
         self.metrics.blocks_proposed_total.inc();
         self.metrics
