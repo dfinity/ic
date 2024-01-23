@@ -211,7 +211,19 @@ impl CatchUpPackageMaker {
                 let summary = start_block.payload.as_ref().as_summary();
                 let registry_version = if let Some(ecdsa) = summary.ecdsa.as_ref() {
                     // Should succeed as we already got the hash above
-                    let state = self.state_manager.get_state_at(height).ok()?;
+                    let state = self
+                        .state_manager
+                        .get_state_at(height)
+                        .map_err(|err| {
+                            error!(
+                                self.log,
+                                "Cannot make ECDSA CUP at height {}: `get_state_hash_at` \
+                                succeeded but `get_state_at` failed with {:?}. Will retry",
+                                err,
+                                height,
+                            )
+                        })
+                        .ok()?;
                     get_oldest_ecdsa_state_registry_version(ecdsa, state.get_ref())
                 } else {
                     None
