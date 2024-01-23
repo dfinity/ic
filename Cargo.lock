@@ -8890,13 +8890,17 @@ dependencies = [
  "candid",
  "dfn_candid",
  "dfn_core",
+ "futures",
  "ic-base-types",
+ "ic-error-types",
  "ic-ic00-types",
  "ic-nervous-system-proxied-canister-calls-tracker",
  "ic-nervous-system-runtime",
  "num-traits",
+ "rand 0.8.5",
  "serde",
  "serde_bytes",
+ "tokio",
 ]
 
 [[package]]

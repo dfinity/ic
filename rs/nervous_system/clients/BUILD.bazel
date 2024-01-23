@@ -8,6 +8,7 @@ DEPENDENCIES = [
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/types/base_types",
+    "//rs/types/error_types",
     "//rs/types/ic00_types",
     "@crate_index//:candid",
     "@crate_index//:num-traits",
@@ -16,6 +17,9 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = DEPENDENCIES + [
+    "@crate_index//:futures",
+    "@crate_index//:rand",
+    "@crate_index//:tokio",
 ]
 
 MACRO_DEPENDENCIES = [
