@@ -34,7 +34,7 @@ function exit_usage() {
         err '    --hosts-ini <hosts_override.ini>      Override the default ansible hosts.ini to set different testnet configuration'
         err '    --no-api-nodes                        Do not deploy API boundary nodes even if they are declared in the hosts.ini file'
         err '    --no-boundary-nodes                   Do not deploy boundary nodes even if they are declared in the hosts.ini file'
-        err '    --boundary-dev-image		           Use development image of the boundary node VM (includes development service worker'
+        err '    --boundary-dev-image		           Use development image of the boundary node VM'
         err '    --with-testnet-keys                   Initialize the registry with readonly and backup keys from testnet/config/ssh_authorized_keys'
         err '    --allow-specified-ids                 Allow installing canisters at specified IDs'
         err ''

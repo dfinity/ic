@@ -1,7 +1,7 @@
 # BoundaryGuestOS - Main Docker Image
 #
 # Build step for example:
-# - `docker build --pull -t dfinity/boundaryos-main --build-arg BUILD_TYPE=dev --build-arg SW=true \ `
+# - `docker build --pull -t dfinity/boundaryos-main --build-arg BUILD_TYPE=dev \ `
 #   `--build-arg BASE_IMAGE=docker.io/dfinity/boundaryos-base@sha256:dc1a2892b0241131dd97ddd4dce560ab274d00a90110a4b5fc4cb2245ff1f0db -f Dockerfile .`
 #
 #
@@ -13,11 +13,6 @@ ARG BASE_IMAGE=
 # We support prod and dev images
 ARG BUILD_TYPE=
 
-# Service worker version and sha256; only if SW is `true` the service worker from npm is used
-ARG SW=
-ARG sw_version=1.8.8
-ARG sw_sha256=0e997ba7efe03441b126dbe674beec6231b89d4a997b24df21fd32428170501b
-
 #
 # First build stage: download software (service worker) that frequently changes, build and verify it (such that it
 # does not change under our noses).
@@ -27,14 +22,6 @@ FROM $BASE_IMAGE AS download
 USER root:root
 
 WORKDIR /tmp
-
-# Download and check service worker production version
-# from: https://registry.npmjs.org/@dfinity/service-worker/-/
-ARG sw_version
-ARG sw_sha256
-RUN \
-   curl -L https://registry.npmjs.org/@dfinity/service-worker/-/service-worker-${sw_version}.tgz -o service-worker.tgz && \
-   echo "${sw_sha256}  service-worker.tgz" | shasum -c
 
 # Download Nginx NJS Plugins
 ARG NGINX_NJS_PLUGINS_PROJECT_ID=38466408
@@ -67,31 +54,11 @@ RUN printf '%s\n' >/etc/nns_public_key.pem \
     'W5u0y3FxEvhHLg1aTRRQX/10hLASkQkcX4e5iINGP5gJGguqrg==' \
     '-----END PUBLIC KEY-----'
 
-
-#
-# Third build stage:
-# - Construct base images with the differences between npm sw and local sw
-#
-FROM image-${BUILD_TYPE} as image-sw-false
-# /var/www/html/ files injected by caller
-
-FROM image-${BUILD_TYPE} as image-sw-true
-USER root:root
-
-# Fetch and install npm ic service worker for dev/prod
-COPY --from=download /tmp/service-worker.tgz /tmp/service-worker.tgz
-ARG BUILD_TYPE=
-RUN cd /tmp && \
-    tar xfvz service-worker.tgz && \
-    mkdir -p /var/www/html/ &&\
-    cp -rf /tmp/package/dist-${BUILD_TYPE}/* /var/www/html/; \
-    rm -rf /tmp/package /tmp/service-worker.tgz
-
 #
 # Fourth build stage:
 # - Construct the actual target image (IC-OS root filesystem)
 #
-FROM image-sw-${SW}
+FROM image-${BUILD_TYPE}
 
 USER root:root
 
@@ -246,7 +213,6 @@ COPY opt /opt
 
 RUN rm -rf /etc/nginx/sites-enabled/nginx.conf
 
-# Install ic service worker production version from: https://registry.npmjs.org/@dfinity/service-worker/-/
 RUN mkdir -p /var/www/html && chown www-data:www-data /var/www/html
 
 # Install other files (e.g. the uninstall-script)

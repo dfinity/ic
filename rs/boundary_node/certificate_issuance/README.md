@@ -97,7 +97,7 @@ configuration to include all registered custom domains.
 ## Directory Organization
 
 This directory contains all the code related to custom domains with the exception
-of the [`nginx` configuration](../../../ic-os/boundary-guestos/rootfs/etc/nginx/) and the [service worker](../../../typescript/service-worker/):
+of the [`nginx` configuration](../../../ic-os/boundary-guestos/rootfs/etc/nginx/):
 
 - [`certificate_issuer`](certificate_issuer/) contains the boundary node service, which handles all registration requests, processes registration tasks and interfaces with the `certificate-orchestrator`.
 - [`certificate_syncer`](certificate_syncer/) contains the boundary node service, which ensures that `nginx` has access to all certificates and keys, and is configured to serve the custom domains.
