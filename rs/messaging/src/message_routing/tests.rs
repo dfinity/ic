@@ -9,6 +9,10 @@ use ic_interfaces_state_manager::StateReader;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_protobuf::registry::subnet::v1::SubnetRecord as SubnetRecordProto;
+use ic_protobuf::registry::{
+    api_boundary_node::v1::ApiBoundaryNodeRecord, node::v1::IPv4InterfaceConfig,
+    node::v1::NodeRecord,
+};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_local_registry::LocalRegistry;
 use ic_registry_local_store::{compact_delta_to_changelog, LocalStoreImpl, LocalStoreWriter};
@@ -36,6 +40,7 @@ use ic_types::{
     NodeId, PrincipalId, Randomness,
 };
 use maplit::{btreemap, btreeset};
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::{fmt::Debug, str::FromStr, sync::Arc, time::Duration};
 use tempfile::TempDir;
 
@@ -188,6 +193,8 @@ struct TestRecords<'a, const N: usize> {
     routing_table: Integrity<&'a RoutingTable>,
     canister_migrations: Integrity<&'a CanisterMigrations>,
     node_public_keys: &'a BTreeMap<NodeId, Integrity<PublicKeyProto>>,
+    api_boundary_node_records: &'a BTreeMap<NodeId, Integrity<ApiBoundaryNodeRecord>>,
+    node_records: &'a BTreeMap<NodeId, Integrity<NodeRecord>>,
 }
 
 /// Writes records into the registry using the `FakeRegistryClient`.
@@ -218,6 +225,7 @@ impl RegistryFixture {
         key: &str,
         value: Integrity<T>,
     ) -> Result<(), ProtoRegistryDataProviderError> {
+        use ic_registry_transport::pb::v1::{registry_mutation::Type, RegistryMutation};
         match value {
             Integrity::Valid(value) => self.data_provider.add(
                 key,
@@ -230,11 +238,11 @@ impl RegistryFixture {
                     83, 97, 101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167,
                     173, 179, 181, 191, 193, 197, 199, 211, 223, 227, 229, 233, 239, 241, 251,
                 ];
-                self.data_provider.add(
-                    key,
-                    self.registry.get_latest_version().increment(),
-                    Some(corrupted_data),
-                )
+                self.data_provider.add_mutations(vec![RegistryMutation {
+                    mutation_type: Type::Insert as i32,
+                    key: key.as_bytes().to_vec(),
+                    value: corrupted_data,
+                }])
             }
             Integrity::Missing => Ok(()),
         }
@@ -393,6 +401,32 @@ impl RegistryFixture {
         Ok(())
     }
 
+    // Writes API Boundary Node records into the registry.
+    fn write_api_boundary_nodes_records(
+        &self,
+        api_boundary_node_records: &BTreeMap<NodeId, Integrity<ApiBoundaryNodeRecord>>,
+    ) -> Result<(), ProtoRegistryDataProviderError> {
+        use ic_registry_keys::make_api_boundary_node_record_key;
+
+        for (node_id, record) in api_boundary_node_records.iter() {
+            self.write_record(&make_api_boundary_node_record_key(*node_id), record.clone())?;
+        }
+        Ok(())
+    }
+
+    // Writes node records into the registry.
+    fn write_node_records(
+        &self,
+        node_records: &BTreeMap<NodeId, Integrity<NodeRecord>>,
+    ) -> Result<(), ProtoRegistryDataProviderError> {
+        use ic_registry_keys::make_node_record_key;
+
+        for (node_id, record) in node_records.iter() {
+            self.write_record(&make_node_record_key(*node_id), record.clone())?;
+        }
+        Ok(())
+    }
+
     /// Writes the relevant records into the registry for testing
     /// `BatchProcessorImpl::try_to_read_registry()`.
     /// `subnet_ids` is used to write
@@ -423,6 +457,8 @@ impl RegistryFixture {
         self.write_ecdsa_signing_subnets(input.ecdsa_signing_subnets)?;
         self.write_provisional_whitelist(input.provisional_whitelist)?;
         self.write_node_public_keys(input.node_public_keys)?;
+        self.write_api_boundary_nodes_records(input.api_boundary_node_records)?;
+        self.write_node_records(input.node_records)?;
         self.registry.update_to_latest_version();
         Ok(())
     }
@@ -518,6 +554,7 @@ fn try_to_read_registry(
         SubnetFeatures,
         RegistryExecutionSettings,
         NodePublicKeys,
+        ApiBoundaryNodes,
     ),
     ReadRegistryError,
 > {
@@ -631,6 +668,42 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             node_test_id(2) => Valid(dummy_node_key_2.clone()),
         };
 
+        let api_boundary_node_records = btreemap! {
+            node_test_id(11) => Valid(ApiBoundaryNodeRecord {
+                version: "some_version".to_string(),
+            }),
+            node_test_id(12) => Valid(ApiBoundaryNodeRecord {
+                version: "some_version".to_string(),
+            }),
+        };
+
+        let node_records = btreemap! {
+            node_test_id(11) => Valid(NodeRecord {
+                http : Some(
+                    ic_registry_client_helpers::node_operator::ConnectionEndpoint {
+                        ip_addr: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
+                        port: 1,
+                    },
+                ),
+                public_ipv4_config: Some(IPv4InterfaceConfig {
+                    ip_addr: "127.0.0.1".to_string(),
+                    ..Default::default()
+                }),
+                domain: Some("api-bn11.example.org".to_string()),
+                ..Default::default()
+            }),
+            node_test_id(12) => Valid(NodeRecord {
+                http : Some(
+                    ic_registry_client_helpers::node_operator::ConnectionEndpoint {
+                        ip_addr: "2001:0db8:85a3:0000:0000:8a2e:0370:7335".to_string(),
+                        port: 1,
+                    },
+                ),
+                domain: Some("api-bn12.example.org".to_string()),
+                ..Default::default()
+            }),
+        };
+
         let fixture = RegistryFixture::new();
         fixture
             .write_test_records(&TestRecords {
@@ -643,16 +716,23 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
                 routing_table: Valid(&routing_table),
                 canister_migrations: Valid(&canister_migrations),
                 node_public_keys: &node_public_keys,
+                api_boundary_node_records: &api_boundary_node_records,
+                node_records: &node_records,
             })
             .unwrap();
 
         // Reading from the registry must succeed for fully specified records.
         let (batch_processor, metrics, state_manager, registry_settings) =
             make_batch_processor(fixture.registry.clone(), log);
-        let (network_topology, own_subnet_features, registry_execution_settings, node_public_keys) =
-            batch_processor
-                .try_to_read_registry(fixture.registry.get_latest_version(), own_subnet_id)
-                .unwrap();
+        let (
+            network_topology,
+            own_subnet_features,
+            registry_execution_settings,
+            node_public_keys,
+            api_boundary_nodes,
+        ) = batch_processor
+            .try_to_read_registry(fixture.registry.get_latest_version(), own_subnet_id)
+            .unwrap();
 
         // Full specification includes the subnet size of `own_subnet_id`. Check the corresponding
         // critical error counter is untouched.
@@ -738,6 +818,33 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             );
         }
 
+        // Check API Boundary Nodes.
+        assert_eq!(api_boundary_nodes.len(), 2);
+        let entry_1 = api_boundary_nodes.get(&node_test_id(11)).unwrap();
+        assert_eq!(
+            entry_1,
+            &ApiBoundaryNodeEntry {
+                domain: "api-bn11.example.org".to_string(),
+                ipv4_address: Some("127.0.0.1".parse::<Ipv4Addr>().unwrap()),
+                ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334"
+                    .parse::<Ipv6Addr>()
+                    .unwrap(),
+                pubkey: None,
+            }
+        );
+        let entry_2 = api_boundary_nodes.get(&node_test_id(12)).unwrap();
+        assert_eq!(
+            entry_2,
+            &ApiBoundaryNodeEntry {
+                domain: "api-bn12.example.org".to_string(),
+                ipv4_address: None,
+                ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7335"
+                    .parse::<Ipv6Addr>()
+                    .unwrap(),
+                pubkey: None,
+            }
+        );
+
         // Commit a state with `own_subnet_id` in its metadata to ensure the latest
         // state corresponds to the registry records written above.
         let (height, mut state) = state_manager.take_tip();
@@ -811,6 +918,8 @@ fn try_read_registry_succeeds_with_minimal_registry_records() {
             routing_table: Missing,
             canister_migrations: Missing,
             node_public_keys: &BTreeMap::default(),
+            api_boundary_node_records: &BTreeMap::default(),
+            node_records: &BTreeMap::default(),
         };
 
         let fixture = RegistryFixture::new();
@@ -827,7 +936,7 @@ fn try_read_registry_succeeds_with_minimal_registry_records() {
         // critical error for `subnet_size` has incremented.
         assert_eq!(metrics.critical_error_missing_subnet_size.get(), 1);
         // Check the subnet size was set to the maximum for a small app subnet.
-        let (_, _, registry_execution_settings, _) = result.unwrap();
+        let (_, _, registry_execution_settings, _, _) = result.unwrap();
         assert_eq!(
             registry_execution_settings.subnet_size,
             SMALL_APP_SUBNET_MAX_SIZE
@@ -910,6 +1019,8 @@ fn try_to_read_registry_returns_errors_for_corrupted_records() {
             routing_table: Missing,
             canister_migrations: Missing,
             node_public_keys: &BTreeMap::default(),
+            api_boundary_node_records: &BTreeMap::default(),
+            node_records: &BTreeMap::default(),
         };
 
         // Corrupted Subnet Ids.
@@ -924,7 +1035,7 @@ fn try_to_read_registry_returns_errors_for_corrupted_records() {
             .unwrap();
         assert_matches!(
             try_to_read_registry(fixture.registry, log.clone(), own_subnet_id),
-            Err(ReadRegistryError::Persistent(err)) if err.contains(&own_subnet_id.to_string()) && err.ends_with("not found")
+            Err(ReadRegistryError::Persistent(err)) if err.contains("subnet IDs") && err.contains("failed to decode")
         );
 
         // Corrupted DKG transcripts.
@@ -963,7 +1074,7 @@ fn try_to_read_registry_returns_errors_for_corrupted_records() {
             .unwrap();
         assert_matches!(
             try_to_read_registry(fixture.registry, log.clone(), own_subnet_id),
-            Err(ReadRegistryError::Persistent(err)) if err.contains(&own_subnet_id.to_string()) && err.contains("err")
+            Err(ReadRegistryError::Persistent(err)) if err.contains(&own_subnet_id.to_string()) && err.contains("failed to decode")
         );
 
         // Corrupted NNS Subnet Id.
@@ -1039,6 +1150,26 @@ fn try_to_read_registry_returns_errors_for_corrupted_records() {
             })
             .unwrap();
         assert_matches!(
+            try_to_read_registry(fixture.registry, log.clone(), own_subnet_id),
+            Err(ReadRegistryError::Persistent(err)) if err.contains("RegistryClientError")
+        );
+
+        // Corrupted node records.
+        let fixture = RegistryFixture::new();
+        fixture
+            .write_test_records(&TestRecords {
+                api_boundary_node_records: &btreemap! {
+                    node_test_id(11) => Valid(ApiBoundaryNodeRecord {
+                        version: "some_version".to_string(),
+                    }),
+                },
+                node_records: &btreemap! {
+                    node_test_id(11) => Corrupted,
+                },
+                ..minimal_input
+            })
+            .unwrap();
+        assert_matches!(
             try_to_read_registry(fixture.registry, log, own_subnet_id),
             Err(ReadRegistryError::Persistent(err)) if err.contains("RegistryClientError")
         );
@@ -1072,6 +1203,8 @@ fn try_read_registry_can_skip_missing_or_invalid_node_public_keys() {
             routing_table: Missing,
             canister_migrations: Missing,
             node_public_keys: &BTreeMap::default(),
+            api_boundary_node_records: &BTreeMap::default(),
+            node_records: &BTreeMap::default(),
         };
 
         // An invalid node public key.
@@ -1120,7 +1253,7 @@ fn try_read_registry_can_skip_missing_or_invalid_node_public_keys() {
             2
         );
 
-        let (_, _, _, node_public_keys) = res.unwrap();
+        let (_, _, _, node_public_keys, _) = res.unwrap();
         assert_eq!(node_public_keys.len(), 1);
         assert!(!node_public_keys.contains_key(&node_test_id(1)));
         assert!(!node_public_keys.contains_key(&node_test_id(2)));
@@ -1129,6 +1262,145 @@ fn try_read_registry_can_skip_missing_or_invalid_node_public_keys() {
                 PublicKeyBytes::try_from(&valid_node_key).expect("invalid public key")
             ),
             node_public_keys.get(&node_test_id(3)).unwrap(),
+        );
+    });
+}
+
+#[test]
+fn try_read_registry_can_skip_missing_or_invalid_fields_of_api_boundary_nodes() {
+    with_test_replica_logger(|log| {
+        use Integrity::*;
+
+        let own_subnet_id = subnet_test_id(13);
+        let own_subnet_record = SubnetRecord {
+            max_number_of_canisters: 784,
+            ..Default::default()
+        };
+        let own_transcript = dummy_transcript_for_tests();
+        let nns_subnet_id = subnet_test_id(42);
+
+        let input = TestRecords {
+            subnet_ids: Valid([own_subnet_id]),
+            subnet_records: [Valid(&own_subnet_record)],
+            ni_dkg_transcripts: [Valid(Some(&own_transcript))],
+            nns_subnet_id: Valid(nns_subnet_id),
+            ecdsa_signing_subnets: &BTreeMap::default(),
+            provisional_whitelist: Missing,
+            routing_table: Missing,
+            canister_migrations: Missing,
+            node_public_keys: &BTreeMap::default(),
+            api_boundary_node_records: &BTreeMap::default(),
+            node_records: &BTreeMap::default(),
+        };
+
+        let api_boundary_node_records = &btreemap! {
+            node_test_id(11) => Valid(ApiBoundaryNodeRecord {
+                version: "some_version".to_string(),
+            }),
+            node_test_id(12) => Valid(ApiBoundaryNodeRecord {
+                version: "some_version".to_string(),
+            }),
+            node_test_id(13) => Valid(ApiBoundaryNodeRecord {
+                version: "some_version".to_string(),
+            }),
+            node_test_id(14) => Valid(ApiBoundaryNodeRecord {
+                version: "some_version".to_string(),
+            }),
+            node_test_id(15) => Valid(ApiBoundaryNodeRecord {
+                version: "some_version".to_string(),
+            }),
+            node_test_id(16) => Valid(ApiBoundaryNodeRecord {
+                version: "some_version".to_string(),
+            }),
+        };
+
+        let node_records = &btreemap! {
+            node_test_id(11) => Valid(NodeRecord {
+                http: Some(
+                    ic_registry_client_helpers::node_operator::ConnectionEndpoint {
+                        ip_addr: "2001:0db8:85a3:0000:0000:8a2e:0370:7335".to_string(),
+                        port: 1,
+                    },
+                ),
+                domain: Some("api-bn12.example.org".to_string()),
+                ..Default::default()
+            }),
+            // The NodeRecord is missing.
+            node_test_id(12) => Missing,
+            // This NodeRecord does not have a domain field.
+            node_test_id(13) => Valid(NodeRecord {
+                http: Some(
+                    ic_registry_client_helpers::node_operator::ConnectionEndpoint {
+                        ip_addr: "2001:0db8:85a3:0000:0000:8a2e:0370:7336".to_string(),
+                        port: 1,
+                    },
+                ),
+                domain: None,
+                ..Default::default()
+            }),
+            // This NodeRecord does not have a http field.
+            node_test_id(14) => Valid(NodeRecord {
+                http: None,
+                domain: Some("api-bn14.example.org".to_string()),
+                ..Default::default()
+            }),
+            // This NodeRecord has an invalid ipv6 address.
+            node_test_id(15) => Valid(NodeRecord {
+                http: Some(
+                    ic_registry_client_helpers::node_operator::ConnectionEndpoint {
+                        ip_addr: "corrupted_ipv6_address".to_string(),
+                        port: 1,
+                    },
+                ),
+                domain: Some("api-bn15.example.org".to_string()),
+                ..Default::default()
+            }),
+            // This NodeRecord has an invalid ipv4 address.
+            node_test_id(16) => Valid(NodeRecord {
+                http: Some(
+                    ic_registry_client_helpers::node_operator::ConnectionEndpoint {
+                        ip_addr: "2001:0db8:85a3:0000:0000:8a2e:0370:7337".to_string(),
+                        port: 1,
+                    },
+                ),
+                public_ipv4_config: Some(
+                    IPv4InterfaceConfig {
+                        ip_addr: "corrupted_ipv4_address".to_string(),
+                        ..Default::default()
+                    }
+                ),
+                domain: Some("api-bn15.example.org".to_string()),
+                ..Default::default()
+            }),
+        };
+
+        let fixture = RegistryFixture::new();
+        fixture
+            .write_test_records(&TestRecords {
+                api_boundary_node_records,
+                node_records,
+                subnet_records: [Valid(&own_subnet_record)],
+                ..input
+            })
+            .unwrap();
+
+        let (batch_processor, metrics, _, _) =
+            make_batch_processor(fixture.registry.clone(), log.clone());
+        let res = batch_processor
+            .try_to_read_registry(fixture.registry.get_latest_version(), own_subnet_id);
+        assert_matches!(res, Ok(_));
+
+        // There are six API BNs in the registry. However, five nodes have missing or invalid fields of NodeRecord.
+        // Hence, only one nodes are retrieved.
+        let (_, _, _, _, api_boundary_nodes) = res.unwrap();
+        assert_eq!(api_boundary_nodes.len(), 1);
+        assert!(api_boundary_nodes.contains_key(&node_test_id(11)));
+
+        assert_eq!(
+            metrics
+                .critical_error_missing_or_invalid_api_boundary_nodes
+                .get(),
+            5
         );
     });
 }
@@ -1166,6 +1438,8 @@ fn check_critical_error_counter_is_not_incremented_for_transient_error() {
             routing_table: Missing,
             canister_migrations: Missing,
             node_public_keys: &BTreeMap::default(),
+            api_boundary_node_records: &BTreeMap::default(),
+            node_records: &BTreeMap::default(),
         };
 
         let fixture = RegistryFixture::new();
@@ -1362,6 +1636,8 @@ fn process_batch_updates_subnet_metrics() {
                 routing_table: Valid(&routing_table),
                 canister_migrations: Valid(&canister_migrations),
                 node_public_keys: &node_public_keys,
+                api_boundary_node_records: &BTreeMap::default(),
+                node_records: &BTreeMap::default(),
             })
             .unwrap();
 

@@ -45,6 +45,7 @@ use ic_types::{
 };
 use ic_wasm_types::WasmHash;
 use serde::{Deserialize, Serialize};
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::ops::Bound::{Included, Unbounded};
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
@@ -189,6 +190,21 @@ pub struct NetworkTopology {
 
     /// The ID of the canister to forward bitcoin mainnet requests to.
     pub bitcoin_mainnet_canister_id: Option<CanisterId>,
+}
+
+/// Full description of the API Boundary Node, which is saved in the metadata.
+/// This entry is formed from two registry records - ApiBoundaryNodeRecord and NodeRecord.
+/// If an ApiBoundaryNodeRecord exists, then a corresponding NodeRecord must exist.
+/// The converse statement is not true.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ApiBoundaryNodeEntry {
+    /// Domain name, required field from NodeRecord
+    pub domain: String,
+    /// Ipv4, optional field from NodeRecord
+    pub ipv4_address: Option<Ipv4Addr>,
+    /// Ipv6, required field from NodeRecord
+    pub ipv6_address: Ipv6Addr,
+    pub pubkey: Option<Vec<u8>>,
 }
 
 impl Default for NetworkTopology {
