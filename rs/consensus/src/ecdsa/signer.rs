@@ -599,38 +599,7 @@ mod tests {
     use ic_types::crypto::{canister_threshold_sig::ExtendedDerivationPath, AlgorithmId};
     use ic_types::time::UNIX_EPOCH;
     use ic_types::{Height, Randomness};
-    use prometheus::IntCounterVec;
     use std::ops::Deref;
-
-    /// Resolves the [`ThresholdEcdsaSigInputsRef`] -> [`ThresholdEcdsaSigInputs`]
-    fn resolve_sig_inputs_refs(
-        block_reader: &dyn EcdsaBlockReader,
-        reason: &str,
-        metric: IntCounterVec,
-        log: &ReplicaLogger,
-    ) -> Vec<(RequestId, ThresholdEcdsaSigInputs)> {
-        let mut ret = Vec::new();
-        for (request_id, sig_inputs_ref) in block_reader.requested_signatures() {
-            // Translate the [`ThresholdEcdsaSigInputsRef`] -> [`ThresholdEcdsaSigInputs`]
-            match sig_inputs_ref.translate(block_reader) {
-                Ok(sig_inputs) => {
-                    ret.push((request_id.clone(), sig_inputs));
-                }
-                Err(error) => {
-                    warn!(
-                        log,
-                        "Failed to resolve sig input ref: reason = {}, \
-                         sig_inputs_ref = {:?}, error = {:?}",
-                        reason,
-                        sig_inputs_ref,
-                        error
-                    );
-                    metric.with_label_values(&[reason]).inc();
-                }
-            }
-        }
-        ret
-    }
 
     fn create_request_id(generator: &mut EcdsaUIDGenerator, height: Height) -> RequestId {
         let quadruple_id = generator.next_quadruple_id(fake_ecdsa_key_id());
@@ -1212,41 +1181,6 @@ mod tests {
                 assert!(is_removed_from_validated(&change_set, &msg_id_2));
             })
         })
-    }
-
-    // Tests resolving of sig inputs
-    #[test]
-    fn test_ecdsa_resolve_sig_inputs_refs() {
-        with_test_replica_logger(|logger| {
-            let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
-            let (id_1, id_2) = (
-                create_request_id(&mut uid_generator, Height::from(10)),
-                create_request_id(&mut uid_generator, Height::from(200)),
-            );
-
-            let block_reader = TestEcdsaBlockReader::for_signer_test(
-                Height::from(100),
-                vec![
-                    (id_1.clone(), create_sig_inputs(1)),
-                    (id_2.clone(), create_sig_inputs(2)),
-                ],
-            );
-
-            let metrics = MetricsRegistry::new();
-            let m = metrics.int_counter_vec(
-                "test_ecdsa_resolve_sig_inputs_refs",
-                "ECDSA test metrics",
-                &["test"],
-            );
-            let r = resolve_sig_inputs_refs(&block_reader, "test", m.clone(), &logger);
-            assert_eq!(r.len(), 2);
-            assert!(r.iter().any(|(id, _)| id == &id_1));
-            assert!(r.iter().any(|(id, _)| id == &id_2));
-
-            let block_reader = block_reader.with_fail_to_resolve();
-            let r = resolve_sig_inputs_refs(&block_reader, "test", m, &logger);
-            assert!(r.is_empty());
-        });
     }
 
     // Tests aggregating signature shares into a complete signature
