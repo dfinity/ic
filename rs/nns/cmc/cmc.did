@@ -1,5 +1,9 @@
 type Cycles = nat;
 type BlockIndex = nat64;
+type log_visibility = variant {
+  controllers;
+  public;
+};
 type CanisterSettings = record {
   controller : opt principal;
   controllers : opt vec principal;
@@ -7,6 +11,7 @@ type CanisterSettings = record {
   memory_allocation : opt nat;
   freezing_threshold : opt nat;
   reserved_cycles_limit: opt nat;
+  log_visibility : opt log_visibility;
 };
 type Subaccount = opt blob;
 type Memo = opt blob;

@@ -628,6 +628,9 @@ impl CanisterManager {
         if let Some(freezing_threshold) = settings.freezing_threshold() {
             canister.system_state.freeze_threshold = freezing_threshold;
         }
+        if let Some(log_visibility) = settings.log_visibility() {
+            canister.system_state.log_visibility = log_visibility;
+        }
     }
 
     /// Tries to apply the requested settings on the canister identified by
@@ -1164,6 +1167,7 @@ impl CanisterManager {
         let memory_allocation = canister.memory_allocation();
         let freeze_threshold = canister.system_state.freeze_threshold;
         let reserved_cycles_limit = canister.system_state.reserved_balance_limit();
+        let log_visibility = canister.system_state.log_visibility;
 
         Ok(CanisterStatusResultV2::new(
             canister.status(),
@@ -1179,6 +1183,7 @@ impl CanisterManager {
             Some(memory_allocation.bytes().get()),
             freeze_threshold.get(),
             reserved_cycles_limit.map(|x| x.get()),
+            log_visibility,
             self.cycles_account_manager
                 .idle_cycles_burned_rate(
                     memory_allocation,

@@ -22,8 +22,8 @@ use ic_execution_environment::{
 use ic_ic00_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
     CanisterSettingsArgsBuilder, CanisterStatusType, EcdsaKeyId, EmptyBlob, InstallCodeArgs,
-    InstallCodeArgsV2, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs, SkipPreUpgrade,
-    UpdateSettingsArgs,
+    InstallCodeArgsV2, LogVisibility, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs,
+    SkipPreUpgrade, UpdateSettingsArgs,
 };
 use ic_interfaces::execution_environment::{
     ExecutionMode, IngressHistoryWriter, QueryHandler, RegistryExecutionSettings,
@@ -647,6 +647,23 @@ impl ExecutionTest {
             canister_id: canister_id.into(),
             settings: CanisterSettingsArgsBuilder::new()
                 .with_controllers(vec![controller])
+                .build(),
+            sender_canister_version: None,
+        }
+        .encode();
+        self.subnet_message(Method::UpdateSettings, payload)
+    }
+
+    /// Sets the log visibility of the canister.
+    pub fn set_log_visibility(
+        &mut self,
+        canister_id: CanisterId,
+        log_visibility: LogVisibility,
+    ) -> Result<WasmResult, UserError> {
+        let payload = UpdateSettingsArgs {
+            canister_id: canister_id.into(),
+            settings: CanisterSettingsArgsBuilder::new()
+                .with_log_visibility(log_visibility)
                 .build(),
             sender_canister_version: None,
         }

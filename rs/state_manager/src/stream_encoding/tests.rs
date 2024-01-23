@@ -30,7 +30,6 @@ proptest! {
             user_test_id(24).get(),
             INITIAL_CYCLES,
             NumSeconds::from(100_000),
-
         ));
 
         let tree_encoding = encode_stream_slice(&state, subnet, stream_slice.header().begin, stream_slice.header().end, None).0;

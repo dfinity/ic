@@ -11,9 +11,9 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
     self as ic00, BitcoinGetUtxosArgs, BitcoinNetwork, BoundedHttpHeaders, CanisterChange,
     CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2, CanisterStatusType,
-    DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob, HttpMethod, Method, Payload as Ic00Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, TransformContext,
-    TransformFunc, IC_00,
+    DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob, HttpMethod, LogVisibility, Method,
+    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
+    TransformContext, TransformFunc, IC_00,
 };
 use ic_registry_routing_table::canister_id_into_u64;
 use ic_registry_routing_table::CanisterIdRange;
@@ -3214,4 +3214,58 @@ fn test_ingress_snapshot_rejected_because_feature_is_disabled() {
         let expected_result = WasmResult::Reject(format!("Unable to route management canister request {}: UserError(UserError {{ code: CanisterRejectedMessage, description: {} }})", method, "\"Snapshotting API is not yet implemented\""));
         assert_eq!(result, expected_result);
     }
+}
+
+#[test]
+fn test_canister_settings_log_visibility_default_controllers() {
+    // Arrange.
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000));
+    // Act.
+    let result = test.canister_status(canister_id);
+    let canister_status = CanisterStatusResultV2::decode(&get_reply(result)).unwrap();
+    // Assert.
+    assert_eq!(
+        canister_status.settings().log_visibility(),
+        LogVisibility::Controllers
+    );
+}
+
+#[test]
+fn test_canister_settings_log_visibility_create_with_settings() {
+    // Arrange.
+    let mut test = ExecutionTestBuilder::new().build();
+    // Act.
+    let canister_id = test
+        .create_canister_with_settings(
+            Cycles::new(1_000_000_000),
+            ic00::CanisterSettingsArgsBuilder::new()
+                .with_log_visibility(LogVisibility::Public)
+                .build(),
+        )
+        .unwrap();
+    let result = test.canister_status(canister_id);
+    let canister_status = CanisterStatusResultV2::decode(&get_reply(result)).unwrap();
+    // Assert.
+    assert_eq!(
+        canister_status.settings().log_visibility(),
+        LogVisibility::Public
+    );
+}
+
+#[test]
+fn test_canister_settings_log_visibility_set_to_public() {
+    // Arrange.
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000));
+    // Act.
+    test.set_log_visibility(canister_id, LogVisibility::Public)
+        .unwrap();
+    let result = test.canister_status(canister_id);
+    let canister_status = CanisterStatusResultV2::decode(&get_reply(result)).unwrap();
+    // Assert.
+    assert_eq!(
+        canister_status.settings().log_visibility(),
+        LogVisibility::Public
+    );
 }
