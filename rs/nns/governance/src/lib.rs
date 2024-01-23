@@ -120,13 +120,18 @@
 //! without need for a quorum of voting power to participate, and it
 //! can also always decide upon proposals in a timely manner.
 
-use crate::pb::v1::ProposalStatus;
 use crate::{
     governance::{Governance, TimeWarp},
-    pb::v1::governance::GovernanceCachedMetrics,
+    pb::v1::{governance::GovernanceCachedMetrics, ProposalStatus},
 };
 use mockall::automock;
-use std::{collections::BTreeMap, collections::HashMap, io};
+use std::{
+    collections::{BTreeMap, HashMap},
+    io,
+};
+
+#[cfg(test)]
+pub mod test_utils;
 
 mod account_id_index;
 mod audit_event;
