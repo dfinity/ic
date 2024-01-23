@@ -38,10 +38,12 @@ use ic_sns_governance::{governance::TREASURY_SUBACCOUNT_NONCE, pb::v1 as sns_pb}
 use ic_sns_init::distributions::MAX_DEVELOPER_DISTRIBUTION_COUNT;
 use ic_sns_swap::{
     pb::v1::{
-        ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse,
-        GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse,
-        GetDerivedStateRequest, GetDerivedStateResponse, GetLifecycleRequest, GetLifecycleResponse,
-        Lifecycle, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse,
+        new_sale_ticket_response, BuyerState, ErrorRefundIcpRequest, ErrorRefundIcpResponse,
+        FinalizeSwapResponse, GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse,
+        GetBuyerStateRequest, GetBuyerStateResponse, GetDerivedStateRequest,
+        GetDerivedStateResponse, GetLifecycleRequest, GetLifecycleResponse, Lifecycle,
+        NewSaleTicketRequest, NewSaleTicketResponse, RefreshBuyerTokensRequest,
+        RefreshBuyerTokensResponse,
     },
     swap::principal_to_subaccount,
 };
@@ -56,12 +58,12 @@ use icrc_ledger_types::icrc1::{
     account::Account,
     transfer::{TransferArg, TransferError},
 };
-use maplit::hashmap;
+use maplit::btreemap;
 use num_traits::ToPrimitive;
 use pocket_ic::{PocketIc, PocketIcBuilder, WasmResult};
 use prost::Message;
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet},
     time::Duration,
 };
 
@@ -369,6 +371,54 @@ mod sns {
             Decode!(&result, Nat).unwrap()
         }
     }
+}
+
+fn new_sale_ticket(
+    pocket_ic: &PocketIc,
+    swap_canister_id: PrincipalId,
+    buyer: PrincipalId,
+    amount_icp_e8s: u64,
+) -> Result<NewSaleTicketResponse, String> {
+    let result = pocket_ic
+        .update_call(
+            swap_canister_id.into(),
+            buyer.into(),
+            "new_sale_ticket",
+            Encode!(&NewSaleTicketRequest {
+                amount_icp_e8s,
+                subaccount: None,
+            })
+            .unwrap(),
+        )
+        .map_err(|err| err.to_string())?;
+    let result = match result {
+        WasmResult::Reply(result) => result,
+        WasmResult::Reject(s) => panic!("Call to new_sale_ticket failed: {:#?}", s),
+    };
+    Ok(Decode!(&result, NewSaleTicketResponse).unwrap())
+}
+
+fn get_buyer_state(
+    pocket_ic: &PocketIc,
+    swap_canister_id: PrincipalId,
+    buyer: PrincipalId,
+) -> Result<GetBuyerStateResponse, String> {
+    let result = pocket_ic
+        .update_call(
+            swap_canister_id.into(),
+            Principal::anonymous(),
+            "get_buyer_state",
+            Encode!(&GetBuyerStateRequest {
+                principal_id: Some(buyer)
+            })
+            .unwrap(),
+        )
+        .map_err(|err| err.to_string())?;
+    let result = match result {
+        WasmResult::Reply(result) => result,
+        WasmResult::Reject(s) => panic!("Call to get_buyer_state failed: {:#?}", s),
+    };
+    Ok(Decode!(&result, GetBuyerStateResponse).unwrap())
 }
 
 fn refresh_buyer_tokens(
@@ -846,7 +896,7 @@ fn add_wasm(pocket_ic: &PocketIc, wasm: SnsWasm) -> Result<ProposalInfo, String>
 
 fn add_real_wasms_to_sns_wasm(
     pocket_ic: &PocketIc,
-) -> Result<HashMap<SnsCanisterType, (ProposalInfo, SnsWasm)>, String> {
+) -> Result<BTreeMap<SnsCanisterType, (ProposalInfo, SnsWasm)>, String> {
     let root_wasm = build_root_sns_wasm();
     let root_proposal_info = add_wasm(pocket_ic, root_wasm.clone())?;
 
@@ -865,7 +915,7 @@ fn add_real_wasms_to_sns_wasm(
     let index_wasm = build_index_sns_wasm();
     let index_proposal_info = add_wasm(pocket_ic, index_wasm.clone())?;
 
-    Ok(hashmap! {
+    Ok(btreemap! {
         SnsCanisterType::Root => (root_proposal_info, root_wasm),
         SnsCanisterType::Governance => (gov_proposal_info, gov_wasm),
         SnsCanisterType::Ledger => (ledger_proposal_info, ledger_wasm),
@@ -958,12 +1008,17 @@ fn install_nns_canisters(
         .collect()
 }
 
+#[derive(Clone, Copy, Debug)]
+struct DirectParticipantConfig {
+    pub use_ticketing_system: bool,
+}
+
 /// This is a parametric test function for the testing the SNS lifecycle. A test instance should
 /// end by calling this function, instantiating it with a set of parameter values that define
 /// a particular testing scenario. If this function panics, the test fails. Otherwise, it succeeds.
 ///
 /// The direct participants represented by `direct_participant_principal_ids` participate with
-/// `(1_000_000 ICP / N)` each, where `N == direct_participant_principal_ids.len()`.
+/// `maximum_direct_participation_icp / N` each, where `N==direct_participant_principal_ids.len()`.
 ///
 /// At a high level, the following aspects of an SNS are covered in this function:
 /// 1. Basic properties on an SNS instance:
@@ -1035,7 +1090,7 @@ fn install_nns_canisters(
 fn test_sns_lifecycle(
     ensure_swap_timeout_is_reached: bool,
     create_service_nervous_system_proposal: CreateServiceNervousSystem,
-    direct_participant_principal_ids: Vec<PrincipalId>,
+    direct_participant_principal_ids: BTreeMap<PrincipalId, DirectParticipantConfig>,
 ) {
     // 0. Deconstruct and clone some immutable objects for convenience.
     let initial_token_distribution = create_service_nervous_system_proposal
@@ -1055,6 +1110,21 @@ fn test_sns_lifecycle(
     let swap_parameters = create_service_nervous_system_proposal
         .swap_parameters
         .clone()
+        .unwrap();
+    let max_direct_participation_icp_e8s = swap_parameters
+        .maximum_direct_participation_icp
+        .unwrap()
+        .e8s
+        .unwrap();
+    let min_participant_icp_e8s = swap_parameters
+        .minimum_participant_icp
+        .unwrap()
+        .e8s
+        .unwrap();
+    let max_participant_icp_e8s = swap_parameters
+        .maximum_participant_icp
+        .unwrap()
+        .e8s
         .unwrap();
     let (developer_neuron_stake_sns_e8s, treasury_distribution_sns_e8s, swap_distribution_sns_e8s) = {
         let treasury_distribution_sns_e8s = initial_token_distribution
@@ -1094,24 +1164,35 @@ fn test_sns_lifecycle(
         .with_sns_subnet()
         .build();
 
-    let participation_amount_per_direct_participant_icp =
-        Tokens::from_e8s((1_000_000 * E8) / (direct_participant_principal_ids.len() as u64));
+    let participation_amount_per_direct_participant_icp = Tokens::from_e8s(
+        (max_direct_participation_icp_e8s / (direct_participant_principal_ids.len() as u64))
+            + DEFAULT_TRANSFER_FEE.get_e8s(),
+    );
+    // Sanity check
+    assert!(participation_amount_per_direct_participant_icp.get_e8s() >= min_participant_icp_e8s);
 
     let direct_participants: BTreeMap<PrincipalId, _> = direct_participant_principal_ids
         .iter()
-        .map(|direct_participant| {
+        .map(|(direct_participant, direct_participant_config)| {
             (
                 *direct_participant,
                 (
                     AccountIdentifier::new(*direct_participant, None),
                     participation_amount_per_direct_participant_icp,
+                    direct_participant_config,
                 ),
             )
         })
         .collect();
-    let nns_neuron_controller_principal_ids =
-        install_nns_canisters(&pocket_ic, direct_participants.values().cloned().collect());
-    let original_nns_neurons_per_controller: BTreeMap<PrincipalId, Vec<u64>> =
+
+    // Install the pre-configured NNS canisters, obtaining information about the original neuron(s).
+    let original_nns_controller_to_maturities_e8s: BTreeMap<PrincipalId, Vec<u64>> = {
+        let direct_participant_initial_icp_balances = direct_participants
+            .values()
+            .map(|(account_identifier, balance_icp, _)| (*account_identifier, *balance_icp))
+            .collect();
+        let nns_neuron_controller_principal_ids =
+            install_nns_canisters(&pocket_ic, direct_participant_initial_icp_balances);
         nns_neuron_controller_principal_ids
             .into_iter()
             .map(|controller_principal_id| {
@@ -1125,7 +1206,8 @@ fn test_sns_lifecycle(
                         .collect(),
                 )
             })
-            .collect();
+            .collect()
+    };
 
     // Install the test dapp.
     let dapp_canister_ids: Vec<_> = create_service_nervous_system_proposal
@@ -1299,7 +1381,11 @@ fn test_sns_lifecycle(
     // 3. Transfer ICP to our direct participants' SNSes subaccounts.
     for (
         direct_participant,
-        (direct_participant_icp_account, direct_participant_icp_account_initial_balance_icp),
+        (
+            direct_participant_icp_account,
+            direct_participant_icp_account_initial_balance_icp,
+            direct_participant_config,
+        ),
     ) in direct_participants.clone()
     {
         let direct_participant_swap_subaccount = Some(principal_to_subaccount(&direct_participant));
@@ -1315,6 +1401,41 @@ fn test_sns_lifecycle(
         let attempted_participation_amount_e8s = direct_participant_icp_account_initial_balance_icp
             .get_e8s()
             - DEFAULT_TRANSFER_FEE.get_e8s();
+        println!(
+            "attempted_participation_amount_e8s = {:?}",
+            attempted_participation_amount_e8s
+        );
+
+        // The ticketing system is optional in the current implementation, so the participants are
+        // free to choose if they use it or not.
+        if direct_participant_config.use_ticketing_system {
+            let expected_accepted_participation_amount_e8s =
+                if attempted_participation_amount_e8s < min_participant_icp_e8s {
+                    0
+                } else {
+                    attempted_participation_amount_e8s.min(max_participant_icp_e8s)
+                };
+            println!(
+                "expected_accepted_participation_amount_e8s = {:?}",
+                expected_accepted_participation_amount_e8s
+            );
+            // Creating a ticket for this participation should succeed even before the ICP transfer.
+            let response = new_sale_ticket(
+                &pocket_ic,
+                swap_canister_id,
+                direct_participant,
+                expected_accepted_participation_amount_e8s,
+            )
+            .expect("Swap.new_sale_ticket response should be Ok.");
+            assert_matches!(
+            response.result,
+            Some(new_sale_ticket_response::Result::Ok(new_sale_ticket_response::Ok {
+                ticket
+            })) => {
+                ticket.expect("field ticket must be specified in new_sale_ticket_response::Ok")
+            });
+        }
+        // Make the actual ICP transfer
         icrc1_transfer(
             &pocket_ic,
             direct_participant,
@@ -1341,26 +1462,60 @@ fn test_sns_lifecycle(
         pocket_ic.advance_time(Duration::from_secs(30 * SECONDS_PER_DAY)); // 30 days
         await_swap_lifecycle(&pocket_ic, swap_canister_id, Lifecycle::Aborted).unwrap();
     } else {
-        for (direct_participant, (_, direct_participant_icp_account_initial_balance_icp)) in
+        for (direct_participant, (_, direct_participant_icp_account_initial_balance_icp, _)) in
             direct_participants.clone()
         {
             let attempted_participation_amount_e8s =
                 direct_participant_icp_account_initial_balance_icp.get_e8s()
                     - DEFAULT_TRANSFER_FEE.get_e8s();
-            let accepted_participation_amount_e8s = attempted_participation_amount_e8s.min(
-                swap_parameters
-                    .maximum_direct_participation_icp
-                    .unwrap()
-                    .e8s
-                    .unwrap(),
-            );
+            let expected_accepted_participation_amount_e8s =
+                if attempted_participation_amount_e8s < min_participant_icp_e8s {
+                    0
+                } else {
+                    attempted_participation_amount_e8s.min(max_participant_icp_e8s)
+                };
+
+            // Precondition: The buyer does not have a buyer state.
+            {
+                let response = get_buyer_state(&pocket_ic, swap_canister_id, direct_participant)
+                    .expect("Swap.get_buyer_state response should be Ok.");
+                assert_eq!(response.buyer_state, None);
+            }
+
+            // Execute the operation under test.
+            let response =
+                refresh_buyer_tokens(&pocket_ic, swap_canister_id, direct_participant, None);
+
+            // Postcondition A: accepted amount matches our expectations.
             assert_eq!(
-                refresh_buyer_tokens(&pocket_ic, swap_canister_id, direct_participant, None),
+                response,
                 Ok(RefreshBuyerTokensResponse {
-                    icp_accepted_participation_e8s: accepted_participation_amount_e8s,
                     icp_ledger_account_balance_e8s: attempted_participation_amount_e8s,
+                    icp_accepted_participation_e8s: expected_accepted_participation_amount_e8s,
                 })
             );
+
+            // Postcondition B: The buyer has an expected buyer state.
+            {
+                let response = get_buyer_state(&pocket_ic, swap_canister_id, direct_participant)
+                    .expect("Swap.get_buyer_state response should be Ok.");
+                let (icp, has_created_neuron_recipes) = assert_matches!(
+                    response.buyer_state,
+                    Some(BuyerState {
+                        icp,
+                        has_created_neuron_recipes,
+                    }) => (
+                        icp.expect("buyer_state.icp must be specified."),
+                        has_created_neuron_recipes
+                            .expect("buyer_state.has_created_neuron_recipes must be specified.")
+                    )
+                );
+                assert!(
+                    !has_created_neuron_recipes,
+                    "Neuron recipes are expected to be created only after the swap is adopted"
+                );
+                assert_eq!(icp.amount_e8s, expected_accepted_participation_amount_e8s);
+            }
         }
         await_swap_lifecycle(&pocket_ic, swap_canister_id, Lifecycle::Committed).unwrap();
     };
@@ -1370,63 +1525,94 @@ fn test_sns_lifecycle(
     // no errors, and matching the expected pattern (different for `Aborted` and `Committed`).
     // It may take some time for the process to complete, so we should await (implemented via a busy
     // loop) rather than try just once.
-    let expected_swap_finalization_status = if ensure_swap_timeout_is_reached {
-        SwapFinalizationStatus::Aborted
-    } else {
-        SwapFinalizationStatus::Committed
+    let swap_finalization_status = {
+        let expected_swap_finalization_status = if ensure_swap_timeout_is_reached {
+            SwapFinalizationStatus::Aborted
+        } else {
+            SwapFinalizationStatus::Committed
+        };
+        if let Err(err) = await_swap_finalization_status(
+            &pocket_ic,
+            swap_canister_id,
+            expected_swap_finalization_status,
+        ) {
+            println!("{}", err);
+            panic!(
+                "Awaiting Swap finalization status {:?} failed.",
+                expected_swap_finalization_status
+            );
+        }
+        expected_swap_finalization_status
     };
-    if let Err(err) = await_swap_finalization_status(
-        &pocket_ic,
-        swap_canister_id,
-        expected_swap_finalization_status,
-    ) {
-        println!("{}", err);
-        panic!(
-            "Awaiting Swap finalization status {:?} failed.",
-            expected_swap_finalization_status
-        );
-    }
 
     // Participation is no longer possible due to Swap being in a terminal state.
-    for (direct_participant, _) in direct_participants.clone() {
-        let err = assert_matches!(refresh_buyer_tokens(&pocket_ic, swap_canister_id, direct_participant, None), Err(err) => err);
+    for direct_participant in direct_participants.keys() {
+        let err = assert_matches!(
+            refresh_buyer_tokens(&pocket_ic, swap_canister_id, *direct_participant, None),
+            Err(err) => err
+        );
         assert!(err.contains("Participation is possible only when the Swap is in the OPEN state."));
     }
 
     // 6. Check that refunding works as expected.
     for (
         direct_participant,
-        (direct_participant_icp_account, direct_participant_icp_account_initial_balance_icp),
+        (direct_participant_icp_account, direct_participant_icp_account_initial_balance_icp, _),
     ) in direct_participants
     {
         let attempted_participation_amount_e8s = direct_participant_icp_account_initial_balance_icp
             .get_e8s()
             - DEFAULT_TRANSFER_FEE.get_e8s();
-        let accepted_participation_amount_e8s = attempted_participation_amount_e8s.min(
-            swap_parameters
-                .maximum_direct_participation_icp
-                .unwrap()
-                .e8s
-                .unwrap(),
-        );
-        let expected_refund_e8s = if ensure_swap_timeout_is_reached {
-            // Expecting to get refunded with Transferred - (ICP Ledger transfer fee).
+        let accepted_participation_amount_e8s =
+            if attempted_participation_amount_e8s < min_participant_icp_e8s {
+                0
+            } else {
+                attempted_participation_amount_e8s.min(max_participant_icp_e8s)
+            };
+
+        let error_refund_icp_result =
+            error_refund_icp(&pocket_ic, swap_canister_id, direct_participant)
+                .result
+                .expect("Error while calling Swap.error_refund_icp");
+
+        use ic_sns_swap::pb::v1::error_refund_icp_response;
+        let expected_refund_e8s = if swap_finalization_status == SwapFinalizationStatus::Aborted {
+            // Case A: Expecting to get refunded with Transferred - (ICP Ledger transfer fee).
+            assert_matches!(
+                error_refund_icp_result,
+                error_refund_icp_response::Result::Ok(_)
+            );
+
             attempted_participation_amount_e8s - DEFAULT_TRANSFER_FEE.get_e8s()
+        } else if accepted_participation_amount_e8s == 0
+            || accepted_participation_amount_e8s == attempted_participation_amount_e8s
+        {
+            // Case B: (No tokens accepted) || (All tokens accepted)  ==>  nothing to refund.
+
+            let error_text = assert_matches!(
+                error_refund_icp_result,
+                error_refund_icp_response::Result::Err(err) => {
+                    err.description.expect("ICP Ledger errors should have a description.")
+                }
+            );
+            assert!(error_text.contains(
+                "the debit account doesn't have enough funds to complete the transaction"
+            ));
+
+            0
         } else {
-            // Expecting to get refunded with Transferred - Accepted - (ICP Ledger transfer fee).
+            // Case C: Expecting to get refunded with Transferred - Accepted - (ICP Ledger transfer fee).
+            assert_matches!(
+                error_refund_icp_result,
+                error_refund_icp_response::Result::Ok(_)
+            );
+
             attempted_participation_amount_e8s
                 - accepted_participation_amount_e8s
                 - DEFAULT_TRANSFER_FEE.get_e8s()
         };
 
-        let result = error_refund_icp(&pocket_ic, swap_canister_id, direct_participant)
-            .result
-            .expect("Error while calling Swap.error_refund_icp");
-        if let ic_sns_swap::pb::v1::error_refund_icp_response::Result::Err(err) = result {
-            panic!("{:?}", err);
-        };
-
-        // This assertion assumes works because we have consumed all of the tokens from this user's
+        // This assertion works because we have consumed all of the tokens from this user's
         // account up to the last e8.
         assert_eq!(
             account_balance(&pocket_ic, &direct_participant_icp_account),
@@ -1654,7 +1840,8 @@ fn test_sns_lifecycle(
             if !ensure_swap_timeout_is_reached {
                 // Direct and Neurons' Fund participants are only expected to get their SNS neurons
                 // in case the swap succeeds.
-                expected_neuron_controller_principal_ids.extend(direct_participant_principal_ids);
+                expected_neuron_controller_principal_ids
+                    .extend(direct_participant_principal_ids.keys());
 
                 // Note that we include SNS neuron hotkeys into the set of expected controllers. For
                 // the Neuron's Fund participants, we could make a stricted check that would assert
@@ -1769,8 +1956,10 @@ fn test_sns_lifecycle(
                         neuron_portions_per_controller
                     },
                 );
-        for (controller_principal_id, mut original_neurons) in original_nns_neurons_per_controller {
-            let mut current_neurons: Vec<u64> = {
+        for (controller_principal_id, mut original_nns_neuron_maturities_e8s) in
+            original_nns_controller_to_maturities_e8s
+        {
+            let mut nns_neuron_maturities_e8s: Vec<u64> = {
                 let response = list_neurons(&pocket_ic, controller_principal_id);
                 response
                     .full_neurons
@@ -1779,15 +1968,15 @@ fn test_sns_lifecycle(
                     .collect()
             };
             assert_eq!(
-                original_neurons.len(),
-                current_neurons.len(),
+                original_nns_neuron_maturities_e8s.len(),
+                nns_neuron_maturities_e8s.len(),
                 "Controller {} is expected to have {} neurons, but it actually has {}. \
-                original_neurons = {:#?}, current_neurons = {:#?}",
+                original_nns_neuron_maturities_e8s = {:#?}, nns_neuron_maturities_e8s = {:#?}",
                 controller_principal_id,
-                original_neurons.len(),
-                current_neurons.len(),
-                original_neurons,
-                current_neurons,
+                original_nns_neuron_maturities_e8s.len(),
+                nns_neuron_maturities_e8s.len(),
+                original_nns_neuron_maturities_e8s,
+                nns_neuron_maturities_e8s,
             );
 
             let mut participated_neurons = final_neurons_fund_participation
@@ -1796,14 +1985,16 @@ fn test_sns_lifecycle(
 
             // Reverse the order to process the largest neurons first.
             {
-                original_neurons.sort_by(|a, b| b.cmp(a));
-                current_neurons.sort_by(|a, b| b.cmp(a));
+                original_nns_neuron_maturities_e8s.sort_by(|a, b| b.cmp(a));
+                nns_neuron_maturities_e8s.sort_by(|a, b| b.cmp(a));
                 // This collection will be popped, so the order does not need to be reversed.
                 participated_neurons.sort();
             }
 
             for (original_maturity_icp_e8s, current_maturity_icp_e8s) in
-                original_neurons.into_iter().zip(current_neurons.iter())
+                original_nns_neuron_maturities_e8s
+                    .into_iter()
+                    .zip(nns_neuron_maturities_e8s.iter())
             {
                 // If the neuron is not in `final_neurons_fund_participation`, it didn't participate.
                 let participated_amount_icp_e8s = participated_neurons.pop().unwrap_or(0);
@@ -1823,8 +2014,10 @@ fn test_sns_lifecycle(
         );
     } else {
         // Neuron's Fund maturity should be completely unchanged.
-        for (controller_principal_id, original_neurons) in original_nns_neurons_per_controller {
-            let current_neurons: Vec<u64> = {
+        for (controller_principal_id, original_nns_neuron_maturities_e8s) in
+            original_nns_controller_to_maturities_e8s
+        {
+            let nns_neuron_maturities_e8s: Vec<u64> = {
                 let response = list_neurons(&pocket_ic, controller_principal_id);
                 response
                     .full_neurons
@@ -1833,10 +2026,13 @@ fn test_sns_lifecycle(
                     .collect()
             };
             assert_eq!(
-                current_neurons, original_neurons,
+                nns_neuron_maturities_e8s,
+                original_nns_neuron_maturities_e8s,
                 "Unexpected mismatch in maturity ICP equivalent for controller {}. \
-                current_neurons={:?} e8s, original_neurons({:?}) e8s.",
-                controller_principal_id, current_neurons, original_neurons,
+                nns_neuron_maturities_e8s={:?} e8s, original_nns_neuron_maturities_e8s({:?}) e8s.",
+                controller_principal_id,
+                nns_neuron_maturities_e8s,
+                original_nns_neuron_maturities_e8s,
             );
         }
     }
@@ -1863,7 +2059,22 @@ fn test_sns_lifecycle_happy_scenario_with_neurons_fund_participation() {
         CreateServiceNervousSystemBuilder::default()
             .neurons_fund_participation(true)
             .build(),
-        vec![PrincipalId::new_user_test_id(1)],
+        btreemap! { PrincipalId::new_user_test_id(1) => DirectParticipantConfig { use_ticketing_system: true } },
+    );
+}
+
+#[test]
+fn test_sns_lifecycle_happy_scenario_direct_participation_with_and_without_ticketing_with_neurons_fund_participation(
+) {
+    test_sns_lifecycle(
+        false,
+        CreateServiceNervousSystemBuilder::default()
+            .neurons_fund_participation(true)
+            .build(),
+        btreemap! {
+            PrincipalId::new_user_test_id(1) => DirectParticipantConfig { use_ticketing_system: true },
+            PrincipalId::new_user_test_id(2) => DirectParticipantConfig { use_ticketing_system: false },
+        },
     );
 }
 
@@ -1874,7 +2085,7 @@ fn test_sns_lifecycle_happy_scenario_without_neurons_fund_participation() {
         CreateServiceNervousSystemBuilder::default()
             .neurons_fund_participation(false)
             .build(),
-        vec![PrincipalId::new_user_test_id(1)],
+        btreemap! { PrincipalId::new_user_test_id(1) => DirectParticipantConfig { use_ticketing_system: true } },
     );
 }
 
@@ -1886,7 +2097,7 @@ fn test_sns_lifecycle_happy_scenario_with_neurons_fund_participation_same_princi
             .neurons_fund_participation(true)
             .build(),
         // Direct participant has the same principal as the one controlling the Neurons' Fund neuron.
-        vec![*TEST_NEURON_1_OWNER_PRINCIPAL],
+        btreemap! { *TEST_NEURON_1_OWNER_PRINCIPAL => DirectParticipantConfig { use_ticketing_system: true } },
     );
 }
 
@@ -1897,7 +2108,7 @@ fn test_sns_lifecycle_swap_timeout_with_neurons_fund_participation() {
         CreateServiceNervousSystemBuilder::default()
             .neurons_fund_participation(true)
             .build(),
-        vec![PrincipalId::new_user_test_id(1)],
+        btreemap! { PrincipalId::new_user_test_id(1) => DirectParticipantConfig { use_ticketing_system: true } },
     );
 }
 
@@ -1908,12 +2119,53 @@ fn test_sns_lifecycle_swap_timeout_without_neurons_fund_participation() {
         CreateServiceNervousSystemBuilder::default()
             .neurons_fund_participation(false)
             .build(),
-        vec![PrincipalId::new_user_test_id(1)],
+        btreemap! { PrincipalId::new_user_test_id(1) => DirectParticipantConfig { use_ticketing_system: true } },
     );
 }
 
 #[test]
 fn test_sns_lifecycle_happy_scenario_with_lots_of_dev_neurons() {
+    let num_neurons = MAX_DEVELOPER_DISTRIBUTION_COUNT as u64;
+    let mut developer_neurons: Vec<_> = (0..num_neurons - 1)
+        .map(|i| NeuronDistribution {
+            controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+            memo: Some(i),
+            // Set the dissolve delay to ~10 days, which is somewhat arbitrary. It needs to be less
+            // than or equal to the maximum dissolve delay (as defined
+            // in `CreateServiceNervousSystemBuilder::default()`), but high enough that it still has
+            // some voting power.
+            dissolve_delay: Some(DurationPb::from_secs(927391)),
+            stake: Some(TokensPb::from_e8s(E8)),
+            vesting_period: Some(DurationPb::from_secs(0)),
+        })
+        .collect();
+    // One developer neuron needs to have the voting power majority for the underlying tests to
+    // be able to get SNS proposals through without arranging any following or voting. The dissolve
+    // delay of this neuron needs to be sufficient for voting (we set it to 7 months).
+    developer_neurons.push(NeuronDistribution {
+        controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+        memo: Some(num_neurons - 1),
+        dissolve_delay: Some(DurationPb::from_secs(SECONDS_PER_DAY * 30 * 7)),
+        // All other neurons together have `num_neurons - 1` e8s, so this one has the majority.
+        stake: Some(TokensPb::from_e8s(num_neurons * E8)),
+        vesting_period: Some(DurationPb::from_secs(0)),
+    });
+
+    let create_service_nervous_system_proposal = CreateServiceNervousSystemBuilder::default()
+        .neurons_fund_participation(true)
+        .initial_token_distribution_developer_neurons(developer_neurons)
+        .initial_token_distribution_total(TokensPb::from_e8s((num_neurons * 2 - 1) * E8))
+        .build();
+
+    test_sns_lifecycle(
+        true,
+        create_service_nervous_system_proposal,
+        btreemap! { PrincipalId::new_user_test_id(1) => DirectParticipantConfig { use_ticketing_system: true } },
+    );
+}
+
+#[test]
+fn test_sns_lifecycle_swap_timeout_with_lots_of_dev_neurons() {
     let num_neurons = MAX_DEVELOPER_DISTRIBUTION_COUNT as u64;
     let mut developer_neurons: Vec<_> = (0..num_neurons - 1)
         .map(|i| NeuronDistribution {
@@ -1949,6 +2201,6 @@ fn test_sns_lifecycle_happy_scenario_with_lots_of_dev_neurons() {
     test_sns_lifecycle(
         true,
         create_service_nervous_system_proposal,
-        vec![PrincipalId::new_user_test_id(1)],
+        btreemap! { PrincipalId::new_user_test_id(1) => DirectParticipantConfig { use_ticketing_system: true } },
     );
 }

@@ -9,7 +9,7 @@ use ic_nervous_system_common::{
     START_OF_2022_TIMESTAMP_SECONDS,
 };
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_PRINCIPAL, TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL,
+    TEST_NEURON_1_OWNER_PRINCIPAL, TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL,
 };
 use ic_nns_common::{pb::v1 as nns_common_pb, types::ProposalId as NnsProposalId};
 use ic_nns_constants::{
@@ -57,10 +57,9 @@ use ic_sns_swap::{
 use ic_sns_test_utils::{
     now_seconds,
     state_test_helpers::{
-        get_buyer_state, get_open_ticket, get_sns_sale_parameters,
-        list_community_fund_participants, new_sale_ticket, participate_in_swap,
-        refresh_buyer_tokens, sns_governance_get_nervous_system_parameters,
-        sns_governance_list_neurons, sns_root_register_dapp_canisters, swap_get_state,
+        get_open_ticket, new_sale_ticket, participate_in_swap, refresh_buyer_tokens,
+        sns_governance_get_nervous_system_parameters, sns_governance_list_neurons,
+        sns_root_register_dapp_canisters, swap_get_state,
     },
 };
 use ic_sns_wasm::pb::v1::SnsCanisterIds;
@@ -2198,135 +2197,4 @@ fn test_deletion_of_sale_ticket_legacy() {
                 + ticket_new.amount_icp_e8s * 2
         }
     );
-}
-
-#[test]
-fn test_list_community_fund_participants_legacy() {
-    // Step 1: Prepare the world.
-    let mut state_machine = StateMachineBuilder::new().with_current_time().build();
-
-    let direct_participant_principal_ids = vec![*TEST_USER1_PRINCIPAL];
-    let planned_participation_amount_per_account = ExplosiveTokens::from_e8s(100 * E8);
-    let neuron_basket_count = 3;
-    let sns_canister_ids = begin_swap_legacy(
-        &mut state_machine,
-        &direct_participant_principal_ids,
-        &[], // additional_nns_neurons
-        planned_participation_amount_per_account,
-        ExplosiveTokens::from_e8s(0), // planned_community_fund_participation_amount
-        neuron_basket_count,
-        DEFAULT_MAX_COMMUNITY_FUND_RELATIVE_ERROR,
-        do_nothing_special_before_proposal_is_adopted,
-    )
-    .0;
-
-    assert_eq!(
-        list_community_fund_participants(
-            &state_machine,
-            &sns_canister_ids.swap(),
-            &TEST_USER1_PRINCIPAL,
-            &0,
-            &0
-        )
-        .cf_participants,
-        vec![]
-    );
-}
-
-#[test]
-fn test_refresh_buyer_token_legacy() {
-    // Step 1: Prepare the world.
-    let mut state_machine = StateMachineBuilder::new().with_current_time().build();
-
-    let direct_participant_principal_ids = vec![
-        *TEST_USER1_PRINCIPAL,
-        *TEST_USER2_PRINCIPAL,
-        *TEST_USER3_PRINCIPAL,
-    ];
-    let planned_participation_amount_per_account = ExplosiveTokens::from_e8s(100 * E8);
-    let neuron_basket_count = 3;
-    let sns_canister_ids = begin_swap_legacy(
-        &mut state_machine,
-        &direct_participant_principal_ids,
-        &[], // additional_nns_neurons
-        planned_participation_amount_per_account,
-        ExplosiveTokens::from_e8s(0), // planned_community_fund_participation_amount
-        neuron_basket_count,
-        DEFAULT_MAX_COMMUNITY_FUND_RELATIVE_ERROR,
-        do_nothing_special_before_proposal_is_adopted,
-    )
-    .0;
-
-    let sns_params = get_sns_sale_parameters(&state_machine, &sns_canister_ids.swap())
-        .params
-        .unwrap();
-
-    //Happy Case
-    {
-        // Create a ticket for user1, amount is the minimum that has to be transferred for a purchase
-        let ticket = new_sale_ticket(
-            &state_machine,
-            sns_canister_ids.swap(),
-            *TEST_USER1_PRINCIPAL,
-            sns_params.min_participant_icp_e8s,
-            None,
-        )
-        .unwrap();
-
-        //Transfer ICP to the SNS Sale canister. The balance of user1 on the corresponding subaccount of the SNS sale canister has now been topped up
-        assert!(icrc1_transfer(
-            &state_machine,
-            LEDGER_CANISTER_ID,
-            *TEST_USER1_PRINCIPAL,
-            TransferArg {
-                from_subaccount: None,
-                to: Account {
-                    owner: sns_canister_ids.swap().into(),
-                    subaccount: Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL))
-                },
-                fee: None,
-                created_at_time: None,
-                memo: None,
-                amount: Nat::from(ticket.amount_icp_e8s)
-            },
-        )
-        .is_ok());
-
-        //Check the balance on the sns sale canister buyer state to make sure the balance of user1 is 0 (or not existing since no purchase has been made yet) before committing to the purchase
-        assert!(get_buyer_state(
-            &state_machine,
-            &sns_canister_ids.swap(),
-            &TEST_USER1_PRINCIPAL
-        )
-        .buyer_state
-        .is_none());
-
-        let refresh_response = refresh_buyer_tokens(
-            &state_machine,
-            &sns_canister_ids.swap(),
-            &TEST_USER1_PRINCIPAL,
-            None,
-        );
-
-        assert_eq!(
-            refresh_response.unwrap(),
-            RefreshBuyerTokensResponse {
-                icp_accepted_participation_e8s: ticket.amount_icp_e8s,
-                icp_ledger_account_balance_e8s: ticket.amount_icp_e8s
-            }
-        );
-
-        //Check the balance on the sns sale canister buyer state to make sure the balance of user1 is the same as specified on the ticket
-        assert!(
-            get_buyer_state(
-                &state_machine,
-                &sns_canister_ids.swap(),
-                &TEST_USER1_PRINCIPAL
-            )
-            .buyer_state
-            .unwrap()
-            .amount_icp_e8s()
-                == ticket.amount_icp_e8s
-        );
-    }
 }

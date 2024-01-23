@@ -183,11 +183,12 @@ lazy_static! {
                 maximum_participant_icp: Some(pb::Tokens {
                     e8s: Some(1_000 * E8),
                 }),
+                neurons_fund_participation: Some(true),
+
                 // Unset legacy fields
                 minimum_icp: None,
                 maximum_icp: None,
                 neurons_fund_investment_icp: None,
-                neurons_fund_participation: Some(true),
                 ..swap_parameters
             }),
             ..CREATE_SERVICE_NERVOUS_SYSTEM.clone()
