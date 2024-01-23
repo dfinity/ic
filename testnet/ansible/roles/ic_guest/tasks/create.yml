@@ -172,7 +172,7 @@
     api_nodes: "{{ hostvars[inventory_hostname].groups.api | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
     boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
     aux_nodes: "{{ hostvars[inventory_hostname].groups.aux | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
-    ic_memory_kib: "{{ ic_memory_gb | int * (1024 | pow(2)) }}"
+    ic_memory_kib: "{{ (hostvars[item].ic_memory_gb | default(ic_memory_gb)) | int * (1024 | pow(2)) }}"
     mac_address: "{{ hostvars[item].mac_address }}"
     ipv4_interface: "{{ hostvars[item].ipv4_interface | default('vlan66') }}"
     ipv6_interface: "{{ hostvars[item].ipv6_interface | default('vlan66') }}"
