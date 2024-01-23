@@ -126,6 +126,8 @@ RUN cd /tmp/ && \
     rm /tmp/node_exporter-1.3.1.linux-amd64.tar.gz
 
 # If CPU_SUPPORT is "sev", install the patched qemu and the host kernel
+# The file `/opt/ic/share/SEV` is used as a build-time flag to indicate that
+# the SEV path shoud be taken at runtime.
 # QEMU installed previously will be over-written by the patched QEMU (7.2.0)
 # Installing libsnappy package only for "sev" configuration
 # TODO: Generate SEV build conditionally so that QEMU 6.2 is not built unnecessarily

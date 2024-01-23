@@ -111,7 +111,7 @@ Follow instructions link:docs/SEVSnpTest.adoc#[here] to prepare the dev machine.
 Note: we are storing the PEM files instead of the DER files.
 
 ```bash
-% ic/ic-os/hostos/rootfs/opt/ic/bin/get-sev-certs.sh
+% snptool get-certs
 % sev-host-set-cert-chain  -r ark.pem -s ask.pem -v vcek.pem
 ```
 

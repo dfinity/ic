@@ -121,11 +121,6 @@ options may be specified:
   --socks_proxy url
     The URL of the socks proxy to use. To be used in
     systems tests only.
-
-  --get_sev_certs
-    If on an SEV-SNP enabled machine, include the ark, ask, and vcek
-    certificates in the config image.  Note: this requires that this
-    script is executed on the host which will be running the SEV-SNP VM.
 EOF
 }
 
@@ -145,7 +140,6 @@ function build_ic_bootstrap_tar() {
     local REPLICA_LOG_DEBUG_OVERRIDES
     local MALICIOUS_BEHAVIOR
     local BITCOIND_ADDR
-    local GET_SEV_CERTS=false
 
     while true; do
         if [ $# == 0 ]; then
@@ -219,11 +213,6 @@ function build_ic_bootstrap_tar() {
             --socks_proxy)
                 SOCKS_PROXY="$2"
                 ;;
-            --get_sev_certs)
-                GET_SEV_CERTS=true
-                shift 1
-                continue
-                ;;
             *)
                 echo "Unrecognized option: $1"
                 usage
@@ -290,12 +279,6 @@ EOF
     fi
     if [ "${NODE_OPERATOR_PRIVATE_KEY}" != "" ]; then
         cp "${NODE_OPERATOR_PRIVATE_KEY}" "${BOOTSTRAP_TMPDIR}/node_operator_private_key.pem"
-    fi
-    if [[ "${GET_SEV_CERTS}" == true && ! -e "/dev/sev" ]]; then
-        echo "--get_sev_certs is true but /dev/sev is not available, unable to get SEV certs"
-    fi
-    if [[ "${GET_SEV_CERTS}" == true && -e "/dev/sev" ]]; then
-        /opt/ic/bin/get-sev-certs.sh
     fi
 
     tar cf "${OUT_FILE}" \
