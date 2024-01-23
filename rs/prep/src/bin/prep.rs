@@ -141,6 +141,10 @@ struct CliArgs {
     #[clap(long, allow_hyphen_values = true)]
     pub max_ingress_bytes_per_message: Option<i64>,
 
+    /// Maximum size of a block payload in bytes.
+    #[clap(long)]
+    pub max_block_payload_size: Option<u64>,
+
     /// if release-package-download-url is not specified and this option is
     /// specified, the corresponding update image field in the blessed replica
     /// version record is left empty.
@@ -209,19 +213,19 @@ fn main() -> Result<()> {
             nodes.to_owned(),
             replica_version.clone(),
             valid_args.max_ingress_bytes_per_message,
-            None,
-            None,
-            None,
-            None,
+            /*max_ingress_messages_per_block=*/ None,
+            valid_args.max_block_payload_size,
+            /*unit_delay=*/ None,
+            /*initial_notary_delay=*/ None,
             valid_args.dkg_interval_length,
-            None,
+            /*dkg_dealings_per_block=*/ None,
             subnet_type,
-            None,
-            None,
-            None,
+            /*max_instructions_per_message=*/ None,
+            /*max_instructions_per_round=*/ None,
+            /*max_instructions_per_install_code=*/ None,
             features,
-            None,
-            None,
+            /*ecdsa_config=*/ None,
+            /*max_number_of_canisters=*/ None,
             valid_args.ssh_readonly_access.clone(),
             valid_args.ssh_backup_access.clone(),
             SubnetRunningState::Active,
@@ -282,6 +286,7 @@ struct ValidatedArgs {
     pub ssh_readonly_access: Vec<String>,
     pub ssh_backup_access: Vec<String>,
     pub max_ingress_bytes_per_message: Option<u64>,
+    pub max_block_payload_size: Option<u64>,
     pub allow_empty_update_image: bool,
     pub guest_launch_measurement_sha256_hex: Option<String>,
     pub use_specified_ids_allocation_range: bool,
@@ -437,6 +442,7 @@ impl CliArgs {
                     None
                 }
             }),
+            max_block_payload_size: self.max_block_payload_size,
             allow_empty_update_image: self.allow_empty_update_image,
             guest_launch_measurement_sha256_hex: self.guest_launch_measurement_sha256_hex,
             use_specified_ids_allocation_range: self.use_specified_ids_allocation_range,
