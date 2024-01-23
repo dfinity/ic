@@ -1,7 +1,6 @@
 //! This module contains definitions for communicating with an Ethereum API using the [JSON RPC](https://ethereum.org/en/developers/docs/apis/json-rpc/)
 //! interface.
 
-use crate::address::Address;
 use crate::endpoints::CandidBlockTag;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::eth_rpc_error::{sanitize_send_raw_transaction_result, Parser};
@@ -17,6 +16,7 @@ use ic_cdk::api::management_canister::http_request::{
     TransformContext,
 };
 use ic_cdk_macros::query;
+use ic_ethereum_types::Address;
 pub use metrics::encode as encode_metrics;
 use minicbor::{Decode, Encode};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -48,7 +48,7 @@ pub fn into_nat(quantity: Quantity) -> candid::Nat {
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(transparent)]
-pub struct Data(#[serde(with = "crate::serde_data")] pub Vec<u8>);
+pub struct Data(#[serde(with = "ic_ethereum_types::serde_data")] pub Vec<u8>);
 
 impl AsRef<[u8]> for Data {
     fn as_ref(&self) -> &[u8] {
@@ -58,7 +58,7 @@ impl AsRef<[u8]> for Data {
 
 #[derive(Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(transparent)]
-pub struct FixedSizeData(#[serde(with = "crate::serde_data")] pub [u8; 32]);
+pub struct FixedSizeData(#[serde(with = "ic_ethereum_types::serde_data")] pub [u8; 32]);
 
 impl AsRef<[u8]> for FixedSizeData {
     fn as_ref(&self) -> &[u8] {
@@ -124,7 +124,7 @@ impl HttpResponsePayload for SendRawTransactionResult {
 #[serde(transparent)]
 #[cbor(transparent)]
 pub struct Hash(
-    #[serde(with = "crate::serde_data")]
+    #[serde(with = "ic_ethereum_types::serde_data")]
     #[cbor(n(0), with = "minicbor::bytes")]
     pub [u8; 32],
 );

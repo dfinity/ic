@@ -1,4 +1,3 @@
-use crate::address::Address;
 use crate::endpoints::CandidBlockTag;
 use crate::eth_rpc::BlockTag;
 use crate::lifecycle::EthereumNetwork;
@@ -8,6 +7,7 @@ use crate::state::{InvalidStateError, State};
 use candid::types::number::Nat;
 use candid::types::principal::Principal;
 use candid::{CandidType, Deserialize};
+use ic_ethereum_types::Address;
 use minicbor::{Decode, Encode};
 
 #[derive(CandidType, Deserialize, Clone, Debug, Encode, Decode, PartialEq, Eq)]

@@ -41,6 +41,7 @@ rust_library(
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/crypto/ecdsa_secp256k1",
         "//rs/crypto/sha3",
+        "//rs/ethereum/types",
         "//rs/phantom_newtype",
         "//rs/types/ic00_types",
         "//rs/utils/ensure",
@@ -129,6 +130,7 @@ rust_test(
         "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/crypto/ecdsa_secp256k1",
+        "//rs/ethereum/types",
         "//rs/rust_canisters/http_types",
         "@crate_index//:askama",
         "@crate_index//:candid",
@@ -179,6 +181,7 @@ rust_ic_test(
     deps = [
         ":minter",
         "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/ethereum/types",
         "//rs/rosetta-api/icrc1/ledger",
         "//rs/rust_canisters/http_types",
         "//rs/state_machine_tests",

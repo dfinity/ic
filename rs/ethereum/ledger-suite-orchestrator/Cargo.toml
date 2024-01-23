@@ -15,6 +15,7 @@ ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
+ic-ethereum-types = { path = "../types"}
 ic-ic00-types = { path = "../../types/ic00_types" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 ic-icrc1-index-ng = { path = "../../rosetta-api/icrc1/index-ng" }

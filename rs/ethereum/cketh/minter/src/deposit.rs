@@ -1,4 +1,3 @@
-use crate::address::Address;
 use crate::eth_logs::{report_transaction_error, ReceivedEthEventError};
 use crate::eth_rpc::{BlockSpec, HttpOutcallError};
 use crate::eth_rpc_client::EthRpcClient;
@@ -9,6 +8,7 @@ use crate::state::{
     audit::process_event, event::EventType, mutate_state, read_state, State, TaskType,
 };
 use ic_canister_log::log;
+use ic_ethereum_types::Address;
 use num_traits::ToPrimitive;
 use std::cmp::{min, Ordering};
 use std::time::Duration;

@@ -5945,6 +5945,7 @@ dependencies = [
  "ic-crypto-ecdsa-secp256k1",
  "ic-crypto-sha3",
  "ic-crypto-test-utils-reproducible-rng",
+ "ic-ethereum-types",
  "ic-ic00-types",
  "ic-icrc1-ledger",
  "ic-metrics-encoder",
@@ -7553,6 +7554,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-ethereum-types"
+version = "0.9.0"
+dependencies = [
+ "assert_matches",
+ "hex",
+ "ic-crypto-sha3",
+ "minicbor",
+ "minicbor-derive",
+ "proptest",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "ic-execution-environment"
 version = "0.9.0"
 dependencies = [
@@ -8603,6 +8618,7 @@ dependencies = [
  "ic-cdk",
  "ic-cdk-macros",
  "ic-cdk-timers",
+ "ic-ethereum-types",
  "ic-ic00-types",
  "ic-icrc1-index-ng",
  "ic-icrc1-ledger",

@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use hex::{FromHex, ToHex};
 use serde::de::{Error, Visitor};
 use serde::Deserializer;

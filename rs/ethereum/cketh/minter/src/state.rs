@@ -1,4 +1,4 @@
-use crate::address::Address;
+use crate::address::ecdsa_public_key_to_address;
 use crate::eth_logs::{EventSource, ReceivedEthEvent};
 use crate::eth_rpc::BlockTag;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
@@ -10,6 +10,7 @@ use candid::Principal;
 use ic_canister_log::log;
 use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
 use ic_crypto_ecdsa_secp256k1::PublicKey;
+use ic_ethereum_types::Address;
 use std::cell::RefCell;
 use std::collections::{btree_map, BTreeMap, BTreeSet, HashSet};
 use strum_macros::EnumIter;
@@ -114,7 +115,7 @@ impl State {
             .unwrap_or_else(|e| {
                 ic_cdk::trap(&format!("failed to decode minter's public key: {:?}", e))
             });
-        Some(Address::from_pubkey(&pubkey))
+        Some(ecdsa_public_key_to_address(&pubkey))
     }
 
     fn record_event_to_mint(&mut self, event: &ReceivedEthEvent) {
@@ -376,7 +377,7 @@ pub async fn lazy_call_ecdsa_public_key() -> PublicKey {
 }
 
 pub async fn minter_address() -> Address {
-    Address::from_pubkey(&lazy_call_ecdsa_public_key().await)
+    ecdsa_public_key_to_address(&lazy_call_ecdsa_public_key().await)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -1,4 +1,3 @@
-use crate::address::Address;
 use crate::checked_amount::CheckedAmountOf;
 use crate::endpoints::CandidBlockTag;
 use crate::eth_logs::{EventSource, ReceivedEthEvent};
@@ -19,6 +18,7 @@ use crate::tx::{
 };
 use candid::{Nat, Principal};
 use ethnum::u256;
+use ic_ethereum_types::Address;
 use proptest::array::{uniform20, uniform32};
 use proptest::collection::vec as pvec;
 use proptest::prelude::*;
@@ -207,13 +207,13 @@ fn received_eth_event() -> ReceivedEthEvent {
 }
 
 mod upgrade {
-    use crate::address::Address;
     use crate::eth_rpc::BlockTag;
     use crate::lifecycle::upgrade::UpgradeArg;
     use crate::numeric::{wei_from_milli_ether, TransactionNonce, Wei};
     use crate::state::{InvalidStateError, State};
     use assert_matches::assert_matches;
     use candid::Nat;
+    use ic_ethereum_types::Address;
     use num_bigint::BigUint;
     use std::str::FromStr;
 

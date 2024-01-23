@@ -3,6 +3,7 @@ use crate::management::{create_canister, install_code, CallError};
 use crate::state::{mutate_state, read_state, Canisters};
 use candid::{Encode, Principal};
 use ic_canister_log::log;
+use ic_ethereum_types::Address;
 use ic_icrc1_index_ng::{IndexArg, InitArg as IndexInitArg};
 use ic_icrc1_ledger::{ArchiveOptions, InitArgs as LedgerInitArgs, LedgerArgument};
 use icrc_ledger_types::icrc1::account::Account;
@@ -192,25 +193,6 @@ pub struct Erc20Contract(#[n(0)] ChainId, #[n(1)] Address);
 #[derive(Debug, PartialEq, Clone, Eq, Ord, PartialOrd, CborEncode, Decode)]
 #[cbor(transparent)]
 pub struct ChainId(#[n(0)] u64);
-
-//TODO reuse Address type from ckETH.
-#[derive(Debug, PartialEq, Clone, Eq, Ord, PartialOrd, CborEncode, Decode)]
-#[cbor(transparent)]
-pub struct Address(#[cbor(n(0), with = "minicbor::bytes")] [u8; 20]);
-
-impl FromStr for Address {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if !s.starts_with("0x") {
-            return Err("address doesn't start with '0x'".to_string());
-        }
-        let mut bytes = [0u8; 20];
-        hex::decode_to_slice(&s[2..], &mut bytes)
-            .map_err(|e| format!("address is not hex: {}", e))?;
-        Ok(Self(bytes))
-    }
-}
 
 impl TryFrom<crate::candid::Erc20Contract> for Erc20Contract {
     type Error = String;

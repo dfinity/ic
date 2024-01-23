@@ -5,7 +5,6 @@ use candid::{Decode, Encode, Nat, Principal};
 use ethers_core::abi::AbiDecode;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
-use ic_cketh_minter::address::Address;
 use ic_cketh_minter::endpoints::events::{
     Event, EventPayload, EventSource, GetEventsResult, TransactionReceipt, TransactionStatus,
     UnsignedTransaction,
@@ -24,6 +23,7 @@ use ic_cketh_minter::{
     PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_ETH_RETRIEVE_TRANSACTIONS_RETRY_INTERVAL,
     PROCESS_REIMBURSEMENT, SCRAPPING_ETH_LOGS_INTERVAL,
 };
+use ic_ethereum_types::Address;
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_state_machine_tests::{Cycles, MessageId, StateMachine, StateMachineBuilder, WasmResult};
 use ic_test_utilities_load_wasm::load_wasm;

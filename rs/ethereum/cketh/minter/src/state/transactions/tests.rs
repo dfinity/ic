@@ -1,4 +1,3 @@
-use crate::address::Address;
 use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::EthereumNetwork;
@@ -10,6 +9,7 @@ use crate::tx::{
     AccessList, Eip1559Signature, Eip1559TransactionRequest, SignedEip1559TransactionRequest,
     TransactionPrice,
 };
+use ic_ethereum_types::Address;
 
 const DEFAULT_WITHDRAWAL_AMOUNT: u128 = 1_100_000_000_000_000;
 const DEFAULT_PRINCIPAL: &str = "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae";
@@ -280,7 +280,6 @@ mod eth_transactions {
     }
 
     mod record_created_transaction {
-        use crate::address::Address;
         use crate::lifecycle::EthereumNetwork;
         use crate::numeric::{LedgerBurnIndex, TransactionNonce};
         use crate::state::transactions::tests::{
@@ -289,6 +288,7 @@ mod eth_transactions {
         };
         use crate::state::transactions::{create_transaction, EthTransactions};
         use crate::tx::Eip1559TransactionRequest;
+        use ic_ethereum_types::Address;
         use proptest::prelude::any;
         use proptest::{prop_assert_ne, proptest};
 
@@ -1706,7 +1706,6 @@ mod withdrawal_flow {
 }
 
 pub mod arbitrary {
-    use crate::address::Address;
     use crate::checked_amount::CheckedAmountOf;
     use crate::numeric::{GasAmount, TransactionNonce, WeiPerGas};
     use crate::state::transactions::{EthWithdrawalRequest, Subaccount};
@@ -1715,6 +1714,7 @@ pub mod arbitrary {
         SignedEip1559TransactionRequest, StorageKey, TransactionPrice,
     };
     use candid::Principal;
+    use ic_ethereum_types::Address;
     use phantom_newtype::Id;
     use proptest::arbitrary::any;
     use proptest::array::{uniform20, uniform32};

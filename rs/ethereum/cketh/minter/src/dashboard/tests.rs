@@ -1,7 +1,6 @@
 use crate::dashboard::tests::assertions::DashboardAssert;
 use crate::dashboard::DashboardTemplate;
 use candid::Principal;
-use ic_cketh_minter::address::Address;
 use ic_cketh_minter::eth_logs::{EventSource, ReceivedEthEvent};
 use ic_cketh_minter::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use ic_cketh_minter::lifecycle::EthereumNetwork;
@@ -15,6 +14,7 @@ use ic_cketh_minter::state::State;
 use ic_cketh_minter::tx::{
     Eip1559Signature, Eip1559TransactionRequest, SignedEip1559TransactionRequest, TransactionPrice,
 };
+use ic_ethereum_types::Address;
 use maplit::btreeset;
 use std::str::FromStr;
 
