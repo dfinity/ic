@@ -9,7 +9,6 @@ INPUT_FILES=(
     rust-toolchain.toml
     gitlab-ci/container/Dockerfile*
     gitlab-ci/container/files/*
-    typescript/service-worker/.nvmrc
 )
 
 # print sha of relevant files

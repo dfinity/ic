@@ -83,10 +83,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /gitlab-ci/config/spawn-pipeline--benchmark.yml                         @dfinity-lab/teams/runtime-owners
 /gitlab-ci/config/rosetta.yml                                           @dfinity-lab/teams/financial-integrations
 
-# [Typescript]
-/typescript/                 @dfinity-lab/teams/owners-owners
-/typescript/service-worker/  @dfinity-lab/teams/trust-team
-
 # [Testnet]
 /testnet/                                                  @dfinity-lab/teams/node-team @dfinity-lab/teams/DRE
 /testnet/ansible/                                          @dfinity-lab/teams/platform-operations

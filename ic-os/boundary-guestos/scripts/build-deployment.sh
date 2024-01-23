@@ -49,7 +49,7 @@ Arguments:
        --cert-issuer-creds              specify a credentials file for certificate-issuer
        --cert-issuer-identity           specify an identity file for certificate-issuer
        --cert-issuer-enc-key            specify an encryption key for certificate-issuer
-       --cert-syncer-raw-domains-file   specify a path to a file containing a list of custom domains that should bypass the service worker
+       --cert-syncer-raw-domains-file   specify a path to a file containing a list of custom domains
        --pre-isolation-canisters        specify a set of pre-domain-isolation canisters
        --ip-hash-salt                   specify a salt for hashing ip values
        --logging-url                    specify an endpoint for our logging backend

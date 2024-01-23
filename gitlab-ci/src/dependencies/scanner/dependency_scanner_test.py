@@ -289,7 +289,7 @@ def test_on_periodic_job_failure(jira_lib_mock):
 @patch("scanner.dependency_scanner.DependencyScanner._DependencyScanner__clone_repository_from_url")
 @patch("shutil.rmtree")
 def test_get_findings_ic_dir(shutil, clone_repo, jira_lib_mock):
-    project = Project("service-worker", "ic/typescript/service-worker")
+    project = Project("ic", "ic")
     repo = Repository("ic", "https://gitlab.com/dfinity-lab/public/ic", [project])
     fake_bazel = Mock()
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [])

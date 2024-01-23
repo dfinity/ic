@@ -66,22 +66,6 @@ function copy_certs() {
         fi
     done
 
-    # Prepend certificate hash to the Service Worker as a comment.
-    # This should force browsers to re-download it whenever the certificate is re-issued.
-    #
-    # See for details:
-    # - https://github.com/w3c/ServiceWorker/issues/1523
-    # - https://bugs.chromium.org/p/chromium/issues/detail?id=1103551
-    # - https://web.dev/service-worker-lifecycle/#updates
-    #
-    # TODO: remove when the bugs are fixed
-    local -r SW="/var/www/html/sw.js"
-    local -r CERT_HASH=$(sha256sum "${CERT_DST}/fullchain.pem" | awk '{print $1}')
-    echo "/* ${CERT_HASH} */" >"${SW}.prefix"
-    cat "${SW}.prefix" "${SW}" >"${SW}.new"
-    mv -f "${SW}.new" "${SW}"
-    rm -f "${SW}.prefix"
-
     local -r SNAKEOIL_KEY='/etc/ssl/private/ssl-cert-snakeoil.key'
     local -r KEYS_SRC="${CERT_SRC}"
     local -r KEYS_DST="${RUN_DIR}/keys"
