@@ -18,6 +18,7 @@ rust_library(
     version = "0.1.0",
     deps = [
         "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/ethereum/types",
         "//rs/rosetta-api/icrc1/index-ng",
         "//rs/rosetta-api/icrc1/ledger",
         "//rs/types/base_types",

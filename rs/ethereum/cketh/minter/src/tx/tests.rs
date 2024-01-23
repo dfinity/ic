@@ -129,12 +129,12 @@ mod transaction_price {
 
 #[test]
 fn should_cbor_encoding_be_stable() {
-    use crate::address::Address;
     use crate::numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas};
     use crate::tx::{
         AccessList, Eip1559Signature, Eip1559TransactionRequest, SignedEip1559TransactionRequest,
     };
     use ethnum::u256;
+    use ic_ethereum_types::Address;
     use std::str::FromStr;
 
     // see https://sepolia.etherscan.io/getRawTx?tx=0x66a9a218ea720ac6d2c9e56f7e44836c1541c186b7627bda220857ce34e2df7f

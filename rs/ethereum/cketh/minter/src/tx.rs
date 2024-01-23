@@ -1,13 +1,13 @@
 #[cfg(test)]
 mod tests;
 
-use crate::address::Address;
 use crate::eth_rpc::{FeeHistory, Hash};
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::numeric::{BlockNumber, GasAmount, TransactionNonce, Wei, WeiPerGas};
 use crate::state::{lazy_call_ecdsa_public_key, read_state};
 use ethnum::u256;
 use ic_crypto_ecdsa_secp256k1::RecoveryId;
+use ic_ethereum_types::Address;
 use ic_ic00_types::DerivationPath;
 use minicbor::{Decode, Encode};
 use rlp::RlpStream;

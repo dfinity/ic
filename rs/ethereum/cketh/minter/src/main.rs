@@ -2,7 +2,7 @@ use candid::Nat;
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
-use ic_cketh_minter::address::{validate_address_as_destination, Address, AddressValidationError};
+use ic_cketh_minter::address::{validate_address_as_destination, AddressValidationError};
 use ic_cketh_minter::deposit::scrap_eth_logs;
 use ic_cketh_minter::endpoints::events::{
     Event as CandidEvent, EventSource as CandidEventSource, GetEventsArg, GetEventsResult,
@@ -27,6 +27,7 @@ use ic_cketh_minter::{
     state, storage, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_REIMBURSEMENT,
     SCRAPPING_ETH_LOGS_INTERVAL,
 };
+use ic_ethereum_types::Address;
 use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;

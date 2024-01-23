@@ -586,10 +586,10 @@ mod eth_get_transaction_receipt {
 }
 
 mod eth_get_transaction_count {
-    use crate::address::Address;
     use crate::eth_rpc::{BlockSpec, BlockTag};
     use crate::eth_rpc_client::requests::GetTransactionCountParams;
     use crate::numeric::TransactionCount;
+    use ic_ethereum_types::Address;
     use std::str::FromStr;
 
     #[test]

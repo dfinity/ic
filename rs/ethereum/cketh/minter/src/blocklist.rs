@@ -1,5 +1,5 @@
-use crate::address::Address;
 use hex_literal::hex;
+use ic_ethereum_types::Address;
 
 #[cfg(test)]
 mod tests;

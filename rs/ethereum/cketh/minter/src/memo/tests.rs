@@ -60,7 +60,7 @@ mod decode_memo {
             "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3"
                 .parse()
                 .unwrap();
-        let from_address: crate::address::Address = "0xdd2851cdd40ae6536831558dd46db62fac7a844d"
+        let from_address: Address = "0xdd2851cdd40ae6536831558dd46db62fac7a844d"
             .parse()
             .unwrap();
         let event = ReceivedEthEvent {
