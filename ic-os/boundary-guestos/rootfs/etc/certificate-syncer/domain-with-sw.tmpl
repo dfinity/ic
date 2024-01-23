@@ -40,8 +40,7 @@ server {
 
         # CORS
         set $cors_allow_methods "HEAD, GET, OPTIONS";
-        include "includes/cors_remove_proxy.conf";
-        include "includes/cors.conf";
+        include "includes/response_headers.conf";
         include "includes/options.conf";
 
         # Update the Host header so that icx-proxy is able to process the request
