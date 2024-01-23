@@ -6,7 +6,7 @@ use std::fmt::{Display, Formatter};
 use std::{fs, path::Path};
 
 /// Location of certs
-static ARK_PEM: &str = "/var/lib/ic/data/ark.pem";
+static ARK_PEM: &str = "/opt/ic/share/ark.pem";
 static ASK_PEM: &str = "/var/lib/ic/data/ask.pem";
 static VCEK_PEM: &str = "/var/lib/ic/data/vcek.pem";
 static CERTS_DIR: &str = "/var/lib/ic/data";
