@@ -23,7 +23,7 @@ impl Registry {
         self.do_remove_node(payload, caller_id);
     }
 
-    fn do_remove_node(&mut self, payload: RemoveNodeDirectlyPayload, caller_id: PrincipalId) {
+    pub fn do_remove_node(&mut self, payload: RemoveNodeDirectlyPayload, caller_id: PrincipalId) {
         // 1. Find the node operator id for this record
         // and abort if the node record is not found
         let node_operator_id = get_node_operator_id_for_node(self, payload.node_id)
