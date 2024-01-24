@@ -516,11 +516,12 @@ http_file(
     url = "https://download.dfinity.systems/ic/acd7e2928237a8e8bc1aa5e73efd47c8a8dfb556/canisters/ledger-archive-node-canister.wasm.gz",
 )
 
+# Most recent upgrade proposal: https://dashboard.internetcomputer.org/proposal/127154
 http_file(
     name = "mainnet_nns_root-canister",
     downloaded_file_path = "root-canister.wasm.gz",
-    sha256 = "d2883d2e5c8a8e0d40585470f720501486c68f9ccfc9d4630d7476cbd2632155",
-    url = "https://download.dfinity.systems/ic/87f48a595b6f666fbc7fe6ad4081aa98fd113d12/canisters/root-canister.wasm.gz",
+    sha256 = "25af9548c5594dc95ba48e6140f4eaa0b59ef0c51ba939a73b1da160bed450ae",
+    url = "https://download.dfinity.systems/ic/80261cb2fdf2e0b49c81040b97a7cac2dfec2251/canisters/root-canister.wasm.gz",
 )
 
 http_file(
