@@ -258,15 +258,15 @@ nns_neuron_info() {
         $(nns_canister_id governance) get_neuron_info "( $NEURON_ID : nat64 )"
 }
 
-##: top_up_wallet
+##: top_up_canister
 ## Tops up the wallet from the current dfx user's ICP balance
-top_up_wallet() {
-    local SUBNET_URL=$1
-    local WALLET_CANISTER=$2
+top_up_canister() {
+    local NNS_URL=$1
+    local CANISTER=$2
     local AMOUNT=$3
 
-    __dfx -q ledger top-up --network "$SUBNET_URL" \
-        --amount "$AMOUNT" "$WALLET_CANISTER"
+    __dfx -q ledger top-up --network "$NNS_URL" \
+        --amount "$AMOUNT" "$CANISTER"
 }
 
 # Note, this will be deprecated soon when get_state is deprecated from sale canister.
@@ -397,17 +397,17 @@ sns_w_latest_version() {
 }
 
 ##: sns_list_my_neurons
-## Usage: $1 <SUBNET_URL> <SNS_GOVERNANCE_CANISTER_ID>
+## Usage: $1 <NNS_URL> <SNS_GOVERNANCE_CANISTER_ID>
 ## List the neurons owned by the current dfx identity
 sns_list_my_neurons() {
 
-    local SNS_URL=$1 # usually SUBNET_URL
+    local NNS_URL=$1 # usually NNS_URL
     local SNS_GOVERNANCE_CANISTER_ID=$2
 
     local IC=$(repo_root)
     local GOV_DID="$IC/rs/sns/governance/canister/governance.did"
 
-    __dfx -q canister --network $SNS_URL call \
+    __dfx -q canister --network $NNS_URL call \
         --candid $GOV_DID \
         $SNS_GOVERNANCE_CANISTER_ID list_neurons \
         "( record { of_principal = opt principal \"$(__dfx -q identity get-principal)\"; limit = 100: nat32})"
@@ -415,17 +415,17 @@ sns_list_my_neurons() {
 }
 
 ##: sns_list_all_neurons
-## Usage: $1 <SUBNET_URL> <SNS_GOVERNANCE_CANISTER_ID>
+## Usage: $1 <NNS_URL> <SNS_GOVERNANCE_CANISTER_ID>
 ## List all neurons in an SNS
 sns_list_all_neurons() {
 
-    local SNS_URL=$1 # usually SUBNET_URL
+    local NNS_URL=$1 # usually NNS_URL
     local SNS_GOVERNANCE_CANISTER_ID=$2
 
     local IC=$(repo_root)
     local GOV_DID="$IC/rs/sns/governance/canister/governance.did"
 
-    __dfx -q canister --network "${SNS_URL}" call \
+    __dfx -q canister --network "${NNS_URL}" call \
         --candid "${GOV_DID}" \
         "${SNS_GOVERNANCE_CANISTER_ID}" list_neurons \
         "( record { of_principal = null; limit = 100: nat32})"
@@ -537,13 +537,13 @@ sns_get_proposal() {
 }
 
 sns_get_archive() {
-    local SUBNET_URL=$1
+    local NNS_URL=$1
     local SNS_LEDGER_CANISTER_ID=$2
 
     set -e
     # Unfortunately the ledger .did file does not support this method even though the canister does.
     # This forces us to use grep & awk instead of jq
-    ARCHIVE_ID=$(__dfx canister --network "$SUBNET_URL" call "${SNS_LEDGER_CANISTER_ID}" archives '()' \
+    ARCHIVE_ID=$(__dfx canister --network "$NNS_URL" call "${SNS_LEDGER_CANISTER_ID}" archives '()' \
         | grep -o 'principal "[^"]*"' | awk -F '"' '{print $2}')
     set +e
 
@@ -592,7 +592,7 @@ wait_for_proposal_to_execute() {
 wait_for_sns_governance_to_be_in_normal_mode() {
     ensure_variable_set IDL2JSON
 
-    local SUBNET_URL=$1
+    local NNS_URL=$1
     local SNS_GOVERNANCE_CANISTER_ID=$2
 
     local IC=$(repo_root)
@@ -600,7 +600,7 @@ wait_for_sns_governance_to_be_in_normal_mode() {
 
     for i in {1..40}; do
         echo "Testing to see if SNS governance ${SNS_GOVERNANCE_CANISTER_ID} is in normal mode (${i}/40)"
-        EXECUTED=$(__dfx canister --network "$SUBNET_URL" call --candid $GOV_DID "${SNS_GOVERNANCE_CANISTER_ID}" get_mode '(record {})' | $IDL2JSON | jq -r '.mode[0]')
+        EXECUTED=$(__dfx canister --network "$NNS_URL" call --candid $GOV_DID "${SNS_GOVERNANCE_CANISTER_ID}" get_mode '(record {})' | $IDL2JSON | jq -r '.mode[0]')
         if [[ "${EXECUTED}" -eq 1 ]]; then
             print_green "SNS Governance ${SNS_GOVERNANCE_CANISTER_ID} is in normal mode"
             return 0

@@ -33,7 +33,6 @@ ensure_variable_set SNS_QUILL
 ensure_variable_set IC_ADMIN
 
 ensure_variable_set NNS_URL
-ensure_variable_set SUBNET_URL
 ensure_variable_set NEURON_ID
 ensure_variable_set WALLET_CANISTER
 ensure_variable_set PEM
@@ -71,14 +70,13 @@ upgrade_swap() {
 
 upgrade_sns() {
     NNS_URL=$1
-    SUBNET_URL=$2
-    NEURON_ID=$3
-    PEM=$4
-    CANISTER_NAME=$5
-    VERSION_OR_WASM=$6
-    LOG_FILE=$7
-    SWAP_CANISTER_ID=$8
-    GOV_CANISTER_ID=$9
+    NEURON_ID=$2
+    PEM=$3
+    CANISTER_NAME=$4
+    VERSION_OR_WASM=$5
+    LOG_FILE=$6
+    SWAP_CANISTER_ID=$7
+    GOV_CANISTER_ID=$8
 
     # For swap testing, we want to do the NNS upgrade
     if [[ $CANISTER_NAME = "swap" ]]; then
@@ -88,7 +86,7 @@ upgrade_sns() {
 
     # SNS upgrade proposal - needed even if swap was upgraded
     echo "Submitting upgrade proposal to $GOV_CANISTER_ID" | tee -a "$LOG_FILE"
-    sns_upgrade_to_next_version "$SUBNET_URL" "$PEM" "$GOV_CANISTER_ID" 0
+    sns_upgrade_to_next_version "$NNS_URL" "$PEM" "$GOV_CANISTER_ID" 0
 }
 
 upgrade_nns_governance_to_test_version() {
@@ -168,13 +166,13 @@ echo "$PERMUTATIONS" | while read -r ORDERING; do
         sns_quill_participate_in_sale "${NNS_URL}" "${PEM}" "${ROOT_CANISTER_ID}" 300000
 
         echo "Wait for finalization to complete ..." | tee -a "${LOG_FILE}"
-        if ! wait_for_sns_governance_to_be_in_normal_mode "${SUBNET_URL}" "${GOV_CANISTER_ID}"; then
+        if ! wait_for_sns_governance_to_be_in_normal_mode "${NNS_URL}" "${GOV_CANISTER_ID}"; then
             print_red "Swap finalization failed, cannot continue with upgrade testing"
             exit 1
         fi
 
         echo "Add the archive canister to sns_canister_ids.json for use during upgrade testing ..." | tee -a $LOG_FILE
-        ARCHIVE_CANISTER_ID=$(sns_get_archive "${SUBNET_URL}" "${LEDGER_CANISTER_ID}")
+        ARCHIVE_CANISTER_ID=$(sns_get_archive "${NNS_URL}" "${LEDGER_CANISTER_ID}")
         add_archive_to_sns_canister_ids "$PWD/sns_canister_ids.json" "${ARCHIVE_CANISTER_ID}"
     fi
 
@@ -216,13 +214,13 @@ echo "$PERMUTATIONS" | while read -r ORDERING; do
         sns_quill_participate_in_sale "${NNS_URL}" "${PEM}" "${ROOT_CANISTER_ID}" 300000
 
         echo "Wait for finalization to complete ..." | tee -a "${LOG_FILE}"
-        if ! wait_for_sns_governance_to_be_in_normal_mode "${SUBNET_URL}" "${GOV_CANISTER_ID}"; then
+        if ! wait_for_sns_governance_to_be_in_normal_mode "${NNS_URL}" "${GOV_CANISTER_ID}"; then
             print_red "Swap finalization failed, cannot continue with upgrade testing"
             exit 1
         fi
 
         echo "Add the archive canister to sns_canister_ids.json for use during upgrade testing ..." | tee -a $LOG_FILE
-        ARCHIVE_CANISTER_ID=$(sns_get_archive "${SUBNET_URL}" "${LEDGER_CANISTER_ID}")
+        ARCHIVE_CANISTER_ID=$(sns_get_archive "${NNS_URL}" "${LEDGER_CANISTER_ID}")
         add_archive_to_sns_canister_ids "$PWD/sns_canister_ids.json" "${ARCHIVE_CANISTER_ID}"
     fi
 

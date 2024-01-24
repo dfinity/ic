@@ -33,7 +33,7 @@ submit_nns_publish_sns_wasm_proposal_mainnet() {
     PROPOSAL_SHA=$(proposal_header_field_value "$PROPOSAL_FILE" "New Wasm Hash:")
     TITLE_CANISTER_TYPE=$(cat $PROPOSAL_FILE | grep "## Proposal to Publish the SNS" | cut -d' ' -f7)
     NORMALIZED_TITLE_CANISTER_TYPE="$(tr '[:upper:]' '[:lower:]' <<<${TITLE_CANISTER_TYPE:0:1})${TITLE_CANISTER_TYPE:1}"
-    CANISTER_TYPE="$(proposal_header_field_value "$PROPOSAL_FILE" "Canister Type:")${CAPITALIZED_CANISTER_TYPE:1}"
+    CANISTER_TYPE="$(proposal_header_field_value "$PROPOSAL_FILE" "Canister Type:")"
 
     if [ "$CANISTER_TYPE" != "$NORMALIZED_TITLE_CANISTER_TYPE" ]; then
         echo "Request malformed, title canister type does not match 'Canister Type' in proposal header."
