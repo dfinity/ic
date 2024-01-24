@@ -22,8 +22,8 @@ type Erc20Contract = record {
 };
 
 type ManagedCanisterIds = record {
-   ledger: principal;
-   index: principal;
+   ledger: opt principal;
+   index: opt principal;
    archives: vec principal;
 };
 

@@ -224,7 +224,10 @@ impl ManagedCanistersAssert {
     }
 
     pub fn assert_index_has_correct_ledger_id(self) -> Self {
-        assert_eq!(self.call_index_ledger_id(), self.canister_ids.ledger);
+        assert_eq!(
+            self.call_index_ledger_id(),
+            self.canister_ids.ledger.unwrap()
+        );
         self
     }
 
@@ -258,11 +261,11 @@ impl ManagedCanistersAssert {
         .unwrap()
     }
     fn ledger_canister_id(&self) -> CanisterId {
-        CanisterId::unchecked_from_principal(PrincipalId::from(self.canister_ids.ledger))
+        CanisterId::unchecked_from_principal(PrincipalId::from(self.canister_ids.ledger.unwrap()))
     }
 
     fn index_canister_id(&self) -> CanisterId {
-        CanisterId::unchecked_from_principal(PrincipalId::from(self.canister_ids.index))
+        CanisterId::unchecked_from_principal(PrincipalId::from(self.canister_ids.index.unwrap()))
     }
 
     fn archive_canister_ids(&self) -> Vec<CanisterId> {
