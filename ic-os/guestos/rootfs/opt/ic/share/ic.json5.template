@@ -221,11 +221,11 @@ table ip6 filter {\n\
     iif lo accept\n\
     ct state { invalid } drop\n\
     ct state { established, related } accept\n\
-    ct state new add @rate_limit { ip6 saddr limit rate over 1000/minute } drop\n\
+    ct state new add @rate_limit { ip6 saddr limit rate over 100000/minute } log prefix \"Drop - rate limit: \" drop\n\
     #  Notes about the rule below:\n\
     #   - The rule allows a maximum of <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> persistent connections to any ip6 address.\n\
     #   - The rule drops all new connections that goes over the configured limit.\n\
-    ct state new add @connection_limit { ip6 saddr ct count over <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> } drop\n\
+    ct state new add @connection_limit { ip6 saddr ct count over <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> } log prefix \"Drop - connection limit: \" drop\n\
     icmpv6 type destination-unreachable accept\n\
     icmpv6 type packet-too-big accept\n\
     icmpv6 type time-exceeded accept\n\
@@ -238,6 +238,7 @@ table ip6 filter {\n\
     ip6 saddr { hostos } ct state { new } tcp dport { 42372 } accept # Allow access from HostOS metrics-proxy so GuestOS metrics-proxy can proxy certain metrics to HostOS.\n\
     <<IPv6_TCP_RULES>>\n\
     <<IPv6_UDP_RULES>>\n\
+    log prefix \"Drop - default policy: \"\n\
   }\n\
 \n\
   chain FORWARD {\n\
