@@ -15,7 +15,6 @@ SSH_AUTHORIZED_KEYS_CLONE="${CONFIG_TMP}/ssh_authorized_keys"
 
 # Define empty variables so they are not unset
 ipv6_prefix=""
-ipv6_subnet=""
 ipv6_gateway=""
 
 function print_config_file() {
@@ -90,7 +89,6 @@ function read_variables() {
     while IFS="=" read -r key value; do
         case "$key" in
             "ipv6_prefix") ipv6_prefix="${value}" ;;
-            "ipv6_subnet") ipv6_subnet="${value}" ;;
             "ipv6_gateway") ipv6_gateway="${value}" ;;
         esac
     done <"${CONFIG_INI_CLONE}"
@@ -99,10 +97,6 @@ function read_variables() {
 function verify_variables() {
     if [ -z "${ipv6_prefix}" ]; then
         log_and_reboot_on_error "1" "Variable 'ipv6_prefix' is not defined in 'config.ini'."
-    fi
-
-    if [ -z "${ipv6_subnet}" ]; then
-        log_and_reboot_on_error "1" "Variable 'ipv6_subnet' is not defined in 'config.ini'."
     fi
 
     if [ -z "${ipv6_gateway}" ]; then

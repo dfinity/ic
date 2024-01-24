@@ -10,35 +10,27 @@ data_centers:
   ch1:
     vars:
       ipv6_prefix: "2607:f6f0:3004:1"
-      ipv6_subnet: "/64"
   dm1:
     vars:
       ipv6_prefix: "2604:6800:258:1"
-      ipv6_subnet: "/64"
   fr1:
     vars:
       ipv6_prefix: "2001:4d78:40d"
-      ipv6_subnet: "/64"
   ln1:
     vars:
       ipv6_prefix: "2a0b:21c0:4003:2"
-      ipv6_subnet: "/64"
   se1:
     vars:
       ipv6_prefix: "2600:c00:2:100"
-      ipv6_subnet: "/64"
   sf1-old:
     vars:
       ipv6_prefix: "2607:fb58:9005:42"
-      ipv6_subnet: "/64"
   sf1:
     vars:
       ipv6_prefix: "2602:fb2b:100:10"
-      ipv6_subnet: "/64"
   zh1:
     vars:
       ipv6_prefix: "2a00:fb01:400:42"
-      ipv6_subnet: "/64"
 
 physical_hosts:
   vars:

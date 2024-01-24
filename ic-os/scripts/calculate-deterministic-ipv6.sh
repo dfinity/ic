@@ -25,10 +25,9 @@ Arguments:
   -i=, --index=         required: specify the single digit node index (Examples: host: 0, guest: 1, boundary: 2)
   -m=, --mac=           required: specify the management MAC address (Examples: b0:7b:25:c8:f6:90)
        --prefix=        required: specify the IPv6 prefix (Examples: 2a02:41b:300e:0)
-  -s=, --subnet=        required: specify the IPv6 subnet (Examples: /64)
 
 Example:
-  ./calculate-deterministic-ipv6.sh --deployment=mainnet --index=1 --mac=b0:7b:25:c8:f6:90 --prefix=2a02:41b:300e:0 --subnet=/64
+  ./calculate-deterministic-ipv6.sh --deployment=mainnet --index=1 --mac=b0:7b:25:c8:f6:90 --prefix=2a02:41b:300e:0
 '
             exit 1
             ;;
@@ -44,10 +43,6 @@ Example:
             PREFIX="${argument#*=}"
             shift
             ;;
-        -s=* | --subnet=*)
-            SUBNET="${argument#*=}"
-            shift
-            ;;
         *)
             echo "Error: Argument is not supported."
             exit 1
@@ -56,7 +51,7 @@ Example:
 done
 
 function validate_arguments() {
-    if [ "${DEPLOYMENT}" == "" -o "${INDEX}" == "" -o "${MAC}" == "" -o "${PREFIX}" == "" -o "${SUBNET}" == "" ]; then
+    if [ "${DEPLOYMENT}" == "" -o "${INDEX}" == "" -o "${MAC}" == "" -o "${PREFIX}" == "" ]; then
         $0 --help
     fi
 }
@@ -82,14 +77,13 @@ function print_deterministic_mac() {
 
 function calculate_deterministic_ipv6() {
     local ipv6_prefix=${PREFIX}
-    local ipv6_subnet=${SUBNET}
     local output=$(echo "${DETERMINISTIC_MAC}" | sed 's/[.:-]//g' | tr '[:upper:]' '[:lower:]')
     local output="${output:0:6}fffe${output:6}"
     local output=$(printf "%02x%s" "$((0x${output:0:2} ^ 2))" "${output:2}")
     local output=$(echo "${output}" | sed 's/.\{4\}/&:/g;s/:$//')
     IPV6_RAW=$(echo "${ipv6_prefix}:${output}")
     IPV6_COMPRESSED=$(echo ${IPV6_RAW} | python3 -c 'import ipaddress, sys;  print(ipaddress.ip_address(sys.stdin.read().strip()))')
-    DETERMINISTIC_IPV6=$(echo ${IPV6_COMPRESSED}${ipv6_subnet})
+    DETERMINISTIC_IPV6=$(echo ${IPV6_COMPRESSED}/64)
 }
 
 function print_deterministic_ipv6() {

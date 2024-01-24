@@ -76,7 +76,6 @@ function read_variables() {
     while IFS="=" read -r key value; do
         case "$key" in
             "ipv6_prefix") ipv6_prefix="${value}" ;;
-            "ipv6_subnet") ipv6_subnet="${value}" ;;
             "ipv6_gateway") ipv6_gateway="${value}" ;;
             "ipv6_address") ipv6_address="${value}" ;;
             "hostname") hostname="${value}" ;;
