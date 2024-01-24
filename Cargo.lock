@@ -17344,7 +17344,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap 4.4.6",
- "ipnet",
  "partition_tools",
  "serde",
  "serde_json",

@@ -610,11 +610,11 @@ fn configure_setupos_image(
     let old_ip = nested_vm.get_vm()?.ipv6;
     let segments = old_ip.segments();
     let prefix = format!(
-        "{:04x}:{:04x}:{:04x}:{:04x}::/64",
+        "{:04x}:{:04x}:{:04x}:{:04x}",
         segments[0], segments[1], segments[2], segments[3]
     );
     let gateway = format!(
-        "{:04x}:{:04x}:{:04x}:{:04x}::1/64",
+        "{:04x}:{:04x}:{:04x}:{:04x}::1",
         segments[0], segments[1], segments[2], segments[3]
     );
 
