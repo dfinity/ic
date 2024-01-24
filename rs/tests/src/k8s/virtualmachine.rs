@@ -5,8 +5,8 @@ use kube::api::{Patch, PatchParams};
 use kube::Api;
 use tracing::*;
 
-use crate::tnet::K8sClient;
-use crate::tnet::{TNet, TNode};
+use crate::k8s::tnet::K8sClient;
+use crate::k8s::tnet::{TNet, TNode};
 
 static VM_PVC_TEMPLATE: &str = r#"
 apiVersion: kubevirt.io/v1

@@ -12886,37 +12886,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "k8s"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "backon",
- "cidr",
- "clap 4.4.6",
- "futures",
- "http 0.2.9",
- "ic-prep",
- "ic-registry-provisional-whitelist",
- "ic-registry-subnet-type",
- "ic-types",
- "k8s-openapi",
- "kube",
- "mockall",
- "mockall_double",
- "once_cell",
- "rand 0.8.5",
- "reqwest",
- "serde",
- "serde_json",
- "serde_yaml 0.9.30",
- "tempfile",
- "tokio",
- "tokio-util",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "k8s-openapi"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13952,18 +13921,6 @@ dependencies = [
  "proc-macro2 1.0.75",
  "quote 1.0.35",
  "syn 1.0.109",
-]
-
-[[package]]
-name = "mockall_double"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1ca96e5ac35256ae3e13536edd39b172b88f41615e1d7b653c8ad24524113e8"
-dependencies = [
- "cfg-if 1.0.0",
- "proc-macro2 1.0.75",
- "quote 1.0.35",
- "syn 2.0.48",
 ]
 
 [[package]]
@@ -18282,6 +18239,7 @@ dependencies = [
  "assert_matches",
  "async-recursion",
  "async-trait",
+ "backon",
  "base64 0.13.1",
  "bincode",
  "bitcoincore-rpc",
@@ -18290,6 +18248,7 @@ dependencies = [
  "certificate_orchestrator_interface",
  "chacha20poly1305",
  "chrono",
+ "cidr",
  "clap 3.2.25",
  "crossbeam-channel",
  "crossbeam-utils",
@@ -18303,6 +18262,7 @@ dependencies = [
  "flate2",
  "futures",
  "hex",
+ "http 0.2.9",
  "humantime",
  "hyper 0.14.26",
  "hyper-rustls",
@@ -18388,7 +18348,8 @@ dependencies = [
  "itertools 0.12.0",
  "json5",
  "k256",
- "k8s",
+ "k8s-openapi",
+ "kube",
  "lazy_static",
  "leb128",
  "libflate",
@@ -18397,6 +18358,7 @@ dependencies = [
  "nix 0.24.3",
  "num_cpus",
  "on_wire",
+ "once_cell",
  "openssh-keys",
  "pem 1.1.1",
  "phantom_newtype",
@@ -18420,6 +18382,7 @@ dependencies = [
  "serde_bytes",
  "serde_cbor",
  "serde_json",
+ "serde_yaml 0.9.30",
  "slog",
  "slog-async",
  "slog-term",
@@ -18428,6 +18391,9 @@ dependencies = [
  "thiserror",
  "time",
  "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
  "tree-deserializer",
  "url",
  "walkdir",

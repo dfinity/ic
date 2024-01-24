@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 use k8s_openapi::chrono::Duration;
 use tracing_subscriber::EnvFilter;
 
-use k8s::tnet::TNet;
+use ic_tests::k8s::tnet::TNet;
 
 fn parse_duration(arg: &str) -> Result<Duration, std::num::ParseIntError> {
     let seconds = arg.parse()?;

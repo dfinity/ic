@@ -1,9 +1,9 @@
 use crate::driver::ic::{AmountOfMemoryKiB, InternetComputer, Node, NrOfVCPUs};
 use crate::driver::universal_vm::UniversalVm;
+use crate::k8s::tnet::TNet;
 use anyhow::{self, bail};
 use flate2::{write::GzEncoder, Compression};
 use ic_registry_subnet_type::SubnetType;
-use k8s::tnet::TNet;
 use serde::{Deserialize, Serialize};
 use slog::{info, warn};
 use std::collections::BTreeMap;
