@@ -41,10 +41,10 @@ pub static TNET_IPV6: Lazy<String> =
 static TNET_CDN_URL: Lazy<String> =
     Lazy::new(|| var("TNET_CDN_URL").unwrap_or("https://download.dfinity.systems".to_string()));
 static TNET_CONFIG_URL: Lazy<String> = Lazy::new(|| {
-    var("TNET_CONFIG_URL").unwrap_or("https://objects.ch1-idx1.dfinity.network".to_string())
+    var("TNET_CONFIG_URL").unwrap_or("https://objects.sf1-idx1.dfinity.network".to_string())
 });
 static TNET_BUCKET: Lazy<String> = Lazy::new(|| {
-    var("TNET_BUCKET").unwrap_or("tnet-config-0b1628f1-bfcd-495d-8a91-5a85e8f426e3".to_string())
+    var("TNET_BUCKET").unwrap_or("tnet-config-5f1a0cb6-fdf2-4ca8-b816-9b9c2ffa1669".to_string())
 });
 static TNET_NAMESPACE: Lazy<String> =
     Lazy::new(|| var("TNET_NAMESPACE").unwrap_or("tnets".to_string()));
@@ -121,7 +121,7 @@ impl TNet {
             name: name.to_string(),
             ..Default::default()
         }
-        .ttl(Duration::days(1))
+        .ttl(Duration::minutes(90))
     }
 
     pub fn owner_config_map_name(idx: u32) -> String {
@@ -462,7 +462,7 @@ impl TNet {
         // tnet guestos image
         let tnet_image = &format!("{}-image-guestos", self.owner.name_any());
         let source = DvSource::url(self.image_url.clone());
-        let dvinfo = DvInfo::new(tnet_image, source, "archive", "32Gi");
+        let dvinfo = DvInfo::new(tnet_image, source, "archive", "50Gi");
         info!("Creating DV {} from {}", tnet_image, self.image_url);
         create_datavolume(&k8s_client.api_dv, &dvinfo, self.owner_reference()).await?;
 
@@ -492,7 +492,7 @@ impl TNet {
             }
         }
 
-        tokio::time::timeout(tokio::time::Duration::from_secs(100), async {
+        tokio::time::timeout(tokio::time::Duration::from_secs(300), async {
             while (|| async {
                 self.k8s
                     .as_ref()
@@ -521,7 +521,7 @@ impl TNet {
             create_pvc(
                 &k8s_client.api_pvc,
                 &pvc_name,
-                "32Gi",
+                "100Gi",
                 None,
                 None,
                 data_source,

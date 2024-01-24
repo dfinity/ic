@@ -206,8 +206,10 @@ pub fn init_ic(
     ic_config.set_use_specified_ids_allocation_range(specific_ids);
 
     if InfraProvider::read_attribute(test_env) == InfraProvider::K8s {
-        // K8s IPv6 subnet used for pods
-        ic_config.set_whitelisted_prefixes(Some("fda6:8d22:43e1::/48".to_string()));
+        ic_config.set_whitelisted_prefixes(Some("::/0".to_string()));
+        ic_config.set_whitelisted_ports(Some(
+            "22,2497,4100,7070,8080,9090,9091,9100,19100,19531".to_string(),
+        ));
     }
 
     info!(test_env.logger(), "Initializing via {:?}", &ic_config);
@@ -443,6 +445,15 @@ pub fn create_config_disk_image(
         .arg(node.crypto_path())
         .arg("--elasticsearch_tags")
         .arg(format!("system_test {}", group_name));
+
+    // We've seen k8s nodes fail to pick up RA correctly, so we specify their
+    // addresses directly. Ideally, all nodes should do this, to match mainnet.
+    if InfraProvider::read_attribute(test_env) == InfraProvider::K8s {
+        cmd.arg("--ipv6_address")
+            .arg(format!("{}/64", node.node_config.public_api.ip()))
+            .arg("--ipv6_gateway")
+            .arg("fe80::ecee:eeff:feee:eeee");
+    }
 
     // If we have a root subnet, specify the correct NNS url.
     if let Some(node) = test_env

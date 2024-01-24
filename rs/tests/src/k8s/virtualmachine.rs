@@ -48,11 +48,15 @@ spec:
             passt: {}
             ports:
               - port: 22
-              - port: 4100
               - port: 2497
+              - port: 4100
+              - port: 7070
               - port: 8080
               - port: 9090
+              - port: 9091
               - port: 9100
+              - port: 19100
+              - port: 19531
         resources:
           requests:
             memory: 64Gi
