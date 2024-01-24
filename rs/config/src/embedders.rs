@@ -52,9 +52,12 @@ pub(crate) const DEFAULT_MAX_SANDBOX_COUNT: usize = 2_000;
 pub(crate) const DEFAULT_MAX_SANDBOX_IDLE_TIME: Duration = Duration::from_secs(30 * 60);
 
 /// The maximum number of pages that a message dirties without optimizing dirty
-/// page copying by triggering a new execution slice for copying and using prefaulting.
-/// This default is 1 GiB. This is 262_144 pages of 4 KiB each.
-pub(crate) const DEFAULT_MAX_DIRTY_PAGES_WITHOUT_OPTIMIZATION: usize = 262_144;
+/// page copying by triggering a new execution slice for copying pages.
+/// This default is 1 GiB.
+pub(crate) const DEFAULT_MAX_DIRTY_PAGES_WITHOUT_OPTIMIZATION: usize = (GiB as usize) / PAGE_SIZE;
+
+/// Scheduling overhead for copying dirty pages, in instructions.
+pub(crate) const DIRTY_PAGE_COPY_OVERHEAD: NumInstructions = NumInstructions::new(3_000);
 
 #[allow(non_upper_case_globals)]
 const KiB: u64 = 1024;
@@ -178,6 +181,9 @@ pub struct Config {
     /// The maximum number of pages that a message dirties without optimizing dirty
     /// page copying by triggering a new execution slice for copying and using prefaulting.
     pub max_dirty_pages_without_optimization: usize,
+
+    /// The dirty page copying overhead, in instructions.
+    pub dirty_page_copy_overhead: NumInstructions,
 }
 
 impl Config {
@@ -204,6 +210,7 @@ impl Config {
             dirty_page_overhead: NumInstructions::new(0),
             trace_execution: FlagStatus::Disabled,
             max_dirty_pages_without_optimization: DEFAULT_MAX_DIRTY_PAGES_WITHOUT_OPTIMIZATION,
+            dirty_page_copy_overhead: DIRTY_PAGE_COPY_OVERHEAD,
         }
     }
 }

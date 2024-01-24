@@ -147,6 +147,11 @@ impl InstructionLimits {
     pub fn update(&mut self, left: NumInstructions) {
         self.message = left;
     }
+
+    /// Checks if DTS is enabled.
+    pub fn slicing_enabled(self) -> bool {
+        self.max_slice < self.message
+    }
 }
 
 // Canister and subnet configuration parameters required for execution.
@@ -2989,7 +2994,9 @@ impl OutOfInstructionsHandler for DefaultOutOfInstructionsHandler {
     }
 
     fn yield_for_dirty_memory_copy(&self, _instruction_counter: i64) -> HypervisorResult<i64> {
-        Err(HypervisorError::InstructionLimitExceeded)
+        // This is a no-op, should only happen if it is called on a subnet where DTS is completely disabled.
+        // 0 instructions were executed as a result.
+        Ok(0)
     }
 }
 
