@@ -27,7 +27,7 @@ use ic_utils::{
     interfaces::http_request::HttpRequestCanister,
 };
 use tokio_util::task::LocalPoolHandle;
-use tracing::{debug, enabled, info, trace, warn, Level};
+use tracing::{info, warn};
 
 use crate::http::request::HttpRequest;
 use crate::http::response::{AgentResponseAny, HttpResponse};
@@ -42,9 +42,6 @@ use crate::{
     error::ErrorFactory,
     http::headers::{ACCEPT_ENCODING_HEADER_NAME, CACHE_HEADER_NAME},
 };
-
-// The maximum length of a body we should log as tracing.
-const MAX_LOG_BODY_SIZE: usize = 100;
 
 // Local thread pool to execute Axum handler
 static LOCAL_THREAD_POOL: OnceLock<LocalPoolHandle> = OnceLock::new();
@@ -238,7 +235,6 @@ async fn process_request_inner(
     let canister_id = match canister_id {
         None => {
             return if request.uri().path().starts_with("/api") {
-                info!("forwarding");
                 let proxied_request =
                     create_proxied_request(&addr.ip(), replica_uri.clone(), request)?;
                 let response = client.call(proxied_request).await?;
@@ -298,19 +294,6 @@ async fn process_request_inner(
             Err(e) => bail!(e),
         },
     ));
-    debug!("<< {} body bytes", http_request.body.len());
-
-    if enabled!(Level::TRACE) {
-        let body = &http_request.body[0..usize::min(http_request.body.len(), MAX_LOG_BODY_SIZE)];
-        let body = String::from_utf8_lossy(body);
-        let body = body.escape_default();
-        let trailing = if http_request.body.len() > MAX_LOG_BODY_SIZE {
-            "..."
-        } else {
-            ""
-        };
-        trace!("<< \"{body}\"{trailing}");
-    }
 
     let canister = HttpRequestCanister::create(agent, canister_id);
     let header_fields = http_request
@@ -464,37 +447,6 @@ async fn process_request_inner(
 
     // Inject it into response
     response.extensions_mut().insert(ctx);
-
-    info!(
-        ">> {:?} {} {}",
-        &response.version(),
-        response.status().as_u16(),
-        response.status().to_string(),
-    );
-    if http_response.has_streaming_body {
-        info!(">> streaming body");
-    } else {
-        info!(">> {} body bytes", http_response.body.len());
-    }
-
-    if enabled!(Level::TRACE) {
-        for (name, value) in response.headers() {
-            let value = String::from_utf8_lossy(value.as_bytes());
-            trace!(">> {name}: {value}");
-        }
-        if !http_response.has_streaming_body {
-            let body =
-                &http_response.body[..usize::min(MAX_LOG_BODY_SIZE, http_response.body.len())];
-            let body = String::from_utf8_lossy(body);
-            let body = body.escape_default();
-            let trailing = if http_response.body.len() > MAX_LOG_BODY_SIZE {
-                "..."
-            } else {
-                ""
-            };
-            trace!(">> \"{body}\"{trailing}");
-        }
-    }
 
     Ok(response)
 }
