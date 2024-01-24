@@ -1,5 +1,5 @@
 {
-  "checksum": "4c57cf57b9b8598aef225caa86dd2e438ee8a03cb791212320aa8b5886d012f7",
+  "checksum": "43204614b00820e26be48107de22bcc25c07cfdf74439c452d1f16399b782f68",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -16280,7 +16280,7 @@
               "target": "wasm_bindgen"
             },
             {
-              "id": "wasm-encoder 0.35.0",
+              "id": "wasm-encoder 0.36.2",
               "target": "wasm_encoder"
             },
             {
@@ -16293,7 +16293,7 @@
               "target": "wasm_smith"
             },
             {
-              "id": "wasmparser 0.115.0",
+              "id": "wasmparser 0.116.1",
               "target": "wasmparser"
             },
             {

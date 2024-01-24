@@ -129,8 +129,8 @@ use crate::wasmtime_embedder::{
 };
 use ic_wasm_transform::{self, Global, Module};
 use wasmparser::{
-    BlockType, Export, ExternalKind, FuncType, GlobalType, Import, MemoryType, Operator,
-    StructuralType, SubType, TypeRef, ValType,
+    BlockType, CompositeType, Export, ExternalKind, FuncType, GlobalType, Import, MemoryType,
+    Operator, SubType, TypeRef, ValType,
 };
 
 use std::collections::BTreeMap;
@@ -477,7 +477,7 @@ const STABLE_BYTEMAP_SIZE_IN_WASM_PAGES: u64 = MAX_STABLE_MEMORY_IN_WASM_PAGES /
 
 fn add_func_type(module: &mut Module, ty: FuncType) -> u32 {
     for (idx, existing_subtype) in module.types.iter().enumerate() {
-        if let StructuralType::Func(existing_ty) = &existing_subtype.structural_type {
+        if let CompositeType::Func(existing_ty) = &existing_subtype.composite_type {
             if *existing_ty == ty {
                 return idx as u32;
             }
@@ -486,7 +486,7 @@ fn add_func_type(module: &mut Module, ty: FuncType) -> u32 {
     module.types.push(SubType {
         is_final: true,
         supertype_idx: None,
-        structural_type: StructuralType::Func(ty),
+        composite_type: CompositeType::Func(ty),
     });
     (module.types.len() - 1) as u32
 }
@@ -742,13 +742,12 @@ pub(super) fn instrument(
     // type) reference to the `code_section`.
     let mut func_types = Vec::new();
     for i in 0..module.code_sections.len() {
-        if let StructuralType::Func(t) = &module.types[module.functions[i] as usize].structural_type
-        {
+        if let CompositeType::Func(t) = &module.types[module.functions[i] as usize].composite_type {
             func_types.push((i, t.clone()));
         } else {
             return Err(WasmInstrumentationError::InvalidFunctionType(format!(
                 "Function has type which is not a function type. Found type: {:?}",
-                &module.types[module.functions[i] as usize].structural_type
+                &module.types[module.functions[i] as usize].composite_type
             )));
         }
     }

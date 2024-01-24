@@ -124,7 +124,7 @@ pub(super) mod internal_to_encoder {
 
     fn heap_type(v: &wasmparser::HeapType) -> wasm_encoder::HeapType {
         match v {
-            wasmparser::HeapType::Indexed(i) => wasm_encoder::HeapType::Indexed(*i),
+            wasmparser::HeapType::Concrete(i) => wasm_encoder::HeapType::Concrete(*i),
             wasmparser::HeapType::Func => wasm_encoder::HeapType::Func,
             wasmparser::HeapType::Extern => wasm_encoder::HeapType::Extern,
             wasmparser::HeapType::Any => wasm_encoder::HeapType::Any,
@@ -138,7 +138,7 @@ pub(super) mod internal_to_encoder {
         }
     }
 
-    fn structural_type(v: &wasmparser::StructuralType) -> wasm_encoder::StructuralType {
+    fn composite_type(v: &wasmparser::CompositeType) -> wasm_encoder::CompositeType {
         fn field_type(f: &wasmparser::FieldType) -> wasm_encoder::FieldType {
             let element_type = match &f.element_type {
                 wasmparser::StorageType::I8 => wasm_encoder::StorageType::I8,
@@ -152,17 +152,17 @@ pub(super) mod internal_to_encoder {
         }
 
         match v {
-            wasmparser::StructuralType::Func(f) => {
-                wasm_encoder::StructuralType::Func(wasm_encoder::FuncType::new(
+            wasmparser::CompositeType::Func(f) => {
+                wasm_encoder::CompositeType::Func(wasm_encoder::FuncType::new(
                     f.params().iter().map(val_type),
                     f.results().iter().map(val_type),
                 ))
             }
-            wasmparser::StructuralType::Array(wasmparser::ArrayType(f)) => {
-                wasm_encoder::StructuralType::Array(wasm_encoder::ArrayType(field_type(f)))
+            wasmparser::CompositeType::Array(wasmparser::ArrayType(f)) => {
+                wasm_encoder::CompositeType::Array(wasm_encoder::ArrayType(field_type(f)))
             }
-            wasmparser::StructuralType::Struct(wasmparser::StructType { fields }) => {
-                wasm_encoder::StructuralType::Struct(wasm_encoder::StructType {
+            wasmparser::CompositeType::Struct(wasmparser::StructType { fields }) => {
+                wasm_encoder::CompositeType::Struct(wasm_encoder::StructType {
                     fields: fields
                         .iter()
                         .map(field_type)
@@ -177,7 +177,7 @@ pub(super) mod internal_to_encoder {
         wasm_encoder::SubType {
             is_final: v.is_final,
             supertype_idx: v.supertype_idx,
-            structural_type: structural_type(&v.structural_type),
+            composite_type: composite_type(&v.composite_type),
         }
     }
 

@@ -24,7 +24,7 @@ use crate::{
     },
     MIN_GUARD_REGION_SIZE,
 };
-use wasmparser::{ExternalKind, FuncType, Operator, StructuralType, TypeRef, ValType};
+use wasmparser::{CompositeType, ExternalKind, FuncType, Operator, TypeRef, ValType};
 
 /// Symbols that are reserved and cannot be exported by canisters.
 #[doc(hidden)] // pub for usage in tests
@@ -753,8 +753,8 @@ fn validate_import_section(module: &Module) -> Result<WasmImportsDetails, WasmVa
             let field = entry.name;
             match &entry.ty {
                 TypeRef::Func(index) => {
-                    let func_ty = if let StructuralType::Func(func_ty) =
-                        &module.types[*index as usize].structural_type
+                    let func_ty = if let CompositeType::Func(func_ty) =
+                        &module.types[*index as usize].composite_type
                     {
                         func_ty
                     } else {
@@ -906,8 +906,8 @@ fn validate_export_section(
                     }
                     let actual_fn_index = fn_index - import_count;
                     let type_index = module.functions[actual_fn_index] as usize;
-                    let func_ty = if let StructuralType::Func(func_ty) =
-                        &module.types[type_index].structural_type
+                    let func_ty = if let CompositeType::Func(func_ty) =
+                        &module.types[type_index].composite_type
                     {
                         func_ty
                     } else {
