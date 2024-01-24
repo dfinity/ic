@@ -15,7 +15,6 @@ function read_variables() {
     while IFS="=" read -r key value; do
         case "$key" in
             "ipv6_prefix") ipv6_prefix="${value}" ;;
-            "ipv6_subnet") ipv6_subnet="${value}" ;;
             "ipv6_gateway") ipv6_gateway="${value}" ;;
             "ipv4_address") ipv4_address="${value}" ;;
             "ipv4_prefix_length") ipv4_prefix_length="${value}" ;;
@@ -123,7 +122,6 @@ function get_network_settings() {
 function print_network_settings() {
     echo "* Printing user defined network settings..."
     echo "  IPv6 Prefix : ${ipv6_prefix}"
-    echo "  IPv6 Subnet : ${ipv6_subnet}"
     echo "  IPv6 Gateway: ${ipv6_gateway}"
     if [[ -n ${ipv4_address} && -n ${ipv4_prefix_length} && -n ${ipv4_gateway} && -n ${domain} ]]; then
         echo "  IPv4 Address: ${ipv4_address}"

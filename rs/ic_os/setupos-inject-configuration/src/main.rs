@@ -179,7 +179,6 @@ async fn write_config(path: &Path, cfg: &NetworkConfig) -> Result<(), Error> {
             segments[0], segments[1], segments[2], segments[3],
         )?;
 
-        writeln!(&mut f, "ipv6_subnet=/{}", ipv6_prefix.prefix_len())?;
         writeln!(&mut f, "ipv6_gateway={}", ipv6_gateway.addr())?;
     }
 
