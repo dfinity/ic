@@ -306,12 +306,12 @@ impl SlotManager {
             Some(slot) => slot,
             None => {
                 if self.next_free_slot.get() > SLOT_TABLE_THRESHOLD {
-                    warn!(
-                        self.log,
-                        "Slot table threshold exceeded for service {}. Slots in use = {}.",
-                        self.service_name,
-                        self.next_free_slot
-                    );
+                    // warn!(
+                    //     self.log,
+                    //     "Slot table threshold exceeded for service {}. Slots in use = {}.",
+                    //     self.service_name,
+                    //     self.next_free_slot
+                    // );
                 }
 
                 let new_slot = self.next_free_slot;

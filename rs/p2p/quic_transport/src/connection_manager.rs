@@ -239,8 +239,8 @@ pub(crate) fn start_connection_manager(
     // Upper bound on receive memory consumption.
     transport_config.receive_window(VarInt::from_u32(3_000_000_000));
     transport_config.stream_receive_window(VarInt::from_u32(20_000_000));
-    transport_config.max_concurrent_bidi_streams(VarInt::from_u32(1_000));
-    transport_config.max_concurrent_uni_streams(VarInt::from_u32(1_000));
+    transport_config.max_concurrent_bidi_streams(VarInt::from_u32(10_000));
+    transport_config.max_concurrent_uni_streams(VarInt::from_u32(10000));
     let transport_config = Arc::new(transport_config);
     let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(rustls_server_config));
     server_config.transport_config(transport_config.clone());

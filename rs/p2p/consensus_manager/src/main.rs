@@ -30,7 +30,7 @@ use ic_interfaces::p2p::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, new_replica_logger_from_config, ReplicaLogger};
-use ic_metrics::MetricsRegistry;
+use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_pprof::{Pprof, PprofCollector};
 use ic_quic_transport::{DummyUdpSocket, SubnetTopology};
 use ic_types::{
@@ -43,7 +43,7 @@ use libp2p::{
     core::ConnectedPoint, gossipsub::IdentTopic, swarm::SwarmEvent, Multiaddr, PeerId, Swarm,
     SwarmBuilder,
 };
-use prometheus::TextEncoder;
+use prometheus::{Histogram, IntCounter, TextEncoder};
 use rand::Rng;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
@@ -58,6 +58,7 @@ use tokio_rustls::rustls::{
     server::{ClientCertVerified, ClientCertVerifier},
     Certificate, ClientConfig, PrivateKey, ServerConfig,
 };
+use tokio_util::time::DelayQueue;
 // use tokio_util::time::DelayQueue;
 
 #[derive(PartialEq, Eq, Debug, Clone)]
@@ -90,8 +91,8 @@ impl ArtifactKind for TestArtifact {
     /// The function converts a TestArtifactMessage to an advert for a
     /// TestArtifact.
     fn message_to_advert(msg: &Self::Message) -> Advert<TestArtifact> {
-        // let id = u64::from_le_bytes(msg[..24].try_into().unwrap());
-        let id = msg[..16].into();
+        let id = msg[..24].into();
+        // let id = msg[..16].into();
         let attribute = ();
 
         Advert {
@@ -199,15 +200,16 @@ struct Args {
     peers_addrs: Vec<SocketAddr>,
 }
 
-#[derive(Default)]
 struct Metrics {
-    received_bytes: AtomicU64,
+    received_bytes: IntCounter,
     received_bytes_previous: AtomicU64,
 
-    received_artifact_count: AtomicU64,
+    received_artifact_count: IntCounter,
     received_artifact_count_previous: AtomicU64,
 
-    sent_artifacts: AtomicU64,
+    message_latency: Histogram,
+
+    sent_artifacts: IntCounter,
     sent_artifacts_last: AtomicU64,
 }
 
@@ -234,7 +236,7 @@ async fn load_generator(
         })
     };
 
-    // let mut purge_queue: DelayQueue<Advert<TestArtifact>> = DelayQueue::new();
+    let mut purge_queue: DelayQueue<Advert<TestArtifact>> = DelayQueue::new();
 
     let mut produce_and_send_artifact = tokio::time::interval(
         Duration::from_secs(1)
@@ -267,24 +269,23 @@ async fn load_generator(
 
                         received_artifact_count += 1;
                         received_bytes += message.len();
+                        metrics
+                            .received_bytes
+                            .inc_by(message.len() as u64);
+                        metrics.received_artifact_count.inc();
+
+                        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+                        let latency = now - Duration::from_secs_f64(f64::from_le_bytes(message[16..24].try_into().unwrap()));
+                        metrics.message_latency.observe(latency.as_secs_f64());
 
                         if relaying {
-                            // let expiry_time_secs = u64::from_le_bytes(message[16..24].try_into().unwrap());
-
-                            // let removal_delay = UNIX_EPOCH
-                            //     .checked_add(Duration::from_secs(expiry_time_secs))
-                            //     .unwrap()
-                            //     .elapsed();
-
-                            // if let Ok(removal_delay) = removal_delay {
-                                // purge_queue.insert(TestArtifact::message_to_advert(&message), removal_delay);
-                                match artifact_processor_rx.send(ArtifactProcessorEvent::Advert(TestArtifact::message_to_advert(&message))).await {
-                                    Ok(_) => {},
-                                    Err(e) => {
-                                        error!(log, "Artifact processor failed to send relay: {:?}", e);
-                                    }
-                                };
-                            // }
+                            purge_queue.insert(TestArtifact::message_to_advert(&message), Duration::from_secs(10));
+                            match artifact_processor_rx.send(ArtifactProcessorEvent::Advert(TestArtifact::message_to_advert(&message))).await {
+                                Ok(_) => {},
+                                Err(e) => {
+                                    error!(log, "Artifact processor failed to send relay: {:?}", e);
+                                }
+                            };
                         }
                     }
                     _ => {
@@ -306,14 +307,15 @@ async fn load_generator(
             // Outgoing Artifact to peers
             _ = produce_and_send_artifact.tick() => {
 
-                // let expiry_time = SystemTime::now().checked_add(removal_delay).unwrap().duration_since(UNIX_EPOCH).unwrap().as_secs();
+                let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64();
 
                 let mut id = Vec::with_capacity(16);
                 id.extend_from_slice(&sent_artifacts.to_le_bytes());
                 id.extend_from_slice(&node_id.to_le_bytes());
-                // id.extend_from_slice(&expiry_time.to_le_bytes());
+                id.extend_from_slice(&now.to_le_bytes());
+                metrics.sent_artifacts.inc();
 
-                // purge_queue.insert(TestArtifact::message_to_advert(&id), removal_delay);
+                purge_queue.insert(TestArtifact::message_to_advert(&id), Duration::from_secs(10));
 
                 match artifact_processor_rx
                     .send(ArtifactProcessorEvent::Advert(TestArtifact::message_to_advert(&id)))
@@ -329,35 +331,32 @@ async fn load_generator(
 
             }
             _ = log_interval.tick() => {
-                info!(log, "Sent artifacts total {}", metrics.sent_artifacts.load(Relaxed));
-                info!(log, "Received artifacts total {}", metrics.received_artifact_count.load(Relaxed));
-                info!(log, "Rate of message sent {}", (sent_artifacts as u64 - metrics.sent_artifacts.load(Relaxed))/30);
-                info!(log, "Rate of messages received {}", (received_artifact_count as u64 - metrics.received_artifact_count.load(Relaxed))/30);
-                info!(log, "Rate of bytes received {}", (received_bytes as u64 - metrics.received_bytes.load(Relaxed))/30);
+                info!(log, "Sent artifacts total {}", metrics.sent_artifacts.get());
+                info!(log, "Received artifacts total {}", metrics.received_artifact_count.get());
             }
-            // Some(n) = purge_queue.next() => {
-            //     let _ = artifact_processor_rx.send(ArtifactProcessorEvent::Purge(n.into_inner().id)).await.unwrap();
-            // }
+            Some(n) = purge_queue.next() => {
+                let _ = artifact_processor_rx.send(ArtifactProcessorEvent::Purge(n.into_inner().id)).await.unwrap();
+            }
         }
-        metrics
-            .received_bytes
-            .store(received_bytes.try_into().unwrap(), Relaxed);
-
-        metrics
-            .received_artifact_count
-            .store(received_artifact_count, Relaxed);
-
-        metrics.sent_artifacts.store(sent_artifacts, Relaxed);
     }
 }
 
-async fn metrics_handler(State(metrics): State<Arc<Metrics>>) -> String {
-    format!(
-        "{}, {}, {}",
-        metrics.received_bytes.load(Relaxed),
-        metrics.received_artifact_count.load(Relaxed),
-        metrics.sent_artifacts.load(Relaxed)
-    )
+async fn metrics_handler(
+    State(metrics): State<(
+        Arc<Mutex<prometheus_client::registry::Registry>>,
+        MetricsRegistry,
+    )>,
+) -> String {
+    let encoder = TextEncoder::new();
+    let mut encoded_metrics1 = encoder
+        .encode_to_string(&metrics.1.prometheus_registry().gather())
+        .unwrap();
+
+    let mut buffer = String::new();
+    let p_metrics = metrics.0.lock().unwrap();
+    prometheus_client::encoding::text::encode(&mut buffer, &p_metrics).unwrap();
+    encoded_metrics1.push_str(&buffer);
+    encoded_metrics1
 }
 
 async fn libp2p_metrics_handler(
@@ -411,7 +410,27 @@ async fn main() {
 
     // TODO: some input verification
     let rt_handle = tokio::runtime::Handle::current();
-    let metrics = Arc::new(Metrics::default());
+    let metrics_reg = MetricsRegistry::default();
+
+    let sent_artifacts = metrics_reg.int_counter("load_generator_sent_artifacts", "TODO");
+    let received_artifacts = metrics_reg.int_counter("load_generator_received_artifacts", "TODO");
+    let received_artifacts_bytes =
+        metrics_reg.int_counter("load_generator_received_artifacts_bytes", "TODO");
+    let message_latency = metrics_reg.histogram(
+        "load_generator_message_latency",
+        "TODO",
+        decimal_buckets(-2, 0),
+    );
+
+    let metrics = Arc::new(Metrics {
+        received_bytes: received_artifacts_bytes,
+        sent_artifacts,
+        received_artifact_count: received_artifacts,
+        message_latency,
+        received_bytes_previous: AtomicU64::default(),
+        received_artifact_count_previous: AtomicU64::default(),
+        sent_artifacts_last: AtomicU64::default(),
+    });
 
     let (log, _async_log_guard) =
         new_replica_logger_from_config(&ic_config::logger::Config::default());
@@ -431,7 +450,6 @@ async fn main() {
     peers_addrs.insert(args.id as usize, transport_addr);
 
     let registry = Arc::new(Mutex::new(prometheus_client::registry::Registry::default()));
-    let metrics_reg = MetricsRegistry::default();
 
     if args.libp2p {
         start_libp2p(
@@ -486,7 +504,7 @@ async fn main() {
 
     let metrics_router = Router::new()
         .route("/metrics", get(metrics_handler))
-        .with_state(metrics)
+        .with_state((registry.clone(), metrics_reg.clone()))
         .route("/libp2pmetrics", get(libp2p_metrics_handler))
         .with_state(registry)
         .route("/setrate", post(interval_handler))
@@ -631,15 +649,13 @@ fn start_libp2p(
                 libp2p::gossipsub::ConfigBuilder::default()
                     .max_transmit_size(20 * 1024 * 1024)
                     .published_message_ids_cache_time(Duration::from_secs(180))
-                    .history_length(10)
-                    .history_gossip(10)
                     .flood_publish(true)
+                    .max_ihave_length(30000)
                     // .mesh_outbound_min(1)
                     // .mesh_n_low(2)
                     // .mesh_n(3)
                     // .mesh_n_high(4)
-                    .gossip_lazy(10)
-                    .message_id_fn(|x| libp2p::gossipsub::MessageId(x.data[0..16].to_vec()))
+                    .message_id_fn(|x| libp2p::gossipsub::MessageId(x.data[0..24].to_vec()))
                     // .validate_messages()
                     .build()
                     .unwrap(),
@@ -649,7 +665,7 @@ fn start_libp2p(
             .unwrap(),
         })
         .unwrap()
-        .with_swarm_config(|mut cfg| cfg.with_idle_connection_timeout(Duration::from_secs(100000)))
+        .with_swarm_config(|mut cfg| cfg.with_idle_connection_timeout(Duration::from_secs(300)))
         .build();
 
     rt_handle.spawn(async move {
@@ -659,7 +675,7 @@ fn start_libp2p(
         };
         let multiaddr = Multiaddr::empty()
             .with(libp2p::multiaddr::Protocol::Ip4(ip_addr))
-            .with(libp2p::multiaddr::Protocol::Tcp(transport_addr.port())).with_p2p(peer_id).unwrap();
+            .with(libp2p::multiaddr::Protocol::Tcp(transport_addr.port()));
         info!(log, "Listenting on my multi {:?}", multiaddr);
         swarm.listen_on(multiaddr).unwrap();
 
@@ -765,8 +781,6 @@ fn start_libp2p(
                                     Multiaddr::empty()
                                         .with(libp2p::multiaddr::Protocol::Ip4(ip_addr))
                                         .with(libp2p::multiaddr::Protocol::Tcp(s.port()))
-                                        .with_p2p(p.clone())
-                                        .unwrap(),
                                 )
                                 .unwrap()
                         }

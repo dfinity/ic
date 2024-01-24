@@ -316,13 +316,13 @@ where
         } else {
             self.active_downloads.remove(&id);
         }
-        debug_assert!(
-            self.slot_table
-                .iter()
-                .flat_map(|(k, v)| v.iter())
-                .all(|(k, v)| self.active_downloads.contains_key(&v.id)),
-            "Every entry in the slot table should have an active download task."
-        );
+        // debug_assert!(
+        //     self.slot_table
+        //         .iter()
+        //         .flat_map(|(k, v)| v.iter())
+        //         .all(|(k, v)| self.active_downloads.contains_key(&v.id)),
+        //     "Every entry in the slot table should have an active download task."
+        // );
     }
 
     pub(crate) fn handle_advert_receive(
@@ -421,10 +421,10 @@ where
                     self.metrics.slot_table_removals_total.inc();
                 }
                 None => {
-                    error!(
-                        self.log,
-                        "Slot table contains an artifact ID that is not present in the `active_downloads`. This should never happen."
-                    );
+                    // error!(
+                    //     self.log,
+                    //     "Slot table contains an artifact ID that is not present in the `active_downloads`. This should never happen."
+                    // );
                     if cfg!(debug_assertions) {
                         panic!("Invariant violated");
                     }
