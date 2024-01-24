@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -Eeuo pipefail
+
 # We hold this in memory since it rarely changes (not during a script call)
 MAINNET_CANISTER_WASM_HASH_VERSIONS=""
 sns_mainnet_canister_wasm_hash_versions() {
@@ -12,8 +14,15 @@ sns_mainnet_canister_wasm_hash_versions() {
 sns_mainnet_wasm_hash() {
     local SNS_CANISTER_TYPE=$1
     local VERSION_INDEX=${2:--1} # default to latest
-    sns_mainnet_canister_wasm_hash_versions "$VERSION_INDEX" \
-        | jq -r ".${SNS_CANISTER_TYPE}_wasm_hash"
+
+    sns_wasm_hash_for_canister $(sns_mainnet_canister_wasm_hash_versions "$VERSION_INDEX") $SNS_CANISTER_TYPE
+}
+
+sns_wasm_hash_for_canister() {
+    local HASH_VERSIONS=$1
+    local SNS_CANISTER_TYPE=$2
+
+    echo "$HASH_VERSIONS" | jq -r ".${SNS_CANISTER_TYPE}_wasm_hash"
 }
 
 sns_wasm_hash_to_git_commit() {
@@ -26,7 +35,9 @@ sns_wasm_hash_to_git_commit() {
 sns_mainnet_git_commit_id() {
     local SNS_CANISTER_TYPE=$1
     local VERSION_INDEX=${2:--1} #default to latest
-    sns_wasm_hash_to_git_commit "$(sns_mainnet_wasm_hash $SNS_CANISTER_TYPE "$VERSION_INDEX")"
+
+    WASM_HASH=$(sns_mainnet_wasm_hash ${SNS_CANISTER_TYPE} ${VERSION_INDEX})
+    sns_wasm_hash_to_git_commit ${WASM_HASH}
 }
 
 create_sns_for_upgrade_test() {
@@ -38,8 +49,11 @@ create_sns_for_upgrade_test() {
     local PEM=$3
     local VERSION_INDEX=$4
 
+    echo "Getting mainnet versions" | tee -a "${LOG_FILE}"
+    MAINNET_VERSIONS=$(sns_mainnet_canister_wasm_hash_versions $VERSION_INDEX)
+
     echo "Reset versions to mainnet" | tee -a "${LOG_FILE}"
-    reset_sns_w_versions_to_mainnet "$NNS_URL" "$NEURON_ID" "$VERSION_INDEX"
+    reset_sns_w_versions ${NNS_URL} ${NEURON_ID} ${PEM} ${MAINNET_VERSIONS}
     # propose new SNS
     echo "Proposing new SNS!" | tee -a "${LOG_FILE}"
 
@@ -64,7 +78,6 @@ create_sns_for_upgrade_test() {
 
     GOV_CANISTER_ID=$(sns_canister_id_for_sns_canister_type governance)
     ROOT_CANISTER_ID=$(sns_canister_id_for_sns_canister_type root)
-    SWAP_CANISTER_ID=$(sns_canister_id_for_sns_canister_type swap)
     LEDGER_CANISTER_ID=$(sns_canister_id_for_sns_canister_type ledger)
 
     echo "Participate in Swap to commit it (this spawns the archive canister) ..." | tee -a $LOG_FILE
@@ -81,19 +94,25 @@ create_sns_for_upgrade_test() {
     add_archive_to_sns_canister_ids "$PWD/sns_canister_ids.json" "${ARCHIVE_CANISTER_ID}"
 
     echo "Assert that all canisters have the mainnet hashes so our test is legitimate ..." | tee -a $LOG_FILE
-    canister_has_hash_installed $NNS_URL \
-        $(sns_canister_id_for_sns_canister_type governance) $(sns_mainnet_wasm_hash governance ${VERSION_INDEX})
-    canister_has_hash_installed $NNS_URL \
-        $(sns_canister_id_for_sns_canister_type root) $(sns_mainnet_wasm_hash root ${VERSION_INDEX})
-    canister_has_hash_installed $NNS_URL \
-        $(sns_canister_id_for_sns_canister_type ledger) $(sns_mainnet_wasm_hash ledger ${VERSION_INDEX})
-    canister_has_hash_installed $NNS_URL \
-        $(sns_canister_id_for_sns_canister_type index) $(sns_mainnet_wasm_hash index ${VERSION_INDEX})
-    canister_has_hash_installed $NNS_URL \
-        $(sns_canister_id_for_sns_canister_type swap) $(sns_mainnet_wasm_hash swap ${VERSION_INDEX})
-    canister_has_hash_installed $NNS_URL \
-        $(sns_canister_id_for_sns_canister_type archive) $(sns_mainnet_wasm_hash archive ${VERSION_INDEX})
+    for SNS_CANISTER in "${SNS_CANISTERS[@]}"; do
+        CANISTER_ID=$(sns_canister_id_for_sns_canister_type ${SNS_CANISTER})
+        WASM_HASH=$(sns_wasm_hash_for_canister ${MAINNET_VERSIONS} ${SNS_CANISTER})
+        canister_has_hash_installed $NNS_URL ${CANISTER_ID} ${WASM_HASH}
+    done
+}
 
+reset_sns_w_versions() {
+    local NNS_URL=$1
+    local NEURON_ID=$2
+    local PEM=$3
+    local HASH_VERSIONS=$4
+
+    for SNS_CANISTER in "${SNS_CANISTERS[@]}"; do
+        WASM_HASH=$(sns_wasm_hash_for_canister "${HASH_VERSIONS}" ${SNS_CANISTER})
+        GIT_COMMIT_ID=$(sns_wasm_hash_to_git_commit ${WASM_HASH})
+        upload_canister_git_version_to_sns_wasm \
+            ${NNS_URL} ${NEURON_ID} ${PEM} ${SNS_CANISTER} ${GIT_COMMIT_ID}
+    done
 }
 
 reset_sns_w_versions_to_mainnet() {
@@ -101,37 +120,10 @@ reset_sns_w_versions_to_mainnet() {
 
     local NNS_URL=$1
     local NEURON_ID=$2
-    local VERSION_INDEX=${3:--1}
+    local PEM=$3
+    local VERSION_INDEX=${4:--1}
 
-    upload_canister_git_version_to_sns_wasm \
-        "$NNS_URL" "$NEURON_ID" \
-        "$PEM" \
-        root $(sns_mainnet_git_commit_id root "${VERSION_INDEX}")
-
-    upload_canister_git_version_to_sns_wasm \
-        "$NNS_URL" "$NEURON_ID" \
-        "$PEM" \
-        governance $(sns_mainnet_git_commit_id governance "${VERSION_INDEX}")
-
-    upload_canister_git_version_to_sns_wasm \
-        "$NNS_URL" "$NEURON_ID" \
-        "$PEM" \
-        ledger $(sns_mainnet_git_commit_id ledger "${VERSION_INDEX}")
-
-    upload_canister_git_version_to_sns_wasm \
-        "$NNS_URL" "$NEURON_ID" \
-        "$PEM" \
-        archive $(sns_mainnet_git_commit_id archive "${VERSION_INDEX}")
-
-    upload_canister_git_version_to_sns_wasm \
-        "$NNS_URL" "$NEURON_ID" \
-        "$PEM" \
-        swap $(sns_mainnet_git_commit_id swap "${VERSION_INDEX}")
-
-    upload_canister_git_version_to_sns_wasm \
-        "$NNS_URL" "$NEURON_ID" \
-        "$PEM" \
-        index $(sns_mainnet_git_commit_id index "${VERSION_INDEX}")
+    reset_sns_w_versions ${NNS_URL} ${NEURON_ID} ${PEM} $(sns_mainnet_canister_wasm_hash_versions $VERSION_INDEX)
 }
 
 upload_canister_git_version_to_sns_wasm() {
