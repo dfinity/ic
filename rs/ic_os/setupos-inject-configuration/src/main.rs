@@ -1,13 +1,14 @@
 use std::os::unix::fs::PermissionsExt;
 use std::{
+    assert,
     fs::{self, File, Permissions},
     io::Write,
+    net::Ipv6Addr,
     path::{Path, PathBuf},
 };
 
 use anyhow::{Context, Error};
 use clap::{Args, Parser};
-use ipnet::Ipv6Net;
 use tempfile::NamedTempFile;
 use url::Url;
 
@@ -38,10 +39,10 @@ struct Cli {
 #[derive(Args)]
 struct NetworkConfig {
     #[arg(long)]
-    ipv6_prefix: Option<Ipv6Net>,
+    ipv6_prefix: Option<String>,
 
     #[arg(long)]
-    ipv6_gateway: Option<Ipv6Net>,
+    ipv6_gateway: Option<Ipv6Addr>,
 
     #[arg(long)]
     mgmt_mac: Option<String>,
@@ -172,14 +173,9 @@ async fn write_config(path: &Path, cfg: &NetworkConfig) -> Result<(), Error> {
 
     if let (Some(ipv6_prefix), Some(ipv6_gateway)) = (ipv6_prefix, ipv6_gateway) {
         // Always write 4 segments, even if our prefix is less.
-        let segments = ipv6_prefix.trunc().addr().segments();
-        writeln!(
-            &mut f,
-            "ipv6_prefix={:04x}:{:04x}:{:04x}:{:04x}",
-            segments[0], segments[1], segments[2], segments[3],
-        )?;
-
-        writeln!(&mut f, "ipv6_gateway={}", ipv6_gateway.addr())?;
+        assert!(format!("{ipv6_prefix}::").parse::<Ipv6Addr>().is_ok());
+        writeln!(&mut f, "ipv6_prefix={}", ipv6_prefix)?;
+        writeln!(&mut f, "ipv6_gateway={}", ipv6_gateway)?;
     }
 
     if let Some(mgmt_mac) = mgmt_mac {

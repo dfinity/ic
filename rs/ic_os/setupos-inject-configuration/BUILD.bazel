@@ -6,7 +6,6 @@ DEPENDENCIES = [
     "//rs/ic_os/utils",
     "@crate_index//:anyhow",
     "@crate_index//:clap_4_0_0",
-    "@crate_index//:ipnet",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:serde",
