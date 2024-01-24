@@ -7,9 +7,8 @@ mod node_gen;
 use node_gen::get_node_gen_metric;
 
 mod prometheus_metric;
-use prometheus_metric::{write_single_metric, LabelPair, MetricType};
+use prometheus_metric::write_single_metric;
 
-use network::interfaces::has_ipv4_connectivity;
 mod generate_network_config;
 use generate_network_config::{
     generate_networkd_config, validate_and_construct_ipv4_address_info,
@@ -17,10 +16,6 @@ use generate_network_config::{
 };
 
 use network::systemd::{restart_systemd_networkd, DEFAULT_SYSTEMD_NETWORK_DIR};
-
-use crate::prometheus_metric::PrometheusMetric;
-
-static NODE_EXPORTER_METRIC_PATH: &str = "/run/node_exporter/collector_textfile";
 
 #[derive(Subcommand)]
 pub enum Commands {
@@ -116,33 +111,6 @@ pub fn main() -> Result<()> {
 
             eprintln!("Restarting systemd networkd");
             restart_systemd_networkd();
-
-            if ipv4_gateway.is_some() {
-                let connectivity_metric_value = if has_ipv4_connectivity() {
-                    eprintln!("Ipv4 configuration successful!");
-                    1.0
-                } else {
-                    eprintln!("ERROR: Ipv4 configuration failed!");
-                    0.0
-                };
-
-                let prometheus_metric = PrometheusMetric {
-                    name: "ipv4_connectivity_status".into(),
-                    help: "Status of IPv4 connectivity".into(),
-                    metric_type: MetricType::Gauge,
-                    labels: [LabelPair {
-                        label: "target".into(),
-                        value: "ipv4_connectivity".into(),
-                    }]
-                    .to_vec(),
-                    value: connectivity_metric_value,
-                };
-
-                let output_path = format!("{}/ipv4_connectivity.prom", NODE_EXPORTER_METRIC_PATH);
-                let output_path = Path::new(&output_path);
-
-                write_single_metric(&prometheus_metric, output_path)?;
-            }
 
             Ok(())
         }
