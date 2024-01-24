@@ -8,6 +8,7 @@ use ic_replicated_state::{ExportedFunctions, Global, Memory, NumWasmPages, PageM
 use ic_system_api::sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateChanges};
 use ic_system_api::{ApiType, DefaultOutOfInstructionsHandler};
 use ic_types::methods::{FuncRef, WasmMethod};
+use ic_types::NumPages;
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
 use wasmtime::Module;
@@ -584,7 +585,7 @@ pub fn process(
         sandbox_safe_system_state,
         canister_current_memory_usage,
         canister_current_message_memory_usage,
-        execution_parameters,
+        execution_parameters.clone(),
         subnet_available_memory,
         embedder.config().feature_flags.wasm_native_stable_memory,
         embedder.config().max_sum_exported_function_name_lengths,
@@ -643,7 +644,7 @@ pub fn process(
     // Capping at the limit to preserve the existing behaviour. It should be
     // possible to remove capping after ensuring that all callers can handle
     // instructions executed being larger than the limit.
-    let slice_instructions_executed = system_api
+    let mut slice_instructions_executed = system_api
         .slice_instructions_executed(instruction_counter)
         .min(slice_instruction_limit);
     // Capping at the limit to avoid an underflow when computing the remaining
@@ -655,8 +656,12 @@ pub fn process(
 
     // In case the message dirtied too many pages, as a performance optimization we will
     // yield the control to the replica and then resume copying dirty pages in a new execution slice.
-    if let Ok(ref res) = run_result {
-        if res.dirty_pages.len() > embedder.config().max_dirty_pages_without_optimization {
+    let num_dirty_pages = if let Ok(ref res) = run_result {
+        let dirty_pages = NumPages::from(res.dirty_pages.len() as u64);
+        // Do not perform this optimization for subnets where DTS is not enabled.
+        if execution_parameters.instruction_limits.slicing_enabled()
+            && dirty_pages.get() > embedder.config().max_dirty_pages_without_optimization as u64
+        {
             if let Err(err) = system_api.yield_for_dirty_memory_copy(instruction_counter) {
                 // If there was an error slicing, propagate this error to the main result and return.
                 // Otherwise, the regular message path takes place.
@@ -676,8 +681,19 @@ pub fn process(
                     Ok(instance),
                 );
             }
+            // The optimization was performed. The slice instructions have been accounted
+            // for in the first slice. At the end of this function we will only account
+            // for dirty pages.
+            slice_instructions_executed = NumInstructions::from(0);
+            dirty_pages
+        } else {
+            // The optimization wasn't performed.
+            NumPages::from(0)
         }
-    }
+    } else {
+        // The optimization wasn't performed because the message execution failed.
+        NumPages::from(0)
+    };
 
     // Has the side effect of deallocating memory if message failed and
     // returning cycles from a request that wasn't sent.
@@ -743,10 +759,20 @@ pub fn process(
         Err(_) => None,
     };
 
+    // If the dirty page optimization slicing has been performed, we know the dirty page copying
+    // was a heavy operation, therefore we take into account its overhead in number of instructions
+    // accounted for this round, when only dirty page copying has happened.
+    // If the optimization wasn't triggered, then num_dirty_pages = 0, therefore the overhead is 0
+    // and the number of instructions is the one accounted for at the beginning of this function.
+    let output_slice = SliceExecutionOutput {
+        executed_instructions: NumInstructions::from(
+            slice_instructions_executed.get()
+                + num_dirty_pages.get() * embedder.config().dirty_page_copy_overhead.get(),
+        ),
+    };
+
     (
-        SliceExecutionOutput {
-            executed_instructions: slice_instructions_executed,
-        },
+        output_slice,
         WasmExecutionOutput {
             wasm_result,
             num_instructions_left: message_instructions_left,

@@ -217,19 +217,23 @@ impl DeterministicTimeSlicing {
     //   dirty page copying in the next slice.
     fn try_yield_for_dirty_memory_copy(
         &self,
-        _instruction_counter: i64,
+        instruction_counter: i64,
     ) -> Result<SliceExecutionOutput, HypervisorError> {
         let mut state = self.state.lock().unwrap();
         assert_eq!(state.execution_status, ExecutionStatus::Running);
-
+        // Get newly executed instructions.
+        let executed_instructions =
+            NumInstructions::from(state.newly_executed(instruction_counter) as u64);
+        // Update the instruction counter such that the canister is charged the for executed instructions.
+        state.update(instruction_counter);
         state.execution_status = ExecutionStatus::Paused;
+
+        // This code path happens only during a longer execution which has triggered many dirty
+        // pages. After the execution happened, we slice, ending the round so that the copying
+        // of dirty pages can happen in a new round.
+        // In the future we might consider adding an overhead for dirty pages copying also here.
         Ok(SliceExecutionOutput {
-            // Since this is a performance optimization we can consider
-            // that the extra round for copying takes 1 instruction.
-            // The overall behavior (i.e., number of executed instructions)
-            // will be the (almost) same as if we didn't pause. We don't return 0
-            // to avoid the confusion that no progress was made.
-            executed_instructions: NumInstructions::from(1),
+            executed_instructions,
         })
     }
 
