@@ -434,8 +434,12 @@ mod test {
             .into(),
         );
 
-        let fake_subnet_mutation =
-            add_fake_subnet(signing_subnet, &mut subnet_list_record, subnet_record);
+        let fake_subnet_mutation = add_fake_subnet(
+            signing_subnet,
+            &mut subnet_list_record,
+            subnet_record,
+            &node_ids_and_dkg_pks,
+        );
         registry.maybe_apply_mutation_internal(fake_subnet_mutation);
 
         // Make a request for the key from a subnet that does not have the key
@@ -489,8 +493,12 @@ mod test {
             .into(),
         );
 
-        let fake_subnet_mutation =
-            add_fake_subnet(signing_subnet, &mut subnet_list_record, subnet_record);
+        let fake_subnet_mutation = add_fake_subnet(
+            signing_subnet,
+            &mut subnet_list_record,
+            subnet_record,
+            &node_ids_and_dkg_pks,
+        );
         registry.maybe_apply_mutation_internal(fake_subnet_mutation);
 
         // Make a request for the key from a subnet that does not have the key
@@ -543,8 +551,12 @@ mod test {
             }
             .into(),
         );
-        let fake_subnet_mutation =
-            add_fake_subnet(signing_subnet, &mut subnet_list_record, subnet_record);
+        let fake_subnet_mutation = add_fake_subnet(
+            signing_subnet,
+            &mut subnet_list_record,
+            subnet_record,
+            &node_ids_and_dkg_pks,
+        );
         registry.maybe_apply_mutation_internal(fake_subnet_mutation);
 
         // Step 2: Try to create another subnet with duplicate keys, which should panic.
