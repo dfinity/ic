@@ -40,8 +40,13 @@ use ic_types::{
     methods::{FuncRef, WasmClosure},
     NumSlices,
 };
-use prometheus::{IntCounter, IntCounterVec};
-use std::{collections::VecDeque, sync::Arc, time::Duration, time::Instant};
+use prometheus::{Histogram, IntCounter, IntCounterVec};
+use std::{
+    collections::{BTreeSet, VecDeque},
+    sync::Arc,
+    time::Duration,
+    time::Instant,
+};
 
 /// The response of a query. If the query originated from a user, then it
 /// contains either `UserResponse` or `UserError`. If the query originated from
@@ -105,6 +110,9 @@ pub(super) struct QueryContext<'a> {
     local_query_execution_stats: Option<&'a QueryStatsCollector>,
     /// How many times each tracked System API call was invoked during the query execution.
     system_api_call_counters: SystemApiCallCounters,
+    /// A set of canister IDs evaluated and executed at least once in this query context.
+    /// The information is used by the query cache for composite queries.
+    evaluated_canister_ids: BTreeSet<CanisterId>,
 }
 
 impl<'a> QueryContext<'a> {
@@ -154,6 +162,7 @@ impl<'a> QueryContext<'a> {
             query_critical_error,
             local_query_execution_stats,
             system_api_call_counters: SystemApiCallCounters::default(),
+            evaluated_canister_ids: BTreeSet::default(),
         }
     }
 
@@ -407,8 +416,8 @@ impl<'a> QueryContext<'a> {
                 &mut self.round_limits,
                 self.query_critical_error,
             );
-        self.system_api_call_counters
-            .saturating_add(system_api_call_counters);
+        self.add_system_api_call_counters(system_api_call_counters);
+        self.insert_evaluated_canister_id(canister.canister_id());
         let instructions_executed = instruction_limit - instructions_left;
 
         let ingress_payload_size = method_payload.len();
@@ -451,6 +460,17 @@ impl<'a> QueryContext<'a> {
         (canister, result)
     }
 
+    /// Add up System API call counters.
+    fn add_system_api_call_counters(&mut self, system_api_call_counters: SystemApiCallCounters) {
+        self.system_api_call_counters
+            .saturating_add(system_api_call_counters);
+    }
+
+    /// Add a canister ID into a set of actually executed canisters.
+    fn insert_evaluated_canister_id(&mut self, canister_id: CanisterId) {
+        self.evaluated_canister_ids.insert(canister_id);
+    }
+
     fn finish(
         &self,
         canister: &mut CanisterState,
@@ -481,6 +501,11 @@ impl<'a> QueryContext<'a> {
         query_system_api_calls
             .with_label_values(&[SYSTEM_API_TIME])
             .inc_by(self.system_api_call_counters.time as u64);
+    }
+
+    /// Observe the number evaluated canisters in the corresponding metrics.
+    pub(super) fn observe_evaluated_canisters(&mut self, query_evaluated_canisters: &Histogram) {
+        query_evaluated_canisters.observe(self.evaluated_canister_ids.len() as f64)
     }
 
     fn execute_callback(
@@ -589,8 +614,8 @@ impl<'a> QueryContext<'a> {
             call_context.time(),
         );
 
-        self.system_api_call_counters
-            .saturating_add(output.system_api_call_counters);
+        self.add_system_api_call_counters(output.system_api_call_counters);
+        // There is no need to update evaluated canister ids, as it's a callback.
         let canister_current_memory_usage = canister.memory_usage();
         let canister_current_message_memory_usage = canister.message_memory_usage();
         canister.execution_state = Some(output_execution_state);
@@ -691,8 +716,8 @@ impl<'a> QueryContext<'a> {
                 time,
             );
 
-        self.system_api_call_counters
-            .saturating_add(cleanup_output.system_api_call_counters);
+        self.add_system_api_call_counters(cleanup_output.system_api_call_counters);
+        // There is no need to update evaluated canister ids, as it's a cleanup.
         canister.execution_state = Some(output_execution_state);
         match cleanup_output.wasm_result {
             Ok(_) => {
@@ -1018,5 +1043,10 @@ impl<'a> QueryContext<'a> {
     /// Return how many times each tracked System API call was invoked.
     pub fn system_api_call_counters(&self) -> &SystemApiCallCounters {
         &self.system_api_call_counters
+    }
+
+    /// Return a list of actually executed canister IDs.
+    pub fn evaluated_canister_ids(&self) -> &BTreeSet<CanisterId> {
+        &self.evaluated_canister_ids
     }
 }

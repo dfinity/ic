@@ -821,6 +821,30 @@ fn query_cache_metrics_system_api_calls_work_on_composite_query() {
 }
 
 #[test]
+fn query_cache_metrics_evaluated_canisters_work() {
+    let mut test = builder_with_query_caching().build();
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let a = wasm()
+        .composite_query(
+            b_id,
+            call_args().on_reply(
+                wasm().composite_query(b_id, call_args().on_reply(wasm().reply_data(&[42]))),
+            ),
+        )
+        .build();
+    test.non_replicated_query(a_id, "composite_query", a)
+        .unwrap();
+
+    let m = &query_handler(&test).metrics;
+
+    // Two canisters reported once.
+    assert_eq!(1, m.query_evaluated_canisters.get_sample_count());
+    assert_eq!(2.0, m.query_evaluated_canisters.get_sample_sum());
+}
+
+#[test]
 fn query_cache_composite_queries_return_the_same_result() {
     let mut test = builder_with_query_caching().build();
     let a_id = test.universal_canister().unwrap();
@@ -889,8 +913,7 @@ fn query_cache_nested_queries_never_get_cached() {
     // The query has no time or balance dependencies...
     let q = wasm()
         // ...but there is a nested query.
-        .composite_query(b_id, call_args())
-        .reply_data(&[42])
+        .composite_query(b_id, call_args().on_reply(wasm().reply_data(&[42])))
         .build();
 
     // Run the query for the first time.
