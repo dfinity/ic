@@ -403,8 +403,8 @@ impl<'a> ManagedCanisters<'a> {
             |canister_id: Principal| CanisterId::unchecked_from_principal(canister_id.into());
 
         Self {
-            ledger: Canister::new(runtime, to_canister_id(canister_ids.ledger)),
-            index: Canister::new(runtime, to_canister_id(canister_ids.index)),
+            ledger: Canister::new(runtime, to_canister_id(canister_ids.ledger.unwrap())),
+            index: Canister::new(runtime, to_canister_id(canister_ids.index.unwrap())),
             archives: canister_ids
                 .archives
                 .into_iter()

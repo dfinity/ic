@@ -1,4 +1,5 @@
 use crate::state::Wasm;
+use async_trait::async_trait;
 use candid::{CandidType, Principal};
 use ic_base_types::PrincipalId;
 use ic_cdk::api::call::RejectionCode;
@@ -15,8 +16,8 @@ use std::fmt;
 /// `sign_with_ecdsa`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CallError {
-    method: String,
-    reason: Reason,
+    pub method: String,
+    pub reason: Reason,
 }
 
 impl CallError {
@@ -88,72 +89,108 @@ impl Reason {
     }
 }
 
-async fn call<I, O>(method: &str, payment: u64, input: &I) -> Result<O, CallError>
-where
-    I: CandidType,
-    O: CandidType + DeserializeOwned,
-{
-    let balance = ic_cdk::api::canister_balance128();
-    if balance < payment as u128 {
-        return Err(CallError {
-            method: method.to_string(),
-            reason: Reason::OutOfCycles,
-        });
-    }
+#[async_trait]
+pub trait CanisterRuntime {
+    /// Returns the canister id of the current canister.
+    fn id(&self) -> Principal;
 
-    let res: Result<(O,), _> = ic_cdk::api::call::call_with_payment(
-        Principal::management_canister(),
-        method,
-        (input,),
-        payment,
-    )
-    .await;
+    /// Creates a new canister with the given cycles.
+    async fn create_canister(
+        &self,
+        cycles_for_canister_creation: u64,
+    ) -> Result<Principal, CallError>;
 
-    match res {
-        Ok((output,)) => Ok(output),
-        Err((code, msg)) => Err(CallError {
-            method: method.to_string(),
-            reason: Reason::from_reject(code, msg),
-        }),
+    /// Installs the given wasm module with the initialization arguments on the given canister.
+    async fn install_code(
+        &self,
+        canister_id: Principal,
+        wasm_module: Wasm,
+        arg: Vec<u8>,
+    ) -> Result<(), CallError>;
+}
+
+pub struct IcCanisterRuntime {}
+
+impl IcCanisterRuntime {
+    async fn call<I, O>(&self, method: &str, payment: u64, input: &I) -> Result<O, CallError>
+    where
+        I: CandidType,
+        O: CandidType + DeserializeOwned,
+    {
+        let balance = ic_cdk::api::canister_balance128();
+        if balance < payment as u128 {
+            return Err(CallError {
+                method: method.to_string(),
+                reason: Reason::OutOfCycles,
+            });
+        }
+
+        let res: Result<(O,), _> = ic_cdk::api::call::call_with_payment(
+            Principal::management_canister(),
+            method,
+            (input,),
+            payment,
+        )
+        .await;
+
+        match res {
+            Ok((output,)) => Ok(output),
+            Err((code, msg)) => Err(CallError {
+                method: method.to_string(),
+                reason: Reason::from_reject(code, msg),
+            }),
+        }
     }
 }
 
-pub async fn create_canister(cycles_for_canister_creation: u64) -> Result<Principal, CallError> {
-    let create_args = CreateCanisterArgs {
-        settings: Some(
-            CanisterSettingsArgsBuilder::new()
-                .with_controllers(vec![ic_cdk::id().into()])
-                .build(),
-        ),
-        ..Default::default()
-    };
-    let result: CanisterIdRecord = call(
-        "create_canister",
-        cycles_for_canister_creation,
-        &create_args,
-    )
-    .await?;
+#[async_trait]
+impl CanisterRuntime for IcCanisterRuntime {
+    fn id(&self) -> Principal {
+        ic_cdk::id()
+    }
 
-    Ok(result.get_canister_id().get().into())
-}
+    async fn create_canister(
+        &self,
+        cycles_for_canister_creation: u64,
+    ) -> Result<Principal, CallError> {
+        let create_args = CreateCanisterArgs {
+            settings: Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_controllers(vec![ic_cdk::id().into()])
+                    .build(),
+            ),
+            ..Default::default()
+        };
+        let result: CanisterIdRecord = self
+            .call(
+                "create_canister",
+                cycles_for_canister_creation,
+                &create_args,
+            )
+            .await?;
 
-pub async fn install_code(
-    canister_id: Principal,
-    wasm_module: Wasm,
-    arg: Vec<u8>,
-) -> Result<(), CallError> {
-    let install_code = InstallCodeArgs {
-        mode: CanisterInstallMode::Install,
-        canister_id: PrincipalId::from(canister_id),
-        wasm_module: wasm_module.to_bytes(),
-        arg,
-        compute_allocation: None,
-        memory_allocation: None,
-        query_allocation: None,
-        sender_canister_version: None,
-    };
+        Ok(result.get_canister_id().get().into())
+    }
 
-    call("install_code", 0, &install_code).await?;
+    async fn install_code(
+        &self,
+        canister_id: Principal,
+        wasm_module: Wasm,
+        arg: Vec<u8>,
+    ) -> Result<(), CallError> {
+        let install_code = InstallCodeArgs {
+            mode: CanisterInstallMode::Install,
+            canister_id: PrincipalId::from(canister_id),
+            wasm_module: wasm_module.to_bytes(),
+            arg,
+            compute_allocation: None,
+            memory_allocation: None,
+            query_allocation: None,
+            sender_canister_version: None,
+        };
 
-    Ok(())
+        self.call("install_code", 0, &install_code).await?;
+
+        Ok(())
+    }
 }

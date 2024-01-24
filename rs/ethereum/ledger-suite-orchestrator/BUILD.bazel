@@ -13,11 +13,13 @@ rust_library(
     ),
     crate_name = "ic_ledger_suite_orchestrator",
     proc_macro_deps = [
+        "@crate_index//:async-trait",
         "@crate_index//:ic-cdk-macros",
     ],
     version = "0.1.0",
     deps = [
         "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/crypto/sha2",
         "//rs/ethereum/types",
         "//rs/rosetta-api/icrc1/index-ng",
         "//rs/rosetta-api/icrc1/ledger",
@@ -51,7 +53,9 @@ rust_test(
     crate = ":ledger_suite_orchestrator",
     deps = [
         ":ledger_suite_orchestrator",
+        "@crate_index//:mockall",
         "@crate_index//:proptest",
+        "@crate_index//:tokio",
     ],
 )
 

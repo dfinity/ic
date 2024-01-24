@@ -32,16 +32,16 @@ pub struct Erc20Contract {
 
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ManagedCanisterIds {
-    pub ledger: Principal,
-    pub index: Principal,
+    pub ledger: Option<Principal>,
+    pub index: Option<Principal>,
     pub archives: Vec<Principal>,
 }
 
 impl From<Canisters> for ManagedCanisterIds {
     fn from(canisters: Canisters) -> Self {
         Self {
-            ledger: *canisters.ledger_canister_id(),
-            index: *canisters.index_canister_id(),
+            ledger: canisters.ledger_canister_id().cloned(),
+            index: canisters.index_canister_id().cloned(),
             archives: canisters.archive_canister_ids().to_vec(),
         }
     }
@@ -50,8 +50,22 @@ impl From<Canisters> for ManagedCanisterIds {
 impl Display for ManagedCanisterIds {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ManagedCanisterIds")
-            .field("ledger", &self.ledger.to_string())
-            .field("index", &self.index.to_string())
+            .field(
+                "ledger",
+                &self
+                    .ledger
+                    .as_ref()
+                    .map(ToString::to_string)
+                    .unwrap_or("pending".to_string()),
+            )
+            .field(
+                "index",
+                &self
+                    .index
+                    .as_ref()
+                    .map(ToString::to_string)
+                    .unwrap_or("pending".to_string()),
+            )
             .field(
                 "archives",
                 &self

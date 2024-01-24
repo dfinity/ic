@@ -8688,6 +8688,7 @@ dependencies = [
 name = "ic-ledger-suite-orchestrator"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "candid",
  "candid_parser",
  "hex",
@@ -8696,6 +8697,7 @@ dependencies = [
  "ic-cdk",
  "ic-cdk-macros",
  "ic-cdk-timers",
+ "ic-crypto-sha2",
  "ic-ethereum-types",
  "ic-ic00-types",
  "ic-icrc1-index-ng",
@@ -8706,10 +8708,12 @@ dependencies = [
  "icrc-ledger-types",
  "minicbor",
  "minicbor-derive",
+ "mockall",
  "num-traits",
  "proptest",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]

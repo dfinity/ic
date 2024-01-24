@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use crate::candid::InitArg;
 use crate::scheduler::{Erc20Contract, Task, Tasks};
 use candid::Principal;
@@ -8,8 +11,11 @@ use minicbor::{Decode, Encode};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::fmt::Debug;
+use std::marker::PhantomData;
 
 const STATE_MEMORY_ID: MemoryId = MemoryId::new(0);
+const WASM_HASH_LENGTH: usize = 32;
 
 thread_local! {
      static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(
@@ -23,17 +29,40 @@ thread_local! {
 }
 
 #[derive(Debug, PartialEq, Encode, Decode, Clone)]
-pub struct Wasm(#[cbor(n(0), with = "minicbor::bytes")] Vec<u8>);
+pub struct Wasm {
+    #[cbor(n(0), with = "minicbor::bytes")]
+    binary: Vec<u8>,
+    #[n(1)]
+    hash: WasmHash,
+}
+
+#[derive(Debug, PartialEq, Encode, Decode, Clone)]
+pub struct WasmHash(#[cbor(n(0), with = "minicbor::bytes")] [u8; WASM_HASH_LENGTH]);
+
+impl From<[u8; WASM_HASH_LENGTH]> for WasmHash {
+    fn from(value: [u8; WASM_HASH_LENGTH]) -> Self {
+        Self(value)
+    }
+}
 
 impl Wasm {
+    pub fn new(binary: Vec<u8>) -> Self {
+        let hash = WasmHash::from(ic_crypto_sha2::Sha256::hash(binary.as_slice()));
+        Self { binary, hash }
+    }
+
     pub fn to_bytes(self) -> Vec<u8> {
-        self.0
+        self.binary
+    }
+
+    pub fn hash(&self) -> &WasmHash {
+        &self.hash
     }
 }
 
 impl From<Vec<u8>> for Wasm {
     fn from(v: Vec<u8>) -> Self {
-        Self(v)
+        Self::new(v)
     }
 }
 
@@ -43,35 +72,113 @@ pub struct ManagedCanisters {
     canisters: BTreeMap<Erc20Contract, Canisters>,
 }
 
-#[derive(Debug, PartialEq, Encode, Decode, Clone)]
+#[derive(Default, Debug, PartialEq, Encode, Decode, Clone)]
 pub struct Canisters {
-    #[cbor(n(0), with = "crate::cbor::principal")]
-    ledger: Principal,
-    #[cbor(n(1), with = "crate::cbor::principal")]
-    index: Principal,
+    #[n(0)]
+    pub ledger: Option<LedgerCanister>,
+    #[n(1)]
+    pub index: Option<IndexCanister>,
     #[cbor(n(2), with = "crate::cbor::principal::vec")]
-    archives: Vec<Principal>,
+    pub archives: Vec<Principal>,
 }
 
 impl Canisters {
-    pub fn new(ledger: Principal, index: Principal) -> Self {
-        Self {
-            ledger,
-            index,
-            archives: vec![],
-        }
+    pub fn ledger_canister_id(&self) -> Option<&Principal> {
+        self.ledger.as_ref().map(LedgerCanister::canister_id)
     }
 
-    pub fn ledger_canister_id(&self) -> &Principal {
-        &self.ledger
-    }
-
-    pub fn index_canister_id(&self) -> &Principal {
-        &self.index
+    pub fn index_canister_id(&self) -> Option<&Principal> {
+        self.index.as_ref().map(IndexCanister::canister_id)
     }
 
     pub fn archive_canister_ids(&self) -> &[Principal] {
         &self.archives
+    }
+}
+
+#[derive(Debug)]
+pub struct Canister<T> {
+    status: ManagedCanisterStatus,
+    marker: PhantomData<T>,
+}
+
+impl<T> Clone for Canister<T> {
+    fn clone(&self) -> Self {
+        Self::new(self.status.clone())
+    }
+}
+
+impl<T> PartialEq for Canister<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.status.eq(&other.status)
+    }
+}
+
+impl<C, T> minicbor::Encode<C> for Canister<T> {
+    fn encode<W: minicbor::encode::Write>(
+        &self,
+        e: &mut minicbor::Encoder<W>,
+        ctx: &mut C,
+    ) -> Result<(), minicbor::encode::Error<W::Error>> {
+        ManagedCanisterStatus::encode(&self.status, e, ctx)
+    }
+}
+
+impl<'b, C, T> minicbor::Decode<'b, C> for Canister<T> {
+    fn decode(d: &mut minicbor::Decoder<'b>, ctx: &mut C) -> Result<Self, minicbor::decode::Error> {
+        ManagedCanisterStatus::decode(d, ctx).map(Self::new)
+    }
+}
+
+impl<T> Canister<T> {
+    pub fn new(status: ManagedCanisterStatus) -> Self {
+        Self {
+            status,
+            marker: PhantomData,
+        }
+    }
+
+    pub fn canister_id(&self) -> &Principal {
+        self.status.canister_id()
+    }
+}
+
+#[derive(Debug)]
+pub enum Ledger {}
+pub type LedgerCanister = Canister<Ledger>;
+
+#[derive(Debug)]
+pub enum Index {}
+pub type IndexCanister = Canister<Index>;
+
+#[derive(Debug, PartialEq, Encode, Decode, Clone)]
+pub enum ManagedCanisterStatus {
+    /// Canister created with the given principal
+    /// but wasm module is not yet installed.
+    #[n(1)]
+    Created {
+        #[cbor(n(0), with = "crate::cbor::principal")]
+        canister_id: Principal,
+    },
+
+    /// Canister created and wasm module installed.
+    /// The wasm_hash reflects the installed wasm module by the orchestrator
+    /// but *may differ* from the one being currently deployed (if another controller did an upgrade)
+    #[n(2)]
+    Installed {
+        #[cbor(n(0), with = "crate::cbor::principal")]
+        canister_id: Principal,
+        #[n(1)]
+        installed_wasm_hash: WasmHash,
+    },
+}
+
+impl ManagedCanisterStatus {
+    pub fn canister_id(&self) -> &Principal {
+        match self {
+            ManagedCanisterStatus::Created { canister_id }
+            | ManagedCanisterStatus::Installed { canister_id, .. } => canister_id,
+        }
     }
 }
 
@@ -165,19 +272,157 @@ impl State {
         self.managed_canisters.canisters.get(contract)
     }
 
+    fn managed_canisters_mut(&mut self, contract: &Erc20Contract) -> Option<&mut Canisters> {
+        self.managed_canisters.canisters.get_mut(contract)
+    }
+
     pub fn unset_timer_guard(&mut self) {
         self.processing_tasks_guard = false;
     }
 
-    pub fn record_managed_canisters(&mut self, contract: Erc20Contract, canisters: Canisters) {
-        assert_eq!(
+    pub fn managed_status<'a, T: 'a>(
+        &'a self,
+        contract: &Erc20Contract,
+    ) -> Option<&'a ManagedCanisterStatus>
+    where
+        Canisters: ManageSingleCanister<T>,
+    {
+        self.managed_canisters(contract)
+            .and_then(|c| c.get().map(|c| &c.status))
+    }
+
+    pub fn record_created_canister<T: Debug>(
+        &mut self,
+        contract: &Erc20Contract,
+        canister_id: Principal,
+    ) where
+        Canisters: ManageSingleCanister<T>,
+    {
+        if self.managed_canisters(contract).is_none() {
             self.managed_canisters
                 .canisters
-                .insert(contract.clone(), canisters),
-            None,
-            "Canisters are already registered for {:?}",
-            contract
-        );
+                .insert(contract.clone(), Canisters::default());
+        }
+        let canisters = self
+            .managed_canisters_mut(contract)
+            .expect("BUG: no managed canisters");
+        canisters
+            .try_insert(Canister::<T>::new(ManagedCanisterStatus::Created {
+                canister_id,
+            }))
+            .unwrap_or_else(|e| {
+                panic!(
+                    "BUG: canister {} already created: {:?}",
+                    Canisters::display_name(),
+                    e
+                )
+            });
+    }
+
+    pub fn record_installed_canister<T>(&mut self, contract: &Erc20Contract, wasm_hash: WasmHash)
+    where
+        Canisters: ManageSingleCanister<T>,
+    {
+        let managed_canister = self
+            .managed_canisters_mut(contract)
+            .and_then(Canisters::get_mut)
+            .unwrap_or_else(|| {
+                panic!(
+                    "BUG: no managed canisters or no {} canister for {:?}",
+                    Canisters::display_name(),
+                    contract
+                )
+            });
+        let canister_id = *managed_canister.canister_id();
+        managed_canister.status = ManagedCanisterStatus::Installed {
+            canister_id,
+            installed_wasm_hash: wasm_hash,
+        };
+    }
+}
+
+pub trait ManageSingleCanister<T> {
+    fn display_name() -> &'static str;
+
+    fn get(&self) -> Option<&Canister<T>>;
+
+    fn get_mut(&mut self) -> Option<&mut Canister<T>>;
+
+    fn try_insert(&mut self, canister: Canister<T>) -> Result<(), OccupiedError<Canister<T>>>;
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct OccupiedError<T> {
+    value: T,
+}
+
+impl ManageSingleCanister<Ledger> for Canisters {
+    fn display_name() -> &'static str {
+        "ledger"
+    }
+
+    fn get(&self) -> Option<&Canister<Ledger>> {
+        self.ledger.as_ref()
+    }
+
+    fn get_mut(&mut self) -> Option<&mut Canister<Ledger>> {
+        self.ledger.as_mut()
+    }
+
+    fn try_insert(
+        &mut self,
+        canister: Canister<Ledger>,
+    ) -> Result<(), OccupiedError<Canister<Ledger>>> {
+        match self.get() {
+            Some(c) => Err(OccupiedError { value: c.clone() }),
+            None => {
+                self.ledger = Some(canister);
+                Ok(())
+            }
+        }
+    }
+}
+
+impl ManageSingleCanister<Index> for Canisters {
+    fn display_name() -> &'static str {
+        "index"
+    }
+
+    fn get(&self) -> Option<&Canister<Index>> {
+        self.index.as_ref()
+    }
+
+    fn get_mut(&mut self) -> Option<&mut Canister<Index>> {
+        self.index.as_mut()
+    }
+
+    fn try_insert(
+        &mut self,
+        canister: Canister<Index>,
+    ) -> Result<(), OccupiedError<Canister<Index>>> {
+        match self.get() {
+            Some(c) => Err(OccupiedError { value: c.clone() }),
+            None => {
+                self.index = Some(canister);
+                Ok(())
+            }
+        }
+    }
+}
+
+pub trait RetrieveCanisterWasm<T> {
+    fn retrieve_wasm(&self) -> &Wasm;
+}
+
+impl RetrieveCanisterWasm<Ledger> for State {
+    fn retrieve_wasm(&self) -> &Wasm {
+        self.ledger_wasm()
+    }
+}
+
+impl RetrieveCanisterWasm<Index> for State {
+    fn retrieve_wasm(&self) -> &Wasm {
+        self.index_wasm()
     }
 }
 
