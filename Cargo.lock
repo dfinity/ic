@@ -7609,8 +7609,8 @@ dependencies = [
  "serde_bytes",
  "slog",
  "slog-term",
- "wasm-encoder 0.35.0",
- "wasmparser 0.115.0",
+ "wasm-encoder 0.36.2",
+ "wasmparser 0.116.1",
  "wasmprinter",
  "wasmtime",
  "wasmtime-environ",
@@ -7716,7 +7716,7 @@ dependencies = [
  "threadpool",
  "tokio",
  "tower",
- "wasmparser 0.115.0",
+ "wasmparser 0.116.1",
  "wat",
 ]
 
@@ -12069,8 +12069,8 @@ dependencies = [
 name = "ic-wasm-transform"
 version = "0.9.0"
 dependencies = [
- "wasm-encoder 0.35.0",
- "wasmparser 0.115.0",
+ "wasm-encoder 0.36.2",
+ "wasmparser 0.116.1",
  "wasmprinter",
  "wat",
 ]
@@ -19659,15 +19659,6 @@ dependencies = [
 
 [[package]]
 name = "wasm-encoder"
-version = "0.35.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ca90ba1b5b0a70d3d49473c5579951f3bddc78d47b59256d2f9d4922b150aca"
-dependencies = [
- "leb128",
-]
-
-[[package]]
-name = "wasm-encoder"
 version = "0.36.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "822b645bf4f2446b949776ffca47e2af60b167209ffb70814ef8779d299cd421"
@@ -19702,16 +19693,6 @@ checksum = "48134de3d7598219ab9eaf6b91b15d8e50d31da76b8519fe4ecfcec2cf35104b"
 dependencies = [
  "indexmap 1.9.2",
  "url",
-]
-
-[[package]]
-name = "wasmparser"
-version = "0.115.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e06c0641a4add879ba71ccb3a1e4278fd546f76f1eafb21d8f7b07733b547cd5"
-dependencies = [
- "indexmap 2.1.0",
- "semver",
 ]
 
 [[package]]
