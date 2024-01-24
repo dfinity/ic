@@ -1,15 +1,3 @@
-use anyhow::bail;
-use ic_types::MAX_STABLE_MEMORY_IN_BYTES;
-use wasmtime::{LinearMemory, MemoryType};
-use wasmtime_environ::{WASM32_MAX_PAGES, WASM_PAGE_SIZE};
-
-use ic_sys::PAGE_SIZE;
-
-use libc::c_void;
-use libc::MAP_FAILED;
-use libc::{mmap, munmap};
-use libc::{MAP_ANON, MAP_PRIVATE, PROT_NONE};
-
 use std::collections::HashMap;
 use std::io::Error;
 use std::ops::Deref;
@@ -19,12 +7,24 @@ use std::sync::{
     Arc, Mutex,
 };
 
+use anyhow::bail;
+use ic_sys::PAGE_SIZE;
+use ic_types::MAX_STABLE_MEMORY_IN_BYTES;
+use libc::c_void;
+use libc::MAP_FAILED;
+use libc::{mmap, munmap};
+use libc::{MAP_ANON, MAP_PRIVATE, PROT_NONE};
+use wasmtime::{LinearMemory, MemoryType};
+use wasmtime_environ::{WASM32_MAX_PAGES, WASM_PAGE_SIZE};
+
+use crate::MIN_GUARD_REGION_SIZE;
+
 pub fn round_up_to_page_size(size: usize, page_size: usize) -> usize {
     (size + (page_size - 1)) & !(page_size - 1)
 }
 
-fn round_up_to_os_page_size(size: usize) -> usize {
-    round_up_to_page_size(size, PAGE_SIZE)
+fn is_multiple_of_page_size(size: usize) -> bool {
+    size == round_up_to_page_size(size, PAGE_SIZE)
 }
 
 #[derive(Hash, PartialEq, Eq)]
@@ -59,46 +59,39 @@ unsafe impl wasmtime::MemoryCreator for WasmtimeMemoryCreator {
         reserved_size_in_bytes: Option<usize>,
         guard_size: usize,
     ) -> Result<Box<dyn LinearMemory>, String> {
-        // We don't use the `reserved_size_in_bytes` because the size of the
-        // memory allocation is determined based on the memory type: 64-bit
-        // memories have size at most the maximum stable memory size and 32-bit
-        // memories have size at most 4GiB. So we always allocate that amount
-        // (unless the module explicitly lists a smaller maximum).
-        //
-        // If we get a `reserved_size_in_bytes` that exceeds the max stable
-        // memory size then there has been a change in our setting of the
-        // `static_memory_maximum_size` for the `wasmtime::Config` which isn't
-        // compatible with the memory sizes we expect to see here.
-        if let Some(reserved_size) = reserved_size_in_bytes {
-            assert!(
-                reserved_size <= MAX_STABLE_MEMORY_IN_BYTES as usize,
-                "Reserved bytes for wasm memory {} exceeds the maximum expected {}",
-                reserved_size,
-                MAX_STABLE_MEMORY_IN_BYTES
-            )
-        }
         let max_pages = if ty.is_64() {
             MAX_STABLE_MEMORY_IN_BYTES / (WASM_PAGE_SIZE as u64)
         } else {
             WASM32_MAX_PAGES
         };
-        let min = std::cmp::min(ty.minimum(), max_pages) as usize;
-        let max = std::cmp::min(ty.maximum().unwrap_or(max_pages), max_pages) as usize;
+        let min = ty.minimum().min(max_pages) as usize;
+        let max = ty.maximum().unwrap_or(max_pages).min(max_pages) as usize;
 
-        let mem = MmapMemory::new(max * WASM_PAGE_SIZE as usize, guard_size);
+        let Some(reserved_size) = reserved_size_in_bytes else {
+            panic!(
+                "Wasmtime issued request to create a memory without specifying a reserved size."
+            );
+        };
+        assert!(
+            reserved_size <= MAX_STABLE_MEMORY_IN_BYTES as usize,
+            "Reserved bytes for wasm memory {} exceeds the maximum expected {}",
+            reserved_size,
+            MAX_STABLE_MEMORY_IN_BYTES
+        );
+
+        assert!(
+            reserved_size >= max * WASM_PAGE_SIZE as usize,
+            "Reserved size {} in bytes is smaller than expected max size {} in wasm pages",
+            reserved_size,
+            max
+        );
+
+        let mem = MmapMemory::new(reserved_size, guard_size);
 
         match self.created_memories.lock() {
             Err(err) => Err(format!("Error locking map of created memories: {:?}", err)),
             Ok(mut created_memories) => {
-                let prologue_guard_size_in_bytes = mem.prologue_guard_size_in_bytes;
-                let epilogue_guard_size_in_bytes = mem.epilogue_guard_size_in_bytes;
-                let new_memory = WasmtimeMemory::new(
-                    mem,
-                    min,
-                    max,
-                    prologue_guard_size_in_bytes,
-                    epilogue_guard_size_in_bytes,
-                );
+                let new_memory = WasmtimeMemory::new(mem, min, max);
                 created_memories.insert(
                     MemoryStart(LinearMemory::as_ptr(&new_memory) as usize),
                     MemoryPageSize(Arc::clone(&new_memory.used)),
@@ -121,8 +114,6 @@ pub struct MmapMemory {
     size_in_bytes: usize,
     // The start of the actual memory exposed to Wasm.
     wasm_memory: *mut c_void,
-    prologue_guard_size_in_bytes: usize,
-    epilogue_guard_size_in_bytes: usize,
 }
 
 /// SAFETY: This type is not actually Send/Sync but this it is only used
@@ -131,20 +122,29 @@ pub struct MmapMemory {
 unsafe impl Send for MmapMemory {}
 unsafe impl Sync for MmapMemory {}
 
-/// The minimal required guard region for correctness is 2GiB. We use 8GiB as a
-/// safety measure since the allocation happens in the virtual memory and its
-/// overhead is negligible.
-const MIN_GUARD_REGION_SIZE: usize = 8 * 1024 * 1024 * 1024;
-
 impl MmapMemory {
     pub fn new(mem_size_in_bytes: usize, guard_size_in_bytes: usize) -> Self {
-        let guard_size_in_bytes =
-            round_up_to_os_page_size(guard_size_in_bytes.max(MIN_GUARD_REGION_SIZE));
+        assert!(
+            guard_size_in_bytes >= MIN_GUARD_REGION_SIZE,
+            "Requested guard size {} is smaller than required size {}",
+            guard_size_in_bytes,
+            MIN_GUARD_REGION_SIZE
+        );
+        assert!(
+            is_multiple_of_page_size(guard_size_in_bytes),
+            "Requested guard size {} is not a multiple of the page size.",
+            guard_size_in_bytes
+        );
+        assert!(
+            is_multiple_of_page_size(mem_size_in_bytes),
+            "Requested memory size {} is not a multiple of the page size.",
+            mem_size_in_bytes
+        );
+
         let prologue_guard_size_in_bytes = guard_size_in_bytes;
         let epilogue_guard_size_in_bytes = guard_size_in_bytes;
-        let size_in_bytes = prologue_guard_size_in_bytes
-            + round_up_to_os_page_size(mem_size_in_bytes)
-            + epilogue_guard_size_in_bytes;
+        let size_in_bytes =
+            prologue_guard_size_in_bytes + mem_size_in_bytes + epilogue_guard_size_in_bytes;
 
         // SAFETY: These are valid arguments to `mmap`. Only `mem_size` is non-constant,
         // but any `usize` will result in a valid call.
@@ -179,13 +179,16 @@ impl MmapMemory {
             start,
             size_in_bytes,
             wasm_memory,
-            prologue_guard_size_in_bytes,
-            epilogue_guard_size_in_bytes,
         }
     }
 
     fn as_ptr(&self) -> *mut c_void {
         self.wasm_memory
+    }
+
+    fn wasm_accessible(&self) -> std::ops::Range<usize> {
+        let start = self.wasm_memory as usize;
+        start..start + self.size_in_bytes
     }
 }
 
@@ -200,24 +203,14 @@ pub struct WasmtimeMemory {
     mem: MmapMemory,
     max_size_in_pages: usize,
     used: MemoryPageSize,
-    prologue_guard_size_in_bytes: usize,
-    epilogue_guard_size_in_bytes: usize,
 }
 
 impl WasmtimeMemory {
-    fn new(
-        mem: MmapMemory,
-        min_size_in_pages: usize,
-        max_size_in_pages: usize,
-        prologue_guard_size_in_bytes: usize,
-        epilogue_guard_size_in_bytes: usize,
-    ) -> Self {
+    fn new(mem: MmapMemory, min_size_in_pages: usize, max_size_in_pages: usize) -> Self {
         Self {
             mem,
             max_size_in_pages,
             used: MemoryPageSize(Arc::new(AtomicUsize::new(min_size_in_pages))),
-            prologue_guard_size_in_bytes,
-            epilogue_guard_size_in_bytes,
         }
     }
 }
@@ -271,11 +264,6 @@ unsafe impl LinearMemory for WasmtimeMemory {
     }
 
     fn wasm_accessible(&self) -> std::ops::Range<usize> {
-        let wasm_memory_start = self.mem.as_ptr() as usize;
-        let prologue_start = wasm_memory_start.saturating_sub(self.prologue_guard_size_in_bytes);
-        let epilogue_end = wasm_memory_start
-            .saturating_add(convert_pages_to_bytes(self.max_size_in_pages))
-            .saturating_add(self.epilogue_guard_size_in_bytes);
-        prologue_start..epilogue_end
+        self.mem.wasm_accessible()
     }
 }

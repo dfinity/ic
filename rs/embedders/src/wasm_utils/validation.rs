@@ -15,11 +15,14 @@ use std::{
     collections::{BTreeMap, HashMap, HashSet},
 };
 
-use crate::wasm_utils::instrumentation::{
-    ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
-};
 use crate::wasmtime_embedder::{
     STABLE_BYTEMAP_MEMORY_NAME, STABLE_MEMORY_NAME, WASM_HEAP_MEMORY_NAME,
+};
+use crate::{
+    wasm_utils::instrumentation::{
+        ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
+    },
+    MIN_GUARD_REGION_SIZE,
 };
 use wasmparser::{ExternalKind, FuncType, Operator, StructuralType, TypeRef, ValType};
 
@@ -1368,6 +1371,8 @@ pub fn wasmtime_validation_config(embedder_config: &EmbeddersConfig) -> wasmtime
         // with a change in how we create the memories in the implementation
         // of `wasmtime::MemoryCreator`.
         .static_memory_maximum_size(MAX_STABLE_MEMORY_IN_BYTES)
+        .guard_before_linear_memory(true)
+        .static_memory_guard_size(MIN_GUARD_REGION_SIZE as u64)
         .max_wasm_stack(embedder_config.max_wasm_stack_size);
     config
 }

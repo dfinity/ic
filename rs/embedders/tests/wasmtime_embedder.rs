@@ -1477,3 +1477,25 @@ fn stable_access_beyond_32_bit_range() {
         .build();
     instance.run(func_ref("write_to_last_page")).unwrap();
 }
+
+/// Test that a particular OOB memory access is caught by wasmtime.
+#[test]
+fn wasm_heap_oob_access() {
+    let wat = r#"
+            (module
+                (type (;0;) (func))
+                (func (;0;) (type 0)
+                    i32.const -943208505
+                    i32.load8_s offset=3933426208
+                    unreachable
+                )
+                (memory (;0;) 652 38945)
+                (export "canister_update test" (func 0))
+            )"#;
+
+    let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+    let err = instance
+        .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
+        .unwrap_err();
+    assert_eq!(err, HypervisorError::Trapped(TrapCode::HeapOutOfBounds));
+}
