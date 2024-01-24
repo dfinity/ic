@@ -268,6 +268,7 @@ mod test {
             subnet_id,
             &mut subnet_list_record,
             subnet_record,
+            &node_ids_and_dkg_pks,
         ));
 
         let now = SystemTime::now();
@@ -322,6 +323,7 @@ mod test {
             subnet_id,
             &mut subnet_list_record,
             subnet_record,
+            &node_ids_and_dkg_pks,
         ));
 
         let now = SystemTime::now();
@@ -377,6 +379,7 @@ mod test {
             subnet_id,
             &mut subnet_list_record,
             subnet_record,
+            &node_ids_and_dkg_pks,
         ));
 
         let now = SystemTime::now();
@@ -442,6 +445,7 @@ mod test {
             subnet_id,
             &mut subnet_list_record,
             subnet_record,
+            &node_ids_and_dkg_pks,
         ));
 
         let mut now = SystemTime::now();

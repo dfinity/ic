@@ -294,6 +294,7 @@ mod tests {
             source_subnet.subnet_id,
             &mut subnet_list_record,
             source_subnet_record,
+            &source_node_ids_and_dkg_pks,
         );
         registry.maybe_apply_mutation_internal(subnet_mutation);
 
@@ -301,6 +302,7 @@ mod tests {
             destination_subnet.subnet_id,
             &mut subnet_list_record,
             destination_subnet_record,
+            &destination_node_ids_and_dkg_pks,
         );
         registry.maybe_apply_mutation_internal(subnet_mutation);
 

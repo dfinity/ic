@@ -333,6 +333,7 @@ mod test {
             subnet_id_holding_key,
             &mut subnet_list_record,
             subnet_record,
+            &node_ids_and_dkg_pks,
         );
         registry.maybe_apply_mutation_internal(fake_subnet_mutation);
         (registry, subnet_id_holding_key)

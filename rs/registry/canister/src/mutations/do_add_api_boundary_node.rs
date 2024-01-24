@@ -188,6 +188,7 @@ mod tests {
                 SubnetId::from(*TEST_USER1_PRINCIPAL),  // signing_subnet
                 &mut registry.get_subnet_list_record(), // subnet_list_record
                 subnet_record,
+                &node_ids_and_dkg_pks,
             ),
         );
 
