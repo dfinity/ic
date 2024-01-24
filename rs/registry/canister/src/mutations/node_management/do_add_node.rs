@@ -6,7 +6,7 @@ use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 
-use ic_base_types::NodeId;
+use ic_base_types::{NodeId, PrincipalId};
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_utils_basic_sig::conversions as crypto_basicsig_conversions;
 use ic_protobuf::registry::{
@@ -28,25 +28,26 @@ use prost::Message;
 impl Registry {
     /// Adds a new node to the registry.
     ///
-    /// This method is called directly by the node or tool that needs to
-    /// add a node.
+    /// This method is called directly by the node or tool that needs to add a node.
     pub fn do_add_node(&mut self, payload: AddNodePayload) -> Result<NodeId, String> {
+        // Get the caller ID and check if it is in the registry
+        let caller_id = dfn_core::api::caller();
         println!(
             "{}do_add_node started: {:?} caller: {:?}",
-            LOG_PREFIX,
-            payload,
-            dfn_core::api::caller()
+            LOG_PREFIX, payload, caller_id
         );
+        self.do_add_node_(payload, caller_id)
+    }
 
-        // The steps are now:
-        // 1. get the caller ID and check if it is in the registry
-        let caller = dfn_core::api::caller();
+    fn do_add_node_(
+        &mut self,
+        payload: AddNodePayload,
+        caller_id: PrincipalId,
+    ) -> Result<NodeId, String> {
+        let mut node_operator_record = get_node_operator_record(self, caller_id)
+            .map_err(|err| format!("{}do_add_node: Aborting node addition: {}", LOG_PREFIX, err))?;
 
-        let mut node_operator_record = get_node_operator_record(self, caller)
-            .map_err(|err| format!("{}do_add_node: Aborting node addition: {}", LOG_PREFIX, err))
-            .unwrap();
-
-        // 2. Clear out any nodes that already exist at this IP.
+        // 1. Clear out any nodes that already exist at this IP.
         // This will only succeed if:
         // - the same NO was in control of the original nodes.
         // - the nodes are no longer in subnets.
@@ -57,33 +58,36 @@ impl Registry {
         let nodes_with_same_ip = scan_for_nodes_by_ip(self, &http_endpoint.ip_addr);
         if !nodes_with_same_ip.is_empty() {
             for node_id in nodes_with_same_ip {
-                self.do_remove_node_directly(RemoveNodeDirectlyPayload { node_id });
+                self.do_remove_node(RemoveNodeDirectlyPayload { node_id }, caller_id);
             }
 
             // Update the NO record, as the available allowance may have changed.
-            node_operator_record = get_node_operator_record(self, caller)
-                .map_err(|err| {
-                    format!("{}do_add_node: Aborting node addition: {}", LOG_PREFIX, err)
-                })
-                .unwrap();
+            node_operator_record = get_node_operator_record(self, caller_id).map_err(|err| {
+                format!("{}do_add_node: Aborting node addition: {}", LOG_PREFIX, err)
+            })?
         }
 
-        // 3. check if adding one more node will get us over the cap for the Node
-        // Operator
+        // 2. Check if adding one more node will get us over the cap for the Node Operator
         if node_operator_record.node_allowance == 0 {
-            return Err("Node allowance for this Node Operator is exhausted".to_string());
+            return Err(format!(
+                "{}do_add_node: Node allowance for this Node Operator is exhausted",
+                LOG_PREFIX
+            ));
         }
 
-        // 4. Validate keys and get the node id
-        let (node_id, valid_pks) = valid_keys_from_payload(&payload)?;
+        // 3. Validate keys and get the node id
+        let (node_id, valid_pks) = valid_keys_from_payload(&payload)
+            .map_err(|err| format!("{}do_add_node: {}", LOG_PREFIX, err))?;
 
-        //5. Validate the domain is valid
+        // 4. Validate the domain is valid
         let domain: Option<String> = payload
             .domain
             .as_ref()
             .map(|domain| {
                 if !is_valid_domain(domain) {
-                    return Err(format!("Domain name {domain} has invalid format"));
+                    return Err(format!(
+                        "{LOG_PREFIX}do_add_node: Domain name `{domain}` has invalid format"
+                    ));
                 }
                 Ok(domain.clone())
             })
@@ -91,11 +95,11 @@ impl Registry {
 
         println!("{}do_add_node: The node id is {:?}", LOG_PREFIX, node_id);
 
-        // 6. create the Node Record
+        // 5. Create the Node Record
         let node_record = NodeRecord {
             xnet: Some(connection_endpoint_from_string(&payload.xnet_endpoint)),
             http: Some(connection_endpoint_from_string(&payload.http_endpoint)),
-            node_operator_id: caller.into_vec(),
+            node_operator_id: caller_id.into_vec(),
             hostos_version_id: None,
             chip_id: payload.chip_id.clone(),
             public_ipv4_config: payload
@@ -105,18 +109,18 @@ impl Registry {
             domain,
         };
 
-        // 7. Insert node, public keys, and crypto keys
+        // 6. Insert node, public keys, and crypto keys
         let mut mutations = make_add_node_registry_mutations(node_id, node_record, valid_pks);
 
-        // 8. Update the Node Operator record
+        // 7. Update the Node Operator record
         node_operator_record.node_allowance -= 1;
 
         let update_node_operator_record =
-            make_update_node_operator_mutation(caller, &node_operator_record);
+            make_update_node_operator_mutation(caller_id, &node_operator_record);
 
         mutations.push(update_node_operator_record);
 
-        // 9. Check invariants before applying mutations
+        // 8. Check invariants before applying mutations
         self.maybe_apply_mutation_internal(mutations);
 
         println!("{}do_add_node finished: {:?}", LOG_PREFIX, payload);
@@ -294,11 +298,53 @@ fn make_valid_node_ivp4_config_or_panic(ip_addresses: Vec<String>) -> IPv4Interf
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
+    use crate::{
+        common::test_helpers::invariant_compliant_registry,
+        mutations::common::{encode_or_panic, test::TEST_NODE_ID},
+    };
+
     use super::*;
     use ic_config::crypto::CryptoConfig;
     use ic_crypto_node_key_generation::generate_node_keys_once;
-    use ic_nns_common::registry::encode_or_panic;
+    use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
+    use ic_registry_keys::{make_node_operator_record_key, make_node_record_key};
+    use ic_registry_transport::insert;
     use lazy_static::lazy_static;
+
+    /// Prepares the payload to add a new node, for tests.
+    pub fn prepare_add_node_payload(mutation_id: u8) -> (AddNodePayload, ValidNodePublicKeys) {
+        // As the node canister checks for validity of keys, we need to generate them first
+        let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
+        let node_public_keys =
+            generate_node_keys_once(&config, None).expect("error generating node public keys");
+        // Create payload message
+        let node_signing_pk = encode_or_panic(node_public_keys.node_signing_key());
+        let committee_signing_pk = encode_or_panic(node_public_keys.committee_signing_key());
+        let ni_dkg_dealing_encryption_pk =
+            encode_or_panic(node_public_keys.dkg_dealing_encryption_key());
+        let transport_tls_cert = encode_or_panic(node_public_keys.tls_certificate());
+        let idkg_dealing_encryption_pk =
+            encode_or_panic(node_public_keys.idkg_dealing_encryption_key());
+        // Create the payload
+        let payload = AddNodePayload {
+            node_signing_pk,
+            committee_signing_pk,
+            ni_dkg_dealing_encryption_pk,
+            transport_tls_cert,
+            idkg_dealing_encryption_pk: Some(idkg_dealing_encryption_pk),
+            xnet_endpoint: format!("128.0.{mutation_id}.1:1234"),
+            http_endpoint: format!("128.0.{mutation_id}.1:4321"),
+            p2p_flow_endpoints: vec![],
+            prometheus_metrics_endpoint: "".to_string(),
+            chip_id: None,
+            public_ipv4_config: None,
+            domain: Some("api-example.com".to_string()),
+        };
+
+        (payload, node_public_keys)
+    }
 
     #[derive(Clone)]
     struct TestData {
@@ -521,5 +567,215 @@ mod tests {
             "204.153.51.2".to_string(),
         ];
         make_valid_node_ivp4_config_or_panic(ipv4_config_raw);
+    }
+
+    #[test]
+    fn should_fail_if_domain_name_is_invalid() {
+        // Arrange
+        let mut registry = invariant_compliant_registry(0);
+        // Add node operator record first
+        let node_operator_record = NodeOperatorRecord {
+            node_allowance: 1, // Should be > 0 to add a new node
+            ..Default::default()
+        };
+        let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_node_operator_record_key(node_operator_id),
+            encode_or_panic(&node_operator_record),
+        )]);
+        let (mut payload, _) = prepare_add_node_payload(1);
+        // Set an invalid domain name
+        payload.domain = Some("invalid_domain_name".to_string());
+        // Act
+        let result = registry.do_add_node_(payload.clone(), node_operator_id);
+        // Assert
+        assert_eq!(
+            result.unwrap_err(),
+            "[Registry] do_add_node: Domain name `invalid_domain_name` has invalid format"
+        );
+    }
+
+    #[test]
+    fn should_fail_if_node_allowance_is_zero() {
+        // Arrange
+        let mut registry = invariant_compliant_registry(0);
+        // Add node operator record with node allowance 0.
+        let node_operator_record = NodeOperatorRecord {
+            node_allowance: 0,
+            ..Default::default()
+        };
+        let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_node_operator_record_key(node_operator_id),
+            encode_or_panic(&node_operator_record),
+        )]);
+        let (payload, _) = prepare_add_node_payload(1);
+        // Act
+        let result = registry.do_add_node_(payload.clone(), node_operator_id);
+        // Assert
+        assert_eq!(
+            result.unwrap_err(),
+            "[Registry] do_add_node: Node allowance for this Node Operator is exhausted"
+        );
+    }
+
+    #[test]
+    fn should_fail_if_node_operator_is_absent_in_registry() {
+        // Arrange
+        let mut registry = invariant_compliant_registry(0);
+        let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
+        let (payload, _) = prepare_add_node_payload(1);
+        // Act
+        let result = registry.do_add_node_(payload.clone(), node_operator_id);
+        // Assert
+        assert_eq!(
+            result.unwrap_err(),
+            "[Registry] do_add_node: Aborting node addition: Node Operator Id node_operator_record_2vxsx-fae not found in the registry."
+        );
+    }
+
+    #[test]
+    fn should_succeed_for_adding_one_node() {
+        // Arrange
+        let mut registry = invariant_compliant_registry(0);
+        // Add node operator record first
+        let node_operator_record = NodeOperatorRecord {
+            node_allowance: 1, // Should be > 0 to add a new node
+            ..Default::default()
+        };
+        let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_node_operator_record_key(node_operator_id),
+            encode_or_panic(&node_operator_record),
+        )]);
+        let (payload, _) = prepare_add_node_payload(1);
+        // Act
+        let node_id: NodeId = registry
+            .do_add_node_(payload.clone(), node_operator_id)
+            .expect("failed to add a node");
+        // Assert node record is correct
+        let node_record_expected = NodeRecord {
+            xnet: Some(connection_endpoint_from_string(&payload.xnet_endpoint)),
+            http: Some(connection_endpoint_from_string(&payload.http_endpoint)),
+            node_operator_id: node_operator_id.into(),
+            domain: Some("api-example.com".to_string()),
+            ..Default::default()
+        };
+        let node_record = registry.get_node_or_panic(node_id);
+        assert_eq!(node_record, node_record_expected);
+        // Assert node allowance counter has decremented
+        let node_operator_record = get_node_operator_record(&registry, node_operator_id)
+            .expect("failed to get node operator");
+        assert_eq!(node_operator_record.node_allowance, 0);
+    }
+
+    #[test]
+    fn should_succeed_for_adding_two_nodes_with_different_ips() {
+        // Arrange
+        let mut registry = invariant_compliant_registry(0);
+        // Add node operator record first
+        let node_operator_record = NodeOperatorRecord {
+            node_allowance: 2, // needed for adding two nodes
+            ..Default::default()
+        };
+        let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_node_operator_record_key(node_operator_id),
+            encode_or_panic(&node_operator_record),
+        )]);
+        let (payload_1, _) = prepare_add_node_payload(1);
+        // Set a different IP for the second node
+        let (mut payload_2, _) = prepare_add_node_payload(2);
+        payload_2.http_endpoint = "128.0.1.10:4321".to_string();
+        assert_ne!(payload_1.http_endpoint, payload_2.http_endpoint);
+        // Act: add two nodes with the different IPs
+        let node_id_1: NodeId = registry
+            .do_add_node_(payload_1.clone(), node_operator_id)
+            .expect("failed to add a node");
+        let node_id_2: NodeId = registry
+            .do_add_node_(payload_2.clone(), node_operator_id)
+            .expect("failed to add a node");
+        // Assert both node records are in the registry and are correct
+        let node_record_expected_1 = NodeRecord {
+            xnet: Some(connection_endpoint_from_string(&payload_1.xnet_endpoint)),
+            http: Some(connection_endpoint_from_string(&payload_1.http_endpoint)),
+            node_operator_id: node_operator_id.into(),
+            domain: Some("api-example.com".to_string()),
+            ..Default::default()
+        };
+        let node_record_expected_2 = NodeRecord {
+            xnet: Some(connection_endpoint_from_string(&payload_2.xnet_endpoint)),
+            http: Some(connection_endpoint_from_string(&payload_2.http_endpoint)),
+            node_operator_id: node_operator_id.into(),
+            domain: Some("api-example.com".to_string()),
+            ..Default::default()
+        };
+        let node_record_1 = registry.get_node_or_panic(node_id_1);
+        assert_eq!(node_record_1, node_record_expected_1);
+        let node_record_2 = registry.get_node_or_panic(node_id_2);
+        assert_eq!(node_record_2, node_record_expected_2);
+        // Assert node allowance counter has decremented by two
+        let node_operator_record = get_node_operator_record(&registry, node_operator_id)
+            .expect("failed to get node operator");
+        assert_eq!(node_operator_record.node_allowance, 0);
+    }
+
+    #[test]
+    fn should_succeed_for_adding_two_nodes_with_identical_ips() {
+        // Arrange
+        let mut registry = invariant_compliant_registry(0);
+        // Add node operator record first
+        let node_operator_record = NodeOperatorRecord {
+            node_allowance: 2, // needed for adding two nodes
+            ..Default::default()
+        };
+        let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_node_operator_record_key(node_operator_id),
+            encode_or_panic(&node_operator_record),
+        )]);
+        // Use payloads with the same IPs
+        let (payload_1, _) = prepare_add_node_payload(1);
+        let (mut payload_2, _) = prepare_add_node_payload(2);
+        payload_2.http_endpoint = payload_1.http_endpoint.clone();
+        assert_eq!(payload_1.http_endpoint, payload_2.http_endpoint);
+        // Act: Add two nodes with the same IPs
+        let node_id_1: NodeId = registry
+            .do_add_node_(payload_1.clone(), node_operator_id)
+            .expect("failed to add a node");
+        let node_record_expected_1 = NodeRecord {
+            xnet: Some(connection_endpoint_from_string(&payload_1.xnet_endpoint)),
+            http: Some(connection_endpoint_from_string(&payload_1.http_endpoint)),
+            node_operator_id: node_operator_id.into(),
+            domain: Some("api-example.com".to_string()),
+            ..Default::default()
+        };
+        let node_record_1 = registry.get_node_or_panic(node_id_1);
+        assert_eq!(node_record_1, node_record_expected_1);
+        // Add the second node, this should remove the first one from the registry
+        let node_id_2: NodeId = registry
+            .do_add_node_(payload_2.clone(), node_operator_id)
+            .expect("failed to add a node");
+        // Assert second node record is in the registry and is correct
+        let node_record_expected_2 = NodeRecord {
+            xnet: Some(connection_endpoint_from_string(&payload_2.xnet_endpoint)),
+            http: Some(connection_endpoint_from_string(&payload_2.http_endpoint)),
+            node_operator_id: node_operator_id.into(),
+            domain: Some("api-example.com".to_string()),
+            ..Default::default()
+        };
+        let node_record_2 = registry.get_node_or_panic(node_id_2);
+        assert_eq!(node_record_2, node_record_expected_2);
+        // Assert first node record is removed from the registry because of the IP conflict
+        assert!(registry
+            .get(
+                make_node_record_key(node_id_1).as_bytes(),
+                registry.latest_version()
+            )
+            .is_none());
+        // Assert node allowance counter has decremented by one (as only one node record was effectively added)
+        let node_operator_record = get_node_operator_record(&registry, node_operator_id)
+            .expect("failed to get node operator");
+        assert_eq!(node_operator_record.node_allowance, 1);
     }
 }
