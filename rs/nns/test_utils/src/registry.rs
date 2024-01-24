@@ -433,11 +433,60 @@ fn make_node_record(node_operator_record: &NodeOperatorRecord) -> NodeRecord {
     }
 }
 
-fn get_new_node_id_and_mutations(nor: &NodeOperatorRecord) -> (NodeId, Vec<RegistryMutation>) {
+fn get_new_node_id_and_mutations(
+    nor: &NodeOperatorRecord,
+    subnet_id: SubnetId,
+) -> (NodeId, Vec<RegistryMutation>) {
     let (valid_pks, node_id) = new_node_keys_and_node_id();
+    let dkg_dealing_encryption_pk = valid_pks.dkg_dealing_encryption_key().clone();
     let nr = make_node_record(nor);
-    let mutations = make_add_node_registry_mutations(node_id, nr, valid_pks);
+    let mut mutations = make_add_node_registry_mutations(node_id, nr, valid_pks);
+    add_threshold_signing_pubkey_and_cup_to_mutations(
+        subnet_id,
+        dkg_dealing_encryption_pk,
+        node_id,
+        &mut mutations,
+    );
     (node_id, mutations)
+}
+
+pub fn add_threshold_signing_pubkey_and_cup_to_mutations(
+    subnet_id: SubnetId,
+    dkg_dealing_encryption_pk: PublicKey,
+    node_id: NodeId,
+    mutations: &mut Vec<RegistryMutation>,
+) {
+    // TODO: CRP-2345: Refactor such that the `ReproducibleRng` is not instantiated here, but at
+    //  the test initialization, and passed down to this function.
+    let rng = &mut ReproducibleRng::new();
+    let dealer_subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+    let registry_version = RegistryVersion::new(1);
+    let mut receiver_keys = BTreeMap::new();
+    receiver_keys.insert(node_id, dkg_dealing_encryption_pk);
+    let subnet_transcript = generate_nidkg_initial_transcript(
+        &receiver_keys,
+        dealer_subnet_id,
+        NiDkgTag::HighThreshold,
+        registry_version,
+        rng,
+    );
+    // Threshold signing public key
+    let subnet_threshold_sig_pk =
+        extract_threshold_sig_public_key(&subnet_transcript.internal_csp_transcript)
+            .expect("error extracting threshold sig public key from internal CSP transcript");
+    mutations.push(insert(
+        make_crypto_threshold_signing_pubkey_key(subnet_id).as_bytes(),
+        encode_or_panic(&PublicKey::from(subnet_threshold_sig_pk)),
+    ));
+    // CUP contents
+    let cup_contents_key = make_catch_up_package_contents_key(subnet_id).into_bytes();
+    let cup_contents = CatchUpPackageContents {
+        initial_ni_dkg_transcript_high_threshold: Some(InitialNiDkgTranscriptRecord::from(
+            subnet_transcript,
+        )),
+        ..Default::default()
+    };
+    mutations.push(insert(cup_contents_key, encode_or_panic(&cup_contents)));
 }
 
 /// Setup the registry with a single subnet (containing all the ranges) which
@@ -461,7 +510,7 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
     let mut add_node_mutations = vec![];
     let mut node_id = vec![];
     for nor in &node_operator {
-        let (id, mut mutations) = get_new_node_id_and_mutations(nor);
+        let (id, mut mutations) = get_new_node_id_and_mutations(nor, nns_subnet_id);
         node_id.push(id);
         add_node_mutations.append(&mut mutations);
     }
