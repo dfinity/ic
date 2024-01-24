@@ -1,5 +1,5 @@
 {
-  "checksum": "fcacb6066d7af946da7ddb54c1fa559c12a3167f40f8831661c627d2e3fa7c32",
+  "checksum": "13580f0105eb946b022e7243814505a4620c871af5d68229c09ff5fe473a9658",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17795,10 +17795,84 @@
           "**"
         ],
         "crate_features": {
-          "common": [
-            "std"
-          ],
-          "selects": {}
+          "common": [],
+          "selects": {
+            "aarch64-apple-darwin": [
+              "std"
+            ],
+            "aarch64-apple-ios": [
+              "std"
+            ],
+            "aarch64-apple-ios-sim": [
+              "std"
+            ],
+            "aarch64-fuchsia": [
+              "std"
+            ],
+            "aarch64-linux-android": [
+              "std"
+            ],
+            "aarch64-pc-windows-msvc": [
+              "std"
+            ],
+            "armv7-linux-androideabi": [
+              "std"
+            ],
+            "i686-apple-darwin": [
+              "std"
+            ],
+            "i686-linux-android": [
+              "std"
+            ],
+            "i686-pc-windows-msvc": [
+              "std"
+            ],
+            "i686-unknown-freebsd": [
+              "std"
+            ],
+            "powerpc-unknown-linux-gnu": [
+              "std"
+            ],
+            "riscv32imc-unknown-none-elf": [
+              "std"
+            ],
+            "riscv64gc-unknown-none-elf": [
+              "std"
+            ],
+            "s390x-unknown-linux-gnu": [
+              "std"
+            ],
+            "thumbv7em-none-eabi": [
+              "std"
+            ],
+            "thumbv8m.main-none-eabi": [
+              "std"
+            ],
+            "wasm32-wasi": [
+              "std"
+            ],
+            "x86_64-apple-darwin": [
+              "std"
+            ],
+            "x86_64-apple-ios": [
+              "std"
+            ],
+            "x86_64-fuchsia": [
+              "std"
+            ],
+            "x86_64-linux-android": [
+              "std"
+            ],
+            "x86_64-pc-windows-msvc": [
+              "std"
+            ],
+            "x86_64-unknown-freebsd": [
+              "std"
+            ],
+            "x86_64-unknown-none": [
+              "std"
+            ]
+          }
         },
         "deps": {
           "common": [],
@@ -30930,27 +31004,12 @@
         ],
         "crate_features": {
           "common": [
+            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
-          "selects": {
-            "aarch64-unknown-linux-gnu": [
-              "errno"
-            ],
-            "arm-unknown-linux-gnueabi": [
-              "errno"
-            ],
-            "armv7-unknown-linux-gnueabi": [
-              "errno"
-            ],
-            "i686-unknown-linux-gnu": [
-              "errno"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "errno"
-            ]
-          }
+          "selects": {}
         },
         "edition": "2018",
         "version": "0.3.8"
@@ -30984,34 +31043,78 @@
         ],
         "crate_features": {
           "common": [
+            "elf",
+            "errno",
             "general",
-            "if_ether",
             "ioctl",
-            "net",
-            "netlink",
-            "no_std",
-            "prctl"
+            "no_std"
           ],
           "selects": {
+            "aarch64-linux-android": [
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl"
+            ],
             "aarch64-unknown-linux-gnu": [
-              "elf",
-              "errno"
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl"
             ],
             "arm-unknown-linux-gnueabi": [
-              "elf",
-              "errno"
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl"
+            ],
+            "armv7-linux-androideabi": [
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl"
             ],
             "armv7-unknown-linux-gnueabi": [
-              "elf",
-              "errno"
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl"
+            ],
+            "i686-linux-android": [
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl"
             ],
             "i686-unknown-linux-gnu": [
-              "elf",
-              "errno"
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl"
+            ],
+            "powerpc-unknown-linux-gnu": [
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl"
+            ],
+            "s390x-unknown-linux-gnu": [
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl"
+            ],
+            "x86_64-linux-android": [
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl"
             ],
             "x86_64-unknown-linux-gnu": [
-              "elf",
-              "errno"
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl"
             ]
           }
         },

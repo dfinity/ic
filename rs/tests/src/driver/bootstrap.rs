@@ -14,6 +14,7 @@ use crate::driver::{
     },
     test_setup::InfraProvider,
 };
+use crate::k8s::tnet::TNet;
 use crate::util::block_on;
 use anyhow::{bail, Result};
 use flate2::{write::GzEncoder, Compression};
@@ -27,7 +28,6 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::ReplicaVersion;
-use k8s::tnet::TNet;
 use slog::{info, warn, Logger};
 use std::{
     collections::BTreeMap,

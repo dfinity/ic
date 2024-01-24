@@ -15,7 +15,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::ReplicaVersion;
 
-use crate::tnet::{TNode, TNET_IPV6};
+use crate::k8s::tnet::{TNode, TNET_IPV6};
 
 const BOOTSTRAP_SCRIPT_PATH: &str = "../../../ic-os/scripts/build-bootstrap-config-image.sh";
 const SSH_AUTHORIZED_KEYS_PATH: &str = "../../../testnet/config/ssh_authorized_keys/";

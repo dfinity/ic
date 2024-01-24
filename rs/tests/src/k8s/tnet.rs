@@ -30,11 +30,11 @@ use tokio;
 use tokio_util::codec::{BytesCodec, FramedRead};
 use tracing::*;
 
-use crate::datavolume::*;
-use crate::persistentvolumeclaim::*;
-use crate::pod::*;
-use crate::prep::*;
-use crate::virtualmachine::*;
+use crate::k8s::datavolume::*;
+use crate::k8s::persistentvolumeclaim::*;
+use crate::k8s::pod::*;
+use crate::k8s::prep::*;
+use crate::k8s::virtualmachine::*;
 
 pub static TNET_IPV6: Lazy<String> =
     Lazy::new(|| var("TNET_IPV6").unwrap_or("fda6:8d22:43e1:fda6".to_string()));
