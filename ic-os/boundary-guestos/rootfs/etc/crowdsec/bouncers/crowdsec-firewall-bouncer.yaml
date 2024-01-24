@@ -8,9 +8,6 @@ log_level: info
 api_url: {API_URL}
 api_key: {API_KEY}
 
-supported_decisions_types:
-- ban
-
 blacklists_ipv4: crowdsec
 blacklists_ipv6: crowdsec6
 

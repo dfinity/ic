@@ -26,8 +26,8 @@ ARG snp_kernel_libc_host=linux-libc-dev_${snp_kernel_version_host}-1_amd64.deb
 ARG snp_kernel_libc_guest=linux-libc-dev_${snp_kernel_version_guest}-1_amd64.deb
 
 # Crowdsec bouncer version to install
-ARG CROWDSEC_BOUNCER_VERSION=1.0.13
-ARG CROWDSEC_BOUNCER_SHA=d6b8db252fdd36cc9597d9494e076a37082ddebeec26ad36932c09023077772b
+ARG CROWDSEC_BOUNCER_VERSION=1.0.14
+ARG CROWDSEC_BOUNCER_SHA=c99919c6ecc69904249ff71b32ea791ce2eec32e5a9e8d4c9c6554131a4fb331
 
 # Vector version to install
 ARG VECTOR_VERSION=0.35.0
