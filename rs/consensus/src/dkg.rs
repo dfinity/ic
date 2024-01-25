@@ -1603,7 +1603,9 @@ mod tests {
         dependencies, dependencies_with_subnet_params,
         dependencies_with_subnet_records_with_raw_state_manager, Dependencies,
     };
-    use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
+    use ic_crypto_test_utils_ni_dkg::{
+        dummy_initial_dkg_transcript, dummy_transcript_for_tests_with_params,
+    };
     use ic_interfaces::{
         consensus_pool::ConsensusPool,
         p2p::consensus::{MutablePool, UnvalidatedArtifact},
@@ -1611,9 +1613,7 @@ mod tests {
     use ic_interfaces_registry::RegistryVersionedRecord;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_protobuf::registry::subnet::v1::{
-        CatchUpPackageContents, InitialNiDkgTranscriptRecord, SubnetRecord,
-    };
+    use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, SubnetRecord};
     use ic_replicated_state::metadata_state::subnet_call_context_manager::{
         SetupInitialDkgContext, SubnetCallContext,
     };
@@ -3868,28 +3868,6 @@ mod tests {
         // Not needed for this test
         fn get_version_timestamp(&self, _: RegistryVersion) -> Option<Time> {
             None
-        }
-    }
-
-    /// Creates a Protobuf `InitialNiDkgTranscriptRecord`. Used in the test
-    /// below.
-    fn dummy_initial_dkg_transcript(
-        committee: Vec<NodeId>,
-        tag: NiDkgTag,
-    ) -> InitialNiDkgTranscriptRecord {
-        let threshold = committee.len() as u32 / 3 + 1;
-        let transcript = dummy_transcript_for_tests_with_params(committee, tag, threshold, 0);
-        InitialNiDkgTranscriptRecord {
-            id: Some(transcript.dkg_id.into()),
-            threshold: transcript.threshold.get().get(),
-            committee: transcript
-                .committee
-                .iter()
-                .map(|(_, c)| c.get().to_vec())
-                .collect(),
-            registry_version: 1,
-            internal_csp_transcript: serde_cbor::to_vec(&transcript.internal_csp_transcript)
-                .unwrap(),
         }
     }
 

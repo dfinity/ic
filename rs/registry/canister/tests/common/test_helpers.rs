@@ -4,7 +4,6 @@ use candid::Encode;
 use canister_test::{Canister, Runtime};
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
-use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
 use ic_ic00_types::{DerivationPath, ECDSAPublicKeyArgs, EcdsaKeyId, Method as Ic00Method};
 use ic_nns_test_utils::itest_helpers::{
     set_up_registry_canister, set_up_universal_canister, try_call_via_universal_canister,
@@ -12,7 +11,6 @@ use ic_nns_test_utils::itest_helpers::{
 use ic_nns_test_utils::registry::{get_value_or_panic, new_node_keys_and_node_id};
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::registry::routing_table::v1 as pb;
-use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
 use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{
@@ -22,7 +20,6 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
-use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTag;
 use ic_types::ReplicaVersion;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use registry_canister::mutations::do_create_subnet::CreateSubnetPayload;
@@ -72,43 +69,6 @@ pub fn get_subnet_holding_ecdsa_keys(
     );
 
     record
-}
-
-/// This creates a CatchupPackageContents for nodes that would be part of as subnet
-/// which is necessary if the underlying IC test machinery knows about the subnets you added
-/// to your registry
-pub fn dummy_cup_for_subnet(nodes: Vec<NodeId>) -> CatchUpPackageContents {
-    let low_threshold_transcript_record =
-        dummy_initial_dkg_transcript(nodes.clone(), NiDkgTag::LowThreshold);
-    let high_threshold_transcript_record =
-        dummy_initial_dkg_transcript(nodes, NiDkgTag::HighThreshold);
-
-    return CatchUpPackageContents {
-        initial_ni_dkg_transcript_low_threshold: Some(low_threshold_transcript_record),
-        initial_ni_dkg_transcript_high_threshold: Some(high_threshold_transcript_record),
-        ..Default::default()
-    };
-
-    // copied from rs/consensus/src/dkg.rs
-    fn dummy_initial_dkg_transcript(
-        committee: Vec<NodeId>,
-        tag: NiDkgTag,
-    ) -> InitialNiDkgTranscriptRecord {
-        let threshold = committee.len() as u32 / 3 + 1;
-        let transcript = dummy_transcript_for_tests_with_params(committee, tag, threshold, 0);
-        InitialNiDkgTranscriptRecord {
-            id: Some(transcript.dkg_id.into()),
-            threshold: transcript.threshold.get().get(),
-            committee: transcript
-                .committee
-                .iter()
-                .map(|(_, c)| c.get().to_vec())
-                .collect(),
-            registry_version: 1,
-            internal_csp_transcript: serde_cbor::to_vec(&transcript.internal_csp_transcript)
-                .unwrap(),
-        }
-    }
 }
 
 /// This allows us to create a registry canister that is in-sync with the FakeRegistryClient

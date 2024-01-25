@@ -20,6 +20,7 @@ DEPENDENCIES = [
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
     "@crate_index//:serde",
+    "@crate_index//:serde_cbor",
 ]
 
 MACRO_DEPENDENCIES = []

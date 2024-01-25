@@ -6,7 +6,7 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::registry::{
-    add_threshold_signing_pubkey_and_cup_to_mutations, get_committee_signing_key,
+    create_subnet_threshold_signing_pubkey_and_cup_mutations, get_committee_signing_key,
     get_dkg_dealing_key, get_idkg_dealing_encryption_key, get_node_record, get_node_signing_key,
     get_transport_tls_certificate, new_node_keys_and_node_id,
 };
@@ -28,6 +28,7 @@ use ic_registry_transport::pb::v1::{
 };
 use ic_types::p2p::build_default_gossip_config;
 use ic_types::{NodeId, ReplicaVersion};
+use maplit::btreemap;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use registry_canister::mutations::node_management::common::make_add_node_registry_mutations;
 use registry_canister::mutations::node_management::do_add_node::connection_endpoint_from_string;
@@ -183,12 +184,12 @@ fn node_cannot_be_removed_if_in_subnet() {
                 value: encode_or_panic(&test_subnet_list_record),
             },
         ];
-        add_threshold_signing_pubkey_and_cup_to_mutations(
-            test_subnet_id,
-            dkg_dealing_encryption_pk,
-            node_id,
-            &mut mutations,
-        );
+        let mut subnet_threshold_pk_and_cup_mutations =
+            create_subnet_threshold_signing_pubkey_and_cup_mutations(
+                test_subnet_id,
+                &btreemap!(node_id => dkg_dealing_encryption_pk),
+            );
+        mutations.append(&mut subnet_threshold_pk_and_cup_mutations);
 
         // Prepare the registry with a single node and make it callable by anyone
         let registry = set_up_registry_canister(

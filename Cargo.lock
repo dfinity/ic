@@ -7254,6 +7254,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "serde",
+ "serde_cbor",
 ]
 
 [[package]]
@@ -16284,7 +16285,6 @@ dependencies = [
  "rand_distr",
  "registry-canister-protobuf-generator",
  "serde",
- "serde_cbor",
  "serde_json",
  "tempfile",
  "tokio",
