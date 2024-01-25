@@ -2323,3 +2323,78 @@ fn successful_install_chunked_charges_for_wasm_assembly() {
         expected_cost
     );
 }
+
+#[test]
+fn install_chunked_with_dts_works() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .with_install_code_instruction_limit(1_000_000_000)
+        .with_install_code_slice_instruction_limit(1_000)
+        .with_deterministic_time_slicing()
+        .build();
+
+    let canister_id = test.create_canister(CYCLES);
+
+    // Upload two chunks that make up the universal canister.
+    let dts_wasm = &wat::parse_str(DTS_INSTALL_WAT).unwrap();
+    let wasm_module_hash = ic_crypto_sha2::Sha256::hash(dts_wasm).to_vec();
+    let chunk1 = &dts_wasm[..dts_wasm.len() / 2];
+    let chunk2 = &dts_wasm[dts_wasm.len() / 2..];
+    let hash1 = UploadChunkReply::decode(&get_reply(
+        test.subnet_message(
+            "upload_chunk",
+            UploadChunkArgs {
+                canister_id: canister_id.into(),
+                chunk: chunk1.to_vec(),
+            }
+            .encode(),
+        ),
+    ))
+    .unwrap()
+    .hash;
+    let hash2 = UploadChunkReply::decode(&get_reply(
+        test.subnet_message(
+            "upload_chunk",
+            UploadChunkArgs {
+                canister_id: canister_id.into(),
+                chunk: chunk2.to_vec(),
+            }
+            .encode(),
+        ),
+    ))
+    .unwrap()
+    .hash;
+
+    // Do an install that triggers DTS.
+    let ingress_id = test.subnet_message_raw(
+        "install_chunked_code",
+        InstallChunkedCodeArgs::new(
+            CanisterInstallModeV2::Install,
+            canister_id,
+            Some(canister_id),
+            vec![hash1, hash2],
+            wasm_module_hash,
+            vec![],
+        )
+        .encode(),
+    );
+    test.execute_subnet_message();
+
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueInstallCode
+    );
+
+    test.execute_message(canister_id);
+
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None
+    );
+
+    let ingress_status = test.ingress_status(&ingress_id);
+    let result = check_ingress_status(ingress_status).unwrap();
+    assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
+}
