@@ -316,7 +316,7 @@ impl Default for Config {
             max_compilation_cache_size: MAX_COMPILATION_CACHE_SIZE,
             query_stats_aggregation: FlagStatus::Disabled,
             query_stats_epoch_length: QUERY_STATS_EPOCH_LENGTH,
-            wasm_chunk_store: FlagStatus::Enabled,
+            wasm_chunk_store: FlagStatus::Disabled,
             stop_canister_timeout_duration: STOP_CANISTER_TIMEOUT_DURATION,
             canister_snapshots: FlagStatus::Disabled,
         }
