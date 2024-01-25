@@ -11,9 +11,9 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
     self as ic00, BitcoinGetUtxosArgs, BitcoinNetwork, BoundedHttpHeaders, CanisterChange,
     CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2, CanisterStatusType,
-    DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob, HttpMethod, LogVisibility, Method,
-    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    TransformContext, TransformFunc, IC_00,
+    DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob, FetchCanisterLogsRequest, HttpMethod,
+    LogVisibility, Method, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
+    ProvisionalTopUpCanisterArgs, TransformContext, TransformFunc, IC_00,
 };
 use ic_registry_routing_table::canister_id_into_u64;
 use ic_registry_routing_table::CanisterIdRange;
@@ -3269,4 +3269,81 @@ fn test_canister_settings_log_visibility_set_to_public() {
         canister_status.settings().log_visibility(),
         LogVisibility::Public
     );
+}
+
+#[test]
+fn test_fetch_canister_logs_should_accept_ingress_message_log_visibility_public_succeeds() {
+    // Arrange.
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let not_a_controller = user_test_id(42);
+    test.set_log_visibility(canister_id, LogVisibility::Public)
+        .unwrap();
+    // Act.
+    test.set_user_id(not_a_controller);
+    let result = test.should_accept_ingress_message(
+        test.state().metadata.own_subnet_id.into(),
+        Method::FetchCanisterLogs,
+        FetchCanisterLogsRequest {
+            canister_id: canister_id.into(),
+        }
+        .encode(),
+    );
+    // Assert.
+    assert_eq!(result, Ok(()));
+}
+
+#[test]
+fn test_fetch_canister_logs_should_accept_ingress_message_log_visibility_invalid_controller_fails()
+{
+    // Arrange.
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let not_a_controller = user_test_id(42);
+    test.set_log_visibility(canister_id, LogVisibility::Controllers)
+        .unwrap();
+    // Act.
+    test.set_user_id(not_a_controller);
+    let result = test.should_accept_ingress_message(
+        test.state().metadata.own_subnet_id.into(),
+        Method::FetchCanisterLogs,
+        FetchCanisterLogsRequest {
+            canister_id: canister_id.into(),
+        }
+        .encode(),
+    );
+    // Assert.
+    assert_eq!(
+        result,
+        Err(UserError::new(
+            ErrorCode::CanisterRejectedMessage,
+            format!(
+                "Caller {not_a_controller} is not allowed to call ic00 method fetch_canister_logs"
+            ),
+        ))
+    );
+}
+
+#[test]
+fn test_fetch_canister_logs_should_accept_ingress_message_log_visibility_valid_controller_succeeds()
+{
+    // Arrange.
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let controller = user_test_id(42);
+    test.set_log_visibility(canister_id, LogVisibility::Controllers)
+        .unwrap();
+    test.set_controller(canister_id, controller.get()).unwrap();
+    // Act.
+    test.set_user_id(controller);
+    let result = test.should_accept_ingress_message(
+        test.state().metadata.own_subnet_id.into(),
+        Method::FetchCanisterLogs,
+        FetchCanisterLogsRequest {
+            canister_id: canister_id.into(),
+        }
+        .encode(),
+    );
+    // Assert.
+    assert_eq!(result, Ok(()));
 }

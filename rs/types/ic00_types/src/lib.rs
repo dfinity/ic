@@ -2295,6 +2295,25 @@ pub struct NodeMetricsHistoryResponse {
 
 impl Payload<'_> for NodeMetricsHistoryResponse {}
 
+/// `CandidType` for `FetchCanisterLogsRequest`
+/// ```text
+/// record {
+///     canister_id: principal;
+/// }
+/// ```
+#[derive(Default, Clone, CandidType, Deserialize, Debug)]
+pub struct FetchCanisterLogsRequest {
+    pub canister_id: PrincipalId,
+}
+
+impl Payload<'_> for FetchCanisterLogsRequest {}
+
+impl FetchCanisterLogsRequest {
+    pub fn get_canister_id(&self) -> CanisterId {
+        CanisterId::unchecked_from_principal(self.canister_id)
+    }
+}
+
 /// Struct used for encoding/decoding
 /// `(record {
 ///     canister_id: principal;

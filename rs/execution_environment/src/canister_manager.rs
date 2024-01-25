@@ -17,8 +17,8 @@ use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterStatusResultV2,
-    CanisterStatusType, InstallChunkedCodeArgs, InstallCodeArgsV2, Method as Ic00Method,
-    StoredChunksReply, UploadChunkReply,
+    CanisterStatusType, InstallChunkedCodeArgs, InstallCodeArgsV2, LogVisibility,
+    Method as Ic00Method, StoredChunksReply, UploadChunkReply,
 };
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, IngressHistoryWriter, SubnetAvailableMemory,
@@ -531,11 +531,28 @@ impl CanisterManager {
                 }
             },
 
-            // TODO(IC-272).
-            Ok(Ic00Method::FetchCanisterLogs) => Err(UserError::new(
-                ErrorCode::CanisterRejectedMessage,
-                format!("{} API is not yet implemented", Ic00Method::FetchCanisterLogs)
-            )),
+            Ok(Ic00Method::FetchCanisterLogs) => {
+                match effective_canister_id {
+                    Some(canister_id) => {
+                        let canister = state.canister_state(&canister_id).ok_or_else(|| UserError::new(
+                            ErrorCode::CanisterNotFound,
+                            format!("Canister {} not found", canister_id),
+                        ))?;
+                        match canister.log_visibility() {
+                            LogVisibility::Public => Ok(()),
+                            LogVisibility::Controllers if canister.controllers().contains(&sender.get()) => Ok(()),
+                            LogVisibility::Controllers => Err(UserError::new(
+                                ErrorCode::CanisterRejectedMessage,
+                                format!("Caller {} is not allowed to call ic00 method {}", sender, method_name),
+                            )),
+                        }
+                    },
+                    None =>  Err(UserError::new(
+                        ErrorCode::InvalidManagementPayload,
+                        format!("Failed to decode payload for ic00 method: {}", method_name),
+                    )),
+                }
+            },
 
             Ok(Ic00Method::ProvisionalCreateCanisterWithCycles)
             | Ok(Ic00Method::BitcoinGetSuccessors)
