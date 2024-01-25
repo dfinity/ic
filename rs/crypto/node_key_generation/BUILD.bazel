@@ -12,7 +12,6 @@ DEPENDENCIES = [
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/utils/basic_sig",
     "//rs/interfaces",
-    "//rs/interfaces/registry",
     "//rs/protobuf",
     "//rs/types/types",
     "@crate_index//:tokio",

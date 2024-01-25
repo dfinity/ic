@@ -45,11 +45,9 @@ DEPENDENCIES = [
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
     "@crate_index//:rayon",
-    "@crate_index//:rcgen",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_cbor",
-    "@crate_index//:simple_asn1",
     "@crate_index//:slog",
     "@crate_index//:strum",
     "@crate_index//:stubborn-io",
@@ -89,7 +87,6 @@ DEV_DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
-    "@crate_index//:async-trait",
     "@crate_index//:strum_macros",
     "@crate_index//:educe",
 ]
