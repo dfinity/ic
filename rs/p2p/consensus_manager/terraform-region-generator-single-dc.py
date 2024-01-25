@@ -4,7 +4,7 @@ import sys
 # Frankfurt
 region = "eu_central_1"
 ami = "ami-0faab6bdbac9486fb"
-instance = "m7i.4xlarge"
+instance = "m7i.8xlarge"
 
 
 merged  = """
@@ -116,8 +116,8 @@ libp2p = sys.argv[4]
 if libp2p == "true":
     libp2p_option = "--libp2p"
 else:
-    # libp2p_option = "--relaying"
-    libp2p_option = ""
+    libp2p_option = "--relaying"
+    # libp2p_option = ""
 
 
 id = 0

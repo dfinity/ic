@@ -280,7 +280,7 @@ async fn load_generator(
 
                         if relaying {
                             purge_queue.insert(TestArtifact::message_to_advert(&message), Duration::from_secs(60));
-                            match artifact_processor_rx.send(ArtifactProcessorEvent::Advert(TestArtifact::message_to_advert(&message))).await {
+                            match artifact_processor_rx.send(ArtifactProcessorEvent::Advert((TestArtifact::message_to_advert(&message),false))).await {
                                 Ok(_) => {},
                                 Err(e) => {
                                     error!(log, "Artifact processor failed to send relay: {:?}", e);
@@ -318,7 +318,7 @@ async fn load_generator(
                 purge_queue.insert(TestArtifact::message_to_advert(&id), Duration::from_secs(60));
 
                 match artifact_processor_rx
-                    .send(ArtifactProcessorEvent::Advert(TestArtifact::message_to_advert(&id)))
+                    .send(ArtifactProcessorEvent::Advert((TestArtifact::message_to_advert(&id),true)))
                     .await {
                         Ok(_) => {},
                         Err(e) => {
@@ -676,6 +676,8 @@ fn start_libp2p(
         let multiaddr = Multiaddr::empty()
             .with(libp2p::multiaddr::Protocol::Ip4(ip_addr))
             .with(libp2p::multiaddr::Protocol::Tcp(transport_addr.port()));
+            // .with(libp2p::multiaddr::Protocol::Udp(transport_addr.port()))
+            // .with(libp2p::multiaddr::Protocol::QuicV1);
         info!(log, "Listenting on my multi {:?}", multiaddr);
         swarm.listen_on(multiaddr).unwrap();
 
@@ -739,7 +741,7 @@ fn start_libp2p(
             pool: &TestConsensus,
         ) {
             match msg {
-                ArtifactProcessorEvent::Advert(advert) => {
+                ArtifactProcessorEvent::Advert((advert,_)) => {
                     let id = advert.id.clone();
                     let pool = pool.clone();
                     let artifact =
@@ -780,7 +782,9 @@ fn start_libp2p(
                                 .dial(
                                     Multiaddr::empty()
                                         .with(libp2p::multiaddr::Protocol::Ip4(ip_addr))
-                                        .with(libp2p::multiaddr::Protocol::Tcp(s.port()))
+                                        .with(libp2p::multiaddr::Protocol::Tcp(transport_addr.port()))
+                                        // .with(libp2p::multiaddr::Protocol::Udp(transport_addr.port()))
+                                        // .with(libp2p::multiaddr::Protocol::QuicV1)
                                 )
                                 .unwrap()
                         }

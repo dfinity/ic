@@ -89,12 +89,14 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
 
         for artifact in artifacts_in_validated_pool {
             let advert = Artifact::message_to_advert(&artifact);
-            self.handle_send_advert(advert);
+            self.handle_send_advert(advert, true);
         }
 
         while let Some(advert) = self.adverts_to_send.recv().await {
             match advert {
-                ArtifactProcessorEvent::Advert(advert) => self.handle_send_advert(advert),
+                ArtifactProcessorEvent::Advert((advert, produced)) => {
+                    self.handle_send_advert(advert, produced)
+                }
                 ArtifactProcessorEvent::Purge(id) => {
                     self.handle_purge_advert(&id);
                 }
@@ -120,7 +122,7 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
         }
     }
 
-    fn handle_send_advert(&mut self, advert: Advert<Artifact>) {
+    fn handle_send_advert(&mut self, advert: Advert<Artifact>, produced: bool) {
         let entry = self.active_adverts.entry(advert.id.clone());
 
         if let Entry::Vacant(entry) = entry {
@@ -137,6 +139,7 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
                 slot,
                 advert,
                 self.pool_reader.clone(),
+                produced,
             );
 
             entry.insert((self.rt_handle.spawn(send_future), slot));
@@ -160,9 +163,10 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
             ..
         }: Advert<Artifact>,
         pool_reader: Arc<RwLock<dyn ValidatedPoolReader<Artifact> + Send + Sync>>,
+        produced: bool,
     ) {
         // Try to push artifact if size below threshold && the artifact is not a relay.
-        let push_artifact = size < ARTIFACT_PUSH_THRESHOLD_BYTES;
+        let push_artifact = produced;
 
         let artifact = if push_artifact {
             let id = id.clone();
