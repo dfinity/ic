@@ -54,11 +54,6 @@ impl Seed {
         Self::new(value, "ic-crypto-seed-from-bytes")
     }
 
-    /// Create a Seed from an externally provided Randomness
-    pub fn from_randomness(r: &ic_types::Randomness) -> Self {
-        Self::new(&r.get(), "ic-crypto-seed-from-randomness")
-    }
-
     /// Create a Seed from a random number generator
     ///
     /// The security of the Seed depends on the security of the RNG
