@@ -18,7 +18,8 @@ use crate::{
         get_neurons_fund_audit_info_response,
         governance::{
             neuron_in_flight_command::{Command as InFlightCommand, SyncCommand},
-            GovernanceCachedMetrics, MakingSnsProposal, NeuronInFlightCommand,
+            GenesisNeuronAccounts, GovernanceCachedMetrics, MakingSnsProposal,
+            NeuronInFlightCommand,
         },
         governance_error::ErrorType,
         manage_neuron,
@@ -1635,7 +1636,15 @@ impl Governance {
         env: Box<dyn Environment>,
         ledger: Box<dyn IcpLedger>,
         cmc: Box<dyn CMC>,
+        // TODO(NNS1-2819) - remove after deployment of this change
+        genesis_neuron_accounts: Option<GenesisNeuronAccounts>,
     ) -> Self {
+        // TODO(NNS1-2819) remove after deployment of this change (genesis_neuron_accounts)
+        let mut governance_proto = governance_proto;
+        if genesis_neuron_accounts.is_some() {
+            governance_proto.genesis_neuron_accounts = genesis_neuron_accounts;
+        }
+
         let (heap_neurons, topic_followee_map, heap_governance_proto) =
             split_governance_proto(governance_proto);
 
@@ -6543,6 +6552,8 @@ impl Governance {
         // Try to update maturity modulation (once per day).
         } else if self.should_update_maturity_modulation() {
             self.update_maturity_modulation().await;
+        } else if self.some_genesis_neurons_are_untagged() {
+            self.tag_genesis_neurons();
         // Try to spawn neurons (potentially multiple times per day).
         } else if self.can_spawn_neurons() {
             self.spawn_neurons().await;
