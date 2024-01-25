@@ -1,5 +1,5 @@
 use std::fs::{create_dir_all, write};
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::Ipv6Addr;
 use std::path::Path;
 use std::process::Command;
 
@@ -18,23 +18,6 @@ where
     let mut result = String::new();
     for nameserver in nameservers {
         if nameserver.parse::<Ipv6Addr>().is_err() {
-            bail!(
-                "Invalid nameserver found in deployment config: {}",
-                nameserver
-            );
-        }
-        result.push_str(&format!("DNS={nameserver}\n"));
-    }
-    Ok(result)
-}
-
-pub fn generate_ipv4_nameserver_list<'a, I>(nameservers: I) -> Result<String>
-where
-    I: IntoIterator<Item = &'a str>,
-{
-    let mut result = String::new();
-    for nameserver in nameservers {
-        if nameserver.parse::<Ipv4Addr>().is_err() {
             bail!(
                 "Invalid nameserver found in deployment config: {}",
                 nameserver
