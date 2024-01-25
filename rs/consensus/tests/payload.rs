@@ -21,11 +21,11 @@ use ic_test_utilities::{
     types::ids::{node_test_id, subnet_test_id},
     types::messages::SignedIngressBuilder,
     xnet_payload_builder::FakeXNetPayloadBuilder,
-    FastForwardTimeSource,
 };
 use ic_test_utilities_registry::{
     setup_registry, FakeLocalStoreCertifiedTimeReader, SubnetRecordBuilder,
 };
+use ic_test_utilities_time::FastForwardTimeSource;
 use ic_types::{
     crypto::CryptoHash, malicious_flags::MaliciousFlags, replica_config::ReplicaConfig,
     CryptoHashOfState, Height,

@@ -14,9 +14,9 @@ use ic_interfaces::consensus_pool::{
 use ic_logger::ReplicaLogger;
 use ic_test_utilities::{
     consensus::{fake::*, make_genesis},
-    mock_time,
     types::ids::node_test_id,
 };
+use ic_test_utilities_time::mock_time;
 use ic_types::{
     artifact::ConsensusMessageId,
     consensus::{

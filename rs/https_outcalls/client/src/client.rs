@@ -327,7 +327,8 @@ mod tests {
         canister_http_service_server::{CanisterHttpService, CanisterHttpServiceServer},
         CanisterHttpSendRequest, CanisterHttpSendResponse,
     };
-    use ic_test_utilities::{mock_time, types::messages::RequestBuilder};
+    use ic_test_utilities::types::messages::RequestBuilder;
+    use ic_test_utilities_time::mock_time;
     use ic_types::canister_http::Transform;
     use ic_types::{
         canister_http::CanisterHttpMethod,

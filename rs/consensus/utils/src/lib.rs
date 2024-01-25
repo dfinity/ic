@@ -549,13 +549,13 @@ mod tests {
     use ic_ic00_types::EcdsaKeyId;
     use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
     use ic_test_utilities::{
-        mock_time,
         state::ReplicatedStateBuilder,
         types::{
             ids::{node_test_id, subnet_test_id},
             messages::RequestBuilder,
         },
     };
+    use ic_test_utilities_time::mock_time;
     use ic_types::{
         consensus::ecdsa::{
             EcdsaKeyTranscript, EcdsaUIDGenerator, KeyTranscriptCreation, MaskedTranscript,

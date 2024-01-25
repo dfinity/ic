@@ -485,10 +485,10 @@ mod tests {
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_utilities::{
         consensus::fake::Fake,
-        mock_time,
         types::ids::{node_test_id, subnet_test_id},
     };
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
+    use ic_test_utilities_time::mock_time;
     use ic_types::{
         batch::ValidationContext,
         consensus::{

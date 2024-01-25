@@ -57,7 +57,7 @@ mod vault_rng {
     use ic_interfaces::crypto::KeyManager;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-    use ic_test_utilities::FastForwardTimeSource;
+    use ic_test_utilities_time::FastForwardTimeSource;
     use rand::SeedableRng;
     use std::time::Duration;
 

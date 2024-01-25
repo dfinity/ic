@@ -3,13 +3,13 @@ use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
 use ic_interfaces::{batch_payload::ProposalContext, consensus::PayloadBuilder};
 use ic_test_utilities::{
     consensus::fake::Fake,
-    mock_time,
     types::{
         ids::{node_test_id, subnet_test_id},
         messages::SignedIngressBuilder,
     },
 };
 use ic_test_utilities_registry::SubnetRecordBuilder;
+use ic_test_utilities_time::mock_time;
 use ic_types::{
     batch::{BatchPayload, ValidationContext},
     consensus::{

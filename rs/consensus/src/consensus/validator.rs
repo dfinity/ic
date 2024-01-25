@@ -1623,9 +1623,9 @@ pub mod test {
         matches_pattern,
         state_manager::RefMockStateManager,
         types::ids::{node_test_id, subnet_test_id},
-        FastForwardTimeSource,
     };
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
+    use ic_test_utilities_time::FastForwardTimeSource;
     use ic_types::{
         consensus::{
             ecdsa::QuadrupleId, CatchUpPackageShare, Finalization, FinalizationShare, HashedBlock,
@@ -2039,42 +2039,42 @@ pub mod test {
         assert!(!ValidationContext {
             registry_version: RegistryVersion::from(10),
             certified_height: Height::from(5),
-            time: ic_test_utilities::mock_time(),
+            time: ic_test_utilities_time::mock_time(),
         }
         .greater_or_equal(&ValidationContext {
             registry_version: RegistryVersion::from(11),
             certified_height: Height::from(4),
-            time: ic_test_utilities::mock_time(),
+            time: ic_test_utilities_time::mock_time(),
         }),);
         assert!(ValidationContext {
             registry_version: RegistryVersion::from(10),
             certified_height: Height::from(5),
-            time: ic_test_utilities::mock_time(),
+            time: ic_test_utilities_time::mock_time(),
         }
         .greater_or_equal(&ValidationContext {
             registry_version: RegistryVersion::from(10),
             certified_height: Height::from(5),
-            time: ic_test_utilities::mock_time(),
+            time: ic_test_utilities_time::mock_time(),
         }),);
         assert!(ValidationContext {
             registry_version: RegistryVersion::from(11),
             certified_height: Height::from(5),
-            time: ic_test_utilities::mock_time(),
+            time: ic_test_utilities_time::mock_time(),
         }
         .greater_or_equal(&ValidationContext {
             registry_version: RegistryVersion::from(11),
             certified_height: Height::from(4),
-            time: ic_test_utilities::mock_time(),
+            time: ic_test_utilities_time::mock_time(),
         }),);
         assert!(!ValidationContext {
             registry_version: RegistryVersion::from(10),
             certified_height: Height::from(5),
-            time: ic_test_utilities::mock_time(),
+            time: ic_test_utilities_time::mock_time(),
         }
         .greater_or_equal(&ValidationContext {
             registry_version: RegistryVersion::from(11),
             certified_height: Height::from(6),
-            time: ic_test_utilities::mock_time(),
+            time: ic_test_utilities_time::mock_time(),
         }),);
     }
 

@@ -1621,13 +1621,13 @@ mod tests {
     use ic_test_utilities::{
         consensus::fake::FakeContentSigner,
         crypto::CryptoReturningOk,
-        mock_time,
         state_manager::RefMockStateManager,
         types::ids::{node_test_id, subnet_test_id},
         types::messages::RequestBuilder,
     };
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
+    use ic_test_utilities_time::mock_time;
     use ic_types::{
         batch::BatchPayload,
         consensus::{ecdsa, DataPayload, HasVersion},
@@ -3023,7 +3023,7 @@ mod tests {
                             dkg_pool_2.insert(UnvalidatedArtifact {
                                 message,
                                 peer_id: node_test_id(1),
-                                timestamp: ic_test_utilities::mock_time(),
+                                timestamp: ic_test_utilities_time::mock_time(),
                             });
                         }
                     }
@@ -3229,7 +3229,7 @@ mod tests {
                 let validation_context = ValidationContext {
                     registry_version: registry.get_latest_version(),
                     certified_height: Height::from(0),
-                    time: ic_test_utilities::mock_time(),
+                    time: ic_test_utilities_time::mock_time(),
                 };
 
                 // STEP 1;
@@ -3364,7 +3364,7 @@ mod tests {
             let context = ValidationContext {
                 registry_version: RegistryVersion::from(5),
                 certified_height: Height::from(0),
-                time: ic_test_utilities::mock_time(),
+                time: ic_test_utilities_time::mock_time(),
             };
 
             // Advance the blockchain to height `dkg_interval_length - 1`

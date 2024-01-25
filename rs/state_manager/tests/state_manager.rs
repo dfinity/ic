@@ -34,7 +34,6 @@ use ic_sys::PAGE_SIZE;
 use ic_test_utilities::{
     consensus::fake::FakeVerifier,
     io::{make_mutable, make_readonly, write_all_at},
-    mock_time,
     state::{arb_stream, arb_stream_slice, canister_ids},
     types::{
         ids::{canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id},
@@ -43,6 +42,7 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge, Labels};
+use ic_test_utilities_time::mock_time;
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_types::batch::{
     CanisterQueryStats, QueryStats, QueryStatsPayload, RawQueryStats, TotalQueryStats,

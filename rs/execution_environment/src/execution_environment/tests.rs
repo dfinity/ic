@@ -23,12 +23,13 @@ use ic_replicated_state::{
     testing::{CanisterQueuesTesting, SystemStateTesting},
     CanisterStatus, SystemState,
 };
-use ic_test_utilities::{assert_utils::assert_balance_equals, mock_time};
+use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_execution_environment::{
     assert_empty_reply, check_ingress_status, get_output_messages, get_reply, ExecutionTest,
     ExecutionTestBuilder,
 };
 use ic_test_utilities_metrics::{fetch_histogram_vec_count, fetch_int_counter, metric_vec};
+use ic_test_utilities_time::mock_time;
 use ic_types::canister_http::Transform;
 use ic_types::{
     canister_http::CanisterHttpMethod,

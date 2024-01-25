@@ -5,10 +5,10 @@ use ic_embedders::{
 use ic_interfaces::execution_environment::{HypervisorError, SystemApi, TrapCode};
 use ic_replicated_state::{canister_state::WASM_PAGE_SIZE_IN_BYTES, Global};
 use ic_test_utilities::{
-    mock_time,
     types::ids::user_test_id,
     wasmtime_instance::{WasmtimeInstanceBuilder, DEFAULT_NUM_INSTRUCTIONS},
 };
+use ic_test_utilities_time::mock_time;
 use ic_types::{
     methods::{FuncRef, WasmClosure, WasmMethod},
     NumBytes,

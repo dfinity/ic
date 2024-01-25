@@ -51,6 +51,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/test_utils/keys",
     "//rs/criterion_time",
     "//rs/test_utilities",
+    "//rs/test_utilities/time",
     "@crate_index//:assert_matches",
     "@crate_index//:ic-btc-test-utils",
     "@crate_index//:criterion",

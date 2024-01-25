@@ -19,13 +19,13 @@ use ic_system_api::{
 };
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
-    mock_time,
     state::SystemStateBuilder,
     types::{
         ids::{call_context_test_id, canister_test_id, subnet_test_id, user_test_id},
         messages::RequestBuilder,
     },
 };
+use ic_test_utilities_time::mock_time;
 use ic_types::{
     messages::{
         CallContextId, CallbackId, RejectContext, RequestMetadata, MAX_RESPONSE_COUNT_BYTES,

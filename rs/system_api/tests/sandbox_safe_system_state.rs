@@ -13,13 +13,13 @@ use ic_replicated_state::{NetworkTopology, SystemState};
 use ic_system_api::sandbox_safe_system_state::SandboxSafeSystemState;
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
-    mock_time,
     state::SystemStateBuilder,
     types::{
         ids::{canister_test_id, subnet_test_id, user_test_id},
         messages::{RequestBuilder, ResponseBuilder},
     },
 };
+use ic_test_utilities_time::mock_time;
 use ic_types::nominal_cycles::NominalCycles;
 use ic_types::{
     messages::{CanisterMessage, RequestMetadata, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},

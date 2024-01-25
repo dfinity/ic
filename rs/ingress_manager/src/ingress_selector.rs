@@ -621,14 +621,13 @@ mod tests {
     use ic_test_utilities::{
         cycles_account_manager::CyclesAccountManagerBuilder,
         history::MockIngressHistory,
-        mock_time,
         state::{CanisterStateBuilder, ReplicatedStateBuilder},
         types::{
             ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id},
             messages::SignedIngressBuilder,
         },
-        FastForwardTimeSource,
     };
+    use ic_test_utilities_time::{mock_time, FastForwardTimeSource};
     use ic_types::crypto::crypto_hash;
     use ic_types::{
         artifact::IngressMessageId,

@@ -7,7 +7,6 @@ use crate::{CanisterState, SchedulerState, SystemState};
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
 use ic_test_utilities::{
-    mock_time,
     state::arb_num_receivers,
     types::{
         arbitrary,
@@ -15,6 +14,7 @@ use ic_test_utilities::{
         messages::{IngressBuilder, RequestBuilder, ResponseBuilder},
     },
 };
+use ic_test_utilities_time::mock_time;
 use ic_types::{
     messages::{CallbackId, CanisterMessage},
     time::expiry_time_from_now,

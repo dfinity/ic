@@ -395,7 +395,8 @@ mod tests {
     use super::*;
     use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_test_utilities::{mock_time, state::ReplicatedStateBuilder};
+    use ic_test_utilities::state::ReplicatedStateBuilder;
+    use ic_test_utilities_time::mock_time;
     use ic_types::{
         batch::{CanisterQueryStats, QueryStats, RawQueryStats},
         crypto::{CryptoHash, CryptoHashOf},

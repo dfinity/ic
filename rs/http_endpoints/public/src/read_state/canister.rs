@@ -432,10 +432,10 @@ mod test {
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{CanisterQueues, ReplicatedState, SystemMetadata};
     use ic_test_utilities::{
-        mock_time,
         state::insert_dummy_canister,
         types::ids::{canister_test_id, subnet_test_id, user_test_id},
     };
+    use ic_test_utilities_time::mock_time;
     use ic_types::batch::RawQueryStats;
     use ic_validator::CanisterIdSet;
     use std::collections::BTreeMap;

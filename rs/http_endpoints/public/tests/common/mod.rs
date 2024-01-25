@@ -37,10 +37,10 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CanisterQueues, NetworkTopology, ReplicatedState, SystemMetadata};
 use ic_test_utilities::{
     crypto::{temp_crypto_component_with_fake_registry, CryptoReturningOk},
-    mock_time,
     state::ReplicatedStateBuilder,
     types::ids::{node_test_id, subnet_test_id},
 };
+use ic_test_utilities_time::mock_time;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     artifact_kind::IngressArtifact,

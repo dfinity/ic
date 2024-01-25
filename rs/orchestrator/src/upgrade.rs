@@ -770,10 +770,10 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::{
         consensus::fake::{Fake, FakeContent},
-        mock_time,
         types::ids::subnet_test_id,
     };
     use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_test_utilities_time::mock_time;
     use ic_types::{
         batch::ValidationContext,
         consensus::{

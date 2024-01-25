@@ -1,10 +1,10 @@
 use super::*;
-use ic_test_utilities::mock_time;
 use ic_test_utilities::types::{
     arbitrary,
     ids::{canister_test_id, message_test_id, user_test_id},
     messages::{IngressBuilder, RequestBuilder, ResponseBuilder},
 };
+use ic_test_utilities_time::mock_time;
 use ic_types::{messages::RequestOrResponse, Time};
 use proptest::prelude::*;
 

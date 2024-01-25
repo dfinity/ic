@@ -18,7 +18,8 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
-use ic_test_utilities::{consensus::fake::*, crypto::CryptoReturningOk, mock_time};
+use ic_test_utilities::{consensus::fake::*, crypto::CryptoReturningOk};
+use ic_test_utilities_time::mock_time;
 use ic_types::signature::*;
 use ic_types::{artifact::ConsensusMessageId, batch::ValidationContext};
 use ic_types::{

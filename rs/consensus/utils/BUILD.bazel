@@ -24,6 +24,7 @@ DEV_DEPENDENCIES = [
     "//rs/consensus/mocks",
     "//rs/test_utilities",
     "//rs/test_utilities/registry",
+    "//rs/test_utilities/time",
     "//rs/types/ic00_types",
 ]
 
