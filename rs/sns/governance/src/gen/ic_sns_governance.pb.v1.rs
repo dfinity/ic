@@ -2037,11 +2037,7 @@ pub mod manage_neuron_response {
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct DisburseMaturityResponse {
-        /// The amount of maturity in e8s of the governance token deducted from the Neuron.
-        /// This amount will undergo maturity modulation if enabled, and may be increased or
-        /// decreased at the time of disbursement.
-        /// This field is being sunset in favor of `amount_deducted_e8s` but will be populated
-        /// with the same values until NNS1-2576 is done.
+        /// This field is deprecated and is populated with the same value as `amount_deducted_e8s`.
         #[prost(uint64, tag = "2")]
         pub amount_disbursed_e8s: u64,
         /// The amount of maturity in e8s of the governance token deducted from the Neuron.
