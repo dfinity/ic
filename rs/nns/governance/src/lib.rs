@@ -409,12 +409,19 @@ pub fn encode_metrics(
         .map(|(proposal_id, data)| {
             let voting_period = governance.voting_period_seconds()(data.topic());
             let deadline_ts = data.get_deadline_timestamp_seconds(voting_period);
-            (proposal_id, deadline_ts)
+            let proposal_topic = data.topic().as_str_name();
+            (proposal_id, (deadline_ts, proposal_topic))
         })
-        .collect::<BTreeMap<&u64, u64>>();
-    for (k, v) in open_proposals_deadline.iter() {
+        .collect::<BTreeMap<&u64, (u64, &str)>>();
+    for (proposal_id, (deadline_ts, proposal_topic)) in open_proposals_deadline.iter() {
         builder = builder
-            .value(&[("proposal_id", &k.to_string())], Metric::into(*v))
+            .value(
+                &[
+                    ("proposal_id", &proposal_id.to_string()),
+                    ("proposal_topic", *proposal_topic),
+                ],
+                Metric::into(*deadline_ts),
+            )
             .unwrap();
     }
 

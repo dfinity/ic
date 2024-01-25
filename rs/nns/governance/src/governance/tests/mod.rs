@@ -1449,7 +1449,9 @@ mod metrics_tests {
     use crate::{
         encode_metrics,
         governance::Governance,
-        pb::v1::{proposal, Governance as GovernanceProto, Motion, Proposal, ProposalData, Tally},
+        pb::v1::{
+            proposal, Governance as GovernanceProto, Motion, Proposal, ProposalData, Tally, Topic,
+        },
         test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
     };
 
@@ -1534,11 +1536,23 @@ mod metrics_tests {
             ..ProposalData::default()
         };
 
+        let motion_proposal = ProposalData {
+            proposal: Some(Proposal {
+                title: Some("Foo Foo Bar".to_string()),
+                action: Some(proposal::Action::Motion(Motion {
+                    motion_text: "Text for this motion".to_string(),
+                })),
+                ..Proposal::default()
+            }),
+            ..ProposalData::default()
+        };
+
         let governance = Governance::new(
             GovernanceProto {
                 proposals: btreemap! {
                     1 =>  open_proposal.clone(),
                     2 =>  rejected_proposal,
+                    3 =>  motion_proposal.clone(),
                 },
                 ..GovernanceProto::default()
             },
@@ -1551,18 +1565,32 @@ mod metrics_tests {
 
         encode_metrics(&governance, &mut writer).unwrap();
 
-        let voting_period = governance.voting_period_seconds()(open_proposal.topic());
-        let deadline_ts = open_proposal.get_deadline_timestamp_seconds(voting_period);
         let body = writer.into_inner();
         let s = String::from_utf8_lossy(&body);
 
+        let voting_period = governance.voting_period_seconds()(open_proposal.topic());
+        let deadline_ts = open_proposal.get_deadline_timestamp_seconds(voting_period);
+
         assert!(s.contains(&format!(
-            "governance_proposal_deadline_timestamp_seconds{{proposal_id=\"1\"}} {} 10",
-            deadline_ts
+            "governance_proposal_deadline_timestamp_seconds{{proposal_id=\"1\",proposal_topic=\"{}\"}} {} 10",
+            Topic::NeuronManagement.as_str_name(),
+            deadline_ts,
+        )));
+
+        let voting_period = governance.voting_period_seconds()(motion_proposal.topic());
+        let deadline_ts = motion_proposal.get_deadline_timestamp_seconds(voting_period);
+
+        assert!(s.contains(&format!(
+            "governance_proposal_deadline_timestamp_seconds{{proposal_id=\"3\",proposal_topic=\"{}\"}} {} 10",
+            Topic::Governance.as_str_name(),
+            deadline_ts,
         )));
 
         // We assert that decided proposals are filtered out from metrics
-        assert!(!s.contains("governance_proposal_deadline_timestamp_seconds{proposal_id=\"2\"}"));
+        assert!(!s.contains(&format!(
+            "governance_proposal_deadline_timestamp_seconds{{proposal_id=\"2\",proposal_topic=\"{}\"}}",
+            Topic::NeuronManagement.as_str_name()
+        )));
     }
 }
 
