@@ -4,7 +4,7 @@ use assert_matches::assert_matches;
 use ic_crypto_internal_threshold_sig_ecdsa::*;
 use ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
 use ic_types::crypto::AlgorithmId;
-use ic_types::*;
+use ic_types::{NumberOfNodes, Randomness};
 use rand::{seq::IteratorRandom, Rng};
 use std::collections::BTreeMap;
 
