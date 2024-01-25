@@ -61,6 +61,7 @@ rust_test(
         "//rs/test_utilities/logger",
         "//rs/test_utilities/metrics",
         "//rs/test_utilities/registry",
+        "//rs/test_utilities/time",
         "@crate_index//:assert_matches",
         "@crate_index//:candid",
         "@crate_index//:lazy_static",

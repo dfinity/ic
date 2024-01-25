@@ -56,12 +56,12 @@ mod tests {
     use super::*;
     use crate::types::ids::node_test_id;
     use crate::types::messages::SignedIngressBuilder;
-    use crate::util::mock_time;
     use ic_artifact_pool::ingress_pool::IngressPoolImpl;
     use ic_interfaces::ingress_pool::IngressPool;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_test_utilities_time::mock_time;
 
     #[test]
     fn test_artifact_pool_config() {

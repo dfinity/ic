@@ -7,17 +7,15 @@ use ic_constants::MAX_INGRESS_TTL;
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{EcdsaCurve, IC_00};
 use ic_registry_routing_table::CanisterIdRange;
-use ic_test_utilities::{
-    mock_time,
-    types::{
-        ids::{
-            canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id,
-            SUBNET_0, SUBNET_1, SUBNET_2,
-        },
-        messages::{RequestBuilder, ResponseBuilder},
-        xnet::{StreamHeaderBuilder, StreamSliceBuilder},
+use ic_test_utilities::types::{
+    ids::{
+        canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id, SUBNET_0,
+        SUBNET_1, SUBNET_2,
     },
+    messages::{RequestBuilder, ResponseBuilder},
+    xnet::{StreamHeaderBuilder, StreamSliceBuilder},
 };
+use ic_test_utilities_time::mock_time;
 use ic_types::{
     batch::BlockmakerMetrics,
     canister_http::{CanisterHttpMethod, CanisterHttpRequestContext},

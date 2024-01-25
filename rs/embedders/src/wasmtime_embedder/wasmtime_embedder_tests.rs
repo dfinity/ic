@@ -16,8 +16,9 @@ use ic_system_api::{
     ExecutionParameters, InstructionLimits, SystemApiImpl,
 };
 use ic_test_utilities::{
-    cycles_account_manager::CyclesAccountManagerBuilder, mock_time, types::ids::canister_test_id,
+    cycles_account_manager::CyclesAccountManagerBuilder, types::ids::canister_test_id,
 };
+use ic_test_utilities_time::mock_time;
 use ic_types::{
     messages::RequestMetadata, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
 };

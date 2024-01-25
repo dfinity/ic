@@ -475,11 +475,10 @@ mod tests {
     use ic_constants::MAX_INGRESS_TTL;
     use ic_interfaces::p2p::consensus::MutablePool;
     use ic_interfaces::time_source::TimeSource;
-    use ic_test_utilities::{
-        mock_time, types::ids::node_test_id, types::messages::SignedIngressBuilder,
-        FastForwardTimeSource,
-    };
+    use ic_test_utilities::{types::ids::node_test_id, types::messages::SignedIngressBuilder};
     use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_test_utilities_time::mock_time;
+    use ic_test_utilities_time::FastForwardTimeSource;
     use rand::Rng;
     use std::time::Duration;
 

@@ -30,6 +30,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     "//rs/test_utilities",
+    "//rs/test_utilities/time",
     "@crate_index//:tower-test",
 ]
 

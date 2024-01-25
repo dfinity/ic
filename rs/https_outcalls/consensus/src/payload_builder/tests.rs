@@ -22,7 +22,6 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_test_utilities::{
-    mock_time,
     state_manager::RefMockStateManager,
     types::{
         ids::{canister_test_id, node_test_id, subnet_test_id},
@@ -30,6 +29,7 @@ use ic_test_utilities::{
     },
 };
 use ic_test_utilities_registry::SubnetRecordBuilder;
+use ic_test_utilities_time::mock_time;
 use ic_types::{
     artifact_kind::CanisterHttpArtifact,
     batch::{CanisterHttpPayload, ValidationContext},

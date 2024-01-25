@@ -1,8 +1,8 @@
 use ic_test_utilities::{
     crypto::mock_random_number_generator,
-    mock_time,
     types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder},
 };
+use ic_test_utilities_time::mock_time;
 
 use ic_base_types::{NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_config::{

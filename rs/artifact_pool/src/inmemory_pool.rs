@@ -331,7 +331,7 @@ pub mod test {
 
     #[test]
     fn test_iterate_with_large_range() {
-        assert!(ic_test_utilities::with_timeout(
+        assert!(ic_test_utilities_time::with_timeout(
             std::time::Duration::new(12, 0),
             || {
                 let mut pool = InMemoryPoolSection::new(ic_logger::replica_logger::no_op_logger());
@@ -350,7 +350,7 @@ pub mod test {
 
     #[test]
     fn test_purging() {
-        assert!(ic_test_utilities::with_timeout(
+        assert!(ic_test_utilities_time::with_timeout(
             std::time::Duration::new(12, 0),
             || {
                 let beacons = (1..=10)

@@ -81,6 +81,7 @@ DEV_DEPENDENCIES = [
     "//rs/registry/keys",
     "//rs/registry/routing_table",
     "//rs/test_utilities",
+    "//rs/test_utilities/time",
     "@crate_index//:ic-agent",
     "@crate_index//:maplit",
     "@crate_index//:pretty_assertions",

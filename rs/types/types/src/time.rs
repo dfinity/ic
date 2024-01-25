@@ -18,7 +18,7 @@ use thiserror::Error;
 
 /// Time since UNIX_EPOCH (in nanoseconds). Just like 'std::time::Instant' or
 /// 'std::time::SystemTime', [Time] does not implement the [Default] trait.
-/// Please use `ic_test_utilities::mock_time` if you ever need such a value.
+/// Please use `ic_test_utilities_time::mock_time` if you ever need such a value.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(Arbitrary, ExhaustiveSet))]
 pub struct Time(u64);

@@ -29,7 +29,6 @@ use ic_replicated_state::ExportedFunctions;
 use ic_state_machine_tests::{PayloadBuilder, StateMachineBuilder};
 use ic_test_utilities::types::ids::message_test_id;
 use ic_test_utilities::{
-    mock_time,
     state::{get_running_canister, get_stopped_canister, get_stopping_canister},
     types::{
         ids::{canister_test_id, subnet_test_id},
@@ -40,6 +39,7 @@ use ic_test_utilities_metrics::{
     fetch_counter, fetch_gauge, fetch_gauge_vec, fetch_histogram_stats, fetch_int_gauge,
     fetch_int_gauge_vec, metric_vec, HistogramStats,
 };
+use ic_test_utilities_time::mock_time;
 use ic_types::methods::SystemMethod;
 use ic_types::methods::WasmMethod;
 use ic_types::time::expiry_time_from_now;

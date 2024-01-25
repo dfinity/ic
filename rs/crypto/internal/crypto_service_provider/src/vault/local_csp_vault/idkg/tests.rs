@@ -22,7 +22,7 @@ mod idkg_gen_dealing_encryption_key_pair {
     use hex::FromHex;
     use ic_crypto_internal_seed::Seed;
     use ic_crypto_internal_threshold_sig_ecdsa::EccCurveType;
-    use ic_test_utilities::FastForwardTimeSource;
+    use ic_test_utilities_time::FastForwardTimeSource;
     use ic_types::time::GENESIS;
     use mockall::Sequence;
     use proptest::prelude::*;

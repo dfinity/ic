@@ -76,7 +76,6 @@ use ic_replicated_state::{
 use ic_state_layout::{CheckpointLayout, RwPolicy};
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::crypto::CryptoReturningOk;
-use ic_test_utilities::FastForwardTimeSource;
 use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_int_counter, fetch_int_gauge, fetch_int_gauge_vec, Labels,
 };
@@ -84,6 +83,7 @@ use ic_test_utilities_registry::{
     add_single_subnet_record, add_subnet_list_record, insert_initial_dkg_transcript,
     SubnetRecordBuilder,
 };
+use ic_test_utilities_time::FastForwardTimeSource;
 use ic_types::artifact::IngressMessageId;
 use ic_types::batch::{BlockmakerMetrics, QueryStatsPayload, TotalQueryStats, ValidationContext};
 pub use ic_types::canister_http::{CanisterHttpMethod, CanisterHttpRequestContext};

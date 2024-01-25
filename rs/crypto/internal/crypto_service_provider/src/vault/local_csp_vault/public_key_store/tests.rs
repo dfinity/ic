@@ -149,7 +149,7 @@ mod current_node_public_keys_with_timestamps {
     use crate::vault::api::PublicKeyStoreCspVault;
     use assert_matches::assert_matches;
     use ic_protobuf::registry::crypto::v1::PublicKey;
-    use ic_test_utilities::FastForwardTimeSource;
+    use ic_test_utilities_time::FastForwardTimeSource;
     use ic_types::time::GENESIS;
     use std::sync::Arc;
     use std::time::Duration;

@@ -5,11 +5,11 @@ use ic_replicated_state::{
     testing::{CanisterQueuesTesting, SystemStateTesting},
     InputQueueType, StateError, SystemState,
 };
-use ic_test_utilities::mock_time;
 use ic_test_utilities::types::{
     ids::{canister_test_id, user_test_id},
     messages::{RequestBuilder, ResponseBuilder},
 };
+use ic_test_utilities_time::mock_time;
 use ic_types::{
     messages::{CanisterMessage, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES},
     CanisterId, Cycles,

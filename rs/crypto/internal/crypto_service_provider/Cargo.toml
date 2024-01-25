@@ -76,9 +76,9 @@ ic-crypto-test-utils-metrics = { path = "../../../crypto/test_utils/metrics" }
 ic-crypto-test-utils-local-csp-vault = { path = "../../../crypto/test_utils/local_csp_vault" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../crypto/test_utils/reproducible_rng" }
 ic-crypto-utils-basic-sig = { path = "../../utils/basic_sig" }
-ic-test-utilities = { path = "../../../test_utilities" }
 ic-test-utilities-compare-dirs = { path = "../../../test_utilities/compare_dirs" }
 ic-test-utilities-in-memory-logger = { path = "../../../test_utilities/in_memory_logger" }
+ic-test-utilities-time = { path = "../../../test_utilities/time" }
 ic-types-test-utils = { path = "../../../types/types_test_utils" }
 lazy_static = "1.4.0"
 num_cpus = "1.16"

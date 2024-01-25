@@ -43,10 +43,10 @@ use ic_protobuf::registry::crypto::v1::{
 use ic_registry_keys::make_crypto_threshold_signing_pubkey_key;
 use ic_replicated_state::ReplicatedState;
 use ic_test_utilities::{
-    mock_time,
     state::ReplicatedStateBuilder,
     types::ids::{canister_test_id, subnet_test_id, user_test_id},
 };
+use ic_test_utilities_time::mock_time;
 use ic_types::{
     batch::{BatchPayload, ValidationContext},
     consensus::{

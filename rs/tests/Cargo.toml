@@ -107,6 +107,7 @@ ic-sns-governance = { path = "../sns/governance" }
 ic-sns-wasm = { path = "../nns/sns-wasm" }
 ic-test-identity = { path = "../test_utilities/identity" }
 ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-types = { path = "../types/types" }
 ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }

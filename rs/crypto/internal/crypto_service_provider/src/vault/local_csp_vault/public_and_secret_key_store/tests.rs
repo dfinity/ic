@@ -907,7 +907,7 @@ mod validate_pks_and_sks {
     };
     use ic_crypto_tls_interfaces::TlsPublicKeyCert;
     use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
-    use ic_test_utilities::FastForwardTimeSource;
+    use ic_test_utilities_time::FastForwardTimeSource;
     use ic_types::time::Time;
     use std::collections::HashSet;
     use std::sync::Arc;

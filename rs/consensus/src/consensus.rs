@@ -740,9 +740,9 @@ mod tests {
         self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
         types::ids::{node_test_id, subnet_test_id},
         xnet_payload_builder::FakeXNetPayloadBuilder,
-        FastForwardTimeSource,
     };
     use ic_test_utilities_registry::{FakeLocalStoreCertifiedTimeReader, SubnetRecordBuilder};
+    use ic_test_utilities_time::FastForwardTimeSource;
     use ic_types::{crypto::CryptoHash, CryptoHashOfState, SubnetId};
     use std::{sync::Arc, time::Duration};
 

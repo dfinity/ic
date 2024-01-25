@@ -14,7 +14,6 @@ use ic_replicated_state::{
     metadata_state::StreamMap, testing::ReplicatedStateTesting, ReplicatedState, Stream,
 };
 use ic_test_utilities::{
-    mock_time,
     state_manager::FakeStateManager,
     types::{
         ids::{
@@ -25,6 +24,7 @@ use ic_test_utilities::{
     },
 };
 use ic_test_utilities_registry::test_subnet_record;
+use ic_test_utilities_time::mock_time;
 use ic_types::{
     messages::CallbackId,
     xnet::{CertifiedStreamSlice, StreamIndex, StreamIndexedQueue},

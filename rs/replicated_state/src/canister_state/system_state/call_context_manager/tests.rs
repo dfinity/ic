@@ -1,5 +1,6 @@
 use super::*;
-use ic_test_utilities::{mock_time, types::ids::canister_test_id};
+use ic_test_utilities::types::ids::canister_test_id;
+use ic_test_utilities_time::mock_time;
 use ic_types::{
     messages::RequestMetadata,
     methods::{WasmClosure, UNKNOWN_CANISTER_ID},

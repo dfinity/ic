@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::util::mock_time;
+use ic_test_utilities_time::mock_time;
 use ic_types::{
     batch::{Batch, BatchMessages, BlockmakerMetrics},
     Height, Randomness, RegistryVersion, Time,

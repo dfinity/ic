@@ -17,10 +17,10 @@ use ic_system_api::{
     ExecutionParameters, InstructionLimits, SystemApiImpl,
 };
 use ic_test_utilities::{
-    mock_time,
     state::SystemStateBuilder,
     types::ids::{call_context_test_id, canister_test_id, subnet_test_id, user_test_id},
 };
+use ic_test_utilities_time::mock_time;
 use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext, RequestMetadata},
     methods::SystemMethod,

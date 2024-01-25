@@ -16,13 +16,13 @@ use ic_base_types::NumSeconds;
 use ic_ic00_types::{CanisterChange, CanisterChangeDetails, CanisterChangeOrigin};
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_test_utilities::mock_time;
 use ic_test_utilities::types::{
     ids::canister_test_id,
     ids::message_test_id,
     ids::user_test_id,
     messages::{RequestBuilder, ResponseBuilder},
 };
+use ic_test_utilities_time::mock_time;
 use ic_types::{
     messages::{
         CallContextId, CallbackId, CanisterCall, RequestMetadata, StopCanisterCallId,

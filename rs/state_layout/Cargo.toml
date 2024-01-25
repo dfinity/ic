@@ -34,5 +34,6 @@ ic-interfaces = { path = "../interfaces" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-tmpdir = { path = "../test_utilities/tmpdir" }
+ic-test-utilities-time = { path = "../test_utilities/time" }
 itertools = { workspace = true }
 proptest = "1.0"

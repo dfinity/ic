@@ -162,12 +162,11 @@ mod tests {
     use ic_interfaces_state_manager::StateManager;
     use ic_test_utilities::{
         history::MockIngressHistory,
-        mock_time,
         state_manager::FakeStateManager,
         types::ids::{canister_test_id, node_test_id, user_test_id},
         types::messages::SignedIngressBuilder,
-        FastForwardTimeSource,
     };
+    use ic_test_utilities_time::{mock_time, FastForwardTimeSource};
     use ic_types::ingress::{IngressState, IngressStatus};
     use std::sync::Arc;
     use std::time::Duration;

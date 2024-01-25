@@ -186,7 +186,8 @@ impl HasLabel for CanisterHttpResponse {
 #[cfg(test)]
 mod tests {
     use ic_logger::replica_logger::no_op_logger;
-    use ic_test_utilities::{consensus::fake::FakeSigner, mock_time, types::ids::node_test_id};
+    use ic_test_utilities::{consensus::fake::FakeSigner, types::ids::node_test_id};
+    use ic_test_utilities_time::mock_time;
     use ic_types::{
         canister_http::{CanisterHttpResponseContent, CanisterHttpResponseMetadata},
         crypto::{CryptoHash, Signed},

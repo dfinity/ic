@@ -1,7 +1,8 @@
 //! Test to validate that all existing function references are properly updated
 //! after instrumentation.
 
-use ic_test_utilities::{mock_time, wasmtime_instance::WasmtimeInstanceBuilder};
+use ic_test_utilities::wasmtime_instance::WasmtimeInstanceBuilder;
+use ic_test_utilities_time::mock_time;
 use ic_types::{
     methods::{FuncRef, WasmMethod},
     Cycles, PrincipalId,

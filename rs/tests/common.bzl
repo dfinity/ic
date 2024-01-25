@@ -89,6 +89,7 @@ DEPENDENCIES = [
     "//rs/sns/swap",
     "//rs/test_utilities",
     "//rs/test_utilities/identity",
+    "//rs/test_utilities/time",
     "//rs/tests/test_canisters/message:lib",
     "//rs/tree_deserializer",
     "//rs/types/base_types",

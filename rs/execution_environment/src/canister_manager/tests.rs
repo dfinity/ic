@@ -46,7 +46,6 @@ use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig};
 use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
-    mock_time,
     state::{
         get_running_canister, get_running_canister_with_args, get_stopped_canister,
         get_stopped_canister_with_controller, get_stopping_canister,
@@ -63,6 +62,7 @@ use ic_test_utilities_execution_environment::{
     assert_delta, get_reply, get_routing_table_with_specified_ids_allocation_range,
     wasm_compilation_cost, wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
 };
+use ic_test_utilities_time::mock_time;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CallbackId, CanisterCall, StopCanisterCallId, StopCanisterContext},

@@ -18,9 +18,9 @@ use ic_test_utilities::{
     crypto::CryptoReturningOk,
     state_manager::RefMockStateManager,
     types::ids::{node_test_id, subnet_test_id},
-    FastForwardTimeSource,
 };
 use ic_test_utilities_registry::{setup_registry_non_final, SubnetRecordBuilder};
+use ic_test_utilities_time::FastForwardTimeSource;
 use ic_types::{
     batch::{BatchPayload, ValidationContext},
     consensus::{block_maker::SubnetRecords, Payload},

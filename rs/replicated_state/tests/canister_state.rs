@@ -2,11 +2,11 @@ use ic_base_types::CanisterId;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CanisterState, InputQueueType, StateError};
 use ic_test_utilities::{
-    mock_time,
     state::{get_running_canister, get_stopped_canister, get_stopping_canister, register_callback},
     types::ids::canister_test_id,
     types::messages::{RequestBuilder, ResponseBuilder},
 };
+use ic_test_utilities_time::mock_time;
 use ic_types::{
     messages::{CallbackId, Request, RequestOrResponse},
     methods::UNKNOWN_CANISTER_ID,

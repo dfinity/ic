@@ -194,9 +194,9 @@ mod test {
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::{
         consensus::fake::FakeSigner,
-        mock_time,
         types::ids::{node_test_id, subnet_test_id},
     };
+    use ic_test_utilities_time::mock_time;
     use ic_types::{
         crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         signature::BasicSignature,

@@ -23,9 +23,10 @@ use ic_system_api::{
     InstructionLimits,
 };
 use ic_test_utilities::{
-    cycles_account_manager::CyclesAccountManagerBuilder, mock_time, state::SystemStateBuilder,
+    cycles_account_manager::CyclesAccountManagerBuilder, state::SystemStateBuilder,
     types::ids::user_test_id,
 };
+use ic_test_utilities_time::mock_time;
 use ic_types::{
     messages::RequestMetadata,
     methods::{FuncRef, WasmMethod},

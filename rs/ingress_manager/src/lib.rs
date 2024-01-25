@@ -256,13 +256,12 @@ pub(crate) mod tests {
         crypto::temp_crypto_component_with_fake_registry,
         cycles_account_manager::CyclesAccountManagerBuilder,
         history::MockIngressHistory,
-        mock_time,
         state::ReplicatedStateBuilder,
         types::ids::{node_test_id, subnet_test_id},
-        FastForwardTimeSource,
     };
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::test_subnet_record;
+    use ic_test_utilities_time::{mock_time, FastForwardTimeSource};
     use ic_types::{ingress::IngressStatus, Height, RegistryVersion, SubnetId};
     use std::{ops::DerefMut, sync::Arc};
 
