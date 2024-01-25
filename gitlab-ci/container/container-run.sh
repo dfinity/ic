@@ -100,6 +100,9 @@ else
     CTR_HOME="/ic"
 fi
 
+trap 'rm -rf "${TEMPDIR}" "${SUBUID_FILE}" "${SUBGID_FILE}"'
+TEMPDIR=$(mktemp -d)
+
 PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"
     --mount type=bind,source="${HOME}",target="${HOME}"
@@ -107,7 +110,7 @@ PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh"
     --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws"
     --mount type=bind,source="/var/lib/containers",target="/var/lib/containers"
-    --mount type=bind,source="$(mktemp -d)",target="/tmp"
+    --mount type=bind,source="${TEMPDIR}",target="/tmp"
 )
 
 if [ "$(id -u)" = "1000" ]; then
