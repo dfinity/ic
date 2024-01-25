@@ -63,10 +63,7 @@ pub(crate) fn check_node_crypto_keys_invariants(
     check_node_crypto_keys_exist_and_are_unique(snapshot)?;
     check_no_orphaned_node_crypto_records(snapshot)?;
     check_ecdsa_signing_subnet_lists(snapshot)?;
-
-    // TODO (CRP-943): Return error if invariant check fails once we are confident that it works,
-    //  and that the mainnet state conforms to it.
-    let _result = check_high_threshold_public_key_matches_the_one_in_cup(snapshot);
+    check_high_threshold_public_key_matches_the_one_in_cup(snapshot)?;
     Ok(())
 }
 
