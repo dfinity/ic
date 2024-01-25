@@ -177,6 +177,16 @@ pub(super) fn resolve_destination(
         Ok(Ic00Method::NodeMetricsHistory) => {
             Ok(NodeMetricsHistoryArgs::decode(payload)?.subnet_id)
         }
+        Ok(Ic00Method::FetchCanisterLogs) => {
+            // TODO(IC-272).
+            Err(ResolveDestinationError::UserError(UserError::new(
+                ic_error_types::ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "{} API is not yet implemented",
+                    Ic00Method::FetchCanisterLogs
+                ),
+            )))
+        }
         Ok(Ic00Method::ECDSAPublicKey) => {
             let key_id = ECDSAPublicKeyArgs::decode(payload)?.key_id;
             route_ecdsa_message(

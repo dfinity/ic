@@ -2338,6 +2338,7 @@ fn get_instructions_limits_for_subnet_message(
             | BitcoinGetCurrentFeePercentiles
             | BitcoinGetSuccessors
             | NodeMetricsHistory
+            | FetchCanisterLogs
             | ProvisionalCreateCanisterWithCycles
             | ProvisionalTopUpCanister
             | UploadChunk
