@@ -14,11 +14,11 @@ instances = sys.argv[1:]
 
 # RPS 
 # 11 node
-# peer_data = [b"1", b"3", b"5", b"7", b"10", b"15"]  # Add more values as needed
+peer_data = [b"1", b"3", b"5", b"7", b"10", b"15", b"30"]  # Add more values as needed
 # 31 node 500Kb msg
 # peer_data = [b"1", b"2", b"3", b"5", b"7", b"10"]  # Add more values as needed
 # 11  node 25kb msg
-peer_data = [b"10", b"20", b"50", b"100", b"200"]  # Add more values as needed
+# peer_data = [b"10", b"20", b"50", b"100", b"200"]  # Add more values as needed
 
 def send_to_peers(data):
     for instance in instances:

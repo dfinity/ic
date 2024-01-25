@@ -279,7 +279,7 @@ async fn load_generator(
                         metrics.message_latency.observe(latency.as_secs_f64());
 
                         if relaying {
-                            purge_queue.insert(TestArtifact::message_to_advert(&message), Duration::from_secs(10));
+                            purge_queue.insert(TestArtifact::message_to_advert(&message), Duration::from_secs(60));
                             match artifact_processor_rx.send(ArtifactProcessorEvent::Advert(TestArtifact::message_to_advert(&message))).await {
                                 Ok(_) => {},
                                 Err(e) => {
@@ -315,7 +315,7 @@ async fn load_generator(
                 id.extend_from_slice(&now.to_le_bytes());
                 metrics.sent_artifacts.inc();
 
-                purge_queue.insert(TestArtifact::message_to_advert(&id), Duration::from_secs(10));
+                purge_queue.insert(TestArtifact::message_to_advert(&id), Duration::from_secs(60));
 
                 match artifact_processor_rx
                     .send(ArtifactProcessorEvent::Advert(TestArtifact::message_to_advert(&id)))
@@ -650,13 +650,13 @@ fn start_libp2p(
                     .max_transmit_size(20 * 1024 * 1024)
                     .published_message_ids_cache_time(Duration::from_secs(180))
                     .flood_publish(true)
-                    .max_ihave_length(30000)
+                    // .max_ihave_length(30000)
                     // .mesh_outbound_min(1)
                     // .mesh_n_low(2)
                     // .mesh_n(3)
                     // .mesh_n_high(4)
                     .message_id_fn(|x| libp2p::gossipsub::MessageId(x.data[0..24].to_vec()))
-                    // .validate_messages()
+                    .validate_messages()
                     .build()
                     .unwrap(),
                 &mut metrics_registry,
