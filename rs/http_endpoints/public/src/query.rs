@@ -5,21 +5,23 @@ use crate::{
     metrics::LABEL_UNKNOWN,
     types::ApiReqType,
     validator_executor::ValidatorExecutor,
-    EndpointService, HttpHandlerMetrics, ReplicaHealthStatus,
+    HttpHandlerMetrics, ReplicaHealthStatus,
 };
 use bytes::Bytes;
 use crossbeam::atomic::AtomicCell;
 use futures_util::FutureExt;
 use http::Request;
 use hyper::{Body, Response, StatusCode};
-use ic_config::http_handler::Config;
+use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_interfaces::{
     crypto::BasicSigner,
     execution_environment::{QueryExecutionError, QueryExecutionService},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{error, replica_logger::no_op_logger, ReplicaLogger};
+use ic_metrics::MetricsRegistry;
 use ic_types::{
+    malicious_flags::MaliciousFlags,
     messages::{
         Blob, CertificateDelegation, HasCanisterId, HttpQueryContent, HttpRequest,
         HttpRequestEnvelope, HttpSignedQueryResponse, NodeSignature, QueryResponseHash,
@@ -32,10 +34,10 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 use std::task::{Context, Poll};
-use tower::{limit::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder};
+use tower::Service;
 
 #[derive(Clone)]
-pub(crate) struct QueryService {
+pub struct QueryService {
     log: ReplicaLogger,
     metrics: HttpHandlerMetrics,
     node_id: NodeId,
@@ -47,37 +49,88 @@ pub(crate) struct QueryService {
     query_execution_service: QueryExecutionService,
 }
 
-impl QueryService {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new_service(
-        config: Config,
-        log: ReplicaLogger,
-        metrics: HttpHandlerMetrics,
-        signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
+pub struct QueryServiceBuilder {
+    log: Option<ReplicaLogger>,
+    metrics: Option<HttpHandlerMetrics>,
+    node_id: NodeId,
+    signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
+    health_status: Option<Arc<AtomicCell<ReplicaHealthStatus>>>,
+    malicious_flags: Option<MaliciousFlags>,
+    delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+    ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
+    registry_client: Arc<dyn RegistryClient>,
+    query_execution_service: QueryExecutionService,
+}
+
+impl QueryServiceBuilder {
+    pub fn builder(
         node_id: NodeId,
-        health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
-        delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
-        validator_executor: ValidatorExecutor<UserQuery>,
+        signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
         registry_client: Arc<dyn RegistryClient>,
+        ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
+        delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
         query_execution_service: QueryExecutionService,
-    ) -> EndpointService {
-        BoxCloneService::new(
-            ServiceBuilder::new()
-                .layer(GlobalConcurrencyLimitLayer::new(
-                    config.max_query_concurrent_requests,
-                ))
-                .service(Self {
-                    log,
-                    metrics,
-                    node_id,
-                    signer,
-                    health_status,
-                    delegation_from_nns,
-                    validator_executor,
-                    registry_client,
-                    query_execution_service,
-                }),
-        )
+    ) -> Self {
+        Self {
+            log: None,
+            metrics: None,
+            node_id,
+            signer,
+            health_status: None,
+            malicious_flags: None,
+            delegation_from_nns,
+            ingress_verifier,
+            registry_client,
+            query_execution_service,
+        }
+    }
+
+    pub fn with_logger(mut self, log: ReplicaLogger) -> Self {
+        self.log = Some(log);
+        self
+    }
+
+    pub(crate) fn with_malicious_flags(mut self, malicious_flags: MaliciousFlags) -> Self {
+        self.malicious_flags = Some(malicious_flags);
+        self
+    }
+
+    pub fn with_health_status(
+        mut self,
+        health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
+    ) -> Self {
+        self.health_status = Some(health_status);
+        self
+    }
+
+    pub(crate) fn with_metrics(mut self, metrics: HttpHandlerMetrics) -> Self {
+        self.metrics = Some(metrics);
+        self
+    }
+
+    pub fn build(self) -> QueryService {
+        let log = self.log.unwrap_or(no_op_logger());
+        let default_metrics_registry = MetricsRegistry::default();
+        QueryService {
+            log: log.clone(),
+            metrics: self
+                .metrics
+                .unwrap_or_else(|| HttpHandlerMetrics::new(&default_metrics_registry)),
+            node_id: self.node_id,
+            signer: self.signer,
+            health_status: self
+                .health_status
+                .unwrap_or_else(|| Arc::new(AtomicCell::new(ReplicaHealthStatus::Healthy))),
+            delegation_from_nns: self.delegation_from_nns,
+            validator_executor: ValidatorExecutor::new(
+                self.registry_client.clone(),
+                self.ingress_verifier,
+                &self.malicious_flags.unwrap_or_default(),
+                log,
+            ),
+            registry_client: self.registry_client,
+            query_execution_service: self.query_execution_service,
+        }
     }
 }
 

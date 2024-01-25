@@ -5,6 +5,7 @@ load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 
 package(default_visibility = [
     "//rs/http_endpoints:__subpackages__",
+    "//rs/pocket_ic_server:__subpackages__",
     "//rs/replica:__subpackages__",
 ])
 

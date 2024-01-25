@@ -18,6 +18,7 @@ mod status;
 mod threads;
 mod types;
 
+pub use query::QueryServiceBuilder;
 pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
 
 cfg_if::cfg_if! {
@@ -47,7 +48,6 @@ use crate::{
         STATUS_SUCCESS,
     },
     pprof::{PprofFlamegraphService, PprofHomeService, PprofProfileService},
-    query::QueryService,
     read_state::subnet::SubnetReadStateService,
     state_reader_executor::StateReaderExecutor,
     status::StatusService,
@@ -315,22 +315,26 @@ pub fn start_server(
         ingress_throttler,
         ingress_tx,
     );
-    let query_service = QueryService::new_service(
-        config.clone(),
-        log.clone(),
-        metrics.clone(),
-        query_signer,
-        node_id,
-        Arc::clone(&health_status),
-        Arc::clone(&delegation_from_nns),
-        ValidatorExecutor::new(
-            Arc::clone(&registry_client),
-            ingress_verifier.clone(),
-            &malicious_flags,
-            log.clone(),
-        ),
-        Arc::clone(&registry_client),
-        query_execution_service,
+    let query_service = BoxCloneService::new(
+        ServiceBuilder::new()
+            .layer(GlobalConcurrencyLimitLayer::new(
+                config.max_query_concurrent_requests,
+            ))
+            .service(
+                QueryServiceBuilder::builder(
+                    node_id,
+                    query_signer,
+                    registry_client.clone(),
+                    ingress_verifier.clone(),
+                    delegation_from_nns.clone(),
+                    query_execution_service,
+                )
+                .with_logger(log.clone())
+                .with_health_status(health_status.clone())
+                .with_metrics(metrics.clone())
+                .with_malicious_flags(malicious_flags.clone())
+                .build(),
+            ),
     );
 
     let canister_read_state_service = BoxCloneService::new(
