@@ -100,7 +100,7 @@ else
     CTR_HOME="/ic"
 fi
 
-trap 'rm -rf "${TEMPDIR}" "${SUBUID_FILE}" "${SUBGID_FILE}"'
+trap 'rm -rf "${TEMPDIR}" "${SUBUID_FILE}" "${SUBGID_FILE}"' EXIT
 TEMPDIR=$(mktemp -d)
 
 PODMAN_RUN_ARGS+=(
