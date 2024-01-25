@@ -67,6 +67,9 @@ pub(crate) enum InstallCodeStep {
         canister_state_changes: Option<CanisterStateChanges>,
         output: WasmExecutionOutput,
     },
+    ChargeForLargeWasmAssembly {
+        instructions: NumInstructions,
+    },
 }
 
 /// Contains fields of `InstallCodeHelper` that are necessary for resuming
@@ -150,6 +153,12 @@ impl InstallCodeHelper {
         self.canister
             .system_state
             .add_canister_change(timestamp_nanos, origin, details);
+    }
+
+    pub fn charge_for_large_wasm_assembly(&mut self, instructions: NumInstructions) {
+        self.steps
+            .push(InstallCodeStep::ChargeForLargeWasmAssembly { instructions });
+        self.reduce_instructions_by(instructions);
     }
 
     pub fn execution_parameters(&self) -> &ExecutionParameters {
@@ -760,6 +769,10 @@ impl InstallCodeHelper {
                 let (_, result) =
                     self.handle_wasm_execution(canister_state_changes, output, original, round);
                 result
+            }
+            InstallCodeStep::ChargeForLargeWasmAssembly { instructions } => {
+                self.charge_for_large_wasm_assembly(instructions);
+                Ok(())
             }
         }
     }
