@@ -9,9 +9,7 @@ rust_library(
     version = "0.9.0",
     deps = [
         "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa",
-        "//rs/crypto/internal/crypto_service_provider",
         "//rs/crypto/temp_crypto",
-        "//rs/crypto/test_utils/reproducible_rng",
         "//rs/interfaces",
         "//rs/monitoring/logger",
         "//rs/protobuf",
@@ -20,7 +18,6 @@ rust_library(
         "//rs/registry/proto_data_provider",
         "//rs/test_utilities/in_memory_logger",
         "//rs/types/types",
-        "@crate_index//:assert_matches",
         "@crate_index//:rand",
         "@crate_index//:rand_chacha",
     ],

@@ -9,7 +9,6 @@ edition = "2021"
 ic-crypto-internal-types = { path = "../../internal/crypto_lib/types" }
 ic-protobuf = { path = "../../../protobuf" }
 ic-types = { path = "../../../types/types" }
-serde_cbor = "0.11.1"
 
 [dev-dependencies]
 ic-base-types = { path = "../../../types/base_types" }

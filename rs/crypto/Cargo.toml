@@ -25,7 +25,6 @@ ic-crypto-internal-logmon = { path = "internal/logmon" }
 ic-crypto-internal-seed = { path = "internal/crypto_lib/seed" }
 ic-crypto-internal-threshold-sig-bls12381 = { path = "internal/crypto_lib/threshold_sig/bls12_381" }
 ic-crypto-internal-threshold-sig-ecdsa = { path = "internal/crypto_lib/threshold_sig/tecdsa" }
-ic-crypto-internal-basic-sig-iccsa = { path = "internal/crypto_lib/basic_sig/iccsa" }
 ic-crypto-internal-types = { path = "internal/crypto_lib/types" }
 ic-crypto-standalone-sig-verifier = { path = "standalone-sig-verifier" }
 ic-crypto-tls-cert-validation = { path = "node_key_validation/tls_cert_validation" }
@@ -45,7 +44,6 @@ ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-types = { path = "../types/types" }
 parking_lot = "0.12.1"
 serde = { workspace = true }
-serde_bytes = { workspace = true }
 slog = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }

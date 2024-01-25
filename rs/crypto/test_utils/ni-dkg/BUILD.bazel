@@ -5,7 +5,6 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/bls12_381/type",
     "//rs/crypto/internal/crypto_lib/types",
-    "//rs/crypto/internal/crypto_service_provider",
     "//rs/crypto/temp_crypto",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/interfaces",

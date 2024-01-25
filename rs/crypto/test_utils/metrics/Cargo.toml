@@ -10,6 +10,3 @@ documentation.workspace = true
 ic-crypto-internal-logmon = { path = "../../internal/logmon" }
 ic-metrics = { path = "../../../monitoring/metrics" }
 ic-test-utilities-metrics = { path = "../../../test_utilities/metrics" }
-prometheus = { workspace = true }
-strum = { workspace = true }
-strum_macros = { workspace = true }

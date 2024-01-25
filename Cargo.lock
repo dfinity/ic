@@ -6251,7 +6251,6 @@ dependencies = [
  "ic-crypto-internal-basic-sig-ecdsa-secp256k1",
  "ic-crypto-internal-basic-sig-ecdsa-secp256r1",
  "ic-crypto-internal-basic-sig-ed25519",
- "ic-crypto-internal-basic-sig-iccsa",
  "ic-crypto-internal-basic-sig-rsa-pkcs1",
  "ic-crypto-internal-csp",
  "ic-crypto-internal-csp-proptest-utils",
@@ -6313,7 +6312,6 @@ dependencies = [
  "rand_chacha 0.3.1",
  "rsa",
  "serde",
- "serde_bytes",
  "sha2 0.10.8",
  "simple_asn1",
  "slog",
@@ -6600,7 +6598,6 @@ name = "ic-crypto-internal-csp"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
- "async-trait",
  "base64 0.13.1",
  "bincode",
  "bytes",
@@ -6657,12 +6654,10 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "rayon",
- "rcgen",
  "rsa",
  "serde",
  "serde_bytes",
  "serde_cbor",
- "simple_asn1",
  "slog",
  "slog-async",
  "strum 0.25.0",
@@ -6715,17 +6710,11 @@ version = "0.9.0"
 dependencies = [
  "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-internal-csp",
- "ic-crypto-internal-logmon",
  "ic-crypto-internal-multi-sig-bls12381",
  "ic-crypto-internal-test-vectors",
- "ic-crypto-internal-types",
- "ic-logger",
  "ic-protobuf",
  "ic-types",
- "rand 0.8.5",
- "rand_chacha 0.3.1",
  "serde",
- "serde_bytes",
  "serde_cbor",
  "tempfile",
  "tokio",
@@ -6796,7 +6785,6 @@ dependencies = [
 name = "ic-crypto-internal-test-vectors"
 version = "0.9.0"
 dependencies = [
- "base64 0.13.1",
  "hex",
  "strum 0.25.0",
  "strum_macros 0.25.3",
@@ -6862,7 +6850,6 @@ dependencies = [
  "p256",
  "paste 1.0.14",
  "rand 0.8.5",
- "rand_chacha 0.3.1",
  "serde",
  "serde_bytes",
  "serde_cbor",
@@ -6932,7 +6919,6 @@ dependencies = [
  "ic-crypto-tls-interfaces",
  "ic-crypto-utils-basic-sig",
  "ic-interfaces",
- "ic-interfaces-registry",
  "ic-logger",
  "ic-metrics",
  "ic-protobuf",
@@ -6972,7 +6958,6 @@ name = "ic-crypto-prng"
 version = "0.1.0"
 dependencies = [
  "ic-crypto-sha2",
- "ic-interfaces",
  "ic-types",
  "ic-types-test-utils",
  "rand 0.8.5",
@@ -7022,7 +7007,6 @@ dependencies = [
  "ic-crypto-internal-basic-sig-iccsa",
  "ic-crypto-internal-basic-sig-rsa-pkcs1",
  "ic-crypto-internal-test-vectors",
- "ic-crypto-internal-types",
  "ic-crypto-sha2",
  "ic-crypto-test-utils-canister-sigs",
  "ic-crypto-test-utils-reproducible-rng",
@@ -7082,8 +7066,6 @@ name = "ic-crypto-temp-crypto-vault"
 version = "0.9.0"
 dependencies = [
  "ic-crypto-internal-csp",
- "ic-crypto-internal-logmon",
- "ic-logger",
  "tempfile",
  "tokio",
 ]
@@ -7094,22 +7076,12 @@ version = "0.9.0"
 dependencies = [
  "ed25519-consensus",
  "ic-crypto-internal-csp-test-utils",
- "ic-crypto-internal-types",
- "ic-crypto-tls-interfaces",
- "ic-interfaces",
  "ic-interfaces-registry",
- "ic-protobuf",
  "ic-registry-client-fake",
- "ic-registry-client-helpers",
- "ic-registry-keys",
  "ic-registry-proto-data-provider",
  "ic-types",
- "ic-types-test-utils",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "serde",
- "strum_macros 0.25.3",
- "tokio",
 ]
 
 [[package]]
@@ -7119,31 +7091,19 @@ dependencies = [
  "ic-certification-test-utils",
  "ic-crypto-internal-basic-sig-iccsa",
  "ic-crypto-internal-basic-sig-iccsa-test-utils",
- "ic-crypto-internal-types",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils",
- "ic-interfaces-registry",
- "ic-protobuf",
- "ic-registry-client-fake",
- "ic-registry-keys",
- "ic-registry-proto-data-provider",
  "ic-types",
- "ic-types-test-utils",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "serde",
- "serde_cbor",
 ]
 
 [[package]]
 name = "ic-crypto-test-utils-canister-threshold-sigs"
 version = "0.9.0"
 dependencies = [
- "assert_matches",
- "ic-crypto-internal-csp",
  "ic-crypto-internal-threshold-sig-ecdsa",
  "ic-crypto-temp-crypto",
- "ic-crypto-test-utils-reproducible-rng",
  "ic-interfaces",
  "ic-logger",
  "ic-protobuf",
@@ -7205,7 +7165,6 @@ dependencies = [
  "ic-protobuf",
  "ic-types",
  "mockall",
- "serde_bytes",
 ]
 
 [[package]]
@@ -7215,9 +7174,6 @@ dependencies = [
  "ic-crypto-internal-logmon",
  "ic-metrics",
  "ic-test-utilities-metrics",
- "prometheus",
- "strum 0.25.0",
- "strum_macros 0.25.3",
 ]
 
 [[package]]
@@ -7240,7 +7196,6 @@ version = "0.9.0"
 dependencies = [
  "hex",
  "ic-crypto-internal-bls12-381-type",
- "ic-crypto-internal-csp",
  "ic-crypto-internal-types",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils",
@@ -7306,9 +7261,7 @@ dependencies = [
  "assert_matches",
  "curve25519-dalek",
  "hex",
- "ic-base-types",
  "ic-crypto-internal-basic-sig-ed25519",
- "ic-crypto-internal-types",
  "ic-crypto-test-utils-keys",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-test-utils-tls",
@@ -7411,7 +7364,6 @@ dependencies = [
  "ic-protobuf",
  "ic-types",
  "ic-types-test-utils",
- "serde_cbor",
 ]
 
 [[package]]

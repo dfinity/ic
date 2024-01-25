@@ -15,7 +15,6 @@ ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "../internal/crypto_lib/
 ic-crypto-internal-basic-sig-ed25519 = { path = "../internal/crypto_lib/basic_sig/ed25519" }
 ic-crypto-internal-basic-sig-iccsa = { path = "../internal/crypto_lib/basic_sig/iccsa" }
 ic-crypto-internal-basic-sig-rsa-pkcs1 = { path = "../internal/crypto_lib/basic_sig/rsa_pkcs1" }
-ic-crypto-internal-types = { path = "../internal/crypto_lib/types" }
 ic-crypto-sha2 = { path = "../sha2" }
 ic-types = { path = "../../types/types" }
 

@@ -9,7 +9,6 @@ filegroup(
 
 DEPENDENCIES = [
     "//rs/crypto/sha2",
-    "//rs/interfaces",
     "//rs/types/types",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
