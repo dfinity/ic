@@ -4,7 +4,10 @@ use crate::mutations::node_management::common::make_add_node_registry_mutations;
 use crate::mutations::node_management::do_add_node::connection_endpoint_from_string;
 use crate::registry::Registry;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
-use ic_nns_test_utils::registry::{invariant_compliant_mutation, new_node_keys_and_node_id};
+use ic_nns_test_utils::registry::{
+    create_subnet_threshold_signing_pubkey_and_cup_mutations, invariant_compliant_mutation,
+    new_node_keys_and_node_id,
+};
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::node::v1::IPv4InterfaceConfig;
 use ic_protobuf::registry::node::v1::NodeRecord;
@@ -17,8 +20,6 @@ use ic_registry_transport::pb::v1::{
 };
 use ic_registry_transport::upsert;
 use ic_types::ReplicaVersion;
-use ic_types_test_utils::ids::subnet_test_id;
-use rand::RngCore;
 use std::collections::BTreeMap;
 
 pub fn invariant_compliant_registry(mutation_id: u8) -> Registry {
@@ -69,52 +70,6 @@ pub fn add_fake_subnet(
         // routing_table_mutation,
     ]);
     subnet_threshold_pk_and_cup_mutations
-}
-
-fn create_subnet_threshold_signing_pubkey_and_cup_mutations(
-    subnet_id: SubnetId,
-    receiver_keys: &BTreeMap<NodeId, PublicKey>,
-) -> Vec<RegistryMutation> {
-    use ic_base_types::RegistryVersion;
-    use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
-    use ic_crypto_utils_ni_dkg::extract_threshold_sig_public_key;
-    use ic_nns_test_utils::registry::generate_nidkg_initial_transcript;
-    use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
-    use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
-    use ic_registry_keys::make_catch_up_package_contents_key;
-    use ic_registry_keys::make_crypto_threshold_signing_pubkey_key;
-    use ic_registry_transport::insert;
-    use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTag;
-
-    let rng = &mut ReproducibleRng::new();
-    let subnet_transcript = generate_nidkg_initial_transcript(
-        receiver_keys,
-        subnet_test_id(rng.next_u64()),
-        NiDkgTag::HighThreshold,
-        RegistryVersion::new(1),
-        rng,
-    );
-    // Threshold signing public key
-    let subnet_threshold_sig_pk =
-        extract_threshold_sig_public_key(&subnet_transcript.internal_csp_transcript)
-            .expect("error extracting threshold sig public key from internal CSP transcript");
-
-    // CUP contents
-    let cup_contents_key = make_catch_up_package_contents_key(subnet_id).into_bytes();
-    let cup_contents = CatchUpPackageContents {
-        initial_ni_dkg_transcript_high_threshold: Some(InitialNiDkgTranscriptRecord::from(
-            subnet_transcript,
-        )),
-        ..Default::default()
-    };
-
-    vec![
-        insert(
-            make_crypto_threshold_signing_pubkey_key(subnet_id).as_bytes(),
-            encode_or_panic(&PublicKey::from(subnet_threshold_sig_pk)),
-        ),
-        insert(cup_contents_key, encode_or_panic(&cup_contents)),
-    ]
 }
 
 /// Get a SubnetRecord that does not fail invariant checks in Registry

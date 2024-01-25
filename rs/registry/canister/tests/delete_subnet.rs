@@ -1,11 +1,11 @@
 use candid::Encode;
 use cycles_minting_canister::CyclesCanisterInitPayload;
-use ic_base_types::{PrincipalId, RegistryVersion, SubnetId};
-use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
-use ic_crypto_utils_ni_dkg::extract_threshold_sig_public_key;
+use ic_base_types::{PrincipalId, SubnetId};
 use ic_nns_common::registry::encode_or_panic;
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
-use ic_nns_test_utils::registry::{generate_nidkg_initial_transcript, new_node_keys_and_node_id};
+use ic_nns_test_utils::registry::{
+    create_subnet_threshold_signing_pubkey_and_cup_mutations, new_node_keys_and_node_id,
+};
 use ic_nns_test_utils::{
     itest_helpers::{
         forward_call_via_universal_canister, local_test_on_nns_subnet,
@@ -13,27 +13,21 @@ use ic_nns_test_utils::{
     },
     registry::{invariant_compliant_mutation_as_atomic_req, INITIAL_MUTATION_ID},
 };
-use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
 use ic_protobuf::registry::{
-    crypto::v1::PublicKey,
     node::v1::{ConnectionEndpoint, NodeRecord},
-    subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord},
+    subnet::v1::{SubnetListRecord, SubnetRecord},
 };
-use ic_registry_keys::{
-    make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
-    make_subnet_list_record_key, make_subnet_record_key,
-};
+use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest, update};
 use ic_test_utilities::types::ids::user_test_id;
-use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTag;
 use ic_types::{p2p::build_default_gossip_config, ReplicaVersion};
+use maplit::btreemap;
 use registry_canister::mutations::node_management::common::make_add_node_registry_mutations;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
     mutations::do_delete_subnet::{DeleteSubnetPayload, NNS_SUBNET_ID},
 };
-use std::collections::BTreeMap;
 
 /// Tests that subnets can only be deleted when appropriate, by doing the following:
 /// 1. Create three subnets (two system subnets and one application subnet)
@@ -88,32 +82,11 @@ fn test_subnet_is_only_deleted_when_appropriate() {
             }
         };
 
-        let dealer_subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(187));
-        let registry_version = RegistryVersion::new(1);
-        let rng = &mut ReproducibleRng::new();
-
-        let mut application_subnet_nodes_and_dkg_pk = BTreeMap::new();
-        application_subnet_nodes_and_dkg_pk
-            .insert(node_pid_2, valid_pks_2.dkg_dealing_encryption_key().clone());
-        let application_subnet_transcript = generate_nidkg_initial_transcript(
-            &application_subnet_nodes_and_dkg_pk,
-            dealer_subnet_id,
-            NiDkgTag::HighThreshold,
-            registry_version,
-            rng,
-        );
-        let application_subnet_pk = PublicKey::from(
-            extract_threshold_sig_public_key(
-                &application_subnet_transcript.internal_csp_transcript,
-            )
-            .expect("error extracting threshold sig public key from internal CSP transcript"),
-        );
-        let application_subnet_cup = CatchUpPackageContents {
-            initial_ni_dkg_transcript_high_threshold: Some(InitialNiDkgTranscriptRecord::from(
-                application_subnet_transcript,
-            )),
-            ..Default::default()
-        };
+        let mut subnet_threshold_signing_pubkey_and_cup_mutations_app_subnet =
+            create_subnet_threshold_signing_pubkey_and_cup_mutations(
+                application_subnet_id,
+                &btreemap!(node_pid_2 => valid_pks_2.dkg_dealing_encryption_key().clone()),
+            );
         let application_subnet = SubnetRecord {
             membership: vec![node_pid_2.get().to_vec()],
             subnet_type: i32::from(SubnetType::Application),
@@ -123,28 +96,11 @@ fn test_subnet_is_only_deleted_when_appropriate() {
             ..Default::default()
         };
 
-        let mut second_system_subnet_nodes_and_dkg_pk = BTreeMap::new();
-        second_system_subnet_nodes_and_dkg_pk
-            .insert(node_pid_3, valid_pks_3.dkg_dealing_encryption_key().clone());
-        let second_system_subnet_transcript = generate_nidkg_initial_transcript(
-            &second_system_subnet_nodes_and_dkg_pk,
-            dealer_subnet_id,
-            NiDkgTag::HighThreshold,
-            registry_version,
-            rng,
-        );
-        let second_system_subnet_pk = PublicKey::from(
-            extract_threshold_sig_public_key(
-                &second_system_subnet_transcript.internal_csp_transcript,
-            )
-            .expect("error extracting threshold sig public key from internal CSP transcript"),
-        );
-        let second_system_subnet_cup = CatchUpPackageContents {
-            initial_ni_dkg_transcript_high_threshold: Some(InitialNiDkgTranscriptRecord::from(
-                second_system_subnet_transcript,
-            )),
-            ..Default::default()
-        };
+        let mut subnet_threshold_signing_pubkey_and_cup_mutations_second_system_subnet =
+            create_subnet_threshold_signing_pubkey_and_cup_mutations(
+                second_system_subnet_id,
+                &btreemap!(node_pid_3 => valid_pks_3.dkg_dealing_encryption_key().clone()),
+            );
         let second_system_subnet = SubnetRecord {
             membership: vec![node_pid_3.get().to_vec()],
             subnet_type: i32::from(SubnetType::System),
@@ -168,22 +124,6 @@ fn test_subnet_is_only_deleted_when_appropriate() {
                 encode_or_panic(&application_subnet),
             ),
             insert(
-                make_catch_up_package_contents_key(application_subnet_id).as_bytes(),
-                encode_or_panic(&application_subnet_cup),
-            ),
-            insert(
-                make_crypto_threshold_signing_pubkey_key(application_subnet_id).as_bytes(),
-                encode_or_panic(&application_subnet_pk),
-            ),
-            insert(
-                make_catch_up_package_contents_key(second_system_subnet_id).as_bytes(),
-                encode_or_panic(&second_system_subnet_cup),
-            ),
-            insert(
-                make_crypto_threshold_signing_pubkey_key(second_system_subnet_id).as_bytes(),
-                encode_or_panic(&second_system_subnet_pk),
-            ),
-            insert(
                 make_subnet_record_key(second_system_subnet_id).as_bytes(),
                 encode_or_panic(&second_system_subnet),
             ),
@@ -192,6 +132,9 @@ fn test_subnet_is_only_deleted_when_appropriate() {
                 encode_or_panic(&subnet_list),
             ),
         ];
+        mutations.append(&mut subnet_threshold_signing_pubkey_and_cup_mutations_app_subnet);
+        mutations
+            .append(&mut subnet_threshold_signing_pubkey_and_cup_mutations_second_system_subnet);
 
         mutations.append(&mut make_add_node_registry_mutations(
             node_pid_2,

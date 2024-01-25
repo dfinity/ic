@@ -45,7 +45,6 @@ ipnet = "2.5.0"
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = { workspace = true }
 serde = { workspace = true }
-serde_cbor = { workspace = true }
 url = "2"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]

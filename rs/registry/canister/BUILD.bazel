@@ -44,7 +44,6 @@ DEPENDENCIES = [
     "@crate_index//:leb128",
     "@crate_index//:prost",
     "@crate_index//:serde",
-    "@crate_index//:serde_cbor",
     "@crate_index//:url",
 ]
 
