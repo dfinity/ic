@@ -531,6 +531,12 @@ impl CanisterManager {
                 }
             },
 
+            // TODO(IC-272).
+            Ok(Ic00Method::FetchCanisterLogs) => Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!("{} API is not yet implemented", Ic00Method::FetchCanisterLogs)
+            )),
+
             Ok(Ic00Method::ProvisionalCreateCanisterWithCycles)
             | Ok(Ic00Method::BitcoinGetSuccessors)
             | Ok(Ic00Method::ProvisionalTopUpCanister) => {

@@ -1086,6 +1086,14 @@ impl ExecutionEnvironment {
                 Some((res, msg.take_cycles()))
             }
 
+            Ok(Ic00Method::DeleteChunks) | Ok(Ic00Method::InstallChunkedCode) => Some((
+                Err(UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    "Chunked upload API is not yet implemented.",
+                )),
+                msg.take_cycles(),
+            )),
+
             Ok(Ic00Method::NodeMetricsHistory) => {
                 let res = match NodeMetricsHistoryArgs::decode(payload) {
                     Err(err) => Err(err),
@@ -1094,10 +1102,14 @@ impl ExecutionEnvironment {
                 Some((res, msg.take_cycles()))
             }
 
-            Ok(Ic00Method::DeleteChunks) | Ok(Ic00Method::InstallChunkedCode) => Some((
+            Ok(Ic00Method::FetchCanisterLogs) => Some((
+                // TODO(IC-272).
                 Err(UserError::new(
                     ErrorCode::CanisterRejectedMessage,
-                    "Chunked upload API is not yet implemented.",
+                    format!(
+                        "{} API is not yet implemented.",
+                        Ic00Method::FetchCanisterLogs
+                    ),
                 )),
                 msg.take_cycles(),
             )),

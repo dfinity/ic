@@ -147,6 +147,7 @@ impl Request {
                     Err(_) => None,
                 }
             }
+            Ok(Method::FetchCanisterLogs) => None, // TODO(IC-272).
             Ok(Method::UploadChunk) => match UploadChunkArgs::decode(&self.method_payload) {
                 Ok(record) => Some(record.get_canister_id()),
                 Err(_) => None,

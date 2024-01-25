@@ -77,6 +77,8 @@ pub enum Method {
 
     NodeMetricsHistory,
 
+    FetchCanisterLogs,
+
     // These methods are only available on test IC instances where there is a
     // need to fabricate cycles without burning ICP first.
     ProvisionalCreateCanisterWithCycles,
