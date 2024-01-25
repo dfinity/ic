@@ -1634,7 +1634,8 @@ impl Governance {
             .push(disbursement_in_progress);
 
         Ok(DisburseMaturityResponse {
-            // TODO(NNS1-2576) - deprecate amount_disbursed_e8s
+            // We still populate this field even though it's deprecated, since we cannot remove
+            // required fields yet.
             amount_disbursed_e8s: maturity_to_deduct,
             amount_deducted_e8s: Some(maturity_to_deduct),
         })

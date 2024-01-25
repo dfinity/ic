@@ -1659,11 +1659,7 @@ message ManageNeuronResponse {
     reserved 1;
     reserved "transfer_block_height";
 
-    // The amount of maturity in e8s of the governance token deducted from the Neuron.
-    // This amount will undergo maturity modulation if enabled, and may be increased or
-    // decreased at the time of disbursement.
-    // This field is being sunset in favor of `amount_deducted_e8s` but will be populated
-    // with the same values until NNS1-2576 is done.
+    // This field is deprecated and is populated with the same value as `amount_deducted_e8s`.
     uint64 amount_disbursed_e8s = 2;
 
     // The amount of maturity in e8s of the governance token deducted from the Neuron.
