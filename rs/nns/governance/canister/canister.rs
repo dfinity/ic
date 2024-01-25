@@ -39,7 +39,10 @@ use ic_nns_governance::{
     neuron_data_validation::NeuronDataValidationSummary,
     pb::v1::{
         claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
-        governance::{GovernanceCachedMetrics, Migrations},
+        governance::{
+            genesis_neuron_accounts::GenesisNeuronAccount, GenesisNeuronAccounts,
+            GovernanceCachedMetrics, Migrations,
+        },
         governance_error::ErrorType,
         manage_neuron::{
             claim_or_refresh::{By, MemoAndController},
@@ -51,13 +54,15 @@ use ic_nns_governance::{
         Governance as GovernanceProto, GovernanceError, ListKnownNeuronsResponse, ListNeurons,
         ListNeuronsResponse, ListNodeProvidersResponse, ListProposalInfo, ListProposalInfoResponse,
         ManageNeuron, ManageNeuronResponse, MostRecentMonthlyNodeProviderRewards, NetworkEconomics,
-        Neuron, NeuronInfo, NnsFunction, NodeProvider, Proposal, ProposalInfo, RewardEvent,
-        RewardNodeProviders, SettleCommunityFundParticipation,
+        Neuron, NeuronInfo, NeuronType, NnsFunction, NodeProvider, Proposal, ProposalInfo,
+        RewardEvent, RewardNodeProviders, SettleCommunityFundParticipation,
         SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
         UpdateNodeProvider, Vote,
     },
-    storage::validate_stable_storage,
-    storage::{grow_upgrades_memory_to, with_upgrades_memory},
+    storage::{grow_upgrades_memory_to, validate_stable_storage, with_upgrades_memory},
+};
+use ic_nns_gtc_accounts::{
+    FORWARDED_ECT_GENESIS_NEURON_ACCOUNTS, FORWARDED_SEED_GENESIS_NEURON_ACCOUNTS,
 };
 use prost::Message;
 use rand::{RngCore, SeedableRng};
@@ -367,14 +372,71 @@ fn canister_post_upgrade() {
         restored_state.genesis_timestamp_seconds,
         restored_state.neurons.len()
     );
+    // TODO(NNS1-2819) - remove after deployed.  Optionally generates genesis_neuron_account_ids
+    let genesis_neuron_account_ids = maybe_generate_genesis_neuron_accounts(&restored_state);
     set_governance(Governance::new_restored(
         restored_state,
         Box::new(CanisterEnv::new()),
         Box::new(IcpLedgerCanister::new(LEDGER_CANISTER_ID)),
         Box::new(CMCCanister::<DfnRuntime>::new()),
+        genesis_neuron_account_ids,
     ));
 
     validate_stable_storage();
+}
+
+// TODO(NNS1-2819) - remove after deployed.  Optionally generates genesis_neuron_account_ids
+/// Generate genesis neuron accounts if they are not present in the governance proto.
+fn maybe_generate_genesis_neuron_accounts(
+    governance_proto: &GovernanceProto,
+) -> Option<GenesisNeuronAccounts> {
+    if governance_proto.genesis_neuron_accounts.is_some() {
+        return None;
+    }
+
+    let seed_round_genesis_accounts: Vec<GenesisNeuronAccount> =
+        FORWARDED_SEED_GENESIS_NEURON_ACCOUNTS
+            .iter()
+            .map(
+                |(id, amount_icp_e8s, neuron_account_ids)| GenesisNeuronAccount {
+                    account_ids: neuron_account_ids
+                        .to_vec()
+                        .iter()
+                        .map(|x| x.to_string())
+                        .collect(),
+                    tag_start_timestamp_seconds: None,
+                    tag_end_timestamp_seconds: None,
+                    error_count: 0,
+                    amount_icp_e8s: *amount_icp_e8s,
+                    neuron_type: NeuronType::Seed as i32,
+                    id: *id,
+                },
+            )
+            .collect();
+
+    let ect_round_genesis_accounts: Vec<GenesisNeuronAccount> =
+        FORWARDED_ECT_GENESIS_NEURON_ACCOUNTS
+            .iter()
+            .map(
+                |(id, amount_icp_e8s, neuron_account_ids)| GenesisNeuronAccount {
+                    account_ids: neuron_account_ids
+                        .to_vec()
+                        .iter()
+                        .map(|x| x.to_string())
+                        .collect(),
+                    tag_start_timestamp_seconds: None,
+                    tag_end_timestamp_seconds: None,
+                    error_count: 0,
+                    neuron_type: NeuronType::Ect as i32,
+                    amount_icp_e8s: *amount_icp_e8s,
+                    id: *id,
+                },
+            )
+            .collect();
+
+    Some(GenesisNeuronAccounts {
+        genesis_neuron_accounts: [seed_round_genesis_accounts, ect_round_genesis_accounts].concat(),
+    })
 }
 
 #[cfg(feature = "test")]

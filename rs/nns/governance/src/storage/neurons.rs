@@ -2,8 +2,8 @@ use crate::{
     neuron_store::NeuronStoreError,
     pb::v1::{
         abridged_neuron::DissolveState as AbridgedNeuronDissolveState,
-        neuron::DissolveState as NeuronDissolveState, neuron::Followees, AbridgedNeuron,
-        BallotInfo, KnownNeuronData, Neuron, NeuronStakeTransfer, Topic,
+        neuron::{DissolveState as NeuronDissolveState, Followees},
+        AbridgedNeuron, BallotInfo, KnownNeuronData, Neuron, NeuronStakeTransfer, Topic,
     },
     storage::validate_stable_btree_map,
 };

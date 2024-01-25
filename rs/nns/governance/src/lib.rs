@@ -136,6 +136,7 @@ pub mod test_utils;
 mod account_id_index;
 mod audit_event;
 mod garbage_collection;
+mod genesis_neuron;
 /// The 'governance' module contains the canister (smart contract)
 /// that manages neurons, proposals, voting, voter following, voting
 /// rewards, and the code necessary to execute accepted proposals.
