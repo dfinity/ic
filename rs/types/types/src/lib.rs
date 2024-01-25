@@ -67,7 +67,6 @@ pub mod artifact;
 pub mod artifact_kind;
 pub mod batch;
 pub mod canister_http;
-pub mod chunkable;
 pub mod consensus;
 pub mod crypto;
 pub mod filetree_sync;
@@ -465,7 +464,7 @@ const GB: u64 = 1024 * 1024 * 1024;
 /// The upper limit on the stable memory size.
 /// This constant is used by other crates to define other constants, that's why
 /// it is public and `u64` (`NumBytes` cannot be used in const expressions).
-pub const MAX_STABLE_MEMORY_IN_BYTES: u64 = 96 * GB;
+pub const MAX_STABLE_MEMORY_IN_BYTES: u64 = 400 * GB;
 
 /// The upper limit on the Wasm memory size.
 /// This constant is used by other crates to define other constants, that's why

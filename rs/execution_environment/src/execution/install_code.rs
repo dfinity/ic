@@ -67,6 +67,9 @@ pub(crate) enum InstallCodeStep {
         canister_state_changes: Option<CanisterStateChanges>,
         output: WasmExecutionOutput,
     },
+    ChargeForLargeWasmAssembly {
+        instructions: NumInstructions,
+    },
 }
 
 /// Contains fields of `InstallCodeHelper` that are necessary for resuming
@@ -152,6 +155,12 @@ impl InstallCodeHelper {
             .add_canister_change(timestamp_nanos, origin, details);
     }
 
+    pub fn charge_for_large_wasm_assembly(&mut self, instructions: NumInstructions) {
+        self.steps
+            .push(InstallCodeStep::ChargeForLargeWasmAssembly { instructions });
+        self.reduce_instructions_by(instructions);
+    }
+
     pub fn execution_parameters(&self) -> &ExecutionParameters {
         &self.execution_parameters
     }
@@ -170,6 +179,12 @@ impl InstallCodeHelper {
 
     pub fn canister_message_memory_usage(&self) -> NumBytes {
         self.canister.message_memory_usage()
+    }
+
+    pub fn reduce_instructions_by(&mut self, instructions: NumInstructions) {
+        self.execution_parameters
+            .instruction_limits
+            .reduce_by(instructions);
     }
 
     /// Returns a struct with all the necessary information to replay the
@@ -433,6 +448,7 @@ impl InstallCodeHelper {
                 memory_allocation: original.requested_memory_allocation,
                 freezing_threshold: None,
                 reserved_cycles_limit: None,
+                log_visibility: None,
             },
             self.canister.memory_usage(),
             self.canister.message_memory_usage(),
@@ -489,9 +505,7 @@ impl InstallCodeHelper {
                 stable_memory_handling,
             });
 
-        self.execution_parameters
-            .instruction_limits
-            .reduce_by(instructions_from_compilation);
+        self.reduce_instructions_by(instructions_from_compilation);
 
         let old_memory_usage = self.canister.memory_usage();
         let old_memory_allocation = self.canister.system_state.memory_allocation;
@@ -755,6 +769,10 @@ impl InstallCodeHelper {
                 let (_, result) =
                     self.handle_wasm_execution(canister_state_changes, output, original, round);
                 result
+            }
+            InstallCodeStep::ChargeForLargeWasmAssembly { instructions } => {
+                self.charge_for_large_wasm_assembly(instructions);
+                Ok(())
             }
         }
     }

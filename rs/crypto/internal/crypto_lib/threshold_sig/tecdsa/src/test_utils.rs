@@ -109,7 +109,7 @@ impl ComplaintCorrupter {
         complaint: &IDkgComplaintInternal,
     ) -> ThresholdEcdsaResult<IDkgComplaintInternal> {
         // double `shared_secret` which likely invalides it
-        let corrupted_shared_secret = complaint.shared_secret.mul_by_node_index(1u32)?;
+        let corrupted_shared_secret = complaint.shared_secret.mul_by_node_index_vartime(1u32)?;
 
         // return a corrupted `IDkgComplaintInternal` instance
         Ok(IDkgComplaintInternal {

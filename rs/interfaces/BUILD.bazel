@@ -6,6 +6,7 @@ DEPENDENCIES = [
     "//rs/crypto/interfaces/sig_verification",
     "//rs/crypto/tree_hash",
     "//rs/interfaces/state_manager",
+    "//rs/phantom_newtype",
     "//rs/protobuf",
     "//rs/registry/provisional_whitelist",
     "//rs/registry/subnet_type",

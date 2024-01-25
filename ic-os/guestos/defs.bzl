@@ -40,11 +40,15 @@ def image_deps(mode, malicious = False):
             "//publish/binaries:orchestrator": "/opt/ic/bin/orchestrator:0755",
             "//publish/binaries:ic-boundary": "/opt/ic/bin/ic-boundary:0755",
             ("//publish/malicious:replica" if malicious else "//publish/binaries:replica"): "/opt/ic/bin/replica:0755",  # Install the malicious replica if set
+            "//publish/binaries:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",
             "//publish/binaries:sandbox_launcher": "/opt/ic/bin/sandbox_launcher:0755",
             "//publish/binaries:state-tool": "/opt/ic/bin/state-tool:0755",
             "//publish/binaries:vsock_guest": "/opt/ic/bin/vsock_guest:0755",
             "//ic-os/utils:infogetty": "/opt/ic/bin/infogetty:0755",
             "//ic-os/utils:prestorecon": "/opt/ic/bin/prestorecon:0755",
+
+            # additional libraries to install
+            "//publish/binaries:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",
         },
 
         # Set various configuration values

@@ -1,6 +1,7 @@
 use canister_test::{Cycles, PrincipalId, WasmResult};
 use ic_interfaces::execution_environment::HypervisorResult;
-use ic_test_utilities::{mock_time, wasmtime_instance::WasmtimeInstanceBuilder};
+use ic_test_utilities::wasmtime_instance::WasmtimeInstanceBuilder;
+use ic_test_utilities_time::mock_time;
 use ic_types::methods::{FuncRef, WasmMethod};
 
 fn wat_with_imports(wat: &str) -> String {

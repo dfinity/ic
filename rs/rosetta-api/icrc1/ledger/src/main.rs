@@ -191,7 +191,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     })
 }
 
-#[query]
+#[query(hidden = true)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
         let mut writer =
@@ -623,7 +623,7 @@ fn main() {}
 
 #[test]
 fn check_candid_interface() {
-    use candid::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{service_equal, CandidSource};
 
     let new_interface = __export_service();
     let manifest_dir = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());

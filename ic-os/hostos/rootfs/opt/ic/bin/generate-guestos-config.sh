@@ -89,8 +89,11 @@ function read_variables() {
     while IFS="=" read -r key value; do
         case "$key" in
             "ipv6_prefix") ipv6_prefix="${value}" ;;
-            "ipv6_subnet") ipv6_subnet="${value}" ;;
             "ipv6_gateway") ipv6_gateway="${value}" ;;
+            "ipv4_address") ipv4_address="${value}" ;;
+            "ipv4_prefix_length") ipv4_prefix_length="${value}" ;;
+            "ipv4_gateway") ipv4_gateway="${value}" ;;
+            "domain") domain="${value}" ;;
         esac
     done <"${CONFIG}"
 }
@@ -102,11 +105,14 @@ function assemble_config_media() {
     cmd+=(--ipv6_address "$(/opt/ic/bin/hostos_tool generate-ipv6-address --node-type GuestOS)")
     cmd+=(--ipv6_gateway "${ipv6_gateway}")
     cmd+=(--ipv6_name_servers "$(/opt/ic/bin/fetch-property.sh --key=.dns.name_servers --metric=hostos_ipv6_dns_name_servers --config=${DEPLOYMENT})")
+    if [[ -n "$ipv4_address" && -n "$ipv4_prefix_length" && -n "$ipv4_gateway" && -n "$domain" ]]; then
+        cmd+=(--ipv4_address "${ipv4_address}/${ipv4_prefix_length}")
+        cmd+=(--ipv4_gateway "${ipv4_gateway}")
+        cmd+=(--domain "${domain}")
+    fi
     cmd+=(--ipv4_name_servers "$(/opt/ic/bin/fetch-property.sh --key=.dns.ipv4_name_servers --metric=hostos_ipv4_dns_name_servers --config=${DEPLOYMENT})")
     cmd+=(--hostname "guest-$(/opt/ic/bin/fetch-mgmt-mac.sh | sed 's/://g')")
     cmd+=(--nns_url "$(/opt/ic/bin/fetch-property.sh --key=.nns.url --metric=hostos_nns_url --config=${DEPLOYMENT})")
-    # AMDs cert download links do not support IPv6; NODE-817
-    # cmd+=(--get_sev_certs)
     if [ -f "/boot/config/node_operator_private_key.pem" ]; then
         cmd+=(--node_operator_private_key "/boot/config/node_operator_private_key.pem")
     fi
@@ -229,6 +235,9 @@ function main() {
     read_variables
     assemble_config_media
     if is_sev_snp_enabled; then
+        # TODO: Also, fetch and load the SEV certs.
+        # snptool get-certs
+        # sev-host-set-cert-chain  -r ark.pem -s ask.pem -v vcek.pem
         generate_sev_guestos_config
     else
         generate_guestos_config

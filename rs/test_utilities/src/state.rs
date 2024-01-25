@@ -1,14 +1,11 @@
-use crate::{
-    mock_time,
-    types::{
-        arbitrary,
-        ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
-        messages::{RequestBuilder, SignedIngressBuilder},
-    },
+use crate::types::{
+    arbitrary,
+    ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
+    messages::{RequestBuilder, SignedIngressBuilder},
 };
 use ic_base_types::NumSeconds;
 use ic_btc_types_internal::BitcoinAdapterRequestWrapper;
-use ic_ic00_types::CanisterStatusType;
+use ic_ic00_types::{CanisterStatusType, LogVisibility};
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -29,11 +26,12 @@ use ic_replicated_state::{
     CallContext, CallOrigin, CanisterState, CanisterStatus, ExecutionState, ExportedFunctions,
     InputQueueType, Memory, NumWasmPages, ReplicatedState, SchedulerState, SystemState,
 };
+use ic_test_utilities_time::mock_time;
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::UNIX_EPOCH;
 use ic_types::{batch::RawQueryStats, messages::CallbackId};
 use ic_types::{
-    messages::{Ingress, Request, RequestOrResponse},
+    messages::{Ingress, Request, RequestMetadata, RequestOrResponse},
     nominal_cycles::NominalCycles,
     xnet::{StreamHeader, StreamIndex, StreamIndexedQueue},
     CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumBytes, PrincipalId,
@@ -185,6 +183,7 @@ pub struct CanisterStateBuilder {
     inputs: Vec<RequestOrResponse>,
     time_of_last_allocation_charge: Time,
     certified_data: Vec<u8>,
+    log_visibility: LogVisibility,
 }
 
 impl CanisterStateBuilder {
@@ -268,6 +267,11 @@ impl CanisterStateBuilder {
         self
     }
 
+    pub fn with_log_visibility(mut self, log_visibility: LogVisibility) -> Self {
+        self.log_visibility = log_visibility;
+        self
+    }
+
     pub fn build(self) -> CanisterState {
         let mut system_state = match self.status {
             CanisterStatusType::Running => SystemState::new_running_for_testing(
@@ -307,6 +311,7 @@ impl CanisterStateBuilder {
                 call_context.call_origin().clone(),
                 call_context.available_cycles(),
                 call_context.time(),
+                call_context.metadata().clone(),
             );
 
             let call_context_in_call_context_manager = call_context_manager
@@ -376,6 +381,7 @@ impl Default for CanisterStateBuilder {
             inputs: Vec::default(),
             time_of_last_allocation_charge: UNIX_EPOCH,
             certified_data: vec![],
+            log_visibility: LogVisibility::default(),
         }
     }
 }
@@ -468,6 +474,7 @@ impl CallContextBuilder {
             false,
             Cycles::zero(),
             self.time,
+            RequestMetadata::new(0, mock_time()),
         )
     }
 }
@@ -741,15 +748,16 @@ pub fn register_callback(
         CallOrigin::CanisterUpdate(originator, callback_id),
         Cycles::zero(),
         Time::from_nanos_since_unix_epoch(0),
+        RequestMetadata::new(0, mock_time()),
     );
 
     call_context_manager.register_callback(Callback::new(
         call_context_id,
-        Some(originator),
-        Some(respondent),
+        originator,
+        respondent,
         Cycles::zero(),
-        Some(Cycles::new(42)),
-        Some(Cycles::new(84)),
+        Cycles::new(42),
+        Cycles::new(84),
         WasmClosure::new(0, 2),
         WasmClosure::new(0, 2),
         None,

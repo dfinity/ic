@@ -82,7 +82,7 @@ fn test_manage_ledger_parameters_change_transfer_fee() {
         sns_canisters.ledger_canister_id,
         user,
         TransferArg {
-            amount: Nat::from(5),
+            amount: Nat::from(5u8),
             fee: Some(Nat::from(new_fee)),
             from_subaccount: None,
             to: Account {
@@ -100,7 +100,7 @@ fn test_manage_ledger_parameters_change_transfer_fee() {
         sns_canisters.ledger_canister_id,
         user,
         TransferArg {
-            amount: Nat::from(5),
+            amount: Nat::from(5u8),
             fee: Some(DEFAULT_LEDGER_TRANSFER_FEE.into()),
             from_subaccount: None,
             to: Account {

@@ -181,11 +181,19 @@ fn test_scalar_negate() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn test_point_mul_by_node_index() -> ThresholdEcdsaResult<()> {
+    let rng = &mut reproducible_rng();
     for curve in EccCurveType::all() {
         let g = EccPoint::generator_g(curve);
 
-        for node_index in 0..300 {
-            let g_ni = g.mul_by_node_index(node_index)?;
+        let mut node_indices: Vec<_> = (0..300).collect();
+        node_indices.push(u32::MAX - 1);
+        node_indices.push(u32::MAX);
+        for _ in 0..100 {
+            node_indices.push(rng.gen());
+        }
+
+        for node_index in node_indices {
+            let g_ni = g.mul_by_node_index_vartime(node_index)?;
 
             let scalar = EccScalar::from_node_index(curve, node_index);
             let g_s = g.scalar_mul(&scalar)?;
@@ -249,6 +257,35 @@ fn test_point_negate() -> ThresholdEcdsaResult<()> {
 
             let should_be_zero = n_random_point.add_points(&random_point)?;
             assert_eq!(should_be_zero, id);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn test_y_is_even() -> ThresholdEcdsaResult<()> {
+    let rng = &mut reproducible_rng();
+
+    for curve_type in EccCurveType::all() {
+        let g = EccPoint::generator_g(curve_type);
+
+        for _trial in 0..100 {
+            let s = EccScalar::random(curve_type, rng);
+            let p = g.scalar_mul(&s)?;
+            let np = p.negate();
+
+            match (p.is_y_even()?, np.is_y_even()?) {
+                (true, true) => panic!("Both point and its negation have even y"),
+                (false, false) => panic!("Neither point nor its negation have even y"),
+                (true, false) => {
+                    assert_eq!(p.affine_y()?.sign(), 0x00);
+                    assert_eq!(np.affine_y()?.sign(), 0x01);
+                }
+                (false, true) => {
+                    assert_eq!(p.affine_y()?.sign(), 0x01);
+                    assert_eq!(np.affine_y()?.sign(), 0x00)
+                }
+            }
         }
     }
     Ok(())
@@ -380,6 +417,10 @@ fn test_mul_n_vartime_naf() -> ThresholdEcdsaResult<()> {
                 }
 
                 // create refs of pairs
+
+                // False positive `map_identity` warning.
+                // See: https://github.com/rust-lang/rust-clippy/pull/11792 (merged)
+                #[allow(clippy::map_identity)]
                 let refs_of_pairs: Vec<_> = pairs.iter().map(|(p, s)| (p, s)).collect();
 
                 // compute the result using an optimized algorithm, which is to be tested

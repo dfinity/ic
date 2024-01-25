@@ -30,6 +30,7 @@ DEV_DEPENDENCIES = [
     "//rs/registry/subnet_features",
     "//rs/sys",
     "//rs/test_utilities",
+    "//rs/test_utilities/time",
     "//rs/types/wasm_types",
     "//rs/utils",
     "@crate_index//:assert_matches",

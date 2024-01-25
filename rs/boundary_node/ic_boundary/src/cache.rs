@@ -83,16 +83,16 @@ struct CacheItem {
 
 #[derive(Clone)]
 pub struct Cache {
-    cache: MokaCache<RequestContext, CacheItem>,
+    cache: MokaCache<Arc<RequestContext>, CacheItem>,
     max_item_size: u64,
     cache_non_anonymous: bool,
 }
 
 // Estimate rough amount of bytes that cache entry takes in memory
-fn weigh_entry(k: &RequestContext, v: &CacheItem) -> u32 {
+fn weigh_entry(k: &Arc<RequestContext>, v: &CacheItem) -> u32 {
     let mut cost = v.body.capacity()
         + std::mem::size_of::<CacheItem>()
-        + std::mem::size_of::<RequestContext>()
+        + std::mem::size_of::<Arc<RequestContext>>()
         + k.method_name.as_ref().map(|x| x.len()).unwrap_or(0)
         + k.arg.as_ref().map(|x| x.len()).unwrap_or(0)
         + k.nonce.as_ref().map(|x| x.len()).unwrap_or(0)
@@ -136,7 +136,7 @@ impl Cache {
 
     // Stores the response components in the cache
     // Response itself cannot be stored since it's not cloneable, so we have to rebuild it
-    async fn store(&self, ctx: RequestContext, parts: &response::Parts, body: &[u8]) {
+    async fn store(&self, ctx: Arc<RequestContext>, parts: &response::Parts, body: &[u8]) {
         // Make sure that the vector has the smallest possible memory footprint
         let mut body = body.to_vec();
         body.shrink_to_fit();
@@ -206,7 +206,7 @@ fn extract_content_length(resp: &Response) -> Result<Option<u64>, Error> {
 // Axum middleware that handles response caching
 pub async fn cache_middleware(
     State(cache): State<Arc<Cache>>,
-    Extension(ctx): Extension<RequestContext>,
+    Extension(ctx): Extension<Arc<RequestContext>>,
     request: Request<Body>,
     next: Next<Body>,
 ) -> Result<impl IntoResponse, ApiError> {

@@ -2,13 +2,14 @@ use ic_base_types::CanisterId;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CanisterState, InputQueueType, StateError};
 use ic_test_utilities::{
-    mock_time,
     state::{get_running_canister, get_stopped_canister, get_stopping_canister, register_callback},
     types::ids::canister_test_id,
     types::messages::{RequestBuilder, ResponseBuilder},
 };
+use ic_test_utilities_time::mock_time;
 use ic_types::{
     messages::{CallbackId, Request, RequestOrResponse},
+    methods::UNKNOWN_CANISTER_ID,
     xnet::QueueId,
 };
 use std::sync::Arc;
@@ -253,4 +254,28 @@ fn validate_responses_against_callback_details() {
     fixture
         .push_input(input_response_from(canister_b_id, callback_id_1))
         .unwrap();
+}
+
+#[test]
+fn validate_responses_against_callback_without_originator_or_respondent() {
+    let mut fixture = CanisterFixture::running();
+
+    // A callback with no `originator` or `respondent` recorded.
+    let callback_id = CallbackId::from(CALLBACK_ID_RAW);
+    register_callback(
+        &mut fixture.canister_state,
+        UNKNOWN_CANISTER_ID,
+        UNKNOWN_CANISTER_ID,
+        callback_id,
+    );
+    fixture.with_input_reservation();
+
+    // Any response addressed to this canister is valid.
+    let response = ResponseBuilder::new()
+        .originator(CANISTER_ID)
+        .respondent(OTHER_CANISTER_ID)
+        .originator_reply_callback(callback_id)
+        .build()
+        .into();
+    fixture.push_input(response).unwrap();
 }

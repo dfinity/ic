@@ -1,5 +1,6 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -44,19 +45,15 @@ rust_canister(
     deps = DEPENDENCIES,
 )
 
-rust_test(
+rust_ic_test(
     name = "canister_creator_integration_test",
     srcs = ["test/test.rs"],
     data = [
         ":canister_creator_canister",
-        "//rs/canister_sandbox",
-        "//rs/canister_sandbox/sandbox_launcher",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/rust_canisters/canister_creator",
         "CANISTER_CREATOR_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/canister_creator:canister_creator_canister)",
-        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     },
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

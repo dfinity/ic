@@ -35,9 +35,9 @@ use ic_test_utilities::{
     state::{CanisterStateBuilder, ReplicatedStateBuilder},
     types::ids::{node_test_id, subnet_test_id},
     types::messages::SignedIngressBuilder,
-    FastForwardTimeSource,
 };
 use ic_test_utilities_registry::test_subnet_record;
+use ic_test_utilities_time::FastForwardTimeSource;
 use ic_types::{
     artifact::IngressMessageId, batch::ValidationContext, ingress::IngressStatus,
     malicious_flags::MaliciousFlags, CanisterId, Cycles, Height, NumBytes, PrincipalId,

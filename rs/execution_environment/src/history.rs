@@ -213,7 +213,7 @@ impl IngressHistoryWriterImpl {
         let mut map = self.received_time.write().unwrap();
         map.remove(message_id).map(|timer| {
             (
-                (time.saturating_sub(timer.ic_time)).as_secs_f64(),
+                (time.saturating_duration_since(timer.ic_time)).as_secs_f64(),
                 timer.system_time.elapsed().as_secs_f64(),
             )
         })

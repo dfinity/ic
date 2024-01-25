@@ -11,6 +11,7 @@ use crate::common::{
     SharableMockChunkable, State,
 };
 use common::SharableMockStateSync;
+use ic_interfaces::p2p::state_sync::{AddChunkError, ChunkId, StateSyncArtifactId};
 use ic_logger::info;
 use ic_memory_transport::TransportRouter;
 use ic_p2p_test_utils::{
@@ -22,12 +23,7 @@ use ic_p2p_test_utils::{
     ConnectivityChecker,
 };
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_types::{
-    artifact::StateSyncArtifactId,
-    chunkable::{ArtifactErrorCode, ChunkId},
-    crypto::CryptoHash,
-    CryptoHashOfState, Height, RegistryVersion,
-};
+use ic_types::{crypto::CryptoHash, Height, RegistryVersion};
 use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3};
 use tokio::sync::Notify;
 use turmoil::Builder;
@@ -329,11 +325,11 @@ fn test_single_advert_between_two_nodes() {
         let received_advert_n2_a1 = Arc::new(AtomicBool::new(false));
         let state_sync_id_1 = StateSyncArtifactId {
             height: Height::from(1),
-            hash: CryptoHashOfState::new(CryptoHash(vec![])),
+            hash: CryptoHash(vec![]),
         };
         let state_sync_id_2 = StateSyncArtifactId {
             height: Height::from(2),
-            hash: CryptoHashOfState::new(CryptoHash(vec![])),
+            hash: CryptoHash(vec![]),
         };
         let state_sync_id_2_clone = state_sync_id_2.clone();
         let state_sync_id_1_clone = state_sync_id_1.clone();
@@ -444,11 +440,11 @@ fn test_multiple_advert_between_two_nodes() {
         let received_advert_n2_a2 = Arc::new(AtomicBool::new(false));
         let state_sync_id_1 = StateSyncArtifactId {
             height: Height::from(1),
-            hash: CryptoHashOfState::new(CryptoHash(vec![])),
+            hash: CryptoHash(vec![]),
         };
         let state_sync_id_2 = StateSyncArtifactId {
             height: Height::from(2),
-            hash: CryptoHashOfState::new(CryptoHash(vec![])),
+            hash: CryptoHash(vec![]),
         };
         let state_sync_id_2_clone = state_sync_id_2.clone();
         let state_sync_id_1_clone = state_sync_id_1.clone();
@@ -648,7 +644,7 @@ fn test_state_sync_abortion() {
                 vec![
                     StateSyncArtifactId {
                         height: Height::from(1),
-                        hash: CryptoHashOfState::from(CryptoHash(vec![])),
+                        hash: CryptoHash(vec![]),
                     };
                     10
                 ]
@@ -672,9 +668,8 @@ fn test_state_sync_abortion() {
         c2.get_mut()
             .expect_chunks_to_download()
             .returning(|| Box::new(vec![ChunkId::from(1)].into_iter()) as Box<_>);
-        c2.get_mut()
-            .expect_add_chunk()
-            .return_const(Err(ArtifactErrorCode::ChunksMoreNeeded));
+        c2.get_mut().expect_add_chunk().return_const(Ok(()));
+        c2.get_mut().expect_completed().return_const(None);
         {
             let c2 = c2.clone();
             s2.get_mut()
@@ -704,7 +699,7 @@ fn test_state_sync_abortion() {
             .return_once(|| {
                 vec![StateSyncArtifactId {
                     height: Height::from(1),
-                    hash: CryptoHashOfState::from(CryptoHash(vec![])),
+                    hash: CryptoHash(vec![]),
                 }]
             });
         s1.get_mut()
@@ -735,7 +730,7 @@ fn test_state_sync_abortion() {
         c2.clear();
         c2.get_mut()
             .expect_add_chunk()
-            .returning(|_, _| Err(ArtifactErrorCode::ChunkVerificationFailed));
+            .returning(|_, _| Err(AddChunkError::Invalid));
         c2.get_mut()
             .expect_chunks_to_download()
             .returning(|| Box::new(vec![ChunkId::from(1)].into_iter()) as Box<_>);
@@ -752,7 +747,7 @@ fn test_state_sync_abortion() {
             .return_once(|| {
                 vec![StateSyncArtifactId {
                     height: Height::from(1),
-                    hash: CryptoHashOfState::from(CryptoHash(vec![])),
+                    hash: CryptoHash(vec![]),
                 }]
             });
         s2.get_mut().expect_available_states().return_const(vec![]);

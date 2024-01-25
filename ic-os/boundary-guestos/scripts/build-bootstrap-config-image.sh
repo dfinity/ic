@@ -112,7 +112,7 @@ options may be specified:
 
   --require_seo_certification
     flag to enforce certification for all crawler and bot requests that are redirected
-    to icx-proxy to bypass the service worker.
+    to icx-proxy.
 
   --require_underscore_certification
     flag to enforce certification for all requests going to /_/raw/ that are

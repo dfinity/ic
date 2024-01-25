@@ -1,7 +1,9 @@
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
+use ic_config::flag_status::FlagStatus;
 use ic_error_types::{ErrorCode, UserError};
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+use ic_replicated_state::canister_state::system_state::wasm_chunk_store;
 use ic_replicated_state::{ExecutionTask, ReplicatedState};
 use ic_state_machine_tests::{IngressState, IngressStatus};
 use ic_types::{
@@ -10,8 +12,8 @@ use ic_types::{
 
 use ic_ic00_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode,
-    CanisterInstallModeV2, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgs, Method, Payload,
-    UploadChunkArgs, UploadChunkReply,
+    CanisterInstallModeV2, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgs, InstallCodeArgsV2,
+    Method, Payload, UploadChunkArgs, UploadChunkReply,
 };
 use ic_replicated_state::canister_state::NextExecution;
 use ic_test_utilities_execution_environment::{
@@ -1435,7 +1437,9 @@ fn install_code_args(canister_id: CanisterId) -> InstallCodeArgs {
 fn install_chunked_works_from_whitelist() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
 
     let canister_id = test.create_canister(CYCLES);
 
@@ -1496,7 +1500,9 @@ fn install_chunked_works_from_whitelist() {
 fn install_chunked_defaults_to_using_target_as_store() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
 
     let canister_id = test.create_canister(CYCLES);
 
@@ -1544,7 +1550,9 @@ fn install_chunked_defaults_to_using_target_as_store() {
 fn install_chunked_recorded_in_history() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
 
     let canister_id = test.create_canister(CYCLES);
 
@@ -1612,7 +1620,9 @@ fn install_chunked_recorded_in_history() {
 fn install_chunked_works_from_other_canister() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
 
     let target_canister = test.create_canister(CYCLES);
     let store_canister = test.create_canister(CYCLES);
@@ -1659,7 +1669,9 @@ fn install_chunked_works_from_other_canister() {
 fn install_chunked_fails_with_wrong_chunk_hash() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
 
     let canister_id = test.create_canister(CYCLES);
 
@@ -1705,7 +1717,9 @@ fn install_chunked_fails_with_wrong_chunk_hash() {
 fn install_chunked_fails_with_wrong_wasm_hash() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
 
     let canister_id = test.create_canister(CYCLES);
 
@@ -1751,7 +1765,9 @@ fn install_chunked_fails_with_wrong_wasm_hash() {
 fn install_chunked_fails_when_store_canister_not_found() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
 
     let target_canister = test.create_canister(CYCLES);
     // Store canister doesn't actually exist.
@@ -1782,7 +1798,9 @@ fn install_chunked_fails_when_store_canister_not_found() {
 fn install_chunked_works_from_controller_of_store() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
 
     let store_canister = test.create_canister(CYCLES);
     let target_canister = test.create_canister(CYCLES);
@@ -1834,10 +1852,12 @@ fn install_chunked_works_from_controller_of_store() {
 }
 
 #[test]
-fn install_chunked_works_fails_from_noncontroller_of_store() {
+fn install_chunked_fails_from_noncontroller_of_store() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
 
     let store_canister = test.create_canister(CYCLES);
     let target_canister = test.create_canister(CYCLES);
@@ -2160,4 +2180,221 @@ fn upgrade_with_dts_correctly_updates_system_state() {
         .get_total_num_changes();
 
     assert_eq!(history_entries_before + 1, history_entries_after);
+}
+
+#[test]
+fn failed_install_chunked_charges_for_wasm_assembly() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
+
+    let canister_id = test.create_canister(CYCLES);
+
+    let wasm = wat::parse_str("(module)").unwrap();
+    let hash = UploadChunkReply::decode(&get_reply(
+        test.subnet_message(
+            "upload_chunk",
+            UploadChunkArgs {
+                canister_id: canister_id.into(),
+                chunk: wasm.to_vec(),
+            }
+            .encode(),
+        ),
+    ))
+    .unwrap()
+    .hash;
+
+    let mut wrong_hash = hash.clone();
+    wrong_hash[0] = wrong_hash[0].wrapping_add(1);
+
+    let initial_cycles = test.canister_state(canister_id).system_state.balance();
+
+    let method_name = "install_chunked_code";
+    let arg = InstallChunkedCodeArgs::new(
+        CanisterInstallModeV2::Install,
+        canister_id,
+        Some(canister_id),
+        vec![hash],
+        wrong_hash,
+        vec![],
+    )
+    .encode();
+
+    let expected_cost = test.cycles_account_manager().execution_cost(
+        NumInstructions::from(wasm_chunk_store::chunk_size().get()),
+        test.subnet_size(),
+    );
+
+    // Install the universal canister
+    let install_err = test.subnet_message(method_name, arg).unwrap_err();
+    assert_eq!(install_err.code(), ErrorCode::CanisterContractViolation);
+    let final_cycles = test.canister_state(canister_id).system_state.balance();
+    let charged_cycles = initial_cycles - final_cycles;
+    // There seems to be a rounding difference from prepay and refund.
+    assert!(
+        charged_cycles - expected_cost <= Cycles::from(1_u64)
+            && expected_cost - charged_cycles <= Cycles::from(1_u64),
+        "Charged cycles {} differs from expected cost {}",
+        charged_cycles,
+        expected_cost
+    );
+}
+
+#[test]
+fn successful_install_chunked_charges_for_wasm_assembly() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
+    let wasm = wat::parse_str("(module)").unwrap();
+
+    // Get the charges for a normal install
+    let charge_for_regular_install = {
+        let canister_id = test.create_canister(CYCLES);
+        let initial_cycles = test.canister_state(canister_id).system_state.balance();
+        let method_name = "install_code";
+        let arg = InstallCodeArgsV2::new(
+            CanisterInstallModeV2::Install,
+            canister_id,
+            wasm.clone(),
+            vec![],
+            None,
+            None,
+            None,
+        )
+        .encode();
+        let _response = test.subnet_message(method_name, arg).unwrap();
+        let final_cycles = test.canister_state(canister_id).system_state.balance();
+        initial_cycles - final_cycles
+    };
+
+    let canister_id = test.create_canister(CYCLES);
+
+    let hash = UploadChunkReply::decode(&get_reply(
+        test.subnet_message(
+            "upload_chunk",
+            UploadChunkArgs {
+                canister_id: canister_id.into(),
+                chunk: wasm.to_vec(),
+            }
+            .encode(),
+        ),
+    ))
+    .unwrap()
+    .hash;
+
+    let initial_cycles = test.canister_state(canister_id).system_state.balance();
+
+    let method_name = "install_chunked_code";
+    let arg = InstallChunkedCodeArgs::new(
+        CanisterInstallModeV2::Install,
+        canister_id,
+        Some(canister_id),
+        vec![hash.clone()],
+        hash,
+        vec![],
+    )
+    .encode();
+
+    // There is a fixed overhead in the `execution_cost` which we don't want to
+    // double count.
+    let fixed_execution_overhead = test
+        .cycles_account_manager()
+        .execution_cost(NumInstructions::from(0), test.subnet_size());
+    let expected_cost = test.cycles_account_manager().execution_cost(
+        NumInstructions::from(wasm_chunk_store::chunk_size().get()),
+        test.subnet_size(),
+    ) - fixed_execution_overhead
+        + charge_for_regular_install;
+
+    // Install the universal canister
+    let _response = test.subnet_message(method_name, arg).unwrap();
+    let final_cycles = test.canister_state(canister_id).system_state.balance();
+    let charged_cycles = initial_cycles - final_cycles;
+    // There seems to be a rounding difference from prepay and refund.
+    assert!(
+        charged_cycles - expected_cost <= Cycles::from(1_u64)
+            && expected_cost - charged_cycles <= Cycles::from(1_u64),
+        "Charged cycles {} differs from expected cost {}",
+        charged_cycles,
+        expected_cost
+    );
+}
+
+#[test]
+fn install_chunked_with_dts_works() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .with_install_code_instruction_limit(1_000_000_000)
+        .with_install_code_slice_instruction_limit(1_000)
+        .with_deterministic_time_slicing()
+        .build();
+
+    let canister_id = test.create_canister(CYCLES);
+
+    // Upload two chunks that make up the universal canister.
+    let dts_wasm = &wat::parse_str(DTS_INSTALL_WAT).unwrap();
+    let wasm_module_hash = ic_crypto_sha2::Sha256::hash(dts_wasm).to_vec();
+    let chunk1 = &dts_wasm[..dts_wasm.len() / 2];
+    let chunk2 = &dts_wasm[dts_wasm.len() / 2..];
+    let hash1 = UploadChunkReply::decode(&get_reply(
+        test.subnet_message(
+            "upload_chunk",
+            UploadChunkArgs {
+                canister_id: canister_id.into(),
+                chunk: chunk1.to_vec(),
+            }
+            .encode(),
+        ),
+    ))
+    .unwrap()
+    .hash;
+    let hash2 = UploadChunkReply::decode(&get_reply(
+        test.subnet_message(
+            "upload_chunk",
+            UploadChunkArgs {
+                canister_id: canister_id.into(),
+                chunk: chunk2.to_vec(),
+            }
+            .encode(),
+        ),
+    ))
+    .unwrap()
+    .hash;
+
+    // Do an install that triggers DTS.
+    let ingress_id = test.subnet_message_raw(
+        "install_chunked_code",
+        InstallChunkedCodeArgs::new(
+            CanisterInstallModeV2::Install,
+            canister_id,
+            Some(canister_id),
+            vec![hash1, hash2],
+            wasm_module_hash,
+            vec![],
+        )
+        .encode(),
+    );
+    test.execute_subnet_message();
+
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueInstallCode
+    );
+
+    test.execute_message(canister_id);
+
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None
+    );
+
+    let ingress_status = test.ingress_status(&ingress_id);
+    let result = check_ingress_status(ingress_status).unwrap();
+    assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
 }

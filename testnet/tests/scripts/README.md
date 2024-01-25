@@ -1,18 +1,8 @@
 In this directory you find scripts written to run various experiments against a testnet with IC OS tooling.
 
-To work with testnets __you need a Linux machine__ (e.g., zh1-spm34.zh1.dfinity.network).
+To work with testnets __you need a Linux machine__ (e.g., your `devenv` or zh1-spm34.zh1.dfinity.network).
 
-## Preparatory work with Nix
-
-With nix-shell, you should invoke all commands with a nix-shell loaded from `./testnet/tests/scripts`.
-
-For instance, the following can be used:
-```
-cd ./testnet/tests/scripts
-nix-shell
-[... run other commands ...]
-```
-## Preparatory work without Nix
+## Preparatory work
 
 Without Nix, you need to install some dependencies. For example, in Ubuntu you can run:
 ```

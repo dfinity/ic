@@ -5,7 +5,6 @@ use async_trait::async_trait;
 use candid::Principal;
 use ethnum::u256;
 use rand::seq::SliceRandom;
-use rayon::prelude::*;
 use tracing::{error, info};
 
 use crate::{
@@ -47,16 +46,16 @@ fn principal_bytes_to_u256(p: &[u8]) -> u256 {
 // This is more efficient than lexographically sorted hexadecimal strings as done in JS router
 // Currently the largest canister_id range is somewhere around 2^40 - so probably using one u128 would work for a long time
 // But going u256 makes it future proof and according to spec
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct RouteSubnet {
     pub id: String,
     pub range_start: u256,
     pub range_end: u256,
-    pub nodes: Vec<Node>,
+    pub nodes: Vec<Arc<Node>>,
 }
 
 impl RouteSubnet {
-    pub fn pick_random_nodes(&self, n: usize) -> Result<Vec<Node>, ErrorCause> {
+    pub fn pick_random_nodes(&self, n: usize) -> Result<Vec<Arc<Node>>, ErrorCause> {
         let nodes = self
             .nodes
             .choose_multiple(&mut rand::thread_rng(), n)
@@ -71,7 +70,7 @@ impl RouteSubnet {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Routes {
     pub node_count: u32,
     // subnets should be sorted by `range_start` field for the binary search to work
@@ -141,12 +140,12 @@ impl Persist for Persister {
         // Generate a list of subnets with a single canister range
         // Can contain several entries with the same subnet ID
         let mut rt_subnets = subnets
-            .into_par_iter()
-            .map(|subnet| {
+            .into_iter()
+            .flat_map(|subnet| {
                 let id = subnet.id.to_string();
                 let nodes = subnet.nodes;
 
-                subnet.ranges.into_par_iter().map(move |range| {
+                subnet.ranges.into_iter().map(move |range| {
                     Arc::new(RouteSubnet {
                         id: id.clone(),
                         range_start: principal_bytes_to_u256(range.start.as_slice()),
@@ -155,7 +154,6 @@ impl Persist for Persister {
                     })
                 })
             })
-            .flatten()
             .collect::<Vec<_>>();
 
         // Sort subnets by range_start for the binary search to work in lookup()

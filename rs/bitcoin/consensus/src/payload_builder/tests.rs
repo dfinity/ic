@@ -18,12 +18,12 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_test_utilities::{
-    mock_time,
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
     state::ReplicatedStateBuilder,
     types::ids::{node_test_id, subnet_test_id},
 };
 use ic_test_utilities_logger::with_test_replica_logger;
+use ic_test_utilities_time::mock_time;
 use ic_types::{
     batch::ValidationContext,
     crypto::{CryptoHash, CryptoHashOf},

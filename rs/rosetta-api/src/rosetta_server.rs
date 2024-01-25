@@ -398,7 +398,7 @@ impl RosettaApiServer {
             });
             std::fs::write(
                 listen_port_file,
-                server.addrs().get(0).unwrap().port().to_string(),
+                server.addrs().first().unwrap().port().to_string(),
             )
             .unwrap_or_else(|e| panic!("Unable to write to listen_port_file! Error: {}", e));
         }

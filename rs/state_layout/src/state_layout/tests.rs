@@ -1,19 +1,18 @@
 use super::*;
 
 use ic_ic00_types::{
-    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode, IC_00,
+    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode,
+    LogVisibility, IC_00,
 };
 use ic_replicated_state::canister_state::system_state::CanisterHistory;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use ic_test_utilities::types::ids::user_test_id;
-use ic_test_utilities::{
-    mock_time,
-    types::{
-        ids::canister_test_id,
-        messages::{IngressBuilder, RequestBuilder, ResponseBuilder},
-    },
+use ic_test_utilities::types::{
+    ids::canister_test_id,
+    messages::{IngressBuilder, RequestBuilder, ResponseBuilder},
 };
 use ic_test_utilities_logger::with_test_replica_logger;
+use ic_test_utilities_time::mock_time;
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_types::messages::{CanisterCall, CanisterMessage, CanisterMessageOrTask};
 use itertools::Itertools;
@@ -53,6 +52,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         canister_history: CanisterHistory::default(),
         wasm_chunk_store_metadata: WasmChunkStoreMetadata::default(),
         total_query_stats: TotalQueryStats::default(),
+        log_visibility: LogVisibility::default(),
     }
 }
 

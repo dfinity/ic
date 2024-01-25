@@ -25,14 +25,14 @@ use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology, Replicated
 use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_test_utilities::types::ids::subnet_test_id;
 use ic_test_utilities::{
-    mock_time,
     state::canister_from_exec_state,
     types::ids::{canister_test_id, user_test_id},
     types::messages::IngressBuilder,
 };
 use ic_test_utilities_execution_environment::generate_network_topology;
+use ic_test_utilities_time::mock_time;
 use ic_types::{
-    messages::{CallbackId, CanisterMessage, Payload, RejectContext},
+    messages::{CallbackId, CanisterMessage, Payload, RejectContext, RequestMetadata},
     methods::{Callback, WasmClosure},
     Cycles, MemoryAllocation, NumBytes, NumInstructions, Time,
 };
@@ -113,14 +113,19 @@ where
         .system_state
         .call_context_manager_mut()
         .unwrap()
-        .new_call_context(call_origin.clone(), Cycles::new(10), mock_time());
+        .new_call_context(
+            call_origin.clone(),
+            Cycles::new(10),
+            mock_time(),
+            RequestMetadata::new(0, mock_time()),
+        );
     let callback = Callback::new(
         call_context_id,
-        Some(canister_test_id(LOCAL_CANISTER_ID)),
-        Some(canister_test_id(REMOTE_CANISTER_ID)),
+        canister_test_id(LOCAL_CANISTER_ID),
+        canister_test_id(REMOTE_CANISTER_ID),
         Cycles::new(0),
-        None,
-        None,
+        Cycles::new(0),
+        Cycles::new(0),
         WasmClosure::new(0, 1),
         WasmClosure::new(0, 1),
         None,

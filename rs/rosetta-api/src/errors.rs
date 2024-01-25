@@ -349,6 +349,11 @@ pub struct Details {
     extra_fields: ObjectMap,
 }
 
+impl From<anyhow::Error> for Details {
+    fn from(value: anyhow::Error) -> Self {
+        Details::from(format!("{:?}", value))
+    }
+}
 #[test]
 fn details_serde_test() {
     let a_ser = r#"{"error_message":"foo","bar":{"bazz":1}}"#;

@@ -5,7 +5,7 @@ use crate::vault::test_utils::sks::secret_key_store_containing_key_with_invalid_
 use crate::vault::test_utils::sks::secret_key_store_with_duplicated_key_id_error_on_insert;
 use crate::LocalCspVault;
 use assert_matches::assert_matches;
-use ic_test_utilities::FastForwardTimeSource;
+use ic_test_utilities_time::FastForwardTimeSource;
 use ic_types_test_utils::ids::node_test_id;
 
 const NODE_1: u64 = 4241;

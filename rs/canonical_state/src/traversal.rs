@@ -64,10 +64,10 @@ mod tests {
         Memory,
     };
     use ic_test_utilities::{
-        mock_time,
         state::new_canister_state,
         types::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id},
     };
+    use ic_test_utilities_time::mock_time;
     use ic_types::{xnet::StreamHeader, CanisterId, Cycles, ExecutionRound};
     use ic_wasm_types::CanisterModule;
     use maplit::{btreemap, btreeset};

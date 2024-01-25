@@ -33,6 +33,8 @@ struct ChunkInfo {
     length: u64,
 }
 
+/// Uploaded chunks which can be assembled to create a Wasm module.
+/// It is cheap to clone because the data is stored in a [`PageMap`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WasmChunkStore {
     data: PageMap,
@@ -183,12 +185,21 @@ impl WasmChunkStore {
     }
 }
 
+/// Mapping from chunk hash to location in the store. It is cheap to clone
+/// because the size is limited to 100 entries.
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct WasmChunkStoreMetadata {
     /// Maps each chunk to its chunk index and length.
     chunks: BTreeMap<WasmChunkHash, ChunkInfo>,
     /// Total size of the data in the chunk store.
     size: NumPages,
+}
+
+// In order to make the metadata cheap to clone, we should ensure that the size
+// of the Map is limited to a small number of entries.
+#[test]
+fn wasm_chunk_store_cheap_clone() {
+    assert!(DEFAULT_MAX_SIZE / CHUNK_SIZE <= 100.into());
 }
 
 impl From<&WasmChunkStoreMetadata> for pb::WasmChunkStoreMetadata {

@@ -21,18 +21,17 @@ use crate::{
         dkg::Message as DkgMessage,
         ecdsa::{EcdsaArtifactId, EcdsaMessage, EcdsaMessageAttribute},
         ConsensusMessage, ConsensusMessageAttribute, ConsensusMessageHash,
-        ConsensusMessageHashable,
+        ConsensusMessageHashable, HasHash, HasHeight,
     },
     crypto::{crypto_hash, CryptoHash},
     filetree_sync::{FileTreeSyncArtifact, FileTreeSyncId},
     messages::{HttpRequestError, MessageId, SignedIngress, SignedRequestBytes},
     p2p::GossipAdvert,
-    CryptoHashOfState, Height, NodeId, Time,
+    Height, NodeId, Time,
 };
 use derive_more::{AsMut, AsRef, From, TryInto};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_protobuf::p2p::v1 as p2p_pb;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::types::{v1 as pb, v1::artifact::Kind};
 use serde::{Deserialize, Serialize};
@@ -371,6 +370,30 @@ pub struct ConsensusMessageId {
     pub height: Height,
 }
 
+impl HasHeight for ConsensusMessageId {
+    fn height(&self) -> Height {
+        self.height
+    }
+}
+
+impl HasHash for ConsensusMessageId {
+    fn hash(&self) -> &CryptoHash {
+        match &self.hash {
+            ConsensusMessageHash::RandomBeacon(hash) => hash.get_ref(),
+            ConsensusMessageHash::Finalization(hash) => hash.get_ref(),
+            ConsensusMessageHash::Notarization(hash) => hash.get_ref(),
+            ConsensusMessageHash::BlockProposal(hash) => hash.get_ref(),
+            ConsensusMessageHash::RandomBeaconShare(hash) => hash.get_ref(),
+            ConsensusMessageHash::NotarizationShare(hash) => hash.get_ref(),
+            ConsensusMessageHash::FinalizationShare(hash) => hash.get_ref(),
+            ConsensusMessageHash::RandomTape(hash) => hash.get_ref(),
+            ConsensusMessageHash::RandomTapeShare(hash) => hash.get_ref(),
+            ConsensusMessageHash::CatchUpPackage(hash) => hash.get_ref(),
+            ConsensusMessageHash::CatchUpPackageShare(hash) => hash.get_ref(),
+        }
+    }
+}
+
 impl From<ConsensusMessageId> for pb::ConsensusMessageId {
     fn from(value: ConsensusMessageId) -> Self {
         Self {
@@ -478,6 +501,21 @@ pub struct CertificationMessageId {
     pub height: Height,
 }
 
+impl HasHeight for CertificationMessageId {
+    fn height(&self) -> Height {
+        self.height
+    }
+}
+
+impl HasHash for CertificationMessageId {
+    fn hash(&self) -> &CryptoHash {
+        match &self.hash {
+            CertificationMessageHash::Certification(hash) => hash.get_ref(),
+            CertificationMessageHash::CertificationShare(hash) => hash.get_ref(),
+        }
+    }
+}
+
 impl From<CertificationMessageId> for pb::CertificationMessageId {
     fn from(value: CertificationMessageId) -> Self {
         Self {
@@ -521,6 +559,19 @@ impl From<&CertificationMessage> for CertificationMessageId {
     }
 }
 
+impl From<&CertificationMessage> for CertificationMessageHash {
+    fn from(msg: &CertificationMessage) -> CertificationMessageHash {
+        match msg {
+            CertificationMessage::Certification(cert) => {
+                CertificationMessageHash::Certification(crypto_hash(cert))
+            }
+            CertificationMessage::CertificationShare(share) => {
+                CertificationMessageHash::CertificationShare(crypto_hash(share))
+            }
+        }
+    }
+}
+
 // -----------------------------------------------------------------------------
 // ECDSA artifacts
 
@@ -530,16 +581,6 @@ pub type EcdsaMessageId = EcdsaArtifactId;
 // CanisterHttp artifacts
 
 pub type CanisterHttpResponseId = CanisterHttpResponseShare;
-
-// ------------------------------------------------------------------------------
-// StateSync artifacts.
-
-/// Identifier of a state sync artifact.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct StateSyncArtifactId {
-    pub height: Height,
-    pub hash: CryptoHashOfState,
-}
 
 // ------------------------------------------------------------------------------
 // Conversions
@@ -577,7 +618,7 @@ impl TryFrom<pb::Artifact> for Artifact {
             Kind::Dkg(x) => Artifact::DkgMessage(x.try_into()?),
             Kind::Ecdsa(x) => Artifact::EcdsaMessage(x.try_into()?),
             Kind::HttpShare(x) => Artifact::CanisterHttpMessage(x.try_into()?),
-            Kind::FileTreeSync(x) => Artifact::FileTreeSync(x.try_into()?),
+            Kind::FileTreeSync(x) => Artifact::FileTreeSync(x.into()),
         })
     }
 }
@@ -639,23 +680,5 @@ impl TryFrom<pb::CertificationMessageFilter> for CertificationMessageFilter {
         Ok(Self {
             height: Height::from(filter.height),
         })
-    }
-}
-
-impl From<StateSyncArtifactId> for p2p_pb::StateSyncId {
-    fn from(id: StateSyncArtifactId) -> Self {
-        Self {
-            height: id.height.get(),
-            hash: id.hash.get().0,
-        }
-    }
-}
-
-impl From<p2p_pb::StateSyncId> for StateSyncArtifactId {
-    fn from(id: p2p_pb::StateSyncId) -> Self {
-        Self {
-            height: Height::from(id.height),
-            hash: CryptoHashOfState::new(CryptoHash(id.hash)),
-        }
     }
 }

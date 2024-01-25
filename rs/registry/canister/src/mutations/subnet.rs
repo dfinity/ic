@@ -1,10 +1,12 @@
-use crate::mutations::common::get_subnet_ids_from_subnet_list;
-use crate::mutations::do_create_subnet::EcdsaInitialConfig;
-use crate::registry::Version;
 use crate::{
     common::LOG_PREFIX,
-    mutations::common::{decode_registry_value, encode_or_panic},
-    registry::Registry,
+    mutations::{
+        common::{
+            decode_registry_value, encode_or_panic, get_subnet_ids_from_subnet_list, has_duplicates,
+        },
+        do_create_subnet::EcdsaInitialConfig,
+    },
+    registry::{Registry, Version},
 };
 use candid::Encode;
 use dfn_core::call;
@@ -14,21 +16,25 @@ use ic_base_types::{
 use ic_ic00_types::{
     ComputeInitialEcdsaDealingsArgs, ComputeInitialEcdsaDealingsResponse, EcdsaKeyId,
 };
-use ic_protobuf::registry::crypto::v1::EcdsaSigningSubnetList;
-use ic_protobuf::registry::subnet::v1::EcdsaInitialization;
-use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord};
+use ic_protobuf::registry::{
+    crypto::v1::EcdsaSigningSubnetList,
+    subnet::v1::{CatchUpPackageContents, EcdsaInitialization, SubnetListRecord, SubnetRecord},
+};
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_ecdsa_signing_subnet_list_key,
     make_subnet_list_record_key, make_subnet_record_key,
 };
-use ic_registry_transport::pb::v1::{RegistryMutation, RegistryValue};
-use ic_registry_transport::upsert;
+use ic_registry_transport::{
+    pb::v1::{RegistryMutation, RegistryValue},
+    upsert,
+};
 use on_wire::bytes;
 use prost::Message;
-use std::collections::HashMap;
-use std::convert::TryInto;
-use std::iter::FromIterator;
-use std::{collections::HashSet, convert::TryFrom};
+use std::{
+    collections::{HashMap, HashSet},
+    convert::{TryFrom, TryInto},
+    iter::FromIterator,
+};
 
 impl Registry {
     /// Get the subnet record or panic on error with a message.
@@ -389,6 +395,19 @@ impl Registry {
                 ));
             }
         }
+
+        let ecdsa_key_ids: Vec<_> = ecdsa_initial_config
+            .keys
+            .iter()
+            .map(|key| key.key_id.clone())
+            .collect();
+        if has_duplicates(&ecdsa_key_ids) {
+            return Err(format!(
+                "The requested ECDSA key ids {:?} have duplicates",
+                ecdsa_key_ids
+            ));
+        }
+
         Ok(())
     }
 }

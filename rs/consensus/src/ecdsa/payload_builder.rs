@@ -28,7 +28,7 @@ use ic_types::{
     batch::ValidationContext,
     consensus::{
         ecdsa,
-        ecdsa::{EcdsaBlockReader, TranscriptAttributes},
+        ecdsa::{EcdsaBlockReader, HasEcdsaKeyId, TranscriptAttributes},
         Block, HasHeight,
     },
     crypto::{
@@ -477,20 +477,27 @@ pub(crate) fn create_data_payload(
             )
         };
         if is_key_transcript_created(ecdsa_payload)
-            && parent_block
+            && !parent_block
                 .payload
                 .as_ref()
                 .as_ecdsa()
-                .map(is_key_transcript_created)
-                .unwrap_or(false)
+                .is_some_and(is_key_transcript_created)
         {
-            ecdsa_payload_metrics.payload_metrics_inc("key_transcripts_created");
+            ecdsa_payload_metrics.payload_metrics_inc(
+                "key_transcripts_created",
+                ecdsa_payload.key_transcript.key_id(),
+            );
         }
 
         ecdsa_payload_metrics.report(ecdsa_payload);
     };
 
     Ok(new_payload)
+}
+
+pub(crate) enum CertifiedHeight {
+    ReachedSummaryHeight,
+    BelowSummaryHeight,
 }
 
 pub(crate) fn create_data_payload_helper(
@@ -551,6 +558,12 @@ pub(crate) fn create_data_payload_helper(
         .subnet_call_context_manager
         .ecdsa_dealings_contexts;
 
+    let certified_height = if context.certified_height >= summary_block.height() {
+        CertifiedHeight::ReachedSummaryHeight
+    } else {
+        CertifiedHeight::BelowSummaryHeight
+    };
+
     create_data_payload_helper_2(
         &mut ecdsa_payload,
         height,
@@ -558,6 +571,7 @@ pub(crate) fn create_data_payload_helper(
         &ecdsa_config,
         &enabled_signing_keys,
         next_interval_registry_version,
+        certified_height,
         &receivers,
         all_signing_requests,
         ecdsa_dealings_contexts,
@@ -577,6 +591,7 @@ pub(crate) fn create_data_payload_helper_2(
     ecdsa_config: &EcdsaConfig,
     enabled_signing_keys: &BTreeSet<EcdsaKeyId>,
     next_interval_registry_version: RegistryVersion,
+    certified_height: CertifiedHeight,
     receivers: &[NodeId],
     all_signing_requests: &BTreeMap<CallbackId, SignWithEcdsaContext>,
     ecdsa_dealings_contexts: &BTreeMap<CallbackId, EcdsaDealingsContext>,
@@ -598,7 +613,7 @@ pub(crate) fn create_data_payload_helper_2(
 
     let request_expiry_time = ecdsa_config
         .signature_request_timeout_ns
-        .and_then(|timeout| context_time.checked_sub_duration(Duration::from_nanos(timeout)));
+        .and_then(|timeout| context_time.checked_sub(Duration::from_nanos(timeout)));
     signatures::update_signature_agreements(all_signing_requests, signature_builder, ecdsa_payload);
     let new_signing_requests = get_signing_requests(
         height,
@@ -614,7 +629,17 @@ pub(crate) fn create_data_payload_helper_2(
         ecdsa_payload,
         log,
     )?;
-    quadruples::make_new_quadruples_if_needed(ecdsa_config, ecdsa_payload);
+
+    if matches!(certified_height, CertifiedHeight::ReachedSummaryHeight) {
+        quadruples::purge_old_key_quadruples(ecdsa_payload, all_signing_requests);
+    }
+
+    let matched_quadruples = all_signing_requests
+        .values()
+        .filter_map(|context| context.matched_quadruple.as_ref())
+        .filter(|(qid, _)| ecdsa_payload.available_quadruples.contains_key(qid))
+        .count();
+    quadruples::make_new_quadruples_if_needed(ecdsa_config, ecdsa_payload, matched_quadruples);
 
     let mut new_transcripts =
         quadruples::update_quadruples_in_creation(ecdsa_payload, transcript_builder, height, log)?;
@@ -1033,8 +1058,6 @@ fn update_next_key_transcript(
 
 #[cfg(test)]
 mod tests {
-    use super::signatures::test_utils::fake_sign_with_ecdsa_context;
-    use super::signatures::test_utils::fake_sign_with_ecdsa_context_with_batch_time;
     use super::*;
     use crate::consensus::batch_delivery::generate_responses_to_sign_with_ecdsa_calls;
     use crate::ecdsa::payload_builder::quadruples::test_utils::create_available_quadruple;
@@ -1057,11 +1080,9 @@ mod tests {
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::consensus::fake::{Fake, FakeContentSigner};
     use ic_test_utilities::types::ids::user_test_id;
-    use ic_test_utilities::{
-        mock_time,
-        types::ids::{node_test_id, subnet_test_id},
-    };
+    use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
+    use ic_test_utilities_time::mock_time;
     use ic_types::batch::BatchPayload;
     use ic_types::consensus::dkg::{Dealings, Summary};
     use ic_types::consensus::ecdsa::EcdsaPayload;
@@ -1224,20 +1245,22 @@ mod tests {
         assert!(signing_requets.is_empty());
 
         // Add two quadruples in creation
-        let quadruple_id_0 = ecdsa_payload.peek_next_quadruple_id();
+        let quadruple_id_0 = ecdsa_payload.peek_next_quadruple_id(key_id.clone());
         let (_kappa_config_ref, _lambda_config_ref) =
             quadruples::test_utils::create_new_quadruple_in_creation(
                 &subnet_nodes,
                 registry_version,
                 &mut ecdsa_payload.uid_generator,
+                key_id.clone(),
                 &mut ecdsa_payload.quadruples_in_creation,
             );
-        let quadruple_id_1 = ecdsa_payload.peek_next_quadruple_id();
+        let quadruple_id_1 = ecdsa_payload.peek_next_quadruple_id(key_id.clone());
         let (_kappa_config_ref, _lambda_config_ref) =
             quadruples::test_utils::create_new_quadruple_in_creation(
                 &subnet_nodes,
                 registry_version,
                 &mut ecdsa_payload.uid_generator,
+                key_id.clone(),
                 &mut ecdsa_payload.quadruples_in_creation,
             );
         let new_requests = get_signing_requests(
@@ -1330,8 +1353,10 @@ mod tests {
                 (key_id.clone(), [1; 32], non_expired_time),
             ]);
         // Add quadruples
-        let _discarded_quadruple_id = create_available_quadruple(&mut ecdsa_payload, 10);
-        let matched_quadruple_id = create_available_quadruple(&mut ecdsa_payload, 11);
+        let _discarded_quadruple_id =
+            create_available_quadruple(&mut ecdsa_payload, key_id.clone(), 10);
+        let matched_quadruple_id =
+            create_available_quadruple(&mut ecdsa_payload, key_id.clone(), 11);
 
         let result = get_signing_requests(
             Height::from(1),
@@ -1370,8 +1395,8 @@ mod tests {
         assert!(result.is_empty());
 
         // Add quadruples
-        create_available_quadruple(&mut ecdsa_payload, 10);
-        create_available_quadruple(&mut ecdsa_payload, 11);
+        create_available_quadruple(&mut ecdsa_payload, valid_key_id.clone(), 10);
+        create_available_quadruple(&mut ecdsa_payload, valid_key_id.clone(), 11);
 
         let result = get_signing_requests(
             height,
@@ -1810,7 +1835,7 @@ mod tests {
         let transcript_builder = TestEcdsaTranscriptBuilder::new();
         let max_ongoing_signatures = 1;
 
-        create_available_quadruple(&mut ecdsa_payload, 13);
+        create_available_quadruple(&mut ecdsa_payload, key_id.clone(), 13);
 
         let all_requests = get_signing_requests(
             Height::from(0),
@@ -1850,6 +1875,7 @@ mod tests {
             &EcdsaConfig::default(),
             &valid_keys,
             RegistryVersion::from(9),
+            CertifiedHeight::ReachedSummaryHeight,
             &[node_test_id(0)],
             &sign_with_ecdsa_contexts,
             &BTreeMap::default(),
@@ -1873,6 +1899,7 @@ mod tests {
             &EcdsaConfig::default(),
             &valid_keys,
             RegistryVersion::from(9),
+            CertifiedHeight::ReachedSummaryHeight,
             &[node_test_id(0)],
             &sign_with_ecdsa_contexts,
             &BTreeMap::default(),
@@ -1987,10 +2014,15 @@ mod tests {
 
             // Create a payload block with references to these past blocks
             let mut ecdsa_payload = empty_ecdsa_payload(subnet_id);
+            let key_id = ecdsa_payload.key_transcript.key_id.clone();
             ecdsa_payload.key_transcript.current = Some(current_key_transcript.clone());
             let (quadruple_id_1, quadruple_id_2) = (
-                ecdsa_payload.uid_generator.next_quadruple_id(),
-                ecdsa_payload.uid_generator.next_quadruple_id(),
+                ecdsa_payload
+                    .uid_generator
+                    .next_quadruple_id(key_id.clone()),
+                ecdsa_payload
+                    .uid_generator
+                    .next_quadruple_id(key_id.clone()),
             );
             let req_id_1 = ecdsa::RequestId {
                 quadruple_id: quadruple_id_1.clone(),
@@ -2028,13 +2060,13 @@ mod tests {
             add_expected_transcripts(reshare_params_1.as_ref().get_refs());
 
             // Add some quadruples in creation
-            // let next_quadruple_id = ecdsa_payload.uid_generator.next_quadruple_id();
             let block_reader = TestEcdsaBlockReader::new();
             let (kappa_config_ref, _lambda_config_ref) =
                 quadruples::test_utils::create_new_quadruple_in_creation(
                     &subnet_nodes,
                     env.newest_registry_version,
                     &mut ecdsa_payload.uid_generator,
+                    key_id.clone(),
                     &mut ecdsa_payload.quadruples_in_creation,
                 );
             let kappa_transcript = {
@@ -2275,8 +2307,9 @@ mod tests {
             // Create a payload block with references to these past blocks
             let mut ecdsa_payload = empty_ecdsa_payload(subnet_id);
             let uid_generator = &mut ecdsa_payload.uid_generator;
-            let quadruple_id_1 = uid_generator.next_quadruple_id();
-            let quadruple_id_2 = uid_generator.next_quadruple_id();
+            let key_id = ecdsa_payload.key_transcript.key_id.clone();
+            let quadruple_id_1 = uid_generator.next_quadruple_id(key_id.clone());
+            let quadruple_id_2 = uid_generator.next_quadruple_id(key_id.clone());
             ecdsa_payload.key_transcript.current = Some(current_key_transcript.clone());
             let req_id_1 = ecdsa::RequestId {
                 quadruple_id: quadruple_id_1.clone(),
@@ -2314,6 +2347,7 @@ mod tests {
                     &subnet_nodes,
                     env.newest_registry_version,
                     &mut ecdsa_payload.uid_generator,
+                    key_id.clone(),
                     &mut ecdsa_payload.quadruples_in_creation,
                 );
             let kappa_transcript = {
@@ -2726,7 +2760,7 @@ mod tests {
             );
             let test_inputs = TestSigInputs::from(&sig_inputs);
             payload_0.available_quadruples.insert(
-                payload_0.uid_generator.next_quadruple_id(),
+                payload_0.uid_generator.next_quadruple_id(key_id.clone()),
                 test_inputs.sig_inputs_ref.presig_quadruple_ref.clone(),
             );
             for (transcript_ref, transcript) in test_inputs.idkg_transcripts {
@@ -2736,6 +2770,7 @@ mod tests {
                 &env.nodes.ids::<Vec<_>>(),
                 env.newest_registry_version,
                 &mut payload_0.uid_generator,
+                key_id.clone(),
                 &mut payload_0.quadruples_in_creation,
             );
             payload_0.ongoing_xnet_reshares.insert(
@@ -2878,6 +2913,8 @@ mod tests {
             assert_eq!(metrics.critical_error_ecdsa_key_transcript_missing.get(), 1);
 
             // Now, quadruples and xnet reshares should be purged
+            // TODO(CON-1149): Extend once available quadruples are no longer immediately purged
+            // on key reshares.
             assert!(payload_4.available_quadruples.is_empty());
             assert!(payload_4.quadruples_in_creation.is_empty());
             assert!(payload_4.ongoing_xnet_reshares.is_empty());
@@ -2946,6 +2983,7 @@ mod tests {
                 &ecdsa_config,
                 &valid_keys,
                 registry_version,
+                CertifiedHeight::ReachedSummaryHeight,
                 &node_ids,
                 &BTreeMap::default(),
                 &BTreeMap::default(),
@@ -3111,6 +3149,7 @@ mod tests {
                 &ecdsa_config,
                 &valid_keys,
                 registry_version,
+                CertifiedHeight::ReachedSummaryHeight,
                 &node_ids,
                 &BTreeMap::default(),
                 &BTreeMap::default(),
@@ -3139,6 +3178,7 @@ mod tests {
                 &ecdsa_config,
                 &valid_keys,
                 registry_version,
+                CertifiedHeight::ReachedSummaryHeight,
                 &node_ids,
                 &BTreeMap::default(),
                 &BTreeMap::default(),
@@ -3165,6 +3205,7 @@ mod tests {
                 &ecdsa_config,
                 &valid_keys,
                 registry_version,
+                CertifiedHeight::ReachedSummaryHeight,
                 &node_ids,
                 &BTreeMap::default(),
                 &BTreeMap::default(),

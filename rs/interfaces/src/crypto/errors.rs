@@ -314,6 +314,8 @@ impl ErrorReproducibility for ThresholdEcdsaVerifySigShareError {
             Self::SerializationError { .. } => true,
             // The share included an invalid commitment type
             Self::InternalError { .. } => true,
+            // true, as validity checks of arguments are stable across replicas
+            Self::InvalidArguments(_) => true,
         }
     }
 }
@@ -334,6 +336,8 @@ impl ErrorReproducibility for ThresholdEcdsaVerifyCombinedSignatureError {
             Self::SerializationError { .. } => true,
             // Invalid commitment type or wrong algorithm ID
             Self::InternalError { .. } => true,
+            // true, as validity checks of arguments are stable across replicas
+            Self::InvalidArguments(_) => true,
         }
     }
 }

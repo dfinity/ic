@@ -122,7 +122,7 @@ impl Notary {
         if let Some(start_time) = pool.get_round_start_time(height) {
             let now = self.time_source.get_relative_time();
             if now >= start_time + adjusted_notary_delay {
-                return Some(now.saturating_sub(start_time));
+                return Some(now.saturating_duration_since(start_time));
             }
         }
         None

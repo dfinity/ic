@@ -53,6 +53,7 @@ serde = { workspace = true }
 build-info-build = { workspace = true }
 
 [dev-dependencies]
+candid_parser = { workspace = true }
 proptest = "1.0"
 pretty_assertions = { workspace = true }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }

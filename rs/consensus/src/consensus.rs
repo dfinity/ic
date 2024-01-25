@@ -538,7 +538,8 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
             let unit_delay = settings.unit_delay;
             let current_time = self.time_source.get_relative_time();
             for (component, last_invoked_time) in self.last_invoked.borrow().iter() {
-                let time_since_last_invoked = current_time.saturating_sub(*last_invoked_time);
+                let time_since_last_invoked =
+                    current_time.saturating_duration_since(*last_invoked_time);
                 let component_name = component.as_ref();
                 self.metrics
                     .time_since_last_invoked
@@ -739,9 +740,9 @@ mod tests {
         self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
         types::ids::{node_test_id, subnet_test_id},
         xnet_payload_builder::FakeXNetPayloadBuilder,
-        FastForwardTimeSource,
     };
     use ic_test_utilities_registry::{FakeLocalStoreCertifiedTimeReader, SubnetRecordBuilder};
+    use ic_test_utilities_time::FastForwardTimeSource;
     use ic_types::{crypto::CryptoHash, CryptoHashOfState, SubnetId};
     use std::{sync::Arc, time::Duration};
 

@@ -70,6 +70,7 @@ ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-execution-environment = { path = "../test_utilities/execution_environment" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
+ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }
 ic-wasm-types = { path = "../types/wasm_types" }
@@ -79,7 +80,7 @@ proptest = "1.0"
 tempfile = "3.1.0"
 test-strategy = "0.2"
 wat = "1.0.52"
-wasmparser = "0.115.0"
+wasmparser = "0.116.1"
 
 [build-dependencies]
 escargot = "0.5"

@@ -16,9 +16,12 @@ use ic_system_api::{
     ExecutionParameters, InstructionLimits, SystemApiImpl,
 };
 use ic_test_utilities::{
-    cycles_account_manager::CyclesAccountManagerBuilder, mock_time, types::ids::canister_test_id,
+    cycles_account_manager::CyclesAccountManagerBuilder, types::ids::canister_test_id,
 };
-use ic_types::{ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions};
+use ic_test_utilities_time::mock_time;
+use ic_types::{
+    messages::RequestMetadata, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
+};
 use ic_wasm_types::BinaryEncodedWasm;
 
 use lazy_static::lazy_static;
@@ -50,6 +53,7 @@ fn test_wasmtime_system_api() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
+        RequestMetadata::new(0, mock_time()),
     );
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);

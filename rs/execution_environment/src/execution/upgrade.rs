@@ -5,6 +5,7 @@
 
 use std::sync::Arc;
 
+use crate::as_round_instructions;
 use crate::canister_manager::{
     DtsInstallCodeResult, InstallCodeContext, PausedInstallCodeExecution,
 };
@@ -25,7 +26,10 @@ use ic_replicated_state::{
 };
 use ic_system_api::ApiType;
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
-use ic_types::{funds::Cycles, messages::CanisterCall};
+use ic_types::{
+    funds::Cycles,
+    messages::{CanisterCall, RequestMetadata},
+};
 
 #[cfg(test)]
 mod tests;
@@ -148,6 +152,7 @@ pub(crate) fn execute_upgrade(
             helper.canister_message_memory_usage(),
             helper.execution_parameters().clone(),
             FuncRef::Method(method),
+            RequestMetadata::for_new_call_tree(original.time),
             round_limits,
             round.network_topology,
         );
@@ -245,13 +250,30 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
 ) -> DtsInstallCodeResult {
     let canister_id = helper.canister().canister_id();
     let context_sender = context.sender();
-    let module_hash = context.wasm_module.module_hash();
+
+    let instructions_to_assemble = context.wasm_source.instructions_to_assemble();
+    helper.charge_for_large_wasm_assembly(instructions_to_assemble);
+    round_limits.instructions -= as_round_instructions(instructions_to_assemble);
+    let wasm_module = match context.wasm_source.into_canister_module() {
+        Ok(wasm_module) => wasm_module,
+        Err(err) => {
+            return finish_err(
+                clean_canister,
+                helper.instructions_left(),
+                original,
+                round,
+                err,
+            );
+        }
+    };
+
+    let module_hash = wasm_module.module_hash();
     // Stage 2: create a new execution state based on the new Wasm code, deactivate global timer, and bump canister version.
     // Replace the execution state of the canister with a new execution state, but
     // persist the stable memory (if it exists).
     let layout = canister_layout(&original.canister_layout_path, &canister_id);
     let (instructions_from_compilation, result) = round.hypervisor.create_execution_state(
-        context.wasm_module,
+        wasm_module,
         layout.raw_path(),
         canister_id,
         round_limits,
@@ -298,6 +320,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
             helper.canister_message_memory_usage(),
             helper.execution_parameters().clone(),
             FuncRef::Method(method),
+            RequestMetadata::for_new_call_tree(original.time),
             round_limits,
             round.network_topology,
         );
@@ -414,6 +437,7 @@ fn upgrade_stage_4a_call_post_upgrade(
         helper.canister_message_memory_usage(),
         helper.execution_parameters().clone(),
         FuncRef::Method(method),
+        RequestMetadata::for_new_call_tree(original.time),
         round_limits,
         round.network_topology,
     );

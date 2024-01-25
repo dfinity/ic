@@ -10,7 +10,7 @@ use crate::page_map::PageAllocatorFileDescriptor;
 use crate::{CanisterQueues, CanisterState, InputQueueType, PageMap, StateError};
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::NumSeconds;
-use ic_ic00_types::{CanisterChange, CanisterChangeDetails, CanisterChangeOrigin};
+use ic_ic00_types::{CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, LogVisibility};
 use ic_logger::{error, ReplicaLogger};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -331,6 +331,9 @@ pub struct SystemState {
 
     /// Store of Wasm chunks to support installation of large Wasm modules.
     pub wasm_chunk_store: WasmChunkStore,
+
+    /// Log visibility of the canister.
+    pub log_visibility: LogVisibility,
 }
 
 /// A wrapper around the different canister statuses.
@@ -579,8 +582,7 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                 };
                 let prepaid_execution_cycles = aborted
                     .prepaid_execution_cycles
-                    .map(|c| c.try_into())
-                    .transpose()?
+                    .map(|c| c.into())
                     .unwrap_or_else(Cycles::zero);
                 ExecutionTask::AbortedExecution {
                     input,
@@ -598,8 +600,7 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                 };
                 let prepaid_execution_cycles = aborted
                     .prepaid_execution_cycles
-                    .map(|c| c.try_into())
-                    .transpose()?
+                    .map(|c| c.into())
                     .unwrap_or_else(Cycles::zero);
                 let call_id = aborted.call_id.ok_or(ProxyDecodeError::MissingField(
                     "AbortedInstallCode::call_id",
@@ -702,6 +703,7 @@ impl SystemState {
             canister_version: 0,
             canister_history: CanisterHistory::default(),
             wasm_chunk_store,
+            log_visibility: LogVisibility::default(),
         }
     }
 
@@ -745,6 +747,7 @@ impl SystemState {
         canister_history: CanisterHistory,
         wasm_chunk_store_data: PageMap,
         wasm_chunk_store_metadata: WasmChunkStoreMetadata,
+        log_visibility: LogVisibility,
     ) -> Self {
         Self {
             controllers,
@@ -767,6 +770,7 @@ impl SystemState {
                 wasm_chunk_store_data,
                 wasm_chunk_store_metadata,
             ),
+            log_visibility,
         }
     }
 

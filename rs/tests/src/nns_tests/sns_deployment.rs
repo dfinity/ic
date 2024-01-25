@@ -812,7 +812,7 @@ impl SaleParticipant {
 
 impl Identity for SaleParticipant {
     fn sender(&self) -> Result<Principal, String> {
-        let principal = Principal::try_from(self.principal_id).unwrap();
+        let principal = Principal::from(self.principal_id);
         Ok(principal)
     }
     fn public_key(&self) -> Option<Vec<u8>> {
@@ -872,7 +872,7 @@ pub fn add_one_participant(env: TestEnv) {
             nns_node.get_public_url().as_str(),
             wealthy_user_identity.clone(),
         ));
-        let ledger_canister_id = Principal::try_from(LEDGER_CANISTER_ID.get()).unwrap();
+        let ledger_canister_id = Principal::from(LEDGER_CANISTER_ID.get());
         Icrc1Agent {
             agent,
             ledger_canister_id,
@@ -991,7 +991,7 @@ pub fn add_one_participant(env: TestEnv) {
         "Second update call to `icp_ledger.transfer` returned {block_idx_2:?} (elapsed {:?})",
         start_time.elapsed()
     );
-    assert_eq!(block_idx_1 + 1, block_idx_2);
+    assert_eq!(block_idx_1 + 1u8, block_idx_2);
 
     info!(log, "Validating the participation setup by calling `sns_sale.refresh_buyer_tokens` in two different ways ...");
     // Use the default identity to call refresh_buyer_tokens for the wealthy user
@@ -1101,7 +1101,7 @@ pub fn generate_ticket_participants_workload(
         let sns_node = env.get_first_healthy_application_node_snapshot();
         let sns_client = SnsClient::read_attribute(env);
         let sns_request_provider = SnsRequestProvider::from_sns_client(&sns_client);
-        let ledger_canister_id = Principal::try_from(LEDGER_CANISTER_ID.get()).unwrap();
+        let ledger_canister_id = Principal::from(LEDGER_CANISTER_ID.get());
 
         move |idx| {
             let (nns_node, app_node) = (nns_node.clone(), sns_node.clone());

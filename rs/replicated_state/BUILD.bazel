@@ -51,6 +51,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/test_utils/keys",
     "//rs/criterion_time",
     "//rs/test_utilities",
+    "//rs/test_utilities/time",
     "@crate_index//:assert_matches",
     "@crate_index//:ic-btc-test-utils",
     "@crate_index//:criterion",
@@ -58,7 +59,6 @@ DEV_DEPENDENCIES = [
     "@crate_index//:prost",
     "@crate_index//:scoped_threadpool",
     "@crate_index//:serde_cbor",
-    "@crate_index//:static_assertions",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

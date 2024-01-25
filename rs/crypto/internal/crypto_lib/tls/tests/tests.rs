@@ -337,7 +337,7 @@ fn should_generate_non_ca_cert() {
 fn should_create_cert_that_passes_node_key_validation() {
     let node_id = node_id(4242);
     let not_before = GENESIS
-        .saturating_sub_duration(Duration::from_secs(1000))
+        .saturating_sub(Duration::from_secs(1000))
         .as_secs_since_unix_epoch();
     let not_after = datetime!(9999-12-31 23:59:59 UTC).unix_timestamp() as u64;
     let current_time = GENESIS;

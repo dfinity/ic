@@ -1,6 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_test_suite")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:defs.bzl", "rust_bench")
+load("//bazel:defs.bzl", "rust_ic_bench", "rust_ic_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -36,21 +35,17 @@ MACRO_DEV_DEPENDENCIES = []
 
 ALIASES = {}
 
-rust_bench(
+rust_ic_bench(
     name = "json_bench",
     testonly = True,
     srcs = ["benches/json.rs"],
     crate_root = "benches/json.rs",
     data = [
         ":json",
-        "//rs/canister_sandbox",
-        "//rs/canister_sandbox/sandbox_launcher",
     ],
     env = {
         "JSON_WASM_PATH": "$(rootpath :json)",
         "CARGO_MANIFEST_DIR": "rs/rust_canisters/tests/",
-        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     },
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
@@ -110,7 +105,7 @@ rust_canister(
     deps = DEPENDENCIES,
 )
 
-rust_test_suite(
+rust_ic_test_suite(
     name = "tests_test",
     srcs = glob(["test/**/*.rs"]),
     aliases = ALIASES,
@@ -121,8 +116,6 @@ rust_test_suite(
         ":panics",
         ":stable",
         ":time",
-        "//rs/canister_sandbox",
-        "//rs/canister_sandbox/sandbox_launcher",
     ],
     env = {
         "NAN_CANONICALIZED_WASM_PATH": "$(rootpath :nan_canonicalized)",
@@ -130,8 +123,6 @@ rust_test_suite(
         "TIME_WASM_PATH": "$(rootpath :time)",
         "PANICS_WASM_PATH": "$(rootpath :panics)",
         "JSON_WASM_PATH": "$(rootpath :json)",
-        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
         "CARGO_MANIFEST_DIR": "rs/rust_canisters/tests",
         "INTER_CANISTER_ERROR_HANDLING_WASM_PATH": "$(rootpath :inter_canister_error_handling)",
     },

@@ -269,7 +269,7 @@ impl KeyDerParser {
         if let ASN1Block::Sequence(_offset_oid, oid_parts) = oid_seq {
             if oid_parts.len() == 1 || oid_parts.len() == 2 {
                 let algo_oid = oid_parts
-                    .get(0)
+                    .first()
                     .expect("Missing OID from algorithm identifier");
                 let algo_params = oid_parts.get(1);
 

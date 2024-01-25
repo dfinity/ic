@@ -44,6 +44,13 @@ pub struct RequestMetadata {
     pub call_tree_depth: ::core::option::Option<u64>,
     #[prost(uint64, optional, tag = "2")]
     pub call_tree_start_time_nanos: ::core::option::Option<u64>,
+    /// A point in the future vs. `call_tree_start_time` at which a request would ideally have concluded
+    /// its lifecycle on the IC. Unlike `call_tree_depth` and `call_tree_start_time`, the deadline
+    /// does not have to be a constant for the whole call tree. Rather it's valid only for the subtree of
+    /// downstream calls at any point in the tree, i.e. it is allowed and desirable for a subtree to have
+    /// a tighter deadline than the tree as whole.
+    ///
+    /// Reserved for future use (guaranteed replies won't be affected).
     #[prost(uint64, optional, tag = "3")]
     pub call_subtree_deadline_nanos: ::core::option::Option<u64>,
 }

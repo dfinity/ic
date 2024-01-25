@@ -208,6 +208,10 @@ where
             Box::new(std::iter::empty())
         }
     }
+
+    fn size(&self) -> usize {
+        self.select_index::<CryptoHashOf<T>>().size()
+    }
 }
 
 impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> PoolSection<T>
@@ -327,7 +331,7 @@ pub mod test {
 
     #[test]
     fn test_iterate_with_large_range() {
-        assert!(ic_test_utilities::with_timeout(
+        assert!(ic_test_utilities_time::with_timeout(
             std::time::Duration::new(12, 0),
             || {
                 let mut pool = InMemoryPoolSection::new(ic_logger::replica_logger::no_op_logger());
@@ -346,7 +350,7 @@ pub mod test {
 
     #[test]
     fn test_purging() {
-        assert!(ic_test_utilities::with_timeout(
+        assert!(ic_test_utilities_time::with_timeout(
             std::time::Duration::new(12, 0),
             || {
                 let beacons = (1..=10)

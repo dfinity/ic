@@ -5,7 +5,7 @@ use super::{
 use crate::{
     canister_state::queues::CanisterQueuesLoopDetector,
     canister_state::system_state::{push_input, CanisterOutputQueuesIterator},
-    metadata_state::StreamMap,
+    metadata_state::{subnet_call_context_manager::SignWithEcdsaContext, StreamMap},
     CanisterQueues,
 };
 use ic_base_types::PrincipalId;
@@ -564,6 +564,14 @@ impl ReplicatedState {
     /// Returns all subnets for which a stream is available.
     pub fn subnets_with_available_streams(&self) -> Vec<SubnetId> {
         self.metadata.streams.keys().cloned().collect()
+    }
+
+    /// Returns all sign with ECDSA contexts
+    pub fn sign_with_ecdsa_contexts(&self) -> &BTreeMap<CallbackId, SignWithEcdsaContext> {
+        &self
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_ecdsa_contexts
     }
 
     /// Retrieves a reference to the stream from this subnet to the destination

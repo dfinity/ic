@@ -378,7 +378,7 @@ mod test {
         }
 
         assert_eq!(cached_blocks.len(), 1);
-        let block = cached_blocks.get(0).expect("there should be 1");
+        let block = cached_blocks.first().expect("there should be 1");
         assert_eq!(block.block_hash(), block_1_hash);
     }
 

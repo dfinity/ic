@@ -8,6 +8,7 @@
 #   build_fat32_image -s 10M -o partition.img.tar -p boot/efi -i dockerimg.tar
 #
 import argparse
+import atexit
 import os
 import subprocess
 import sys
@@ -113,7 +114,8 @@ def main():
     limit_prefix = args.path
     extra_files = args.extra_files
 
-    tmpdir = tempfile.mkdtemp()
+    tmpdir = tempfile.mkdtemp(prefix="icosbuild")
+    atexit.register(lambda: subprocess.run(["rm", "-rf", tmpdir], check=True))
 
     fs_basedir = os.path.join(tmpdir, "fs")
     os.mkdir(fs_basedir)

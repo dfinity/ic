@@ -31,14 +31,14 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 slog = { workspace = true }
 slog-term = "2.6.0"
-wasmtime = { version = "14.0.4", default-features = false, features = [
+wasmtime = { version = "15.0.0", default-features = false, features = [
     'cranelift',
     'parallel-compilation',
 ] }
-wasmtime-environ = "14.0.4"
-wasmtime-runtime = "14.0.4"
-wasm-encoder = "0.35.0"
-wasmparser = "0.115.0"
+wasmtime-environ = "15.0.0"
+wasmtime-runtime = "15.0.0"
+wasm-encoder = "0.36.2"
+wasmparser = "0.116.1"
 rayon = "1.5.1"
 
 
@@ -52,6 +52,7 @@ ic-system-api = { path = "../system_api" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-execution-environment = { path = "../test_utilities/execution_environment" }
+ic-test-utilities-time = { path = "../test_utilities/time" }
 lazy_static = "1.4.0"
 maplit = "1.0.2"
 proptest = "1.0"

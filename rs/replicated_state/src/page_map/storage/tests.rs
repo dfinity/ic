@@ -260,7 +260,7 @@ fn storage_files(dir: &Path) -> StorageFiles {
     assert!(bases.len() <= 1);
 
     StorageFiles {
-        base: bases.get(0).cloned(),
+        base: bases.first().cloned(),
         overlays,
     }
 }

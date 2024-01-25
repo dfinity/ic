@@ -22,6 +22,11 @@
     },
 
     // ============================================
+    // Configuration of the domain name
+    // ============================================
+    domain: "{{ domain }}",
+
+    // ============================================
     // Configuration of registry client
     // ============================================
     registry_client: {
@@ -216,11 +221,11 @@ table ip6 filter {\n\
     iif lo accept\n\
     ct state { invalid } drop\n\
     ct state { established, related } accept\n\
-    ct state new add @rate_limit { ip6 saddr limit rate over 1000/minute } drop\n\
+    ct state new add @rate_limit { ip6 saddr limit rate over 100000/minute } log prefix \"Drop - rate limit: \" drop\n\
     #  Notes about the rule below:\n\
     #   - The rule allows a maximum of <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> persistent connections to any ip6 address.\n\
     #   - The rule drops all new connections that goes over the configured limit.\n\
-    ct state new add @connection_limit { ip6 saddr ct count over <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> } drop\n\
+    ct state new add @connection_limit { ip6 saddr ct count over <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> } log prefix \"Drop - connection limit: \" drop\n\
     icmpv6 type destination-unreachable accept\n\
     icmpv6 type packet-too-big accept\n\
     icmpv6 type time-exceeded accept\n\
@@ -230,8 +235,10 @@ table ip6 filter {\n\
     icmpv6 type nd-router-advert accept\n\
     icmpv6 type nd-neighbor-solicit accept\n\
     icmpv6 type nd-neighbor-advert accept\n\
+    ip6 saddr { hostos } ct state { new } tcp dport { 42372 } accept # Allow access from HostOS metrics-proxy so GuestOS metrics-proxy can proxy certain metrics to HostOS.\n\
     <<IPv6_TCP_RULES>>\n\
     <<IPv6_UDP_RULES>>\n\
+    log prefix \"Drop - default policy: \"\n\
   }\n\
 \n\
   chain FORWARD {\n\
@@ -328,14 +335,14 @@ table ip6 filter {\n\
             "2a0f:cd00:0002::/56",
             "fd00:2:1:1::/64",
           ],
-          ports: [22, 2497, 4100, 7070, 8080, 9090, 9091, 9100, 19531],
+          ports: [22, 2497, 4100, 7070, 8080, 9090, 9091, 9100, 19100, 19531],
           action: 1,
           comment: "Default rule from template",
           direction: 1,
         }],
         tcp_ports_for_node_whitelist: [2497, 4100, 8080],
         udp_ports_for_node_whitelist: [4100],
-        ports_for_http_adapter_blacklist: [22, 2497, 4100, 7070, 8080, 9090, 9091, 9100, 19531],
+        ports_for_http_adapter_blacklist: [22, 2497, 4100, 7070, 8080, 9090, 9091, 9100, 19100, 19531],
         max_simultaneous_connections_per_ip_address: 100,
     },
 

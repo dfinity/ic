@@ -400,7 +400,7 @@ fn evaluate_at(points: &[EccPoint], eval_point: NodeIndex) -> ThresholdEcdsaResu
 
     let mut acc = EccPoint::identity(curve_type);
     for pt in points.iter().rev() {
-        acc = acc.mul_by_node_index(eval_point)?;
+        acc = acc.mul_by_node_index_vartime(eval_point)?;
         acc = acc.add_points(pt)?;
     }
     Ok(acc)
@@ -600,7 +600,7 @@ impl PolynomialCommitment {
         self.points().len()
     }
 
-    pub(crate) fn evaluate_at(&self, eval_point: NodeIndex) -> ThresholdEcdsaResult<EccPoint> {
+    pub fn evaluate_at(&self, eval_point: NodeIndex) -> ThresholdEcdsaResult<EccPoint> {
         evaluate_at(self.points(), eval_point)
     }
 

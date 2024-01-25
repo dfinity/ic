@@ -143,9 +143,8 @@ NODES=0
 VALUES=$(echo ${CONFIG} \
     | jq -r -c '.datacenters[]
 | .aux_nodes[] += { "type": "aux" } | .boundary_nodes[] += {"type": "boundary"} | .nodes[] += { "type": "replica" }
-| [.aux_nodes[], .boundary_nodes[], .nodes[]][] + { "ipv6_prefix": .ipv6_prefix, "ipv6_subnet": .ipv6_subnet } | [
+| [.aux_nodes[], .boundary_nodes[], .nodes[]][] + { "ipv6_prefix": .ipv6_prefix } | [
     .ipv6_prefix,
-    .ipv6_subnet,
     .ipv6_address,
     .hostname,
     .subnet_type,
@@ -154,10 +153,9 @@ VALUES=$(echo ${CONFIG} \
     .use_hsm,
     .type
 ] | join("\u0001")')
-while IFS=$'\1' read -r ipv6_prefix ipv6_subnet ipv6_address hostname subnet_type subnet_idx node_idx use_hsm type; do
+while IFS=$'\1' read -r ipv6_prefix ipv6_address hostname subnet_type subnet_idx node_idx use_hsm type; do
     eval "declare -A __RAW_NODE_${NODES}=(
         ['ipv6_prefix']=${ipv6_prefix}
-        ['ipv6_subnet']=${ipv6_subnet}
         ['ipv6_address']=${ipv6_address}
         ['hostname']=${hostname}
         ['subnet_type']=${subnet_type}

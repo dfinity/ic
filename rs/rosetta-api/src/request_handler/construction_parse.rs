@@ -3,7 +3,7 @@ use crate::errors::ApiError;
 use crate::models::{ConstructionParseRequest, ConstructionParseResponse, ParsedTransaction};
 use crate::request_handler::{verify_network_id, RosettaRequestHandler};
 use crate::request_types::{
-    AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, MergeMaturity, NeuronInfo,
+    AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity, NeuronInfo,
     PublicKeyOrPrincipal, RegisterVote, RemoveHotKey, RequestType, SetDissolveTimestamp, Spawn,
     Stake, StakeMaturity, StartDissolve, StopDissolve,
 };
@@ -30,8 +30,9 @@ impl RosettaRequestHandler {
     ) -> Result<ConstructionParseResponse, ApiError> {
         verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
 
-        let updates: Vec<_> = match msg.transaction()? {
-            ParsedTransaction::Signed(envelopes) => envelopes
+        let updates: Vec<_> = match ParsedTransaction::try_from(msg.clone())? {
+            ParsedTransaction::Signed(signed_transaction) => signed_transaction
+                .requests
                 .iter()
                 .map(
                     |(request_type, updates)| match updates[0].update.content.clone() {
@@ -92,6 +93,7 @@ impl RosettaRequestHandler {
                 RequestType::StakeMaturity { neuron_index } => {
                     stake_maturity(&mut requests, arg, from, neuron_index)?
                 }
+                RequestType::ListNeurons => list_neurons(&mut requests, arg, from)?,
                 RequestType::NeuronInfo {
                     neuron_index,
                     controller,
@@ -109,7 +111,6 @@ impl RosettaRequestHandler {
 
         Ok(ConstructionParseResponse {
             operations: Request::requests_to_operations(&requests, self.ledger.token_symbol())?,
-            signers: None,
             account_identifier_signers: Some(from_ai),
             metadata: Some(metadata),
         })
@@ -537,6 +538,16 @@ fn neuron_info(
     Ok(())
 }
 
+/// Handle LIST_NEURONS.
+fn list_neurons(
+    requests: &mut Vec<Request>,
+    _arg: Blob,
+    from: AccountIdentifier,
+) -> Result<(), ApiError> {
+    requests.push(Request::ListNeurons(ListNeurons { account: from }));
+    Ok(())
+}
+
 /// Handle FOLLOW.
 fn follow(
     requests: &mut Vec<Request>,
@@ -635,7 +646,7 @@ mod tests {
         };
         let account = handler
             .construction_derive(ConstructionDeriveRequest {
-                network_identifier: network_identifier.clone().into(),
+                network_identifier: network_identifier.clone(),
                 public_key: pub_key.clone(),
                 metadata: None,
             })
@@ -769,7 +780,7 @@ mod tests {
             let construction_payloads_result = handler.construction_payloads(ConstructionPayloadsRequest {
                 network_identifier: network_identifier.clone(),
                 operations: operations.clone(),
-                metadata: metadata.clone(),
+                metadata: metadata.clone().map(|m|m.into()),
                 public_keys: Some(vec![pub_key.clone()]),
             }).unwrap();
             let unsigned_transaction = construction_payloads_result.unsigned_transaction;
@@ -799,7 +810,7 @@ mod tests {
             let construction_payloads_result = handler.construction_payloads(ConstructionPayloadsRequest {
                 network_identifier: network_identifier.clone(),
                 operations: operations.clone(),
-                metadata: metadata.clone(),
+                metadata: metadata.clone().map(|m|m.into()),
                 public_keys: Some(vec![pub_key.clone()]),
             }).unwrap();
             let unsigned_transaction = construction_payloads_result.unsigned_transaction;
@@ -819,14 +830,14 @@ mod tests {
             }
 
             let signed_transaction = handler.construction_combine(ConstructionCombineRequest {
-                network_identifier: network_identifier.clone(),
+                network_identifier:network_identifier.clone(),
                 unsigned_transaction,
                 signatures,
             }).unwrap().signed_transaction;
 
             // parse the signed transaction and check the result
             let parsed = handler.construction_parse(ConstructionParseRequest {
-                network_identifier: network_identifier.clone(),
+                network_identifier:network_identifier.clone(),
                 signed: true,
                 transaction: signed_transaction,
             }).unwrap();

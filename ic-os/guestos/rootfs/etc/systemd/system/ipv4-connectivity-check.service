@@ -1,0 +1,9 @@
+[Unit]
+Description=Check IPv4 connectivity
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ic/bin/ipv4-connectivity-check.sh

@@ -9,7 +9,6 @@ use ic_replicated_state::testing::CanisterQueuesTesting;
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     history::MockIngressHistory,
-    mock_time,
     state::{
         get_running_canister, get_stopped_canister, get_stopping_canister, CanisterStateBuilder,
         ReplicatedStateBuilder,
@@ -24,6 +23,7 @@ use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_int_counter_vec, metric_vec, nonzero_values, HistogramStats,
     MetricVec,
 };
+use ic_test_utilities_time::mock_time;
 use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::{MessageId, SignedIngressContent},

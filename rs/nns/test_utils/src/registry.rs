@@ -6,7 +6,9 @@ use ic_base_types::{CanisterId, PrincipalId, RegistryVersion, SubnetId};
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
-use ic_crypto_test_utils_ni_dkg::{initial_dkg_transcript, InitialNiDkgConfig};
+use ic_crypto_test_utils_ni_dkg::{
+    dummy_initial_dkg_transcript, initial_dkg_transcript, InitialNiDkgConfig,
+};
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_crypto_utils_ni_dkg::extract_threshold_sig_public_key;
 use ic_nervous_system_common_test_keys::{
@@ -239,6 +241,12 @@ pub fn invariant_compliant_mutation(mutation_id: u8) -> Vec<RegistryMutation> {
 
     let (valid_pks, node_id) = new_node_keys_and_node_id();
 
+    let mut threshold_pk_and_cup_mutations =
+        create_subnet_threshold_signing_pubkey_and_cup_mutations(
+            subnet_pid,
+            &btreemap!(node_id => valid_pks.dkg_dealing_encryption_key().clone()),
+        );
+
     let node_record = {
         let ip_addr = format!("128.0.{mutation_id}.1");
         let xnet_connection_endpoint = ConnectionEndpoint {
@@ -304,6 +312,7 @@ pub fn invariant_compliant_mutation(mutation_id: u8) -> Vec<RegistryMutation> {
         node_record,
         valid_pks,
     ));
+    mutations.append(&mut threshold_pk_and_cup_mutations);
     mutations
 }
 
@@ -405,11 +414,74 @@ fn make_node_record(node_operator_record: &NodeOperatorRecord) -> NodeRecord {
     }
 }
 
-fn get_new_node_id_and_mutations(nor: &NodeOperatorRecord) -> (NodeId, Vec<RegistryMutation>) {
+fn get_new_node_id_and_mutations(
+    nor: &NodeOperatorRecord,
+    subnet_id: SubnetId,
+) -> (NodeId, Vec<RegistryMutation>) {
     let (valid_pks, node_id) = new_node_keys_and_node_id();
+    let dkg_dealing_encryption_pk = valid_pks.dkg_dealing_encryption_key().clone();
     let nr = make_node_record(nor);
-    let mutations = make_add_node_registry_mutations(node_id, nr, valid_pks);
+    let mut mutations = make_add_node_registry_mutations(node_id, nr, valid_pks);
+    let mut subnet_threshold_pk_and_cup_mutations =
+        create_subnet_threshold_signing_pubkey_and_cup_mutations(
+            subnet_id,
+            &btreemap!(node_id => dkg_dealing_encryption_pk),
+        );
+    mutations.append(&mut subnet_threshold_pk_and_cup_mutations);
     (node_id, mutations)
+}
+
+pub fn create_subnet_threshold_signing_pubkey_and_cup_mutations(
+    subnet_id: SubnetId,
+    receiver_keys: &BTreeMap<NodeId, PublicKey>,
+) -> Vec<RegistryMutation> {
+    // TODO: CRP-2345: Refactor such that the `ReproducibleRng` is not instantiated here, but at
+    //  the test initialization, and passed down to this function.
+    let rng = &mut ReproducibleRng::new();
+    let subnet_transcript = generate_nidkg_initial_transcript(
+        receiver_keys,
+        subnet_test_id(rng.next_u64()),
+        NiDkgTag::HighThreshold,
+        RegistryVersion::new(1),
+        rng,
+    );
+    // Threshold signing public key
+    let subnet_threshold_sig_pk =
+        extract_threshold_sig_public_key(&subnet_transcript.internal_csp_transcript)
+            .expect("error extracting threshold sig public key from internal CSP transcript");
+
+    // CUP contents
+    let cup_contents_key = make_catch_up_package_contents_key(subnet_id).into_bytes();
+    let cup_contents = CatchUpPackageContents {
+        initial_ni_dkg_transcript_high_threshold: Some(InitialNiDkgTranscriptRecord::from(
+            subnet_transcript,
+        )),
+        ..dummy_cup_for_subnet(receiver_keys.keys().copied().collect())
+    };
+
+    vec![
+        insert(
+            make_crypto_threshold_signing_pubkey_key(subnet_id).as_bytes(),
+            encode_or_panic(&PublicKey::from(subnet_threshold_sig_pk)),
+        ),
+        insert(cup_contents_key, encode_or_panic(&cup_contents)),
+    ]
+}
+
+/// This creates a CatchupPackageContents for nodes that would be part of as subnet
+/// which is necessary if the underlying IC test machinery knows about the subnets you added
+/// to your registry
+fn dummy_cup_for_subnet(nodes: Vec<NodeId>) -> CatchUpPackageContents {
+    let low_threshold_transcript_record =
+        dummy_initial_dkg_transcript(nodes.clone(), NiDkgTag::LowThreshold);
+    let high_threshold_transcript_record =
+        dummy_initial_dkg_transcript(nodes, NiDkgTag::HighThreshold);
+
+    CatchUpPackageContents {
+        initial_ni_dkg_transcript_low_threshold: Some(low_threshold_transcript_record),
+        initial_ni_dkg_transcript_high_threshold: Some(high_threshold_transcript_record),
+        ..Default::default()
+    }
 }
 
 /// Setup the registry with a single subnet (containing all the ranges) which
@@ -433,7 +505,7 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
     let mut add_node_mutations = vec![];
     let mut node_id = vec![];
     for nor in &node_operator {
-        let (id, mut mutations) = get_new_node_id_and_mutations(nor);
+        let (id, mut mutations) = get_new_node_id_and_mutations(nor, nns_subnet_id);
         node_id.push(id);
         add_node_mutations.append(&mut mutations);
     }
@@ -480,7 +552,7 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
         ),
         insert(
             make_routing_table_record_key().as_bytes(),
-            encode_or_panic(&RoutingTablePB::try_from(routing_table).unwrap()),
+            encode_or_panic(&RoutingTablePB::from(routing_table)),
         ),
         insert(
             make_replica_version_key(replica_version_id).as_bytes(),
@@ -599,24 +671,12 @@ pub fn prepare_registry_with_two_node_sets(
         encode_or_panic(&subnet_record),
     ));
 
-    let dealer_subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(187));
-    let registry_version = RegistryVersion::new(1);
-    let rng = &mut ReproducibleRng::new();
-    let subnet_transcript = generate_nidkg_initial_transcript(
-        &node_ids_and_dkg_keys_subnet_1,
-        dealer_subnet_id,
-        NiDkgTag::HighThreshold,
-        registry_version,
-        rng,
-    );
-    let subnet_threshold_sig_pk =
-        extract_threshold_sig_public_key(&subnet_transcript.internal_csp_transcript)
-            .expect("error extracting threshold sig public key from internal CSP transcript");
-
-    mutations.push(insert(
-        make_crypto_threshold_signing_pubkey_key(subnet_id).as_bytes(),
-        encode_or_panic(&PublicKey::from(subnet_threshold_sig_pk)),
-    ));
+    let mut threshold_signing_pk_and_cup_mutations_subnet_1 =
+        create_subnet_threshold_signing_pubkey_and_cup_mutations(
+            subnet_id,
+            &node_ids_and_dkg_keys_subnet_1,
+        );
+    mutations.append(&mut threshold_signing_pk_and_cup_mutations_subnet_1);
 
     // Subnet list record
     let mut subnet_list = decode_registry_value::<SubnetListRecord>(mutations.remove(0).value);
@@ -643,21 +703,12 @@ pub fn prepare_registry_with_two_node_sets(
             encode_or_panic(&subnet2_record),
         ));
 
-        let subnet2_transcript = generate_nidkg_initial_transcript(
-            &node_ids_and_dkg_keys_subnet_2,
-            dealer_subnet_id,
-            NiDkgTag::HighThreshold,
-            registry_version,
-            rng,
-        );
-        let subnet2_threshold_sig_pk =
-            extract_threshold_sig_public_key(&subnet2_transcript.internal_csp_transcript)
-                .expect("error extracting threshold sig public key from internal CSP transcript");
-
-        mutations.push(insert(
-            make_crypto_threshold_signing_pubkey_key(subnet2_id).as_bytes(),
-            encode_or_panic(&PublicKey::from(subnet2_threshold_sig_pk)),
-        ));
+        let mut threshold_signing_pk_and_cup_mutations_subnet_2 =
+            create_subnet_threshold_signing_pubkey_and_cup_mutations(
+                subnet2_id,
+                &node_ids_and_dkg_keys_subnet_2,
+            );
+        mutations.append(&mut threshold_signing_pk_and_cup_mutations_subnet_2);
 
         subnet_list.subnets.push(subnet2_id.get().to_vec());
     }
@@ -666,9 +717,6 @@ pub fn prepare_registry_with_two_node_sets(
         make_subnet_list_record_key().as_bytes(),
         encode_or_panic(&subnet_list),
     ));
-
-    // CUP contents
-    add_cup_to_mutations(&mut mutations, subnet_id, subnet_transcript);
 
     let mutate_request = RegistryAtomicMutateRequest {
         mutations,
@@ -722,21 +770,6 @@ fn generate_node_keys_and_add_node_record_and_key_mutations(
         .collect()
 }
 
-fn add_cup_to_mutations(
-    mutations: &mut Vec<RegistryMutation>,
-    subnet_id: SubnetId,
-    transcript: NiDkgTranscript,
-) {
-    let cup_contents_key = make_catch_up_package_contents_key(subnet_id).into_bytes();
-    let cup_contents = CatchUpPackageContents {
-        initial_ni_dkg_transcript_high_threshold: Some(InitialNiDkgTranscriptRecord::from(
-            transcript,
-        )),
-        ..Default::default()
-    };
-    mutations.push(insert(cup_contents_key, encode_or_panic(&cup_contents)));
-}
-
 pub fn generate_nidkg_initial_transcript(
     receiver_keys: &BTreeMap<NodeId, PublicKey>,
     dealer_subnet_id: SubnetId,
@@ -787,6 +820,7 @@ pub fn prepare_add_node_payload(mutation_id: u8) -> (AddNodePayload, ValidNodePu
         prometheus_metrics_endpoint: "".to_string(),
         chip_id: None,
         public_ipv4_config: None,
+        domain: None,
     };
 
     (payload, node_public_keys)

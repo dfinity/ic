@@ -5,6 +5,8 @@ use crate::{
 };
 
 use candid::{CandidType, Deserialize};
+#[cfg(target_arch = "wasm32")]
+use dfn_core::println;
 use ic_nns_common::registry::decode_or_panic;
 use ic_protobuf::registry::unassigned_nodes_config::v1::UnassignedNodesConfigRecord;
 use ic_registry_keys::make_unassigned_nodes_config_record_key;

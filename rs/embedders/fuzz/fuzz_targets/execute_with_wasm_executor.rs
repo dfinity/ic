@@ -23,10 +23,12 @@ use ic_system_api::{
     InstructionLimits,
 };
 use ic_test_utilities::{
-    cycles_account_manager::CyclesAccountManagerBuilder, mock_time, state::SystemStateBuilder,
+    cycles_account_manager::CyclesAccountManagerBuilder, state::SystemStateBuilder,
     types::ids::user_test_id,
 };
+use ic_test_utilities_time::mock_time;
 use ic_types::{
+    messages::RequestMetadata,
     methods::{FuncRef, WasmMethod},
     ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
 };
@@ -114,6 +116,7 @@ fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
         &network_topology,
         dirty_page_overhead,
         ComputeAllocation::default(),
+        RequestMetadata::new(0, mock_time()),
     );
 
     let canister_current_memory_usage = NumBytes::new(0);

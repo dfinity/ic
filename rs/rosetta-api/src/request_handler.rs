@@ -7,6 +7,7 @@ mod construction_payloads;
 mod construction_preprocess;
 mod construction_submit;
 
+use crate::ledger_client::list_known_neurons_response::ListKnownNeuronsResponse;
 use crate::ledger_client::pending_proposals_response::PendingProposalsResponse;
 use crate::ledger_client::proposal_info_response::ProposalInfoResponse;
 use crate::models::{CallResponse, NetworkIdentifier};
@@ -185,6 +186,13 @@ impl RosettaRequestHandler {
                     pending_proposals_response,
                 )))
             }
+            "list_known_neurons" => {
+                let known_neurons = self.ledger.list_known_neurons().await?;
+                let list_known_neurons_response = ListKnownNeuronsResponse { known_neurons };
+                Ok(CallResponse::new(ObjectMap::from(
+                    list_known_neurons_response,
+                )))
+            }
             _ => Err(ApiError::InvalidRequest(
                 false,
                 Details::from(format!(
@@ -197,10 +205,7 @@ impl RosettaRequestHandler {
 
     /// Get a Block
     pub async fn block(&self, msg: models::BlockRequest) -> Result<BlockResponse, ApiError> {
-        verify_network_id(
-            self.ledger.ledger_canister_id(),
-            &msg.network_identifier.into(),
-        )?;
+        verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
 
         let blocks = self.ledger.read_blocks().await;
         let hb = get_block(&blocks, Some(msg.block_identifier))?;
@@ -233,10 +238,7 @@ impl RosettaRequestHandler {
         &self,
         msg: models::BlockTransactionRequest,
     ) -> Result<BlockTransactionResponse, ApiError> {
-        verify_network_id(
-            self.ledger.ledger_canister_id(),
-            &msg.network_identifier.into(),
-        )?;
+        verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
         let blocks = self.ledger.read_blocks().await;
         let b_id = Some(PartialBlockIdentifier {
             index: Some(msg.block_identifier.index),
@@ -249,10 +251,7 @@ impl RosettaRequestHandler {
 
     /// Get All Mempool Transactions
     pub async fn mempool(&self, msg: models::NetworkRequest) -> Result<MempoolResponse, ApiError> {
-        verify_network_id(
-            self.ledger.ledger_canister_id(),
-            &msg.network_identifier.into(),
-        )?;
+        verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
         Ok(MempoolResponse::new(vec![]))
     }
 
@@ -274,7 +273,7 @@ impl RosettaRequestHandler {
         _metadata_request: MetadataRequest,
     ) -> Result<NetworkListResponse, ApiError> {
         let net_id = self.network_id();
-        Ok(NetworkListResponse::new(vec![net_id.0]))
+        Ok(NetworkListResponse::new(vec![net_id]))
     }
 
     /// Get Network Options
@@ -282,10 +281,7 @@ impl RosettaRequestHandler {
         &self,
         msg: models::NetworkRequest,
     ) -> Result<NetworkOptionsResponse, ApiError> {
-        verify_network_id(
-            self.ledger.ledger_canister_id(),
-            &msg.network_identifier.into(),
-        )?;
+        verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
 
         Ok(NetworkOptionsResponse::new(
             Version::new(
@@ -343,10 +339,7 @@ impl RosettaRequestHandler {
         &self,
         msg: models::NetworkRequest,
     ) -> Result<NetworkStatusResponse, ApiError> {
-        verify_network_id(
-            self.ledger.ledger_canister_id(),
-            &msg.network_identifier.into(),
-        )?;
+        verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
         let blocks = self.ledger.read_blocks().await;
         let first = blocks.get_first_verified_hashed_block()?;
         let tip = blocks.get_latest_verified_hashed_block()?;
@@ -642,7 +635,7 @@ fn create_parent_block_id(
     block: &HashedBlock,
 ) -> Result<BlockIdentifier, ApiError> {
     // For the first block, we return the block itself as its parent
-    let idx = std::cmp::max(0, block_height_to_index(block.index)? - 1);
+    let idx = std::cmp::max(0, block_height_to_index(block.index) - 1);
     if blocks.is_verified_by_idx(&(idx as u64))? {
         let parent = blocks.get_hashed_block(&(idx as u64))?;
         convert::block_id(&parent)
@@ -651,8 +644,8 @@ fn create_parent_block_id(
     }
 }
 
-fn block_height_to_index(height: BlockIndex) -> Result<i128, ApiError> {
-    i128::try_from(height).map_err(|e| ApiError::InternalError(true, e.to_string().into()))
+fn block_height_to_index(height: BlockIndex) -> i128 {
+    i128::from(height)
 }
 
 fn get_block(
@@ -714,7 +707,9 @@ fn get_block(
 
 fn verify_network_id(canister_id: &CanisterId, net_id: &NetworkIdentifier) -> Result<(), ApiError> {
     verify_network_blockchain(net_id)?;
-    let id: CanisterId = net_id.try_into()?;
+    let id: CanisterId = net_id
+        .try_into()
+        .map_err(|err| ApiError::InvalidNetworkId(false, format!("{:?}", err).into()))?;
     if *canister_id != id {
         return Err(ApiError::InvalidNetworkId(false, "unknown network".into()));
     }
@@ -722,7 +717,7 @@ fn verify_network_id(canister_id: &CanisterId, net_id: &NetworkIdentifier) -> Re
 }
 
 fn verify_network_blockchain(net_id: &NetworkIdentifier) -> Result<(), ApiError> {
-    match net_id.0.blockchain.as_str() {
+    match net_id.blockchain.as_str() {
         "Internet Computer" => Ok(()),
         _ => Err(ApiError::InvalidNetworkId(
             false,

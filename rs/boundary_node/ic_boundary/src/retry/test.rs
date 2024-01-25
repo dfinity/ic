@@ -34,6 +34,8 @@ fn gen_request(request_type: RequestType) -> Request<Body> {
         ..Default::default()
     };
 
+    let ctx = Arc::new(ctx);
+
     let mut req = Request::post("/").body(Body::from("foobar")).unwrap();
     req.extensions_mut().insert(ctx);
     req.extensions_mut()
@@ -81,7 +83,7 @@ async fn test_request_clone() -> Result<(), Error> {
         assert_eq!(parts_out.headers.get(k).unwrap(), v);
     }
 
-    parts_out.extensions.get::<RequestContext>().unwrap();
+    parts_out.extensions.get::<Arc<RequestContext>>().unwrap();
     parts_out.extensions.get::<CanisterId>().unwrap();
 
     Ok(())

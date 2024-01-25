@@ -44,6 +44,8 @@ impl Definition {
         registry_query_timeout: Duration,
         stop_signal_sender: Sender<()>,
     ) -> Self {
+        let global_registry_path =
+            std::fs::canonicalize(global_registry_path).expect("Invalid global registry path");
         let registry_path = global_registry_path.join(name.clone());
         if std::fs::metadata(&registry_path).is_err() {
             std::fs::create_dir_all(registry_path.clone()).unwrap();
@@ -73,6 +75,11 @@ impl Definition {
 
     async fn initial_registry_sync(&self) {
         info!(self.log, "Syncing local registry for {} started", self.name);
+        info!(
+            self.log,
+            "Using local registry path: {}",
+            self.registry_path.display()
+        );
 
         sync_local_registry(
             self.log.clone(),
@@ -134,22 +141,20 @@ impl Definition {
 
         self.poll_loop().await;
 
-        if self.name == "ic" {
-            return;
-        }
-
-        info!(
-            self.log,
-            "Removing registry dir '{}' for definition {}...",
-            self.registry_path.display(),
-            self.name
-        );
-
-        if let Err(e) = std::fs::remove_dir_all(self.registry_path.clone()) {
-            warn!(
+        if self.name != "mercury" {
+            info!(
                 self.log,
-                "Failed to remove registry dir for definition {}: {:?}", self.name, e
+                "Removing registry dir '{}' for definition {}...",
+                self.registry_path.display(),
+                self.name
             );
+
+            if let Err(e) = std::fs::remove_dir_all(self.registry_path.clone()) {
+                warn!(
+                    self.log,
+                    "Failed to remove registry dir for definition {}: {:?}", self.name, e
+                );
+            }
         }
     }
 

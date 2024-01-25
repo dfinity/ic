@@ -173,7 +173,7 @@ use ic_utils::interfaces::ManagementCanister;
 use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayload, Tokens};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use slog::{info, warn, Logger};
+use slog::{error, info, warn, Logger};
 use ssh2::Session;
 use std::cmp::max;
 use std::collections::{HashMap, HashSet};
@@ -676,6 +676,11 @@ impl IcNodeSnapshot {
         node_record.public_ipv4_config
     }
 
+    pub fn get_domain(&self) -> Option<String> {
+        let node_record = self.raw_node_record();
+        node_record.domain
+    }
+
     /// Is it accessible via ssh with the `admin` user.
     /// Waits until connection is ready.
     pub fn await_can_login_as_admin_via_ssh(&self) -> Result<()> {
@@ -716,7 +721,7 @@ impl IcNodeSnapshot {
                     .get_subnet_canister_ranges(self.registry_version, subnet_id)
                     .expect("Could not deserialize optional routing table from local registry.")
                     .expect("Optional routing table is None in local registry.");
-                match canister_ranges.get(0) {
+                match canister_ranges.first() {
                     Some(range) => range.start.get(),
                     None => PrincipalId::default(),
                 }
@@ -946,8 +951,6 @@ pub trait HasIcDependencies {
     fn get_mainnet_ic_os_img_sha256(&self) -> Result<String>;
     fn get_mainnet_ic_os_update_img_url(&self) -> Result<Url>;
     fn get_mainnet_ic_os_update_img_sha256(&self) -> Result<String>;
-    fn get_api_boundary_node_img_url(&self) -> Result<Url>;
-    fn get_api_boundary_node_img_sha256(&self) -> Result<String>;
     fn get_canister_http_test_ca_cert(&self) -> Result<String>;
     fn get_canister_http_test_ca_key(&self) -> Result<String>;
     fn get_hostos_update_img_test_url(&self) -> Result<Url>;
@@ -1088,19 +1091,6 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
         Ok(sha256)
     }
 
-    fn get_api_boundary_node_img_url(&self) -> Result<Url> {
-        let dep_rel_path = "ic-os/boundary-api-guestos/envs/dev/disk-img.tar.zst.cas-url";
-        let url = self.read_dependency_to_string(dep_rel_path)?;
-        Ok(Url::parse(&url)?)
-    }
-
-    fn get_api_boundary_node_img_sha256(&self) -> Result<String> {
-        let dep_rel_path = "ic-os/boundary-api-guestos/envs/dev/disk-img.tar.zst.sha256";
-        let sha256 = self.read_dependency_to_string(dep_rel_path)?;
-        bail_if_sha256_invalid(&sha256, "api_boundary_node_img_sha256")?;
-        Ok(sha256)
-    }
-
     fn get_mainnet_ic_os_img_url(&self) -> Result<Url> {
         let mainnet_version: String =
             self.read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
@@ -1111,7 +1101,7 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     fn get_mainnet_ic_os_img_sha256(&self) -> Result<String> {
         let mainnet_version: String =
             self.read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
-        fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img"), "disk-img.tar.zst")
+        fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img"), "disk-img.tar.zst", self.test_env().logger())
     }
 
     fn get_mainnet_ic_os_update_img_url(&self) -> Result<Url> {
@@ -1123,7 +1113,7 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     fn get_mainnet_ic_os_update_img_sha256(&self) -> Result<String> {
         let mainnet_version: String =
             self.read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
-        fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img"), "update-img.tar.zst")
+        fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img"), "update-img.tar.zst", self.test_env().logger())
     }
 
     fn get_canister_http_test_ca_cert(&self) -> Result<String> {
@@ -1151,10 +1141,20 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     }
 }
 
-fn fetch_sha256(base_url: String, file: &str) -> Result<String> {
+fn fetch_sha256(base_url: String, file: &str, logger: Logger) -> Result<String> {
     let sha256sums_url = format!("{base_url}/SHA256SUMS");
 
-    let body = reqwest::blocking::get(sha256sums_url)?.text()?;
+    let response = reqwest::blocking::get(sha256sums_url)?;
+    if !response.status().is_success() {
+        error!(
+            logger,
+            "Failed to fetch sha256. Remote address: {:?}, Headers: {:?}",
+            response.remote_addr(),
+            response.headers()
+        );
+        return Err(anyhow!("Failed to fetch sha256"));
+    }
+    let body = response.text()?;
 
     // body should look like:
     // eb2bd3cc9db26427dcee039b0e696a4127c2466e2e487d8628c4a7b2d3ecdbd3 *disk-img.tar.gz
@@ -1322,6 +1322,10 @@ impl<T: HasDependencies> HasWasm for T {
             wasm_bytes = wat::parse_bytes(&wasm_bytes)
                 .expect("Could not compile wat to wasm")
                 .to_vec();
+        }
+
+        if wasm_bytes.is_empty() {
+            panic!("WASM read from {:?} was empty", p.as_ref());
         }
 
         if !(wasm_bytes.starts_with(WASM_MAGIC_BYTES)

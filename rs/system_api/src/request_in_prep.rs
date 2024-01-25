@@ -205,11 +205,11 @@ pub(crate) fn into_request(
 
     let callback_id = sandbox_safe_system_state.register_callback(Callback::new(
         call_context_id,
-        Some(sender),
-        Some(destination_canister),
+        sender,
+        destination_canister,
         cycles,
-        Some(prepayment_for_response_execution),
-        Some(prepayment_for_response_transmission),
+        prepayment_for_response_execution,
+        prepayment_for_response_transmission,
         on_reply,
         on_reject,
         on_cleanup,
@@ -222,7 +222,7 @@ pub(crate) fn into_request(
         method_payload,
         sender_reply_callback: callback_id,
         payment: cycles,
-        metadata: None,
+        metadata: Some(sandbox_safe_system_state.request_metadata.clone()),
     };
     // We cannot call `Request::payload_size_bytes()` before constructing the
     // request, so ensure our separate calculation matches the actual size.

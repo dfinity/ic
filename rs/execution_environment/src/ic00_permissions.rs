@@ -138,6 +138,11 @@ impl Ic00MethodPermissions {
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
             },
+            Ic00Method::FetchCanisterLogs => Self {
+                method,
+                allow_remote_subnet_sender: false, // Only users can call this method, not canisters (also no nested composite query calls).
+                allow_only_nns_subnet_sender: false,
+            },
             Ic00Method::ProvisionalCreateCanisterWithCycles => Self {
                 method,
                 allow_remote_subnet_sender: true,

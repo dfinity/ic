@@ -105,7 +105,7 @@ async fn test_follow(ros: &RosettaApiClient, _ledger: &LedgerClient, neuron_info
     assert_eq!(1, res.operations.len());
     let status = res
         .operations
-        .get(0)
+        .first()
         .unwrap()
         .status
         .as_ref()
@@ -196,7 +196,7 @@ async fn test_follow_with_hotkey(
     assert_eq!(1, res.operations.len());
     let status = res
         .operations
-        .get(0)
+        .first()
         .unwrap()
         .status
         .as_ref()

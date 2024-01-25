@@ -35,17 +35,15 @@ impl HostosUpgrader {
 }
 
 impl HostosUpgrader {
-    /// Calls `check_for_upgrade()` once every `interval`, timing out after `timeout`.
-    /// Awaiting this function blocks until `exit_signal` is set to `true`.
+    /// Calls `check_for_upgrade()`, timing out after `timeout`, and waiting
+    /// for `interval` between attempts. Awaiting this function blocks until
+    /// `exit_signal` is set to `true`.
     pub async fn upgrade_loop(
         &mut self,
         mut exit_signal: Receiver<bool>,
         interval: Duration,
         timeout: Duration,
     ) {
-        // Wait for a minute before starting the loop, to allow the registry
-        // some time to catch up, after starting.
-        tokio::time::sleep(Duration::from_secs(60)).await;
         while !*exit_signal.borrow() {
             match tokio::time::timeout(timeout, self.check_for_upgrade()).await {
                 Ok(Ok(())) => {}
@@ -109,7 +107,8 @@ impl HostosUpgrader {
         for release_package_url in release_package_urls.iter() {
             // We only ever expect this command to exit in error. If the
             // upgrade call succeeds, the HostOS will reboot and shut us down.
-            if let Err(e) = UtilityCommand::request_hostos_upgrade(release_package_url, &hash) {
+            if let Err(e) = UtilityCommand::request_hostos_upgrade(release_package_url, &hash).await
+            {
                 info!(
                     &self.logger,
                     "HostOS upgrade failed using: '{release_package_url}'"

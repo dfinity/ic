@@ -20,5 +20,6 @@ ic-metrics = { path = "../../monitoring/metrics" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-test-utilities = { path = "../" }
+ic-test-utilities-time = { path = "../time" }
 ic-types = { path = "../../types/types" }
 tempfile = "3.1.0"

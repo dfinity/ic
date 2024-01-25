@@ -1,8 +1,8 @@
 use ic_test_utilities::{
     crypto::mock_random_number_generator,
-    mock_time,
     types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder},
 };
+use ic_test_utilities_time::mock_time;
 
 use ic_base_types::{NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_config::{
@@ -22,8 +22,8 @@ use ic_execution_environment::{
 use ic_ic00_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
     CanisterSettingsArgsBuilder, CanisterStatusType, EcdsaKeyId, EmptyBlob, InstallCodeArgs,
-    InstallCodeArgsV2, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs, SkipPreUpgrade,
-    UpdateSettingsArgs,
+    InstallCodeArgsV2, LogVisibility, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs,
+    SkipPreUpgrade, UpdateSettingsArgs,
 };
 use ic_interfaces::execution_environment::{
     ExecutionMode, IngressHistoryWriter, QueryHandler, RegistryExecutionSettings,
@@ -134,6 +134,7 @@ pub fn test_registry_settings() -> RegistryExecutionSettings {
         max_number_of_canisters: 0x2000,
         provisional_whitelist: ProvisionalWhitelist::Set(BTreeSet::new()),
         max_ecdsa_queue_size: 20,
+        quadruples_to_create_in_advance: 5,
         subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
     }
 }
@@ -539,7 +540,9 @@ impl ExecutionTest {
     ) -> Result<WasmResult, UserError> {
         let payload = UpdateSettingsArgs {
             canister_id: canister_id.into(),
-            settings: CanisterSettingsArgs::new(Some(controllers), None, None, None, None),
+            settings: CanisterSettingsArgsBuilder::new()
+                .with_controllers(controllers)
+                .build(),
             sender_canister_version: None,
         }
         .encode();
@@ -644,6 +647,23 @@ impl ExecutionTest {
             canister_id: canister_id.into(),
             settings: CanisterSettingsArgsBuilder::new()
                 .with_controllers(vec![controller])
+                .build(),
+            sender_canister_version: None,
+        }
+        .encode();
+        self.subnet_message(Method::UpdateSettings, payload)
+    }
+
+    /// Sets the log visibility of the canister.
+    pub fn set_log_visibility(
+        &mut self,
+        canister_id: CanisterId,
+        log_visibility: LogVisibility,
+    ) -> Result<WasmResult, UserError> {
+        let payload = UpdateSettingsArgs {
+            canister_id: canister_id.into(),
+            settings: CanisterSettingsArgsBuilder::new()
+                .with_log_visibility(log_visibility)
                 .build(),
             sender_canister_version: None,
         }
@@ -1884,8 +1904,8 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_wasm_chunk_store(mut self) -> Self {
-        self.execution_config.wasm_chunk_store = FlagStatus::Enabled;
+    pub fn with_wasm_chunk_store(mut self, status: FlagStatus) -> Self {
+        self.execution_config.wasm_chunk_store = status;
         self
     }
 
@@ -1914,6 +1934,13 @@ impl ExecutionTestBuilder {
 
     pub fn with_heap_delta_rate_limit(mut self, heap_delta_rate_limit: NumBytes) -> Self {
         self.heap_delta_rate_limit = heap_delta_rate_limit;
+        self
+    }
+
+    pub fn with_max_dirty_pages_optimization_embedder_config(mut self, no_pages: usize) -> Self {
+        self.execution_config
+            .embedders_config
+            .max_dirty_pages_without_optimization = no_pages;
         self
     }
 
@@ -2055,7 +2082,7 @@ impl ExecutionTestBuilder {
             self.upload_wasm_chunk_instructions,
         );
         let (query_stats_collector, _) =
-            ic_query_stats::init_query_stats(self.log.clone(), config.query_stats_epoch_length);
+            ic_query_stats::init_query_stats(self.log.clone(), &config, &metrics_registry);
 
         let query_handler = InternalHttpQueryHandler::new(
             self.log.clone(),

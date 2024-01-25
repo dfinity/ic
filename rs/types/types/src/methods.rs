@@ -2,7 +2,7 @@
 //! various types of methods in the IC.
 
 use crate::{messages::CallContextId, Cycles};
-use ic_base_types::CanisterId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::{canister_state_bits::v1 as pb, queues::v1::Cycles as PbCycles};
 use ic_protobuf::types::v1 as pb_types;
@@ -220,27 +220,36 @@ impl WasmClosure {
     }
 }
 
+/// A placeholder `CanisterId` for the `Callback::originator` and
+/// `Callback::respondent` fields, if the callback was created before February
+/// 2022 (i.e. before originator and respondent were recorded).
+pub const UNKNOWN_CANISTER_ID: CanisterId =
+    CanisterId::unchecked_from_principal(PrincipalId::new_anonymous());
+
 /// Callback holds references to functions executed when a response is received.
 /// It also tracks information about the origin of the request.
 /// This information is used to validate the response when it is received.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Callback {
     pub call_context_id: CallContextId,
-    // (EXC-877) Once this is deployed in production,
-    // it's safe to make `respondent` and `originator` non-optional.
-    // Currently optional to ensure backwards compatibility.
-    /// The request's sender id.
-    pub originator: Option<CanisterId>,
-    /// The id of the principal that the request was addressed to.
-    pub respondent: Option<CanisterId>,
+    /// The request's sender ID.
+    ///
+    /// `UNKNOWN_CANISTER_ID` if the `Callback` was created before February 2022.
+    pub originator: CanisterId,
+    /// The ID of the principal that the request was addressed to.
+    ///
+    /// `UNKNOWN_CANISTER_ID` if the `Callback` was created before February 2022.
+    pub respondent: CanisterId,
     /// The number of cycles that were sent in the original request.
     pub cycles_sent: Cycles,
     /// Cycles prepaid by the caller for response execution.
-    /// The field is optional for backwards compatibility.
-    pub prepayment_for_response_execution: Option<Cycles>,
+    ///
+    /// `Cycles::zero()` if the `Callback` was created before February 2022.
+    pub prepayment_for_response_execution: Cycles,
     /// Cycles prepaid by the caller for response transimission.
-    /// The field is optional for backwards compatibility.
-    pub prepayment_for_response_transmission: Option<Cycles>,
+    ///
+    /// `Cycles::zero()` if the `Callback` was created before February 2022.
+    pub prepayment_for_response_transmission: Cycles,
     /// A closure to be executed if the call succeeded.
     pub on_reply: WasmClosure,
     /// A closure to be executed if the call was rejected.
@@ -253,11 +262,11 @@ pub struct Callback {
 impl Callback {
     pub fn new(
         call_context_id: CallContextId,
-        originator: Option<CanisterId>,
-        respondent: Option<CanisterId>,
+        originator: CanisterId,
+        respondent: CanisterId,
         cycles_sent: Cycles,
-        prepayment_for_response_execution: Option<Cycles>,
-        prepayment_for_response_transmission: Option<Cycles>,
+        prepayment_for_response_execution: Cycles,
+        prepayment_for_response_transmission: Cycles,
         on_reply: WasmClosure,
         on_reject: WasmClosure,
         on_cleanup: Option<WasmClosure>,
@@ -274,27 +283,68 @@ impl Callback {
             on_cleanup,
         }
     }
+
+    pub fn originator(&self) -> Option<CanisterId> {
+        if self.originator == UNKNOWN_CANISTER_ID {
+            None
+        } else {
+            Some(self.originator)
+        }
+    }
+
+    pub fn respondent(&self) -> Option<CanisterId> {
+        if self.respondent == UNKNOWN_CANISTER_ID {
+            None
+        } else {
+            Some(self.respondent)
+        }
+    }
+
+    pub fn prepayment_for_response_execution(&self) -> Option<Cycles> {
+        if self.prepayment_for_response_execution.is_zero() {
+            None
+        } else {
+            Some(self.prepayment_for_response_execution)
+        }
+    }
+
+    pub fn prepayment_for_response_transmission(&self) -> Option<Cycles> {
+        if self.prepayment_for_response_transmission.is_zero() {
+            None
+        } else {
+            Some(self.prepayment_for_response_transmission)
+        }
+    }
 }
 
 impl From<&Callback> for pb::Callback {
     fn from(item: &Callback) -> Self {
         Self {
             call_context_id: item.call_context_id.get(),
-            originator: item
-                .originator
-                .as_ref()
-                .map(|originator| pb_types::CanisterId::from(*originator)),
-            respondent: item
-                .respondent
-                .as_ref()
-                .map(|respondent| pb_types::CanisterId::from(*respondent)),
+            originator: if item.originator == UNKNOWN_CANISTER_ID {
+                None
+            } else {
+                Some(pb_types::CanisterId::from(item.originator))
+            },
+            respondent: if item.respondent == UNKNOWN_CANISTER_ID {
+                None
+            } else {
+                Some(pb_types::CanisterId::from(item.respondent))
+            },
             cycles_sent: Some(item.cycles_sent.into()),
-            prepayment_for_response_execution: item
-                .prepayment_for_response_execution
-                .map(|cycles| cycles.into()),
-            prepayment_for_response_transmission: item
+            prepayment_for_response_execution: if item.prepayment_for_response_execution.is_zero() {
+                None
+            } else {
+                Some(item.prepayment_for_response_execution.into())
+            },
+            prepayment_for_response_transmission: if item
                 .prepayment_for_response_transmission
-                .map(|cycles| cycles.into()),
+                .is_zero()
+            {
+                None
+            } else {
+                Some(item.prepayment_for_response_transmission.into())
+            },
             on_reply: Some(pb::WasmClosure {
                 func_idx: item.on_reply.func_idx,
                 env: item.on_reply.env,
@@ -324,18 +374,26 @@ impl TryFrom<pb::Callback> for Callback {
 
         let prepayment_for_response_execution = value
             .prepayment_for_response_execution
-            .map(|c| c.try_into())
-            .transpose()?;
+            .map(Into::into)
+            .unwrap_or_default();
 
         let prepayment_for_response_transmission = value
             .prepayment_for_response_transmission
-            .map(|c| c.try_into())
-            .transpose()?;
+            .map(Into::into)
+            .unwrap_or_default();
 
         Ok(Self {
             call_context_id: CallContextId::from(value.call_context_id),
-            originator: try_from_option_field(value.originator, "Callback::originator").ok(),
-            respondent: try_from_option_field(value.respondent, "Callback::respondent").ok(),
+            originator: value
+                .originator
+                .map(TryInto::try_into)
+                .transpose()?
+                .unwrap_or(UNKNOWN_CANISTER_ID),
+            respondent: value
+                .respondent
+                .map(TryInto::try_into)
+                .transpose()?
+                .unwrap_or(UNKNOWN_CANISTER_ID),
             cycles_sent: Cycles::from(cycles_sent),
             prepayment_for_response_execution,
             prepayment_for_response_transmission,

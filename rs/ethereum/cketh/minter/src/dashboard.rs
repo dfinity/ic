@@ -3,7 +3,6 @@ mod tests;
 
 use askama::Template;
 use candid::Principal;
-use ic_cketh_minter::address::Address;
 use ic_cketh_minter::endpoints::{EthTransaction, RetrieveEthStatus};
 use ic_cketh_minter::eth_logs::{EventSource, ReceivedEthEvent};
 use ic_cketh_minter::eth_rpc::Hash;
@@ -12,6 +11,7 @@ use ic_cketh_minter::lifecycle::EthereumNetwork;
 use ic_cketh_minter::numeric::{BlockNumber, LedgerBurnIndex, TransactionNonce, Wei};
 use ic_cketh_minter::state::transactions::{EthWithdrawalRequest, Reimbursed};
 use ic_cketh_minter::state::{EthBalance, MintedEvent, State};
+use ic_ethereum_types::Address;
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 

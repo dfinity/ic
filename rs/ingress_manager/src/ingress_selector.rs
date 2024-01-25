@@ -621,14 +621,13 @@ mod tests {
     use ic_test_utilities::{
         cycles_account_manager::CyclesAccountManagerBuilder,
         history::MockIngressHistory,
-        mock_time,
         state::{CanisterStateBuilder, ReplicatedStateBuilder},
         types::{
             ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id},
             messages::SignedIngressBuilder,
         },
-        FastForwardTimeSource,
     };
+    use ic_test_utilities_time::{mock_time, FastForwardTimeSource};
     use ic_types::crypto::crypto_hash;
     use ic_types::{
         artifact::IngressMessageId,
@@ -2004,7 +2003,7 @@ mod tests {
         );
         let mut small_payloads = vec![(messages_0, canister_0)];
 
-        for canister_id in (1..3).map(|i| canister_test_id(i)) {
+        for canister_id in (1..3).map(canister_test_id) {
             let (m, c) = generate_ingress_with_params(
                 canister_id,
                 /* msg_count = */ 2,
@@ -2028,7 +2027,7 @@ mod tests {
 
         // small ingress messages that fall below quota, to generate surplus that
         // is later dispersed amongst the first three canisters.
-        for canister_id in (3..30).map(|i| canister_test_id(i)) {
+        for canister_id in (3..30).map(canister_test_id) {
             small_payloads.push(generate_ingress_with_params(
                 canister_id,
                 /* msg_count = */ 1,

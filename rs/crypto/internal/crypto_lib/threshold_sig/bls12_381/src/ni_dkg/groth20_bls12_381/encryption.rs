@@ -26,10 +26,10 @@ use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
 mod crypto {
-    pub use crate::ni_dkg::fs_ni_dkg::encryption_key_pop::EncryptionKeyPop;
+
     pub use crate::ni_dkg::fs_ni_dkg::forward_secure::{
         dec_chunks, enc_chunks, kgen, verify_ciphertext_integrity, EncryptionWitness,
-        FsEncryptionCiphertext, PlaintextChunks, PublicKeyWithPop, SecretKey, SysParam,
+        FsEncryptionCiphertext, PlaintextChunks, SecretKey, SysParam,
     };
     pub use crate::ni_dkg::fs_ni_dkg::nizk_chunking::{
         prove_chunking, verify_chunking, ChunkingInstance, ChunkingWitness, ProofChunking,

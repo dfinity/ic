@@ -830,7 +830,7 @@ fn dirty_pages_to_dirty_chunks(
         let new_path = checkpoint.raw_path().join(path);
         let old_path = manifest_delta.base_checkpoint.raw_path().join(path);
         if !old_path.exists() {
-            break;
+            continue;
         }
         let new_metadata = new_path.metadata();
         let old_metadata = old_path.metadata();

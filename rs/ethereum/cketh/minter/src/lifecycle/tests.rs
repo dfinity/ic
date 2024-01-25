@@ -18,7 +18,7 @@ mod init {
 
         assert_matches!(
             State::try_from(InitArg {
-                minimum_withdrawal_amount: Nat::from(0),
+                minimum_withdrawal_amount: Nat::from(0_u8),
                 ..valid_init_arg()
             }),
             Err(InvalidStateError::InvalidMinimumWithdrawalAmount(_))

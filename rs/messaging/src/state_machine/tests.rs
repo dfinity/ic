@@ -18,6 +18,7 @@ use ic_test_utilities::{
 use ic_test_utilities_execution_environment::test_registry_settings;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::fetch_int_counter_vec;
+use ic_types::consensus::ecdsa::QuadrupleId;
 use ic_types::messages::SignedIngress;
 use ic_types::{batch::BatchMessages, crypto::canister_threshold_sig::MasterEcdsaPublicKey};
 use ic_types::{Height, PrincipalId, SubnetId, Time};
@@ -34,6 +35,7 @@ mock! {
             state: ic_replicated_state::ReplicatedState,
             randomness: ic_types::Randomness,
             ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+            ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>>,
             current_round: ExecutionRound,
             current_round_type: ExecutionRoundType,
             registry_settings: &RegistryExecutionSettings,
@@ -88,11 +90,12 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
             always(),
             eq(provided_batch.randomness),
             eq(provided_batch.ecdsa_subnet_public_keys.clone()),
+            eq(provided_batch.ecdsa_quadruple_ids.clone()),
             eq(round),
             eq(round_type),
             eq(test_registry_settings()),
         )
-        .returning(|state, _, _, _, _, _| state);
+        .returning(|state, _, _, _, _, _, _| state);
 
     let mut stream_builder = Box::new(MockStreamBuilder::new());
     stream_builder

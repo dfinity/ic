@@ -9,7 +9,6 @@ use ic_replicated_state::{
     CanisterState, InputQueueType, ReplicatedState, Stream,
 };
 use ic_test_utilities::{
-    mock_time,
     state::{new_canister_state, register_callback},
     types::{
         ids::{canister_test_id, user_test_id, SUBNET_27, SUBNET_42},
@@ -21,6 +20,7 @@ use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_int_counter_vec, fetch_int_gauge_vec, metric_vec, nonzero_values,
     MetricVec,
 };
+use ic_test_utilities_time::mock_time;
 use ic_types::{
     messages::{
         CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response,
@@ -452,7 +452,7 @@ fn build_streams_impl_respects_limits(
         let msgs = generate_messages_for_test(/* senders = */ 2, /* receivers = */ 2);
         let msg_count = msgs.len();
         // All messages returned by `generate_messages_for_test` are of the same size
-        let msg_size = msgs.get(0).unwrap().count_bytes() as u64;
+        let msg_size = msgs.first().unwrap().count_bytes() as u64;
 
         assert!(
             msg_count > expected_messages as usize,

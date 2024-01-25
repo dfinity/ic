@@ -49,7 +49,7 @@ fn index_of_complainer(
     complainer_id: NodeId,
     transcript: &IDkgTranscript,
 ) -> Result<NodeIndex, IDkgVerifyComplaintError> {
-    transcript.receivers.position(complainer_id).ok_or(
+    transcript.index_for_signer_id(complainer_id).ok_or(
         IDkgVerifyComplaintError::InvalidArgumentMissingComplainerInTranscript { complainer_id },
     )
 }

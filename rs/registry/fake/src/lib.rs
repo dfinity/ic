@@ -144,21 +144,25 @@ impl RegistryClient for FakeRegistryClient {
             _ => return Ok(vec![]),
         };
 
-        let res = records
+        let records = records
             .iter()
             .skip(i)
             .filter(|r| r.version <= version)
-            .take_while(|r| r.key.starts_with(key_prefix))
-            .fold(vec![], |mut acc, r| {
-                let is_present = r.value.is_some();
-                if acc.last().map(|k| k == &r.key).unwrap_or(false) && !is_present {
-                    acc.pop();
-                } else if is_present {
-                    acc.push(r.key.clone());
+            .take_while(|r| r.key.starts_with(key_prefix));
+        let mut results = vec![];
+        for record in records {
+            let has_value = record.value.is_some();
+            let last_result_is_current_key =
+                results.last().map(|k| k == &record.key).unwrap_or(false);
+            if has_value {
+                if !last_result_is_current_key {
+                    results.push(record.key.clone());
                 }
-                acc
-            });
-        Ok(res)
+            } else if last_result_is_current_key {
+                results.pop();
+            }
+        }
+        Ok(results)
     }
 
     fn get_latest_version(&self) -> RegistryVersion {
@@ -169,3 +173,6 @@ impl RegistryClient for FakeRegistryClient {
         self.cache.read().unwrap().1.get(&registry_version).cloned()
     }
 }
+
+#[cfg(test)]
+mod tests;

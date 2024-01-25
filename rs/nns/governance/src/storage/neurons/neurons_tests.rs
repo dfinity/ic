@@ -209,10 +209,10 @@ fn test_store_simplest_nontrivial_case() {
     // Derive neuron_5 from neuron_1 by adding entries to collections (to make
     // sure the updating collections works).
     let neuron_5 = {
-        let mut hot_keys = neuron_1.hot_keys;
+        let mut hot_keys = neuron_1.hot_keys.clone();
         hot_keys.push(PrincipalId::new_user_test_id(102));
 
-        let mut followees = neuron_1.followees;
+        let mut followees = neuron_1.followees.clone();
         assert_eq!(
             followees.insert(
                 7,
@@ -223,16 +223,16 @@ fn test_store_simplest_nontrivial_case() {
             None,
         );
 
-        let mut recent_ballots = neuron_1.recent_ballots;
+        let mut recent_ballots = neuron_1.recent_ballots.clone();
         recent_ballots.push(BallotInfo {
             proposal_id: Some(ProposalId { id: 303 }),
             vote: Vote::Yes as i32,
         });
 
-        let mut known_neuron_data = neuron_1.known_neuron_data;
+        let mut known_neuron_data = neuron_1.known_neuron_data.clone();
         known_neuron_data.as_mut().unwrap().name = "I changed my mind".to_string();
 
-        let mut transfer = neuron_1.transfer;
+        let mut transfer = neuron_1.transfer.clone();
         transfer.as_mut().unwrap().memo = 405_405;
 
         Neuron {
@@ -245,21 +245,22 @@ fn test_store_simplest_nontrivial_case() {
             known_neuron_data,
             transfer,
 
-            ..neuron_1
+            ..neuron_1.clone()
         }
     };
-    assert_eq!(store.update(neuron_5.clone()), Ok(()));
+    assert_eq!(store.update(&neuron_1, neuron_5.clone()), Ok(()));
     assert_that_red_herring_neurons_are_untouched(&store);
 
     // 6. Read to verify update.
     assert_eq!(store.read(NeuronId { id: 42 }), Ok(neuron_5.clone()));
 
     // 7. Bad update: Neuron not found (unknown ID).
-    let update_result = store.update(Neuron {
+    let non_existent_neuron = Neuron {
         id: Some(NeuronId { id: 0xDEAD_BEEF }),
         cached_neuron_stake_e8s: 0xBAD_F00D,
         ..Default::default()
-    });
+    };
+    let update_result = store.update(&non_existent_neuron, non_existent_neuron.clone());
     match &update_result {
         // This is what we expected.
         Err(err) => match err {
@@ -295,9 +296,9 @@ fn test_store_simplest_nontrivial_case() {
     let neuron_9 = Neuron {
         known_neuron_data: None,
         transfer: None,
-        ..neuron_5
+        ..neuron_5.clone()
     };
-    assert_eq!(store.update(neuron_9.clone()), Ok(()));
+    assert_eq!(store.update(&neuron_5, neuron_9.clone()), Ok(()));
     assert_that_red_herring_neurons_are_untouched(&store);
 
     // 10. Read to verify second update.

@@ -166,9 +166,7 @@ mod ingress_expiry {
             let builder_info = format!("{:?}", builder);
             let request = builder
                 .with_authentication(scheme)
-                .with_ingress_expiry_at(
-                    CURRENT_TIME.saturating_sub_duration(Duration::from_nanos(1)),
-                )
+                .with_ingress_expiry_at(CURRENT_TIME.saturating_sub(Duration::from_nanos(1)))
                 .build();
 
             let result = verifier.validate_request(&request);
@@ -1150,7 +1148,7 @@ mod authenticated_requests_delegations {
         let verifier = verifier_at_time(CURRENT_TIME).build();
         let expired_delegation_index = rng1.gen_range(1..=MAXIMUM_NUMBER_OF_DELEGATIONS);
         let one_ns = Duration::from_nanos(1);
-        let expired = CURRENT_TIME.saturating_sub_duration(one_ns);
+        let expired = CURRENT_TIME.saturating_sub(one_ns);
         let not_expired = CURRENT_TIME;
         let delegation_chain = grow_delegation_chain(
             DelegationChain::rooted_at(random_user_key_pair(rng1)),

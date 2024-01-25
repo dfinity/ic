@@ -165,7 +165,7 @@ async fn test_neuron_info(
     assert_eq!(1, res.operations.len());
     let metadata: &ObjectMap = res
         .operations
-        .get(0)
+        .first()
         .unwrap()
         .metadata
         .as_ref()
@@ -277,7 +277,7 @@ async fn test_neuron_info_with_hotkey(
     assert_eq!(1, res.operations.len());
     let metadata: &ObjectMap = res
         .operations
-        .get(0)
+        .first()
         .unwrap()
         .metadata
         .as_ref()
@@ -549,7 +549,7 @@ async fn test_neuron_info_with_hotkey_raw(
     }
     assert_eq!(2, operations.len());
     let metadata = operations
-        .get(0)
+        .first()
         .unwrap()
         .get("metadata")
         .expect("No metadata found.");

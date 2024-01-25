@@ -14,18 +14,6 @@ DEFAULT_NODE_VERSION = "19"
 
 REPOS_TO_SCAN = [
     Repository(
-        "ic",
-        "https://gitlab.com/dfinity-lab/public/ic",
-        [
-            Project(
-                name="service-worker",
-                path="ic/typescript/service-worker",
-                owner=Team.TRUST_TEAM,
-            )
-        ],
-        "18.17.1",
-    ),
-    Repository(
         "nns-dapp",
         "https://github.com/dfinity/nns-dapp",
         [

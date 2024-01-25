@@ -1,4 +1,8 @@
-use crate::{common::LOG_PREFIX, mutations::common::encode_or_panic, registry::Registry};
+use crate::{
+    common::LOG_PREFIX,
+    mutations::common::{encode_or_panic, has_duplicates},
+    registry::Registry,
+};
 use std::collections::HashSet;
 
 use candid::{CandidType, Deserialize};
@@ -62,6 +66,13 @@ impl Registry {
         }
         let subnet_id = payload.subnet_id;
         let payload_ecdsa_config = payload.ecdsa_config.as_ref().unwrap();
+
+        if has_duplicates(&payload_ecdsa_config.key_ids) {
+            panic!(
+                "{}The requested ECDSA key ids {:?} have duplicates",
+                LOG_PREFIX, payload_ecdsa_config.key_ids
+            );
+        }
 
         // Ensure that if keys are held by the subnet, they cannot be changed.
         let keys_held_currently = self.get_ecdsa_keys_held_by_subnet(subnet_id);
@@ -397,6 +408,7 @@ mod tests {
         },
         PrincipalId, ReplicaVersion, SubnetId,
     };
+    use maplit::btreemap;
     use std::str::FromStr;
 
     fn make_ecdsa_key(name: &str) -> EcdsaKeyId {
@@ -1070,7 +1082,7 @@ mod tests {
     fn test_ecdsa_keys_cannot_be_enabled_unless_already_held() {
         let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(1, 2);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -1081,13 +1093,18 @@ mod tests {
         };
 
         // Create the subnet we will update that doesn't hold the key
-        let subnet_record = get_invariant_compliant_subnet_record(vec![node_ids.pop().unwrap()]);
+        let mut node_ids_and_dkg_pks_iter = node_ids_and_dkg_pks.iter();
+        let (first_node_id, first_dkg_pk) = node_ids_and_dkg_pks_iter
+            .next()
+            .expect("should contain at least one node ID and key");
+        let subnet_record = get_invariant_compliant_subnet_record(vec![*first_node_id]);
 
         let subnet_id = subnet_test_id(1000);
         registry.maybe_apply_mutation_internal(add_fake_subnet(
             subnet_id,
             &mut subnet_list_record,
             subnet_record,
+            &btreemap!(*first_node_id => first_dkg_pk.clone()),
         ));
 
         let mut payload = make_empty_update_payload(subnet_id);
@@ -1101,6 +1118,47 @@ mod tests {
         payload.ecdsa_key_signing_enable = Some(vec![key]);
 
         // Should panic because we are trying to enable a key that hasn't previously held it
+        registry.do_update_subnet(payload);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "The requested ECDSA key ids [EcdsaKeyId { curve: Secp256k1, name: \"key_id\" }, \
+        EcdsaKeyId { curve: Secp256k1, name: \"key_id\" }] have duplicates"
+    )]
+    fn test_disallow_duplicate_ecdsa_keys() {
+        // Step 1: prepare registry with a subnet record.
+        let mut registry = invariant_compliant_registry(0);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+        let mut subnet_list_record = registry.get_subnet_list_record();
+        let mut node_ids_and_dkg_pks_iter = node_ids_and_dkg_pks.iter();
+        let (first_node_id, first_dkg_pk) = node_ids_and_dkg_pks_iter
+            .next()
+            .expect("should contain at least one node ID and key");
+        let subnet_record = get_invariant_compliant_subnet_record(vec![*first_node_id]);
+        let subnet_id = subnet_test_id(1000);
+        registry.maybe_apply_mutation_internal(add_fake_subnet(
+            subnet_id,
+            &mut subnet_list_record,
+            subnet_record,
+            &btreemap!(*first_node_id => first_dkg_pk.clone()),
+        ));
+
+        // Step 2: try to update the subnet with duplicate ECDSA keys and should panic.
+        let key = EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "key_id".to_string(),
+        };
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.ecdsa_config = Some(EcdsaConfig {
+            quadruples_to_create_in_advance: 1,
+            key_ids: vec![key.clone(), key.clone()],
+            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+        });
+        payload.ecdsa_key_signing_enable = Some(vec![key]);
         registry.do_update_subnet(payload);
     }
 
@@ -1121,14 +1179,18 @@ mod tests {
 
         let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(1, 2);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
 
         // Create first subnet that holds the ECDSA key.
+        let mut node_ids_and_dkg_pks_iter = node_ids_and_dkg_pks.iter();
+        let (first_node_id, first_dkg_pk) = node_ids_and_dkg_pks_iter
+            .next()
+            .expect("should contain at least one node ID");
         let mut subnet_holding_key_record =
-            get_invariant_compliant_subnet_record(vec![node_ids.pop().unwrap()]);
+            get_invariant_compliant_subnet_record(vec![*first_node_id]);
         // This marks the subnet as having the key.
         subnet_holding_key_record.ecdsa_config = Some(
             EcdsaConfig {
@@ -1145,15 +1207,20 @@ mod tests {
             subnet_holding_key_id,
             &mut subnet_list_record,
             subnet_holding_key_record,
+            &btreemap!(*first_node_id => first_dkg_pk.clone()),
         ));
 
         // Create second subnet that does not hold the key.
-        let subnet_to_update = get_invariant_compliant_subnet_record(vec![node_ids.pop().unwrap()]);
+        let (second_node_id, second_dkg_pkg) = node_ids_and_dkg_pks_iter
+            .next()
+            .expect("should contain at least one node ID");
+        let subnet_to_update = get_invariant_compliant_subnet_record(vec![*second_node_id]);
 
         registry.maybe_apply_mutation_internal(add_fake_subnet(
             subnet_to_update_id,
             &mut subnet_list_record,
             subnet_to_update,
+            &btreemap!(*second_node_id => second_dkg_pkg.clone()),
         ));
 
         // Now that both subnets are added to the Registry, one with the existing_key_id,
@@ -1182,19 +1249,24 @@ mod tests {
     fn test_sev_enabled_cannot_be_changed() {
         let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(1, 2);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
 
         // Create the subnet we will update that changes sev_enabled
-        let subnet_record = get_invariant_compliant_subnet_record(vec![node_ids.pop().unwrap()]);
+        let (first_node_id, first_dkg_pk) = node_ids_and_dkg_pks
+            .iter()
+            .next()
+            .expect("should contain at least one node ID");
+        let subnet_record = get_invariant_compliant_subnet_record(vec![*first_node_id]);
 
         let subnet_id = subnet_test_id(1000);
         registry.maybe_apply_mutation_internal(add_fake_subnet(
             subnet_id,
             &mut subnet_list_record,
             subnet_record,
+            &btreemap!(*first_node_id => first_dkg_pk.clone()),
         ));
 
         let mut payload = make_empty_update_payload(subnet_id);
@@ -1215,7 +1287,7 @@ mod tests {
     fn can_disable_signing_without_removing_keys() {
         let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(1, 2);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -1226,8 +1298,12 @@ mod tests {
         };
 
         // Create first subnet that holds the ECDSA key
+        let (first_node_id, first_dkg_pk) = node_ids_and_dkg_pks
+            .iter()
+            .next()
+            .expect("should contain at least one node ID");
         let mut subnet_holding_key_record =
-            get_invariant_compliant_subnet_record(vec![node_ids.pop().unwrap()]);
+            get_invariant_compliant_subnet_record(vec![*first_node_id]);
         // This marks the subnet as having the key
         subnet_holding_key_record.ecdsa_config = Some(
             EcdsaConfig {
@@ -1245,6 +1321,7 @@ mod tests {
             subnet_id,
             &mut subnet_list_record,
             subnet_holding_key_record,
+            &btreemap!(*first_node_id => first_dkg_pk.clone()),
         ));
 
         let mut payload = make_empty_update_payload(subnet_id);
@@ -1302,7 +1379,7 @@ mod tests {
     fn enable_and_disable_signing_lists_should_not_have_same_keys_in_single_request() {
         let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(1, 2);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -1313,8 +1390,11 @@ mod tests {
         };
 
         // Create the subnet we will update
-        let mut subnet_record =
-            get_invariant_compliant_subnet_record(vec![node_ids.pop().unwrap()]);
+        let (first_node_id, first_dkg_pk) = node_ids_and_dkg_pks
+            .iter()
+            .next()
+            .expect("should contain at least one node ID");
+        let mut subnet_record = get_invariant_compliant_subnet_record(vec![*first_node_id]);
         // Give it the key.
         subnet_record.ecdsa_config = Some(
             EcdsaConfig {
@@ -1332,6 +1412,7 @@ mod tests {
             subnet_id,
             &mut subnet_list_record,
             subnet_record,
+            &btreemap!(*first_node_id => first_dkg_pk.clone()),
         ));
 
         let mut payload = make_empty_update_payload(subnet_id);
@@ -1357,7 +1438,7 @@ mod tests {
     fn test_modify_ecdsa_keys_after_setting_fails() {
         let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(1, 2);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -1368,8 +1449,11 @@ mod tests {
         };
 
         // Create the subnet we will update
-        let mut subnet_record =
-            get_invariant_compliant_subnet_record(vec![node_ids.pop().unwrap()]);
+        let (first_node_id, first_dkg_pk) = node_ids_and_dkg_pks
+            .iter()
+            .next()
+            .expect("should contain at least one node ID");
+        let mut subnet_record = get_invariant_compliant_subnet_record(vec![*first_node_id]);
         // Give it the key.
         subnet_record.ecdsa_config = Some(
             EcdsaConfig {
@@ -1387,6 +1471,7 @@ mod tests {
             subnet_id,
             &mut subnet_list_record,
             subnet_record,
+            &btreemap!(*first_node_id => first_dkg_pk.clone()),
         ));
 
         let mut payload = make_empty_update_payload(subnet_id);

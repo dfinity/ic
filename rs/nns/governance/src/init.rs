@@ -111,6 +111,9 @@ impl GovernanceCanisterInitPayloadBuilder {
         if let Some(maturity_equivalent_icp_e8s) = maturity_equivalent_icp_e8s {
             neuron1.maturity_e8s_equivalent = maturity_equivalent_icp_e8s;
             neuron1.joined_community_fund_timestamp_seconds = Some(1);
+            // Setting `auto_stake_maturity` makes simplifies testing, as maturity accumulated
+            // over time does not need to be taken into account.
+            neuron1.auto_stake_maturity = Some(true);
         }
 
         let neuron2 = {

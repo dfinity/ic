@@ -3,16 +3,13 @@
 #![deny(clippy::unwrap_used)]
 
 use async_trait::async_trait;
-use core::fmt;
-use ic_crypto_sha2::Sha256;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::registry::RegistryClientError;
 use ic_types::{NodeId, RegistryVersion};
 use serde::{Deserialize, Deserializer, Serialize};
-use std::cmp::Ordering;
 use std::collections::BTreeSet;
-use std::fmt::{Display, Formatter};
-use std::hash::{Hash, Hasher};
+use std::fmt::{self, Display, Formatter};
+use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
 use tokio_rustls::rustls::{ClientConfig, ServerConfig};
@@ -21,33 +18,26 @@ use x509_parser::certificate::X509Certificate;
 #[cfg(test)]
 mod tests;
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 /// An X.509 certificate
 pub struct TlsPublicKeyCert {
     // rename, to match previous serializations (which used X509PublicKeyCert)
     #[serde(rename = "certificate_der")]
     der_cached: Vec<u8>,
-    #[serde(skip_serializing)]
-    hash_cached: Vec<u8>,
 }
 
 impl TlsPublicKeyCert {
     /// Creates a certificate from ASN.1 DER encoding
     pub fn new_from_der(cert_der: Vec<u8>) -> Result<Self, TlsPublicKeyCertCreationError> {
         use x509_parser::prelude::FromDer;
-        let (remainder, _cert) =
-            X509Certificate::from_der(&cert_der).map_err(|e| TlsPublicKeyCertCreationError {
-                internal_error: format!("Error parsing DER: {}", e),
-            })?;
+        let (remainder, _cert) = X509Certificate::from_der(&cert_der)
+            .map_err(|e| TlsPublicKeyCertCreationError(format!("Error parsing DER: {}", e)))?;
         if !remainder.is_empty() {
-            return Err(TlsPublicKeyCertCreationError {
-                internal_error: format!(
-                    "DER not fully consumed when parsing. Remainder: {remainder:?}",
-                ),
-            });
+            return Err(TlsPublicKeyCertCreationError(format!(
+                "DER not fully consumed when parsing. Remainder: {remainder:?}"
+            )));
         }
         Ok(Self {
-            hash_cached: Sha256::hash(&cert_der).to_vec(),
             der_cached: cert_der,
         })
     }
@@ -55,9 +45,7 @@ impl TlsPublicKeyCert {
     /// Creates a certificate from PEM encoding
     pub fn new_from_pem(pem_cert: &str) -> Result<Self, TlsPublicKeyCertCreationError> {
         let cert_der = x509_parser::pem::Pem::read(std::io::Cursor::new(pem_cert))
-            .map_err(|e| TlsPublicKeyCertCreationError {
-                internal_error: format!("Error parsing PEM: {e}"),
-            })?
+            .map_err(|e| TlsPublicKeyCertCreationError(format!("Error parsing PEM: {e}")))?
             .0
             .contents;
         Self::new_from_der(cert_der)
@@ -76,32 +64,9 @@ impl TlsPublicKeyCert {
     }
 }
 
-impl PartialEq for TlsPublicKeyCert {
-    /// Equality is determined by comparison of the SHA256 hash byte arrays.
-    fn eq(&self, rhs: &Self) -> bool {
-        self.hash_cached == rhs.hash_cached
-    }
-}
-
-impl Eq for TlsPublicKeyCert {}
-
-impl Hash for TlsPublicKeyCert {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.hash_cached.hash(state)
-    }
-}
-
-impl PartialOrd for TlsPublicKeyCert {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for TlsPublicKeyCert {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.hash_cached.cmp(&other.hash_cached)
-    }
-}
+#[derive(Error, Debug)]
+#[error("{0}")]
+pub struct TlsPublicKeyCertCreationError(String);
 
 impl<'de> Deserialize<'de> for TlsPublicKeyCert {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -128,20 +93,6 @@ impl TryFrom<X509PublicKeyCert> for TlsPublicKeyCert {
         TlsPublicKeyCert::new_from_der(value.certificate_der)
     }
 }
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-/// Errors encountered during creation of a `TlsPublicKeyCert`.
-pub struct TlsPublicKeyCertCreationError {
-    pub internal_error: String,
-}
-
-impl Display for TlsPublicKeyCertCreationError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-impl std::error::Error for TlsPublicKeyCertCreationError {}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 /// Errors from a TLS handshake performed as the server. Please refer to the

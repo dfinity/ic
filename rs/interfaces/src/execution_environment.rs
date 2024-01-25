@@ -10,6 +10,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::{PageBytes, PageIndex};
 use ic_types::{
+    consensus::ecdsa::QuadrupleId,
     crypto::canister_threshold_sig::MasterEcdsaPublicKey,
     ingress::{IngressStatus, WasmResult},
     messages::{
@@ -19,9 +20,9 @@ use ic_types::{
     Cycles, ExecutionRound, Height, NumInstructions, NumPages, Randomness, Time,
 };
 use serde::{Deserialize, Serialize};
-use std::convert::TryFrom;
 use std::sync::Arc;
 use std::{collections::BTreeMap, ops};
+use std::{collections::BTreeSet, convert::TryFrom};
 use std::{convert::Infallible, fmt};
 use tower::util::BoxCloneService;
 
@@ -499,6 +500,10 @@ pub trait OutOfInstructionsHandler {
     // the function returns `Err(HypervisorError::InstructionLimitExceeded)`.
     // Otherwise, the function returns a new positive instruction counter.
     fn out_of_instructions(&self, instruction_counter: i64) -> HypervisorResult<i64>;
+
+    // Invoked only when a long execution dirties many memory pages to yield control
+    // and start the copy only in a new slice. This is a performance improvement.
+    fn yield_for_dirty_memory_copy(&self, instruction_counter: i64) -> HypervisorResult<i64>;
 }
 
 /// Indicates the type of stable memory API being used.
@@ -896,6 +901,11 @@ pub trait SystemApi {
     /// Otherwise, the function return a new non-negative instruction counter.
     fn out_of_instructions(&mut self, instruction_counter: i64) -> HypervisorResult<i64>;
 
+    /// This system call is not part of the public spec and it is invoked when
+    /// Wasm execution has a large number of dirty pages that, for performance reasons,
+    /// should be copied in a new execution slice.
+    fn yield_for_dirty_memory_copy(&mut self, instruction_counter: i64) -> HypervisorResult<i64>;
+
     /// This system call is not part of the public spec. It's called after a
     /// native `memory.grow` or `table.grow` has been called to check whether
     /// there's enough available memory left.
@@ -1099,6 +1109,7 @@ pub struct RegistryExecutionSettings {
     pub max_number_of_canisters: u64,
     pub provisional_whitelist: ProvisionalWhitelist,
     pub max_ecdsa_queue_size: u32,
+    pub quadruples_to_create_in_advance: u32,
     pub subnet_size: usize,
 }
 
@@ -1157,6 +1168,7 @@ pub trait Scheduler: Send {
         state: Self::State,
         randomness: Randomness,
         ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+        ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>>,
         current_round: ExecutionRound,
         current_round_type: ExecutionRoundType,
         registry_settings: &RegistryExecutionSettings,

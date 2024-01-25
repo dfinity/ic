@@ -4,16 +4,11 @@ use axum::http::{Request, Response};
 use bytes::Bytes;
 use ic_interfaces::p2p::{
     consensus::{PriorityFnAndFilterProducer, ValidatedPoolReader},
-    state_sync::StateSyncClient,
+    state_sync::{AddChunkError, Chunk, ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient},
 };
 use ic_quic_transport::{ConnId, SendError, Transport};
 use ic_types::artifact::PriorityFn;
-use ic_types::{
-    artifact::StateSyncArtifactId,
-    chunkable::{ArtifactErrorCode, Chunkable},
-    chunkable::{Chunk, ChunkId},
-    NodeId,
-};
+use ic_types::NodeId;
 use mockall::mock;
 
 mock! {
@@ -63,7 +58,8 @@ mock! {
 
     impl<T> Chunkable<T> for Chunkable<T> {
         fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>>;
-        fn add_chunk(&mut self, chunk_id: ChunkId, chunk: Chunk) -> Result<T, ArtifactErrorCode>;
+        fn add_chunk(&mut self, chunk_id: ChunkId, chunk: Chunk) -> Result<(), AddChunkError>;
+        fn completed(&self) -> Option<T>;
     }
 }
 

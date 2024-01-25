@@ -27,11 +27,11 @@ fn main() {
     let mut definitions = vec![];
 
     let (oneshot_sender, oneshot_receiver) = oneshot::channel();
-    if !cli_args.start_without_ic {
-        let ic_definition = get_ic_definition(&cli_args, log.clone());
-        definitions.push(ic_definition.clone());
+    if !cli_args.start_without_mainnet {
+        let mainnet_definition = get_mainnet_definition(&cli_args, log.clone());
+        definitions.push(mainnet_definition.clone());
 
-        let ic_handle = std::thread::spawn(wrap(ic_definition, rt.handle().clone()));
+        let ic_handle = std::thread::spawn(wrap(mainnet_definition, rt.handle().clone()));
         handles.push(ic_handle);
     }
     let definitions = Arc::new(Mutex::new(definitions));
@@ -80,9 +80,8 @@ pub struct CliArgs {
 A writeable directory where the registries of the targeted Internet Computer
 instances are stored.
 
-If the directory does not contain a directory called 'mercury' and
-`--no-mercury` is *not* specified, a corresponding target will be generated and
-initialized with a hardcoded initial registry.
+Mainnet (mercury) directory will be created and initialized if no --start-without-mainnet
+is provided.
 
 "#
     )]
@@ -120,25 +119,23 @@ NNS-url to use for syncing the registry version.
     nns_url: Url,
 
     #[clap(
-        long = "start-without-ic",
+        long = "start-without-mainnet",
         default_value = "false",
         action,
         help = r#"
-Start the discovery without default IC target.
+Start the discovery without the IC Mainnet target.
 "#
     )]
-    start_without_ic: bool,
+    start_without_mainnet: bool,
 }
 
-fn get_ic_definition(cli_args: &CliArgs, log: Logger) -> Definition {
+fn get_mainnet_definition(cli_args: &CliArgs, log: Logger) -> Definition {
     let (ic_stop_signal_sender, ic_stop_signal_rcv) = crossbeam::channel::bounded::<()>(0);
-
-    let def_name = "ic";
 
     Definition::new(
         vec![cli_args.nns_url.clone()],
         cli_args.targets_dir.clone(),
-        def_name.to_string(),
+        "mercury".to_string(),
         log.clone(),
         None,
         cli_args.poll_interval,

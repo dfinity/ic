@@ -357,7 +357,14 @@ type TransferFromError = variant {
     GenericError : record { error_code : nat; message : text };
 };
 
+type ArchiveInfo = record {
+    canister_id: principal;
+    block_range_start: BlockIndex;
+    block_range_end: BlockIndex;
+};
+
 service : (ledger_arg : LedgerArg) -> {
+    archives : () -> (vec ArchiveInfo) query;
     get_transactions : (GetTransactionsRequest) -> (GetTransactionsResponse) query;
     get_blocks : (GetBlocksArgs) -> (GetBlocksResponse) query;  
     get_data_certificate : () -> (DataCertificate) query; 

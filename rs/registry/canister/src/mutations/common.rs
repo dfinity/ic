@@ -1,8 +1,4 @@
-use std::collections::HashSet;
-use std::convert::TryFrom;
-use std::net::Ipv4Addr;
-use std::str::FromStr;
-
+use crate::registry::Registry;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::{
     replica_version::v1::BlessedReplicaVersions, subnet::v1::SubnetListRecord,
@@ -12,8 +8,9 @@ use ic_registry_keys::{
 };
 use ic_registry_transport::pb::v1::RegistryValue;
 use prost::Message;
-
-use crate::registry::Registry;
+use std::{
+    cmp::Eq, collections::HashSet, convert::TryFrom, hash::Hash, net::Ipv4Addr, str::FromStr,
+};
 
 /// Wraps around Message::encode and panics on error.
 pub(crate) fn encode_or_panic<T: Message>(msg: &T) -> Vec<u8> {
@@ -219,6 +216,15 @@ pub fn check_ipv4_config(ip_addr: String, gateway_ip_addrs: Vec<String>, prefix_
     if !is_global_ipv4_address(&ip_addr) {
         panic!("The specified IPv4 address is not a global address");
     }
+}
+
+/// Returns whether a list has duplicate elements.
+pub fn has_duplicates<T>(v: &Vec<T>) -> bool
+where
+    T: Hash + Eq,
+{
+    let s: HashSet<_> = HashSet::from_iter(v);
+    s.len() < v.len()
 }
 
 #[cfg(test)]

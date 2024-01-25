@@ -5,13 +5,13 @@ use std::{
 
 use axum::Server;
 use candid::Principal;
-use criterion::{criterion_group, criterion_main, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput};
 use ic_types::messages::{Blob, HttpQueryContent, HttpRequestEnvelope, HttpUserQuery};
 use rand::prelude::*;
 
 use ic_boundary::test_utils::setup_test_router;
 
-async fn do_request(cli: &reqwest::Client, addr: &SocketAddr) -> reqwest::Response {
+fn gen_request(cli: &reqwest::Client, addr: &SocketAddr, bytes_size: usize) -> reqwest::Request {
     let mut rng = rand::thread_rng();
 
     let canister_id: u64 = rng.gen_range(0..100_000_000);
@@ -21,7 +21,7 @@ async fn do_request(cli: &reqwest::Client, addr: &SocketAddr) -> reqwest::Respon
         query: HttpUserQuery {
             canister_id: Blob(canister_id.as_slice().to_vec()),
             method_name: "foobar".to_string(),
-            arg: Blob("a".repeat(1024).as_bytes().to_vec()),
+            arg: Blob("a".repeat(bytes_size).as_bytes().to_vec()),
             sender: Blob(Principal::anonymous().as_slice().to_vec()),
             nonce: None,
             ingress_expiry: 1234,
@@ -39,13 +39,12 @@ async fn do_request(cli: &reqwest::Client, addr: &SocketAddr) -> reqwest::Respon
 
     cli.post(format!("http://{addr}/api/v2/canister/{canister_id}/query"))
         .body(body)
-        .send()
-        .await
+        .build()
         .unwrap()
 }
 
 fn benchmark(c: &mut Criterion) {
-    let (app, _) = setup_test_router(true, 100, 50);
+    let (app, _) = setup_test_router(true, 100, 50, 16384);
 
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
@@ -73,14 +72,25 @@ fn benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("rps");
     group.throughput(Throughput::Elements(1));
     group.significance_level(0.1);
-    group.sample_size(150);
-    group.measurement_time(Duration::from_secs(5));
-    group.bench_function("test_query", move |b| {
-        b.to_async(&runtime).iter(|| async {
-            let resp = do_request(&cli, &addr).await;
-            resp.text().await.unwrap();
-        })
-    });
+    group.sample_size(250);
+    group.measurement_time(Duration::from_secs(15));
+
+    for req_size in [1024, 4096, 8192, 16384].iter() {
+        group.bench_with_input(
+            BenchmarkId::from_parameter(req_size),
+            req_size,
+            |b, &size| {
+                b.to_async(&runtime).iter_batched(
+                    || gen_request(&cli, &addr, size),
+                    |req| async {
+                        let resp = cli.execute(req).await.unwrap();
+                        resp.text().await.unwrap();
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
+    }
     group.finish();
 }
 
@@ -93,7 +103,7 @@ criterion_main!(benches);
 async fn main2() {
     use std::time::Instant;
 
-    let (app, _) = setup_test_router(false, 100, 50);
+    let (app, _) = setup_test_router(false, 100, 50, 16384); // 16k is > than 97% IC responses
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
 
@@ -110,11 +120,13 @@ async fn main2() {
 
     let cli = reqwest::ClientBuilder::new().build().unwrap();
 
-    let n = 15000;
+    let n = 1;
     let start = Instant::now();
 
     for _ in 0..n {
-        let resp = do_request(&cli, &addr).await;
+        let req = gen_request(&cli, &addr, 1024);
+        let resp = cli.execute(req).await.unwrap();
+        assert_eq!(resp.status(), http::StatusCode::OK);
         resp.text().await.unwrap();
     }
 

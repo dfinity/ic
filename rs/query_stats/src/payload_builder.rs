@@ -1,3 +1,4 @@
+use crate::metrics::QueryStatsPayloadBuilderMetrics;
 use crossbeam_channel::{Receiver, TryRecvError};
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext},
@@ -7,9 +8,10 @@ use ic_interfaces::{
 };
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn, ReplicaLogger};
+use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    batch::{LocalQueryStats, QueryStatsPayload, ValidationContext, ENABLE_QUERY_STATS},
+    batch::{LocalQueryStats, QueryStatsPayload, ValidationContext},
     epoch_from_height, CanisterId, Height, NodeId, NumBytes, QueryStatsEpoch,
 };
 use std::{
@@ -23,7 +25,12 @@ use std::{
 /// We initialize the [`QueryStatsPayloadBuilder`] in two steps, because otherwise
 /// we would have to pass consensus related arguments (like the [`NodeId`]) to the
 /// execution environment.
-pub struct QueryStatsPayloadBuilderParams(pub(crate) Receiver<LocalQueryStats>, pub(crate) u64);
+pub struct QueryStatsPayloadBuilderParams {
+    pub(crate) rx: Receiver<LocalQueryStats>,
+    pub(crate) metrics_registry: MetricsRegistry,
+    pub(crate) epoch_length: u64,
+    pub(crate) enabled: bool,
+}
 
 impl QueryStatsPayloadBuilderParams {
     pub fn into_payload_builder(
@@ -33,23 +40,27 @@ impl QueryStatsPayloadBuilderParams {
         log: ReplicaLogger,
     ) -> Box<dyn BatchPayloadBuilder> {
         Box::new(QueryStatsPayloadBuilderImpl {
+            current_stats: RwLock::new(None),
             state_reader,
+            receiver: self.rx,
             node_id,
             log,
-            current_stats: RwLock::new(None),
-            receiver: self.0,
-            epoch_length: self.1,
+            metrics: QueryStatsPayloadBuilderMetrics::new(&self.metrics_registry),
+            epoch_length: self.epoch_length,
+            enabled: self.enabled,
         })
     }
 }
 
 pub struct QueryStatsPayloadBuilderImpl {
+    current_stats: RwLock<Option<LocalQueryStats>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    receiver: Receiver<LocalQueryStats>,
     node_id: NodeId,
     log: ReplicaLogger,
-    current_stats: RwLock<Option<LocalQueryStats>>,
-    receiver: Receiver<LocalQueryStats>,
+    metrics: QueryStatsPayloadBuilderMetrics,
     epoch_length: u64,
+    enabled: bool,
 }
 
 impl BatchPayloadBuilder for QueryStatsPayloadBuilderImpl {
@@ -60,6 +71,12 @@ impl BatchPayloadBuilder for QueryStatsPayloadBuilderImpl {
         past_payloads: &[PastPayload],
         context: &ValidationContext,
     ) -> Vec<u8> {
+        let _time = self
+            .metrics
+            .query_stats_payload_builder_duration
+            .with_label_values(&["build"])
+            .start_timer();
+
         match self.receiver.try_recv() {
             Ok(new_epoch) => {
                 let Ok(mut epoch) = self.current_stats.write() else {
@@ -77,10 +94,10 @@ impl BatchPayloadBuilder for QueryStatsPayloadBuilderImpl {
             }
         }
 
-        match ENABLE_QUERY_STATS {
-            true => self.build_payload_impl(height, max_size, past_payloads, context),
-            false => vec![],
+        if !self.enabled {
+            return vec![];
         }
+        self.build_payload_impl(height, max_size, past_payloads, context)
     }
 
     fn validate_payload(
@@ -90,6 +107,12 @@ impl BatchPayloadBuilder for QueryStatsPayloadBuilderImpl {
         payload: &[u8],
         past_payloads: &[PastPayload],
     ) -> Result<(), PayloadValidationError> {
+        let _time = self
+            .metrics
+            .query_stats_payload_builder_duration
+            .with_label_values(&["validate"])
+            .start_timer();
+
         // Empty payloads are always valid
         if payload.is_empty() {
             return Ok(());
@@ -97,7 +120,7 @@ impl BatchPayloadBuilder for QueryStatsPayloadBuilderImpl {
 
         // Check whether feature is enabled and reject if it isn't.
         // NOTE: All payloads that are processed at this point are non-empty
-        if !ENABLE_QUERY_STATS {
+        if !self.enabled {
             return Err(transient_error(
                 QueryStatsTransientValidationError::Disabled,
             ));
@@ -122,7 +145,11 @@ impl QueryStatsPayloadBuilderImpl {
             Some(stats) => stats,
             None => {
                 return {
-                    warn!(self.log, "Current stats are uninitalized. This warning should go away after some minutes");
+                    warn!(
+                        every_n_seconds => 30,
+                        self.log,
+                        "Current stats are uninitalized. This warning should go away after some minutes"
+                    );
                     vec![]
                 }
             }
@@ -146,12 +173,23 @@ impl QueryStatsPayloadBuilderImpl {
         };
 
         // Pick all stats that have not been sent before
-        let messages = current_stats
+        let messages: Vec<_> = current_stats
             .stats
             .iter()
             .filter(|stats| !previous_ids.contains(&stats.canister_id))
             .cloned()
-            .collect();
+            .collect::<Vec<_>>();
+
+        if messages.is_empty() {
+            return vec![];
+        }
+
+        self.metrics
+            .query_stats_payload_builder_current_epoch
+            .set(current_stats.epoch.get() as i64);
+        self.metrics
+            .query_stats_payload_builder_num_canister_ids
+            .set(messages.len() as i64);
 
         let payload = QueryStatsPayload {
             epoch: current_stats.epoch,
@@ -357,7 +395,8 @@ mod tests {
     use super::*;
     use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_test_utilities::{mock_time, state::ReplicatedStateBuilder};
+    use ic_test_utilities::state::ReplicatedStateBuilder;
+    use ic_test_utilities_time::mock_time;
     use ic_types::{
         batch::{CanisterQueryStats, QueryStats, RawQueryStats},
         crypto::{CryptoHash, CryptoHashOf},
@@ -728,12 +767,14 @@ mod tests {
     ) -> QueryStatsPayloadBuilderImpl {
         let (_, rx) = crossbeam_channel::bounded(1);
         QueryStatsPayloadBuilderImpl {
+            current_stats: Some(stats).into(),
             state_reader: Arc::new(state),
+            receiver: rx,
             node_id: node_test_id(1),
             log: no_op_logger(),
-            current_stats: Some(stats).into(),
-            receiver: rx,
+            metrics: QueryStatsPayloadBuilderMetrics::new(&MetricsRegistry::default()),
             epoch_length: ic_config::execution_environment::QUERY_STATS_EPOCH_LENGTH,
+            enabled: true,
         }
     }
 

@@ -745,6 +745,7 @@ impl Player {
             // Use a fake randomness here since we don't have random tape for extra messages
             randomness,
             ecdsa_subnet_public_keys: BTreeMap::new(),
+            ecdsa_quadruple_ids: BTreeMap::new(),
             registry_version,
             time,
             consensus_responses: Vec::new(),

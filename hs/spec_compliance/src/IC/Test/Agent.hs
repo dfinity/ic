@@ -60,6 +60,7 @@ module IC.Test.Agent
     code202_or_4xx,
     code2xx,
     code4xx,
+    code403,
     decodeCert',
     defaultSK,
     defaultUser,
@@ -486,11 +487,11 @@ sync_height cid = forM subnets $ \sub -> do
   let ranges = map (\(a, b) -> (wordToId' a, wordToId' b)) (tc_canister_ranges sub)
   when (any (\(a, b) -> a <= cid && cid <= b) ranges) $ do
     hs <- get_heights (tc_node_addresses sub)
-    let h = maximum hs
     unless (length (nub hs) <= 1) $
-      waitFor $ do
-        hs <- get_heights (tc_node_addresses sub)
-        if h <= minimum hs then return (Just ()) else return Nothing
+      let h = maximum hs
+       in waitFor $ do
+            hs <- get_heights (tc_node_addresses sub)
+            if h <= minimum hs then return (Just ()) else return Nothing
   where
     get_heights ns =
       mapM
@@ -776,6 +777,9 @@ code2xx, code202, code4xx, code202_or_4xx :: (HasCallStack) => Response BS.ByteS
 code2xx = codePred "2xx" $ \c -> 200 <= c && c < 300
 code202 = codePred "202" $ \c -> c == 202
 code4xx = codePred "4xx" $ \c -> 400 <= c && c < 500
+
+code403 = codePred "403" $ \c -> c == 403
+
 code202_or_4xx = codePred "202 or 4xx" $ \c -> c == 202 || 400 <= c && c < 500
 
 -- * CBOR decoding

@@ -1,6 +1,6 @@
 ---
 source: rs/embedders/tests/instrumentation.rs
-assertion_line: 55
+assertion_line: 53
 expression: out
 ---
 (module
@@ -174,8 +174,8 @@ expression: out
     local.get 5
     i32.sub
   )
-  (memory (;0;) i64 0 1572864)
-  (memory (;1;) 384 384)
+  (memory (;0;) i64 0 6553600)
+  (memory (;1;) 1600 1600)
   (global (;0;) (mut i64) i64.const 0)
   (global (;1;) (mut i64) i64.const 0)
   (global (;2;) (mut i64) i64.const 0)

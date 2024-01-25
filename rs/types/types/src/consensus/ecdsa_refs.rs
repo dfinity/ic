@@ -86,7 +86,7 @@ impl TryFrom<&pb::RequestId> for RequestId {
 
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
-pub struct QuadrupleId(pub(crate) u64, pub(crate) Option<EcdsaKeyId>);
+pub struct QuadrupleId(pub u64, pub Option<EcdsaKeyId>);
 
 impl QuadrupleId {
     pub fn id(&self) -> u64 {
@@ -925,6 +925,9 @@ pub trait EcdsaBlockReader: Send + Sync {
         &self,
     ) -> Box<dyn Iterator<Item = (&RequestId, &ThresholdEcdsaSigInputsRef)> + '_>;
 
+    /// For the given quadruple ID, returns the quadruple ref if available.
+    fn available_quadruple(&self, id: &QuadrupleId) -> Option<&PreSignatureQuadrupleRef>;
+
     /// Returns the set of all the active references.
     fn active_transcripts(&self) -> BTreeSet<TranscriptRef>;
 
@@ -1361,7 +1364,9 @@ impl From<&PreSignatureQuadrupleRef> for pb::PreSignatureQuadrupleRef {
             lambda_masked_ref: Some((&quadruple.lambda_masked_ref).into()),
             kappa_times_lambda_ref: Some((&quadruple.kappa_times_lambda_ref).into()),
             key_times_lambda_ref: Some((&quadruple.key_times_lambda_ref).into()),
-            key_unmasked_ref: None,
+            key_unmasked_ref: quadruple
+                .key_unmasked_ref
+                .map(|transcript| (&transcript).into()),
         }
     }
 }

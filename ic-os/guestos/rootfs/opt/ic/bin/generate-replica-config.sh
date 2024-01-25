@@ -78,6 +78,7 @@ function read_network_variables() {
             "ipv4_name_servers") ipv4_name_servers="${value}" ;;
             "ipv4_address") ipv4_address="${value}" ;;
             "ipv4_gateway") ipv4_gateway="${value}" ;;
+            "domain") domain="${value}" ;;
         esac
     done <"$1"
 }
@@ -204,6 +205,7 @@ IPV6_ADDRESS="${ipv6_address%/*}"
 IPV6_ADDRESS="${IPV6_ADDRESS:-$(get_if_address_retries 6 ${INTERFACE} 12)}"
 IPV4_ADDRESS="${ipv4_address:-}"
 IPV4_GATEWAY="${ipv4_gateway:-}"
+DOMAIN="${domain:-}"
 NNS_URL="${nns_url:-http://[::1]:8080}"
 NODE_INDEX="${node_index:-0}"
 # Default value is 24h
@@ -239,6 +241,7 @@ fi
 sed -e "s@{{ ipv6_address }}@${IPV6_ADDRESS}@" \
     -e "s@{{ ipv4_address }}@${IPV4_ADDRESS}@" \
     -e "s@{{ ipv4_gateway }}@${IPV4_GATEWAY}@" \
+    -e "s@{{ domain }}@${DOMAIN}@" \
     -e "s@{{ nns_url }}@${NNS_URL}@" \
     -e "s@{{ node_index }}@${NODE_INDEX}@" \
     -e "s@{{ backup_retention_time_secs }}@${BACKUP_RETENTION_TIME_SECS}@" \

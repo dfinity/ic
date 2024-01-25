@@ -1,19 +1,20 @@
 // The Local Replica is running the binary of a replica of the IC locally and thus allows for local testing
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
-use ic_agent::agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Agent;
+use ic_agent::{agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport, Identity};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ic00_types::{CanisterInstallMode, CreateCanisterArgs, InstallCodeArgs};
+use ic_icrc1_ledger::FeatureFlags;
 use ic_icrc1_ledger::{InitArgs, InitArgsBuilder, LedgerArgument};
 use ic_icrc1_ledger_sm_tests::{
     ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, FEE, INT_META_KEY, INT_META_VALUE,
     NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY, TEXT_META_VALUE,
     TOKEN_NAME, TOKEN_SYMBOL,
 };
+use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_starter_tests::{ReplicaBins, ReplicaContext, ReplicaStarterConfig};
-use icrc_ledger_types::icrc1::account::Account;
 
 use std::sync::Arc;
 use url::Url;
@@ -62,6 +63,13 @@ pub async fn start_new_local_replica() -> ReplicaContext {
 }
 
 pub async fn get_testing_agent(context: &ReplicaContext) -> Agent {
+    get_custom_agent(Arc::new(test_identity()), context).await
+}
+
+pub async fn get_custom_agent(
+    basic_identity: Arc<dyn Identity>,
+    context: &ReplicaContext,
+) -> Agent {
     // The local replica will be running on the localhost
     let replica_url = Url::parse(&format!("http://localhost:{}", context.port)).unwrap();
 
@@ -70,7 +78,7 @@ pub async fn get_testing_agent(context: &ReplicaContext) -> Agent {
     let transport =
         ReqwestHttpReplicaV2Transport::create_with_client(replica_url.clone(), client).unwrap();
     let agent = Agent::builder()
-        .with_identity(test_identity())
+        .with_identity(basic_identity)
         .with_arc_transport(Arc::new(transport))
         .build()
         .unwrap();
@@ -80,16 +88,13 @@ pub async fn get_testing_agent(context: &ReplicaContext) -> Agent {
     agent
 }
 
-pub async fn icrc_ledger_default_args_builder(context: &ReplicaContext) -> InitArgsBuilder {
-    let testing_account: Account = get_testing_agent(context)
-        .await
-        .get_principal()
-        .unwrap()
-        .into();
+pub fn icrc_ledger_default_args_builder() -> InitArgsBuilder {
+    let test_identity = test_identity();
     InitArgsBuilder::with_symbol_and_name(TOKEN_SYMBOL, TOKEN_NAME)
-        .with_minting_account(testing_account)
-        .with_initial_balance(testing_account, 1_000_000_000_000u64)
         .with_transfer_fee(FEE)
+        .with_feature_flags(FeatureFlags { icrc2: true })
+        .with_minting_account(minter_identity().sender().unwrap())
+        .with_initial_balance(test_identity.sender().unwrap(), 1_000_000_000_000u64)
         .with_archive_options(ArchiveOptions {
             trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
             num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE as usize,
@@ -107,7 +112,7 @@ pub async fn icrc_ledger_default_args_builder(context: &ReplicaContext) -> InitA
 
 // Deploy an icrc ledger with the default arguments from sm-tests and return the canister id of the icrc ledger
 pub async fn deploy_icrc_ledger_with_default_args(context: &ReplicaContext) -> CanisterId {
-    let default_init_args = icrc_ledger_default_args_builder(context).await.build();
+    let default_init_args = icrc_ledger_default_args_builder().build();
     deploy_icrc_ledger_with_custom_args(context, default_init_args).await
 }
 

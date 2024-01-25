@@ -1,7 +1,7 @@
 use crate::pb::v1::{
     governance::{
-        followers_map::Followers, FollowersMap, GovernanceCachedMetrics, MakingSnsProposal,
-        Migrations, NeuronInFlightCommand,
+        followers_map::Followers, FollowersMap, GenesisNeuronAccounts, GovernanceCachedMetrics,
+        MakingSnsProposal, Migrations, NeuronInFlightCommand,
     },
     neuron::Followees,
     Governance as GovernanceProto, MostRecentMonthlyNodeProviderRewards, NetworkEconomics, Neuron,
@@ -34,6 +34,7 @@ pub struct HeapGovernanceData {
     pub spawning_neurons: Option<bool>,
     pub making_sns_proposal: Option<MakingSnsProposal>,
     pub migrations: Option<Migrations>,
+    pub genesis_neuron_accounts: Option<GenesisNeuronAccounts>,
 }
 
 fn proto_to_heap_topic_followee_index(
@@ -120,6 +121,7 @@ pub fn split_governance_proto(
         making_sns_proposal,
         migrations,
         topic_followee_index,
+        genesis_neuron_accounts,
     } = governance_proto;
 
     let neuron_management_voting_period_seconds =
@@ -148,6 +150,7 @@ pub fn split_governance_proto(
             spawning_neurons,
             making_sns_proposal,
             migrations,
+            genesis_neuron_accounts,
         },
     )
 }
@@ -183,6 +186,7 @@ pub fn reassemble_governance_proto(
         spawning_neurons,
         making_sns_proposal,
         migrations,
+        genesis_neuron_accounts,
     } = heap_governance_proto;
 
     let neuron_management_voting_period_seconds = Some(neuron_management_voting_period_seconds);
@@ -208,6 +212,7 @@ pub fn reassemble_governance_proto(
         making_sns_proposal,
         migrations,
         topic_followee_index: heap_topic_followee_index_to_proto(topic_followee_index),
+        genesis_neuron_accounts,
     }
 }
 
@@ -248,6 +253,7 @@ mod tests {
             making_sns_proposal: Some(MakingSnsProposal::default()),
             migrations: Some(Migrations::default()),
             topic_followee_index: Default::default(),
+            genesis_neuron_accounts: Some(GenesisNeuronAccounts::default()),
         }
     }
 

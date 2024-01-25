@@ -86,6 +86,7 @@ rust_test(
         "//rs/test_utilities",
         "//rs/test_utilities/in_memory_logger",
         "//rs/test_utilities/logger",
+        "//rs/test_utilities/time",
         "@crate_index//:mockall",
     ],
 )

@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -20,8 +20,14 @@ DEPENDENCIES = [
     "@crate_index//:tokio",
 ]
 
+rust_library(
+    name = "ic-sns-audit",
+    srcs = ["src/lib.rs"],
+    deps = DEPENDENCIES,
+)
+
 rust_binary(
     name = "sns-audit",
     srcs = ["src/main.rs"],
-    deps = DEPENDENCIES,
+    deps = DEPENDENCIES + [":ic-sns-audit"],
 )

@@ -51,9 +51,13 @@ fn request_clone(parts: &Parts, body: &[u8]) -> Request<Body> {
     // TODO upgrade to 1.0.0 at some point, for now we just manually copy the following extensions that have
     // to be present. This must be kept in sync with whatever extensions we inject into the request before retry middleware.
 
-    request
-        .extensions_mut()
-        .insert(parts.extensions.get::<RequestContext>().unwrap().clone());
+    request.extensions_mut().insert(
+        parts
+            .extensions
+            .get::<Arc<RequestContext>>()
+            .unwrap()
+            .clone(),
+    );
 
     request
         .extensions_mut()
@@ -65,7 +69,7 @@ fn request_clone(parts: &Parts, body: &[u8]) -> Request<Body> {
 /// Middleware that optionally retries the request according to the predefined conditions
 pub async fn retry_request(
     State(params): State<RetryParams>,
-    Extension(ctx): Extension<RequestContext>,
+    Extension(ctx): Extension<Arc<RequestContext>>,
     Extension(subnet): Extension<Arc<RouteSubnet>>,
     mut request: Request<Body>,
     next: Next<Body>,
@@ -94,7 +98,7 @@ pub async fn retry_request(
     let body = body::to_bytes(body).await.unwrap();
 
     let mut response_last: Option<AxumResponse> = None;
-    let mut node_last: Option<Node> = None;
+    let mut node_last: Option<Arc<Node>> = None;
     let mut retry_result = RetryResult {
         retries: 0,
         success: false,

@@ -16,6 +16,7 @@ DEPENDENCIES = [
     "//rs/registry/helpers",
     "//rs/replicated_state",
     "//rs/test_utilities",
+    "//rs/test_utilities/time",
     "//rs/types/types",
     "@crate_index//:tempfile",
 ]

@@ -11,6 +11,8 @@ pub struct CallContext {
     pub time_nanos: u64,
     #[prost(uint64, tag = "10")]
     pub instructions_executed: u64,
+    #[prost(message, optional, tag = "11")]
+    pub metadata: ::core::option::Option<super::super::queues::v1::RequestMetadata>,
     #[prost(oneof = "call_context::CallOrigin", tags = "1, 2, 3, 4, 7")]
     pub call_origin: ::core::option::Option<call_context::CallOrigin>,
 }
@@ -601,6 +603,9 @@ pub struct CanisterStateBits {
     /// Statistics on query execution for entire lifetime of canister.
     #[prost(message, optional, tag = "41")]
     pub total_query_stats: ::core::option::Option<TotalQueryStats>,
+    /// Log visibility for the canister.
+    #[prost(enumeration = "LogVisibility", tag = "42")]
+    pub log_visibility: i32,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }
@@ -737,6 +742,35 @@ impl CyclesUseCase {
             "CYCLES_USE_CASE_DELETED_CANISTERS" => Some(Self::DeletedCanisters),
             "CYCLES_USE_CASE_NON_CONSUMED" => Some(Self::NonConsumed),
             "CYCLES_USE_CASE_BURNED_CYCLES" => Some(Self::BurnedCycles),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum LogVisibility {
+    Unspecified = 0,
+    Controllers = 1,
+    Public = 2,
+}
+impl LogVisibility {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            LogVisibility::Unspecified => "LOG_VISIBILITY_UNSPECIFIED",
+            LogVisibility::Controllers => "LOG_VISIBILITY_CONTROLLERS",
+            LogVisibility::Public => "LOG_VISIBILITY_PUBLIC",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "LOG_VISIBILITY_UNSPECIFIED" => Some(Self::Unspecified),
+            "LOG_VISIBILITY_CONTROLLERS" => Some(Self::Controllers),
+            "LOG_VISIBILITY_PUBLIC" => Some(Self::Public),
             _ => None,
         }
     }

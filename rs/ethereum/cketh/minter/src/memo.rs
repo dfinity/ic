@@ -1,11 +1,11 @@
 #[cfg(test)]
 mod tests;
 
-use crate::address::Address;
 use crate::eth_logs::ReceivedEthEvent;
 use crate::eth_rpc::Hash;
 use crate::numeric::LogIndex;
 use crate::state::transactions::ReimbursementRequest;
+use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use minicbor::{Decode, Encode, Encoder};
 

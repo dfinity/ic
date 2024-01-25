@@ -824,7 +824,7 @@ fn list_subaccounts(args: ListSubaccountsArgs) -> Vec<Subaccount> {
     })
 }
 
-#[query]
+#[query(hidden = true)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
         let mut writer =
@@ -927,7 +927,7 @@ candid::export_service!();
 
 #[test]
 fn check_candid_interface() {
-    use candid::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{service_equal, CandidSource};
     use std::path::PathBuf;
 
     let new_interface = __export_service();

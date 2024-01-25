@@ -44,5 +44,5 @@ rust_test(
     compile_data = ["interface.did"],
     crate = ":_wasm_certificate_orchestrator",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES,
+    deps = DEPENDENCIES + ["@crate_index//:candid_parser"],
 )

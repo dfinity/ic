@@ -81,6 +81,7 @@ fn fake_complete() -> DownloadState {
         manifest,
         meta_manifest: Arc::new(meta_manifest),
         state_sync_file_group: Default::default(),
+        malicious_flags: Default::default(),
     };
     DownloadState::Complete(Box::new(artifact))
 }

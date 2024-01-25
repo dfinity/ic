@@ -22,14 +22,13 @@ use ic_interfaces::{
     time_source::TimeSource,
 };
 use ic_test_utilities::{
-    mock_time,
     state::{CanisterStateBuilder, ReplicatedStateBuilder},
     types::{
         ids::{canister_test_id, node_test_id},
         messages::SignedIngressBuilder,
     },
-    FastForwardTimeSource,
 };
+use ic_test_utilities_time::{mock_time, FastForwardTimeSource};
 use ic_types::crypto::crypto_hash;
 use ic_types::{
     artifact::IngressMessageId, batch::ValidationContext, messages::SignedIngress, CountBytes,

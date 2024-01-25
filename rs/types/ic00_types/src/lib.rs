@@ -77,6 +77,8 @@ pub enum Method {
 
     NodeMetricsHistory,
 
+    FetchCanisterLogs,
+
     // These methods are only available on test IC instances where there is a
     // need to fabricate cycles without burning ICP first.
     ProvisionalCreateCanisterWithCycles,
@@ -661,6 +663,42 @@ impl UninstallCodeArgs {
 
 impl Payload<'_> for UninstallCodeArgs {}
 
+/// Log visibility for a canister.
+/// ```text
+/// variant {
+///    controllers;
+///    public;
+/// }
+/// ```
+#[derive(Default, Clone, Copy, CandidType, Deserialize, Debug, PartialEq, Eq)]
+pub enum LogVisibility {
+    #[default]
+    #[serde(rename = "controllers")]
+    Controllers,
+    #[serde(rename = "public")]
+    Public,
+}
+
+impl From<LogVisibility> for i32 {
+    fn from(item: LogVisibility) -> Self {
+        match item {
+            LogVisibility::Controllers => 1,
+            LogVisibility::Public => 2,
+        }
+    }
+}
+
+impl From<i32> for LogVisibility {
+    fn from(item: i32) -> Self {
+        match item {
+            0 => Self::default(),
+            1 => Self::Controllers,
+            2 => Self::Public,
+            _ => panic!("Unsupported value"),
+        }
+    }
+}
+
 /// Struct used for encoding/decoding
 /// `(record {
 ///     controller : principal;
@@ -668,6 +706,7 @@ impl Payload<'_> for UninstallCodeArgs {}
 ///     memory_allocation: nat;
 ///     freezing_threshold: nat;
 ///     reserved_cycles_limit: nat;
+///     log_visibility: log_visibility;
 /// })`
 #[derive(CandidType, Clone, Deserialize, Debug, Eq, PartialEq)]
 pub struct DefiniteCanisterSettingsArgs {
@@ -677,6 +716,7 @@ pub struct DefiniteCanisterSettingsArgs {
     memory_allocation: candid::Nat,
     freezing_threshold: candid::Nat,
     reserved_cycles_limit: candid::Nat,
+    log_visibility: LogVisibility,
 }
 
 impl DefiniteCanisterSettingsArgs {
@@ -687,6 +727,7 @@ impl DefiniteCanisterSettingsArgs {
         memory_allocation: Option<u64>,
         freezing_threshold: u64,
         reserved_cycles_limit: Option<u128>,
+        log_visibility: LogVisibility,
     ) -> Self {
         let memory_allocation = candid::Nat::from(memory_allocation.unwrap_or(0));
         let reserved_cycles_limit = candid::Nat::from(reserved_cycles_limit.unwrap_or(0));
@@ -697,6 +738,7 @@ impl DefiniteCanisterSettingsArgs {
             memory_allocation,
             freezing_threshold: candid::Nat::from(freezing_threshold),
             reserved_cycles_limit,
+            log_visibility,
         }
     }
 
@@ -706,6 +748,10 @@ impl DefiniteCanisterSettingsArgs {
 
     pub fn reserved_cycles_limit(&self) -> candid::Nat {
         self.reserved_cycles_limit.clone()
+    }
+
+    pub fn log_visibility(&self) -> LogVisibility {
+        self.log_visibility
     }
 }
 
@@ -822,6 +868,7 @@ impl CanisterStatusResultV2 {
         memory_allocation: Option<u64>,
         freezing_threshold: u64,
         reserved_cycles_limit: Option<u128>,
+        log_visibility: LogVisibility,
         idle_cycles_burned_per_day: u128,
         reserved_cycles: u128,
         query_num_calls: u128,
@@ -845,6 +892,7 @@ impl CanisterStatusResultV2 {
                 memory_allocation,
                 freezing_threshold,
                 reserved_cycles_limit,
+                log_visibility,
             ),
             freezing_threshold: candid::Nat::from(freezing_threshold),
             idle_cycles_burned_per_day: candid::Nat::from(idle_cycles_burned_per_day),
@@ -1451,6 +1499,7 @@ fn verify_max_bounded_controllers_length() {
 ///     memory_allocation: opt nat;
 ///     freezing_threshold: opt nat;
 ///     reserved_cycles_limit: opt nat;
+///     log_visibility : opt log_visibility;
 /// })`
 #[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq)]
 pub struct CanisterSettingsArgs {
@@ -1461,25 +1510,23 @@ pub struct CanisterSettingsArgs {
     pub memory_allocation: Option<candid::Nat>,
     pub freezing_threshold: Option<candid::Nat>,
     pub reserved_cycles_limit: Option<candid::Nat>,
+    pub log_visibility: Option<LogVisibility>,
 }
 
 impl Payload<'_> for CanisterSettingsArgs {}
 
 impl CanisterSettingsArgs {
-    pub fn new(
-        controllers: Option<Vec<PrincipalId>>,
-        compute_allocation: Option<u64>,
-        memory_allocation: Option<u64>,
-        freezing_threshold: Option<u64>,
-        reserved_cycles_limit: Option<u128>,
-    ) -> Self {
+    /// Note: do not use `new(...)` with passing all the arguments, use corresponding builder instead.
+    #[deprecated(note = "please use `CanisterSettingsArgsBuilder` instead")]
+    pub fn new() -> Self {
         Self {
             controller: None,
-            controllers: controllers.map(BoundedControllers::new),
-            compute_allocation: compute_allocation.map(candid::Nat::from),
-            memory_allocation: memory_allocation.map(candid::Nat::from),
-            freezing_threshold: freezing_threshold.map(candid::Nat::from),
-            reserved_cycles_limit: reserved_cycles_limit.map(candid::Nat::from),
+            controllers: None,
+            compute_allocation: None,
+            memory_allocation: None,
+            freezing_threshold: None,
+            reserved_cycles_limit: None,
+            log_visibility: None,
         }
     }
 
@@ -1496,6 +1543,7 @@ pub struct CanisterSettingsArgsBuilder {
     memory_allocation: Option<candid::Nat>,
     freezing_threshold: Option<candid::Nat>,
     reserved_cycles_limit: Option<candid::Nat>,
+    log_visibility: Option<LogVisibility>,
 }
 
 #[allow(dead_code)]
@@ -1512,6 +1560,7 @@ impl CanisterSettingsArgsBuilder {
             memory_allocation: self.memory_allocation,
             freezing_threshold: self.freezing_threshold,
             reserved_cycles_limit: self.reserved_cycles_limit,
+            log_visibility: self.log_visibility,
         }
     }
 
@@ -1576,6 +1625,14 @@ impl CanisterSettingsArgsBuilder {
     pub fn with_reserved_cycles_limit(self, reserved_cycles_limit: u128) -> Self {
         Self {
             reserved_cycles_limit: Some(candid::Nat::from(reserved_cycles_limit)),
+            ..self
+        }
+    }
+
+    /// Sets the log visibility.
+    pub fn with_log_visibility(self, log_visibility: LogVisibility) -> Self {
+        Self {
+            log_visibility: Some(log_visibility),
             ..self
         }
     }
@@ -2237,6 +2294,25 @@ pub struct NodeMetricsHistoryResponse {
 }
 
 impl Payload<'_> for NodeMetricsHistoryResponse {}
+
+/// `CandidType` for `FetchCanisterLogsRequest`
+/// ```text
+/// record {
+///     canister_id: principal;
+/// }
+/// ```
+#[derive(Default, Clone, CandidType, Deserialize, Debug)]
+pub struct FetchCanisterLogsRequest {
+    pub canister_id: PrincipalId,
+}
+
+impl Payload<'_> for FetchCanisterLogsRequest {}
+
+impl FetchCanisterLogsRequest {
+    pub fn get_canister_id(&self) -> CanisterId {
+        CanisterId::unchecked_from_principal(self.canister_id)
+    }
+}
 
 /// Struct used for encoding/decoding
 /// `(record {

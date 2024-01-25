@@ -54,12 +54,17 @@ fn should_verify_transcript_reject_if_dealing_is_removed() -> Result<(), Thresho
         let random_seed = Seed::from_rng(&mut rng);
         let setup = ProtocolSetup::new(cfg, nodes, threshold, random_seed)?;
         let random = ProtocolRound::random(&setup, nodes, corrupted)?;
+        let urandom = ProtocolRound::random_unmasked(&setup, nodes, corrupted)?;
         let reshared = ProtocolRound::reshare_of_masked(&setup, &random, nodes, corrupted)?;
         let product = ProtocolRound::multiply(&setup, &random, &reshared, nodes, corrupted)?;
         let reshared2 = ProtocolRound::reshare_of_unmasked(&setup, &reshared, nodes, corrupted)?;
 
         for node_index in 0..nodes as u32 {
             assert!(!remove_dealing_and_verify(node_index, &setup, &random));
+        }
+
+        for node_index in 0..nodes as u32 {
+            assert!(!remove_dealing_and_verify(node_index, &setup, &urandom));
         }
 
         for node_index in 0..nodes as u32 {
@@ -90,6 +95,7 @@ fn should_verify_transcript_reject_if_dealing_is_swapped() -> Result<(), Thresho
         let random_seed = Seed::from_rng(&mut rng);
         let setup = ProtocolSetup::new(cfg, nodes, threshold, random_seed)?;
         let random = ProtocolRound::random(&setup, nodes, corrupted)?;
+        let urandom = ProtocolRound::random_unmasked(&setup, nodes, corrupted)?;
         let reshared = ProtocolRound::reshare_of_masked(&setup, &random, nodes, corrupted)?;
         let product = ProtocolRound::multiply(&setup, &random, &reshared, nodes, corrupted)?;
         let reshared2 = ProtocolRound::reshare_of_unmasked(&setup, &reshared, nodes, corrupted)?;
@@ -102,6 +108,7 @@ fn should_verify_transcript_reject_if_dealing_is_swapped() -> Result<(), Thresho
         this is the unique set of dealings that can create a particular transcript.
          */
         assert!(swap_dealing_and_verify(0, 1, &setup, &random));
+        assert!(swap_dealing_and_verify(0, 1, &setup, &urandom));
         assert!(!swap_dealing_and_verify(0, 1, &setup, &reshared));
         assert!(!swap_dealing_and_verify(0, 1, &setup, &product));
         assert!(!swap_dealing_and_verify(0, 1, &setup, &reshared2));
@@ -122,12 +129,17 @@ fn should_verify_transcript_reject_if_dealing_is_duplicated() -> Result<(), Thre
         let random_seed = Seed::from_rng(&mut rng);
         let setup = ProtocolSetup::new(cfg, nodes, threshold, random_seed)?;
         let random = ProtocolRound::random(&setup, nodes, corrupted)?;
+        let urandom = ProtocolRound::random_unmasked(&setup, nodes, corrupted)?;
         let reshared = ProtocolRound::reshare_of_masked(&setup, &random, nodes, corrupted)?;
         let product = ProtocolRound::multiply(&setup, &random, &reshared, nodes, corrupted)?;
         let reshared2 = ProtocolRound::reshare_of_unmasked(&setup, &reshared, nodes, corrupted)?;
 
         for node_index in 0..nodes as u32 {
             assert!(!dup_dealing_and_verify(node_index, &setup, &random));
+        }
+
+        for node_index in 0..nodes as u32 {
+            assert!(!dup_dealing_and_verify(node_index, &setup, &urandom));
         }
 
         for node_index in 0..nodes as u32 {

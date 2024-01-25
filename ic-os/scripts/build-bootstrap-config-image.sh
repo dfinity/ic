@@ -45,6 +45,9 @@ options may be specified:
   --ipv4_gateway a.b.c.d
     (optional) Default IPv4 gateway (e.g. 18.208.190.33).
 
+    --domain domain
+    (optional) The domain name to assign to the guest.
+
   --hostname name
     Name to assign to the host. Will be used in logging.
 
@@ -118,11 +121,6 @@ options may be specified:
   --socks_proxy url
     The URL of the socks proxy to use. To be used in
     systems tests only.
-
-  --get_sev_certs
-    If on an SEV-SNP enabled machine, include the ark, ask, and vcek
-    certificates in the config image.  Note: this requires that this
-    script is executed on the host which will be running the SEV-SNP VM.
 EOF
 }
 
@@ -133,7 +131,7 @@ function build_ic_bootstrap_tar() {
     local OUT_FILE="$1"
     shift
 
-    local IPV6_ADDRESS IPV6_GATEWAY IPV6_NAME_SERVERS IPV4_NAME_SERVERS HOSTNAME
+    local IPV6_ADDRESS IPV6_GATEWAY IPV6_NAME_SERVERS IPV4_NAME_SERVERS DOMAIN HOSTNAME
     local IC_CRYPTO IC_REGISTRY_LOCAL_STORE
     local NNS_URL NNS_PUBLIC_KEY NODE_OPERATOR_PRIVATE_KEY
     local BACKUP_RETENTION_TIME_SECS BACKUP_PURGING_INTERVAL_SECS
@@ -142,13 +140,13 @@ function build_ic_bootstrap_tar() {
     local REPLICA_LOG_DEBUG_OVERRIDES
     local MALICIOUS_BEHAVIOR
     local BITCOIND_ADDR
-    local GET_SEV_CERTS=false
 
     while true; do
         if [ $# == 0 ]; then
             break
         fi
         case "$1" in
+
             --ipv6_address)
                 IPV6_ADDRESS="$2"
                 ;;
@@ -166,6 +164,9 @@ function build_ic_bootstrap_tar() {
                 ;;
             --ipv4_gateway)
                 IPV4_GATEWAY="$2"
+                ;;
+            --domain)
+                DOMAIN="$2"
                 ;;
             --hostname)
                 HOSTNAME="$2"
@@ -212,11 +213,6 @@ function build_ic_bootstrap_tar() {
             --socks_proxy)
                 SOCKS_PROXY="$2"
                 ;;
-            --get_sev_certs)
-                GET_SEV_CERTS=true
-                shift 1
-                continue
-                ;;
             *)
                 echo "Unrecognized option: $1"
                 usage
@@ -242,6 +238,7 @@ ipv4_name_servers=$IPV4_NAME_SERVERS
 hostname=$HOSTNAME
 ${IPV4_ADDRESS:+ipv4_address=$IPV4_ADDRESS}
 ${IPV4_GATEWAY:+ipv4_gateway=$IPV4_GATEWAY}
+${DOMAIN:+domain=$DOMAIN}
 EOF
     if [ "${ELASTICSEARCH_HOSTS}" != "" ]; then
         echo "elasticsearch_hosts=$ELASTICSEARCH_HOSTS" >"${BOOTSTRAP_TMPDIR}/filebeat.conf"
@@ -282,12 +279,6 @@ EOF
     fi
     if [ "${NODE_OPERATOR_PRIVATE_KEY}" != "" ]; then
         cp "${NODE_OPERATOR_PRIVATE_KEY}" "${BOOTSTRAP_TMPDIR}/node_operator_private_key.pem"
-    fi
-    if [[ "${GET_SEV_CERTS}" == true && ! -e "/dev/sev" ]]; then
-        echo "--get_sev_certs is true but /dev/sev is not available, unable to get SEV certs"
-    fi
-    if [[ "${GET_SEV_CERTS}" == true && -e "/dev/sev" ]]; then
-        /opt/ic/bin/get-sev-certs.sh
     fi
 
     tar cf "${OUT_FILE}" \

@@ -37,10 +37,10 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CanisterQueues, NetworkTopology, ReplicatedState, SystemMetadata};
 use ic_test_utilities::{
     crypto::{temp_crypto_component_with_fake_registry, CryptoReturningOk},
-    mock_time,
     state::ReplicatedStateBuilder,
     types::ids::{node_test_id, subnet_test_id},
 };
+use ic_test_utilities_time::mock_time;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     artifact_kind::IngressArtifact,
@@ -166,6 +166,10 @@ pub fn default_certified_state_reader(
 
         fn get_state(&self) -> &ReplicatedState {
             &self.0
+        }
+
+        fn get_height(&self) -> Height {
+            self.2.height
         }
 
         fn read_certified_state(

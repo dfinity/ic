@@ -94,6 +94,57 @@ impl PocketIcBuilder {
         }
     }
 
+    /// `path_to_nns_state` should lead to the `ic_state` directory which is expected to have
+    /// the following structure:
+    ///
+    /// ic_state/
+    ///  |-- backups
+    ///  |-- checkpoints
+    ///  |-- diverged_checkpoints
+    ///  |-- diverged_state_markers
+    ///  |-- fs_tmp
+    ///  |-- page_deltas
+    ///  |-- states_metadata.pbuf
+    ///  |-- tip
+    ///  `-- tmp
+    ///
+    /// `nns_subnet_id` should be the subnet ID of the NNS subnet in the state under
+    /// `path_to_state`, e.g.:
+    /// ```rust
+    /// PrincipalId(
+    ///     candid::Principal::from_text(
+    ///         "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe",
+    ///     )
+    ///     .unwrap(),
+    /// )
+    /// .into();
+    /// ```
+    ///
+    /// The value can be obtained, e.g., via the following command:
+    /// ```sh
+    /// ic-regedit snapshot <path-to-ic_registry_local_store> | jq -r ".nns_subnet_id"
+    /// ```
+    pub fn with_nns_state(self, nns_subnet_id: SubnetId, path_to_state: PathBuf) -> Self {
+        let path_to_state_str = path_to_state
+            .as_path()
+            .to_str()
+            .expect("cannot stringify path")
+            .to_string();
+        assert!(
+            path_to_state.exists(),
+            "the path to NNS state does not exist: {}",
+            path_to_state_str
+        );
+        Self {
+            config: SubnetConfigSet {
+                nns: true,
+                nns_subnet_id: Some(RawSubnetId::from(nns_subnet_id)),
+                nns_subnet_state: Some(path_to_state_str),
+                ..self.config
+            },
+        }
+    }
+
     pub fn with_sns_subnet(self) -> Self {
         Self {
             config: SubnetConfigSet {

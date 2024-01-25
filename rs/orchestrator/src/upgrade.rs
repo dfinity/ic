@@ -332,7 +332,7 @@ impl Upgrade {
             .registry
             .get_api_boundary_node_version(self.node_id, registry_version)
             .or_else(|err| match err {
-                OrchestratorError::NodeUnassignedError(_, _) => self
+                OrchestratorError::ApiBoundaryNodeMissingError(_, _) => self
                     .registry
                     .get_unassigned_replica_version(registry_version),
                 err => Err(err),
@@ -770,10 +770,10 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::{
         consensus::fake::{Fake, FakeContent},
-        mock_time,
         types::ids::subnet_test_id,
     };
     use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_test_utilities_time::mock_time;
     use ic_types::{
         batch::ValidationContext,
         consensus::{

@@ -16,18 +16,15 @@ container-autobuild-protected:
       # container image tag
       TAG=$(cat ./gitlab-ci/container/TAG)
       # check if we have it in dockerhub
-      EXISTS=$(curl -s https://hub.docker.com/v2/repositories/dfinity/ic-build-legacy/tags | jq -r "[.results? | .[]? | .name == \"$TAG\"] | any")
       EXISTS_BAZEL=$(curl -s https://hub.docker.com/v2/repositories/dfinity/ic-build/tags | jq -r "[.results? | .[]? | .name == \"$TAG\"] | any")
 
-      if [ "$EXISTS" != "true" ] || [ "$EXISTS_BAZEL" != "true" ]; then
+      if [ "$EXISTS_BAZEL" != "true" ]; then
         # build it
         echo -e "\e[0Ksection_start:$(date +%s):docker_build_script[collapsed=true]\r\e[0KClick here to see the docker_build_script"
         ./gitlab-ci/container/build-image.sh
         echo -e "\e[0Ksection_end:$(date +%s):docker_build_script\r\e[0K"
         # push it to dockerhub
         docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
-        docker push docker.io/dfinity/ic-build-legacy:"$TAG"
-        docker push docker.io/dfinity/ic-build-legacy:latest
         docker push docker.io/dfinity/ic-build:"$TAG"
         docker push docker.io/dfinity/ic-build:latest
         # clean-up
@@ -62,17 +59,15 @@ container-autobuild:
       TAG="$(./get-image-tag.sh)"
       cd ../config
       # names must match with names in docker-build-image.sh!
-      IMG_NAME="registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy"
       IMG_BAZEL_NAME="registry.gitlab.com/dfinity-lab/core/docker/ic-build"
       IMG_BAZEL_DOCKER_HUB="dfinity/ic-build"
 
-      IMG_NAME_FULL="$IMG_NAME:$TAG"
       IMG_BAZEL_NAME_FULL="$IMG_BAZEL_NAME:$TAG"
       IMG_BAZEL_DOCKER_HUB_FULL="$IMG_BAZEL_DOCKER_HUB:$TAG"
 
       # return if no changes
-      if grep -q "$IMG_NAME_FULL" -- *; then
-          echo "No changes required to build a new docker ic-build-legacy image"
+      if grep -q "$IMG_BAZEL_NAME_FULL" -- *; then
+          echo "No changes required to build a new docker ic-build image"
           exit 0
       fi
       popd
@@ -80,9 +75,8 @@ container-autobuild:
       # build new ic-build* images
       ./gitlab-ci/container/build-image.sh
 
-      # push the new ic-build-legacy image it to gitlab registry
+      # push the new ic-build image it to gitlab registry
       docker login -u gitlab-ci-token -p "$GITLAB_API_TOKEN" registry.gitlab.com
-      docker push "$IMG_NAME_FULL"
       docker push "$IMG_BAZEL_NAME_FULL"
       # clean-up
       docker image prune -f
@@ -90,7 +84,6 @@ container-autobuild:
 
       # update gitlab's docker image tags
       pushd gitlab-ci/config
-      sed -i -E "s|$IMG_NAME:[^\"]{5,}|$IMG_NAME_FULL|g" -- *
       sed -i -E "s|$IMG_BAZEL_NAME:[^\"]{5,}|$IMG_BAZEL_NAME_FULL|g" -- *
       cd ../container
       echo "$TAG" > TAG

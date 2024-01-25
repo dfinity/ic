@@ -94,6 +94,7 @@ rust_test(
     },
     deps = [
         "//rs/types/types_test_utils",
+        "@crate_index//:candid_parser",
         "@crate_index//:futures",
     ],
 )

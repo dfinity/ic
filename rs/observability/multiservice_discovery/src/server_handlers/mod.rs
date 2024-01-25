@@ -65,18 +65,22 @@ pub async fn prepare_server(
         .and_then(delete_definition);
 
     let export_items = items.clone();
+    let export_def_log = log.clone();
     let export_prometheus = warp::path!("prom" / "targets")
         .and(warp::get())
         .and(warp::any().map(move || ExportDefinitionConfigBinding {
             definitions: export_items.clone(),
+            log: export_def_log.clone(),
         }))
         .and_then(export_prometheus_config);
 
     let export_targets_items = items.clone();
+    let export_log = log.clone();
     let export_targets = warp::path!("targets")
         .and(warp::get())
         .and(warp::any().map(move || ExportTargetsBinding {
             definitions: export_targets_items.clone(),
+            log: export_log.clone(),
         }))
         .and_then(export_targets);
 

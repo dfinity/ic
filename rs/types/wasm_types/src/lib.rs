@@ -159,6 +159,15 @@ impl From<[u8; WASM_HASH_LENGTH]> for WasmHash {
     }
 }
 
+impl TryFrom<Vec<u8>> for WasmHash {
+    type Error = Vec<u8>;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        let array: [u8; WASM_HASH_LENGTH] = value.try_into()?;
+        Ok(Self::from(array))
+    }
+}
+
 impl CountBytes for WasmHash {
     fn count_bytes(&self) -> usize {
         self.0.len()

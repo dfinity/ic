@@ -35,7 +35,7 @@ pub fn test(env: TestEnv) {
             "($0 ~ /canister history/)",
             "($0 ~ /canister version/)",
             "($0 ~ /canister global timer/)",
-            "($0 ~ /canister http calls/)",
+            "($0 ~ /canister http outcalls/)",
             "($0 ~ /WebAssembly module validation/)",
         ],
     );

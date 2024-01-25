@@ -26,6 +26,7 @@ ic-types = { path = "../../../types/types" }
 rand = "0.8"
 rand_chacha = "0.3"
 serde = { workspace = true }
+serde_cbor = {  workspace = true }
 
 [dev-dependencies]
 ic-crypto-test-utils = { path = "../../test_utils" }

@@ -288,7 +288,7 @@ fn tls_cert_from_registry(
     let raw_cert = tls_cert_from_registry_raw(registry, node_id, registry_version)?;
     TlsPublicKeyCert::try_from(raw_cert).map_err(|e| {
         TlsCertFromRegistryError::CertificateMalformed {
-            internal_error: e.internal_error,
+            internal_error: format!("{e}"),
         }
     })
 }

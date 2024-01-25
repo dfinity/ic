@@ -32,7 +32,7 @@ mod extract_subnet_threshold_sig_public_key {
                 ThresholdSigPublicKey::from(
                     *public_coefficient_bytes
                         .coefficients
-                        .get(0)
+                        .first()
                         .expect("should have at least one coefficient"),
                 )
             }
@@ -88,7 +88,7 @@ mod extract_threshold_sig_public_key {
                 CspNiDkgTranscript::Groth20_Bls12_381(transcript) => transcript
                     .public_coefficients
                     .coefficients
-                    .get(0)
+                    .first()
                     .copied()
                     .expect("should contain at least one coefficient"),
             });

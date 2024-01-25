@@ -210,6 +210,33 @@ impl DeterministicTimeSlicing {
         })
     }
 
+    // Performance improvement:
+    // - The function is called from the execution thread when too many dirty
+    //  pages are created during message execution.
+    // - The function transitions to `Paused` if it is possible to continue the
+    //   dirty page copying in the next slice.
+    fn try_yield_for_dirty_memory_copy(
+        &self,
+        instruction_counter: i64,
+    ) -> Result<SliceExecutionOutput, HypervisorError> {
+        let mut state = self.state.lock().unwrap();
+        assert_eq!(state.execution_status, ExecutionStatus::Running);
+        // Get newly executed instructions.
+        let executed_instructions =
+            NumInstructions::from(state.newly_executed(instruction_counter) as u64);
+        // Update the instruction counter such that the canister is charged the for executed instructions.
+        state.update(instruction_counter);
+        state.execution_status = ExecutionStatus::Paused;
+
+        // This code path happens only during a longer execution which has triggered many dirty
+        // pages. After the execution happened, we slice, ending the round so that the copying
+        // of dirty pages can happen in a new round.
+        // In the future we might consider adding an overhead for dirty pages copying also here.
+        Ok(SliceExecutionOutput {
+            executed_instructions,
+        })
+    }
+
     // Sleeps while the current execution state is `Paused`.
     // Returns the instruction limit for the next slice if execution was resumed.
     // Otherwise, returns an error that indicates that execution was aborted.
@@ -282,6 +309,17 @@ impl DeterministicTimeSlicingHandler {
 impl OutOfInstructionsHandler for DeterministicTimeSlicingHandler {
     fn out_of_instructions(&self, instruction_counter: i64) -> HypervisorResult<i64> {
         let slice = self.dts.try_pause(instruction_counter)?;
+        let paused = PausedExecution {
+            dts: self.dts.clone(),
+        };
+        (self.pause_callback)(slice, paused);
+        self.dts.wait_for_resume_or_abort()
+    }
+
+    fn yield_for_dirty_memory_copy(&self, instruction_counter: i64) -> HypervisorResult<i64> {
+        let slice = self
+            .dts
+            .try_yield_for_dirty_memory_copy(instruction_counter)?;
         let paused = PausedExecution {
             dts: self.dts.clone(),
         };

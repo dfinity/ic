@@ -21,7 +21,7 @@ ic-utils = { path = "../utils" }
 prometheus = { workspace = true }
 lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "f62018b2deb79ea0d53914d5502389433fc3e6da" }
 prost = { workspace = true }
-rocksdb = { version = "0.21.0", optional = true, default-features = false}
+rocksdb = { version = "0.21.0", optional = true, default-features = false }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde-bytes-repr = "0.1.5"
@@ -39,6 +39,7 @@ ic-test-artifact-pool = { path = "../test_utilities/artifact_pool" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
+ic-test-utilities-time = { path = "../test_utilities/time" }
 slog-term = "2.6.0"
 slog-envlogger = "2.2.0"
 slog-async = "2.5.0"

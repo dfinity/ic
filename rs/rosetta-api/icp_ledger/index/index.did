@@ -40,17 +40,11 @@ type Operation = variant {
     allowance : Tokens;
     expires_at : opt TimeStamp;
     spender : text;
+    expected_allowance : opt Tokens;
   };
-  Burn : record { from : text; amount : Tokens };
+  Burn : record { from : text; amount : Tokens; spender : opt text };
   Mint : record { to : text; amount : Tokens };
-  Transfer : record { to : text; fee : Tokens; from : text; amount : Tokens };
-  TransferFrom : record {
-    to : text;
-    fee : Tokens;
-    from : text;
-    amount : Tokens;
-    spender : text;
-  };
+  Transfer : record { to : text; fee : Tokens; from : text; amount : Tokens; spender : opt text };
 };
 type GetAccountIdentifierTransactionsResult = variant {
   Ok : GetAccountIdentifierTransactionsResponse;

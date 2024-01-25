@@ -1,7 +1,5 @@
 use super::test_fixtures::*;
 use crate::{all_supported_versions, encoding::*};
-use ic_test_utilities::types::messages::RequestBuilder;
-use ic_types::messages::RequestMetadata;
 
 #[test]
 fn roundtrip_encoding_stream_header() {
@@ -22,25 +20,6 @@ fn roundtrip_encoding_request() {
         assert_eq!(
             request,
             decode_message(&encode_message(&request, certification_version)).unwrap()
-        );
-    }
-}
-
-#[test]
-fn request_missing_metadata_and_missing_metadata_fields_encode_the_same() {
-    for certification_version in all_supported_versions() {
-        let request1: RequestOrResponse = RequestBuilder::new().metadata(None).build().into();
-        let request2: RequestOrResponse = RequestBuilder::new()
-            .metadata(Some(RequestMetadata {
-                call_tree_depth: None,
-                call_tree_start_time: None,
-                call_subtree_deadline: None,
-            }))
-            .build()
-            .into();
-        assert_eq!(
-            encode_message(&request1, certification_version),
-            encode_message(&request2, certification_version),
         );
     }
 }

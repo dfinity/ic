@@ -333,7 +333,7 @@ async fn heartbeat() {
 }
 
 // Resources to serve for a given http_request
-#[query]
+#[query(hidden = true)]
 fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/metrics" => serve_metrics(encode_metrics),
@@ -360,7 +360,7 @@ fn encode_metrics(_w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::
 /// We include the .did file as committed, which means it is included verbatim in
 /// the .wasm; using `candid::export_service` here would involve unnecessary
 /// runtime computation.
-#[query]
+#[query(hidden = true)]
 fn __get_candid_interface_tmp_hack() -> String {
     include_str!("root.did").to_string()
 }

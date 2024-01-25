@@ -4149,6 +4149,7 @@ mod test {
         .await;
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn test_deploy_new_sns_request_legacy(
         sns_init_payload: Option<SnsInitPayload>,
         canister_api: TestCanisterApi,
@@ -4218,6 +4219,7 @@ mod test {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn test_deploy_new_sns_request(
         canister_wrapper: &'static LocalKey<RefCell<SnsWasmCanister<TestCanisterStableMemory>>>,
         sns_init_payload: Option<SnsInitPayload>,

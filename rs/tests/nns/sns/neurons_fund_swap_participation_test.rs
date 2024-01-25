@@ -89,12 +89,12 @@ fn generate_ticket_participants_workload_necessary_to_close_the_swap(env: TestEn
         "maximum_direct_participation_icp",
         swap_params
             .maximum_direct_participation_icp
-            .unwrap()
+            .expect("maximum_direct_participation_icp must be set")
             .e8s
-            .unwrap(),
+            .expect("maximum_direct_participation_icp:e8s must be set"),
         num_participants,
     )
-    .unwrap();
+    .expect("unable to compute contribution_per_user");
 
     // The number of participants is the rps * the duration in seconds.
     // So if we set rps to `1`, and the duration to `num_participants`, we'll

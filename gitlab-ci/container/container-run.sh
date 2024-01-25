@@ -33,6 +33,7 @@ CTR=0
 while test $# -gt $CTR; do
     case "$1" in
         -h | --help) usage && exit 0 ;;
+        -f | --full) echo "The legacy image has been deprecated, --full is not an option anymore." && exit 0 ;;
         -c | --cache-dir)
             if [[ $# -gt "$CTR + 1" ]]; then
                 if [ ! -d "$2" ]; then

@@ -19,7 +19,7 @@ fn run_bench<M: criterion::measurement::Measurement>(
     group.bench_function(bench_name, |b| {
         b.iter_batched(
             // Test setup.
-            || setup(),
+            setup,
             // Test measurement.
             |(env, test_canister)| {
                 let result = env.execute_ingress(

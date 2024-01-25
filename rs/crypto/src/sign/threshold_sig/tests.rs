@@ -281,7 +281,7 @@ mod verify_threshold_sig_share {
             .return_const(Ok(()));
         csp.expect_threshold_individual_public_key()
             .withf(move |alg_id, node_index, public_coeffs| {
-                *alg_id == AlgorithmId::try_from(&pub_coeffs).unwrap()
+                *alg_id == AlgorithmId::from(&pub_coeffs)
                     && *node_index == 3
                     && *public_coeffs == pub_coeffs
             })

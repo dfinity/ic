@@ -12,6 +12,7 @@ documentation.workspace = true
 candid = { workspace = true }
 ciborium = { workspace = true }
 clap = { workspace = true }
+ed25519-consensus = "2.0.1"
 hex = "0.4.2"
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
@@ -53,6 +54,7 @@ ic-state-manager = { path = "../state_manager" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
+ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-state-machine-client = "3.0"
 ic-types = { path = "../types/types" }
 ic-xnet-payload-builder = { path = "../xnet/payload_builder" }

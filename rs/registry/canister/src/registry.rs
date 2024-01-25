@@ -615,7 +615,7 @@ mod tests {
         let deltas = registry.get_changes_since(0, None);
         // Assert that we got the right thing, and test a few values
         assert_eq!(deltas.len(), 2);
-        let key1_values = &deltas.get(0).unwrap().values;
+        let key1_values = &deltas.first().unwrap().values;
         let key2_values = &deltas.get(1).unwrap().values;
         assert_eq!(key1_values.len(), 4);
         assert_eq!(key2_values.len(), 2);
@@ -631,7 +631,7 @@ mod tests {
         let deltas = registry.get_changes_since(1, Some(2));
         // Assert that we got the right thing, and test the values.
         assert_eq!(deltas.len(), 2);
-        let key1_values = &deltas.get(0).unwrap().values;
+        let key1_values = &deltas.first().unwrap().values;
         let key2_values = &deltas.get(1).unwrap().values;
         assert_eq!(key1_values.len(), 2);
         assert_eq!(key2_values.len(), 2);

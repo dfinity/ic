@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 DEPENDENCIES = [
     "@crate_index//:askama",
     "@crate_index//:candid",
+    "@crate_index//:candid_parser",
     "@crate_index//:clap_4_0_0",
     "@crate_index//:hex",
     "@crate_index//:serde_json",

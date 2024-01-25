@@ -15,13 +15,16 @@ use std::{
     collections::{BTreeMap, HashMap, HashSet},
 };
 
-use crate::wasm_utils::instrumentation::{
-    ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
-};
 use crate::wasmtime_embedder::{
     STABLE_BYTEMAP_MEMORY_NAME, STABLE_MEMORY_NAME, WASM_HEAP_MEMORY_NAME,
 };
-use wasmparser::{ExternalKind, FuncType, Operator, StructuralType, TypeRef, ValType};
+use crate::{
+    wasm_utils::instrumentation::{
+        ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
+    },
+    MIN_GUARD_REGION_SIZE,
+};
+use wasmparser::{CompositeType, ExternalKind, FuncType, Operator, TypeRef, ValType};
 
 /// Symbols that are reserved and cannot be exported by canisters.
 #[doc(hidden)] // pub for usage in tests
@@ -750,8 +753,8 @@ fn validate_import_section(module: &Module) -> Result<WasmImportsDetails, WasmVa
             let field = entry.name;
             match &entry.ty {
                 TypeRef::Func(index) => {
-                    let func_ty = if let StructuralType::Func(func_ty) =
-                        &module.types[*index as usize].structural_type
+                    let func_ty = if let CompositeType::Func(func_ty) =
+                        &module.types[*index as usize].composite_type
                     {
                         func_ty
                     } else {
@@ -903,8 +906,8 @@ fn validate_export_section(
                     }
                     let actual_fn_index = fn_index - import_count;
                     let type_index = module.functions[actual_fn_index] as usize;
-                    let func_ty = if let StructuralType::Func(func_ty) =
-                        &module.types[type_index].structural_type
+                    let func_ty = if let CompositeType::Func(func_ty) =
+                        &module.types[type_index].composite_type
                     {
                         func_ty
                     } else {
@@ -1368,6 +1371,8 @@ pub fn wasmtime_validation_config(embedder_config: &EmbeddersConfig) -> wasmtime
         // with a change in how we create the memories in the implementation
         // of `wasmtime::MemoryCreator`.
         .static_memory_maximum_size(MAX_STABLE_MEMORY_IN_BYTES)
+        .guard_before_linear_memory(true)
+        .static_memory_guard_size(MIN_GUARD_REGION_SIZE as u64)
         .max_wasm_stack(embedder_config.max_wasm_stack_size);
     config
 }

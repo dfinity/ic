@@ -18,6 +18,7 @@ ic-nervous-system-common-build-metadata = { path = "../build_metadata" }
 build-info-build = { workspace = true }
 
 [dev-dependencies]
+candid_parser = { workspace = true }
 canister-test = { path = "../../../rust_canisters/canister_test" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-types = { path = "../../../types/types" }

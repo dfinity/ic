@@ -153,7 +153,7 @@ pub struct LocalTestRuntime {
     pub ingress_history_reader: Arc<dyn IngressHistoryReader>,
     pub state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     pub node_id: NodeId,
-    nonce: Mutex<u64>,
+    pub nonce: Mutex<u64>,
     pub ingress_time_limit: Duration,
     pub registry_data_provider: Arc<ProtoRegistryDataProvider>,
     pub registry_client: Arc<FakeRegistryClient>,

@@ -71,7 +71,7 @@ async fn store_smoke_test() {
     }
     assert_eq!(
         store.get_first_hashed_block().unwrap(),
-        *scribe.blockchain.get(0).unwrap()
+        *scribe.blockchain.front().unwrap()
     );
     assert_eq!(
         store.get_latest_hashed_block().unwrap(),
@@ -296,7 +296,7 @@ fn verify_pruned(scribe: &Scribe, store: &mut Blocks, prune_at: u64) {
         // Genesis block (at idx 0) should still be accessible
         assert_eq!(
             store.get_hashed_block(&0).unwrap(),
-            *scribe.blockchain.get(0).unwrap()
+            *scribe.blockchain.front().unwrap()
         );
     }
 

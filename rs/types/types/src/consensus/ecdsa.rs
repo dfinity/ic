@@ -46,6 +46,14 @@ use std::{
 };
 use strum_macros::EnumIter;
 
+/// This feature flag enables the reduced latency path through payload
+/// builder and signer components. Instead of matching pre-signatures
+/// with requests in the block payload, and generating signature shares
+/// once that block is finalized, the optimized path matches pre-signatures
+/// with requests in replicated state and generates signature shares as
+/// soon as that state is certified.
+pub const ECDSA_IMPROVED_LATENCY: bool = false;
+
 /// For completed signature requests, we differentiate between those
 /// that have already been reported and those that have not. This is
 /// to prevent signatures from being reported more than once.
@@ -691,12 +699,11 @@ impl EcdsaUIDGenerator {
         id
     }
 
-    pub fn next_quadruple_id(&mut self) -> QuadrupleId {
+    pub fn next_quadruple_id(&mut self, key_id: EcdsaKeyId) -> QuadrupleId {
         let id = self.next_unused_quadruple_id;
         self.next_unused_quadruple_id += 1;
 
-        // TODO(kpop): fill this with an appropriate EcdsaKeyId
-        QuadrupleId(id, None)
+        QuadrupleId(id, Some(key_id))
     }
 }
 
@@ -1838,6 +1845,88 @@ impl From<&EcdsaMessage> for EcdsaArtifactId {
             EcdsaMessage::EcdsaSigShare(object) => object.message_id(),
             EcdsaMessage::EcdsaComplaint(object) => object.message_id(),
             EcdsaMessage::EcdsaOpening(object) => object.message_id(),
+        }
+    }
+}
+
+pub trait HasEcdsaKeyId {
+    /// Returns a reference to the [`EcdsaKeyId`] associated with the object.
+    // TODO(kpop): remove the Option once it's safe
+    fn key_id(&self) -> Option<&EcdsaKeyId>;
+}
+
+impl HasEcdsaKeyId for QuadrupleId {
+    fn key_id(&self) -> Option<&EcdsaKeyId> {
+        self.key_id()
+    }
+}
+
+impl HasEcdsaKeyId for EcdsaReshareRequest {
+    fn key_id(&self) -> Option<&EcdsaKeyId> {
+        Some(&self.key_id)
+    }
+}
+
+impl HasEcdsaKeyId for RequestId {
+    fn key_id(&self) -> Option<&EcdsaKeyId> {
+        self.quadruple_id.key_id()
+    }
+}
+
+impl HasEcdsaKeyId for EcdsaKeyTranscript {
+    fn key_id(&self) -> Option<&EcdsaKeyId> {
+        Some(&self.key_id)
+    }
+}
+
+impl<T: HasEcdsaKeyId, U> HasEcdsaKeyId for (T, U) {
+    fn key_id(&self) -> Option<&EcdsaKeyId> {
+        self.0.key_id()
+    }
+}
+
+impl<T: HasEcdsaKeyId> HasEcdsaKeyId for &T {
+    fn key_id(&self) -> Option<&EcdsaKeyId> {
+        (*self).key_id()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn uid_generator_quadruple_ids_are_globally_unique_test() {
+        let mut uid_generator =
+            EcdsaUIDGenerator::new(ic_types_test_utils::ids::SUBNET_0, Height::new(100));
+
+        let quadruple_id_0 = uid_generator.next_quadruple_id(fake_ecdsa_key_id("key_id_0"));
+        let quadruple_id_1 = uid_generator.next_quadruple_id(fake_ecdsa_key_id("key_id_1"));
+        let quadruple_id_2 = uid_generator.next_quadruple_id(fake_ecdsa_key_id("key_id_2"));
+
+        assert_eq!(quadruple_id_0.id(), 0);
+        assert_eq!(quadruple_id_1.id(), 1);
+        assert_eq!(quadruple_id_2.id(), 2);
+    }
+
+    #[test]
+    fn uid_generator_quadruple_id_test() {
+        let key_id_1 = fake_ecdsa_key_id("key_id_1");
+        let key_id_2 = fake_ecdsa_key_id("key_id_2");
+        let mut uid_generator =
+            EcdsaUIDGenerator::new(ic_types_test_utils::ids::SUBNET_0, Height::new(100));
+
+        let quadruple_id_0 = uid_generator.next_quadruple_id(key_id_1.clone());
+        let quadruple_id_1 = uid_generator.next_quadruple_id(key_id_2.clone());
+
+        assert_eq!(quadruple_id_0.key_id(), Some(&key_id_1));
+        assert_eq!(quadruple_id_1.key_id(), Some(&key_id_2));
+    }
+
+    fn fake_ecdsa_key_id(name: &str) -> EcdsaKeyId {
+        EcdsaKeyId {
+            curve: ic_ic00_types::EcdsaCurve::Secp256k1,
+            name: name.to_string(),
         }
     }
 }

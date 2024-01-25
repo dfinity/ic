@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests;
 
-use crate::address::Address;
 use crate::eth_rpc::{FixedSizeData, Hash, LogEntry};
 use crate::eth_rpc_client::{EthRpcClient, MultiCallError};
 use crate::logs::{DEBUG, INFO};
@@ -10,6 +9,7 @@ use crate::state::read_state;
 use candid::Principal;
 use hex_literal::hex;
 use ic_canister_log::log;
+use ic_ethereum_types::Address;
 use minicbor::{Decode, Encode};
 use std::fmt;
 use thiserror::Error;

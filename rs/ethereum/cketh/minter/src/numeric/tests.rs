@@ -55,7 +55,8 @@ mod transaction_nonce {
         );
 
         let u256_max_plus_one: Nat =
-            Nat(BigUint::parse_bytes(U256_MAX, 16).expect("Failed to parse u256 max")) + 1;
+            Nat(BigUint::parse_bytes(U256_MAX, 16).expect("Failed to parse u256 max"))
+                + Nat::from(1_u8);
         assert_matches!(
             TransactionNonce::try_from(u256_max_plus_one),
             Err(e) if e.contains("Nat does not fit in a U256")

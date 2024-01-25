@@ -34,7 +34,7 @@ pub struct RawTime {
 /// If a canister ID is provided, the call will be sent to the management
 /// canister of the subnet where the canister is on.
 /// If None, the call will be sent to any management canister.
-#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema, PartialEq, Eq, Hash)]
 pub enum RawEffectivePrincipal {
     None,
     SubnetId(
@@ -194,7 +194,7 @@ impl From<Principal> for RawCanisterId {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema, PartialEq, Eq, Hash)]
 pub struct RawSubnetId {
     #[serde(deserialize_with = "base64::deserialize")]
     #[serde(serialize_with = "base64::serialize")]
@@ -291,7 +291,7 @@ pub enum SubnetKind {
 
 /// This represents which named subnets the user wants to create, and how
 /// many of the general app/system subnets, which are indistinguishable.
-#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct SubnetConfigSet {
     pub nns: bool,
     pub sns: bool,
@@ -300,6 +300,8 @@ pub struct SubnetConfigSet {
     pub bitcoin: bool,
     pub system: usize,
     pub application: usize,
+    pub nns_subnet_state: Option<String>,
+    pub nns_subnet_id: Option<RawSubnetId>,
 }
 
 impl SubnetConfigSet {
@@ -318,18 +320,18 @@ impl SubnetConfigSet {
     }
 
     /// Return the configured named subnets in order.
-    pub fn get_named(&self) -> Vec<SubnetKind> {
+    pub fn get_named(&self) -> Vec<(SubnetKind, Option<String>)> {
         use SubnetKind::*;
         vec![
-            (self.nns, NNS),
-            (self.sns, SNS),
-            (self.ii, II),
-            (self.fiduciary, Fiduciary),
-            (self.bitcoin, Bitcoin),
+            (self.nns, NNS, self.nns_subnet_state.clone()),
+            (self.sns, SNS, None),
+            (self.ii, II, None),
+            (self.fiduciary, Fiduciary, None),
+            (self.bitcoin, Bitcoin, None),
         ]
         .into_iter()
-        .filter(|(flag, _)| *flag)
-        .map(|(_, kind)| kind)
+        .filter(|(flag, _, _)| *flag)
+        .map(|(_, kind, state_dir)| (kind, state_dir))
         .collect()
     }
 }

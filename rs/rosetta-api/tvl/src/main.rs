@@ -56,23 +56,23 @@ fn http_request(req: HttpRequest) -> HttpResponse {
 /// Checks the real candid interface against the one declared in the did file
 #[test]
 fn check_candid_interface_compatibility() {
-    fn source_to_str(source: &candid::utils::CandidSource) -> String {
+    fn source_to_str(source: &candid_parser::utils::CandidSource) -> String {
         match source {
-            candid::utils::CandidSource::File(f) => {
+            candid_parser::utils::CandidSource::File(f) => {
                 std::fs::read_to_string(f).unwrap_or_else(|_| "".to_string())
             }
-            candid::utils::CandidSource::Text(t) => t.to_string(),
+            candid_parser::utils::CandidSource::Text(t) => t.to_string(),
         }
     }
     fn check_service_equal(
         new_name: &str,
-        new: candid::utils::CandidSource,
+        new: candid_parser::utils::CandidSource,
         old_name: &str,
-        old: candid::utils::CandidSource,
+        old: candid_parser::utils::CandidSource,
     ) {
         let new_str = source_to_str(&new);
         let old_str = source_to_str(&old);
-        match candid::utils::service_equal(new, old) {
+        match candid_parser::utils::service_equal(new, old) {
             Ok(_) => {}
             Err(e) => {
                 eprintln!(
@@ -94,8 +94,8 @@ fn check_candid_interface_compatibility() {
         std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("tvl.did");
     check_service_equal(
         "actual ledger candid interface",
-        candid::utils::CandidSource::Text(&new_interface),
+        candid_parser::utils::CandidSource::Text(&new_interface),
         "declared candid interface in tvl.did file",
-        candid::utils::CandidSource::File(old_interface.as_path()),
+        candid_parser::utils::CandidSource::File(old_interface.as_path()),
     );
 }

@@ -14,15 +14,15 @@ use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ExecutionParameters, InstructionLimits,
     ModificationTracking, SystemApiImpl,
 };
-use ic_types::{ComputeAllocation, MemoryAllocation, NumInstructions};
+use ic_types::{messages::RequestMetadata, ComputeAllocation, MemoryAllocation, NumInstructions};
 use ic_wasm_types::BinaryEncodedWasm;
 
 use crate::{
     cycles_account_manager::CyclesAccountManagerBuilder,
-    mock_time,
     state::SystemStateBuilder,
     types::ids::{canister_test_id, user_test_id},
 };
+use ic_test_utilities_time::mock_time;
 
 pub const DEFAULT_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000_000_000);
 
@@ -133,6 +133,7 @@ impl WasmtimeInstanceBuilder {
             &self.network_topology,
             dirty_page_overhead,
             ComputeAllocation::default(),
+            RequestMetadata::new(0, mock_time()),
         );
 
         let subnet_memory_capacity = i64::MAX / 2;

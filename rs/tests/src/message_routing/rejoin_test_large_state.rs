@@ -117,33 +117,60 @@ fn test(env: TestEnv, config: Config) {
 }
 
 async fn test_async(env: TestEnv, config: Config) {
-    let logger = env.logger();
     let mut nodes = env.topology_snapshot().root_subnet().nodes();
-    let node = nodes.next().unwrap();
+    let agent_node = nodes.next().unwrap();
     let rejoin_node = nodes.next().unwrap();
+    let allowed_failures = (config.nodes_count - 1) / 3;
+    rejoin_test_large_state(
+        env,
+        allowed_failures,
+        config.size_level,
+        config.num_canisters,
+        DKG_INTERVAL,
+        rejoin_node.clone(),
+        agent_node.clone(),
+        nodes.take(allowed_failures),
+    )
+    .await;
+}
+
+pub async fn rejoin_test_large_state(
+    env: TestEnv,
+    allowed_failures: usize,
+    size_level: usize,
+    num_canisters: usize,
+    dkg_interval: u64,
+    rejoin_node: IcNodeSnapshot,
+    agent_node: IcNodeSnapshot,
+    nodes_to_kill: impl Iterator<Item = IcNodeSnapshot>,
+) {
+    let logger = env.logger();
     info!(
         logger,
         "Installing universal canister on a node {} ...",
-        node.get_public_url()
+        agent_node.get_public_url()
     );
-    let agent = node.build_default_agent_async().await;
+    let agent = agent_node.build_default_agent_async().await;
     let universal_canister =
-        UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger).await;
+        UniversalCanister::new_with_retries(&agent, agent_node.effective_canister_id(), &logger)
+            .await;
 
-    let endpoint_runtime = runtime_from_url(node.get_public_url(), node.effective_canister_id());
-    let canisters =
-        install_statesync_test_canisters(env, &endpoint_runtime, config.num_canisters).await;
+    let endpoint_runtime = runtime_from_url(
+        agent_node.get_public_url(),
+        agent_node.effective_canister_id(),
+    );
+    let canisters = install_statesync_test_canisters(env, &endpoint_runtime, num_canisters).await;
 
     info!(
         logger,
         "Start expanding the canister heap. The total size of all canisters will be {} MiB.",
-        config.size_level * config.num_canisters * 128
+        size_level * num_canisters * 128
     );
     modify_canister_heap(
         logger.clone(),
         canisters.clone(),
-        config.size_level,
-        config.num_canisters,
+        size_level,
+        num_canisters,
         false,
         0,
     )
@@ -151,7 +178,7 @@ async fn test_async(env: TestEnv, config: Config) {
 
     // Kill the rejoin node after it has a checkpoint so that we can test both `copy_chunks` and `fetch_chunks` in the state sync.
     info!(logger, "Waiting for the rejoin_node to have a checkpoint");
-    wait_for_manifest(&logger, DKG_INTERVAL + 1, rejoin_node.clone()).await;
+    wait_for_manifest(&logger, dkg_interval + 1, rejoin_node.clone()).await;
 
     let res = fetch_metrics::<u64>(
         &logger,
@@ -181,8 +208,8 @@ async fn test_async(env: TestEnv, config: Config) {
     modify_canister_heap(
         logger.clone(),
         canisters.clone(),
-        config.size_level,
-        config.num_canisters,
+        size_level,
+        num_canisters,
         true,
         1,
     )
@@ -191,20 +218,20 @@ async fn test_async(env: TestEnv, config: Config) {
     info!(logger, "Get the latest certified height of an active node");
     let message = b"Are you actively making progress?";
     store_and_read_stable(message, &universal_canister).await;
-    let res = fetch_metrics::<u64>(&logger, node.clone(), vec![LATEST_CERTIFIED_HEIGHT]).await;
+    let res =
+        fetch_metrics::<u64>(&logger, agent_node.clone(), vec![LATEST_CERTIFIED_HEIGHT]).await;
     let latest_certified_height = res[LATEST_CERTIFIED_HEIGHT][0];
 
     // Wait for the next CUP to make sure the second round of state modification is persisted to a new checkpoint.
     info!(logger, "Waiting for the next CUP");
-    wait_for_cup(&logger, latest_certified_height, node.clone()).await;
+    wait_for_cup(&logger, latest_certified_height, agent_node.clone()).await;
 
-    let allowed_failures = (config.nodes_count - 1) / 3;
     info!(logger, "Killing {} nodes ...", allowed_failures);
-    for _ in 0..allowed_failures {
-        let node = nodes.next().unwrap();
-        info!(logger, "Killing node {} ...", node.get_public_url());
-        node.vm().kill();
-        node.await_status_is_unavailable()
+    for node_to_kill in nodes_to_kill {
+        info!(logger, "Killing node {} ...", node_to_kill.get_public_url());
+        node_to_kill.vm().kill();
+        node_to_kill
+            .await_status_is_unavailable()
             .expect("Node still healthy");
     }
 
@@ -245,10 +272,10 @@ async fn test_async(env: TestEnv, config: Config) {
 
 // The function waits for the manifest reaching or surpassing the given height and returns the manifest height.
 async fn wait_for_manifest(log: &slog::Logger, height: u64, node: IcNodeSnapshot) -> u64 {
-    const NUM_RETRIES: u32 = DKG_INTERVAL as u32 + 1;
+    let num_retries = height + 1;
     const BACKOFF_TIME_SECONDS: u64 = 5;
 
-    for _ in 0..NUM_RETRIES {
+    for _ in 0..num_retries {
         let res = fetch_metrics::<u64>(log, node.clone(), vec![LAST_MANIFEST_HEIGHT]).await;
         let last_manifest_height = res[LAST_MANIFEST_HEIGHT][0];
         if last_manifest_height >= height {
@@ -266,10 +293,10 @@ async fn wait_for_manifest(log: &slog::Logger, height: u64, node: IcNodeSnapshot
 // Practically speaking, there should be little gap between the manifest and the last CUP reach the same new height.
 // However we still use CUP height here because conceptually it indicates a new state sync can be triggered base on that.
 async fn wait_for_cup(log: &slog::Logger, height: u64, node: IcNodeSnapshot) -> u64 {
-    const NUM_RETRIES: u32 = DKG_INTERVAL as u32 + 1;
+    let num_retries = height + 1;
     const BACKOFF_TIME_SECONDS: u64 = 5;
 
-    for _ in 0..NUM_RETRIES {
+    for _ in 0..num_retries {
         let res =
             fetch_metrics::<u64>(log, node.clone(), vec![REPLICATED_STATE_PURGE_HEIGHT_DISK]).await;
         let last_cup_height = res[REPLICATED_STATE_PURGE_HEIGHT_DISK][0];

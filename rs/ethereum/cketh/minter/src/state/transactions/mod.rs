@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests;
 
-use crate::address::Address;
 use crate::endpoints::{EthTransaction, RetrieveEthStatus, TxFinalizedStatus};
 use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::TransactionReceipt;
@@ -14,6 +13,7 @@ use crate::tx::{
     TransactionPrice,
 };
 use candid::Principal;
+use ic_ethereum_types::Address;
 use minicbor::{Decode, Encode};
 use std::cmp::min;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};

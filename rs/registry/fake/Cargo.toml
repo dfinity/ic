@@ -9,3 +9,6 @@ documentation.workspace = true
 [dependencies]
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-types = { path = "../../types/types" }
+
+[dev-dependencies]
+ic-registry-keys = { path = "../keys" }

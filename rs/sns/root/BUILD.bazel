@@ -131,6 +131,7 @@ rust_test(
     crate = ":_wasm_sns-root-canister",
     data = ["canister/root.did"],
     env = {"CARGO_MANIFEST_DIR": "rs/sns/root"},
+    deps = ["@crate_index//:candid_parser"],
 )
 
 rust_test_suite(

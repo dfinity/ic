@@ -436,7 +436,7 @@ mod verify_written_blocks {
             from_subaccount: ledger.minter_account.subaccount,
             to: ledger.from_account,
             amount: Nat::from(10 * DEFAULT_AMOUNT),
-            fee: Some(NumTokens::from(0)),
+            fee: Some(NumTokens::from(0u8)),
             created_at_time: Some(ledger.current_time_ns_since_unix_epoch),
             memo: Some(Memo(ByteBuf::from(DEFAULT_MEMO))),
         };
@@ -482,7 +482,7 @@ mod verify_written_blocks {
             from_subaccount: ledger.from_account.subaccount,
             spender: ledger.minter_account,
             amount: Nat::from(2 * DEFAULT_AMOUNT),
-            expected_allowance: Some(Nat::from(0)),
+            expected_allowance: Some(Nat::from(0u8)),
             expires_at: Some(ledger.current_time_ns_since_unix_epoch + 1_000_000),
             fee: Some(Nat::from(DEFAULT_FEE)),
             memo: Some(Memo(ByteBuf::from(DEFAULT_MEMO))),
@@ -525,7 +525,7 @@ mod verify_written_blocks {
             from_subaccount: ledger.from_account.subaccount,
             spender: ledger.minter_account,
             amount: Nat::from(2 * DEFAULT_AMOUNT),
-            expected_allowance: Some(Nat::from(0)),
+            expected_allowance: Some(Nat::from(0u8)),
             expires_at: Some(ledger.current_time_ns_since_unix_epoch + 1_000_000),
             fee: Some(Nat::from(DEFAULT_FEE)),
             memo: Some(Memo(ByteBuf::from(DEFAULT_MEMO))),
@@ -536,7 +536,7 @@ mod verify_written_blocks {
             from: ledger.from_account,
             to: ledger.minter_account,
             amount: Nat::from(DEFAULT_AMOUNT),
-            fee: Some(NumTokens::from(0)),
+            fee: Some(NumTokens::from(0u8)),
             memo: Some(Memo(ByteBuf::from(DEFAULT_MEMO))),
             created_at_time: Some(ledger.current_time_ns_since_unix_epoch),
         };
@@ -571,7 +571,7 @@ mod verify_written_blocks {
             from_subaccount: ledger.from_account.subaccount,
             spender: ledger.spender_account,
             amount: Nat::from(2 * DEFAULT_AMOUNT),
-            expected_allowance: Some(Nat::from(0)),
+            expected_allowance: Some(Nat::from(0u8)),
             expires_at: Some(ledger.current_time_ns_since_unix_epoch + 1_000_000),
             fee: Some(Nat::from(DEFAULT_FEE)),
             memo: Some(Memo(ByteBuf::from(DEFAULT_MEMO))),
@@ -693,7 +693,7 @@ mod verify_written_blocks {
         fn get_transaction(&self, block_index: BlockIndex) -> Transaction {
             let request = GetTransactionsRequest {
                 start: block_index.into(),
-                length: 1.into(),
+                length: 1u8.into(),
             };
 
             let wasm_result_bytes = match {

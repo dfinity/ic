@@ -83,9 +83,9 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/tree_hash",
     "//rs/interfaces/registry/mocks",
     "//rs/registry/client",
-    "//rs/test_utilities",
     "//rs/test_utilities/in_memory_logger",
     "//rs/test_utilities/registry",
+    "//rs/test_utilities/time",
     "//rs/types/types_test_utils",
     "@crate_index//:assert_matches",
     "@crate_index//:criterion",
@@ -150,6 +150,7 @@ rust_test(
 
 rust_test_suite_with_extra_srcs(
     name = "integration_suite",
+    size = "large",
     srcs = glob(
         ["tests/**/*.rs"],
         exclude = [

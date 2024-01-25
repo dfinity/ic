@@ -11,6 +11,9 @@ system_test(
     name = "canister_sig_verification_cache_test",
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + II_DEV_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -19,6 +22,9 @@ system_test(
 system_test(
     name = "request_signature_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -27,6 +33,9 @@ system_test(
 system_test(
     name = "rpc_csp_vault_reconnection_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -35,6 +44,9 @@ system_test(
 system_test(
     name = "ic_crypto_csp_metrics_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -43,6 +55,9 @@ system_test(
 system_test(
     name = "ic_crypto_csp_socket_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -51,6 +66,9 @@ system_test(
 system_test(
     name = "ic_crypto_csp_umask_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],

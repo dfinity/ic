@@ -72,7 +72,7 @@ pub mod util {
             // * Signatures cannot be generated with an incorrect AlgorithmId:
             for algorithm_id in AlgorithmId::iter() {
                 if algorithm_id != AlgorithmId::ThresBls12_381 {
-                    if let Some((csp, key_id)) = signers.get(0) {
+                    if let Some((csp, key_id)) = signers.first() {
                         assert!(
                             csp.csp_vault
                                 .threshold_sign(algorithm_id, message.to_vec(), *key_id)
@@ -85,7 +85,7 @@ pub mod util {
             }
             //
             // * Signatures cannot be generated with an incorrect key_id:
-            if let Some((csp, _key_id)) = signers.get(0) {
+            if let Some((csp, _key_id)) = signers.first() {
                 let wrong_key_id = KeyId::from(rng.gen::<[u8; 32]>());
                 let mut key_ids = signers.iter().map(|(_, key_id)| *key_id);
 

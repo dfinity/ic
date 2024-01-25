@@ -12,6 +12,8 @@ use ic_interfaces::consensus_pool::{
 };
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_protobuf::types::v1 as pb;
+use ic_types::consensus::certification::CertificationMessageHash;
+use ic_types::consensus::HasHash;
 use ic_types::{
     artifact::{CertificationMessageId, ConsensusMessageId},
     batch::BatchPayload,
@@ -326,8 +328,8 @@ impl<T: HasCFInfos> PersistentHeightIndexedPool<T> {
     }
 
     /// Returns the key to use for looking up the given consensus message
-    fn lookup_key(&self, msg_id: &ConsensusMessageId) -> Option<Vec<u8>> {
-        let key = make_key(msg_id.height.get(), &msg_id.hash.digest().0);
+    fn lookup_key<K: HasHeight + HasHash>(&self, msg_id: &K) -> Option<Vec<u8>> {
+        let key = make_key(msg_id.height().get(), &msg_id.hash().0);
         let watermark = make_min_key(self.watermark.read().unwrap().get());
         if key < watermark {
             // Skip read if key is below watermark
@@ -720,6 +722,11 @@ impl<Message: ConsensusMessageHashable + PerTypeCFInfo + 'static> HeightIndexedP
             _ => Err(OnlyError::MultipleValues),
         }
     }
+
+    // not implemented
+    fn size(&self) -> usize {
+        0
+    }
 }
 
 pub fn new_pool_snapshot_iterator<Message: ConsensusMessageHashable + PerTypeCFInfo>(
@@ -762,7 +769,7 @@ fn make_compaction_filter_fn(watermark: Watermark) -> impl CompactionFilterFn + 
 
 /// Encapsulates the information needed to build a ColumnFamilyDescriptor,
 /// per type.
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct ArtifactCFInfo {
     name: &'static str,
 }
@@ -1073,6 +1080,34 @@ impl crate::certification_pool::MutablePoolSection
         }
     }
 
+    fn get(&self, msg_id: &CertificationMessageId) -> Option<CertificationMessage> {
+        let key = self.lookup_key(msg_id)?;
+        let info = match msg_id.hash {
+            CertificationMessageHash::Certification(_) => CERTIFICATION_CF_INFO,
+            CertificationMessageHash::CertificationShare(_) => CERTIFICATION_SHARE_CF_INFO,
+        };
+        let cf_handle = self
+            .db
+            .cf_handle(info.name)
+            .unwrap_or_else(|| panic!("column family {} doesn't exist", info.name));
+        let bytes = self.db.get_cf(cf_handle, key).expect("retrieve db entry")?;
+
+        Some(match msg_id.hash {
+            CertificationMessageHash::Certification(_) => {
+                CertificationMessage::Certification(deserialize_certification_artifact(
+                    Arc::new(StandaloneSnapshot::new(self.db.clone())),
+                    &bytes,
+                )?)
+            }
+            CertificationMessageHash::CertificationShare(_) => {
+                CertificationMessage::CertificationShare(deserialize_certification_artifact(
+                    Arc::new(StandaloneSnapshot::new(self.db.clone())),
+                    &bytes,
+                )?)
+            }
+        })
+    }
+
     fn certifications(&self) -> &dyn HeightIndexedPool<Certification> {
         self
     }
@@ -1141,6 +1176,10 @@ impl<Message: CertificationType + PerTypeCFInfo + 'static> HeightIndexedPool<Mes
             1 => Ok(as_vec.remove(0)),
             _ => Err(OnlyError::MultipleValues),
         }
+    }
+
+    fn size(&self) -> usize {
+        0
     }
 }
 

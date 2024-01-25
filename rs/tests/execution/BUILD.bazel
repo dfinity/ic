@@ -6,6 +6,9 @@ package(default_visibility = ["//visibility:public"])
 system_test(
     name = "compute_allocation_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -14,6 +17,9 @@ system_test(
 system_test(
     name = "cycles_restrictions_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -22,6 +28,9 @@ system_test(
 system_test(
     name = "general_execution_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -30,6 +39,9 @@ system_test(
 system_test(
     name = "query_apis_bitcoin_canister_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -38,6 +50,9 @@ system_test(
 system_test(
     name = "bitcoin_query_calls_to_application_subnet",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -54,6 +69,9 @@ system_test(
 system_test(
     name = "max_number_of_canisters_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -62,6 +80,9 @@ system_test(
 system_test(
     name = "system_api_security_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -70,6 +91,9 @@ system_test(
 system_test(
     name = "system_subnets_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],

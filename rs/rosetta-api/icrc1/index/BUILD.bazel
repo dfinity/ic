@@ -72,6 +72,7 @@ rust_test(
     env = {
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1/index",
     },
+    deps = ["@crate_index//:candid_parser"],
 )
 
 rust_test(

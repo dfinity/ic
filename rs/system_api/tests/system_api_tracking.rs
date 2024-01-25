@@ -1,9 +1,8 @@
 use ic_interfaces::execution_environment::SystemApiCallCounters;
 use ic_system_api::NonReplicatedQueryKind;
 use ic_test_utilities::types::ids::subnet_test_id;
-use ic_test_utilities::{
-    mock_time, types::ids::user_test_id, wasmtime_instance::WasmtimeInstanceBuilder,
-};
+use ic_test_utilities::{types::ids::user_test_id, wasmtime_instance::WasmtimeInstanceBuilder};
+use ic_test_utilities_time::mock_time;
 
 fn call_counters_on_ok_call(wat: &str) -> SystemApiCallCounters {
     let mut instance = WasmtimeInstanceBuilder::new()

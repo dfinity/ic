@@ -9,9 +9,10 @@ use ic_types::nominal_cycles::NominalCycles;
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
-    self as ic00, BoundedHttpHeaders, CanisterChange, CanisterHttpRequestArgs, CanisterIdRecord,
-    CanisterStatusResultV2, CanisterStatusType, DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob,
-    HttpMethod, Method, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
+    self as ic00, BitcoinGetUtxosArgs, BitcoinNetwork, BoundedHttpHeaders, CanisterChange,
+    CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2, CanisterStatusType,
+    DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob, FetchCanisterLogsRequest, HttpMethod,
+    LogVisibility, Method, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
     ProvisionalTopUpCanisterArgs, TransformContext, TransformFunc, IC_00,
 };
 use ic_registry_routing_table::canister_id_into_u64;
@@ -22,12 +23,13 @@ use ic_replicated_state::{
     testing::{CanisterQueuesTesting, SystemStateTesting},
     CanisterStatus, SystemState,
 };
-use ic_test_utilities::{assert_utils::assert_balance_equals, mock_time};
+use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_execution_environment::{
     assert_empty_reply, check_ingress_status, get_output_messages, get_reply, ExecutionTest,
     ExecutionTestBuilder,
 };
 use ic_test_utilities_metrics::{fetch_histogram_vec_count, fetch_int_counter, metric_vec};
+use ic_test_utilities_time::mock_time;
 use ic_types::canister_http::Transform;
 use ic_types::{
     canister_http::CanisterHttpMethod,
@@ -1405,18 +1407,15 @@ fn create_canister_xnet_called_from_nns() {
     );
     test.execute_all();
     let response = test.xnet_messages()[0].clone();
-    match response {
-        RequestOrResponse::Response(response) => {
-            assert_eq!(response.originator, nns_canister);
-            assert_eq!(response.respondent, CanisterId::from(own_subnet));
-            assert_eq!(response.refund, Cycles::new(0));
-            match response.response_payload {
-                Payload::Data(_) => (),
-                _ => panic!("Failed creating the canister."),
-            }
-        }
-        _ => panic!("Type should be RequestOrResponse::Response"),
-    }
+    let RequestOrResponse::Response(response) = response else {
+        panic!("Type should be RequestOrResponse::Response");
+    };
+    assert_eq!(response.originator, nns_canister);
+    assert_eq!(response.respondent, CanisterId::from(own_subnet));
+    assert_eq!(response.refund, Cycles::new(0));
+    let Payload::Data(_) = response.response_payload else {
+        panic!("Failed creating the canister.");
+    };
 }
 
 #[test]
@@ -2454,8 +2453,19 @@ fn canister_output_queue_does_not_overflow_when_calling_ic00() {
                 call_args().other_side(args.clone()),
             )
             .build();
-        test.ingress_raw(uc, "update", payload);
+        let (message_id, _) = test.ingress_raw(uc, "update", payload);
         test.execute_message(uc);
+        if i > DEFAULT_QUEUE_CAPACITY {
+            assert_eq!(
+                test.ingress_state(&message_id),
+                IngressState::Failed(UserError::new(
+                    ErrorCode::CanisterCalledTrap,
+                    format!("Canister {} trapped explicitly: call_perform failed", uc)
+                ))
+            );
+        } else {
+            assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
+        }
         let system_state = &mut test.canister_state_mut(uc).system_state;
         assert_eq!(1, system_state.queues().output_queues_len());
         assert_eq!(
@@ -2463,6 +2473,92 @@ fn canister_output_queue_does_not_overflow_when_calling_ic00() {
             system_state.queues().output_message_count()
         );
     }
+}
+
+fn send_messages_to_bitcoin_canister_until_capacity(
+    test: &mut ExecutionTest,
+    bitcoin_canister: CanisterId,
+    network: BitcoinNetwork,
+) {
+    let uc = test.universal_canister().unwrap();
+
+    for i in 1..=2 * DEFAULT_QUEUE_CAPACITY {
+        let target = if i < DEFAULT_QUEUE_CAPACITY / 2 {
+            bitcoin_canister.get()
+        } else {
+            ic00::IC_00.get()
+        };
+        let args = Encode!(&BitcoinGetUtxosArgs {
+            network: network.into(),
+            address: String::from(""),
+            filter: None,
+        })
+        .unwrap();
+        let payload = wasm()
+            .call_simple(
+                target,
+                Method::BitcoinGetUtxos,
+                call_args().other_side(args.clone()),
+            )
+            .build();
+        let (message_id, _) = test.ingress_raw(uc, "update", payload);
+        test.execute_message(uc);
+        if i > DEFAULT_QUEUE_CAPACITY {
+            assert_eq!(
+                test.ingress_state(&message_id),
+                IngressState::Failed(UserError::new(
+                    ErrorCode::CanisterCalledTrap,
+                    format!("Canister {} trapped explicitly: call_perform failed", uc)
+                ))
+            );
+        } else {
+            assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
+        }
+        let system_state = &mut test.canister_state_mut(uc).system_state;
+        assert_eq!(1, system_state.queues().output_queues_len());
+        assert_eq!(
+            i.min(DEFAULT_QUEUE_CAPACITY),
+            system_state.queues().output_message_count()
+        );
+    }
+}
+
+#[test]
+fn canister_output_queue_does_not_overflow_when_calling_bitcoin_mainnet_canister() {
+    let own_subnet = subnet_test_id(1);
+    let bitcoin_mainnet_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_nns_subnet_id(own_subnet)
+        .with_initial_canister_cycles(1_000_000_000_000_000_000)
+        .with_bitcoin_mainnet_canister_id(Some(bitcoin_mainnet_canister))
+        .with_manual_execution()
+        .build();
+
+    send_messages_to_bitcoin_canister_until_capacity(
+        &mut test,
+        bitcoin_mainnet_canister,
+        BitcoinNetwork::Mainnet,
+    );
+}
+
+#[test]
+fn canister_output_queue_does_not_overflow_when_calling_bitcoin_testnet_canister() {
+    let own_subnet = subnet_test_id(1);
+    let bitcoin_testnet_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_nns_subnet_id(own_subnet)
+        .with_initial_canister_cycles(1_000_000_000_000_000_000)
+        .with_bitcoin_testnet_canister_id(Some(bitcoin_testnet_canister))
+        .with_manual_execution()
+        .build();
+
+    send_messages_to_bitcoin_canister_until_capacity(
+        &mut test,
+        bitcoin_testnet_canister,
+        BitcoinNetwork::Testnet,
+    );
 }
 
 #[test]
@@ -3119,4 +3215,135 @@ fn test_ingress_snapshot_rejected_because_feature_is_disabled() {
         let expected_result = WasmResult::Reject(format!("Unable to route management canister request {}: UserError(UserError {{ code: CanisterRejectedMessage, description: {} }})", method, "\"Snapshotting API is not yet implemented\""));
         assert_eq!(result, expected_result);
     }
+}
+
+#[test]
+fn test_canister_settings_log_visibility_default_controllers() {
+    // Arrange.
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000));
+    // Act.
+    let result = test.canister_status(canister_id);
+    let canister_status = CanisterStatusResultV2::decode(&get_reply(result)).unwrap();
+    // Assert.
+    assert_eq!(
+        canister_status.settings().log_visibility(),
+        LogVisibility::Controllers
+    );
+}
+
+#[test]
+fn test_canister_settings_log_visibility_create_with_settings() {
+    // Arrange.
+    let mut test = ExecutionTestBuilder::new().build();
+    // Act.
+    let canister_id = test
+        .create_canister_with_settings(
+            Cycles::new(1_000_000_000),
+            ic00::CanisterSettingsArgsBuilder::new()
+                .with_log_visibility(LogVisibility::Public)
+                .build(),
+        )
+        .unwrap();
+    let result = test.canister_status(canister_id);
+    let canister_status = CanisterStatusResultV2::decode(&get_reply(result)).unwrap();
+    // Assert.
+    assert_eq!(
+        canister_status.settings().log_visibility(),
+        LogVisibility::Public
+    );
+}
+
+#[test]
+fn test_canister_settings_log_visibility_set_to_public() {
+    // Arrange.
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000));
+    // Act.
+    test.set_log_visibility(canister_id, LogVisibility::Public)
+        .unwrap();
+    let result = test.canister_status(canister_id);
+    let canister_status = CanisterStatusResultV2::decode(&get_reply(result)).unwrap();
+    // Assert.
+    assert_eq!(
+        canister_status.settings().log_visibility(),
+        LogVisibility::Public
+    );
+}
+
+#[test]
+fn test_fetch_canister_logs_should_accept_ingress_message_log_visibility_public_succeeds() {
+    // Arrange.
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let not_a_controller = user_test_id(42);
+    test.set_log_visibility(canister_id, LogVisibility::Public)
+        .unwrap();
+    // Act.
+    test.set_user_id(not_a_controller);
+    let result = test.should_accept_ingress_message(
+        test.state().metadata.own_subnet_id.into(),
+        Method::FetchCanisterLogs,
+        FetchCanisterLogsRequest {
+            canister_id: canister_id.into(),
+        }
+        .encode(),
+    );
+    // Assert.
+    assert_eq!(result, Ok(()));
+}
+
+#[test]
+fn test_fetch_canister_logs_should_accept_ingress_message_log_visibility_invalid_controller_fails()
+{
+    // Arrange.
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let not_a_controller = user_test_id(42);
+    test.set_log_visibility(canister_id, LogVisibility::Controllers)
+        .unwrap();
+    // Act.
+    test.set_user_id(not_a_controller);
+    let result = test.should_accept_ingress_message(
+        test.state().metadata.own_subnet_id.into(),
+        Method::FetchCanisterLogs,
+        FetchCanisterLogsRequest {
+            canister_id: canister_id.into(),
+        }
+        .encode(),
+    );
+    // Assert.
+    assert_eq!(
+        result,
+        Err(UserError::new(
+            ErrorCode::CanisterRejectedMessage,
+            format!(
+                "Caller {not_a_controller} is not allowed to call ic00 method fetch_canister_logs"
+            ),
+        ))
+    );
+}
+
+#[test]
+fn test_fetch_canister_logs_should_accept_ingress_message_log_visibility_valid_controller_succeeds()
+{
+    // Arrange.
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let controller = user_test_id(42);
+    test.set_log_visibility(canister_id, LogVisibility::Controllers)
+        .unwrap();
+    test.set_controller(canister_id, controller.get()).unwrap();
+    // Act.
+    test.set_user_id(controller);
+    let result = test.should_accept_ingress_message(
+        test.state().metadata.own_subnet_id.into(),
+        Method::FetchCanisterLogs,
+        FetchCanisterLogsRequest {
+            canister_id: canister_id.into(),
+        }
+        .encode(),
+    );
+    // Assert.
+    assert_eq!(result, Ok(()));
 }

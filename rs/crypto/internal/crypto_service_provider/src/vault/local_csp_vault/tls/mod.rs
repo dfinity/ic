@@ -64,7 +64,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         let issuance_time: Time = self
             .time_source
             .get_relative_time()
-            .saturating_sub_duration(TWO_MINUTES);
+            .saturating_sub(TWO_MINUTES);
 
         let common_name = &node.get().to_string()[..];
 

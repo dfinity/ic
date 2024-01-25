@@ -17,7 +17,7 @@ ic-crypto-internal-logmon = { path = "../internal/logmon" }
 ic-crypto-node-key-generation = { path = "../node_key_generation" }
 ic-crypto-tls-interfaces = { path = "../tls_interfaces" }
 ic-crypto-temp-crypto-vault = { path = "temp_vault" }
-ic-crypto-utils-basic-sig = { path = "../utils/basic_sig"}
+ic-crypto-utils-basic-sig = { path = "../utils/basic_sig" }
 ic-crypto-utils-time = { path = "../utils/time" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
@@ -36,6 +36,6 @@ tokio-rustls = "0.24.0"
 assert_matches = "1.5.0"
 ic-crypto-test-utils = { path = "../test_utils" }
 ic-crypto-test-utils-reproducible-rng = { path = "../test_utils/reproducible_rng" }
-ic-test-utilities = { path = "../../test_utilities" }
+ic-test-utilities-time = { path = "../../test_utilities/time" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 rand_chacha = "0.3"

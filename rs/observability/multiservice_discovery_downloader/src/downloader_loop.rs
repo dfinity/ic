@@ -84,6 +84,11 @@ pub async fn run_downloader_loop(logger: Logger, cli: CliArgs, stop_signal: Rece
             }
         };
 
+        if targets.is_empty() {
+            warn!(logger, "Got zero targets, skipping @ interval {:?}", tick);
+            continue;
+        }
+
         let mut hasher = DefaultHasher::new();
 
         let targets = targets

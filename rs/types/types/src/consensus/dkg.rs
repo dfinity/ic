@@ -517,6 +517,45 @@ impl NiDkgTag {
     }
 }
 
+impl From<&Summary> for pb::DkgPayload {
+    fn from(summary: &Summary) -> Self {
+        Self {
+            val: Some(pb::dkg_payload::Val::Summary(pb::Summary::from(summary))),
+        }
+    }
+}
+
+impl From<&Dealings> for pb::DkgPayload {
+    fn from(dealings: &Dealings) -> Self {
+        Self {
+            val: Some(pb::dkg_payload::Val::Dealings(pb::Dealings {
+                // TODO do we need this clone
+                dealings: dealings
+                    .messages
+                    .iter()
+                    .cloned()
+                    .map(pb::DkgMessage::from)
+                    .collect(),
+                summary_height: dealings.start_height.get(),
+            })),
+        }
+    }
+}
+
+impl TryFrom<pb::DkgPayload> for Payload {
+    type Error = String;
+    fn try_from(summary: pb::DkgPayload) -> Result<Self, Self::Error> {
+        match summary.val.ok_or("Val missing in DkgPayload")? {
+            pb::dkg_payload::Val::Summary(summary) => {
+                Ok(Payload::Summary(Summary::try_from(summary)?))
+            }
+            pb::dkg_payload::Val::Dealings(dealings) => {
+                Ok(Payload::Dealings(Dealings::try_from(dealings)?))
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -561,44 +600,5 @@ mod tests {
         assert_eq!(get_faults_tolerated(7), 2);
         assert_eq!(get_faults_tolerated(28), 9);
         assert_eq!(get_faults_tolerated(64), 21);
-    }
-}
-
-impl From<&Summary> for pb::DkgPayload {
-    fn from(summary: &Summary) -> Self {
-        Self {
-            val: Some(pb::dkg_payload::Val::Summary(pb::Summary::from(summary))),
-        }
-    }
-}
-
-impl From<&Dealings> for pb::DkgPayload {
-    fn from(dealings: &Dealings) -> Self {
-        Self {
-            val: Some(pb::dkg_payload::Val::Dealings(pb::Dealings {
-                // TODO do we need this clone
-                dealings: dealings
-                    .messages
-                    .iter()
-                    .cloned()
-                    .map(pb::DkgMessage::from)
-                    .collect(),
-                summary_height: dealings.start_height.get(),
-            })),
-        }
-    }
-}
-
-impl TryFrom<pb::DkgPayload> for Payload {
-    type Error = String;
-    fn try_from(summary: pb::DkgPayload) -> Result<Self, Self::Error> {
-        match summary.val.ok_or("Val missing in DkgPayload")? {
-            pb::dkg_payload::Val::Summary(summary) => {
-                Ok(Payload::Summary(Summary::try_from(summary)?))
-            }
-            pb::dkg_payload::Val::Dealings(dealings) => {
-                Ok(Payload::Dealings(Dealings::try_from(dealings)?))
-            }
-        }
     }
 }

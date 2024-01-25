@@ -69,7 +69,7 @@ pub fn update_settings_benchmark(c: &mut Criterion) {
         &mut group,
         "canisters:10/controllers:10/reply",
         (10, 10),
-        |result| expect_reply(result),
+        expect_reply,
     );
     run_bench(
         &mut group,

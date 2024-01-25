@@ -328,6 +328,7 @@ pub enum ThresholdEcdsaVerifySigShareError {
     SerializationError { internal_error: String },
     InvalidSignatureShare,
     InvalidArgumentMissingSignerInTranscript { signer_id: NodeId },
+    InvalidArguments(String),
 }
 impl_display_using_debug!(ThresholdEcdsaVerifySigShareError);
 
@@ -346,6 +347,7 @@ pub enum ThresholdEcdsaVerifyCombinedSignatureError {
     InternalError { internal_error: String },
     InvalidSignature,
     SerializationError { internal_error: String },
+    InvalidArguments(String),
 }
 impl_display_using_debug!(ThresholdEcdsaVerifyCombinedSignatureError);
 

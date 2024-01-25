@@ -17,7 +17,7 @@ use ic_types::crypto::canister_threshold_sig::{
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeId, NodeIndex};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
 #[cfg(test)]
@@ -43,7 +43,7 @@ pub fn sign_share<C: CspThresholdEcdsaSigner>(
     self_node_id: &NodeId,
     inputs: &ThresholdEcdsaSigInputs,
 ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError> {
-    ensure_self_was_receiver(self_node_id, inputs.receivers().get())?;
+    ensure_self_was_receiver(self_node_id, inputs.receivers())?;
 
     let internal_sig_share = csp_client.ecdsa_sign_share(inputs)?;
 
@@ -166,7 +166,7 @@ pub fn combine_sig_shares<C: CspThresholdEcdsaSigVerifier>(
     let kappa_unmasked =
         IDkgTranscriptInternal::deserialize(kappa_transcript).map_err(conv_error)?;
 
-    let internal_shares = internal_sig_shares_by_index_from_sig_shares(shares, inputs.receivers())?;
+    let internal_shares = internal_sig_shares_by_index_from_sig_shares(shares, inputs)?;
 
     let key = IDkgTranscriptInternal::try_from(inputs.key_transcript()).map_err(conv_error)?;
 
@@ -219,9 +219,9 @@ pub fn get_tecdsa_master_public_key(
 
 fn ensure_self_was_receiver(
     self_node_id: &NodeId,
-    receivers: &BTreeSet<NodeId>,
+    receivers: &IDkgReceivers,
 ) -> Result<(), ThresholdEcdsaSignShareError> {
-    if receivers.contains(self_node_id) {
+    if receivers.contains(*self_node_id) {
         Ok(())
     } else {
         Err(ThresholdEcdsaSignShareError::NotAReceiver)
@@ -248,14 +248,14 @@ fn ensure_sufficient_sig_shares_collected(
 /// and map them by signer index (rather than signer Id).
 fn internal_sig_shares_by_index_from_sig_shares(
     shares: &BTreeMap<NodeId, ThresholdEcdsaSigShare>,
-    receivers: &IDkgReceivers,
+    inputs: &ThresholdEcdsaSigInputs,
 ) -> Result<BTreeMap<NodeIndex, ThresholdEcdsaSigShareInternal>, ThresholdEcdsaCombineSigSharesError>
 {
     shares
         .iter()
         .map(|(&id, share)| {
-            let index = receivers
-                .position(id)
+            let index = inputs
+                .index_for_signer_id(id)
                 .ok_or(ThresholdEcdsaCombineSigSharesError::SignerNotAllowed { node_id: id })?;
             let internal_share = ThresholdEcdsaSigShareInternal::deserialize(&share.sig_share_raw)
                 .map_err(

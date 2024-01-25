@@ -38,6 +38,12 @@ if [ ! -z "$CANDID_ARGS" ]; then
     ENCODED_ARGS_FILE=$(encode_candid_args_in_file "$CANDID_ARGS")
 fi
 
+# When CMC is recovered from mainnet, it soon starts making calls to the Exchange Rate Canister (XRC), which is on a
+# subnet that is not recovered.  These calls don't timeout and can't return.  That prevents CMC from ever being able to
+# stop, which means we could never complete the upgrade. However, because they cannot return,
+# it is safe to skip stopping when testing the upgrade of this canister, as replies cannot cause arbitrary code to execute
+# when they return (which is the only reason for stopping in the first place).  The upgrade will still work, and
+# the upgrade process will be exercised.
 if [ "$CANISTER_NAME" == "cycles-minting" ]; then
     export SKIP_STOPPING=yes
 fi

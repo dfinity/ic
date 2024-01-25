@@ -32,11 +32,11 @@ fn main() -> Result<()> {
     let metrics = Metrics::new(metrics_registry.clone());
 
     info!(log, "Starting service discovery ...");
-    let mercury_dir = cli_args.targets_dir.join("mercury");
+    let mercury_target_dir = cli_args.targets_dir.join("mercury");
     let nns_url = vec![cli_args.nns_url.clone()];
     rt.block_on(sync_local_registry(
         log.clone(),
-        mercury_dir,
+        mercury_target_dir,
         nns_url,
         cli_args.skip_sync,
         None,

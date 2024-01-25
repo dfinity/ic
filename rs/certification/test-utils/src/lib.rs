@@ -282,7 +282,7 @@ pub fn generate_root_of_trust<R: Rng + CryptoRng>(
     let public_key = ThresholdSigPublicKey::from(CspThresholdSigPublicKey::from(
         combined_public_key(&public_coefficients).unwrap(),
     ));
-    (public_key, secret_key_bytes.get(0).unwrap().clone())
+    (public_key, secret_key_bytes.first().unwrap().clone())
 }
 
 pub fn serialize_to_cbor<T: Serialize>(payload: &T) -> Vec<u8> {

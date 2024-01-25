@@ -14,7 +14,6 @@ use ic_config::{
     transport::TransportConfig,
     Config,
 };
-use ic_crypto::CryptoComponentForNonReplicaProcess;
 use ic_icos_sev::{get_chip_id, SnpError};
 use ic_interfaces::crypto::IDkgKeyRotationResult;
 use ic_interfaces_registry::RegistryClient;
@@ -31,8 +30,10 @@ use ic_sys::utility_command::UtilityCommand;
 use ic_types::{crypto::KeyPurpose, messages::MessageId, NodeId, RegistryVersion, SubnetId};
 use prost::Message;
 use rand::prelude::*;
-use registry_canister::mutations::do_update_node_directly::UpdateNodeDirectlyPayload;
 use registry_canister::mutations::node_management::do_add_node::AddNodePayload;
+use registry_canister::mutations::{
+    common::is_valid_domain, do_update_node_directly::UpdateNodeDirectlyPayload,
+};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use std::{net::IpAddr, str::FromStr};
@@ -42,6 +43,20 @@ use url::Url;
 /// we use a 15% time buffer compensating for a potential delay of the previous node.
 const DELAY_COMPENSATION: f64 = 0.85;
 
+pub trait NodeRegistrationCrypto:
+    ic_interfaces::crypto::KeyManager + ic_interfaces::crypto::BasicSigner<MessageId> + Send + Sync
+{
+}
+
+// Blanket implementation of `NodeRegistrationCrypto` for all types that fulfill the requirements.
+impl<T> NodeRegistrationCrypto for T where
+    T: ic_interfaces::crypto::KeyManager
+        + ic_interfaces::crypto::BasicSigner<MessageId>
+        + Send
+        + Sync
+{
+}
+
 /// Subcomponent used to register this node with the provided NNS.
 pub(crate) struct NodeRegistration {
     log: ReplicaLogger,
@@ -49,7 +64,7 @@ pub(crate) struct NodeRegistration {
     registry_client: Arc<dyn RegistryClient>,
     metrics: Arc<OrchestratorMetrics>,
     node_id: NodeId,
-    key_handler: Arc<dyn CryptoComponentForNonReplicaProcess>,
+    key_handler: Arc<dyn NodeRegistrationCrypto>,
     local_store: Arc<dyn LocalStore>,
     signer: Box<dyn Signer>,
 }
@@ -63,7 +78,7 @@ impl NodeRegistration {
         registry_client: Arc<dyn RegistryClient>,
         metrics: Arc<OrchestratorMetrics>,
         node_id: NodeId,
-        key_handler: Arc<dyn CryptoComponentForNonReplicaProcess>,
+        key_handler: Arc<dyn NodeRegistrationCrypto>,
         local_store: Arc<dyn LocalStore>,
     ) -> Self {
         // If we can open a PEM file under the path specified in the replica config,
@@ -199,6 +214,8 @@ impl NodeRegistration {
             chip_id: get_snp_chip_id().expect("Failed to retrieve chip_id from snp firmware"),
             prometheus_metrics_endpoint: "".to_string(),
             public_ipv4_config: ipv4_config_to_vec(&self.log, &self.node_config.ipv4_config),
+            domain: process_domain_name(&self.log, &self.node_config.domain)
+                .expect("Domain name is invalid"),
         }
     }
 
@@ -630,6 +647,18 @@ fn ipv4_config_to_vec(log: &ReplicaLogger, ipv4_config: &IPv4Config) -> Option<V
         ]);
     }
     None
+}
+
+fn process_domain_name(log: &ReplicaLogger, domain: &str) -> OrchestratorResult<Option<String>> {
+    info!(log, "Reading domain name for registration");
+    match domain {
+        "" => Ok(None),
+        domain if is_valid_domain(domain) => Ok(Some(domain.into())),
+        _ => Err(OrchestratorError::invalid_configuration_error(format!(
+            "Provided domain name {} is invalid",
+            domain
+        ))),
+    }
 }
 
 /// Create a nonce to be included with the ingress message sent to the node

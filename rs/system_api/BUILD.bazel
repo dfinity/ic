@@ -52,6 +52,7 @@ INTEGRATION_TEST_DEPS = [
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
     "//rs/test_utilities",
+    "//rs/test_utilities/time",
     "//rs/types/base_types",
     "//rs/types/error_types",
     "//rs/types/ic00_types",

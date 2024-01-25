@@ -403,7 +403,7 @@ fn get_subnets(env: &TestEnv) -> (SubnetSnapshot, SubnetSnapshot) {
         .filter(|subnet| subnet.subnet_type() == SubnetType::Application)
         .collect::<Vec<_>>();
 
-    let source_subnet = app_subnets.get(0).expect("there is no application subnet");
+    let source_subnet = app_subnets.first().expect("there is no application subnet");
     let destination_subnet = app_subnets.get(1).expect("there is no application subnet");
 
     (source_subnet.clone(), destination_subnet.clone())

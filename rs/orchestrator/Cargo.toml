@@ -23,7 +23,7 @@ ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-dashboard = { path = "./dashboard" }
 ic-http-utils = { path = "../http_utils" }
 ic-ic00-types = { path = "../types/ic00_types" }
-ic-icos-sev = { path = "../ic_os/sev"}
+ic-icos-sev = { path = "../ic_os/sev" }
 ic-image-upgrader = { path = "./image_upgrader" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
@@ -63,4 +63,5 @@ ic-registry-client-fake = { path = "../registry/fake" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-in-memory-logger = { path = "../test_utilities/in_memory_logger" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
+ic-test-utilities-time = { path = "../test_utilities/time" }
 mockall = { workspace = true }

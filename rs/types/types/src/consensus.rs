@@ -65,6 +65,12 @@ pub trait IsShare {
     fn is_share(&self) -> bool;
 }
 
+/// Abstract messages with hash attribute. The [`hash`] implementation is expected
+/// to return an existing hash value, instead of computing one.
+pub trait HasHash {
+    fn hash(&self) -> &CryptoHash;
+}
+
 impl<T: HasHeight, S> HasHeight for Signed<T, S> {
     fn height(&self) -> Height {
         self.content.height()

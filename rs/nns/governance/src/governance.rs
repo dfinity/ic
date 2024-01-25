@@ -18,7 +18,8 @@ use crate::{
         get_neurons_fund_audit_info_response,
         governance::{
             neuron_in_flight_command::{Command as InFlightCommand, SyncCommand},
-            GovernanceCachedMetrics, MakingSnsProposal, NeuronInFlightCommand,
+            GenesisNeuronAccounts, GovernanceCachedMetrics, MakingSnsProposal,
+            NeuronInFlightCommand,
         },
         governance_error::ErrorType,
         manage_neuron,
@@ -647,9 +648,6 @@ impl NnsFunction {
             NnsFunction::RemoveApiBoundaryNodes => {
                 (REGISTRY_CANISTER_ID, "remove_api_boundary_nodes")
             }
-            NnsFunction::UpdateApiBoundaryNodeDomain => {
-                (REGISTRY_CANISTER_ID, "update_api_boundary_node_domain")
-            }
             NnsFunction::UpdateApiBoundaryNodesVersion => {
                 (REGISTRY_CANISTER_ID, "update_api_boundary_nodes_version")
             }
@@ -774,7 +772,6 @@ impl Proposal {
                             | NnsFunction::RetireReplicaVersion => Topic::ReplicaVersionManagement,
                             NnsFunction::AddApiBoundaryNode
                             | NnsFunction::RemoveApiBoundaryNodes
-                            | NnsFunction::UpdateApiBoundaryNodeDomain
                             | NnsFunction::UpdateApiBoundaryNodesVersion => {
                                 Topic::ApiBoundaryNodeManagement
                             }
@@ -1639,7 +1636,15 @@ impl Governance {
         env: Box<dyn Environment>,
         ledger: Box<dyn IcpLedger>,
         cmc: Box<dyn CMC>,
+        // TODO(NNS1-2819) - remove after deployment of this change
+        genesis_neuron_accounts: Option<GenesisNeuronAccounts>,
     ) -> Self {
+        // TODO(NNS1-2819) remove after deployment of this change (genesis_neuron_accounts)
+        let mut governance_proto = governance_proto;
+        if genesis_neuron_accounts.is_some() {
+            governance_proto.genesis_neuron_accounts = genesis_neuron_accounts;
+        }
+
         let (heap_neurons, topic_followee_map, heap_governance_proto) =
             split_governance_proto(governance_proto);
 
@@ -2644,7 +2649,7 @@ impl Governance {
     /// - The parent neuron is not spawning itself.
     /// - The maturity to move to the new neuron must be such that, with every maturity modulation, at least
     ///   NetworkEconomics::neuron_minimum_spawn_stake_e8s are created when the maturity is spawn.
-    pub async fn spawn_neuron(
+    pub fn spawn_neuron(
         &mut self,
         id: &NeuronId,
         caller: &PrincipalId,
@@ -2726,9 +2731,19 @@ impl Governance {
             ));
         }
 
-        let creation_timestamp_seconds = self.env.now();
+        let created_timestamp_seconds = self.env.now();
         let dissolve_and_spawn_at_timestamp_seconds =
-            creation_timestamp_seconds + economics.neuron_spawn_dissolve_delay_seconds;
+            created_timestamp_seconds + economics.neuron_spawn_dissolve_delay_seconds;
+
+        // Lock both parent and child neurons so that it cannot interleave with other async
+        // operations on those neurons and spawn doesn't happen while the parent is in a corrupted
+        // state.
+        let in_flight_command = NeuronInFlightCommand {
+            timestamp: created_timestamp_seconds,
+            command: Some(InFlightCommand::SyncCommand(SyncCommand {})),
+        };
+        let _parent_lock = self.lock_neuron_for_command(id.id, in_flight_command.clone())?;
+        let _child_lock = self.lock_neuron_for_command(child_nid.id, in_flight_command.clone())?;
 
         let child_neuron = Neuron {
             id: Some(child_nid),
@@ -2737,7 +2752,7 @@ impl Governance {
             hot_keys: parent_neuron.hot_keys.clone(),
             cached_neuron_stake_e8s: 0,
             neuron_fees_e8s: 0,
-            created_timestamp_seconds: creation_timestamp_seconds,
+            created_timestamp_seconds,
             aging_since_timestamp_seconds: u64::MAX,
             dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                 dissolve_and_spawn_at_timestamp_seconds,
@@ -6405,7 +6420,6 @@ impl Governance {
                 .map(ManageNeuronResponse::disburse_response),
             Some(Command::Spawn(s)) => self
                 .spawn_neuron(&id, caller, s)
-                .await
                 .map(ManageNeuronResponse::spawn_response),
             Some(Command::MergeMaturity(_)) => self.merge_maturity_removed_error(),
             Some(Command::StakeMaturity(s)) => self
@@ -6538,6 +6552,8 @@ impl Governance {
         // Try to update maturity modulation (once per day).
         } else if self.should_update_maturity_modulation() {
             self.update_maturity_modulation().await;
+        } else if self.some_genesis_neurons_are_untagged() {
+            self.tag_genesis_neurons();
         // Try to spawn neurons (potentially multiple times per day).
         } else if self.can_spawn_neurons() {
             self.spawn_neurons().await;

@@ -30,7 +30,7 @@ if [ "$CI_COMMIT_REF_PROTECTED" = "true" ]; then
     ic_version_rc_only="${CI_COMMIT_SHA}"
 fi
 
-if [[ "${CI_COMMIT_TAG:-}" =~ ^hotfix-.+-rc--.+ ]]; then
+if [[ "${CI_COMMIT_BRANCH:-}" =~ ^hotfix-.+-rc--.+ ]]; then
     ic_version_rc_only="${CI_COMMIT_SHA}"
 fi
 

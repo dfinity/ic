@@ -1,0 +1,20 @@
+[package]
+name = "nss_icos"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "nss_icos"
+crate-type = ["cdylib"]
+
+[dependencies]
+libc = "0.2.152"
+lazy_static = "1.4.0"
+paste = "1.0.14"
+libnss = { workspace = true }
+local-ip-address = { workspace = true }

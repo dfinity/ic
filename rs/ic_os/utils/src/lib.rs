@@ -54,6 +54,41 @@ pub fn intersperse(source: &str, to_inject: char, spacing: usize) -> String {
     result
 }
 
+// Retry the given function `f` until either:
+// * f has been called `attempts` times
+// * `stop_pred` returns true when passed the result of `f()`
+// `wait_func` is called before each attempt.
+// The result returned is either the one held after `stop_pred` returns true or the one held after `attempts` has been breached.
+pub fn retry_pred<F, P, T, W>(attempts: usize, f: F, stop_pred: P, wait_func: W) -> Result<T>
+where
+    F: Fn() -> Result<T, anyhow::Error>,
+    P: Fn(&Result<T>) -> bool,
+    W: Fn(usize),
+{
+    for attempt in 1..attempts - 1 {
+        // Final attempt is last line of function
+        wait_func(attempt);
+        let result = f();
+        if stop_pred(&result) {
+            return result;
+        }
+    }
+    f()
+}
+
+// Retry until `f` returns ok() or has been called `attempts` times
+pub fn retry<F, T>(attempts: usize, f: F, wait: std::time::Duration) -> Result<T>
+where
+    F: Fn() -> Result<T, anyhow::Error>,
+{
+    retry_pred(
+        attempts,
+        f,
+        |result| result.is_ok(),
+        |_| std::thread::sleep(wait),
+    )
+}
+
 #[cfg(test)]
 pub mod tests {
     use super::*;

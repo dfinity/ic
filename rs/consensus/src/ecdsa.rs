@@ -186,8 +186,11 @@ use ic_interfaces::{
     ecdsa::{EcdsaChangeSet, EcdsaPool},
     p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
 };
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use ic_replicated_state::ReplicatedState;
+use ic_types::crypto::canister_threshold_sig::error::IDkgRetainKeysError;
 use ic_types::{
     artifact::{EcdsaMessageId, Priority, PriorityFn},
     artifact_kind::EcdsaArtifact,
@@ -203,6 +206,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 pub(crate) mod complaints;
+pub mod malicious_pre_signer;
 pub(crate) mod payload_builder;
 pub(crate) mod payload_verifier;
 pub(crate) mod pre_signer;
@@ -226,7 +230,8 @@ pub const INACTIVE_TRANSCRIPT_PURGE_SECS: Duration = Duration::from_secs(60);
 /// `EcdsaImpl` is the consensus component responsible for processing threshold
 /// ECDSA payloads.
 pub struct EcdsaImpl {
-    pre_signer: Box<dyn EcdsaPreSigner>,
+    /// The Pre-Signer subcomponent
+    pub pre_signer: Box<EcdsaPreSignerImpl>,
     signer: Box<dyn EcdsaSigner>,
     complaint_handler: Box<dyn EcdsaComplaintHandler>,
     consensus_block_cache: Arc<dyn ConsensusBlockCache>,
@@ -235,6 +240,8 @@ pub struct EcdsaImpl {
     last_transcript_purge_ts: RefCell<Instant>,
     metrics: EcdsaClientMetrics,
     logger: ReplicaLogger,
+    #[cfg_attr(not(feature = "malicious_code"), allow(dead_code))]
+    malicious_flags: MaliciousFlags,
 }
 
 impl EcdsaImpl {
@@ -243,6 +250,7 @@ impl EcdsaImpl {
         node_id: NodeId,
         consensus_block_cache: Arc<dyn ConsensusBlockCache>,
         crypto: Arc<dyn ConsensusCrypto>,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         metrics_registry: MetricsRegistry,
         logger: ReplicaLogger,
         malicious_flags: MaliciousFlags,
@@ -253,12 +261,12 @@ impl EcdsaImpl {
             crypto.clone(),
             metrics_registry.clone(),
             logger.clone(),
-            malicious_flags,
         ));
         let signer = Box::new(EcdsaSignerImpl::new(
             node_id,
             consensus_block_cache.clone(),
             crypto.clone(),
+            state_reader,
             metrics_registry.clone(),
             logger.clone(),
         ));
@@ -279,6 +287,7 @@ impl EcdsaImpl {
             last_transcript_purge_ts: RefCell::new(Instant::now()),
             metrics: EcdsaClientMetrics::new(metrics_registry),
             logger,
+            malicious_flags,
         }
     }
 
@@ -320,23 +329,35 @@ impl EcdsaImpl {
             return;
         }
 
-        if let Err(error) =
-            IDkgProtocol::retain_active_transcripts(&*self.crypto, &active_transcripts)
-        {
-            error!(
-                self.logger,
-                "{}: failed with error = {:?}",
-                CRITICAL_ERROR_ECDSA_RETAIN_ACTIVE_TRANSCRIPTS,
-                error
-            );
-            self.metrics
-                .critical_error_ecdsa_retain_active_transcripts
-                .inc();
-        } else {
-            self.metrics
-                .client_metrics
-                .with_label_values(&["retain_active_transcripts"])
-                .inc();
+        match IDkgProtocol::retain_active_transcripts(&*self.crypto, &active_transcripts) {
+            Err(IDkgRetainKeysError::TransientInternalError { internal_error }) => {
+                warn!(
+                    self.logger,
+                    "purge_inactive_transcripts(): failed due to transient error: {}",
+                    internal_error
+                );
+                self.metrics
+                    .client_errors
+                    .with_label_values(&["retain_active_transcripts_transient"])
+                    .inc();
+            }
+            Err(error) => {
+                error!(
+                    self.logger,
+                    "{}: failed with error = {:?}",
+                    CRITICAL_ERROR_ECDSA_RETAIN_ACTIVE_TRANSCRIPTS,
+                    error
+                );
+                self.metrics
+                    .critical_error_ecdsa_retain_active_transcripts
+                    .inc();
+            }
+            Ok(()) => {
+                self.metrics
+                    .client_metrics
+                    .with_label_values(&["retain_active_transcripts"])
+                    .inc();
+            }
         }
     }
 }
@@ -347,14 +368,23 @@ impl<T: EcdsaPool> ChangeSetProducer<T> for EcdsaImpl {
     fn on_state_change(&self, ecdsa_pool: &T) -> EcdsaChangeSet {
         let metrics = self.metrics.clone();
         let pre_signer = || {
-            timed_call(
+            let changeset = timed_call(
                 "pre_signer",
                 || {
                     self.pre_signer
                         .on_state_change(ecdsa_pool, self.complaint_handler.as_transcript_loader())
                 },
                 &metrics.on_state_change_duration,
-            )
+            );
+            #[cfg(any(feature = "malicious_code", test))]
+            if self.malicious_flags.is_ecdsa_malicious() {
+                return super::ecdsa::malicious_pre_signer::maliciously_alter_changeset(
+                    changeset,
+                    &self.pre_signer,
+                    &self.malicious_flags,
+                );
+            }
+            changeset
         };
         let signer = || {
             timed_call(
@@ -396,6 +426,7 @@ impl<T: EcdsaPool> ChangeSetProducer<T> for EcdsaImpl {
 pub struct EcdsaGossipImpl {
     subnet_id: SubnetId,
     consensus_block_cache: Arc<dyn ConsensusBlockCache>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     metrics: EcdsaGossipMetrics,
 }
 
@@ -404,11 +435,13 @@ impl EcdsaGossipImpl {
     pub fn new(
         subnet_id: SubnetId,
         consensus_block_cache: Arc<dyn ConsensusBlockCache>,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         metrics_registry: MetricsRegistry,
     ) -> Self {
         Self {
             subnet_id,
             consensus_block_cache,
+            state_reader,
             metrics: EcdsaGossipMetrics::new(metrics_registry),
         }
     }
@@ -416,13 +449,18 @@ impl EcdsaGossipImpl {
 
 struct EcdsaPriorityFnArgs {
     finalized_height: Height,
+    #[allow(dead_code)]
+    certified_height: Height,
     requested_transcripts: BTreeSet<IDkgTranscriptId>,
     requested_signatures: BTreeSet<RequestId>,
     active_transcripts: BTreeSet<IDkgTranscriptId>,
 }
 
 impl EcdsaPriorityFnArgs {
-    fn new(block_reader: &EcdsaBlockReaderImpl) -> Self {
+    fn new(
+        block_reader: &EcdsaBlockReaderImpl,
+        state_reader: &dyn StateReader<State = ReplicatedState>,
+    ) -> Self {
         let mut requested_transcripts = BTreeSet::new();
         for params in block_reader.requested_transcripts() {
             requested_transcripts.insert(params.transcript_id);
@@ -438,8 +476,33 @@ impl EcdsaPriorityFnArgs {
             active_transcripts.insert(transcript_ref.transcript_id);
         }
 
+        let (certified_height, _) =
+            state_reader
+                .get_certified_state_snapshot()
+                .map_or(Default::default(), |snapshot| {
+                    let certified_height = snapshot.get_height();
+                    let requested_signatures = snapshot
+                        .get_state()
+                        .sign_with_ecdsa_contexts()
+                        .values()
+                        .flat_map(|context| {
+                            context
+                                .matched_quadruple
+                                .clone()
+                                .map(|(quadruple_id, height)| RequestId {
+                                    quadruple_id,
+                                    pseudo_random_id: context.pseudo_random_id,
+                                    height,
+                                })
+                        })
+                        .collect::<BTreeSet<_>>();
+
+                    (certified_height, requested_signatures)
+                });
+
         Self {
             finalized_height: block_reader.tip_height(),
+            certified_height,
             requested_transcripts,
             requested_signatures,
             active_transcripts,
@@ -454,7 +517,7 @@ impl<Pool: EcdsaPool> PriorityFnAndFilterProducer<EcdsaArtifact, Pool> for Ecdsa
     ) -> PriorityFn<EcdsaMessageId, EcdsaMessageAttribute> {
         let block_reader = EcdsaBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let subnet_id = self.subnet_id;
-        let args = EcdsaPriorityFnArgs::new(&block_reader);
+        let args = EcdsaPriorityFnArgs::new(&block_reader, self.state_reader.as_ref());
         let metrics = self.metrics.clone();
         Box::new(move |_, attr: &'_ EcdsaMessageAttribute| {
             compute_priority(attr, subnet_id, &args, &metrics)
@@ -538,6 +601,7 @@ fn compute_priority(
 
 #[cfg(test)]
 mod tests {
+    use super::test_utils::fake_ecdsa_key_id;
     use super::*;
     use ic_types::consensus::ecdsa::EcdsaUIDGenerator;
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
@@ -561,6 +625,7 @@ mod tests {
         requested_transcripts.insert(transcript_id_fetch_1);
         let args = EcdsaPriorityFnArgs {
             finalized_height: Height::from(100),
+            certified_height: Height::from(100),
             requested_transcripts,
             requested_signatures: BTreeSet::new(),
             active_transcripts: BTreeSet::new(),
@@ -625,22 +690,22 @@ mod tests {
         let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(2));
         let mut uid_generator = EcdsaUIDGenerator::new(subnet_id, Height::new(0));
         let request_id_fetch_1 = RequestId {
-            quadruple_id: uid_generator.next_quadruple_id(),
+            quadruple_id: uid_generator.next_quadruple_id(fake_ecdsa_key_id()),
             pseudo_random_id: [1; 32],
             height: Height::from(80),
         };
         let request_id_drop = RequestId {
-            quadruple_id: uid_generator.next_quadruple_id(),
+            quadruple_id: uid_generator.next_quadruple_id(fake_ecdsa_key_id()),
             pseudo_random_id: [2; 32],
             height: Height::from(70),
         };
         let request_id_fetch_2 = RequestId {
-            quadruple_id: uid_generator.next_quadruple_id(),
+            quadruple_id: uid_generator.next_quadruple_id(fake_ecdsa_key_id()),
             pseudo_random_id: [3; 32],
             height: Height::from(102),
         };
         let request_id_stash = RequestId {
-            quadruple_id: uid_generator.next_quadruple_id(),
+            quadruple_id: uid_generator.next_quadruple_id(fake_ecdsa_key_id()),
             pseudo_random_id: [4; 32],
             height: Height::from(200),
         };
@@ -652,6 +717,7 @@ mod tests {
         requested_signatures.insert(request_id_fetch_1.clone());
         let args = EcdsaPriorityFnArgs {
             finalized_height: Height::from(100),
+            certified_height: Height::from(100),
             requested_transcripts: BTreeSet::new(),
             requested_signatures,
             active_transcripts: BTreeSet::new(),
@@ -703,6 +769,7 @@ mod tests {
         requested_transcripts.insert(transcript_id_fetch_3);
         let args = EcdsaPriorityFnArgs {
             finalized_height: Height::from(100),
+            certified_height: Height::from(100),
             requested_transcripts,
             requested_signatures: BTreeSet::new(),
             active_transcripts,

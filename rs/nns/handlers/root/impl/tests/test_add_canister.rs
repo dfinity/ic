@@ -55,9 +55,9 @@ fn test_add_nns_canister() {
             name: name.clone(),
             wasm_module: EMPTY_WASM.to_vec(),
             arg: vec![],
-            query_allocation: Some(Nat::from(34)),
-            memory_allocation: Some(Nat::from(12345)),
-            compute_allocation: Some(Nat::from(12)),
+            query_allocation: Some(Nat::from(34u32)),
+            memory_allocation: Some(Nat::from(12345u32)),
+            compute_allocation: Some(Nat::from(12u32)),
             initial_cycles: 1 << 45,
         };
 

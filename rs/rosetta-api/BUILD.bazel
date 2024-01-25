@@ -28,6 +28,7 @@ DEPENDENCIES = [
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
     "//rs/rosetta-api/rosetta_core:rosetta-core",
+    "@crate_index//:anyhow",
     "@crate_index//:actix-rt",
     "@crate_index//:actix-web",
     "@crate_index//:base64",
@@ -74,7 +75,7 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {
 }
 
-ROSETTA_VERSION = "1.9.0"
+ROSETTA_VERSION = "2.0.0"
 
 rust_library(
     name = "rosetta-api",

@@ -49,7 +49,6 @@
         headers:
           Content-Type: "application/json"
       loop:
-        - control_plane
         - denylist_updater
         - ic_registry_replicator
         - icx_proxy

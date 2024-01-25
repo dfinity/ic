@@ -227,7 +227,7 @@ fn test_sleb128() {
 fn test_test_vectors() {
     let test_vectors = vec![
         (
-            Value::Nat(42.into()),
+            Value::Nat(42_u32.into()),
             "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1",
         ),
         (
@@ -244,7 +244,7 @@ fn test_test_vectors() {
         ),
         (
             Value::Array(vec![
-                Value::Nat(3.into()),
+                Value::Nat(3_u32.into()),
                 Value::text("foo"),
                 Value::blob(hex::decode("0506").unwrap()),
             ]),
@@ -266,9 +266,9 @@ fn test_test_vectors() {
                             .unwrap(),
                     ),
                 ),
-                ("amount", Value::Nat(42.into())),
-                ("created_at", Value::Nat(1699218263.into())),
-                ("memo", Value::Nat(0.into())),
+                ("amount", Value::Nat(42_u32.into())),
+                ("created_at", Value::Nat(1699218263_u32.into())),
+                ("memo", Value::Nat(0_u32.into())),
             ]),
             "c56ece650e1de4269c5bdeff7875949e3e2033f85b2d193c2ff4f7f78bdcfc75",
         ),

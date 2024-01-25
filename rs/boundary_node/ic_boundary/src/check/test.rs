@@ -58,6 +58,7 @@ pub fn generate_custom_registry_snapshot(
                     .certificate_der,
                 replica_version: "7742d96ddd30aa6b607c9d2d4093a7b714f5b25b".to_string(),
             };
+            let node = Arc::new(node);
 
             nodes.push(node.clone());
             nodes_hash.insert(node.id.to_string(), node);

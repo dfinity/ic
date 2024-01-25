@@ -161,7 +161,7 @@ mod tests {
     use ic_test_utilities::types::ids::{canister_test_id, subnet_test_id, user_test_id};
     use ic_types::{
         ingress::WasmResult,
-        messages::CallContextId,
+        messages::{CallContextId, RequestMetadata},
         methods::{FuncRef, WasmMethod},
         time::Time,
         CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
@@ -218,6 +218,7 @@ mod tests {
             CanisterTimer::Inactive,
             0,
             BTreeSet::from([controller]),
+            RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(0)),
         )
     }
 

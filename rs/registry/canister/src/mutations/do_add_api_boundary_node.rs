@@ -9,13 +9,11 @@ use serde::Serialize;
 
 use crate::{common::LOG_PREFIX, mutations::common::encode_or_panic, registry::Registry};
 
-use super::common::{check_replica_version_is_blessed, is_valid_domain};
-
+use super::common::check_replica_version_is_blessed;
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct AddApiBoundaryNodePayload {
     pub node_id: NodeId,
     pub version: String,
-    pub domain: String,
 }
 
 impl Registry {
@@ -35,7 +33,6 @@ impl Registry {
                 key,
                 encode_or_panic(&ApiBoundaryNodeRecord {
                     version: payload.version,
-                    domain: payload.domain,
                 }),
             ),
         ])
@@ -86,11 +83,6 @@ impl Registry {
 
         // Ensure version exists and is blessed
         check_replica_version_is_blessed(self, &payload.version);
-
-        // Ensure domain is valid
-        if !is_valid_domain(&payload.domain) {
-            panic!("invalid domain");
-        }
     }
 }
 
@@ -132,7 +124,6 @@ mod tests {
         let payload = AddApiBoundaryNodePayload {
             node_id,
             version: "version".into(),
-            domain: "example.com".into(),
         };
 
         registry.do_add_api_boundary_node(payload);
@@ -144,19 +135,22 @@ mod tests {
         let mut registry = invariant_compliant_registry(0);
 
         // Add node to registry
-        let (mutate_request, node_ids) = prepare_registry_with_nodes(
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
             1, // mutation id
             1, // node count
         );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         // Add boundary node to registry
-        let node_id = node_ids.first().expect("no node ids found").to_owned();
+        let node_id = node_ids_and_dkg_pks
+            .keys()
+            .next()
+            .expect("no node ids found")
+            .to_owned();
 
         let payload = AddApiBoundaryNodePayload {
             node_id,
             version: "version".into(),
-            domain: "example.com".into(),
         };
 
         registry.maybe_apply_mutation_internal(vec![
@@ -165,7 +159,6 @@ mod tests {
                 make_api_boundary_node_record_key(payload.node_id), // key
                 encode_or_panic(&ApiBoundaryNodeRecord {
                     version: payload.version.clone(),
-                    domain: payload.domain.clone(),
                 }),
             ),
         ]);
@@ -179,14 +172,15 @@ mod tests {
         let mut registry = invariant_compliant_registry(0);
 
         // Add node to registry
-        let (mutate_request, node_ids) = prepare_registry_with_nodes(
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
             1, // mutation id
             1, // node count
         );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         // Add subnet to registry and assign the node to it
-        let subnet_record = get_invariant_compliant_subnet_record(node_ids.clone());
+        let subnet_record =
+            get_invariant_compliant_subnet_record(node_ids_and_dkg_pks.keys().copied().collect());
 
         registry.maybe_apply_mutation_internal(
             // Mutation to insert SubnetRecord
@@ -194,16 +188,20 @@ mod tests {
                 SubnetId::from(*TEST_USER1_PRINCIPAL),  // signing_subnet
                 &mut registry.get_subnet_list_record(), // subnet_list_record
                 subnet_record,
+                &node_ids_and_dkg_pks,
             ),
         );
 
         // Validate proposal payload
-        let node_id = node_ids.first().expect("no node ids found").to_owned();
+        let node_id = node_ids_and_dkg_pks
+            .keys()
+            .next()
+            .expect("no node ids found")
+            .to_owned();
 
         let payload = AddApiBoundaryNodePayload {
             node_id,
             version: "version".into(),
-            domain: "example.com".into(),
         };
 
         registry.do_add_api_boundary_node(payload);
@@ -215,19 +213,22 @@ mod tests {
         let mut registry = invariant_compliant_registry(0);
 
         // Add node to registry
-        let (mutate_request, node_ids) = prepare_registry_with_nodes(
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
             1, // mutation id
             1, // node count
         );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         // Validate proposal payload
-        let node_id = node_ids.first().expect("no node ids found").to_owned();
+        let node_id = node_ids_and_dkg_pks
+            .keys()
+            .next()
+            .expect("no node ids found")
+            .to_owned();
 
         let payload = AddApiBoundaryNodePayload {
             node_id,
             version: "version".into(),
-            domain: "example.com".into(),
         };
 
         registry.do_add_api_boundary_node(payload);
@@ -238,7 +239,7 @@ mod tests {
         let mut registry = invariant_compliant_registry(0);
 
         // Add node to registry
-        let (mutate_request, node_ids) = prepare_registry_with_nodes(
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
             1, // mutation id
             1, // node count
         );
@@ -274,12 +275,15 @@ mod tests {
         ]);
 
         // Validate proposal payload
-        let node_id = node_ids.first().expect("no node ids found").to_owned();
+        let node_id = node_ids_and_dkg_pks
+            .keys()
+            .next()
+            .expect("no node ids found")
+            .to_owned();
 
         let payload = AddApiBoundaryNodePayload {
             node_id,
             version: "version".into(),
-            domain: "example.com".into(),
         };
 
         registry.do_add_api_boundary_node(payload);

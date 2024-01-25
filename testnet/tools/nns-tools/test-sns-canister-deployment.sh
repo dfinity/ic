@@ -33,7 +33,6 @@ ensure_variable_set SNS_QUILL
 ensure_variable_set IC_ADMIN
 
 ensure_variable_set NNS_URL
-ensure_variable_set SUBNET_URL
 ensure_variable_set NEURON_ID
 ensure_variable_set WALLET_CANISTER
 ensure_variable_set PEM
@@ -51,71 +50,6 @@ PERMUTATIONS=$(python3 \
     $CANISTERS)
 
 LOG_FILE=$(mktemp)
-
-sns_canister_id_for_sns_canister_type() {
-    local SNS_CANISTER_TYPE=$1
-    cat $PWD/sns_canister_ids.json | jq -r ".${SNS_CANISTER_TYPE}_canister_id"
-}
-
-upgrade_swap() {
-    NNS_URL=$1
-    NEURON_ID=$2
-    PEM=$3
-    CANISTER_ID=$4
-    VERSION_OR_WASM=$5
-
-    WASM_FILE=$([ -f "$VERSION_OR_WASM" ] && echo "$VERSION_OR_WASM" || download_sns_canister_wasm_gz_for_type swap "$VERSION")
-
-    propose_upgrade_canister_wasm_file_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_ID" "$WASM_FILE"
-}
-
-upgrade_sns() {
-    NNS_URL=$1
-    SUBNET_URL=$2
-    NEURON_ID=$3
-    PEM=$4
-    CANISTER_NAME=$5
-    VERSION_OR_WASM=$6
-    LOG_FILE=$7
-    SWAP_CANISTER_ID=$8
-    GOV_CANISTER_ID=$9
-
-    # For swap testing, we want to do the NNS upgrade
-    if [[ $CANISTER_NAME = "swap" ]]; then
-        echo "Submitting upgrade proposal to NNS Governance for Swap" | tee -a "$LOG_FILE"
-        upgrade_swap "$NNS_URL" "$NEURON_ID" "$PEM" "$SWAP_CANISTER_ID" "$VERSION_OR_WASM"
-    fi
-
-    # SNS upgrade proposal - needed even if swap was upgraded
-    echo "Submitting upgrade proposal to $GOV_CANISTER_ID" | tee -a "$LOG_FILE"
-    sns_upgrade_to_next_version "$SUBNET_URL" "$PEM" "$GOV_CANISTER_ID" 0
-}
-
-upgrade_nns_governance_to_test_version() {
-    NNS_URL=$1
-    NEURON_ID=$2
-    PEM=$3
-
-    GOVERNANCE_CANISTER_ID=$(nns_canister_id governance)
-    GIT_COMMIT=${GIT_COMMIT:-$(canister_git_version "${NNS_URL}" "${GOVERNANCE_CANISTER_ID}")}
-    DOWNLOAD_NAME="governance-canister_test"
-    WASM_GZ_FILE=$(_download_canister_gz "${DOWNLOAD_NAME}" "${GIT_COMMIT}")
-    WASM_SHA=$(sha_256 "${WASM_GZ_FILE}")
-
-    if nns_canister_has_file_contents_installed "${NNS_URL}" "governance" "${WASM_GZ_FILE}"; then
-        print_green "Governance already on the correct version."
-        return 0
-    fi
-
-    propose_upgrade_nns_canister_wasm_file_pem "${NNS_URL}" "${NEURON_ID}" "${PEM}" "governance" "${WASM_GZ_FILE}"
-
-    if ! wait_for_nns_canister_has_file_contents "${NNS_URL}" "governance" "${WASM_GZ_FILE}"; then
-        print_red "Could not upgrade NNS Governance to its test version at version ${GIT_COMMIT}"
-        exit 1
-    fi
-
-    print_green "Upgraded NNS Governance to its test build for Git Commit ${GIT_COMMIT}. Its hash is ${WASM_SHA}"
-}
 
 upgrade_nns_governance_to_test_version "${NNS_URL}" "${NEURON_ID}" "${PEM}"
 
@@ -168,13 +102,13 @@ echo "$PERMUTATIONS" | while read -r ORDERING; do
         sns_quill_participate_in_sale "${NNS_URL}" "${PEM}" "${ROOT_CANISTER_ID}" 300000
 
         echo "Wait for finalization to complete ..." | tee -a "${LOG_FILE}"
-        if ! wait_for_sns_governance_to_be_in_normal_mode "${SUBNET_URL}" "${GOV_CANISTER_ID}"; then
+        if ! wait_for_sns_governance_to_be_in_normal_mode "${NNS_URL}" "${GOV_CANISTER_ID}"; then
             print_red "Swap finalization failed, cannot continue with upgrade testing"
             exit 1
         fi
 
         echo "Add the archive canister to sns_canister_ids.json for use during upgrade testing ..." | tee -a $LOG_FILE
-        ARCHIVE_CANISTER_ID=$(sns_get_archive "${SUBNET_URL}" "${LEDGER_CANISTER_ID}")
+        ARCHIVE_CANISTER_ID=$(sns_get_archive "${NNS_URL}" "${LEDGER_CANISTER_ID}")
         add_archive_to_sns_canister_ids "$PWD/sns_canister_ids.json" "${ARCHIVE_CANISTER_ID}"
     fi
 
@@ -216,13 +150,13 @@ echo "$PERMUTATIONS" | while read -r ORDERING; do
         sns_quill_participate_in_sale "${NNS_URL}" "${PEM}" "${ROOT_CANISTER_ID}" 300000
 
         echo "Wait for finalization to complete ..." | tee -a "${LOG_FILE}"
-        if ! wait_for_sns_governance_to_be_in_normal_mode "${SUBNET_URL}" "${GOV_CANISTER_ID}"; then
+        if ! wait_for_sns_governance_to_be_in_normal_mode "${NNS_URL}" "${GOV_CANISTER_ID}"; then
             print_red "Swap finalization failed, cannot continue with upgrade testing"
             exit 1
         fi
 
         echo "Add the archive canister to sns_canister_ids.json for use during upgrade testing ..." | tee -a $LOG_FILE
-        ARCHIVE_CANISTER_ID=$(sns_get_archive "${SUBNET_URL}" "${LEDGER_CANISTER_ID}")
+        ARCHIVE_CANISTER_ID=$(sns_get_archive "${NNS_URL}" "${LEDGER_CANISTER_ID}")
         add_archive_to_sns_canister_ids "$PWD/sns_canister_ids.json" "${ARCHIVE_CANISTER_ID}"
     fi
 

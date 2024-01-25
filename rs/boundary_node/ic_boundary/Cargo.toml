@@ -69,12 +69,12 @@ mockall = "0.11.4"
 moka = { version = "0.12", features = ["sync", "future"] }
 prometheus = { workspace = true }
 rand = "0.8.4"
-rayon = "1.5.3"
 rcgen = { workspace = true }
 regex = "1.3.9"
 reqwest = { workspace = true }
 rustls = { version = "^0.21.0", features = ["dangerous_configuration"] }
 serde = { workspace = true }
+serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }

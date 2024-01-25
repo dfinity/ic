@@ -13,7 +13,7 @@ pub fn validate(block: &Value) -> Result<(), ValuePredicateFailures> {
 
     let is_zero = or(vec![
         and(vec![is_int(), is(Value::Int(0.into()))]),
-        and(vec![is_nat(), is(Value::Nat(0.into()))]),
+        and(vec![is_nat(), is(Value::Nat(0_u8.into()))]),
         and(vec![is_nat64(), is(Value::Nat64(0))]),
     ]);
     let is_positive = or(vec![is_zero, is_more_than(0)]);

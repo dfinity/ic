@@ -139,7 +139,7 @@ impl AggregatorClient {
     }
 
     pub fn principal(&self) -> Principal {
-        Principal::try_from(self.canister_id).unwrap()
+        Principal::from(self.canister_id)
     }
 
     pub fn aggregator_http_endpoint() -> String {

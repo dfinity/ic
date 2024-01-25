@@ -402,6 +402,7 @@ mod tests {
                 hostos_version_id: None,
                 chip_id: None,
                 public_ipv4_config: None,
+                domain: None,
             }),
         );
 
@@ -425,6 +426,7 @@ mod tests {
                 hostos_version_id: None,
                 chip_id: None,
                 public_ipv4_config: None,
+                domain: None,
             }),
         );
 
@@ -451,6 +453,7 @@ mod tests {
                 hostos_version_id: None,
                 chip_id: None,
                 public_ipv4_config: None,
+                domain: None,
             }),
         );
         check_endpoint_invariants(&snapshot, true).unwrap();

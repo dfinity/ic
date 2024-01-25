@@ -1,6 +1,5 @@
 //! Various helper methods enabling execution and piping of system commands.
 use crate::error::{RecoveryError, RecoveryResult};
-use std::convert::TryInto;
 use std::process::Command;
 use std::process::Stdio;
 
@@ -33,10 +32,7 @@ pub fn pipe(a: &mut Command, b: &mut Command) -> RecoveryResult<()> {
         .ok_or_else(|| {
             RecoveryError::cmd_error(a, None, "Could not create pipe: stdout is None".to_string())
         })?
-        .try_into()
-        .map_err(|e| {
-            RecoveryError::cmd_error(a, None, format!("Could not create pipe: {:?}", e))
-        })?;
+        .into();
 
     b.stdin(b_stdin).stdout(Stdio::piped());
 

@@ -1,5 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "gzip_compress")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -72,12 +73,24 @@ rust_library(
     ]
 ]
 
+[
+    gzip_compress(
+        name = "index_ng_canister" + name_suffix + ".wasm.gz",
+        srcs = [":index_ng_canister" + name_suffix],
+    )
+    for name_suffix in [
+        "",
+        "_u256",
+    ]
+]
+
 rust_test(
     name = "index_ng_unit_test",
     crate = ":_wasm_index_ng_canister",
     data = [":index-ng.did"],
     deps = [
         "//rs/rosetta-api/icrc1/test_utils",
+        "@crate_index//:candid_parser",
         "@crate_index//:proptest",
     ],
 )

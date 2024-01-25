@@ -68,7 +68,6 @@ serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
 slog-async = "2.5.0"
-static_assertions = "0.3.4"
 tempfile = "3.1.0"
 tokio = { workspace = true }
 tracing = "0.1.13"

@@ -8,7 +8,7 @@ use ic_crypto_tree_hash::{
 };
 use ic_ic00_types::{CanisterChangeDetails, CanisterChangeOrigin};
 use ic_interfaces::certification::Verifier;
-use ic_interfaces::p2p::state_sync::StateSyncClient;
+use ic_interfaces::p2p::state_sync::{ChunkId, StateSyncArtifactId, StateSyncClient};
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_state_manager::*;
 use ic_logger::replica_logger::no_op_logger;
@@ -34,7 +34,6 @@ use ic_sys::PAGE_SIZE;
 use ic_test_utilities::{
     consensus::fake::FakeVerifier,
     io::{make_mutable, make_readonly, write_all_at},
-    mock_time,
     state::{arb_stream, arb_stream_slice, canister_ids},
     types::{
         ids::{canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id},
@@ -43,13 +42,12 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge, Labels};
+use ic_test_utilities_time::mock_time;
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_types::batch::{
     CanisterQueryStats, QueryStats, QueryStatsPayload, RawQueryStats, TotalQueryStats,
 };
 use ic_types::{
-    artifact::{Priority, StateSyncArtifactId},
-    chunkable::ChunkId,
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::CallbackId,
@@ -456,7 +454,7 @@ fn rejoining_node_doesnt_accumulate_states() {
                 let hash = wait_for_checkpoint(&*src_state_manager, height(i));
                 let id = StateSyncArtifactId {
                     height: height(i),
-                    hash,
+                    hash: hash.get(),
                 };
                 let msg = src_state_sync
                     .get_validated_by_identifier(&id)
@@ -1978,7 +1976,7 @@ fn delivers_state_adverts_once() {
         let hash = wait_for_checkpoint(&*state_manager, height(1));
         let id = StateSyncArtifactId {
             height: height(1),
-            hash,
+            hash: hash.get(),
         };
 
         assert!(state_sync.get_validated_by_identifier(&id).is_some());
@@ -2012,7 +2010,7 @@ fn state_sync_message_contains_manifest() {
         let hash = wait_for_checkpoint(&*state_manager, height(1));
         let id = StateSyncArtifactId {
             height: height(1),
-            hash,
+            hash: hash.get(),
         };
 
         let msg = state_sync
@@ -2048,75 +2046,39 @@ fn state_sync_priority_fn_respects_states_to_fetch() {
         let (_height, state) = state_manager.take_tip();
         state_manager.commit_and_certify(state, height(2), CertificationScope::Metadata);
 
-        let priority_fn = state_sync.get_priority_function();
-        for (h, p) in [
-            (1, Priority::Drop),
-            (2, Priority::Drop),
-            (3, Priority::Stash),
-        ]
-        .iter()
-        {
+        for (h, p) in [(1, false), (2, false), (3, false)].iter() {
             assert_eq!(
                 *p,
-                priority_fn(
-                    &StateSyncArtifactId {
-                        height: height(*h),
-                        hash: hash(*h as u8),
-                    },
-                    &()
-                )
+                state_sync.should_download(&StateSyncArtifactId {
+                    height: height(*h),
+                    hash: hash(*h as u8).get(),
+                },)
             );
         }
 
         // Request fetching of state 3.
         state_manager.fetch_state(height(3), hash(3), Height::new(99));
-        let priority_fn = state_sync.get_priority_function();
         // Good hash
-        assert_eq!(
-            Priority::Fetch,
-            priority_fn(
-                &StateSyncArtifactId {
-                    height: height(3),
-                    hash: hash(3),
-                },
-                &()
-            )
-        );
+        assert!(state_sync.should_download(&StateSyncArtifactId {
+            height: height(3),
+            hash: hash(3).get(),
+        }));
         // Wrong hash
-        assert_eq!(
-            Priority::Drop,
-            priority_fn(
-                &StateSyncArtifactId {
-                    height: height(3),
-                    hash: hash(4),
-                },
-                &()
-            )
-        );
+        assert!(!state_sync.should_download(&StateSyncArtifactId {
+            height: height(3),
+            hash: hash(4).get(),
+        }));
 
         // Request fetching of newer state 4.
         state_manager.fetch_state(height(4), hash(4), Height::new(99));
-        let priority_fn = state_sync.get_priority_function();
-        assert_eq!(
-            Priority::Drop,
-            priority_fn(
-                &StateSyncArtifactId {
-                    height: height(3),
-                    hash: hash(3),
-                },
-                &()
-            )
-        );
-        assert_eq!(
-            Priority::Fetch,
-            priority_fn(
-                &StateSyncArtifactId {
-                    height: height(4),
-                    hash: hash(4),
-                },
-                &()
-            )
-        );
+        assert!(!state_sync.should_download(&StateSyncArtifactId {
+            height: height(3),
+            hash: hash(3).get(),
+        },));
+        assert!(state_sync.should_download(&StateSyncArtifactId {
+            height: height(4),
+            hash: hash(4).get(),
+        }));
     });
 }
 
@@ -2147,7 +2109,7 @@ fn can_do_simple_state_sync_transfer() {
         let hash = wait_for_checkpoint(&*src_state_manager, height(1));
         let id = StateSyncArtifactId {
             height: height(1),
-            hash,
+            hash: hash.get(),
         };
 
         let state = src_state_manager.get_latest_state().take();
@@ -2194,7 +2156,7 @@ fn state_sync_message_returns_none_for_invalid_chunk_requests() {
         let hash = wait_for_checkpoint(&*src_state_manager, height(1));
         let id = StateSyncArtifactId {
             height: height(1),
-            hash,
+            hash: hash.get(),
         };
 
         let msg = src_state_sync
@@ -2270,7 +2232,7 @@ fn can_state_sync_from_cache() {
         let hash = wait_for_checkpoint(&*src_state_manager, height(1));
         let id = StateSyncArtifactId {
             height: height(1),
-            hash: hash.clone(),
+            hash: hash.get_ref().clone(),
         };
 
         let state = src_state_manager.get_latest_state().take();
@@ -2333,7 +2295,7 @@ fn can_state_sync_from_cache() {
                 // Same state just higher height
                 let id = StateSyncArtifactId {
                     height: height(2),
-                    hash: hash.clone(),
+                    hash: hash.get_ref().clone(),
                 };
 
                 let mut chunkable = dst_state_sync.create_chunkable_state(&id);
@@ -2379,7 +2341,7 @@ fn can_state_sync_from_cache() {
                 // Same state just higher height
                 let id = StateSyncArtifactId {
                     height: height(3),
-                    hash,
+                    hash: hash.get(),
                 };
 
                 let mut chunkable = dst_state_sync.create_chunkable_state(&id);
@@ -2428,7 +2390,7 @@ fn can_state_sync_after_aborting_in_prep_phase() {
         let hash = wait_for_checkpoint(&*src_state_manager, height(1));
         let id = StateSyncArtifactId {
             height: height(1),
-            hash: hash.clone(),
+            hash: hash.get_ref().clone(),
         };
 
         let state = src_state_manager.get_latest_state().take();
@@ -2467,7 +2429,7 @@ fn can_state_sync_after_aborting_in_prep_phase() {
                 // Same state just higher height
                 let id = StateSyncArtifactId {
                     height: height(2),
-                    hash: hash.clone(),
+                    hash: hash.get_ref().clone(),
                 };
 
                 let mut chunkable = dst_state_sync.create_chunkable_state(&id);
@@ -2522,7 +2484,7 @@ fn state_sync_can_reject_invalid_chunks() {
         let hash = wait_for_checkpoint(&*src_state_manager, height(1));
         let id = StateSyncArtifactId {
             height: height(1),
-            hash,
+            hash: hash.get(),
         };
 
         let state = src_state_manager.get_latest_state().take();
@@ -2626,7 +2588,7 @@ fn can_state_sync_into_existing_checkpoint() {
         let hash = wait_for_checkpoint(&*src_state_manager, height(1));
         let id = StateSyncArtifactId {
             height: height(1),
-            hash,
+            hash: hash.get(),
         };
 
         let msg = src_state_sync
@@ -2675,7 +2637,7 @@ fn can_group_small_files_in_state_sync() {
         let hash = wait_for_checkpoint(&*src_state_manager, height(1));
         let id = StateSyncArtifactId {
             height: height(1),
-            hash,
+            hash: hash.get(),
         };
 
         let state = src_state_manager.get_latest_state().take();
@@ -2750,7 +2712,7 @@ fn can_commit_after_prev_state_is_gone() {
         let hash = wait_for_checkpoint(&*src_state_manager, height(3));
         let id = StateSyncArtifactId {
             height: height(3),
-            hash,
+            hash: hash.get(),
         };
 
         let msg = src_state_sync
@@ -2807,7 +2769,7 @@ fn can_commit_without_prev_hash_mismatch_after_taking_tip_at_the_synced_height()
         let hash = wait_for_checkpoint(&*src_state_manager, height(3));
         let id = StateSyncArtifactId {
             height: height(3),
-            hash,
+            hash: hash.get(),
         };
 
         let msg = src_state_sync
@@ -2850,7 +2812,7 @@ fn can_state_sync_based_on_old_checkpoint() {
         let hash = wait_for_checkpoint(&*src_state_manager, height(2));
         let id = StateSyncArtifactId {
             height: height(2),
-            hash,
+            hash: hash.get(),
         };
         let msg = src_state_sync
             .get_validated_by_identifier(&id)
@@ -2972,7 +2934,7 @@ fn can_recover_from_corruption_on_state_sync() {
         let hash_2 = wait_for_checkpoint(&*src_state_manager, height(2));
         let id = StateSyncArtifactId {
             height: height(2),
-            hash: hash_2,
+            hash: hash_2.get(),
         };
         let msg = src_state_sync
             .get_validated_by_identifier(&id)
@@ -3100,7 +3062,7 @@ fn can_commit_below_state_sync() {
         let hash = wait_for_checkpoint(&*src_state_manager, height(2));
         let id = StateSyncArtifactId {
             height: height(2),
-            hash,
+            hash: hash.get(),
         };
 
         let msg = src_state_sync
@@ -3142,7 +3104,7 @@ fn can_state_sync_below_commit() {
 
         let id = StateSyncArtifactId {
             height: height(1),
-            hash,
+            hash: hash.get(),
         };
 
         let msg = src_state_sync

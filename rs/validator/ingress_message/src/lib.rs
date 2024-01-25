@@ -8,6 +8,7 @@ mod internal;
 
 pub use internal::IngressMessageVerifier;
 pub use internal::IngressMessageVerifierBuilder;
+pub use internal::StandaloneIngressSigVerifier;
 pub use internal::TimeProvider;
 
 /// Validate an incoming HTTP request according to the

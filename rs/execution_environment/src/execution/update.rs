@@ -8,6 +8,7 @@ use crate::execution::common::{
 use crate::execution_environment::{
     ExecuteMessageResult, PausedExecution, RoundContext, RoundLimits,
 };
+use crate::metrics::CallTreeMetrics;
 use ic_base_types::CanisterId;
 use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
 use ic_error_types::{ErrorCode, UserError};
@@ -17,15 +18,14 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{info, ReplicaLogger};
 use ic_replicated_state::{CallOrigin, CanisterState};
+use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::messages::{
     CallContextId, CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask,
-    CanisterTask,
+    CanisterTask, RequestMetadata,
 };
+use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 use ic_types::{CanisterTimer, Cycles, NumBytes, NumInstructions, Time};
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
-
-use ic_system_api::{ApiType, ExecutionParameters};
-use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 
 #[cfg(test)]
 mod tests;
@@ -42,6 +42,7 @@ pub fn execute_update(
     round: RoundContext,
     round_limits: &mut RoundLimits,
     subnet_size: usize,
+    call_tree_metrics: &dyn CallTreeMetrics,
 ) -> ExecuteMessageResult {
     let (clean_canister, prepaid_execution_cycles, resuming_aborted) =
         match prepaid_execution_cycles {
@@ -86,6 +87,14 @@ pub fn execute_update(
         clean_canister.system_state.reserved_balance(),
     );
 
+    let request_metadata = match &call_or_task {
+        CanisterCallOrTask::Call(CanisterCall::Request(request)) => match &request.metadata {
+            Some(metadata) => metadata.for_downstream_call(),
+            None => RequestMetadata::for_new_call_tree(time),
+        },
+        _ => RequestMetadata::for_new_call_tree(time),
+    };
+
     let original = OriginalContext {
         call_origin: CallOrigin::from(&call_or_task),
         method,
@@ -94,6 +103,7 @@ pub fn execute_update(
         execution_parameters,
         subnet_size,
         time,
+        request_metadata,
         freezing_threshold,
         canister_id: clean_canister.canister_id(),
     };
@@ -143,6 +153,7 @@ pub fn execute_update(
         message_memory_usage,
         original.execution_parameters.clone(),
         FuncRef::Method(original.method.clone()),
+        original.request_metadata.clone(),
         round_limits,
         round.network_topology,
     );
@@ -191,6 +202,7 @@ pub fn execute_update(
                 original,
                 round,
                 round_limits,
+                call_tree_metrics,
             )
         }
     }
@@ -247,6 +259,7 @@ struct OriginalContext {
     execution_parameters: ExecutionParameters,
     subnet_size: usize,
     time: Time,
+    request_metadata: RequestMetadata,
     freezing_threshold: Cycles,
     canister_id: CanisterId,
 }
@@ -282,6 +295,7 @@ impl UpdateHelper {
                 original.call_origin.clone(),
                 original.call_or_task.cycles(),
                 original.time,
+                original.request_metadata.clone(),
             );
 
         let initial_cycles_balance = canister.system_state.balance();
@@ -342,6 +356,7 @@ impl UpdateHelper {
         original: OriginalContext,
         round: RoundContext,
         round_limits: &mut RoundLimits,
+        call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
         self.canister
             .system_state
@@ -393,7 +408,10 @@ impl UpdateHelper {
             round.hypervisor.subnet_id(),
             round.log,
             round.counters.state_changes_error,
+            call_tree_metrics,
+            original.time,
         );
+
         let heap_delta = if output.wasm_result.is_ok() {
             NumBytes::from((output.instance_stats.dirty_pages * ic_sys::PAGE_SIZE) as u64)
         } else {
@@ -468,6 +486,7 @@ impl PausedExecution for PausedCallExecution {
         round: RoundContext,
         round_limits: &mut RoundLimits,
         _subnet_size: usize,
+        call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
         info!(
             round.log,
@@ -546,6 +565,7 @@ impl PausedExecution for PausedCallExecution {
                     self.original,
                     round,
                     round_limits,
+                    call_tree_metrics,
                 )
             }
         }

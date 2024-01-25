@@ -216,7 +216,7 @@ impl UpdateElectedReplicaVersionsPayload {
         let elect_params = [
             self.replica_version_to_elect.as_ref(),
             self.release_package_sha256_hex.as_ref(),
-            self.release_package_urls.get(0),
+            self.release_package_urls.first(),
         ];
 
         if elect_params.iter().all(|p| p.is_some()) {

@@ -187,6 +187,7 @@ async fn wait_for_swap_to_finalize(env: &TestEnv, max_duration: Duration) {
     let GetLifecycleResponse {
         lifecycle,
         decentralization_sale_open_timestamp_seconds: _,
+        decentralization_swap_termination_timestamp_seconds: _,
     } = {
         let request = sns_request_provider.get_lifecycle(CallMode::Update);
         canister_agent

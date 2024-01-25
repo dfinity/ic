@@ -5,7 +5,7 @@ use ic_ledger_canister_blocks_synchronizer_test_utils::sample_data::{acc_id, Scr
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::timestamp::TimeStamp;
-use ic_nns_governance::pb::v1::ProposalInfo;
+use ic_nns_governance::pb::v1::{KnownNeuron, ProposalInfo};
 use ic_rosetta_api::errors::ApiError;
 use ic_rosetta_api::models::{
     AccountBalanceRequest, EnvelopePair, PartialBlockIdentifier, SignedTransaction,
@@ -125,6 +125,10 @@ impl LedgerAccess for TestLedger {
         Err(ApiError::InternalError(false, Default::default()))
     }
 
+    async fn list_known_neurons(&self) -> Result<Vec<KnownNeuron>, ApiError> {
+        Err(ApiError::InternalError(false, Default::default()))
+    }
+
     async fn pending_proposals(&self) -> Result<Vec<ProposalInfo>, ApiError> {
         Err(ApiError::InternalError(false, Default::default()))
     }
@@ -159,10 +163,13 @@ impl LedgerAccess for TestLedger {
         &self.governance_canister_id
     }
 
-    async fn submit(&self, envelopes: SignedTransaction) -> Result<TransactionResults, ApiError> {
+    async fn submit(
+        &self,
+        signed_transaction: SignedTransaction,
+    ) -> Result<TransactionResults, ApiError> {
         let mut results = vec![];
 
-        for (request_type, request) in &envelopes {
+        for (request_type, request) in signed_transaction.requests.iter() {
             assert_eq!(request_type, &RequestType::Send);
 
             let EnvelopePair { update, .. } = &request[0];

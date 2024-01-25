@@ -11,6 +11,7 @@ name = "sns-audit"
 path = "src/main.rs"
 
 [lib]
+name = "ic_sns_audit"
 path = "src/lib.rs"
 
 [dependencies]

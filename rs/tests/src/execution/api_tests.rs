@@ -4,18 +4,25 @@ end::catalog[] */
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::GetFirstHealthyNodeSnapshot;
 use crate::driver::test_env_api::HasPublicApiUrl;
+use crate::driver::test_env_api::IcNodeSnapshot;
 use crate::util::*;
 use candid::Principal;
 use canister_test::PrincipalId;
-use ic_agent::{agent::RejectCode, AgentError};
+use ic_agent::{agent::RejectCode, Agent, AgentError};
 use ic_ic00_types::{self as ic00, EmptyBlob, Method, Payload};
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm};
 
-pub fn test_raw_rand_api(env: TestEnv) {
-    let logger = env.logger();
+/// Helper function to setup an application node and an agent.
+fn setup_app_node_and_agent(env: &TestEnv) -> (IcNodeSnapshot, Agent) {
     let app_node = env.get_first_healthy_application_node_snapshot();
     let agent = app_node.build_default_agent();
+    (app_node, agent)
+}
+
+pub fn test_raw_rand_api(env: TestEnv) {
+    let (app_node, agent) = setup_app_node_and_agent(&env);
+    let logger = env.logger();
     block_on({
         async move {
             let canister = UniversalCanister::new_with_retries(
@@ -111,9 +118,8 @@ pub fn test_controller(env: TestEnv) {
 }
 
 pub fn test_in_replicated_execution(env: TestEnv) {
+    let (app_node, agent) = setup_app_node_and_agent(&env);
     let logger = env.logger();
-    let app_node = env.get_first_healthy_application_node_snapshot();
-    let agent = app_node.build_default_agent();
     block_on({
         async move {
             let canister = UniversalCanister::new_with_retries(
@@ -204,9 +210,8 @@ pub fn test_cycles_burn(env: TestEnv) {
 
 pub fn node_metrics_history_update_succeeds(env: TestEnv) {
     // Arrange.
+    let (app_node, agent) = setup_app_node_and_agent(&env);
     let logger = env.logger();
-    let app_node = env.get_first_healthy_application_node_snapshot();
-    let agent = app_node.build_default_agent();
     let subnet_id = app_node.subnet_id().unwrap().get();
     block_on({
         async move {
@@ -241,9 +246,8 @@ pub fn node_metrics_history_update_succeeds(env: TestEnv) {
 
 pub fn node_metrics_history_query_fails(env: TestEnv) {
     // Arrange.
+    let (app_node, agent) = setup_app_node_and_agent(&env);
     let logger = env.logger();
-    let app_node = env.get_first_healthy_application_node_snapshot();
-    let agent = app_node.build_default_agent();
     let subnet_id = app_node.subnet_id().unwrap().get();
     block_on({
         async move {
@@ -281,11 +285,10 @@ pub fn node_metrics_history_query_fails(env: TestEnv) {
 
 pub fn node_metrics_history_another_subnet_succeeds(env: TestEnv) {
     // Arrange.
-    let logger = env.logger();
-    let app_node_1 = env.get_first_healthy_application_node_snapshot();
-    let agent_1 = app_node_1.build_default_agent();
+    let (app_node_1, agent_1) = setup_app_node_and_agent(&env);
     // Create another subnet and use its id in the request.
-    let app_node_2 = env.get_first_healthy_application_node_snapshot();
+    let (app_node_2, _agent_2) = setup_app_node_and_agent(&env);
+    let logger = env.logger();
     let subnet_id = app_node_2.subnet_id().unwrap().get();
     block_on({
         async move {
@@ -320,9 +323,8 @@ pub fn node_metrics_history_another_subnet_succeeds(env: TestEnv) {
 
 pub fn node_metrics_history_non_existing_subnet_fails(env: TestEnv) {
     // Arrange.
+    let (app_node, agent) = setup_app_node_and_agent(&env);
     let logger = env.logger();
-    let app_node = env.get_first_healthy_application_node_snapshot();
-    let agent = app_node.build_default_agent();
     // Create non existing subnet id.
     let subnet_id = PrincipalId::new_subnet_test_id(1);
     block_on({
@@ -357,8 +359,7 @@ pub fn node_metrics_history_non_existing_subnet_fails(env: TestEnv) {
 
 pub fn node_metrics_history_ingress_update_fails(env: TestEnv) {
     // Arrange.
-    let app_node = env.get_first_healthy_application_node_snapshot();
-    let agent = app_node.build_default_agent();
+    let (app_node, agent) = setup_app_node_and_agent(&env);
     let subnet_id = app_node.subnet_id().unwrap().get();
     block_on({
         async move {
@@ -386,8 +387,7 @@ pub fn node_metrics_history_ingress_update_fails(env: TestEnv) {
 
 pub fn node_metrics_history_ingress_query_fails(env: TestEnv) {
     // Arrange.
-    let app_node = env.get_first_healthy_application_node_snapshot();
-    let agent = app_node.build_default_agent();
+    let (app_node, agent) = setup_app_node_and_agent(&env);
     let subnet_id = app_node.subnet_id().unwrap().get();
     block_on({
         async move {

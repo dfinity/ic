@@ -311,12 +311,13 @@ mod test {
         let mut registry = invariant_compliant_registry(0);
 
         // add a node for our existing subnet that has the ECDSA key
-        let (mutate_request, node_ids) = prepare_registry_with_nodes(1, 1);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 1);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
 
-        let mut subnet_record: SubnetRecord = get_invariant_compliant_subnet_record(node_ids);
+        let mut subnet_record: SubnetRecord =
+            get_invariant_compliant_subnet_record(node_ids_and_dkg_pks.keys().copied().collect());
         subnet_record.ecdsa_config = Some(
             EcdsaConfig {
                 quadruples_to_create_in_advance: 1,
@@ -332,6 +333,7 @@ mod test {
             subnet_id_holding_key,
             &mut subnet_list_record,
             subnet_record,
+            &node_ids_and_dkg_pks,
         );
         registry.maybe_apply_mutation_internal(fake_subnet_mutation);
         (registry, subnet_id_holding_key)
@@ -537,6 +539,37 @@ mod test {
             idkg_key_rotation_period_ms: None,
         });
 
+        futures::executor::block_on(registry.do_recover_subnet(payload));
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "[Registry] Cannot recover subnet 'ge6io-epiam-aaaaa-aaaap-yai': The requested \
+        ECDSA key ids [EcdsaKeyId { curve: Secp256k1, name: \"test_key_id\" }, EcdsaKeyId { curve: \
+        Secp256k1, name: \"test_key_id\" }] have duplicates"
+    )]
+    fn do_recover_subnet_should_panic_with_duplicate_ecdsa_keys() {
+        // Step 1: Set up a registry holding an ECDSA key.
+        let key_id = EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "test_key_id".to_string(),
+        };
+        let subnet_id_to_recover = subnet_test_id(1000);
+        let (mut registry, subnet_id_holding_key) = setup_registry_with_subnet_holding_key(&key_id);
+
+        // Step 2: try to recover a subnet with the key, but the key appears twice, which should cause a panic.
+        let mut payload = get_default_recover_subnet_payload(subnet_id_to_recover);
+        let key_request = EcdsaKeyRequest {
+            key_id,
+            subnet_id: Some(subnet_id_holding_key.get()),
+        };
+        payload.ecdsa_config = Some(EcdsaInitialConfig {
+            quadruples_to_create_in_advance: 1,
+            keys: vec![key_request; 2],
+            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+        });
         futures::executor::block_on(registry.do_recover_subnet(payload));
     }
 }

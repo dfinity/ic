@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
-load("//bazel:defs.bzl", "rust_bench")
+load("//bazel:defs.bzl", "rust_ic_bench")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -35,6 +35,7 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities",
     "//rs/test_utilities/logger",
     "//rs/test_utilities/registry",
+    "//rs/test_utilities/time",
     "@crate_index//:assert_matches",
     "@crate_index//:criterion",
     "@crate_index//:proptest",
@@ -47,14 +48,10 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {}
 
 DATA = [
-    "//rs/canister_sandbox",
-    "//rs/canister_sandbox/sandbox_launcher",
     "//rs/rust_canisters/stable_structures:stable_structures_canister",
 ]
 
 ENV = {
-    "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-    "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     "STABLE_STRUCTURES_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/stable_structures:stable_structures_canister)",
 }
 
@@ -76,7 +73,7 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-rust_bench(
+rust_ic_bench(
     name = "build_payload_bench",
     testonly = True,
     srcs = ["benches/build_payload.rs"],
@@ -99,6 +96,7 @@ rust_bench(
         "//rs/registry/proto_data_provider",
         "//rs/test_utilities",
         "//rs/test_utilities/registry",
+        "//rs/test_utilities/time",
         "//rs/types/ic00_types",
         "//rs/types/types",
         "@crate_index//:criterion",
@@ -107,7 +105,7 @@ rust_bench(
     ],
 )
 
-rust_bench(
+rust_ic_bench(
     name = "handle_ingress_bench",
     testonly = True,
     srcs = ["benches/handle_ingress.rs"],
@@ -133,6 +131,7 @@ rust_bench(
         "//rs/test_utilities",
         "//rs/test_utilities/logger",
         "//rs/test_utilities/registry",
+        "//rs/test_utilities/time",
         "//rs/types/types",
         "@crate_index//:criterion",
         "@crate_index//:rand",

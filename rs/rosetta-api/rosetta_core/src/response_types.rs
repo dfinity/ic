@@ -231,3 +231,78 @@ impl ConstructionPreprocessResponse {
         }
     }
 }
+
+/// The ConstructionMetadataResponse returns network-specific metadata used for
+/// transaction construction.  Optionally, the implementer can return the
+/// suggested fee associated with the transaction being constructed. The caller
+/// may use this info to adjust the intent of the transaction or to create a
+/// transaction with a different account that can pay the suggested fee.
+/// Suggested fee is an array in case fee payment must occur in multiple
+/// currencies.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct ConstructionMetadataResponse {
+    pub metadata: ObjectMap,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suggested_fee: Option<Vec<Amount>>,
+}
+
+/// ConstructionTransactionResponse is returned by `/construction/payloads`. It
+/// contains an unsigned transaction blob (that is usually needed to construct
+/// the a network transaction from a collection of signatures) and an array of
+/// payloads that must be signed by the caller.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct ConstructionPayloadsResponse {
+    /// CBOR+hex-encoded 'UnsignedTransaction'
+    pub unsigned_transaction: String,
+
+    pub payloads: Vec<SigningPayload>,
+}
+
+impl ConstructionPayloadsResponse {
+    pub fn new(
+        unsigned_transaction: String,
+        payloads: Vec<SigningPayload>,
+    ) -> ConstructionPayloadsResponse {
+        ConstructionPayloadsResponse {
+            unsigned_transaction,
+            payloads,
+        }
+    }
+}
+
+/// ConstructionParseResponse contains an array of operations that occur in a
+/// transaction blob. This should match the array of operations provided to
+/// `/construction/preprocess` and `/construction/payloads`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct ConstructionParseResponse {
+    pub operations: Vec<Operation>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account_identifier_signers: Option<Vec<AccountIdentifier>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<ObjectMap>,
+}
+
+impl ConstructionParseResponse {
+    pub fn new(operations: Vec<Operation>) -> ConstructionParseResponse {
+        ConstructionParseResponse {
+            operations,
+            account_identifier_signers: None,
+            metadata: None,
+        }
+    }
+}
+
+/// ConstructionCombineResponse is returned by `/construction/combine`. The
+/// network payload will be sent directly to the `construction/submit` endpoint.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct ConstructionCombineResponse {
+    /// CBOR+hex-encoded 'SignedTransaction'
+    pub signed_transaction: String,
+}

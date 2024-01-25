@@ -75,6 +75,8 @@ notice = "warn"
 # output a note when they are encountered.
 ignore = [
     #"RUSTSEC-0000-0000",
+    # TODO(SCAVM-59): remove RUSTSEC-2023-0071 from list
+    "RUSTSEC-2023-0071",
 ]
 # Threshold for security vulnerabilities, any vulnerability with a CVSS score
 # lower than the range specified will be ignored. Note that ignored advisories
@@ -96,15 +98,21 @@ ignore = [
 # More documentation for the licenses section can be found here:
 # https://embarkstudios.github.io/cargo-deny/checks/licenses/cfg.html
 [licenses]
+# Please read the ./LICENSE file for the canonical license policy. 
+# This check is disabled because the source code is not published to 
+# the crates index and the ./LICENSE file is sufficient.
 # The lint level for crates which do not have a detectable license
-unlicensed = "deny"
+unlicensed = "allow"
 # List of explicitly allowed licenses
 # See https://spdx.org/licenses/ for list of possible licenses
 # [possible values: any SPDX 3.11 short identifier (+ optional exception)].
 allow = [
-    "MIT",
     "Apache-2.0",
-    #"Apache-2.0 WITH LLVM-exception",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "MIT",
+    "MPL-2.0",
 ]
 # List of explicitly disallowed licenses
 # See https://spdx.org/licenses/ for list of possible licenses
@@ -179,7 +187,7 @@ registries = [
 # https://embarkstudios.github.io/cargo-deny/checks/bans/cfg.html
 [bans]
 # Lint level for when multiple versions of the same crate are detected
-multiple-versions = "warn"
+multiple-versions = "allow"
 # Lint level for when a crate version requirement is `*`
 wildcards = "allow"
 # The graph highlighting used when creating dotgraphs for crates
@@ -265,8 +273,9 @@ allow-git = []
 
 [sources.allow-org]
 # 1 or more github.com organizations to allow git sources for
-github = ["dfinity-lab", "dfinity"]
+# TODO(NET-1607): remove apoelstra from list
+github = ["dfinity-lab", "dfinity", "apoelstra"]
 # 1 or more gitlab.com organizations to allow git sources for
-gitlab = [""]
+# gitlab = [""]
 # 1 or more bitbucket.org organizations to allow git sources for
-bitbucket = [""]
+# bitbucket = [""]

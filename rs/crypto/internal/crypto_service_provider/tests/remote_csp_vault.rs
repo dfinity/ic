@@ -110,6 +110,14 @@ mod rpc_connection {
         let keys = client.current_node_public_keys_with_timestamps(); //encoded response from server has 93 bytes
         assert_matches!(keys, Err(CspPublicKeyStoreError::TransientInternalError(msg)) if msg.contains("an error occurred while waiting for the server response"));
 
+        // `tarpc` seems to have a race condition in this particular, very rare
+        // case: https://github.com/google/tarpc/issues/415. Adding a delay
+        // in this test temporarily fixes the issue until it is fixed in
+        // `tarpc`.
+        // TODO(CRP-2348): bump `tarpc` version when there is a fix and remove
+        // the `sleep`.
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
         assert_matches!(client.idkg_gen_dealing_encryption_key_pair(),
         Err(CspCreateMEGaKeyError::TransientInternalError {internal_error}) if internal_error.contains("the connection to the server was already shutdown"));
     }

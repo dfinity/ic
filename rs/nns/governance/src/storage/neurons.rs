@@ -2,8 +2,8 @@ use crate::{
     neuron_store::NeuronStoreError,
     pb::v1::{
         abridged_neuron::DissolveState as AbridgedNeuronDissolveState,
-        neuron::DissolveState as NeuronDissolveState, neuron::Followees, AbridgedNeuron,
-        BallotInfo, KnownNeuronData, Neuron, NeuronStakeTransfer, Topic,
+        neuron::{DissolveState as NeuronDissolveState, Followees},
+        AbridgedNeuron, BallotInfo, KnownNeuronData, Neuron, NeuronStakeTransfer, Topic,
     },
     storage::validate_stable_btree_map,
 };
@@ -220,7 +220,11 @@ where
     /// Changes an existing entry.
     ///
     /// If the entry does not already exist, returns a NotFound Err.
-    pub fn update(&mut self, neuron: Neuron) -> Result<(), NeuronStoreError> {
+    pub fn update(
+        &mut self,
+        old_neuron: &Neuron,
+        new_neuron: Neuron,
+    ) -> Result<(), NeuronStoreError> {
         let DecomposedNeuron {
             // The original neuron is consumed near the end of this
             // statement. This abridged one takes its place.
@@ -233,7 +237,7 @@ where
 
             known_neuron_data,
             transfer,
-        } = DecomposedNeuron::try_from(neuron)?;
+        } = DecomposedNeuron::try_from(new_neuron)?;
 
         validate_recent_ballots(&recent_ballots)?;
 
@@ -259,16 +263,26 @@ where
         // Auxiliary Data
         // --------------
 
-        update_repeated_field(neuron_id, hot_keys, &mut self.hot_keys_map);
-        update_repeated_field(neuron_id, recent_ballots, &mut self.recent_ballots_map);
-        self.update_followees(neuron_id, followees);
+        if hot_keys != old_neuron.hot_keys {
+            update_repeated_field(neuron_id, hot_keys, &mut self.hot_keys_map);
+        }
+        if recent_ballots != old_neuron.recent_ballots {
+            update_repeated_field(neuron_id, recent_ballots, &mut self.recent_ballots_map);
+        }
+        if followees != old_neuron.followees {
+            self.update_followees(neuron_id, followees);
+        }
 
-        update_singleton_field(
-            neuron_id,
-            known_neuron_data,
-            &mut self.known_neuron_data_map,
-        );
-        update_singleton_field(neuron_id, transfer, &mut self.transfer_map);
+        if known_neuron_data != old_neuron.known_neuron_data {
+            update_singleton_field(
+                neuron_id,
+                known_neuron_data,
+                &mut self.known_neuron_data_map,
+            );
+        }
+        if transfer != old_neuron.transfer {
+            update_singleton_field(neuron_id, transfer, &mut self.transfer_map);
+        }
 
         Ok(())
     }
@@ -335,6 +349,20 @@ where
         validate_stable_btree_map(&self.followees_map);
         validate_stable_btree_map(&self.known_neuron_data_map);
         validate_stable_btree_map(&self.transfer_map);
+    }
+
+    // TODO(NNS1-2813): remove after upgrade.
+    pub fn remove_deprecated_topic_from_followees(&mut self, deprecated_topic: Topic) {
+        let keys_to_remove: Vec<_> = self
+            .followees_map
+            .range(FolloweesKey::MIN..=FolloweesKey::MAX)
+            .filter(|(key, _)| key.topic == deprecated_topic)
+            .map(|(key, _)| key)
+            .collect();
+
+        for key in keys_to_remove {
+            self.followees_map.remove(&key);
+        }
     }
 
     /// Internal function to take what's in the main map and fill in the remaining data from

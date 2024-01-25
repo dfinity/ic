@@ -1,7 +1,52 @@
-use ic_types::{
-    artifact::StateSyncArtifactId,
-    chunkable::{Chunk, ChunkId, Chunkable},
-};
+//! The file contains the synchronous interface used from P2P, to drive the StateSync protocol.  
+use ic_protobuf::p2p::v1 as p2p_pb;
+use ic_types::{crypto::CryptoHash, Height};
+use phantom_newtype::Id;
+use thiserror::Error;
+
+/// Identifier of a state sync artifact.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct StateSyncArtifactId {
+    pub height: Height,
+    pub hash: CryptoHash,
+}
+
+impl From<StateSyncArtifactId> for p2p_pb::StateSyncId {
+    fn from(id: StateSyncArtifactId) -> Self {
+        Self {
+            height: id.height.get(),
+            hash: id.hash.0,
+        }
+    }
+}
+
+impl From<p2p_pb::StateSyncId> for StateSyncArtifactId {
+    fn from(id: p2p_pb::StateSyncId) -> Self {
+        Self {
+            height: Height::from(id.height),
+            hash: CryptoHash(id.hash),
+        }
+    }
+}
+
+pub type Chunk = Vec<u8>;
+
+/// Error codes returned by the `Chunkable` interface.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Error)]
+pub enum AddChunkError {
+    #[error("bad chunk")]
+    Invalid,
+}
+
+/// The chunk type.
+pub struct ChunkIdTag;
+pub type ChunkId = Id<ChunkIdTag, u32>;
+
+pub trait Chunkable<T> {
+    fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>>;
+    fn add_chunk(&mut self, chunk_id: ChunkId, chunk: Chunk) -> Result<(), AddChunkError>;
+    fn completed(&self) -> Option<T>;
+}
 
 pub trait StateSyncClient: Send + Sync {
     type Message;
@@ -24,5 +69,7 @@ pub trait StateSyncClient: Send + Sync {
     /// Get a specific chunk from the specified state.
     fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<Chunk>;
     /// Finish a state sync by delivering the `StateSyncMessage` returned in `Chunkable::add_chunks`.
+    /// This function should be called only once for each completed state sync message.
+    /// TODO: (NET-1469) In the future the above invariant should be enforced by the API.
     fn deliver_state_sync(&self, msg: Self::Message);
 }

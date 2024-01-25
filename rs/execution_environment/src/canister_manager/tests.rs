@@ -2,7 +2,7 @@ use crate::{
     as_num_instructions,
     canister_manager::{
         uninstall_canister, AddCanisterChangeToHistory, CanisterManager, CanisterManagerError,
-        CanisterMgrConfig, InstallCodeContext, StopCanisterResult,
+        CanisterMgrConfig, InstallCodeContext, StopCanisterResult, WasmSource,
     },
     canister_settings::{CanisterSettings, CanisterSettingsBuilder},
     execution_environment::{as_round_instructions, RoundCounters},
@@ -46,7 +46,6 @@ use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig};
 use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
-    mock_time,
     state::{
         get_running_canister, get_running_canister_with_args, get_stopped_canister,
         get_stopped_canister_with_controller, get_stopping_canister,
@@ -63,6 +62,7 @@ use ic_test_utilities_execution_environment::{
     assert_delta, get_reply, get_routing_table_with_specified_ids_allocation_range,
     wasm_compilation_cost, wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
 };
+use ic_test_utilities_time::mock_time;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CallbackId, CanisterCall, StopCanisterCallId, StopCanisterContext},
@@ -156,7 +156,7 @@ impl InstallCodeContextBuilder {
     }
 
     pub fn wasm_module(mut self, wasm_module: Vec<u8>) -> Self {
-        self.ctx.wasm_module = CanisterModule::new(wasm_module);
+        self.ctx.wasm_source = WasmSource::CanisterModule(CanisterModule::new(wasm_module));
         self
     }
 
@@ -192,7 +192,9 @@ impl Default for InstallCodeContextBuilder {
             ctx: InstallCodeContext {
                 origin: canister_change_origin_from_principal(&PrincipalId::new_user_test_id(0)),
                 canister_id: canister_test_id(0),
-                wasm_module: CanisterModule::new(wat::parse_str(EMPTY_WAT).unwrap()),
+                wasm_source: WasmSource::CanisterModule(CanisterModule::new(
+                    wat::parse_str(EMPTY_WAT).unwrap(),
+                )),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -333,7 +335,7 @@ fn install_code(
     let args = InstallCodeArgsV2::new(
         context.mode,
         context.canister_id,
-        context.wasm_module.as_slice().into(),
+        context.wasm_source.unwrap_as_slice_for_testing().into(),
         context.arg.clone(),
         None,
         None,
@@ -3064,7 +3066,7 @@ fn failed_upgrade_hooks_consume_instructions() {
             InstallCodeContext {
                 origin: canister_change_origin_from_principal(&sender),
                 canister_id,
-                wasm_module: CanisterModule::new(initial_wasm),
+                wasm_source: WasmSource::CanisterModule(CanisterModule::new(initial_wasm)),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -3088,7 +3090,7 @@ fn failed_upgrade_hooks_consume_instructions() {
             InstallCodeContext {
                 origin: canister_change_origin_from_principal(&sender),
                 canister_id,
-                wasm_module: CanisterModule::new(upgrade_wasm),
+                wasm_source: WasmSource::CanisterModule(CanisterModule::new(upgrade_wasm)),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -3208,7 +3210,7 @@ fn failed_install_hooks_consume_instructions() {
             InstallCodeContext {
                 origin: canister_change_origin_from_principal(&sender),
                 canister_id,
-                wasm_module: CanisterModule::new(wasm),
+                wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm)),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -3326,7 +3328,7 @@ fn install_code_respects_instruction_limit() {
         InstallCodeContext {
             origin: canister_change_origin_from_principal(&sender),
             canister_id,
-            wasm_module: CanisterModule::new(wasm.clone()),
+            wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm.clone())),
             arg: vec![],
             compute_allocation: None,
             memory_allocation: None,
@@ -3357,7 +3359,7 @@ fn install_code_respects_instruction_limit() {
         InstallCodeContext {
             origin: canister_change_origin_from_principal(&sender),
             canister_id,
-            wasm_module: CanisterModule::new(wasm.clone()),
+            wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm.clone())),
             arg: vec![],
             compute_allocation: None,
             memory_allocation: None,
@@ -3381,7 +3383,7 @@ fn install_code_respects_instruction_limit() {
         InstallCodeContext {
             origin: canister_change_origin_from_principal(&sender),
             canister_id,
-            wasm_module: CanisterModule::new(wasm.clone()),
+            wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm.clone())),
             arg: vec![],
             compute_allocation: None,
             memory_allocation: None,
@@ -3411,7 +3413,7 @@ fn install_code_respects_instruction_limit() {
         InstallCodeContext {
             origin: canister_change_origin_from_principal(&sender),
             canister_id,
-            wasm_module: CanisterModule::new(wasm),
+            wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm)),
             arg: vec![],
             compute_allocation: None,
             memory_allocation: None,
@@ -3471,14 +3473,18 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         .sender(controller.into())
         .canister_id(canister_id)
         .build();
-    let compilation_cost = wasm_compilation_cost(install_code_context.wasm_module.as_slice());
+    let compilation_cost = wasm_compilation_cost(
+        install_code_context
+            .wasm_source
+            .unwrap_as_slice_for_testing(),
+    );
 
     let ctxt = InstallCodeContextBuilder::default()
         .mode(CanisterInstallModeV2::Install)
         .sender(controller.into())
         .canister_id(canister_id)
         .build();
-    let module_hash = ctxt.wasm_module.module_hash();
+    let module_hash = ctxt.wasm_source.module_hash();
     let (instructions_left, res, canister) =
         install_code(&canister_manager, ctxt, &mut state, &mut round_limits);
     state.put_canister_state(canister.unwrap());
@@ -3520,7 +3526,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         .sender(controller.into())
         .canister_id(canister_id)
         .build();
-    let module_hash = ctxt.wasm_module.module_hash();
+    let module_hash = ctxt.wasm_source.module_hash();
     let (instructions_left, res, canister) =
         install_code(&canister_manager, ctxt, &mut state, &mut round_limits);
     state.put_canister_state(canister.unwrap());
@@ -3571,7 +3577,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         .sender(controller.into())
         .canister_id(canister_id)
         .build();
-    let module_hash = ctxt.wasm_module.module_hash();
+
     let (instructions_left, res, canister) =
         install_code(&canister_manager, ctxt, &mut state, &mut round_limits);
     state.put_canister_state(canister.unwrap());
@@ -3644,7 +3650,7 @@ fn lower_memory_allocation_than_usage_fails() {
             InstallCodeContext {
                 origin: canister_change_origin_from_principal(&sender),
                 canister_id,
-                wasm_module: CanisterModule::new(wasm),
+                wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm)),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -3713,7 +3719,7 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
             InstallCodeContext {
                 origin: canister_change_origin_from_principal(&sender),
                 canister_id,
-                wasm_module: CanisterModule::new(wasm.clone()),
+                wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm.clone())),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -3755,7 +3761,7 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
             InstallCodeContext {
                 origin: canister_change_origin_from_principal(&sender),
                 canister_id,
-                wasm_module: CanisterModule::new(wasm),
+                wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm)),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -3814,7 +3820,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
             InstallCodeContext {
                 origin: canister_change_origin_from_principal(&sender),
                 canister_id,
-                wasm_module: CanisterModule::new(wasm),
+                wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm)),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -3839,7 +3845,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
             InstallCodeContext {
                 origin: canister_change_origin_from_principal(&sender),
                 canister_id,
-                wasm_module: CanisterModule::new(wasm.clone()),
+                wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm.clone())),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -3886,7 +3892,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
             InstallCodeContext {
                 origin: canister_change_origin_from_principal(&sender),
                 canister_id,
-                wasm_module: CanisterModule::new(wasm),
+                wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm)),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -4023,7 +4029,7 @@ fn test_install_when_setting_memory_allocation_to_zero() {
             InstallCodeContext {
                 origin: canister_change_origin_from_principal(&sender),
                 canister_id,
-                wasm_module: CanisterModule::new(wasm),
+                wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm)),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -4074,7 +4080,7 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
             InstallCodeContext {
                 origin: canister_change_origin_from_principal(&sender),
                 canister_id,
-                wasm_module: CanisterModule::new(wasm.clone()),
+                wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm.clone())),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -4110,7 +4116,7 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
             InstallCodeContext {
                 origin: canister_change_origin_from_principal(&sender),
                 canister_id,
-                wasm_module: CanisterModule::new(wasm),
+                wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm)),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -6736,7 +6742,7 @@ fn canister_status_contains_reserved_cycles_limit() {
     let status = CanisterStatusResultV2::decode(&reply).unwrap();
     assert_eq!(
         status.settings().reserved_cycles_limit(),
-        candid::Nat::from(42),
+        candid::Nat::from(42_u32),
     );
 }
 
@@ -6744,7 +6750,9 @@ fn canister_status_contains_reserved_cycles_limit() {
 fn upload_chunk_works_from_white_list() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
 
     let canister_id = test.create_canister(CYCLES);
 
@@ -6768,7 +6776,9 @@ fn upload_chunk_works_from_white_list() {
 fn upload_chunk_works_from_controller() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
 
     let canister_id = test.create_canister(CYCLES);
     let uc = test
@@ -6806,7 +6816,9 @@ fn upload_chunk_works_from_controller() {
 fn chunk_store_methods_fail_from_non_controller() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
 
     let canister_id = test.create_canister(CYCLES);
     let uc = test
@@ -6891,7 +6903,9 @@ fn upload_chunk_fails_when_allocation_exceeded() {
 
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
 
     let canister_id = test.create_canister(CYCLES);
     let memory_needed_for_history = history_memory_usage_from_one_settings_update();
@@ -6938,7 +6952,7 @@ fn upload_chunk_fails_when_subnet_memory_exceeded() {
     let chunk_size = wasm_chunk_store::chunk_size();
     let default_subnet_memory_reservation = Config::default().subnet_memory_reservation;
     let mut test = ExecutionTestBuilder::new()
-        .with_wasm_chunk_store()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
         .with_subnet_execution_memory(
             (default_subnet_memory_reservation.get() + chunk_size.get()) as i64,
         )
@@ -6977,7 +6991,9 @@ fn upload_chunk_counts_to_memory_usage() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
     let chunk_size = wasm_chunk_store::chunk_size();
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
 
     let canister_id = test.create_canister(CYCLES);
 
@@ -7040,7 +7056,9 @@ fn upload_chunk_counts_to_memory_usage() {
 fn chunk_store_methods_fail_with_feature_disabled() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Disabled)
+        .build();
     let canister_id = test.create_canister(CYCLES);
     let initial_subnet_available_memory = test.subnet_available_memory();
 
@@ -7085,7 +7103,9 @@ fn chunk_store_methods_fail_with_feature_disabled() {
 fn uninstall_clears_wasm_chunk_store() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
     let canister_id = test.create_canister(CYCLES);
 
     // Upload a chunk
@@ -7117,7 +7137,9 @@ fn upload_chunk_fails_when_freeze_threshold_triggered() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
     let instructions = SchedulerConfig::application_subnet().upload_wasm_chunk_instructions;
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
     let canister_id = test.create_canister(CYCLES);
     let initial_subnet_available_memory = test.subnet_available_memory();
 
@@ -7162,7 +7184,9 @@ fn upload_chunk_fails_when_freeze_threshold_triggered() {
 fn upload_chunk_fails_when_it_exceeds_chunk_size() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
     let canister_id = test.create_canister(CYCLES);
     let initial_subnet_available_memory = test.subnet_available_memory();
 
@@ -7200,7 +7224,7 @@ fn upload_chunk_reserves_cycles() {
             .with_subnet_execution_memory(CAPACITY)
             .with_subnet_memory_reservation(0)
             .with_subnet_memory_threshold(0)
-            .with_wasm_chunk_store()
+            .with_wasm_chunk_store(FlagStatus::Enabled)
             .build();
         let canister_id = test.create_canister(CYCLES);
 
@@ -7217,7 +7241,7 @@ fn upload_chunk_reserves_cycles() {
     };
 
     let mut test = ExecutionTestBuilder::new()
-        .with_wasm_chunk_store()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
         .with_subnet_memory_reservation(0)
         .with_subnet_memory_threshold(memory_usage_after_uploading_one_chunk + 1)
         .build();
@@ -7268,7 +7292,9 @@ fn upload_chunk_reserves_cycles() {
 fn clear_chunk_store_works() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
 
     let canister_id = test.create_canister(CYCLES);
 
@@ -7317,7 +7343,9 @@ fn stored_chunks_works() {
 
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
 
     let canister_id = test.create_canister(CYCLES);
 
@@ -7402,7 +7430,7 @@ fn upload_chunk_fails_when_heap_delta_rate_limited() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
     let mut test = ExecutionTestBuilder::new()
-        .with_wasm_chunk_store()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
         .with_heap_delta_rate_limit(wasm_chunk_store::chunk_size())
         .build();
     let canister_id = test.create_canister(CYCLES);
@@ -7447,7 +7475,9 @@ fn upload_chunk_fails_when_heap_delta_rate_limited() {
 fn upload_chunk_increases_subnet_heap_delta() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
     let canister_id = test.create_canister(CYCLES);
     assert_eq!(test.state().metadata.heap_delta_estimate, NumBytes::from(0));
 
@@ -7471,7 +7501,9 @@ fn upload_chunk_charges_canister_cycles() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
     let instructions = SchedulerConfig::application_subnet().upload_wasm_chunk_instructions;
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
     let canister_id = test.create_canister(CYCLES);
     let initial_balance = test.canister_state(canister_id).system_state.balance();
 
@@ -7499,7 +7531,7 @@ fn upload_chunk_charges_if_failing() {
     let instructions = SchedulerConfig::application_subnet().upload_wasm_chunk_instructions;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_wasm_chunk_store()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
         .with_subnet_memory_reservation(0)
         .with_subnet_execution_memory(10)
         .build();
@@ -7530,7 +7562,9 @@ fn upload_chunk_charges_if_failing() {
 fn chunk_store_methods_succeed_from_canister_itself() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new().with_wasm_chunk_store().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
 
     let uc = test
         .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())

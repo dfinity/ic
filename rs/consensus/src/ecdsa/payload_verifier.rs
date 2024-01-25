@@ -570,12 +570,7 @@ mod test {
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_ic00_types::EcdsaKeyId;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_replicated_state::metadata_state::subnet_call_context_manager::*;
-    use ic_test_utilities::{
-        crypto::CryptoReturningOk,
-        mock_time,
-        types::{ids::subnet_test_id, messages::RequestBuilder},
-    };
+    use ic_test_utilities::{crypto::CryptoReturningOk, types::ids::subnet_test_id};
     use ic_types::{
         consensus::ecdsa::TranscriptAttributes, crypto::AlgorithmId, messages::CallbackId, Height,
     };
@@ -830,25 +825,11 @@ mod test {
         let max_ongoing_signatures = 2;
         sign_with_ecdsa_contexts.insert(
             CallbackId::from(1),
-            SignWithEcdsaContext {
-                request: RequestBuilder::new().build(),
-                key_id: key_id.clone(),
-                pseudo_random_id: [1; 32],
-                message_hash: [0; 32],
-                derivation_path: vec![],
-                batch_time: mock_time(),
-            },
+            fake_sign_with_ecdsa_context(key_id.clone(), [1; 32]),
         );
         sign_with_ecdsa_contexts.insert(
             CallbackId::from(2),
-            SignWithEcdsaContext {
-                request: RequestBuilder::new().build(),
-                key_id: key_id.clone(),
-                pseudo_random_id: [2; 32],
-                message_hash: [0; 32],
-                derivation_path: vec![],
-                batch_time: mock_time(),
-            },
+            fake_sign_with_ecdsa_context(key_id.clone(), [2; 32]),
         );
         let mut ecdsa_payload = empty_ecdsa_payload(subnet_id);
 
@@ -865,8 +846,12 @@ mod test {
             key_transcript.to_attributes(),
             key_transcript_ref,
         ));
-        let quadruple_id_1 = ecdsa_payload.uid_generator.next_quadruple_id();
-        let quadruple_id_2 = ecdsa_payload.uid_generator.next_quadruple_id();
+        let quadruple_id_1 = ecdsa_payload
+            .uid_generator
+            .next_quadruple_id(key_id.clone());
+        let quadruple_id_2 = ecdsa_payload
+            .uid_generator
+            .next_quadruple_id(key_id.clone());
         // Fill in the ongoing signatures
         let sig_inputs_1 = create_sig_inputs_with_args(
             13,
@@ -1048,7 +1033,9 @@ mod test {
                 ecdsa::UnmaskedTranscript::try_from((Height::new(i as u64), &transcript_0))
                     .unwrap();
             curr_payload.available_quadruples.insert(
-                curr_payload.uid_generator.next_quadruple_id(),
+                curr_payload
+                    .uid_generator
+                    .next_quadruple_id(curr_payload.key_transcript.key_id.clone()),
                 PreSignatureQuadrupleRef {
                     kappa_unmasked_ref: malicious_transcript_ref,
                     lambda_masked_ref: masked_transcript_1,

@@ -71,6 +71,14 @@ fn execute_instance(
                         timestamp,
                     });
                 }
+                InputMessage::Ecdsa(msg) => {
+                    let mut ecdsa_pool = instance.driver.ecdsa_pool.write().unwrap();
+                    ecdsa_pool.insert(UnvalidatedArtifact {
+                        message: msg,
+                        peer_id: node_test_id(0),
+                        timestamp,
+                    });
+                }
             },
             // Repeat the polling
             Input::TimerExpired(x) => {

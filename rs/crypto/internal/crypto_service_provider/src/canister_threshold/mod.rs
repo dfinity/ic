@@ -390,10 +390,8 @@ impl CspThresholdEcdsaSigVerifier for Csp {
             algorithm_id,
         )
         .map_err(|e| match e {
-            ThresholdEcdsaVerifySigShareInternalError::UnsupportedAlgorithm => {
-                ThresholdEcdsaVerifySigShareError::InternalError {
-                    internal_error: "Algorithm not supported".to_string(),
-                }
+            ThresholdEcdsaVerifySigShareInternalError::InvalidArguments(s) => {
+                ThresholdEcdsaVerifySigShareError::InvalidArguments(s)
             }
             ThresholdEcdsaVerifySigShareInternalError::InternalError(s) => {
                 ThresholdEcdsaVerifySigShareError::InternalError { internal_error: s }
@@ -432,10 +430,8 @@ impl CspThresholdEcdsaSigVerifier for Csp {
             ThresholdEcdsaVerifySignatureInternalError::InvalidSignature => {
                 ThresholdEcdsaVerifyCombinedSignatureError::InvalidSignature
             }
-            ThresholdEcdsaVerifySignatureInternalError::UnsupportedAlgorithm => {
-                ThresholdEcdsaVerifyCombinedSignatureError::InternalError {
-                    internal_error: "Algorithm not supported".to_string(),
-                }
+            ThresholdEcdsaVerifySignatureInternalError::InvalidArguments(s) => {
+                ThresholdEcdsaVerifyCombinedSignatureError::InvalidArguments(s)
             }
             ThresholdEcdsaVerifySignatureInternalError::InternalError(s) => {
                 ThresholdEcdsaVerifyCombinedSignatureError::InternalError { internal_error: s }

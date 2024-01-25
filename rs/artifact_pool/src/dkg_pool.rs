@@ -1,6 +1,6 @@
 use crate::{
     metrics::{POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},
-    pool_common::PoolSection,
+    pool_common::{HasLabel, PoolSection},
 };
 use ic_interfaces::{
     dkg::{ChangeAction, ChangeSet, DkgPool},
@@ -175,6 +175,18 @@ impl DkgPool for DkgPoolImpl {
     }
 }
 
+impl HasLabel for dkg::Message {
+    fn label(&self) -> &str {
+        "dkg_message"
+    }
+}
+
+impl HasLabel for UnvalidatedArtifact<dkg::Message> {
+    fn label(&self) -> &str {
+        self.message.label()
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -182,9 +194,9 @@ mod test {
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::{
         consensus::fake::FakeSigner,
-        mock_time,
         types::ids::{node_test_id, subnet_test_id},
     };
+    use ic_test_utilities_time::mock_time;
     use ic_types::{
         crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         signature::BasicSignature,

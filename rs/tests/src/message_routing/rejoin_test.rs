@@ -87,19 +87,39 @@ fn test(env: TestEnv, config: Config) {
 }
 
 async fn test_async(env: TestEnv, config: Config) {
-    let logger = env.logger();
     let mut nodes = env.topology_snapshot().root_subnet().nodes();
-    let node = nodes.next().unwrap();
+    let agent_node = nodes.next().unwrap();
     let rejoin_node = nodes.next().unwrap();
+    let allowed_failures = (config.nodes_count - 1) / 3;
+    rejoin_test(
+        &env,
+        allowed_failures,
+        DKG_INTERVAL,
+        rejoin_node,
+        agent_node,
+        nodes.take(allowed_failures),
+    )
+    .await;
+}
+pub async fn rejoin_test(
+    env: &TestEnv,
+    allowed_failures: usize,
+    dkg_interval: u64,
+    rejoin_node: IcNodeSnapshot,
+    agent_node: IcNodeSnapshot,
+    nodes_to_kill: impl Iterator<Item = IcNodeSnapshot>,
+) {
+    let logger = env.logger();
     info!(
         logger,
         "Installing universal canister on a node {} ...",
-        node.get_public_url()
+        agent_node.get_public_url()
     );
 
-    let agent = node.build_default_agent_async().await;
+    let agent = agent_node.build_default_agent_async().await;
     let universal_canister =
-        UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger).await;
+        UniversalCanister::new_with_retries(&agent, agent_node.effective_canister_id(), &logger)
+            .await;
 
     let res = fetch_metrics::<u64>(
         &logger,
@@ -120,17 +140,18 @@ async fn test_async(env: TestEnv, config: Config) {
         .expect("Node still healthy");
 
     info!(logger, "Making some canister update calls ...");
-    for i in 0..3 * DKG_INTERVAL {
+    let canister_update_calls = 3 * dkg_interval;
+    for i in 0..canister_update_calls {
+        info!(logger, "Performing canister update call {i}");
         store_and_read_stable(i.to_le_bytes().as_slice(), &universal_canister).await;
     }
 
-    let allowed_failures = (config.nodes_count - 1) / 3;
     info!(logger, "Killing {} nodes ...", allowed_failures);
-    for _ in 0..allowed_failures {
-        let node = nodes.next().unwrap();
-        info!(logger, "Killing node {} ...", node.get_public_url());
-        node.vm().kill();
-        node.await_status_is_unavailable()
+    for node_to_kill in nodes_to_kill {
+        info!(logger, "Killing node {} ...", node_to_kill.get_public_url());
+        node_to_kill.vm().kill();
+        node_to_kill
+            .await_status_is_unavailable()
             .expect("Node still healthy");
     }
 
@@ -194,7 +215,7 @@ where
         std::iter::once(node),
         labels.iter().map(|&label| label.to_string()).collect(),
     );
-    for _ in 0..NUM_RETRIES {
+    for i in 0..NUM_RETRIES {
         let metrics_result = metrics.fetch::<T>().await;
         match metrics_result {
             Ok(result) => {
@@ -202,14 +223,14 @@ where
                     info!(log, "Metrics successfully scraped {:?}.", result);
                     return result;
                 } else {
-                    info!(log, "Metrics not available yet.");
+                    info!(log, "Metrics not available yet, attempt {i}.");
                 }
             }
             Err(e) => {
-                info!(log, "Could not scrape metrics: {}.", e);
+                info!(log, "Could not scrape metrics: {e}, attempt {i}.");
             }
         }
         tokio::time::sleep(Duration::from_millis(BACKOFF_TIME_MILLIS)).await;
     }
-    panic!("Couldn't obtain metrics after 200 attempts.");
+    panic!("Couldn't obtain metrics after {NUM_RETRIES} attempts.");
 }

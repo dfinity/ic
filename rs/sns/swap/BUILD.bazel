@@ -65,6 +65,7 @@ DEV_DEPENDENCIES = [
     "//rs/nervous_system/common/test_utils",
     "//rs/sns/swap/protobuf_generator:lib",
     "//rs/test_utilities/compare_dirs",
+    "@crate_index//:candid_parser",
     "@crate_index//:futures",
     "@crate_index//:pretty_assertions",
     "@crate_index//:proptest",

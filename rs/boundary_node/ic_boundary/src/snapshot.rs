@@ -32,7 +32,7 @@ use crate::{
 // Some magical prefix that the public key should have
 const DER_PREFIX: &[u8; 37] = b"\x30\x81\x82\x30\x1d\x06\x0d\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x01\x02\x01\x06\x0c\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x02\x01\x03\x61\x00";
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Node {
     pub id: Principal,
     pub subnet_id: Principal,
@@ -60,7 +60,7 @@ pub struct Subnet {
     pub id: Principal,
     pub subnet_type: SubnetType,
     pub ranges: Vec<CanisterRange>,
-    pub nodes: Vec<Node>,
+    pub nodes: Vec<Arc<Node>>,
     pub replica_version: String,
 }
 
@@ -102,7 +102,7 @@ pub struct RegistrySnapshot {
     pub nns_public_key: Vec<u8>,
     pub subnets: Vec<Subnet>,
     // Hash map for a faster lookup by DNS resolver
-    pub nodes: HashMap<String, Node>,
+    pub nodes: HashMap<String, Arc<Node>>,
 }
 
 pub struct Snapshotter {
@@ -251,7 +251,7 @@ impl Snapshotter {
                         X509Certificate::from_der(cert.certificate_der.as_slice())
                             .context("Unable to parse TLS certificate")?;
 
-                        let node_route = Node {
+                        let node = Node {
                             id: node_id.as_ref().0,
                             subnet_id: subnet_id.as_ref().0,
                             subnet_type,
@@ -261,19 +261,20 @@ impl Snapshotter {
                             tls_certificate: cert.certificate_der,
                             replica_version: replica_version.to_string(),
                         };
+                        let node = Arc::new(node);
 
-                        nodes_map.insert(node_route.id.to_string(), node_route.clone());
-                        let out: Result<Node, Error> = Ok(node_route);
-                        out
+                        nodes_map.insert(node.id.to_string(), node.clone());
+
+                        Ok::<Arc<Node>, Error>(node)
                     })
-                    .collect::<Result<Vec<Node>, Error>>()
+                    .collect::<Result<Vec<Arc<Node>>, Error>>()
                     .context("unable to get nodes")?;
 
                 let ranges = ranges_by_subnet
                     .remove(&subnet_id.as_ref().0)
                     .context("unable to find ranges")?;
 
-                let subnet_route = Subnet {
+                let subnet = Subnet {
                     id: subnet_id.as_ref().0,
                     subnet_type,
                     ranges,
@@ -281,8 +282,7 @@ impl Snapshotter {
                     replica_version: replica_version.to_string(),
                 };
 
-                let out: Result<Subnet, Error> = Ok(subnet_route);
-                out
+                Ok::<Subnet, Error>(subnet)
             })
             .collect::<Result<Vec<Subnet>, Error>>()
             .context("unable to get subnets")?;

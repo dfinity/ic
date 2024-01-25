@@ -52,6 +52,7 @@ pub(crate) struct ExecutionEnvironmentMetrics {
     /// Critical error for failed canister creation.
     pub(crate) canister_creation_error: IntCounter,
 }
+
 impl ExecutionEnvironmentMetrics {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {

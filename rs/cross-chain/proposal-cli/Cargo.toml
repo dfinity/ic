@@ -9,6 +9,7 @@ documentation.workspace = true
 [dependencies]
 askama = { workspace = true }
 candid = { workspace = true }
+candid_parser = { workspace = true }
 clap = { version = "4", features = ["derive"] }
 hex = "0.4.2"
 serde_json = { workspace = true }

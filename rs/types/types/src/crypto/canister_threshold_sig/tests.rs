@@ -5,7 +5,7 @@ use crate::crypto::canister_threshold_sig::error::{
 use crate::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
 use crate::{Height, NodeId, RegistryVersion, SubnetId};
 use assert_matches::assert_matches;
-use ic_crypto_test_utils_canister_threshold_sigs::set_of_nodes;
+use ic_crypto_test_utils_canister_threshold_sigs::{node_id, set_of_nodes};
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
@@ -484,6 +484,42 @@ fn serde_cbor_deserialization_of_extended_derivation_path_is_backward_compatible
         serde_cbor::from_slice(&stable_bytes).expect("failed to deserialize");
     let expected_derivation_path = derivation_path();
     assert_eq!(computed_derivation_path, expected_derivation_path);
+}
+
+#[test]
+fn should_return_correct_index_for_signer_id_from_threshold_ecdsa_sig_inputs() {
+    let rng = &mut reproducible_rng();
+    let common_receivers = set_of_nodes(&[42, 43, 45, 128]);
+    let (kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda, key_transcript) =
+        transcripts_for_ecdsa_inputs(common_receivers, rng);
+
+    let quadruple = PreSignatureQuadruple::new(
+        kappa_unmasked,
+        lambda_masked,
+        kappa_times_lambda,
+        key_times_lambda,
+    );
+    assert!(quadruple.is_ok());
+
+    let derivation_path = derivation_path();
+    let hashed_message = hashed_message();
+    let nonce = nonce();
+    let quadruple = quadruple.unwrap();
+    let inputs = ThresholdEcdsaSigInputs::new(
+        &derivation_path,
+        &hashed_message,
+        nonce,
+        quadruple.clone(),
+        key_transcript.clone(),
+    )
+    .expect("failed to create ThresholdEcdsaSigInputs");
+
+    assert_eq!(inputs.index_for_signer_id(node_id(42)), Some(0));
+    assert_eq!(inputs.index_for_signer_id(node_id(43)), Some(1));
+    assert_eq!(inputs.index_for_signer_id(node_id(44)), None);
+    assert_eq!(inputs.index_for_signer_id(node_id(45)), Some(2));
+    assert_eq!(inputs.index_for_signer_id(node_id(46)), None);
+    assert_eq!(inputs.index_for_signer_id(node_id(128)), Some(3));
 }
 
 // A randomized way to get non-repeating IDs.

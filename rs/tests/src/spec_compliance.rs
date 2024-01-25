@@ -13,6 +13,7 @@ use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::SubnetId;
 use slog::{info, Logger};
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 pub const UNIVERSAL_VM_NAME: &str = "httpbin";
@@ -226,6 +227,41 @@ fn subnet_config(subnet: &SubnetSnapshot) -> String {
     )
 }
 
+pub fn run_ic_ref_test(
+    httpbin: Option<String>,
+    ic_ref_test_path: String,
+    ic_test_data_path: PathBuf,
+    endpoint: String,
+    test_subnet_config: String,
+    peer_subnet_config: String,
+    excluded_tests: Vec<&str>,
+    included_tests: Vec<&str>,
+    jobs: u32,
+) {
+    let mut cmd = Command::new(ic_ref_test_path);
+    cmd.env("IC_TEST_DATA", ic_test_data_path)
+        .arg(format!("-j{}", jobs))
+        .arg("--pattern")
+        .arg(tests_to_pattern(excluded_tests, included_tests))
+        .arg("--endpoint")
+        .arg(endpoint)
+        .arg("--test-subnet-config")
+        .arg(test_subnet_config)
+        .arg("--peer-subnet-config")
+        .arg(peer_subnet_config)
+        .arg("--allow-self-signed-certs")
+        .arg("True");
+    if let Some(httpbin) = httpbin {
+        cmd.arg("--httpbin").arg(&httpbin);
+    }
+    let status = cmd
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+        .expect("ic-ref-test binary crashed");
+    assert!(status.success());
+}
+
 pub fn with_endpoint(
     env: TestEnv,
     test_subnet: SubnetSnapshot,
@@ -256,32 +292,17 @@ pub fn with_endpoint(
     let peer_subnet_config = subnet_config(&peer_subnet);
     info!(log, "test-subnet-config: {}", test_subnet_config);
     info!(log, "peer-subnet-config: {}", peer_subnet_config);
-    let mut cmd = Command::new(ic_ref_test_path);
-    cmd.env(
-        "IC_TEST_DATA",
+    run_ic_ref_test(
+        httpbin,
+        ic_ref_test_path,
         env.get_dependency_path("rs/tests/ic-hs/test-data"),
-    )
-    .arg("-j16")
-    .arg("--pattern")
-    .arg(tests_to_pattern(excluded_tests, included_tests))
-    .arg("--endpoint")
-    .arg(endpoint)
-    .arg("--test-subnet-config")
-    .arg(test_subnet_config)
-    .arg("--peer-subnet-config")
-    .arg(peer_subnet_config)
-    .arg("--allow-self-signed-certs")
-    .arg("True");
-    if let Some(httpbin) = httpbin {
-        cmd.arg("--httpbin").arg(&httpbin);
-    }
-    let status = cmd
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()
-        .expect("ic-ref-test binary crashed");
-    info!(log, "{}", format!("Status of ic-ref-test: {:?}", &status));
-    assert!(status.success());
+        endpoint,
+        test_subnet_config,
+        peer_subnet_config,
+        excluded_tests,
+        included_tests,
+        16,
+    );
 }
 
 fn tests_to_pattern(excluded_tests: Vec<&str>, included_tests: Vec<&str>) -> String {

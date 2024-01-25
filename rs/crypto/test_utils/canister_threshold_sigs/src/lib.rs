@@ -3,7 +3,7 @@
 use crate::node::{Node, Nodes};
 use ic_crypto_internal_threshold_sig_ecdsa::test_utils::{corrupt_dealing, ComplaintCorrupter};
 use ic_crypto_internal_threshold_sig_ecdsa::{
-    EccScalar, IDkgComplaintInternal, IDkgDealingInternal, MEGaCiphertext, NodeIndex, Seed,
+    IDkgComplaintInternal, IDkgDealingInternal, NodeIndex, Seed,
 };
 use ic_crypto_temp_crypto::{TempCryptoComponent, TempCryptoComponentGeneric};
 use ic_interfaces::crypto::IDkgProtocol;
@@ -144,6 +144,46 @@ pub fn swap_two_dealings_in_transcript(
     assert!(transcript
         .verified_dealings
         .insert(b_idx, dealing_ab_signed)
+        .is_some());
+
+    transcript
+}
+
+/// Copies the dealing from `dealer_from` to `dealer_to` and outputs the result
+/// in a new transcript.
+pub fn copy_dealing_in_transcript(
+    params: &IDkgTranscriptParams,
+    transcript: IDkgTranscript,
+    env: &CanisterThresholdSigTestEnvironment,
+    dealer_from: &Node,
+    dealer_to: &Node,
+) -> IDkgTranscript {
+    assert_ne!(dealer_from, dealer_to);
+
+    let from_idx = transcript.index_for_dealer_id(dealer_from.id()).unwrap();
+    let to_idx = transcript.index_for_dealer_id(dealer_to.id()).unwrap();
+
+    let dealing_from = transcript
+        .verified_dealings
+        .get(&from_idx)
+        .expect("Dealing exists")
+        .clone();
+
+    let dealing_to = dealing_from
+        .content
+        .into_builder()
+        .with_dealer_id(dealer_to.id())
+        .build_with_signature(params, dealer_to, dealer_to.id());
+
+    let dealing_to_signed = env
+        .nodes
+        .support_dealing_from_all_receivers(dealing_to, params);
+
+    let mut transcript = transcript;
+
+    assert!(transcript
+        .verified_dealings
+        .insert(to_idx, dealing_to_signed)
         .is_some());
 
     transcript
@@ -711,7 +751,7 @@ pub mod node {
         ) -> impl Iterator<Item = Node> + 'a {
             self.nodes
                 .into_iter()
-                .filter(move |node| idkg_receivers.as_ref().get().contains(&node.id))
+                .filter(move |node| idkg_receivers.as_ref().contains(node.id))
         }
 
         pub fn receivers<'a, T: AsRef<IDkgReceivers> + 'a>(
@@ -719,7 +759,7 @@ pub mod node {
             idkg_receivers: T,
         ) -> impl Iterator<Item = &Node> + 'a {
             self.iter()
-                .filter(move |node| idkg_receivers.as_ref().get().contains(&node.id))
+                .filter(move |node| idkg_receivers.as_ref().contains(node.id))
         }
 
         pub fn dealers<'a, T: AsRef<IDkgDealers> + 'a>(
@@ -727,7 +767,7 @@ pub mod node {
             idkg_dealers: T,
         ) -> impl Iterator<Item = &Node> + 'a {
             self.iter()
-                .filter(move |node| idkg_dealers.as_ref().get().contains(&node.id))
+                .filter(move |node| idkg_dealers.as_ref().contains(node.id))
         }
 
         pub fn random_subset_with_min_size<'a, R: RngCore + CryptoRng>(
@@ -1416,7 +1456,7 @@ pub fn corrupt_signed_idkg_dealing<R: CryptoRng + RngCore, T: BasicSigner<IDkgDe
     let receiver =
         random_receiver_id_excluding_set(transcript_params.receivers(), excluded_receivers, rng)
             .ok_or(CorruptSignedIDkgDealingError::NoReceivers)?;
-    let node_index = transcript_params.receivers().position(*receiver).unwrap();
+    let node_index = transcript_params.receiver_index(*receiver).unwrap();
 
     Ok(idkg_dealing
         .into_builder()
@@ -2084,6 +2124,7 @@ pub fn corrupt_dealings_and_generate_complaints<'a, R: RngCore + CryptoRng>(
                 *index_to_corrupt,
                 &mut transcript.verified_dealings,
                 complainer_index,
+                rng,
             )
         });
 
@@ -2139,38 +2180,30 @@ fn generate_and_verify_opening(
     opening
 }
 
-fn corrupt_signed_dealing_for_one_receiver(
+fn corrupt_signed_dealing_for_one_receiver<R: Rng + CryptoRng>(
     dealing_index_to_corrupt: NodeIndex,
     dealings: &mut BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
     receiver_index: NodeIndex,
+    rng: &mut R,
 ) {
     let signed_dealing = dealings
         .get_mut(&dealing_index_to_corrupt)
         .unwrap_or_else(|| panic!("Missing dealing at index {:?}", dealing_index_to_corrupt));
     let invalidated_internal_dealing_raw = {
-        let mut internal_dealing =
+        let internal_dealing =
             IDkgDealingInternal::deserialize(&signed_dealing.idkg_dealing().internal_dealing_raw)
                 .expect("failed to deserialize internal dealing");
-        match internal_dealing.ciphertext {
-            MEGaCiphertext::Single(ref mut ctext) => {
-                let corrupted_ctext = corrupt_ecc_scalar(&ctext.ctexts[receiver_index as usize]);
-                ctext.ctexts[receiver_index as usize] = corrupted_ctext;
-            }
-            MEGaCiphertext::Pairs(ref mut ctext) => {
-                let (ctext_1, ctext_2) = ctext.ctexts[receiver_index as usize].clone();
-                let corrupted_ctext_1 = corrupt_ecc_scalar(&ctext_1);
-                ctext.ctexts[receiver_index as usize] = (corrupted_ctext_1, ctext_2);
-            }
-        };
-        internal_dealing
+
+        let corrupted_internal_dealing =
+            ic_crypto_internal_threshold_sig_ecdsa::test_utils::corrupt_dealing(
+                &internal_dealing,
+                &[receiver_index],
+                Seed::from_rng(rng),
+            )
+            .expect("failed to corrupt dealing");
+        corrupted_internal_dealing
             .serialize()
             .expect("failed to serialize internal dealing")
     };
     signed_dealing.content.content.internal_dealing_raw = invalidated_internal_dealing_raw;
-}
-
-fn corrupt_ecc_scalar(value: &EccScalar) -> EccScalar {
-    value
-        .add(&EccScalar::one(value.curve_type()))
-        .expect("Corruption for testing failed")
 }

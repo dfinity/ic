@@ -7,11 +7,11 @@ use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
-use ic_test_utilities::{
-    mock_time,
-    types::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
+use ic_test_utilities::types::ids::{
+    canister_test_id, message_test_id, subnet_test_id, user_test_id,
 };
 use ic_test_utilities_logger::with_test_replica_logger;
+use ic_test_utilities_time::mock_time;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     Height,

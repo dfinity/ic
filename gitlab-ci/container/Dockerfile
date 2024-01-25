@@ -28,11 +28,11 @@ RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /
 
 # install afl & gsutils deps for bazel-fuzzers
 RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
-    echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-15 main" | tee -a /etc/apt/sources.list.d/llvm.list && \
+    echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-17 main" | tee -a /etc/apt/sources.list.d/llvm.list && \
     echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
     curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg  add - && \
     apt -yq update && \
-    apt -yqq install --no-install-recommends lld-15 llvm-15 llvm-15-dev clang-15 libclang-rt-15-dev google-cloud-cli \
+    apt -yqq install --no-install-recommends lld-17 llvm-17 llvm-17-dev clang-17 libclang-rt-17-dev google-cloud-cli \
         gcc-$(gcc --version|head -n1|sed 's/\..*//'|sed 's/.* //')-plugin-dev libstdc++-$(gcc --version|head -n1|sed 's/\..*//'|sed 's/.* //')-dev
 
 ARG sdk_version=0.12.0
@@ -60,9 +60,7 @@ ENV NVM_DIR=/opt/nvm
 RUN mkdir $NVM_DIR && \
     curl --fail https://raw.githubusercontent.com/nvm-sh/nvm/${nvm_version}/install.sh -sSf | bash
 
-COPY typescript/service-worker/.nvmrc /tmp/sw.npmrc
 RUN . /opt/nvm/nvm.sh && \
-    nvm install $(cat /tmp/sw.npmrc) && \
     nvm install ${dependency_mgmt_nns_dapp_node_version} && \
     nvm install ${dependency_mgmt_default_node_version}
 
@@ -90,14 +88,14 @@ RUN curl -fsSL "https://github.com/cocogitto/cocogitto/releases/download/${COCOG
     echo "26a64a7ace621a0c8aabf9305987b91aa9e84c35db949e8809d4a97ae977fa34  ${COCOGITTO_BIN}" | shasum -a 256 -c -
 
 # Install AFLplusplus
-ARG AFL_RELEASE_VERSION=v4.08c
+ARG AFL_RELEASE_VERSION=v4.09c
 RUN mkdir -p /afl && \
     chown -R ubuntu:ubuntu /afl && \
     cd /afl && \
     git clone --depth=1 --branch=${AFL_RELEASE_VERSION} https://github.com/AFLplusplus/AFLplusplus.git && \
     cd AFLplusplus && \
-    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-15 CC=/usr/bin/clang-15 CXX=/usr/bin/clang++-15 make all && \
-    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-15 CC=/usr/bin/clang-15 CXX=/usr/bin/clang++-15 make install && \
+    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-17 CC=/usr/bin/clang-17 CXX=/usr/bin/clang++-17 make all && \
+    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-17 CC=/usr/bin/clang-17 CXX=/usr/bin/clang++-17 make install && \
     mv afl-fuzz afl-showmap  /afl && \
     cd .. && rm -rf AFLplusplus
 
@@ -111,7 +109,7 @@ ENV PYTHONPATH=/ic/gitlab-ci/src:/ic/gitlab-ci/src/dependencies:$PYTHONPATH
 RUN cd /tmp/bazel && bazel version
 
 # Add Rust/Cargo support
-ARG RUST_VERSION=1.74.0
+ARG RUST_VERSION=1.75.0
 RUN curl --fail https://sh.rustup.rs -sSf \
     | sh -s -- -y --default-toolchain ${RUST_VERSION}-x86_64-unknown-linux-gnu --no-modify-path && \
     rustup default ${RUST_VERSION}-x86_64-unknown-linux-gnu && \
@@ -120,9 +118,9 @@ RUN curl --fail https://sh.rustup.rs -sSf \
 
 # Add buf
 ARG BUF_BIN="/usr/local/bin/buf"
-ARG BUF_VERSION="1.25.1"
+ARG BUF_VERSION="1.28.1"
 RUN curl -sSL "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-$(uname -s)-$(uname -m)" -o "${BUF_BIN}" && \
-    echo "3e013b7b7d204ee0ca2952da076fd3fd6e014d11aa92e6262a4343bd61747f34  ${BUF_BIN}" | shasum -a 256 -c - && \
+    echo "855a055c8615a03ee93219f287bd7f652586c6b6b8d2b01079782cba54ee6033  ${BUF_BIN}" | shasum -a 256 -c - && \
     chmod +x "${BUF_BIN}"
 
 # Add zshrc generated from zsh-newuser-install (option 2)

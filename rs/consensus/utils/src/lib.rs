@@ -13,7 +13,9 @@ use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_helpers::subnet::{NotarizationDelaySettings, SubnetRegistry};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    consensus::{Block, BlockProposal, HasCommittee, HasHeight, HasRank, Rank},
+    consensus::{
+        ecdsa::EcdsaPayload, Block, BlockProposal, HasCommittee, HasHeight, HasRank, Rank,
+    },
     crypto::{
         threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
         CryptoHash, CryptoHashable, Signed,
@@ -207,16 +209,15 @@ pub fn get_adjusted_notary_delay_from_settings(
     // At the moment this is a linear slowdown, which could be switched to
     // exponential if required.
     let cup_gap = finalized_height.saturating_sub(pool.get_catch_up_height().get());
-    let last_cup_dkg_info = pool
-        .get_highest_catch_up_package()
+    let last_cup = pool.get_highest_catch_up_package();
+    let last_cup_dkg_info = &last_cup
         .content
         .block
         .as_ref()
         .payload
         .as_ref()
         .as_summary()
-        .dkg
-        .clone();
+        .dkg;
 
     let last_interval_length = last_cup_dkg_info.interval_length;
     let missing_cup_interval_length = last_cup_dkg_info.next_interval_length;
@@ -405,13 +406,6 @@ pub fn lookup_replica_version(
     }
 }
 
-// Data we usually pull from the latest relevant DKG summary block.
-struct DkgData {
-    registry_version: RegistryVersion,
-    low_threshold_transcript: NiDkgTranscript,
-    high_threshold_transcript: NiDkgTranscript,
-}
-
 /// Return the registry version to be used for the given height.
 /// Note that this can only look up for height that is greater than or equal
 /// to the latest catch-up package height, otherwise an error is returned.
@@ -419,7 +413,7 @@ pub fn registry_version_at_height(
     reader: &dyn ConsensusPoolCache,
     height: Height,
 ) -> Option<RegistryVersion> {
-    get_active_data_at(reader, height).map(|data| data.registry_version)
+    get_active_data_at(reader, height, get_registry_version_at_given_summary)
 }
 
 /// Return the current low transcript for the given height if it was found.
@@ -427,7 +421,9 @@ pub fn active_low_threshold_transcript(
     reader: &dyn ConsensusPoolCache,
     height: Height,
 ) -> Option<NiDkgTranscript> {
-    get_active_data_at(reader, height).map(|data| data.low_threshold_transcript)
+    get_active_data_at(reader, height, |block, height| {
+        get_transcript_at_given_summary(block, height, NiDkgTag::LowThreshold)
+    })
 }
 
 /// Return the current high transcript for the given height if it was found.
@@ -435,11 +431,17 @@ pub fn active_high_threshold_transcript(
     reader: &dyn ConsensusPoolCache,
     height: Height,
 ) -> Option<NiDkgTranscript> {
-    get_active_data_at(reader, height).map(|data| data.high_threshold_transcript)
+    get_active_data_at(reader, height, |block, height| {
+        get_transcript_at_given_summary(block, height, NiDkgTag::HighThreshold)
+    })
 }
 
 /// Return the active DKGData active at the given height if it was found.
-fn get_active_data_at(reader: &dyn ConsensusPoolCache, height: Height) -> Option<DkgData> {
+fn get_active_data_at<T>(
+    reader: &dyn ConsensusPoolCache,
+    height: Height,
+    getter: impl Fn(&Block, Height) -> Option<T>,
+) -> Option<T> {
     // Note that we cannot always use the latest finalized DKG summary to determine
     // the active DKG data: Suppose we have CUPs every 100th block, and we just
     // finalized DKG summary block 300. With that block, we can find the active
@@ -459,43 +461,45 @@ fn get_active_data_at(reader: &dyn ConsensusPoolCache, height: Height) -> Option
     // As a solution, we try to establish the active DKG data using the summary
     // block from the CUP first, and if that does not work, we try the latest
     // finalized summary block. This way we avoid both ways of getting stuck.
-    get_active_data_at_given_summary(reader.catch_up_package().content.block.get_value(), height)
-        .or_else(|| get_active_data_at_given_summary(&reader.summary_block(), height))
+    getter(reader.catch_up_package().content.block.get_value(), height)
+        .or_else(|| getter(&reader.summary_block(), height))
 }
 
-/// Return the active DKGData active at the given height using the given summary
-/// block.
-fn get_active_data_at_given_summary(summary_block: &Block, height: Height) -> Option<DkgData> {
+fn get_registry_version_at_given_summary(
+    summary_block: &Block,
+    height: Height,
+) -> Option<RegistryVersion> {
     let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
     if dkg_summary.current_interval_includes(height) {
-        Some(DkgData {
-            registry_version: dkg_summary.registry_version,
-            high_threshold_transcript: dkg_summary
-                .current_transcript(&NiDkgTag::HighThreshold)
-                .clone(),
-            low_threshold_transcript: dkg_summary
-                .current_transcript(&NiDkgTag::LowThreshold)
-                .clone(),
-        })
+        Some(dkg_summary.registry_version)
     } else if dkg_summary.next_interval_includes(height) {
-        let get_transcript_for = |tag| {
-            dkg_summary
-                .next_transcript(&tag)
-                .unwrap_or_else(|| dkg_summary.current_transcript(&tag))
-                .clone()
-        };
-        Some(DkgData {
-            registry_version: summary_block.context.registry_version,
-            high_threshold_transcript: get_transcript_for(NiDkgTag::HighThreshold),
-            low_threshold_transcript: get_transcript_for(NiDkgTag::LowThreshold),
-        })
+        Some(summary_block.context.registry_version)
     } else {
         None
     }
 }
 
-/// Get the [`SubnetRecord`] of this subnet with the
-/// specified [`RegistryVersion`]
+fn get_transcript_at_given_summary(
+    summary_block: &Block,
+    height: Height,
+    tag: NiDkgTag,
+) -> Option<NiDkgTranscript> {
+    let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
+    if dkg_summary.current_interval_includes(height) {
+        Some(dkg_summary.current_transcript(&tag).clone())
+    } else if dkg_summary.next_interval_includes(height) {
+        Some(
+            dkg_summary
+                .next_transcript(&tag)
+                .unwrap_or_else(|| dkg_summary.current_transcript(&tag))
+                .clone(),
+        )
+    } else {
+        None
+    }
+}
+
+/// Get the [`SubnetRecord`] of this subnet with the specified [`RegistryVersion`]
 pub fn get_subnet_record(
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
@@ -519,13 +523,52 @@ pub fn get_subnet_record(
     }
 }
 
+/// Return the oldest registry version of transcripts in the given ECDSA summary payload that are
+/// referenced by the given replicated state.
+pub fn get_oldest_ecdsa_state_registry_version(
+    ecdsa: &EcdsaPayload,
+    state: &ReplicatedState,
+) -> Option<RegistryVersion> {
+    state
+        .sign_with_ecdsa_contexts()
+        .values()
+        .flat_map(|context| context.matched_quadruple.as_ref())
+        .flat_map(|(quadruple_id, _)| ecdsa.available_quadruples.get(quadruple_id))
+        .flat_map(|quadruple| quadruple.get_refs())
+        .flat_map(|transcript_ref| ecdsa.idkg_transcripts.get(&transcript_ref.transcript_id))
+        .map(|transcript| transcript.registry_version)
+        .min()
+}
+
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
     use ic_consensus_mocks::{dependencies, Dependencies};
-    use ic_test_utilities::types::ids::node_test_id;
+    use ic_ic00_types::EcdsaKeyId;
+    use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
+    use ic_test_utilities::{
+        state::ReplicatedStateBuilder,
+        types::{
+            ids::{node_test_id, subnet_test_id},
+            messages::RequestBuilder,
+        },
+    };
+    use ic_test_utilities_time::mock_time;
     use ic_types::{
-        crypto::{ThresholdSigShare, ThresholdSigShareOf},
+        consensus::ecdsa::{
+            EcdsaKeyTranscript, EcdsaUIDGenerator, KeyTranscriptCreation, MaskedTranscript,
+            PreSignatureQuadrupleRef, QuadrupleId, UnmaskedTranscript,
+        },
+        crypto::{
+            canister_threshold_sig::idkg::{
+                IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
+                IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
+            },
+            ThresholdSigShare, ThresholdSigShareOf,
+        },
+        messages::CallbackId,
         signature::ThresholdSignatureShare,
     };
 
@@ -662,5 +705,173 @@ mod tests {
         let calls: [&'_ dyn Fn() -> Vec<u8>; 3] = [&make_empty, &make_1, &make_empty];
         assert_eq!(round_robin.call_next(&calls), vec![1]);
         assert_eq!(round_robin.call_next(&calls), vec![1]);
+    }
+
+    fn empty_ecdsa_payload() -> EcdsaPayload {
+        EcdsaPayload {
+            signature_agreements: BTreeMap::new(),
+            available_quadruples: BTreeMap::new(),
+            ongoing_signatures: BTreeMap::new(),
+            quadruples_in_creation: BTreeMap::new(),
+            uid_generator: EcdsaUIDGenerator::new(subnet_test_id(0), Height::new(0)),
+            idkg_transcripts: BTreeMap::new(),
+            ongoing_xnet_reshares: BTreeMap::new(),
+            xnet_reshare_agreements: BTreeMap::new(),
+            key_transcript: EcdsaKeyTranscript {
+                current: None,
+                next_in_creation: KeyTranscriptCreation::Begin,
+                key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
+            },
+        }
+    }
+
+    fn fake_transcript(id: IDkgTranscriptId, registry_version: RegistryVersion) -> IDkgTranscript {
+        IDkgTranscript {
+            transcript_id: id,
+            receivers: IDkgReceivers::new(BTreeSet::from_iter([node_test_id(0)])).unwrap(),
+            registry_version,
+            verified_dealings: Default::default(),
+            transcript_type: IDkgTranscriptType::Unmasked(
+                IDkgUnmaskedTranscriptOrigin::ReshareMasked(fake_transcript_id(0)),
+            ),
+            algorithm_id: ic_types::crypto::AlgorithmId::EcdsaSecp256k1,
+            internal_transcript_raw: vec![],
+        }
+    }
+
+    fn fake_transcript_id(id: u64) -> IDkgTranscriptId {
+        IDkgTranscriptId::new(subnet_test_id(0), id, Height::from(0))
+    }
+
+    // Create a fake quadruple, it will use transcripts with ids
+    // id, id+1, id+2, and id+3.
+    fn fake_quadruple(id: u64) -> PreSignatureQuadrupleRef {
+        let temp_rv = RegistryVersion::from(0);
+        let kappa_unmasked = fake_transcript(fake_transcript_id(id), temp_rv);
+        let mut lambda_masked = kappa_unmasked.clone();
+        lambda_masked.transcript_id = fake_transcript_id(id + 1);
+        lambda_masked.transcript_type =
+            IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random);
+        let mut kappa_times_lambda = lambda_masked.clone();
+        kappa_times_lambda.transcript_id = fake_transcript_id(id + 2);
+        let mut key_times_lambda = lambda_masked.clone();
+        key_times_lambda.transcript_id = fake_transcript_id(id + 3);
+        let h = Height::from(0);
+        PreSignatureQuadrupleRef {
+            kappa_unmasked_ref: UnmaskedTranscript::try_from((h, &kappa_unmasked)).unwrap(),
+            lambda_masked_ref: MaskedTranscript::try_from((h, &lambda_masked)).unwrap(),
+            kappa_times_lambda_ref: MaskedTranscript::try_from((h, &kappa_times_lambda)).unwrap(),
+            key_times_lambda_ref: MaskedTranscript::try_from((h, &key_times_lambda)).unwrap(),
+            key_unmasked_ref: None,
+        }
+    }
+
+    fn fake_context(quadruple_id: Option<QuadrupleId>) -> SignWithEcdsaContext {
+        SignWithEcdsaContext {
+            request: RequestBuilder::new().build(),
+            key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
+            message_hash: [0; 32],
+            derivation_path: vec![],
+            pseudo_random_id: [0; 32],
+            matched_quadruple: quadruple_id.map(|qid| (qid, Height::from(0))),
+            nonce: None,
+            batch_time: mock_time(),
+        }
+    }
+
+    fn fake_state_with_contexts(contexts: Vec<SignWithEcdsaContext>) -> ReplicatedState {
+        let mut state = ReplicatedStateBuilder::default().build();
+        let iter = contexts
+            .into_iter()
+            .enumerate()
+            .map(|(i, context)| (CallbackId::from(i as u64), context));
+        state
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_ecdsa_contexts = BTreeMap::from_iter(iter);
+        state
+    }
+
+    // Create an ECDSA payload with 10 quadruples, each using registry version 2, 3 or 4.
+    fn ecdsa_payload_with_quadruples() -> EcdsaPayload {
+        let mut ecdsa = empty_ecdsa_payload();
+        let key_id = ecdsa.key_transcript.key_id.clone();
+        let mut rvs = [
+            RegistryVersion::from(2),
+            RegistryVersion::from(3),
+            RegistryVersion::from(4),
+        ]
+        .into_iter()
+        .cycle();
+        for i in (0..40).step_by(4) {
+            let quadruple = fake_quadruple(i as u64);
+            let rv = rvs.next().unwrap();
+            for r in quadruple.get_refs() {
+                ecdsa
+                    .idkg_transcripts
+                    .insert(r.transcript_id, fake_transcript(r.transcript_id, rv));
+            }
+            ecdsa
+                .available_quadruples
+                .insert(QuadrupleId(i as u64, Some(key_id.clone())), quadruple);
+        }
+        ecdsa
+    }
+
+    #[test]
+    fn test_empty_state_should_return_no_registry_version() {
+        let ecdsa = ecdsa_payload_with_quadruples();
+        let state = fake_state_with_contexts(vec![]);
+        assert_eq!(
+            None,
+            get_oldest_ecdsa_state_registry_version(&ecdsa, &state)
+        );
+    }
+
+    #[test]
+    fn test_state_without_matches_should_return_no_registry_version() {
+        let ecdsa = ecdsa_payload_with_quadruples();
+        let state = fake_state_with_contexts(vec![fake_context(None)]);
+        assert_eq!(
+            None,
+            get_oldest_ecdsa_state_registry_version(&ecdsa, &state)
+        );
+    }
+
+    #[test]
+    fn test_should_return_oldest_registry_version() {
+        let ecdsa = ecdsa_payload_with_quadruples();
+        // create contexts for all quadruples, but only create a match for
+        // quadruples with registry version >= 3 (not 2!). Thus the oldest
+        // registry version referenced by the state should be 3.
+        let contexts = ecdsa
+            .available_quadruples
+            .iter()
+            .map(|(id, quad)| {
+                let t_id = quad.lambda_masked_ref.as_ref().transcript_id;
+                let transcript = ecdsa.idkg_transcripts.get(&t_id).unwrap();
+                (transcript.registry_version.get() >= 3).then_some(id.clone())
+            })
+            .map(fake_context)
+            .collect();
+        let state = fake_state_with_contexts(contexts);
+        assert_eq!(
+            Some(RegistryVersion::from(3)),
+            get_oldest_ecdsa_state_registry_version(&ecdsa, &state)
+        );
+
+        let mut ecdsa_without_transcripts = ecdsa.clone();
+        ecdsa_without_transcripts.idkg_transcripts = BTreeMap::new();
+        assert_eq!(
+            None,
+            get_oldest_ecdsa_state_registry_version(&ecdsa_without_transcripts, &state)
+        );
+
+        let mut ecdsa_without_quadruples = ecdsa.clone();
+        ecdsa_without_quadruples.available_quadruples = BTreeMap::new();
+        assert_eq!(
+            None,
+            get_oldest_ecdsa_state_registry_version(&ecdsa_without_quadruples, &state)
+        );
     }
 }

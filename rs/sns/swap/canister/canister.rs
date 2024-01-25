@@ -685,13 +685,13 @@ mod tests {
             module_hash: Some(vec![0_u8]),
             settings: DefiniteCanisterSettingsArgs {
                 controllers: vec![PrincipalId::new_user_test_id(0)],
-                compute_allocation: candid::Nat::from(0),
-                memory_allocation: candid::Nat::from(0),
-                freezing_threshold: candid::Nat::from(0),
+                compute_allocation: candid::Nat::from(0_u32),
+                memory_allocation: candid::Nat::from(0_u32),
+                freezing_threshold: candid::Nat::from(0_u32),
             },
-            memory_size: candid::Nat::from(0),
-            cycles: candid::Nat::from(0),
-            idle_cycles_burned_per_day: candid::Nat::from(0),
+            memory_size: candid::Nat::from(0_u32),
+            cycles: candid::Nat::from(0_u32),
+            idle_cycles_burned_per_day: candid::Nat::from(0_u32),
         };
 
         let management_canister_client = MockManagementCanisterClient::new(vec![
@@ -699,15 +699,15 @@ mod tests {
                 CanisterStatusResultFromManagementCanister {
                     status: CanisterStatusType::Running,
                     module_hash: Some(vec![0_u8]),
-                    memory_size: candid::Nat::from(0),
+                    memory_size: candid::Nat::from(0_u32),
                     settings: DefiniteCanisterSettingsFromManagementCanister {
-                        controllers: vec![PrincipalId::new_user_test_id(0)],
-                        compute_allocation: candid::Nat::from(0),
-                        memory_allocation: candid::Nat::from(0),
-                        freezing_threshold: candid::Nat::from(0),
+                        controllers: vec![PrincipalId::new_user_test_id(0_u64)],
+                        compute_allocation: candid::Nat::from(0_u32),
+                        memory_allocation: candid::Nat::from(0_u32),
+                        freezing_threshold: candid::Nat::from(0_u32),
                     },
-                    cycles: candid::Nat::from(0),
-                    idle_cycles_burned_per_day: candid::Nat::from(0),
+                    cycles: candid::Nat::from(0_u32),
+                    idle_cycles_burned_per_day: candid::Nat::from(0_u32),
                 },
             )),
         ]);

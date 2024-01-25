@@ -107,6 +107,12 @@ pub struct SignWithEcdsaContext {
     pub derivation_path_vec: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
     #[prost(message, optional, tag = "7")]
     pub key_id: ::core::option::Option<super::super::super::registry::crypto::v1::EcdsaKeyId>,
+    #[prost(uint64, optional, tag = "8")]
+    pub height: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "9")]
+    pub quadruple_id: ::core::option::Option<u64>,
+    #[prost(bytes = "vec", optional, tag = "10")]
+    pub nonce: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

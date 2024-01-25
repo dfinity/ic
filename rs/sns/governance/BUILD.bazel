@@ -91,7 +91,7 @@ LIB_SRCS = glob(
     ["src/**"],
     # Ensures that we do not need to rebuild just because a _test.rs file
     # changed.
-    exclude = ["**/*_tests.rs"],
+    exclude = ["**/*tests.rs"],
 )
 
 cargo_build_script(

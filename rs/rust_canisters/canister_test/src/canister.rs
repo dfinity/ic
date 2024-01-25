@@ -537,6 +537,10 @@ impl<'a> Canister<'a> {
         self.canister_id().get().into_vec()
     }
 
+    pub fn runtime(&self) -> &'a Runtime {
+        self.runtime
+    }
+
     pub fn from_vec8(runtime: &'a Runtime, canister_id_vec8: Vec<u8>) -> Canister<'a> {
         let canister_id = CanisterId::unchecked_from_principal(
             PrincipalId::try_from(&canister_id_vec8[..]).expect("failed to decode principal id"),

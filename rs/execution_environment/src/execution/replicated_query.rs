@@ -8,15 +8,15 @@ use crate::execution::common::{
     finish_call_with_error, validate_message, wasm_result_to_query_response,
 };
 use crate::execution_environment::{ExecuteMessageResult, RoundContext, RoundLimits};
+use crate::metrics::CallTreeMetricsNoOp;
 use ic_error_types::{ErrorCode, UserError};
 use ic_replicated_state::{CallOrigin, CanisterState};
+use ic_system_api::{ApiType, ExecutionParameters};
+use ic_types::methods::{FuncRef, WasmMethod};
 use ic_types::{
     messages::{CanisterCall, CanisterCallOrTask},
     NumBytes, NumInstructions, Time,
 };
-
-use ic_system_api::{ApiType, ExecutionParameters};
-use ic_types::methods::{FuncRef, WasmMethod};
 use prometheus::IntCounter;
 
 // Execute an inter-canister request or an ingress message as a replicated query.
@@ -134,6 +134,8 @@ pub fn execute_replicated_query(
         round.network_topology,
         round_limits,
         state_changes_error,
+        &CallTreeMetricsNoOp,
+        time,
     );
 
     let result = output.wasm_result;

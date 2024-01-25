@@ -81,7 +81,7 @@ dfx canister --network ic call ledger icrc1_transfer "(record { from_subaccount 
 1. Approve the minter's principal:
 +
 ----
-dfx canister --network ic call ledger icrc2_approve "(record {spender=record{owner=principal \"mqygn-kiaaa-aaaar-qaadq-cai\"}; amount=AMOUNT)"
+dfx canister --network ic call ledger icrc2_approve "(record {spender=record{owner=principal \"mqygn-kiaaa-aaaar-qaadq-cai\"}; amount=AMOUNT})"
 ----
 +
 2. Call the `retrieve_btc_with_approval` endpoint with the desired BTC destination address where you want to receive your Bitcoin.

@@ -49,4 +49,8 @@ pub struct NodeRecord {
     /// IPv4 interface configuration
     #[prost(message, optional, tag = "18")]
     pub public_ipv4_config: ::core::option::Option<IPv4InterfaceConfig>,
+    /// Domain name, which resolves into Node's IPv4 and IPv6.
+    /// If a Node is to be converted into the ApiBoundaryNode, the domain field should be set.
+    #[prost(string, optional, tag = "19")]
+    pub domain: ::core::option::Option<::prost::alloc::string::String>,
 }

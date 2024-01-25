@@ -102,7 +102,7 @@ impl RegistryHelper {
         match self
             .registry_client
             .get_api_boundary_node_record(node_id, version)
-            .map_err(|err| OrchestratorError::RegistryClientError(err))?
+            .map_err(OrchestratorError::RegistryClientError)?
         {
             Some(record) => Ok(record),
             _ => Err(OrchestratorError::ApiBoundaryNodeMissingError(

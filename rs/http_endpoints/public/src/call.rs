@@ -225,9 +225,10 @@ impl Service<Request<Bytes>> for CallService {
         let node_id = self.node_id;
         let ingress_throttler = self.ingress_throttler.clone();
         Box::pin(async move {
-            let validate_signed_ingress_fut =
-                validator_executor.validate_request(msg.as_ref().clone(), registry_version);
-            if let Err(http_err) = validate_signed_ingress_fut.await {
+            if let Err(http_err) = validator_executor
+                .validate_request(msg.as_ref().clone(), registry_version)
+                .await
+            {
                 let res = make_plaintext_response(http_err.status, http_err.message);
                 return Ok(res);
             }

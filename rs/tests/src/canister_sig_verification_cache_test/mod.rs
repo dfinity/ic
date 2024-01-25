@@ -352,7 +352,7 @@ async fn scrape_metrics_and_check_cache_stats(env: &TestEnv, user_i: usize, call
         count_fetching_metrics += 1;
         if count_fetching_metrics > NUM_RETRIES {
             panic!(
-                "Failed to connect to metrics after {NUM_RETRIES} retries 
+                "Failed to connect to metrics after {NUM_RETRIES} retries
                 each with the timeout of {} secs",
                 RETRY_DELAY.as_secs_f64()
             )

@@ -551,7 +551,7 @@ impl TryFrom<v1::BitcoinAdapterResponseWrapper> for BitcoinAdapterResponseWrappe
                 BitcoinAdapterResponseWrapper::GetSuccessorsResponse(r.try_into()?),
             ),
             v1::bitcoin_adapter_response_wrapper::R::SendTransactionResponse(r) => Ok(
-                BitcoinAdapterResponseWrapper::SendTransactionResponse(r.try_into()?),
+                BitcoinAdapterResponseWrapper::SendTransactionResponse(r.into()),
             ),
             v1::bitcoin_adapter_response_wrapper::R::GetSuccessorsReject(r) => Ok(
                 BitcoinAdapterResponseWrapper::GetSuccessorsReject(r.try_into()?),

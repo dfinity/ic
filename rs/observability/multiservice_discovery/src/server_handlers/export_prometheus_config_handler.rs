@@ -5,6 +5,7 @@ use service_discovery::{
     jobs::Job,
     IcServiceDiscovery,
 };
+use slog::Logger;
 use tokio::sync::Mutex;
 use warp::reply::Reply;
 
@@ -18,6 +19,7 @@ use super::WebResult;
 
 pub struct ExportDefinitionConfigBinding {
     pub definitions: Arc<Mutex<Vec<Definition>>>,
+    pub log: Logger,
 }
 
 pub async fn export_prometheus_config(
@@ -37,7 +39,10 @@ pub async fn export_prometheus_config(
 
     for def in definitions.iter() {
         for job_type in all_jobs {
-            let targets = match def.ic_discovery.get_target_groups(job_type) {
+            let targets = match def
+                .ic_discovery
+                .get_target_groups(job_type, binding.log.clone())
+            {
                 Ok(targets) => targets,
                 Err(_) => continue,
             };

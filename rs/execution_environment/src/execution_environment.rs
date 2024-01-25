@@ -15,7 +15,7 @@ use crate::{
     },
     hypervisor::Hypervisor,
     ic00_permissions::Ic00MethodPermissions,
-    metrics::IngressFilterMetrics,
+    metrics::{CallTreeMetrics, CallTreeMetricsImpl, IngressFilterMetrics},
     NonReplicatedQueryKind,
 };
 use candid::Encode;
@@ -245,6 +245,7 @@ pub trait PausedExecution: std::fmt::Debug + Send {
         round_context: RoundContext,
         round_limits: &mut RoundLimits,
         subnet_size: usize,
+        call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult;
 
     /// Aborts the paused execution.
@@ -285,6 +286,7 @@ pub struct ExecutionEnvironment {
     canister_manager: CanisterManager,
     ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
     metrics: ExecutionEnvironmentMetrics,
+    call_tree_metrics: CallTreeMetricsImpl,
     config: ExecutionConfig,
     cycles_account_manager: Arc<CyclesAccountManager>,
     own_subnet_id: SubnetId,
@@ -369,6 +371,7 @@ impl ExecutionEnvironment {
             canister_manager,
             ingress_history_writer,
             metrics,
+            call_tree_metrics: CallTreeMetricsImpl::new(metrics_registry),
             config,
             cycles_account_manager,
             own_subnet_id,
@@ -427,7 +430,8 @@ impl ExecutionEnvironment {
                 return match context {
                     None => (state, Some(NumInstructions::from(0))),
                     Some(context) => {
-                        let time_elapsed = state.time().saturating_sub(context.get_time());
+                        let time_elapsed =
+                            state.time().saturating_duration_since(context.get_time());
                         let request = context.get_request();
 
                         self.metrics.observe_subnet_message(
@@ -494,6 +498,7 @@ impl ExecutionEnvironment {
                     registry_settings.subnet_size,
                 );
             }
+
             Ok(Ic00Method::InstallChunkedCode)
                 if self.config.wasm_chunk_store == FlagStatus::Enabled =>
             {
@@ -542,26 +547,32 @@ impl ExecutionEnvironment {
                                 &args.key_id,
                             ) {
                                 Err(err) => Some((Err(err), msg.take_cycles())),
-                                Ok(_) => self
-                                    .sign_with_ecdsa(
-                                        (**request).clone(),
-                                        args.message_hash,
-                                        args.derivation_path
-                                            .get()
-                                            .clone()
-                                            .into_iter()
-                                            .map(|x| x.into_vec())
-                                            .collect(),
-                                        args.key_id,
-                                        registry_settings.max_ecdsa_queue_size,
-                                        &mut state,
-                                        rng,
-                                        registry_settings.subnet_size,
-                                    )
-                                    .map_or_else(
-                                        |err| Some((Err(err), msg.take_cycles())),
-                                        |()| None,
-                                    ),
+                                Ok(_) => match self.sign_with_ecdsa(
+                                    (**request).clone(),
+                                    args.message_hash,
+                                    args.derivation_path
+                                        .get()
+                                        .clone()
+                                        .into_iter()
+                                        .map(|x| x.into_vec())
+                                        .collect(),
+                                    args.key_id,
+                                    registry_settings.max_ecdsa_queue_size,
+                                    &mut state,
+                                    rng,
+                                    registry_settings.subnet_size,
+                                ) {
+                                    Err(err) => Some((Err(err), msg.take_cycles())),
+                                    Ok(()) => {
+                                        self.metrics.observe_message_with_label(
+                                            &request.method_name,
+                                            since.elapsed().as_secs_f64(),
+                                            SUBMITTED_OUTCOME_LABEL.into(),
+                                            SUCCESS_STATUS_LABEL.into(),
+                                        );
+                                        None
+                                    }
+                                },
                             }
                         }
                     }
@@ -793,6 +804,7 @@ impl ExecutionEnvironment {
                 Err(err) => Some((Err(err), msg.take_cycles())),
                 Ok(args) => Some(self.deposit_cycles(args.get_canister_id(), &mut msg, &mut state)),
             },
+
             Ok(Ic00Method::HttpRequest) => match state.metadata.own_subnet_features.http_requests {
                 true => match &msg {
                     CanisterCall::Request(request) => {
@@ -865,6 +877,7 @@ impl ExecutionEnvironment {
                     Some((err, msg.take_cycles()))
                 }
             },
+
             Ok(Ic00Method::SetupInitialDKG) => match &msg {
                 CanisterCall::Request(request) => self
                     .setup_initial_dkg(payload, request, &mut state, rng)
@@ -1073,6 +1086,14 @@ impl ExecutionEnvironment {
                 Some((res, msg.take_cycles()))
             }
 
+            Ok(Ic00Method::DeleteChunks) | Ok(Ic00Method::InstallChunkedCode) => Some((
+                Err(UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    "Chunked upload API is not yet implemented.",
+                )),
+                msg.take_cycles(),
+            )),
+
             Ok(Ic00Method::NodeMetricsHistory) => {
                 let res = match NodeMetricsHistoryArgs::decode(payload) {
                     Err(err) => Err(err),
@@ -1081,13 +1102,18 @@ impl ExecutionEnvironment {
                 Some((res, msg.take_cycles()))
             }
 
-            Ok(Ic00Method::DeleteChunks) | Ok(Ic00Method::InstallChunkedCode) => Some((
+            Ok(Ic00Method::FetchCanisterLogs) => Some((
+                // TODO(IC-272).
                 Err(UserError::new(
                     ErrorCode::CanisterRejectedMessage,
-                    "Chunked upload API is not yet implemented.",
+                    format!(
+                        "{} API is not yet implemented.",
+                        Ic00Method::FetchCanisterLogs
+                    ),
                 )),
                 msg.take_cycles(),
             )),
+
             Ok(Ic00Method::TakeCanisterSnapshot) => match self.config.canister_snapshots {
                 FlagStatus::Enabled => {
                     // TODO(EXC-1529): Implement take_canister_snapshot.
@@ -1107,6 +1133,7 @@ impl ExecutionEnvironment {
                     Some((err, msg.take_cycles()))
                 }
             },
+
             Ok(Ic00Method::LoadCanisterSnapshot) => match self.config.canister_snapshots {
                 FlagStatus::Enabled => {
                     // TODO(EXC-1530): Implement load_canister_snapshot.
@@ -1126,6 +1153,7 @@ impl ExecutionEnvironment {
                     Some((err, msg.take_cycles()))
                 }
             },
+
             Ok(Ic00Method::ListCanisterSnapshots) => match self.config.canister_snapshots {
                 FlagStatus::Enabled => {
                     // TODO(EXC-1531): Implement list_canister_snapshot.
@@ -1145,6 +1173,7 @@ impl ExecutionEnvironment {
                     Some((err, msg.take_cycles()))
                 }
             },
+
             Ok(Ic00Method::DeleteCanisterSnapshot) => match self.config.canister_snapshots {
                 FlagStatus::Enabled => {
                     // TODO(EXC-1532): Implement delete_canister_snapshot.
@@ -1164,6 +1193,7 @@ impl ExecutionEnvironment {
                     Some((err, msg.take_cycles()))
                 }
             },
+
             Err(ParseError::VariantNotFound) => {
                 let res = Err(UserError::new(
                     ErrorCode::CanisterMethodNotFound,
@@ -1367,6 +1397,7 @@ impl ExecutionEnvironment {
                     round,
                     round_limits,
                     subnet_size,
+                    &self.call_tree_metrics,
                 )
             }
             WasmMethod::System(_) => {
@@ -1403,6 +1434,7 @@ impl ExecutionEnvironment {
             round,
             round_limits,
             subnet_size,
+            &self.call_tree_metrics,
         )
     }
 
@@ -1774,6 +1806,7 @@ impl ExecutionEnvironment {
             round_limits,
             subnet_size,
             scaled_subnet_memory_reservation,
+            &self.call_tree_metrics,
         )
     }
 
@@ -2221,6 +2254,8 @@ impl ExecutionEnvironment {
                 derivation_path,
                 pseudo_random_id,
                 batch_time: state.metadata.batch_time,
+                matched_quadruple: None,
+                nonce: None,
             }));
         Ok(())
     }
@@ -2388,7 +2423,7 @@ impl ExecutionEnvironment {
         }
 
         let canister_id = old_canister.canister_id();
-        let new_wasm_hash = WasmHash::from(&install_context.wasm_module);
+        let new_wasm_hash = (&install_context.wasm_source).into();
         let compilation_cost_handling = if state
             .metadata
             .expected_compiled_wasms
@@ -2400,9 +2435,7 @@ impl ExecutionEnvironment {
         };
         info!(
             self.log,
-            "Start executing install_code message on canister {:?}, contains module {:?}",
-            canister_id,
-            install_context.wasm_module.is_empty().to_string(),
+            "Start executing install_code message on canister {:?}", canister_id,
         );
 
         let execution_parameters = self.execution_parameters(
@@ -2862,7 +2895,9 @@ impl ExecutionEnvironment {
             match stop_canister_call {
                 Some(stop_canister_call) => {
                     let call = stop_canister_call.call;
-                    let time_elapsed = state.time().saturating_sub(stop_canister_call.time);
+                    let time_elapsed = state
+                        .time()
+                        .saturating_duration_since(stop_canister_call.time);
                     if let CanisterCall::Request(request) = call {
                         self.metrics.observe_subnet_message(
                             &request.method_name,
@@ -3193,7 +3228,13 @@ pub fn execute_canister(
                     log: &exec_env.log,
                     time,
                 };
-                let result = paused.resume(canister, round_context, round_limits, subnet_size);
+                let result = paused.resume(
+                    canister,
+                    round_context,
+                    round_limits,
+                    subnet_size,
+                    &exec_env.call_tree_metrics,
+                );
                 let (canister, instructions_used, heap_delta, ingress_status) =
                     exec_env.process_result(result);
                 return ExecuteCanisterResult {

@@ -725,7 +725,7 @@ mod tests {
 
     use super::*;
 
-    const PROCESS_ARTIFACT_TIMEOUT: Duration = Duration::from_millis(100);
+    const PROCESS_ARTIFACT_TIMEOUT: Duration = Duration::from_millis(1000);
 
     fn create_receive_manager(
         log: ReplicaLogger,
@@ -1007,16 +1007,9 @@ mod tests {
             assert_eq!(mgr.slot_table.len(), 1);
             assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
 
-            let joined_artifact_processor = rt.block_on(async {
-                timeout(
-                    PROCESS_ARTIFACT_TIMEOUT,
-                    mgr.artifact_processor_tasks.join_next(),
-                )
-                .await
-            });
+            let joined_artifact_processor = rt.block_on(mgr.artifact_processor_tasks.join_next());
 
             let result = joined_artifact_processor
-                .expect("Joining artifact processor join-set timed out")
                 .expect("Joining artifact processor task failed")
                 .expect("Artifact processor task panicked");
 
@@ -1542,16 +1535,9 @@ mod tests {
             );
 
             // Make sure the download task for 0 closes since both entries got overwritten.
-            let joined_artifact_processor = rt.block_on(async {
-                timeout(
-                    PROCESS_ARTIFACT_TIMEOUT,
-                    mgr.artifact_processor_tasks.join_next(),
-                )
-                .await
-            });
+            let joined_artifact_processor = rt.block_on(mgr.artifact_processor_tasks.join_next());
 
             let result = joined_artifact_processor
-                .expect("Joining artifact processor join-set timed out")
                 .expect("Joining artifact processor task failed")
                 .expect("Artifact processor task panicked");
 

@@ -7,10 +7,8 @@ use crate::errors::convert_to_error;
 use crate::request::transaction_operation_results::TransactionOperationResults;
 use crate::{convert::from_hex, errors, errors::ApiError, request_types::RequestType};
 pub use ic_canister_client_sender::Ed25519KeyPair as EdKeypair;
-use ic_types::PrincipalId;
-use ic_types::{
-    messages::{HttpCallContent, HttpCanisterUpdate, HttpReadStateContent, HttpRequestEnvelope},
-    CanisterId,
+use ic_types::messages::{
+    HttpCallContent, HttpCanisterUpdate, HttpReadStateContent, HttpRequestEnvelope,
 };
 pub use rosetta_core::identifiers::*;
 pub use rosetta_core::miscellaneous::*;
@@ -19,6 +17,7 @@ pub use rosetta_core::request_types::*;
 pub use rosetta_core::response_types::*;
 use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
+use std::str::FromStr;
 
 // This file is generated from https://github.com/coinbase/rosetta-specifications using openapi-generator
 // Then heavily tweaked because openapi-generator no longer generates valid rust
@@ -150,70 +149,24 @@ impl CallResponse {
     }
 }
 
-/// ConstructionCombineRequest is the input to the `/construction/combine`
-/// endpoint. It contains the unsigned transaction blob returned by
-/// `/construction/payloads` and all required signatures to create a network
-/// transaction.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct ConstructionCombineRequest {
-    #[serde(rename = "network_identifier")]
-    pub network_identifier: NetworkIdentifier,
-
-    #[serde(rename = "unsigned_transaction")]
-    pub unsigned_transaction: String, // = CBOR+hex-encoded 'UnsignedTransaction'
-
-    #[serde(rename = "signatures")]
-    pub signatures: Vec<Signature>,
-}
-
-impl ConstructionCombineRequest {
-    pub fn new(
-        network_identifier: NetworkIdentifier,
-        unsigned_transaction: String,
-        signatures: Vec<Signature>,
-    ) -> ConstructionCombineRequest {
-        ConstructionCombineRequest {
-            network_identifier,
-            unsigned_transaction,
-            signatures,
-        }
-    }
-
-    pub fn unsigned_transaction(&self) -> Result<UnsignedTransaction, ApiError> {
-        serde_cbor::from_slice(&from_hex(&self.unsigned_transaction)?).map_err(|e| {
-            ApiError::invalid_request(format!("Could not deserialize unsigned transaction: {}", e))
-        })
-    }
-}
-
-/// ConstructionCombineResponse is returned by `/construction/combine`. The
-/// network payload will be sent directly to the `construction/submit` endpoint.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct ConstructionCombineResponse {
-    #[serde(rename = "signed_transaction")]
-    pub signed_transaction: String, // = CBOR+hex-encoded 'SignedTransaction'
-}
-
-impl ConstructionCombineResponse {
-    pub fn new(signed_transaction: String) -> ConstructionCombineResponse {
-        ConstructionCombineResponse { signed_transaction }
-    }
-
-    pub fn signed_transaction(&self) -> Result<SignedTransaction, ApiError> {
-        serde_cbor::from_slice(&from_hex(&self.signed_transaction)?).map_err(|e| {
-            ApiError::invalid_request(format!(
-                "Cannot deserialize signed transaction in /construction/combine response: {}",
-                e
-            ))
-        })
-    }
-}
-
 /// The type (encoded as CBOR) returned by /construction/combine, containing the
 /// IC calls to submit the transaction and to check the result.
-pub type SignedTransaction = Vec<Request>;
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct SignedTransaction {
+    pub requests: Vec<Request>,
+}
+
+impl FromStr for SignedTransaction {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_cbor::from_slice(
+            hex::decode(s)
+                .map_err(|err| format!("{:?}", err))?
+                .as_slice(),
+        )
+        .map_err(|err| format!("{:?}", err))
+    }
+}
 
 /// A vector of update/read-state calls for different ingress windows
 /// of the same call.
@@ -324,47 +277,9 @@ impl ConstructionHashRequest {
     }
 }
 
-/// A ConstructionMetadataRequest is utilized to get information required to
-/// construct a transaction. The Options object used to specify which metadata
-/// to return is left purposely unstructured to allow flexibility for
-/// implementers.  Optionally, the request can also include an array of
-/// PublicKeys associated with the AccountIdentifiers returned in
-/// ConstructionPreprocessResponse.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct ConstructionMetadataRequest {
-    #[serde(rename = "network_identifier")]
-    pub network_identifier: NetworkIdentifier,
-
-    /// Some blockchains require different metadata for different types of
-    /// transaction construction (ex: delegation versus a transfer). Instead of
-    /// requiring a blockchain node to return all possible types of metadata for
-    /// construction (which may require multiple node fetches), the client can
-    /// populate an options object to limit the metadata returned to only the
-    /// subset required.
-    #[serde(rename = "options")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(default)]
-    pub options: Option<ConstructionMetadataRequestOptions>,
-
-    #[serde(rename = "public_keys")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub public_keys: Option<Vec<PublicKey>>,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConstructionMetadataRequestOptions {
     pub request_types: Vec<RequestType>,
-}
-
-impl ConstructionMetadataRequest {
-    pub fn new(network_identifier: NetworkIdentifier) -> ConstructionMetadataRequest {
-        ConstructionMetadataRequest {
-            network_identifier,
-            options: None,
-            public_keys: None,
-        }
-    }
 }
 
 impl From<ConstructionMetadataRequestOptions> for ObjectMap {
@@ -373,6 +288,18 @@ impl From<ConstructionMetadataRequestOptions> for ObjectMap {
             Ok(serde_json::Value::Object(o)) => o,
             _ => unreachable!(),
         }
+    }
+}
+
+impl TryFrom<ObjectMap> for ConstructionMetadataRequestOptions {
+    type Error = ApiError;
+    fn try_from(o: ObjectMap) -> Result<Self, ApiError> {
+        serde_json::from_value(serde_json::Value::Object(o)).map_err(|e| {
+            ApiError::internal_error(format!(
+                "Could not parse ConstructionMetadataRequestOptions from Object: {}",
+                e
+            ))
+        })
     }
 }
 
@@ -388,114 +315,29 @@ impl TryFrom<Option<ObjectMap>> for ConstructionMetadataRequestOptions {
     }
 }
 
-/// The ConstructionMetadataResponse returns network-specific metadata used for
-/// transaction construction.  Optionally, the implementer can return the
-/// suggested fee associated with the transaction being constructed. The caller
-/// may use this info to adjust the intent of the transaction or to create a
-/// transaction with a different account that can pay the suggested fee.
-/// Suggested fee is an array in case fee payment must occur in multiple
-/// currencies.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct ConstructionMetadataResponse {
-    #[serde(rename = "metadata")]
-    pub metadata: ConstructionPayloadsRequestMetadata,
-
-    #[serde(rename = "suggested_fee")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(default)]
-    pub suggested_fee: Option<Vec<Amount>>,
-}
-
-/// ConstructionParseRequest is the input to the `/construction/parse` endpoint.
-/// It allows the caller to parse either an unsigned or signed transaction.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct ConstructionParseRequest {
-    #[serde(rename = "network_identifier")]
-    pub network_identifier: NetworkIdentifier,
-
-    /// Signed is a boolean indicating whether the transaction is signed.
-    #[serde(rename = "signed")]
-    pub signed: bool,
-
-    /// This must be either the unsigned transaction blob returned by
-    /// `/construction/payloads` or the signed transaction blob returned by
-    /// `/construction/combine`.
-    #[serde(rename = "transaction")]
-    pub transaction: String,
-}
-
 pub enum ParsedTransaction {
     Signed(SignedTransaction),
     Unsigned(UnsignedTransaction),
 }
 
-impl ConstructionParseRequest {
-    pub fn new(
-        network_identifier: NetworkIdentifier,
-        signed: bool,
-        transaction: String,
-    ) -> ConstructionParseRequest {
-        ConstructionParseRequest {
-            network_identifier,
-            signed,
-            transaction,
-        }
-    }
-
-    pub fn transaction(&self) -> Result<ParsedTransaction, ApiError> {
-        if self.signed {
+impl TryFrom<ConstructionParseRequest> for ParsedTransaction {
+    type Error = ApiError;
+    fn try_from(value: ConstructionParseRequest) -> Result<Self, Self::Error> {
+        if value.signed {
             Ok(ParsedTransaction::Signed(
-                serde_cbor::from_slice(&from_hex(&self.transaction)?).map_err(|e| {
+                serde_cbor::from_slice(&from_hex(&value.transaction)?).map_err(|e| {
                     ApiError::invalid_request(format!("Could not decode signed transaction: {}", e))
                 })?,
             ))
         } else {
             Ok(ParsedTransaction::Unsigned(
-                serde_cbor::from_slice(&from_hex(&self.transaction)?).map_err(|e| {
+                serde_cbor::from_slice(&from_hex(&value.transaction)?).map_err(|e| {
                     ApiError::invalid_request(format!(
                         "Could not decode unsigned transaction: {}",
                         e
                     ))
                 })?,
             ))
-        }
-    }
-}
-
-/// ConstructionParseResponse contains an array of operations that occur in a
-/// transaction blob. This should match the array of operations provided to
-/// `/construction/preprocess` and `/construction/payloads`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct ConstructionParseResponse {
-    #[serde(rename = "operations")]
-    pub operations: Vec<Operation>,
-
-    /// [DEPRECATED by `account_identifier_signers` in `v1.4.4`] All signers
-    /// (addresses) of a particular transaction. If the transaction is unsigned,
-    /// it should be empty.
-    #[serde(rename = "signers")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub signers: Option<Vec<String>>,
-
-    #[serde(rename = "account_identifier_signers")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub account_identifier_signers: Option<Vec<AccountIdentifier>>,
-
-    #[serde(rename = "metadata")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<ObjectMap>,
-}
-
-impl ConstructionParseResponse {
-    pub fn new(operations: Vec<Operation>) -> ConstructionParseResponse {
-        ConstructionParseResponse {
-            operations,
-            signers: None,
-            account_identifier_signers: None,
-            metadata: None,
         }
     }
 }
@@ -526,66 +368,24 @@ pub struct ConstructionPayloadsRequestMetadata {
     pub created_at_time: Option<u64>,
 }
 
-/// ConstructionPayloadsRequest is the request to `/construction/payloads`. It
-/// contains the network, a slice of operations, and arbitrary metadata that was
-/// returned by the call to `/construction/metadata`.  Optionally, the request
-/// can also include an array of PublicKeys associated with the
-/// AccountIdentifiers returned in ConstructionPreprocessResponse.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct ConstructionPayloadsRequest {
-    #[serde(rename = "network_identifier")]
-    pub network_identifier: NetworkIdentifier,
-
-    #[serde(rename = "operations")]
-    pub operations: Vec<Operation>,
-
-    #[serde(rename = "metadata")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<ConstructionPayloadsRequestMetadata>,
-
-    #[serde(rename = "public_keys")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub public_keys: Option<Vec<PublicKey>>,
-}
-
-impl ConstructionPayloadsRequest {
-    pub fn new(
-        network_identifier: NetworkIdentifier,
-        operations: Vec<Operation>,
-    ) -> ConstructionPayloadsRequest {
-        ConstructionPayloadsRequest {
-            network_identifier,
-            operations,
-            metadata: None,
-            public_keys: None,
+impl From<ConstructionPayloadsRequestMetadata> for ObjectMap {
+    fn from(p: ConstructionPayloadsRequestMetadata) -> Self {
+        match serde_json::to_value(p) {
+            Ok(serde_json::Value::Object(o)) => o,
+            _ => unreachable!(),
         }
     }
 }
 
-/// ConstructionTransactionResponse is returned by `/construction/payloads`. It
-/// contains an unsigned transaction blob (that is usually needed to construct
-/// the a network transaction from a collection of signatures) and an array of
-/// payloads that must be signed by the caller.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct ConstructionPayloadsResponse {
-    #[serde(rename = "unsigned_transaction")]
-    pub unsigned_transaction: String, // = CBOR+hex-encoded 'UnsignedTransaction'
-
-    #[serde(rename = "payloads")]
-    pub payloads: Vec<SigningPayload>,
-}
-
-impl ConstructionPayloadsResponse {
-    pub fn new(
-        unsigned_transaction: &UnsignedTransaction,
-        payloads: Vec<SigningPayload>,
-    ) -> ConstructionPayloadsResponse {
-        ConstructionPayloadsResponse {
-            unsigned_transaction: hex::encode(serde_cbor::to_vec(unsigned_transaction).unwrap()),
-            payloads,
-        }
+impl TryFrom<ObjectMap> for ConstructionPayloadsRequestMetadata {
+    type Error = ApiError;
+    fn try_from(o: ObjectMap) -> Result<Self, ApiError> {
+        serde_json::from_value(serde_json::Value::Object(o)).map_err(|e| {
+            ApiError::internal_error(format!(
+                "Could not parse ConstructionPayloadsRequestMetadata from Object: {}",
+                e
+            ))
+        })
     }
 }
 
@@ -593,6 +393,24 @@ impl ConstructionPayloadsResponse {
 pub struct UnsignedTransaction {
     pub updates: Vec<(RequestType, HttpCanisterUpdate)>,
     pub ingress_expiries: Vec<u64>,
+}
+
+impl ToString for UnsignedTransaction {
+    fn to_string(&self) -> String {
+        hex::encode(serde_cbor::to_vec(self).unwrap())
+    }
+}
+
+impl FromStr for UnsignedTransaction {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_cbor::from_slice(
+            hex::decode(s)
+                .map_err(|err| format!("{:?}", err))?
+                .as_slice(),
+        )
+        .map_err(|err| format!("{:?}", err))
+    }
 }
 
 /// The transaction submission request includes a signed transaction.
@@ -695,159 +513,6 @@ impl MempoolTransactionRequest {
         MempoolTransactionRequest {
             network_identifier,
             transaction_identifier,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct NetworkIdentifier(pub rosetta_core::identifiers::NetworkIdentifier);
-impl TryInto<CanisterId> for &NetworkIdentifier {
-    type Error = ApiError;
-    fn try_into(self) -> Result<CanisterId, Self::Error> {
-        let principal_bytes = hex::decode(&self.0.network)
-            .map_err(|_| ApiError::InvalidNetworkId(false, "not hex".into()))?;
-        let principal_id = PrincipalId::try_from(&principal_bytes)
-            .map_err(|_| ApiError::InvalidNetworkId(false, "invalid principal id".into()))?;
-        CanisterId::try_from(principal_id)
-            .map_err(|_| ApiError::InvalidNetworkId(false, "invalid canister id".into()))
-    }
-}
-
-impl From<rosetta_core::identifiers::NetworkIdentifier> for NetworkIdentifier {
-    fn from(value: rosetta_core::identifiers::NetworkIdentifier) -> Self {
-        Self(value)
-    }
-}
-
-impl From<NetworkIdentifier> for rosetta_core::identifiers::NetworkIdentifier {
-    fn from(value: NetworkIdentifier) -> Self {
-        value.0
-    }
-}
-
-impl NetworkIdentifier {
-    pub fn new(blockchain: String, network: String) -> NetworkIdentifier {
-        Self(rosetta_core::identifiers::NetworkIdentifier::new(
-            blockchain, network,
-        ))
-    }
-}
-
-/// Signature contains the payload that was signed, the public keys of the
-/// keypairs used to produce the signature, the signature (encoded in hex), and
-/// the SignatureType.  PublicKey is often times not known during construction
-/// of the signing payloads but may be needed to combine signatures properly.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct Signature {
-    #[serde(rename = "signing_payload")]
-    pub signing_payload: SigningPayload,
-
-    #[serde(rename = "public_key")]
-    pub public_key: PublicKey,
-
-    #[serde(rename = "signature_type")]
-    pub signature_type: SignatureType,
-
-    #[serde(rename = "hex_bytes")]
-    pub hex_bytes: String,
-}
-
-impl Signature {
-    pub fn new(
-        signing_payload: SigningPayload,
-        public_key: PublicKey,
-        signature_type: SignatureType,
-        hex_bytes: String,
-    ) -> Signature {
-        Signature {
-            signing_payload,
-            public_key,
-            signature_type,
-            hex_bytes,
-        }
-    }
-}
-
-/// SignatureType is the type of a cryptographic signature.  * ecdsa: `r (32-bytes) || s (32-bytes)` - `64 bytes` * ecdsa_recovery: `r (32-bytes) || s (32-bytes) || v (1-byte)` - `65 bytes` * ed25519: `R (32-byte) || s (32-bytes)` - `64 bytes` * schnorr_1: `r (32-bytes) || s (32-bytes)` - `64 bytes`  (schnorr signature implemented by Zilliqa where both `r` and `s` are scalars encoded as `32-bytes` values, most significant byte first.) * schnorr_poseidon: `r (32-bytes) || s (32-bytes)` where s = Hash(1st pk || 2nd pk || r) - `64 bytes`  (schnorr signature w/ Poseidon hash function implemented by O(1) Labs where both `r` and `s` are scalars encoded as `32-bytes` values, least significant byte first. https://github.com/CodaProtocol/signer-reference/blob/master/schnorr.ml )
-/// Enumeration of values.
-/// Since this enum's variants do not hold data, we can easily define them them
-/// as `#[repr(C)]` which helps with FFI.
-#[allow(non_camel_case_types)]
-#[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGenericEnum))]
-pub enum SignatureType {
-    #[serde(rename = "ecdsa")]
-    Ecdsa,
-    #[serde(rename = "ecdsa_recovery")]
-    EcdsaRecovery,
-    #[serde(rename = "ed25519")]
-    Ed25519,
-    #[serde(rename = "schnorr_1")]
-    Schnorr1,
-    #[serde(rename = "schnorr_poseidon")]
-    SchnorrPoseidon,
-}
-
-impl ::std::fmt::Display for SignatureType {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            SignatureType::Ecdsa => write!(f, "ecdsa"),
-            SignatureType::EcdsaRecovery => write!(f, "ecdsa_recovery"),
-            SignatureType::Ed25519 => write!(f, "ed25519"),
-            SignatureType::Schnorr1 => write!(f, "schnorr_1"),
-            SignatureType::SchnorrPoseidon => write!(f, "schnorr_poseidon"),
-        }
-    }
-}
-
-impl ::std::str::FromStr for SignatureType {
-    type Err = ();
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "ecdsa" => Ok(SignatureType::Ecdsa),
-            "ecdsa_recovery" => Ok(SignatureType::EcdsaRecovery),
-            "ed25519" => Ok(SignatureType::Ed25519),
-            "schnorr_1" => Ok(SignatureType::Schnorr1),
-            "schnorr_poseidon" => Ok(SignatureType::SchnorrPoseidon),
-            _ => Err(()),
-        }
-    }
-}
-
-/// SigningPayload is signed by the client with the keypair associated with an
-/// AccountIdentifier using the specified SignatureType.  SignatureType can be
-/// optionally populated if there is a restriction on the signature scheme that
-/// can be used to sign the payload.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct SigningPayload {
-    /// [DEPRECATED by `account_identifier` in `v1.4.4`] The network-specific
-    /// address of the account that should sign the payload.
-    #[serde(rename = "address")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub address: Option<String>,
-
-    #[serde(rename = "account_identifier")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub account_identifier: Option<AccountIdentifier>,
-
-    #[serde(rename = "hex_bytes")]
-    pub hex_bytes: String,
-
-    #[serde(rename = "signature_type")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub signature_type: Option<SignatureType>,
-}
-
-impl SigningPayload {
-    pub fn new(hex_bytes: String) -> SigningPayload {
-        SigningPayload {
-            address: None,
-            account_identifier: None,
-            hex_bytes,
-            signature_type: None,
         }
     }
 }

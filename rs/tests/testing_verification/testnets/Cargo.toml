@@ -34,10 +34,6 @@ name = "single_large_node"
 path = "single_large_node.rs"
 
 [[bin]]
-name = "small_api_boundary"
-path = "small_api_boundary.rs"
-
-[[bin]]
 name = "small_nns"
 path = "small_nns.rs"
 

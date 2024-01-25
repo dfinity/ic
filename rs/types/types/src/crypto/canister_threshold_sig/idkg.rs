@@ -20,7 +20,6 @@ use std::num::TryFromIntError;
 
 pub mod conversions;
 pub mod proto_conversions;
-pub use conversions::*;
 
 #[cfg(test)]
 mod tests;
@@ -164,11 +163,19 @@ impl IDkgReceivers {
 
     /// Returns the position of the given `node_id` in the receivers. Returns
     /// `None` if the `node_id` is not a receiver.
-    pub fn position(&self, node_id: NodeId) -> Option<NodeIndex> {
+    ///
+    /// This method is intended to be PRIVATE. For public methods for obtaining
+    /// a receiver's index, the methods of the objects like [`IDkgTranscript`],
+    /// [`IDkgTranscriptParams`], or [`ThresholdEcdsaSigInputs`] should be used.
+    fn position(&self, node_id: NodeId) -> Option<NodeIndex> {
         self.receivers
             .iter()
             .position(|receiver| node_id == *receiver)
             .map(|index| NodeIndex::try_from(index).expect("node index overflow"))
+    }
+
+    pub fn contains(&self, node_id: NodeId) -> bool {
+        self.receivers.contains(&node_id)
     }
 
     pub fn get(&self) -> &BTreeSet<NodeId> {
@@ -262,16 +269,8 @@ impl IDkgDealers {
         Ok(())
     }
 
-    /// Returns the position of the given `node_id` in the dealers. Returns
-    /// `None` if the `node_id` is not a dealer.
-    pub fn position(&self, node_id: NodeId) -> Option<NodeIndex> {
-        self.iter().find_map(|(node_index, this_node_id)| {
-            if node_id == this_node_id {
-                Some(node_index)
-            } else {
-                None
-            }
-        })
+    pub fn contains(&self, node_id: NodeId) -> bool {
+        self.dealers.contains(&node_id)
     }
 
     pub fn get(&self) -> &BTreeSet<NodeId> {
@@ -403,23 +402,28 @@ impl IDkgTranscriptParams {
     /// For a Random transcript, the index of a dealer correspond to the position of `node_id` in the dealer set.
     /// For all other transcript operations, the dealer index corresponds to its position of `node_id` in the previous set of receivers.
     pub fn dealer_index(&self, node_id: NodeId) -> Option<NodeIndex> {
-        match self.dealers().position(node_id) {
-            None => None,
-            Some(index) => {
-                match &self.operation_type {
-                    IDkgTranscriptOperation::Random => Some(index),
-                    IDkgTranscriptOperation::ReshareOfMasked(transcript) => {
-                        transcript.receivers.position(node_id)
-                    }
-                    IDkgTranscriptOperation::ReshareOfUnmasked(transcript) => {
-                        transcript.receivers.position(node_id)
-                    }
-                    IDkgTranscriptOperation::UnmaskedTimesMasked(transcript_1, _transcript_2) => {
-                        // transcript_1.receivers == transcript_2.receivers already checked by
-                        // IDkgTranscriptParams::new
-                        transcript_1.receivers.position(node_id)
-                    }
+        let index = self
+            .dealers()
+            .iter()
+            .find_map(|(node_index, this_node_id)| {
+                if node_id == this_node_id {
+                    Some(node_index)
+                } else {
+                    None
                 }
+            })?;
+        match &self.operation_type {
+            IDkgTranscriptOperation::Random => Some(index),
+            IDkgTranscriptOperation::ReshareOfMasked(transcript) => {
+                transcript.index_for_signer_id(node_id)
+            }
+            IDkgTranscriptOperation::ReshareOfUnmasked(transcript) => {
+                transcript.index_for_signer_id(node_id)
+            }
+            IDkgTranscriptOperation::UnmaskedTimesMasked(transcript_1, _transcript_2) => {
+                // transcript_1.receivers == transcript_2.receivers already checked by
+                // IDkgTranscriptParams::new
+                transcript_1.index_for_signer_id(node_id)
             }
         }
     }
@@ -940,7 +944,7 @@ impl IDkgTranscript {
 
     /// Checks if the specified `NodeId` is a receiver of the transcript.
     pub fn has_receiver(&self, receiver_id: NodeId) -> bool {
-        self.receivers.position(receiver_id).is_some()
+        self.receivers.contains(receiver_id)
     }
 
     /// Returns a copy of the raw internal transcript.

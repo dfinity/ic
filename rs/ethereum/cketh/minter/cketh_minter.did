@@ -6,6 +6,7 @@ type EthereumNetwork = variant {
 };
 
 type CanisterStatusResponse = record {
+  query_stats : QueryStats;
   status : CanisterStatusType;
   memory_size : nat;
   cycles : nat;
@@ -21,6 +22,13 @@ type DefiniteCanisterSettings = record {
   controllers : vec principal;
   memory_allocation : nat;
   compute_allocation : nat;
+};
+
+type QueryStats = record {
+  response_payload_bytes_total : nat;
+  num_instructions_total : nat;
+  num_calls_total : nat;
+  request_payload_bytes_total : nat;
 };
 
 type BlockTag = variant {

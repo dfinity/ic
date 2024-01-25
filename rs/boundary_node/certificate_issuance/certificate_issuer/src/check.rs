@@ -205,6 +205,7 @@ impl Check for Checker {
                 .map(|field| (field.0.to_string(), field.1.to_string()))
                 .collect::<Vec<(String, String)>>(),
             body: response.body.clone(),
+            upgrade: response.upgrade,
         };
         let max_cert_time_offset_ns = 300_000_000_000;
         let current_time_ns = SystemTime::now()

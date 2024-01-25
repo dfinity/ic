@@ -18,6 +18,9 @@ mod status;
 mod threads;
 mod types;
 
+pub use query::QueryServiceBuilder;
+pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
+
 cfg_if::cfg_if! {
     if #[cfg(feature = "fuzzing_code")] {
         pub mod validator_executor;
@@ -45,8 +48,7 @@ use crate::{
         STATUS_SUCCESS,
     },
     pprof::{PprofFlamegraphService, PprofHomeService, PprofProfileService},
-    query::QueryService,
-    read_state::{canister::CanisterReadStateService, subnet::SubnetReadStateService},
+    read_state::subnet::SubnetReadStateService,
     state_reader_executor::StateReaderExecutor,
     status::StatusService,
     types::*,
@@ -294,6 +296,7 @@ pub fn start_server(
 
     let delegation_from_nns = Arc::new(RwLock::new(delegation_from_nns));
     let health_status = Arc::new(AtomicCell::new(ReplicaHealthStatus::Starting));
+    let state_reader_clone = state_reader.clone();
     let state_reader_executor = StateReaderExecutor::new(state_reader);
     let call_service = CallService::new_service(
         config.clone(),
@@ -312,38 +315,48 @@ pub fn start_server(
         ingress_throttler,
         ingress_tx,
     );
-    let query_service = QueryService::new_service(
-        config.clone(),
-        log.clone(),
-        metrics.clone(),
-        query_signer,
-        node_id,
-        Arc::clone(&health_status),
-        Arc::clone(&delegation_from_nns),
-        ValidatorExecutor::new(
-            Arc::clone(&registry_client),
-            ingress_verifier.clone(),
-            &malicious_flags,
-            log.clone(),
-        ),
-        Arc::clone(&registry_client),
-        query_execution_service,
+    let query_service = BoxCloneService::new(
+        ServiceBuilder::new()
+            .layer(GlobalConcurrencyLimitLayer::new(
+                config.max_query_concurrent_requests,
+            ))
+            .service(
+                QueryServiceBuilder::builder(
+                    node_id,
+                    query_signer,
+                    registry_client.clone(),
+                    ingress_verifier.clone(),
+                    delegation_from_nns.clone(),
+                    query_execution_service,
+                )
+                .with_logger(log.clone())
+                .with_health_status(health_status.clone())
+                .with_metrics(metrics.clone())
+                .with_malicious_flags(malicious_flags.clone())
+                .build(),
+            ),
     );
-    let canister_read_state_service = CanisterReadStateService::new_service(
-        config.clone(),
-        log.clone(),
-        metrics.clone(),
-        Arc::clone(&health_status),
-        Arc::clone(&delegation_from_nns),
-        state_reader_executor.clone(),
-        ValidatorExecutor::new(
-            Arc::clone(&registry_client),
-            ingress_verifier.clone(),
-            &malicious_flags,
-            log.clone(),
-        ),
-        Arc::clone(&registry_client),
+
+    let canister_read_state_service = BoxCloneService::new(
+        ServiceBuilder::new()
+            .layer(GlobalConcurrencyLimitLayer::new(
+                config.max_read_state_concurrent_requests,
+            ))
+            .service(
+                CanisterReadStateServiceBuilder::builder(
+                    state_reader_clone,
+                    registry_client.clone(),
+                    ingress_verifier,
+                    delegation_from_nns.clone(),
+                )
+                .with_logger(log.clone())
+                .with_health_status(health_status.clone())
+                .with_metrics(metrics.clone())
+                .with_malicious_flags(malicious_flags)
+                .build(),
+            ),
     );
+
     let subnet_read_state_service = SubnetReadStateService::new_service(
         config.clone(),
         log.clone(),
@@ -860,7 +873,7 @@ async fn make_router(
         svc_per_conn
             .oneshot(req)
             .await
-            .unwrap_or_else(|err| map_box_error_to_response(err)),
+            .unwrap_or_else(map_box_error_to_response),
         timer,
     )
 }

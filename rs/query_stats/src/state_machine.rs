@@ -3,9 +3,11 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::{QueryStats, QueryStatsPayload, RawQueryStats},
     consensus::get_faults_tolerated,
-    epoch_from_height, CanisterId, Height,
+    CanisterId, Height,
 };
 use std::collections::BTreeMap;
+
+use crate::metrics::QueryStatsAggregatorMetrics;
 
 /// Aggregate given query stats
 ///
@@ -70,11 +72,12 @@ fn apply_query_stats_to_canister(
 pub fn deliver_query_stats(
     query_stats: &QueryStatsPayload,
     state: &mut ReplicatedState,
-    height: Height,
+    _height: Height,
     logger: &ReplicaLogger,
-    epoch_length: u64,
+    _epoch_length: u64,
+    metrics: &QueryStatsAggregatorMetrics,
 ) {
-    let epoch = epoch_from_height(height, epoch_length);
+    let epoch = query_stats.epoch;
 
     // If current epoch doesn't match the epoch we received
     if Some(epoch) != state.epoch_query_stats.epoch {
@@ -114,6 +117,10 @@ pub fn deliver_query_stats(
                 }
             }
         }
+
+        metrics
+            .query_stats_aggregator_current_epoch
+            .set(epoch.get() as i64);
 
         state.epoch_query_stats = RawQueryStats {
             epoch: Some(epoch),
@@ -183,6 +190,7 @@ mod tests {
             Height::new(1),
             &no_op_logger(),
             epoch_length,
+            &QueryStatsAggregatorMetrics::new(&ic_metrics::MetricsRegistry::new()),
         );
 
         // Check that query stats are added to replicated state.

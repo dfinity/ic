@@ -110,7 +110,7 @@ fn test_is_blob() {
     for value in [
         Value::text("foobar"),
         Value::Int(Int::from(0)),
-        Value::Nat(Nat::from(0)),
+        Value::Nat(Nat::from(0_u8)),
         Value::Nat64(0),
         Value::Array(vec![]),
         Value::Map(BTreeMap::new()),
@@ -135,7 +135,7 @@ fn test_is_text() {
     for value in [
         Value::blob(vec![]),
         Value::Int(Int::from(0)),
-        Value::Nat(Nat::from(0)),
+        Value::Nat(Nat::from(0_u8)),
         Value::Nat64(0),
         Value::Array(vec![]),
         Value::Map(BTreeMap::new()),
@@ -168,7 +168,7 @@ fn test_is_nat() {
         let res = is_nat()(Cow::Owned(value.clone()));
         assert_matches!(res, Err(_), "{}", value);
     }
-    assert_eq!(is_nat()(Cow::Owned(Value::Nat(Nat::from(0)))), Ok(()));
+    assert_eq!(is_nat()(Cow::Owned(Value::Nat(Nat::from(0_u8)))), Ok(()));
 }
 
 pub fn is_nat64() -> ValuePredicate {
@@ -186,7 +186,7 @@ fn test_is_nat64() {
         Value::blob(vec![]),
         Value::Int(Int::from(0)),
         Value::text("foobar"),
-        Value::Nat(Nat::from(0)),
+        Value::Nat(Nat::from(0_u8)),
         Value::Array(vec![]),
         Value::Map(BTreeMap::new()),
     ] {
@@ -211,7 +211,7 @@ fn test_is_int() {
         Value::blob(vec![]),
         Value::Nat64(0),
         Value::text("foobar"),
-        Value::Nat(Nat::from(0)),
+        Value::Nat(Nat::from(0_u8)),
         Value::Array(vec![]),
         Value::Map(BTreeMap::new()),
     ] {
@@ -236,7 +236,7 @@ fn test_is_array() {
         Value::blob(vec![]),
         Value::Nat64(0),
         Value::text("foobar"),
-        Value::Nat(Nat::from(0)),
+        Value::Nat(Nat::from(0_u8)),
         Value::Int(Int::from(0)),
         Value::Map(BTreeMap::new()),
     ] {
@@ -261,7 +261,7 @@ fn test_is_map() {
         Value::blob(vec![]),
         Value::Nat64(0),
         Value::text("foobar"),
-        Value::Nat(Nat::from(0)),
+        Value::Nat(Nat::from(0_u8)),
         Value::Int(Int::from(0)),
         Value::Array(vec![]),
     ] {

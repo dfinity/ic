@@ -136,6 +136,12 @@ impl InternetComputer {
         self
     }
 
+    /// Add unassigned node with custom settings.
+    pub fn with_unassigned_node(mut self, node: Node) -> Self {
+        self.unassigned_nodes.push(node);
+        self
+    }
+
     /// Add a single unassigned node with the given IPv4 configuration
     pub fn with_ipv4_enabled_unassigned_node(mut self, ipv4_config: Ipv4Config) -> Self {
         self.unassigned_nodes.push(
@@ -411,6 +417,29 @@ impl InternetComputer {
             _ => panic!("more than one node has id={node_id}"),
         }
     }
+
+    pub fn get_domain_of_node(&self, node_id: NodeId) -> Option<String> {
+        let node_filter_map = |n: &Node| {
+            if n.secret_key_store.as_ref().unwrap().node_id == node_id {
+                Some(n.domain.clone())
+            } else {
+                None
+            }
+        };
+        // extract all matching nodes from all subnet nodes
+        let mut nodes: Vec<Option<String>> = self
+            .subnets
+            .iter()
+            .flat_map(|s| s.nodes.iter().filter_map(node_filter_map))
+            .collect();
+        // extract malicious nodes from all unassigned nodes
+        nodes.extend(self.unassigned_nodes.iter().filter_map(node_filter_map));
+        match nodes.len() {
+            0 => None,
+            1 => nodes.first().unwrap().clone(),
+            _ => panic!("more than one node has id={node_id}"),
+        }
+    }
 }
 
 /// A builder for the initial configuration of a subnetwork.
@@ -616,15 +645,23 @@ impl Subnet {
     }
 
     pub fn add_malicious_nodes(
-        mut self,
+        self,
         no_of_nodes: usize,
         malicious_behaviour: MaliciousBehaviour,
     ) -> Self {
-        for _ in 0..no_of_nodes {
-            let node = Node::new().with_malicious_behaviour(malicious_behaviour.clone());
-            self.nodes.push(node);
-        }
-        self
+        (0..no_of_nodes).fold(self, |subnet, _| {
+            let default_vm_resources = subnet.default_vm_resources;
+            let vm_allocation = subnet.vm_allocation.clone();
+            let required_host_features = subnet.required_host_features.clone();
+            subnet.add_node(
+                Node::new_with_settings(
+                    default_vm_resources,
+                    vm_allocation,
+                    required_host_features,
+                )
+                .with_malicious_behaviour(malicious_behaviour.clone()),
+            )
+        })
     }
 
     pub fn add_node_with_ipv4(self, ipv4_config: Ipv4Config) -> Self {
@@ -716,6 +753,7 @@ pub struct Node {
     pub ipv6: Option<Ipv6Addr>,
     pub malicious_behaviour: Option<MaliciousBehaviour>,
     pub ipv4: Option<Ipv4Config>,
+    pub domain: Option<String>,
 }
 
 impl Node {
@@ -749,6 +787,11 @@ impl Node {
 
     pub fn with_ipv4_config(mut self, ipv4_config: Ipv4Config) -> Self {
         self.ipv4 = Some(ipv4_config);
+        self
+    }
+
+    pub fn with_domain(mut self, domain: String) -> Self {
+        self.domain = Some(domain);
         self
     }
 }

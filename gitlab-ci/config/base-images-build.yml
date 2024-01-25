@@ -8,7 +8,6 @@
       changes:
         - gitlab-ci/config/base-images-build.yml
         - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/boundary-api-guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/packages.common
         - ic-os/guestos/rootfs/packages.dev
@@ -97,25 +96,6 @@ build-boundaryos-base-snp:
   - BUILD_ARGS=(--build-arg "CPU_SUPPORT=snp")
   - *build-base-image
 
-build-boundaryos-api-guestos-base:
-  extends:
-    - .build-base-image-job
-  variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/boundary-api-guestos/rootfs"
-    IMAGE: "boundary-api-guestos-base"
-    REF_FILE: "ic-os/boundary-api-guestos/rootfs/docker-base.prod"
-
-build-boundaryos-api-guestos-base-snp:
-  extends:
-    - .build-base-image-job
-  variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/boundary-api-guestos/rootfs"
-    IMAGE: "boundary-api-guestos-base-snp"
-    REF_FILE: "ic-os/boundary-api-guestos/rootfs/docker-base.snp"
-  script:
-  - BUILD_ARGS=(--build-arg "CPU_SUPPORT=snp")
-  - *build-base-image
-
 build-hostos-base:
   extends:
     - .build-base-image-job
@@ -186,8 +166,6 @@ build-base-images-ref-update:
     - build-guestos-base-dev-sev
     - build-boundaryos-base
     - build-boundaryos-base-snp
-    - build-boundaryos-api-guestos-base
-    - build-boundaryos-api-guestos-base-snp
     - build-hostos-base
     - build-hostos-base-dev
     - build-hostos-base-dev-sev
@@ -200,8 +178,6 @@ build-base-images-ref-update:
     - build-guestos-base-dev-sev
     - build-boundaryos-base
     - build-boundaryos-base-snp
-    - build-boundaryos-api-guestos-base
-    - build-boundaryos-api-guestos-base-snp
     - build-hostos-base
     - build-hostos-base-dev
     - build-hostos-base-dev-sev

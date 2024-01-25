@@ -1,13 +1,13 @@
 use crate::numeric::wei_from_milli_ether;
 
 mod retrieve_eth_guard {
-    use crate::address::Address;
     use crate::guard::tests::init_state;
     use crate::guard::{retrieve_eth_guard, GuardError, MAX_CONCURRENT, MAX_PENDING};
     use crate::numeric::{LedgerBurnIndex, Wei};
     use crate::state::mutate_state;
     use crate::state::transactions::EthWithdrawalRequest;
     use candid::Principal;
+    use ic_ethereum_types::Address;
 
     #[test]
     fn should_error_on_reentrant_principal() {

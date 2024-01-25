@@ -225,7 +225,7 @@ impl ValidSetRuleImpl {
         status: &str,
         ingress_expiry: Time,
     ) {
-        let delta_in_nanos = expiry_time_from_now().saturating_sub(ingress_expiry);
+        let delta_in_nanos = expiry_time_from_now().saturating_duration_since(ingress_expiry);
         self.metrics
             .unreliable_induct_ingress_message_duration
             .with_label_values(&[status])

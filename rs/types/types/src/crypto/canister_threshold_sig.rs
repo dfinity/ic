@@ -6,7 +6,8 @@ use crate::crypto::canister_threshold_sig::idkg::{
 use crate::crypto::AlgorithmId;
 use crate::{NumberOfNodes, Randomness};
 use core::fmt;
-use ic_base_types::PrincipalId;
+use ic_base_types::{NodeId, PrincipalId};
+use ic_crypto_internal_types::NodeIndex;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use serde::{Deserialize, Serialize};
@@ -279,27 +280,13 @@ impl PreSignatureQuadruple {
 }
 
 /// Metadata used to derive a specific ECDSA keypair.
+#[serde_with::serde_as]
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ExtendedDerivationPath {
     pub caller: PrincipalId,
-    // TODO(CRP-2303): replace with `#[serde_as(as = "Vec<serde_with::Bytes>")]`
-    #[serde(deserialize_with = "efficient_vector_of_byte_vectors_deserialization")]
+    #[serde_as(as = "Vec<serde_with::Bytes>")]
     pub derivation_path: Vec<Vec<u8>>,
-}
-
-// This deserialization is efficient and backward-compatible.
-// TODO(CRP-2303): when this is deployed to all nodes, replace the serde
-// implementation on the deserialization of the `derivation_path` variable
-// in `ExtendedDerivationPath` with `#[serde_as(as = "Vec<serde_with::Bytes>")]`.
-fn efficient_vector_of_byte_vectors_deserialization<'de, D>(
-    deserializer: D,
-) -> Result<Vec<Vec<u8>>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let result = Vec::<serde_bytes::ByteBuf>::deserialize(deserializer)?;
-    Ok(result.into_iter().map(|buf| buf.into_vec()).collect())
 }
 
 impl fmt::Debug for ExtendedDerivationPath {
@@ -494,6 +481,10 @@ impl ThresholdEcdsaSigInputs {
                 format!("Quadruple transcript `key_times_lambda` expected to have type `Masked` with origin of type `UnmaskedTimesMasked({:?},_)`, but found transcript of type {:?}", key_transcript.transcript_id, presig_quadruple.key_times_lambda.transcript_type))
             ),
         }
+    }
+
+    pub fn index_for_signer_id(&self, node_id: NodeId) -> Option<NodeIndex> {
+        self.key_transcript().index_for_signer_id(node_id)
     }
 }
 

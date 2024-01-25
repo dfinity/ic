@@ -35,6 +35,7 @@ DEPENDENCIES = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
     "//rs/rosetta-api",
+    "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/icrc1/ledger",
     "//rs/rosetta-api/icrc1/tokens_u64",

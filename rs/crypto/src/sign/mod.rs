@@ -33,7 +33,7 @@ use ic_types::crypto::{
 use ic_types::{NodeId, RegistryVersion, SubnetId};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
-pub use threshold_sig::ThresholdSigDataStore;
+
 pub use threshold_sig::ThresholdSigDataStoreImpl;
 
 mod basic_sig;

@@ -16,17 +16,17 @@ use ic_base_types::NumSeconds;
 use ic_ic00_types::{CanisterChange, CanisterChangeDetails, CanisterChangeOrigin};
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_test_utilities::mock_time;
 use ic_test_utilities::types::{
     ids::canister_test_id,
     ids::message_test_id,
     ids::user_test_id,
     messages::{RequestBuilder, ResponseBuilder},
 };
+use ic_test_utilities_time::mock_time;
 use ic_types::{
     messages::{
-        CallContextId, CallbackId, CanisterCall, StopCanisterCallId, StopCanisterContext,
-        MAX_RESPONSE_COUNT_BYTES,
+        CallContextId, CallbackId, CanisterCall, RequestMetadata, StopCanisterCallId,
+        StopCanisterContext, MAX_RESPONSE_COUNT_BYTES,
     },
     methods::{Callback, WasmClosure},
     nominal_cycles::NominalCycles,
@@ -98,6 +98,7 @@ impl CanisterStateFixture {
                 CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1)),
                 Cycles::zero(),
                 Time::from_nanos_since_unix_epoch(0),
+                RequestMetadata::new(0, mock_time()),
             );
         self.canister_state
             .system_state
@@ -105,11 +106,11 @@ impl CanisterStateFixture {
             .unwrap()
             .register_callback(Callback::new(
                 call_context_id,
-                Some(CANISTER_ID),
-                Some(OTHER_CANISTER_ID),
+                CANISTER_ID,
+                OTHER_CANISTER_ID,
                 Cycles::zero(),
-                Some(Cycles::new(42)),
-                Some(Cycles::new(84)),
+                Cycles::new(42),
+                Cycles::new(84),
                 WasmClosure::new(0, 2),
                 WasmClosure::new(0, 2),
                 None,
@@ -557,11 +558,11 @@ fn canister_state_callback_round_trip() {
 
     let callback = Callback::new(
         CallContextId::new(1),
-        Some(CANISTER_ID),
-        Some(OTHER_CANISTER_ID),
+        CANISTER_ID,
+        OTHER_CANISTER_ID,
         Cycles::zero(),
-        Some(Cycles::new(42)),
-        Some(Cycles::new(84)),
+        Cycles::new(42),
+        Cycles::new(84),
         WasmClosure::new(0, 2),
         WasmClosure::new(0, 2),
         None,
@@ -813,6 +814,7 @@ fn reverts_stopping_status_after_split() {
         CallOrigin::Ingress(user_test_id(1), message_test_id(2)),
         Cycles::from(0u128),
         Time::from_nanos_since_unix_epoch(0),
+        RequestMetadata::new(0, mock_time()),
     );
     canister_state.system_state.status = CanisterStatus::Stopping {
         call_context_manager: call_context_manager.clone(),

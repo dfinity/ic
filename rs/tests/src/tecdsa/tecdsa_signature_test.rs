@@ -625,14 +625,16 @@ pub fn test_threshold_ecdsa_key_rotation(test_env: TestEnv) {
 
         let mut count = 0;
         let mut created = 0;
-        let metrics = MetricsFetcher::new(
-            app_subnet.nodes(),
-            vec![ECDSA_KEY_TRANSCRIPT_CREATED.to_string()],
+        let metric_with_label = format!(
+            "{}{{key_id=\"{}\"}}",
+            ECDSA_KEY_TRANSCRIPT_CREATED,
+            make_key(KEY_ID1)
         );
+        let metrics = MetricsFetcher::new(app_subnet.nodes(), vec![metric_with_label.clone()]);
         loop {
             match metrics.fetch::<u64>().await {
                 Ok(val) => {
-                    created = val[ECDSA_KEY_TRANSCRIPT_CREATED][0];
+                    created = val[&metric_with_label][0];
                     if created > 1 {
                         break;
                     }

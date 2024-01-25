@@ -4,6 +4,7 @@
 # and outputs root hash to a separate file.
 #
 import argparse
+import atexit
 import os
 import re
 import subprocess
@@ -38,7 +39,8 @@ def main():
 
     args = parser.parse_args(sys.argv[1:])
 
-    tmpdir = tempfile.mkdtemp()
+    tmpdir = tempfile.mkdtemp(prefix="icosbuild")
+    atexit.register(lambda: subprocess.run(["rm", "-rf", tmpdir], check=True))
 
     subprocess.run(
         [

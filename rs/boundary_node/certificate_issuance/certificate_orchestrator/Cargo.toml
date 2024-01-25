@@ -32,3 +32,6 @@ serde = { workspace = true }
 serde_cbor = { workspace = true }
 sha2 = "0.10.6"
 thiserror = "1.0.37"
+
+[dev-dependencies]
+candid_parser = { workspace = true }

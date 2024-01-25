@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::util::mock_time;
+use ic_test_utilities_time::mock_time;
 use ic_types::{
     batch::{Batch, BatchMessages, BlockmakerMetrics},
     Height, Randomness, RegistryVersion, Time,
@@ -20,6 +20,7 @@ impl Default for BatchBuilder {
                 messages: BatchMessages::default(),
                 randomness: Randomness::from([0; 32]),
                 ecdsa_subnet_public_keys: BTreeMap::new(),
+                ecdsa_quadruple_ids: BTreeMap::new(),
                 registry_version: RegistryVersion::from(1),
                 time: mock_time(),
                 consensus_responses: vec![],

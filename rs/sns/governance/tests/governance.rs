@@ -10,6 +10,7 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nervous_system_proto::pb::v1::Percentage;
 use ic_sns_governance::{
+    governance::MATURITY_DISBURSEMENT_DELAY_SECONDS,
     neuron::NeuronState,
     pb::{
         sns_root_types::{
@@ -258,6 +259,10 @@ fn test_disburse_maturity_succeeds_to_self() {
     assert_eq!(neuron.maturity_e8s_equivalent, 0);
     assert_eq!(neuron.disburse_maturity_in_progress.len(), 1);
     let in_progress = &neuron.disburse_maturity_in_progress[0];
+    assert_eq!(
+        in_progress.finalize_disbursement_timestamp_seconds,
+        Some(env.gov_fixture.now() + MATURITY_DISBURSEMENT_DELAY_SECONDS)
+    );
     let target_account_proto = in_progress
         .account_to_disburse_to
         .as_ref()
@@ -362,6 +367,10 @@ fn test_disburse_maturity_succeeds_to_other() {
     assert_eq!(neuron.maturity_e8s_equivalent, 0);
     assert_eq!(neuron.disburse_maturity_in_progress.len(), 1);
     let in_progress = &neuron.disburse_maturity_in_progress[0];
+    assert_eq!(
+        in_progress.finalize_disbursement_timestamp_seconds,
+        Some(env.gov_fixture.now() + MATURITY_DISBURSEMENT_DELAY_SECONDS)
+    );
     let target_account_proto = in_progress
         .account_to_disburse_to
         .as_ref()

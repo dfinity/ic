@@ -32,6 +32,7 @@ message CallContext {
   bool deleted = 8;
   uint64 time_nanos = 9;
   uint64 instructions_executed = 10;
+  state.queues.v1.RequestMetadata metadata = 11;
 }
 
 message CallContextEntry {
@@ -293,6 +294,12 @@ message WasmChunkStoreMetadata {
   uint64 size = 2;
 }
 
+enum LogVisibility {
+  LOG_VISIBILITY_UNSPECIFIED = 0;
+  LOG_VISIBILITY_CONTROLLERS = 1;
+  LOG_VISIBILITY_PUBLIC = 2;
+}
+
 message CanisterStateBits {
   reserved 1;
   reserved "controller";
@@ -361,4 +368,6 @@ message CanisterStateBits {
   WasmChunkStoreMetadata wasm_chunk_store_metadata = 40;
   // Statistics on query execution for entire lifetime of canister.
   TotalQueryStats total_query_stats = 41;
+  // Log visibility for the canister.
+  LogVisibility log_visibility = 42;
 }

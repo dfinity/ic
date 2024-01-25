@@ -1,7 +1,6 @@
 // We disable clippy warnings for the whole module because they apply to
 // generated code, meaning we can't locally disable the warnings (the code is
 // defined in another module).
-#![allow(clippy::redundant_closure)]
 #![allow(clippy::unit_arg)]
 
 use serde::{Deserialize, Serialize};
@@ -54,10 +53,7 @@ pub struct CryptoConfig {
     /// Path to use for storing state on the file system.
     /// It is needed for either value of `csp_vault_type`, as the config
     /// is used both for starting a replica, and for starting the `CspVault`-server.
-    #[cfg_attr(
-        test,
-        proptest(strategy = "any::<String>().prop_map(|x| PathBuf::from(x))")
-    )]
+    #[cfg_attr(test, proptest(strategy = "any::<String>().prop_map(PathBuf::from)"))]
     pub crypto_root: PathBuf,
     pub csp_vault_type: CspVaultType,
 }
@@ -198,7 +194,7 @@ mod tests {
 
     #[test]
     fn default_config_serializes_and_deserializes() {
-        CryptoConfig::run_with_temp_config(|config| serde_test(config));
+        CryptoConfig::run_with_temp_config(serde_test);
     }
 
     proptest! {

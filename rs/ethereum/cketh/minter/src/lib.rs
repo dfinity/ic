@@ -15,7 +15,6 @@ pub mod management;
 pub mod map;
 pub mod memo;
 pub mod numeric;
-mod serde_data;
 pub mod state;
 pub mod storage;
 pub mod tx;

@@ -13,6 +13,7 @@ use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::types::v1 as pb;
 use ic_types::consensus::certification::CertificationMessageHash;
+use ic_types::consensus::HasHash;
 use ic_types::{
     artifact::{CertificationMessageId, ConsensusMessageId, EcdsaMessageId},
     batch::BatchPayload,
@@ -205,9 +206,9 @@ impl From<(Height, &CryptoHash)> for IdKey {
 
 // This conversion is lossy because height and type tag are not preserved.
 // It is okay because we don't expect reverse conversion.
-impl From<&ConsensusMessageId> for IdKey {
-    fn from(id: &ConsensusMessageId) -> IdKey {
-        IdKey::from((id.height, id.hash.digest()))
+impl<T: HasHeight + HasHash> From<&T> for IdKey {
+    fn from(id: &T) -> IdKey {
+        IdKey::from((id.height(), id.hash()))
     }
 }
 
@@ -411,7 +412,7 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
     }
 
     /// Get the index database of the given type_key.
-    /// Each index database maps HeightKey to a list of IdKey.
+    /// Each index database maps [`HeightKey`] to a list of [`IdKey`].
     fn get_index_db(&self, type_key: &TypeKey) -> Database {
         self.indices
             .iter()
@@ -736,6 +737,19 @@ where
             1 => Ok(as_vec.remove(0)),
             _ => Err(OnlyError::MultipleValues),
         }
+    }
+
+    fn size(&self) -> usize {
+        let index_db = self.get_index_db(&Message::type_key());
+        let Some(tx) = log_err!(self.db_env.begin_ro_txn(), &self.log, "begin_ro_txn") else {
+            return 0;
+        };
+        let Some(mut cursor) = log_err!(tx.open_ro_cursor(index_db), &self.log, "open_ro_cursor")
+        else {
+            return 0;
+        };
+
+        cursor.iter().count()
     }
 }
 
@@ -1408,6 +1422,23 @@ impl crate::certification_pool::MutablePoolSection
         };
     }
 
+    fn get(&self, msg_id: &CertificationMessageId) -> Option<CertificationMessage> {
+        let tx = log_err!(self.db_env.begin_ro_txn(), self.log, "begin_ro_txn")?;
+        let key = IdKey::from(msg_id);
+        log_err_except!(
+            CertificationMessage::load_as::<CertificationMessage>(
+                &key,
+                self.db_env.clone(),
+                self.artifacts,
+                &tx,
+                &self.log
+            ),
+            self.log,
+            lmdb::Error::NotFound,
+            format!("get {:?}", msg_id)
+        )
+    }
+
     fn purge_below(&self, height: Height) -> Vec<CertificationMessageId> {
         match self.purge_below_height(height) {
             Ok(purged) => purged,
@@ -1440,8 +1471,8 @@ impl From<EcdsaMessageId> for IdKey {
     }
 }
 
-impl From<&EcdsaPrefix> for IdKey {
-    fn from(prefix: &EcdsaPrefix) -> IdKey {
+impl From<EcdsaPrefix> for IdKey {
+    fn from(prefix: EcdsaPrefix) -> IdKey {
         let mut bytes = vec![];
         bytes.extend_from_slice(&u64::to_be_bytes(prefix.group_tag()));
         bytes.extend_from_slice(&u64::to_be_bytes(prefix.meta_hash()));
@@ -1639,7 +1670,7 @@ impl EcdsaMessageDb {
             self.db_env.clone(),
             self.db,
             deserialize_fn,
-            prefix.map(|p| p.as_ref().into()),
+            prefix.map(|p| p.get().into()),
             self.log.clone(),
         ))
     }
@@ -2089,9 +2120,29 @@ mod tests {
         });
     }
 
+    fn assert_count_consistency_<T>(pool: &dyn HeightIndexedPool<T>) {
+        assert_eq!(pool.size(), pool.get_all().count());
+    }
+
+    fn assert_count_consistency(pool: &PersistentHeightIndexedPool<ConsensusMessage>) {
+        assert_count_consistency_(pool.random_beacon());
+        assert_count_consistency_(pool.random_tape());
+        assert_count_consistency_(pool.block_proposal());
+        assert_count_consistency_(pool.notarization());
+        assert_count_consistency_(pool.finalization());
+        assert_count_consistency_(pool.random_beacon_share());
+        assert_count_consistency_(pool.random_tape_share());
+        assert_count_consistency_(pool.notarization_share());
+        assert_count_consistency_(pool.finalization_share());
+        assert_count_consistency_(pool.catch_up_package());
+        assert_count_consistency_(pool.catch_up_package_share());
+    }
+
     // Assert that entries in artifacts db are reflected by index db and vice versa.
     // Each entry should have a join partner when joining on IdKey.
     fn assert_consistency(pool: &PersistentHeightIndexedPool<ConsensusMessage>) {
+        assert_count_consistency(pool);
+
         let tx = pool.db_env.begin_ro_txn().unwrap();
         // get all ids from all indices
         let mut ids_index = pool

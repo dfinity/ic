@@ -193,6 +193,9 @@ pub struct Swap {
     /// the swap proposal.
     #[prost(uint64, optional, tag = "11")]
     pub decentralization_sale_open_timestamp_seconds: ::core::option::Option<u64>,
+    /// The timestamp for the actual termination of the swap (committed or aborted).
+    #[prost(uint64, optional, tag = "21")]
+    pub decentralization_swap_termination_timestamp_seconds: ::core::option::Option<u64>,
     /// This ticket id counter keeps track of the latest ticket id. Whenever a new
     /// ticket is created this counter is incremented. It ensures that ticket ids
     /// are unique. The ticket IDs are sequential and next_ticket_id is assigned to
@@ -1707,6 +1710,8 @@ pub struct GetLifecycleResponse {
     pub lifecycle: ::core::option::Option<i32>,
     #[prost(uint64, optional, tag = "2")]
     pub decentralization_sale_open_timestamp_seconds: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "3")]
+    pub decentralization_swap_termination_timestamp_seconds: ::core::option::Option<u64>,
 }
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]

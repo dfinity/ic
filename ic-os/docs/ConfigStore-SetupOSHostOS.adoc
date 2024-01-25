@@ -23,7 +23,6 @@ The `config.ini` file contains all network-related settings, which must be provi
 The configuration file expects the following key-value pairs in lower-case format. For example:
 
   ipv6_prefix=2a00:fb01:400:100
-  ipv6_subnet=/64
   ipv6_gateway=2a00:fb01:400:100::1
 
 [NOTE]

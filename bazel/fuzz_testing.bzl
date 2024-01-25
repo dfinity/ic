@@ -51,7 +51,7 @@ def rust_fuzz_test_binary(name, srcs, rustc_flags = [], sanitizers = [], crate_f
 
     RUSTC_FLAGS_LIBFUZZER = DEFAULT_RUSTC_FLAGS + [
         # This would only work inside the devcontainer
-        "-Clink-arg=/usr/lib/llvm-15/lib/clang/15.0.7/lib/linux/libclang_rt.fuzzer-x86_64.a",
+        "-Clink-arg=/usr/lib/llvm-17/lib/clang/17/lib/linux/libclang_rt.fuzzer-x86_64.a",
     ]
 
     rust_binary(

@@ -87,6 +87,7 @@ impl StateMachine for StateMachineImpl {
                 batch.batch_number,
                 &self.log,
                 self.query_stats_epoch_length,
+                &self.metrics.query_stats_metrics,
             );
         }
 
@@ -148,6 +149,7 @@ impl StateMachine for StateMachineImpl {
             state_with_messages,
             batch.randomness,
             batch.ecdsa_subnet_public_keys,
+            batch.ecdsa_quadruple_ids,
             ExecutionRound::from(batch.batch_number.get()),
             execution_round_type,
             registry_settings,

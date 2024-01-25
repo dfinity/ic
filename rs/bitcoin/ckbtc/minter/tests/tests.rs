@@ -91,7 +91,7 @@ fn kyt_wasm() -> Vec<u8> {
 fn install_ledger(env: &StateMachine) -> CanisterId {
     let args = LedgerArgument::Init(
         LedgerInitArgsBuilder::for_tests()
-            .with_transfer_fee(0)
+            .with_transfer_fee(0_u8)
             .build(),
     );
     env.install_canister(ledger_wasm(), Encode!(&args).unwrap(), None)
@@ -1635,8 +1635,8 @@ fn test_ledger_memo() {
     assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - KYT_FEE));
 
     let get_transaction_request = GetTransactionsRequest {
-        start: 0.into(),
-        length: 1.into(),
+        start: 0_u8.into(),
+        length: 1_u8.into(),
     };
     let res = ckbtc.get_transactions(get_transaction_request);
     let memo = res.transactions[0].mint.clone().unwrap().memo.unwrap();
@@ -1665,7 +1665,7 @@ fn test_ledger_memo() {
 
     let get_transaction_request = GetTransactionsRequest {
         start: block_index.into(),
-        length: 1.into(),
+        length: 1_u8.into(),
     };
     let res = ckbtc.get_transactions(get_transaction_request);
     let memo = res.transactions[0].burn.clone().unwrap().memo.unwrap();
@@ -1688,8 +1688,8 @@ fn test_ledger_memo() {
         .expect("failed to transfer funds");
 
     let get_transaction_request = GetTransactionsRequest {
-        start: 3.into(),
-        length: 1.into(),
+        start: 3_u8.into(),
+        length: 1_u8.into(),
     };
     let res = ckbtc.get_transactions(get_transaction_request);
     let memo = res.transactions[0].mint.clone().unwrap().memo.unwrap();
@@ -1802,7 +1802,7 @@ fn test_retrieve_btc_with_approval() {
 
     let get_transaction_request = GetTransactionsRequest {
         start: block_index.into(),
-        length: 1.into(),
+        length: 1_u8.into(),
     };
     let res = ckbtc.get_transactions(get_transaction_request);
     let memo = res.transactions[0].burn.clone().unwrap().memo.unwrap();
@@ -1891,7 +1891,7 @@ fn test_retrieve_btc_with_approval_from_subaccount() {
 
     let get_transaction_request = GetTransactionsRequest {
         start: block_index.into(),
-        length: 1.into(),
+        length: 1_u8.into(),
     };
     let res = ckbtc.get_transactions(get_transaction_request);
     let memo = res.transactions[0].burn.clone().unwrap().memo.unwrap();

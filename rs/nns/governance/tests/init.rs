@@ -27,6 +27,6 @@ fn neurons_from_csv() {
         .unwrap()
         .followees;
     assert_eq!(2, followees.len());
-    assert_eq!(25, followees.get(0).unwrap().id);
+    assert_eq!(25, followees.first().unwrap().id);
     assert_eq!(42, followees.get(1).unwrap().id);
 }

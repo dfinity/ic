@@ -14,6 +14,7 @@ use crate::driver::{
     },
     test_setup::InfraProvider,
 };
+use crate::k8s::tnet::TNet;
 use crate::util::block_on;
 use anyhow::{bail, Result};
 use flate2::{write::GzEncoder, Compression};
@@ -27,7 +28,6 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::ReplicaVersion;
-use k8s::tnet::TNet;
 use slog::{info, warn, Logger};
 use std::{
     collections::BTreeMap,
@@ -206,8 +206,10 @@ pub fn init_ic(
     ic_config.set_use_specified_ids_allocation_range(specific_ids);
 
     if InfraProvider::read_attribute(test_env) == InfraProvider::K8s {
-        // K8s IPv6 subnet used for pods
-        ic_config.set_whitelisted_prefixes(Some("fda6:8d22:43e1::/48".to_string()));
+        ic_config.set_whitelisted_prefixes(Some("::/0".to_string()));
+        ic_config.set_whitelisted_ports(Some(
+            "22,2497,4100,7070,8080,9090,9091,9100,19100,19531".to_string(),
+        ));
     }
 
     info!(test_env.logger(), "Initializing via {:?}", &ic_config);
@@ -256,6 +258,7 @@ pub fn setup_and_start_vms_k8s(
                 &ic_name,
                 &node,
                 malicious_behaviour,
+                None,
                 None,
                 &t_env,
                 &group_name,
@@ -313,6 +316,7 @@ pub fn setup_and_start_vms(
         let ic_name = ic.name();
         let malicious_behaviour = ic.get_malicious_behavior_of_node(node.node_id);
         let ipv4_config = ic.get_ipv4_config_of_node(node.node_id);
+        let domain = ic.get_domain_of_node(node.node_id);
         nodes_info.insert(node.node_id, malicious_behaviour.clone());
         join_handles.push(thread::spawn(move || {
             create_config_disk_image(
@@ -320,6 +324,7 @@ pub fn setup_and_start_vms(
                 &node,
                 malicious_behaviour,
                 ipv4_config,
+                domain,
                 &t_env,
                 &group_name,
             )?;
@@ -420,6 +425,7 @@ pub fn create_config_disk_image(
     node: &InitializedNode,
     malicious_behavior: Option<MaliciousBehaviour>,
     ipv4_config: Option<Ipv4Config>,
+    domain: Option<String>,
     test_env: &TestEnv,
     group_name: &str,
 ) -> anyhow::Result<()> {
@@ -439,6 +445,15 @@ pub fn create_config_disk_image(
         .arg(node.crypto_path())
         .arg("--elasticsearch_tags")
         .arg(format!("system_test {}", group_name));
+
+    // We've seen k8s nodes fail to pick up RA correctly, so we specify their
+    // addresses directly. Ideally, all nodes should do this, to match mainnet.
+    if InfraProvider::read_attribute(test_env) == InfraProvider::K8s {
+        cmd.arg("--ipv6_address")
+            .arg(format!("{}/64", node.node_config.public_api.ip()))
+            .arg("--ipv6_gateway")
+            .arg("fe80::ecee:eeff:feee:eeee");
+    }
 
     // If we have a root subnet, specify the correct NNS url.
     if let Some(node) = test_env
@@ -475,6 +490,14 @@ pub fn create_config_disk_image(
         ));
         cmd.arg("--ipv4_gateway")
             .arg(ipv4_config.gateway_ip_addr.to_string());
+    }
+
+    if let Some(domain) = domain {
+        info!(
+            test_env.logger(),
+            "Node with id={} has domain_name {}", node.node_id, domain,
+        );
+        cmd.arg("--domain").arg(domain);
     }
 
     let ssh_authorized_pub_keys_dir: PathBuf = test_env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
@@ -598,11 +621,11 @@ fn configure_setupos_image(
     let old_ip = nested_vm.get_vm()?.ipv6;
     let segments = old_ip.segments();
     let prefix = format!(
-        "{:04x}:{:04x}:{:04x}:{:04x}::/64",
+        "{:04x}:{:04x}:{:04x}:{:04x}",
         segments[0], segments[1], segments[2], segments[3]
     );
     let gateway = format!(
-        "{:04x}:{:04x}:{:04x}:{:04x}::1/64",
+        "{:04x}:{:04x}:{:04x}:{:04x}::1",
         segments[0], segments[1], segments[2], segments[3]
     );
 

@@ -137,7 +137,6 @@ fn u64_leb128_encode() {
 #[test]
 fn hash_max_u64() {
     use ciborium::value::Integer;
-    use std::convert::TryFrom;
 
     let mut bytes = vec![];
     leb128::write::unsigned(&mut bytes, u64::MAX).unwrap();
@@ -145,8 +144,7 @@ fn hash_max_u64() {
         hash_value(&Value::Bytes(bytes.clone())).expect("failed to hash leb128 bytes");
 
     assert_eq!(
-        hash_value(&Value::Integer(Integer::try_from(u64::MAX).unwrap()))
-            .expect("failed to hash u64::MAX"),
+        hash_value(&Value::Integer(Integer::from(u64::MAX))).expect("failed to hash u64::MAX"),
         expected_hash
     );
 

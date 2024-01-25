@@ -51,6 +51,7 @@ pub trait IcServiceDiscovery: Send + Sync {
     fn get_target_groups(
         &self,
         job_name: JobType,
+        log: Logger,
     ) -> Result<BTreeSet<TargetGroup>, IcServiceDiscoveryError>;
 }
 
@@ -65,7 +66,6 @@ pub struct TargetGroup {
     /// A set of labels that are associated with the targets listed in
     /// `socket_addr`.
     pub subnet_id: Option<SubnetId>,
-
     pub dc_id: String,
     pub operator_id: PrincipalId,
     pub node_provider_id: PrincipalId,
@@ -200,6 +200,7 @@ impl IcServiceDiscoveryImpl {
     fn get_targets(
         reg_client: &dyn RegistryClient,
         ic_name: &str,
+        log: Logger,
     ) -> Result<BTreeSet<TargetGroup>, IcServiceDiscoveryError> {
         let latest_version = reg_client.get_latest_version();
 
@@ -216,7 +217,20 @@ impl IcServiceDiscoveryImpl {
         for subnet_id in subnet_ids {
             let t_infos = reg_client
                 .get_subnet_node_records(subnet_id, latest_version)
-                .map_registry_err(latest_version, "get_subnet_transport_info")?;
+                .map_registry_err(latest_version, "get_subnet_transport_info");
+
+            let t_infos = match t_infos {
+                Ok(t) => t,
+                Err(e) => {
+                    warn!(
+                        log,
+                        "Error while fetching get_subnet_transport_info for node id {}: {:?}",
+                        subnet_id,
+                        e
+                    );
+                    continue;
+                }
+            };
 
             for (node_id, node_record) in t_infos {
                 Self::add_node_to_node_targets(
@@ -236,7 +250,18 @@ impl IcServiceDiscoveryImpl {
         for node_id in unassigned_node_ids {
             let node_record = reg_client
                 .get_node_record(node_id, latest_version)
-                .map_registry_err(latest_version, "get_transport_info")?;
+                .map_registry_err(latest_version, "get_transport_info");
+
+            let node_record = match node_record {
+                Ok(nr) => nr,
+                Err(e) => {
+                    warn!(
+                        log,
+                        "Error while fetching transport_info for node id {}: {:?}", node_id, e
+                    );
+                    continue;
+                }
+            };
 
             Self::add_node_to_node_targets(
                 node_id,
@@ -308,6 +333,7 @@ impl IcServiceDiscovery for IcServiceDiscoveryImpl {
     fn get_target_groups(
         &self,
         job: JobType,
+        log: Logger,
     ) -> Result<BTreeSet<TargetGroup>, IcServiceDiscoveryError> {
         let mut mapping: Option<Box<dyn Fn(SocketAddr) -> Option<SocketAddr>>> = None;
 
@@ -342,7 +368,7 @@ impl IcServiceDiscovery for IcServiceDiscoveryImpl {
         let target_list = registries_lock_guard.iter().try_fold(
             BTreeSet::new(),
             |mut a, (ic_name, registry)| {
-                a.append(&mut Self::get_targets(registry, ic_name)?);
+                a.append(&mut Self::get_targets(registry, ic_name, log.clone())?);
                 Ok::<_, IcServiceDiscoveryError>(a)
             },
         )?;
@@ -499,7 +525,9 @@ mod tests {
         let ic_scraper =
             IcServiceDiscoveryImpl::new(log.clone(), tempdir.path(), QUERY_TIMEOUT, jobs).unwrap();
         ic_scraper.load_new_ics(log.clone()).unwrap();
-        let target_groups = ic_scraper.get_target_groups(JobType::Replica).unwrap();
+        let target_groups = ic_scraper
+            .get_target_groups(JobType::Replica, log.clone())
+            .unwrap();
 
         let nns_targets: HashSet<_> = target_groups
             .iter()

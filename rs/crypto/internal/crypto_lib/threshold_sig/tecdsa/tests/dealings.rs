@@ -78,6 +78,48 @@ fn create_random_dealing() -> Result<(), IdkgCreateDealingInternalError> {
 }
 
 #[test]
+fn create_random_unmasked_dealing() -> Result<(), IdkgCreateDealingInternalError> {
+    let rng = &mut reproducible_rng();
+
+    for curve in EccCurveType::all() {
+        let associated_data = vec![1, 2, 3];
+        let (private_keys, public_keys) = gen_private_keys(rng, curve, 5);
+        let threshold = 2;
+        let dealer_index = 0;
+
+        let shares = SecretShares::RandomUnmasked;
+
+        let dealing = create_dealing(
+            alg_for_curve(curve),
+            &associated_data,
+            dealer_index,
+            NumberOfNodes::from(threshold as u32),
+            &public_keys,
+            &shares,
+            Seed::from_rng(rng),
+        )?;
+
+        match dealing.commitment {
+            PolynomialCommitment::Simple(c) => {
+                assert_eq!(c.points.len(), threshold);
+            }
+            _ => panic!("Unexpected commitment type for random unmasked dealing"),
+        }
+
+        match dealing.ciphertext {
+            MEGaCiphertext::Single(p) => {
+                assert_eq!(p.ctexts.len(), private_keys.len())
+            }
+            _ => panic!("Unexpected ciphertext type for random unmasked dealing"),
+        }
+
+        assert!(dealing.proof.is_none()); // random dealings have no associated proof
+    }
+
+    Ok(())
+}
+
+#[test]
 fn create_reshare_unmasked_dealing() -> Result<(), IdkgCreateDealingInternalError> {
     let rng = &mut reproducible_rng();
 
@@ -252,6 +294,12 @@ fn secret_shares_should_redact_logs() -> Result<(), ThresholdEcdsaError> {
         let shares = SecretShares::Random;
         let log = format!("{:?}", shares);
         assert_eq!("SecretShares::Random", log);
+    }
+
+    {
+        let shares = SecretShares::RandomUnmasked;
+        let log = format!("{:?}", shares);
+        assert_eq!("SecretShares::RandomUnmasked", log);
     }
 
     {

@@ -14,6 +14,7 @@ rust_library(
         "@crate_index//:lazy_static",
         "@crate_index//:libc",
         "@crate_index//:nix",
+        "@crate_index//:tokio",
         "@crate_index//:wsl",
     ],
 )

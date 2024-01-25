@@ -7,7 +7,6 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-
 candid = { workspace = true }
 ciborium = { workspace = true }
 dfn_candid = { path = "../../../rust_canisters/dfn_candid" }
@@ -22,3 +21,6 @@ ic-nns-constants = { path = "../../../nns/constants" }
 icp-ledger = { path = "../" }
 lazy_static = "1.4.0"
 serde = { workspace = true }
+
+[dev-dependencies]
+candid_parser = { workspace = true }

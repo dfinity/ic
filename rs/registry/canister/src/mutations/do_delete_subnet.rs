@@ -9,6 +9,8 @@ use crate::{
 use candid::{CandidType, Deserialize};
 use cycles_minting_canister::RemoveSubnetFromAuthorizedSubnetListArgs;
 use dfn_core::call;
+#[cfg(target_arch = "wasm32")]
+use dfn_core::println;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID};
 use ic_protobuf::registry::routing_table::v1::RoutingTable as RoutingTablePb;
