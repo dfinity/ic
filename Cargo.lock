@@ -6346,7 +6346,6 @@ name = "ic-crypto-ecdsa-secp256r1"
 version = "0.9.0"
 dependencies = [
  "hex",
- "ic-crypto-getrandom-for-wasm",
  "ic-crypto-sha2",
  "ic-crypto-test-utils-reproducible-rng",
  "lazy_static",
@@ -6550,7 +6549,6 @@ name = "ic-crypto-internal-basic-sig-rsa-pkcs1"
 version = "0.9.0"
 dependencies = [
  "hex",
- "ic-crypto-getrandom-for-wasm",
  "ic-crypto-internal-basic-sig-der-utils",
  "ic-crypto-sha2",
  "ic-types",
@@ -6571,7 +6569,6 @@ version = "0.9.0"
 dependencies = [
  "criterion",
  "hex",
- "ic-crypto-getrandom-for-wasm",
  "ic-crypto-test-utils-reproducible-rng",
  "ic_bls12_381",
  "itertools 0.12.0",

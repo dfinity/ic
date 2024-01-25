@@ -4,7 +4,6 @@ load("//bazel:defs.bzl", "rust_bench")
 package(default_visibility = ["//rs/crypto:__subpackages__"])
 
 DEPENDENCIES = [
-    "//rs/crypto/getrandom_for_wasm",
     "@crate_index//:ic_bls12_381",
     "@crate_index//:itertools",
     "@crate_index//:hex",
