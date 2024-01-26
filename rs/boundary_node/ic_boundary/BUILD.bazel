@@ -107,7 +107,7 @@ rust_binary(
 )
 
 rust_test(
-    name = "ic_boundary",
+    name = "ic_boundary_test",
     aliases = ALIASES,
     crate = ":ic-boundary",
     crate_features = ["tls"],
@@ -116,7 +116,7 @@ rust_test(
 )
 
 rust_library(
-    name = "ic-boundary-lib",
+    name = "ic_boundary",
     srcs = glob(
         ["src/**"],
         exclude = ["src/main.rs"],
