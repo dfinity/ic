@@ -10,6 +10,7 @@ use ic_icrc1_tokens_u64::U64;
 use ic_ledger_core::block::{BlockType, EncodedBlock};
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub, TokensType, Zero};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
+use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc3::blocks::GenericBlock;
 use num_bigint::BigUint;
 use num_traits::Bounded;
@@ -77,10 +78,27 @@ impl RosettaBlock {
             .map_err(anyhow::Error::msg)
     }
 
+    pub fn get_fee_payed(&self) -> anyhow::Result<Option<Tokens>> {
+        Ok(self
+            .get_effective_fee()?
+            .or(match self.get_transaction()?.operation {
+                ic_icrc1::Operation::Mint { .. } => None,
+                ic_icrc1::Operation::Transfer { fee, .. } => fee,
+                ic_icrc1::Operation::Approve { fee, .. } => fee,
+                ic_icrc1::Operation::Burn { .. } => None,
+            }))
+    }
+
     pub fn get_transaction(&self) -> anyhow::Result<Transaction<Tokens>> {
         Ok(Block::<Tokens>::decode(self.encoded_block.clone())
             .map_err(anyhow::Error::msg)?
             .transaction)
+    }
+
+    pub fn get_fee_collector(&self) -> anyhow::Result<Option<Account>> {
+        Ok(Block::<Tokens>::decode(self.encoded_block.clone())
+            .map_err(anyhow::Error::msg)?
+            .fee_collector)
     }
 
     pub fn get_icrc1_block(&self) -> anyhow::Result<Block<Tokens>> {

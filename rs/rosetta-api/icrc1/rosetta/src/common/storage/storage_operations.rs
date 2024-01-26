@@ -1,13 +1,17 @@
-use crate::common::storage::types::{MetadataEntry, RosettaBlock, Tokens};
-use anyhow::{anyhow, bail};
+use crate::common::storage::types::{MetadataEntry, RosettaBlock, RosettaToken, Tokens};
+use crate::common::utils::utils::create_progress_bar;
+use anyhow::{anyhow, bail, Context};
 use candid::Principal;
 use ic_icrc1::{Operation, Transaction};
 use ic_ledger_core::block::EncodedBlock;
+use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
-use rusqlite::{params, Params};
+use num_traits::Bounded;
+use rusqlite::{named_params, params, Params};
 use rusqlite::{Connection, Statement, ToSql};
 use serde_bytes::ByteBuf;
+use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
 
 pub fn store_metadata(connection: &Connection, metadata: Vec<MetadataEntry>) -> anyhow::Result<()> {
@@ -16,15 +20,12 @@ pub fn store_metadata(connection: &Connection, metadata: Vec<MetadataEntry>) -> 
     let mut stmt_metadata = connection.prepare("INSERT INTO metadata (key, value) VALUES (?1, ?2) ON CONFLICT (key) DO UPDATE SET value = excluded.value;")?;
 
     for entry in metadata.into_iter() {
-        match execute(&mut stmt_metadata, params![entry.key.clone(), entry.value]) {
-            Ok(_) => (),
-            Err(e) => {
-                connection.execute_batch("ROLLBACK TRANSACTION;")?;
-                return Err(e);
-            }
-        };
+        execute_or_rollback(
+            connection,
+            &mut stmt_metadata,
+            params![entry.key.clone(), entry.value],
+        )?;
     }
-
     connection.execute_batch("COMMIT TRANSACTION;")?;
     Ok(())
 }
@@ -45,6 +46,212 @@ pub fn get_metadata(connection: &Connection) -> anyhow::Result<Vec<MetadataEntry
     Ok(result)
 }
 
+pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()> {
+    fn get_highest_block_idx_in_account_balance_table(
+        connection: &Connection,
+    ) -> anyhow::Result<Option<u64>> {
+        match connection
+            .prepare("SELECT block_idx FROM account_balances ORDER BY block_idx DESC LIMIT 1")?
+            .query_map(params![], |row| row.get(0))?
+            .next()
+        {
+            None => Ok(None),
+            Some(res) => Ok(res?),
+        }
+    }
+
+    // Utility method that tries to fetch the balance from the cache first and, if
+    // no balance has been found, fetches it from the database
+    fn get_account_balance_with_cache(
+        account: &Account,
+        index: u64,
+        connection: &mut Connection,
+        account_balances_cache: &mut HashMap<Account, BTreeMap<u64, Tokens>>,
+    ) -> anyhow::Result<Option<RosettaToken>> {
+        // Either fetch the balance from the cache or from the database
+        match account_balances_cache.get(account).map(|balances| {
+            balances
+                .last_key_value()
+                .map(|(_, balance)| balance.clone())
+        }) {
+            Some(balance) => Ok(balance),
+            None => get_account_balance_at_block_idx(connection, account, index),
+        }
+    }
+
+    fn debit(
+        account: Account,
+        amount: Tokens,
+        index: u64,
+        connection: &mut Connection,
+        account_balances_cache: &mut HashMap<Account, BTreeMap<u64, Tokens>>,
+    ) -> anyhow::Result<()> {
+        let new_balance = if let Some(balance) =
+            get_account_balance_with_cache(&account, index, connection, account_balances_cache)?
+        {
+            balance.checked_sub(&amount).with_context(|| {
+                format!(
+                    "Underflow while debiting account {} for amount {} at index {} (balance: {})",
+                    account, amount, index, balance
+                )
+            })?
+        } else {
+            bail!("Trying to debit an account {} that has not yet been allocated any tokens (index: {})", account, index)
+        };
+        account_balances_cache
+            .entry(account)
+            .or_default()
+            .insert(index, new_balance);
+        Ok(())
+    }
+
+    fn credit(
+        account: Account,
+        amount: Tokens,
+        index: u64,
+        connection: &mut Connection,
+        account_balances_cache: &mut HashMap<Account, BTreeMap<u64, Tokens>>,
+    ) -> anyhow::Result<()> {
+        let new_balance = if let Some(balance) =
+            get_account_balance_with_cache(&account, index, connection, account_balances_cache)?
+        {
+            balance.checked_add(&amount).with_context(|| {
+                format!(
+                    "Overflow while crediting an account {} for amount {} at index {} (balance: {})",
+                    account, amount, index, balance
+                )
+            })?
+        } else {
+            amount
+        };
+        account_balances_cache
+            .entry(account)
+            .or_default()
+            .insert(index, new_balance);
+        Ok(())
+    }
+
+    // The next block to be updated is the highest block index in the account balance table + 1 if the table is not empty and 0 otherwise
+    let next_block_to_be_updated =
+        get_highest_block_idx_in_account_balance_table(connection)?.map_or(0, |idx| idx + 1);
+    // Create a progressbar to visualize the updating process
+    let pb = create_progress_bar(
+        next_block_to_be_updated,
+        get_block_with_highest_block_idx(connection)?.map_or(0, |block| block.index),
+    );
+
+    // Take an interval of 100000 blocks and update the account balances for these blocks
+    const BATCH_SIZE: u64 = 100000;
+    let mut batch_start_idx = next_block_to_be_updated;
+    let mut batch_end_idx = batch_start_idx + BATCH_SIZE;
+    let mut rosetta_blocks = get_blocks_by_index_range(connection, batch_start_idx, batch_end_idx)?;
+
+    // For faster inserts, keep a cache of the account balances within a batch range in memory
+    // This also makes the inserting of the account balances batchable and therefore faster
+    let mut account_balances_cache: HashMap<Account, BTreeMap<u64, Tokens>> = HashMap::new();
+
+    // As long as there are blocks to be fetched, keep on iterating over the blocks in the database with the given BATCH_SIZE interval
+    while !rosetta_blocks.is_empty() {
+        for rosetta_block in rosetta_blocks {
+            match rosetta_block.get_transaction()?.operation {
+                Operation::Burn { from, amount, .. } => {
+                    debit(
+                        from,
+                        amount,
+                        rosetta_block.index,
+                        connection,
+                        &mut account_balances_cache,
+                    )?;
+                }
+                Operation::Mint { to, amount } => {
+                    credit(
+                        to,
+                        amount,
+                        rosetta_block.index,
+                        connection,
+                        &mut account_balances_cache,
+                    )?;
+                }
+                Operation::Approve { from, .. } => {
+                    let fee = rosetta_block
+                        .get_fee_payed()?
+                        .unwrap_or(Tokens::min_value());
+                    debit(
+                        from,
+                        fee,
+                        rosetta_block.index,
+                        connection,
+                        &mut account_balances_cache,
+                    )?;
+                }
+                Operation::Transfer {
+                    from, to, amount, ..
+                } => {
+                    let fee = rosetta_block
+                        .get_fee_payed()?
+                        .unwrap_or(Tokens::min_value());
+                    let payable_amount = amount
+                        .checked_add(&fee)
+                        .with_context(|| format!("Overflow while adding the fee {} to the amount {} for block at index {}",
+                            fee, amount, rosetta_block.index
+                    ))?;
+
+                    credit(
+                        to,
+                        amount,
+                        rosetta_block.index,
+                        connection,
+                        &mut account_balances_cache,
+                    )?;
+                    debit(
+                        from,
+                        payable_amount,
+                        rosetta_block.index,
+                        connection,
+                        &mut account_balances_cache,
+                    )?;
+
+                    if let Some(collector) = rosetta_block.get_fee_collector()? {
+                        credit(
+                            collector,
+                            fee,
+                            rosetta_block.index,
+                            connection,
+                            &mut account_balances_cache,
+                        )?;
+                    }
+                }
+            }
+            pb.inc(1);
+        }
+
+        // Flush the cache
+        let insert_tx = connection.transaction()?;
+        for (account, block_idx_new_balances) in account_balances_cache.drain() {
+            for (block_idx, new_balance) in block_idx_new_balances {
+                insert_tx
+                    .prepare_cached("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (:block_idx, :principal, :subaccount, :amount)")?
+                    .execute(named_params! {
+                        ":block_idx": block_idx,
+                        ":principal": account.owner.as_slice(),
+                        ":subaccount": account.effective_subaccount().as_slice(),
+                        ":amount": new_balance.to_string(),
+                    })?;
+            }
+        }
+        insert_tx.commit()?;
+
+        // Fetch the next batch of blocks
+        batch_start_idx = get_highest_block_idx_in_account_balance_table(connection)?
+            .context("No blocks in account balance table after inserting")?
+            + 1;
+        batch_end_idx = batch_start_idx + BATCH_SIZE;
+        rosetta_blocks = get_blocks_by_index_range(connection, batch_start_idx, batch_end_idx)?;
+    }
+    pb.finish_with_message("Account Balances have been updated successfully");
+    Ok(())
+}
+
 // Stores a batch of RosettaBlocks
 pub fn store_blocks(
     connection: &Connection,
@@ -59,7 +266,8 @@ pub fn store_blocks(
         "INSERT OR IGNORE INTO transactions (block_idx,tx_hash,operation_type,from_principal,from_subaccount,to_principal,to_subaccount,spender_principal,spender_subaccount,memo,amount,expected_allowance,fee,transaction_created_at_time,approval_expires_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,?14,?15)",
     )?;
     for rosetta_block in rosetta_blocks.into_iter() {
-        match execute(
+        execute_or_rollback(
+            connection,
             &mut stmt_blocks,
             params![
                 rosetta_block.index,
@@ -71,13 +279,7 @@ pub fn store_blocks(
                     .map(|hash| hash.as_slice().to_vec()),
                 rosetta_block.timestamp
             ],
-        ) {
-            Ok(_) => (),
-            Err(e) => {
-                connection.execute_batch("ROLLBACK TRANSACTION;")?;
-                return Err(e);
-            }
-        };
+        )?;
 
         let transaction: Transaction<Tokens> = rosetta_block.get_transaction()?;
         let (
@@ -160,7 +362,8 @@ pub fn store_blocks(
             ),
         };
 
-        match execute(
+        execute_or_rollback(
+            connection,
             &mut stmt_transactions,
             params![
                 rosetta_block.index,
@@ -179,13 +382,7 @@ pub fn store_blocks(
                 transaction.created_at_time,
                 approval_expires_at
             ],
-        ) {
-            Ok(_) => (),
-            Err(e) => {
-                connection.execute_batch("ROLLBACK TRANSACTION;")?;
-                return Err(e);
-            }
-        };
+        )?;
     }
     connection.execute_batch("COMMIT TRANSACTION;")?;
     Ok(())
@@ -296,6 +493,44 @@ pub fn get_transactions_by_hash(
     read_transactions(&mut stmt, params![hash.as_slice().to_vec()])
 }
 
+pub fn get_account_balance_at_highest_block_idx(
+    connection: &Connection,
+    account: &Account,
+) -> anyhow::Result<Option<Tokens>> {
+    get_account_balance_at_block_idx(connection, account, i64::MAX as u64)
+}
+
+pub fn get_account_balance_at_block_idx(
+    connection: &Connection,
+    account: &Account,
+    block_idx: u64,
+) -> anyhow::Result<Option<Tokens>> {
+    connection
+        .prepare_cached(
+            "SELECT amount \
+             FROM account_balances \
+             WHERE principal = :principal \
+             AND subaccount = :subaccount \
+             AND block_idx <= :block_idx \
+             ORDER BY block_idx \
+             DESC LIMIT 1",
+        )?
+        .query(named_params! {
+            ":principal": account.owner.as_slice(),
+            ":subaccount": account.effective_subaccount(),
+            ":block_idx": block_idx
+        })?
+        .mapped(|row| row.get(0))
+        .next()
+        .transpose()
+        .with_context(|| {
+            format!(
+                "Unable to fetch balance of account {} at index {}",
+                account, block_idx
+            )
+        })
+}
+
 fn read_single_block<P>(stmt: &mut Statement, params: P) -> anyhow::Result<Option<RosettaBlock>>
 where
     P: Params,
@@ -309,9 +544,7 @@ where
         Ok(None)
     } else {
         // If more than one block was found return an error
-        Err(anyhow::Error::msg(
-            "Multiple blocks found with given parameters".to_owned(),
-        ))
+        bail!("Multiple blocks found with given parameters".to_owned(),)
     }
 }
 
@@ -324,9 +557,10 @@ where
         row.get(1).map(|x| {
             RosettaBlock::from_encoded_block(
                 EncodedBlock::from_vec(x),
-                row.get(0).map_err(|e| anyhow::Error::msg(e.to_string()))?,
+                row.get(0)
+                    .context("Cannot retrieve Row 0 from blocks table")?,
             )
-            .map_err(|e| anyhow::Error::msg(e.to_string()))
+            .context("Cannot create RosettaBlock from Encoded Block")
         })
     })?;
     let mut result = vec![];
@@ -367,7 +601,6 @@ where
     fn opt_bytes_to_memo(bytes: Option<Vec<u8>>) -> Option<Memo> {
         Some(Memo(ByteBuf::from(bytes?)))
     }
-
     let rows = stmt.query_map(params, |row| {
         Ok((
             row.get::<usize, String>(2)?,
@@ -402,21 +635,22 @@ where
             transaction_created_at_time,
             approval_expires_at,
         ) = row?;
-        let amount = Tokens::from_str(&amount_str).map_err(anyhow::Error::msg)?;
+        let amount = Tokens::from_str(&amount_str)
+            .with_context(|| format!("Cannot parse Tokens from string: {}", amount_str))?;
         let expected_allowance = if let Some(expected_allowance_str) = expected_allowance_str {
-            Some(
-                Tokens::from_str(&expected_allowance_str)
-                    .map_err(anyhow::Error::msg)
-                    .map_err(anyhow::Error::msg)?,
-            )
+            Some(Tokens::from_str(&expected_allowance_str).with_context(|| {
+                format!(
+                    "Cannot parse Tokens from string: {}",
+                    expected_allowance_str
+                )
+            })?)
         } else {
             None
         };
         let fee = if let Some(fee_str) = fee_str {
             Some(
                 Tokens::from_str(&fee_str)
-                    .map_err(anyhow::Error::msg)
-                    .map_err(anyhow::Error::msg)?,
+                    .with_context(|| format!("Cannot parse Tokens from string: {}", fee_str))?,
             )
         } else {
             None
@@ -489,6 +723,20 @@ where
 // Executes a constructed statement
 fn execute(stmt: &mut Statement, params: &[&dyn ToSql]) -> anyhow::Result<()> {
     stmt.execute(params)
-        .map_err(|e| anyhow::Error::msg(e.to_string()))?;
+        .with_context(|| format!("Failed to execute statement: {:?}.", stmt))?;
     Ok(())
+}
+
+fn execute_or_rollback(
+    connection: &Connection,
+    stmt: &mut Statement,
+    params: &[&dyn ToSql],
+) -> anyhow::Result<()> {
+    match execute(stmt, params) {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            connection.execute_batch("ROLLBACK TRANSACTION;")?;
+            Err(e)
+        }
+    }
 }
