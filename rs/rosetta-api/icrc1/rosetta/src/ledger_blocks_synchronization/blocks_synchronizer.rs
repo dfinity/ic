@@ -1,13 +1,14 @@
-use crate::common::storage::{storage_client::StorageClient, types::RosettaBlock};
-use anyhow::Result;
+use crate::common::{
+    storage::{storage_client::StorageClient, types::RosettaBlock},
+    utils::utils::create_progress_bar,
+};
 use anyhow::{bail, Context};
 use candid::{Decode, Encode, Nat};
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc3::blocks::{BlockRange, GetBlocksRequest, GetBlocksResponse};
-use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use num_traits::ToPrimitive;
 use serde_bytes::ByteBuf;
-use std::{cmp, collections::HashMap, fmt::Write, ops::RangeInclusive, sync::Arc};
+use std::{cmp, collections::HashMap, ops::RangeInclusive, sync::Arc};
 use tracing::info;
 
 // The Range of indices to be synchronized.
@@ -110,7 +111,7 @@ pub async fn start_synching_blocks(
     }
 
     // After all the gaps have been filled continue with a synchronization from the top of the blockchain.
-    sync_from_the_tip(agent, storage_client, maximum_blocks_per_request).await?;
+    sync_from_the_tip(agent, storage_client.clone(), maximum_blocks_per_request).await?;
 
     Ok(())
 }
@@ -175,16 +176,9 @@ async fn sync_blocks_interval(
     sync_range: SyncRange,
 ) -> anyhow::Result<()> {
     // Create a progress bar for visualization.
-    let pb = ProgressBar::new(*sync_range.index_range.end() - *sync_range.index_range.start() + 1);
-    pb.set_style(
-        ProgressStyle::with_template(
-            "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] ({eta}) {msg}",
-        )
-        .unwrap()
-        .with_key("eta", |state: &ProgressState, w: &mut dyn Write| {
-            write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap()
-        })
-        .progress_chars("#>-"),
+    let pb = create_progress_bar(
+        *sync_range.index_range.start(),
+        *sync_range.index_range.end(),
     );
 
     // The leading index/hash is the highest block index/hash that is requested by the icrc ledger.

@@ -2,8 +2,9 @@ use super::{
     storage_operations,
     types::{MetadataEntry, RosettaBlock, Tokens},
 };
-use anyhow::Result;
+use anyhow::{bail, Result};
 use ic_icrc1::Transaction;
+use icrc_ledger_types::icrc1::account::Account;
 use rusqlite::Connection;
 use serde_bytes::ByteBuf;
 use std::{path::Path, sync::Mutex};
@@ -160,12 +161,62 @@ impl StorageClient {
             "#,
             [],
         )?;
+        open_connection.execute(
+            r#"
+            CREATE TABLE IF NOT EXISTS account_balances (
+                block_idx INTEGER NOT NULL,
+                principal BLOB NOT NULL,
+                subaccount BLOB NOT NULL,
+                amount TEXT NOT NULL,
+                PRIMARY KEY(principal,subaccount,block_idx)
+            )
+            "#,
+            [],
+        )?;
+        open_connection.execute(
+            r#"
+            CREATE INDEX IF NOT EXISTS block_idx_account_balances 
+            ON account_balances(block_idx)
+            "#,
+            [],
+        )?;
+
         Ok(())
     }
 
+    // Populates the blocks and transactions table by the Rosettablocks provided
+    // This function does NOT populate the account_balance table.
     pub fn store_blocks(&self, blocks: Vec<RosettaBlock>) -> anyhow::Result<()> {
         let open_connection = self.storage_connection.lock().unwrap();
         storage_operations::store_blocks(&open_connection, blocks)
+    }
+
+    // Extracts the information from the transaction and blocks table and fills the account balance table with that information
+    // Throws an error if there are gaps in the transaction or blocks table.
+    pub fn update_account_balances(&self) -> anyhow::Result<()> {
+        if !self.get_blockchain_gaps()?.is_empty() {
+            bail!("Tried to update account balances but there exist gaps in the database.",);
+        }
+        let mut open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::update_account_balances(&mut open_connection)
+    }
+
+    // Retrieves the account balance at a certain block height
+    // Returns None if the account does not exist in the database
+    pub fn get_account_balance_at_block_idx(
+        &self,
+        account: &Account,
+        block_idx: u64,
+    ) -> anyhow::Result<Option<Tokens>> {
+        let open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::get_account_balance_at_block_idx(&open_connection, account, block_idx)
+    }
+
+    // Retrieves the account balance at the heighest block height in the database
+    // Returns None if the account does not exist in the database
+    pub fn get_account_balance(&self, account: &Account) -> anyhow::Result<Option<Tokens>> {
+        let open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::get_account_balance_at_highest_block_idx(&open_connection, account)
     }
 }
 
@@ -442,6 +493,22 @@ mod tests {
                let metadata_read = Metadata::from_metadata_entries(&entries_read).unwrap();
 
                assert_eq!(metadata_write, metadata_read);
+           }
+
+           #[test]
+           fn test_updating_account_balances_for_blockchain_with_gaps(blockchain in valid_blockchain_with_gaps_strategy::<Tokens>(1000)){
+               let storage_client_memory = StorageClient::new_in_memory().unwrap();
+               let mut rosetta_blocks = vec![];
+               for i in 0..blockchain.0.len() {
+                rosetta_blocks.push(RosettaBlock::from_encoded_block(blockchain.0[i].clone().encode(),blockchain.1[i] as u64).unwrap());
+               }
+
+               storage_client_memory.store_blocks(rosetta_blocks.clone()).unwrap();
+
+               if !storage_client_memory.get_blockchain_gaps().unwrap().is_empty(){
+               // Updating of account balances should not be possible if the stored blockchain contains gaps
+               assert!(storage_client_memory.update_account_balances().is_err())
+               }
            }
        }
 }
