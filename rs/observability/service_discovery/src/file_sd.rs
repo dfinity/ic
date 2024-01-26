@@ -52,7 +52,7 @@ impl FileSd {
             .into_iter()
             .map(ServiceDiscoveryRecord::from)
             .collect();
-        ic_utils::fs::write_atomically(target_path.as_path(), |f| {
+        ic_sys::fs::write_atomically(target_path.as_path(), |f| {
             serde_json::to_writer_pretty(f, &targets).map_err(|e| {
                 std::io::Error::new(
                     std::io::ErrorKind::Other,

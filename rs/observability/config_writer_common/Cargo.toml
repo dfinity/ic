@@ -8,13 +8,13 @@ edition = "2021"
 [dependencies]
 regex = "1.7.0"
 service-discovery = { path = "../service_discovery" }
+ic-sys = { path = "../../sys" }
 ic-types = { path = "../../types/types" }
 slog = { workspace = true }
 slog-async = { version = "2.5", features = ["nested-values"] }
 slog-term = "2.6.0"
 serde = { workspace = true }
 serde_json = { workspace = true }
-ic-utils = { path = "../../utils/" }
 erased-serde = "0.3.23"
 serde_derive = "1.0.150"
 crossbeam = "0.8.0"

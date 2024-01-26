@@ -105,6 +105,7 @@ ic-sns-swap = { path = "../sns/swap" }
 ic-sns-root = { path = "../sns/root" }
 ic-sns-governance = { path = "../sns/governance" }
 ic-sns-wasm = { path = "../nns/sns-wasm" }
+ic-sys = { path = "../sys" }
 ic-test-identity = { path = "../test_utilities/identity" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-time = { path = "../test_utilities/time" }

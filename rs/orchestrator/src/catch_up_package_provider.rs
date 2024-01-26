@@ -38,6 +38,7 @@ use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::types::v1 as pb;
+use ic_sys::fs::write_protobuf_using_tmp_file;
 use ic_types::NodeId;
 use ic_types::{
     consensus::catchup::{CatchUpContentProtobufBytes, CatchUpPackage, CatchUpPackageParam},
@@ -45,7 +46,6 @@ use ic_types::{
     crypto::*,
     RegistryVersion, SubnetId,
 };
-use ic_utils::fs::write_protobuf_using_tmp_file;
 use std::convert::TryFrom;
 use std::sync::Arc;
 use std::{fs::File, path::PathBuf};

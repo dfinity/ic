@@ -574,7 +574,7 @@ impl BackupArtifact {
         // If the file exists, it will be overwritten (this is required on
         // initializations).
         let serialized = self.serialize()?;
-        ic_utils::fs::write_using_tmp_file(full_path, |writer| writer.write_all(&serialized))
+        ic_sys::fs::write_using_tmp_file(full_path, |writer| writer.write_all(&serialized))
     }
 
     /// Serializes the artifact to protobuf.

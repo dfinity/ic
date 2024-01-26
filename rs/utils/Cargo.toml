@@ -12,16 +12,6 @@ prost = { workspace = true }
 scoped_threadpool = "0.1.*"
 serde = { workspace = true }
 
-[target.'cfg(target_family = "unix")'.dependencies]
-rand = "0.8.3"
-
-[target.'cfg(target_os = "linux")'.dependencies]
-cvt = "0.1.1"
-ic-sys = { path = "../sys" }
-libc = "0.2.91"
-nix = { workspace = true }
-thiserror = "1.0"
-
 [dev-dependencies]
 assert_matches = "1.5.0"
 tempfile = "3.1.0"

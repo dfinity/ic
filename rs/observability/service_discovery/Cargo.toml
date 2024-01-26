@@ -14,6 +14,7 @@ ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-registry-nns-data-provider = { path = "../../registry/nns_data_provider" }
 ic-registry-local-store = { path = "../../registry/local_store" }
 ic-registry-local-store-artifacts = { path = "../../registry/local_store/artifacts" }
+ic-sys = { path = "../../sys" }
 ic-types = { path = "../../types/types" }
 thiserror = "1.0"
 ic-metrics = { path = "../../monitoring/metrics" }
@@ -23,7 +24,6 @@ anyhow = "1.0.31"
 slog = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-ic-utils = { path = "../../utils/" }
 ic-registry-keys = { path = "../../registry/keys" }
 tokio = { workspace = true }
 crossbeam = "0.8.0"

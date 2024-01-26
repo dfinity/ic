@@ -39,7 +39,6 @@ ic-registry-keys = { path = "../registry/keys" }
 ic-registry-replicator = { path = "./registry_replicator" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
-ic-utils = { path = "../utils" }
 nix = { workspace = true }
 prometheus = { workspace = true }
 rand = "0.8"
