@@ -4,7 +4,7 @@ import sys
 # Frankfurt
 region = "eu_central_1"
 ami = "ami-0faab6bdbac9486fb"
-instance = "m7i.8xlarge"
+instance = "m7i.4xlarge"
 
 
 merged  = """

@@ -279,7 +279,7 @@ async fn load_generator(
                         metrics.message_latency.observe(latency.as_secs_f64());
 
                         if relaying {
-                            purge_queue.insert(TestArtifact::message_to_advert(&message), Duration::from_secs(60));
+                            // purge_queue.insert(TestArtifact::message_to_advert(&message), Duration::from_secs(60));
                             match artifact_processor_rx.send(ArtifactProcessorEvent::Advert((TestArtifact::message_to_advert(&message),false))).await {
                                 Ok(_) => {},
                                 Err(e) => {
@@ -315,7 +315,7 @@ async fn load_generator(
                 id.extend_from_slice(&now.to_le_bytes());
                 metrics.sent_artifacts.inc();
 
-                purge_queue.insert(TestArtifact::message_to_advert(&id), Duration::from_secs(60));
+                // purge_queue.insert(TestArtifact::message_to_advert(&id), Duration::from_secs(60));
 
                 match artifact_processor_rx
                     .send(ArtifactProcessorEvent::Advert((TestArtifact::message_to_advert(&id),true)))
@@ -628,20 +628,20 @@ fn start_libp2p(
     let mut metrics_registry = metrics_registry.lock().unwrap();
     let mut swarm = SwarmBuilder::with_existing_identity(libp2p_kp.clone().into())
         .with_tokio()
-        // .with_quic_config(|mut cfg| {
-        //     // ms
-        //     cfg.max_idle_timeout = 1_000_000;
-        //     cfg.max_connection_data = 1_000_000_000;
-        //     cfg.max_concurrent_stream_limit = 1000;
-        //     cfg.handshake_timeout = Duration::from_secs(100000);
-        //     cfg
-        // })
-        .with_tcp(
-            libp2p::tcp::Config::default(),
-            libp2p::noise::Config::new,
-            libp2p::yamux::Config::default,
-        )
-        .unwrap()
+        .with_quic_config(|mut cfg| {
+            // ms
+            cfg.max_idle_timeout = 1_000_000;
+            cfg.max_connection_data = 1_000_000_000;
+            cfg.max_concurrent_stream_limit = 1000;
+            cfg.handshake_timeout = Duration::from_secs(100000);
+            cfg
+        })
+        // .with_tcp(
+        //     libp2p::tcp::Config::default(),
+        //     libp2p::noise::Config::new,
+        //     libp2p::yamux::Config::default,
+        // )
+        // .unwrap()
         .with_bandwidth_metrics(&mut metrics_registry)
         .with_behaviour(|_| MainBehaviour {
             gossip_sub: libp2p::gossipsub::Behaviour::new_with_metrics(
@@ -675,9 +675,9 @@ fn start_libp2p(
         };
         let multiaddr = Multiaddr::empty()
             .with(libp2p::multiaddr::Protocol::Ip4(ip_addr))
-            .with(libp2p::multiaddr::Protocol::Tcp(transport_addr.port()));
-            // .with(libp2p::multiaddr::Protocol::Udp(transport_addr.port()))
-            // .with(libp2p::multiaddr::Protocol::QuicV1);
+            // .with(libp2p::multiaddr::Protocol::Tcp(transport_addr.port()));
+            .with(libp2p::multiaddr::Protocol::Udp(transport_addr.port()))
+            .with(libp2p::multiaddr::Protocol::QuicV1);
         info!(log, "Listenting on my multi {:?}", multiaddr);
         swarm.listen_on(multiaddr).unwrap();
 
@@ -782,9 +782,9 @@ fn start_libp2p(
                                 .dial(
                                     Multiaddr::empty()
                                         .with(libp2p::multiaddr::Protocol::Ip4(ip_addr))
-                                        .with(libp2p::multiaddr::Protocol::Tcp(transport_addr.port()))
-                                        // .with(libp2p::multiaddr::Protocol::Udp(transport_addr.port()))
-                                        // .with(libp2p::multiaddr::Protocol::QuicV1)
+                                        // .with(libp2p::multiaddr::Protocol::Tcp(transport_addr.port()))
+                                        .with(libp2p::multiaddr::Protocol::Udp(transport_addr.port()))
+                                        .with(libp2p::multiaddr::Protocol::QuicV1)
                                 )
                                 .unwrap()
                         }

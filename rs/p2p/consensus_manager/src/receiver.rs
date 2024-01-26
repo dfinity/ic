@@ -60,6 +60,7 @@ pub fn build_axum_router<Artifact: ArtifactKind>(
             &format!("/{}/update", uri_prefix::<Artifact>()),
             any(update_handler),
         )
+        .layer(axum::extract::DefaultBodyLimit::disable())
         .with_state((log, update_tx));
 
     (router, update_rx)
