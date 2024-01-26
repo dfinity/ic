@@ -80,8 +80,8 @@ use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_int_counter, fetch_int_gauge, fetch_int_gauge_vec, Labels,
 };
 use ic_test_utilities_registry::{
-    add_single_subnet_record, add_subnet_list_record, insert_initial_dkg_transcript,
-    SubnetRecordBuilder,
+    add_single_subnet_record, add_subnet_key_record, add_subnet_list_record,
+    insert_initial_dkg_transcript, SubnetRecordBuilder,
 };
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_types::artifact::IngressMessageId;
@@ -221,6 +221,7 @@ fn make_nodes_registry(
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     nodes: &Vec<StateMachineNode>,
     is_root_subnet: bool,
+    public_key: ThresholdSigPublicKey,
 ) -> Arc<FakeRegistryClient> {
     // ECDSA subnet_id must be different from nns_subnet_id, otherwise
     // `sign_with_ecdsa` won't be charged.
@@ -320,6 +321,12 @@ fn make_nodes_registry(
         registry_version.get(),
         subnet_id,
         record,
+    );
+    add_subnet_key_record(
+        &registry_data_provider,
+        registry_version.get(),
+        subnet_id,
+        public_key,
     );
 
     let registry_client = Arc::new(FakeRegistryClient::new(
@@ -1085,6 +1092,7 @@ impl StateMachine {
             registry_data_provider.clone(),
             &nodes,
             is_root_subnet,
+            public_key,
         );
 
         let mut sm_config = ic_config::state_manager::Config::new(state_dir.path().to_path_buf());

@@ -1,16 +1,20 @@
 use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
 use ic_interfaces::time_source::TimeSource;
 use ic_interfaces_registry::LocalStoreCertifiedTimeReader;
+use ic_protobuf::registry::crypto::v1::AlgorithmId;
+use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_protobuf::registry::subnet::v1::{
     CatchUpPackageContents, InitialNiDkgTranscriptRecord, SubnetListRecord, SubnetRecord,
 };
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{
-    make_catch_up_package_contents_key, make_subnet_list_record_key, make_subnet_record_key,
+    make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
+    make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
+use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{
     crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
     NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId, Time,
@@ -133,6 +137,29 @@ pub fn add_single_subnet_record(
             Some(record),
         )
         .expect("Failed to add subnet record.");
+}
+
+pub fn add_subnet_key_record(
+    registry_data_provider: &Arc<ProtoRegistryDataProvider>,
+    version: u64,
+    subnet_id: SubnetId,
+    subnet_pubkey: ThresholdSigPublicKey,
+) {
+    let registry_version = RegistryVersion::from(version);
+    let record = PublicKeyProto {
+        algorithm: AlgorithmId::ThresBls12381 as i32,
+        key_value: subnet_pubkey.into_bytes().to_vec(),
+        version: 0,
+        proof_data: None,
+        timestamp: None,
+    };
+    registry_data_provider
+        .add(
+            &make_crypto_threshold_signing_pubkey_key(subnet_id),
+            registry_version,
+            Some(record),
+        )
+        .expect("Failed to add subnet threshold signing pubkey record.");
 }
 
 pub fn add_subnet_list_record(
