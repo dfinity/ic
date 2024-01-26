@@ -11,6 +11,7 @@ mkdir -p $MY_DOWNLOAD_DIR
 IDL2JSON=${IDL2JSON:-$(which idl2json 2>/dev/null || true)}
 SNS_QUILL=${SNS_QUILL:-$(which sns-quill 2>/dev/null || true)}
 IC_ADMIN=${IC_ADMIN:-$(which ic-admin 2>/dev/null || true)}
+IC_WASM=${IC_WASM:-$(which ic-wasm 2>/dev/null || true)}
 
 __dfx() {
     HOME="${DFX_HOME:-$HOME}" dfx "${@}"
