@@ -1,6 +1,4 @@
 use std::{
-    fs::File,
-    io::{self, BufRead},
     net::SocketAddr,
     path::PathBuf,
     sync::{Arc, RwLock},
@@ -65,13 +63,7 @@ struct Cli {
     local_configuration_path: PathBuf,
 
     #[clap(long, default_value = "servers.conf.tmpl")]
-    configuration_template_sw_path: PathBuf,
-
-    #[clap(long, default_value = "servers.conf.tmpl")]
-    configuration_template_no_sw_path: PathBuf,
-
-    #[clap(long)]
-    no_sw_domains_path: Option<PathBuf>,
+    configuration_template_path: PathBuf,
 
     #[clap(long, default_value = "mappings.js")]
     domain_mappings_path: PathBuf,
@@ -135,27 +127,10 @@ async fn main() -> Result<(), Error> {
     let reloader = WithMetrics(reloader, MetricParams::new(&meter, SERVICE_NAME, "reload"));
 
     // Persistence
-    let configuration_template_sw = std::fs::read_to_string(&cli.configuration_template_sw_path)
-        .context("failed to read configuration template for using the service worker")?;
+    let configuration_template = std::fs::read_to_string(&cli.configuration_template_path)
+        .context("failed to read configuration template")?;
 
-    let configuration_template_no_sw =
-        std::fs::read_to_string(&cli.configuration_template_no_sw_path)
-            .context("failed to read configuration template for using icx-proxy")?;
-
-    let no_sw_domains: Vec<String> = match &cli.no_sw_domains_path {
-        Some(no_sw_domains_path) => {
-            let file = File::open(no_sw_domains_path)?;
-            let reader = io::BufReader::new(file);
-            reader.lines().map(|line| line.unwrap()).collect()
-        }
-        None => Vec::new(),
-    };
-
-    let renderer = Renderer::new(
-        &configuration_template_sw,
-        &configuration_template_no_sw,
-        no_sw_domains,
-    );
+    let renderer = Renderer::new(&configuration_template);
     let renderer = WithMetrics(renderer, MetricParams::new(&meter, SERVICE_NAME, "render"));
     let renderer = Arc::new(renderer);
 

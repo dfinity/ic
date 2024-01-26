@@ -282,11 +282,7 @@ mod tests {
 
         let tmp_dir = tempdir()?;
 
-        let renderer = Renderer::new(
-            "{name}|{ssl_certificate_key_path}|{ssl_certificate_path}",
-            "{name}|{ssl_certificate_key_path}|{ssl_certificate_path}",
-            vec!["X".to_string(), "Y".to_string(), "Z".to_string()],
-        );
+        let renderer = Renderer::new("{name}|{ssl_certificate_key_path}|{ssl_certificate_path}");
 
         let persister = Persister::new(
             Arc::new(renderer),              // renderer

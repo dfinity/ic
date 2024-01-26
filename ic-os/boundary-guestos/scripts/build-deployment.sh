@@ -534,22 +534,6 @@ EOF
     done
 }
 
-function generate_certificate_syncer_config() {
-    if [ ! -z "${CERTIFICATE_SYNCER_RAW_DOMAINS_FILE}" ]; then
-        for n in $NODES; do
-            declare -n NODE=$n
-            if [[ "${NODE["type"]}" != "boundary" ]]; then
-                continue
-            fi
-
-            local SUBNET_IDX="${NODE["subnet_idx"]}"
-            local NODE_IDX="${NODE["node_idx"]}"
-            local NODE_PREFIX="${DEPLOYMENT}.${SUBNET_IDX}.${NODE_IDX}"
-            cp "${CERTIFICATE_SYNCER_RAW_DOMAINS_FILE}" "${CONFIG_DIR}/${NODE_PREFIX}/raw_domains.txt"
-        done
-    fi
-}
-
 function copy_pre_isolation_canisters() {
     if [[ -z "${PRE_ISOLATION_CANISTERS:-}" ]]; then
         err "pre-domain-isolation canisters have not been provided, proceeding without copying them"
@@ -685,7 +669,6 @@ function main() {
     copy_deny_list
     copy_geolite2_dbs
     generate_certificate_issuer_config
-    generate_certificate_syncer_config
     copy_pre_isolation_canisters
     copy_ip_hash_salt
     copy_logging_credentials
