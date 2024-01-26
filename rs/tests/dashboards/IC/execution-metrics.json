@@ -7605,11 +7605,11 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_subnet_queue_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_scheduling_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
               "hide": false,
-              "legendFormat": "· subnet_queue",
+              "legendFormat": "· scheduling",
               "range": true,
-              "refId": "· subnet_queue"
+              "refId": "· scheduling"
             },
             {
               "datasource": {
@@ -7617,11 +7617,11 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_scheduling_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_subnet_queue_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
               "hide": false,
-              "legendFormat": "· scheduling",
+              "legendFormat": "· subnet_queue",
               "range": true,
-              "refId": "· scheduling"
+              "refId": "· subnet_queue"
             },
             {
               "datasource": {
@@ -7677,7 +7677,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "label_replace(\n      quantile by (ic, ic_subnet) (\n        0.5,\n        (\n          rate(execution_round_inner_iteration_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n          -\n          (\n            rate(execution_round_inner_preparation_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n            +\n            rate(execution_round_inner_finalization_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n          )\n        )\n    /\n      (rate(execution_round_duration_seconds_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_inner_execution_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
               "hide": false,
               "legendFormat": "· inner_loop_exe",
               "range": true,
@@ -7881,11 +7881,11 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_subnet_queue_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_scheduling_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
               "hide": false,
-              "legendFormat": "· subnet_queue",
+              "legendFormat": "· scheduling",
               "range": true,
-              "refId": "· subnet_queue"
+              "refId": "· scheduling"
             },
             {
               "datasource": {
@@ -7893,11 +7893,11 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_scheduling_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_subnet_queue_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
               "hide": false,
-              "legendFormat": "· scheduling",
+              "legendFormat": "· subnet_queue",
               "range": true,
-              "refId": "· scheduling"
+              "refId": "· subnet_queue"
             },
             {
               "datasource": {
@@ -7953,7 +7953,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "label_replace(\n      quantile by (ic, ic_subnet) (\n        0.5,\n        (\n          rate(execution_round_inner_iteration_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n          -\n          (\n            rate(execution_round_inner_preparation_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n            +\n            rate(execution_round_inner_finalization_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n          )\n        )\n    /\n      (rate(execution_round_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(execution_round_inner_execution_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      (rate(execution_round_duration_seconds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) != 0)\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
               "hide": false,
               "legendFormat": "· inner_loop_exe",
               "range": true,
@@ -8294,36 +8294,12 @@
               },
               "editorMode": "code",
               "exemplar": true,
-              "expr": "label_replace(\n  sum(\n    rate(execution_query_cache_hits_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)\n",
+              "expr": "label_replace(\n  sum by(ic_subnet) (\n    rate(execution_query_cache_hits_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)\n",
               "hide": false,
               "interval": "",
-              "legendFormat": "Total hits",
+              "legendFormat": "{{ic_subnet}}",
               "range": true,
               "refId": "A"
-            },
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "000000001"
-              },
-              "editorMode": "code",
-              "expr": "label_replace(\n  sum(\n    rate(execution_query_cache_hits_with_ignored_time_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)\n",
-              "hide": false,
-              "legendFormat": "Hits with ignored time",
-              "range": true,
-              "refId": "B"
-            },
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "000000001"
-              },
-              "editorMode": "code",
-              "expr": "label_replace(\n  sum(\n    rate(execution_query_cache_hits_with_ignored_canister_balance_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)\n",
-              "hide": false,
-              "legendFormat": "Hits with ignored canister balance",
-              "range": true,
-              "refId": "C"
             }
           ],
           "title": "Query cache hit rate",
@@ -8901,25 +8877,11 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "exemplar": true,
-              "expr": "label_replace(\n  sum(\n    rate(execution_query_cache_invalidated_entries_by_max_expiry_time_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)\n",
-              "hide": false,
-              "interval": "",
-              "legendFormat": "Max expiry time",
-              "range": true,
-              "refId": "B"
-            },
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "000000001"
-              },
-              "editorMode": "code",
               "expr": "label_replace(\n  sum(\n    rate(execution_query_cache_invalidated_entries_by_canister_version_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)\n",
               "hide": false,
               "legendFormat": "Canister version",
               "range": true,
-              "refId": "C"
+              "refId": "B"
             },
             {
               "datasource": {
@@ -8931,19 +8893,7 @@
               "hide": false,
               "legendFormat": "Canister balance",
               "range": true,
-              "refId": "D"
-            },
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "000000001"
-              },
-              "editorMode": "code",
-              "expr": "label_replace(\n  sum(\n    rate(execution_query_cache_invalidated_entries_by_nested_call_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)\n",
-              "hide": false,
-              "legendFormat": "Nested calls",
-              "range": true,
-              "refId": "E"
+              "refId": "C"
             }
           ],
           "title": "Total query cache invalidation reason",
@@ -9362,8 +9312,8 @@
       {
         "current": {
           "selected": false,
-          "text": "IC Metrics",
-          "value": "IC Metrics"
+          "text": "IC Metrics (aggregated)",
+          "value": "IC Metrics (aggregated)"
         },
         "hide": 0,
         "includeAll": false,
@@ -9616,6 +9566,6 @@
   "timezone": "utc",
   "title": "Execution Metrics",
   "uid": "execution-metrics",
-  "version": 8,
+  "version": 9,
   "weekStart": ""
 }
