@@ -1,8 +1,8 @@
-use candid::{Decode, Encode, Nat, Principal};
+use candid::{Decode, Encode, Principal};
 use dfn_candid::candid_one;
 
 use ic_base_types::{CanisterId, PrincipalId};
-use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
+use icrc_ledger_types::icrc1::account::Account;
 
 use ic_nervous_system_common::{
     assert_is_ok, ledger::compute_neuron_staking_subaccount, ExplosiveTokens, E8, SECONDS_PER_DAY,
@@ -31,7 +31,7 @@ use ic_nns_test_utils::{
         wait_for_proposal_status,
     },
     state_test_helpers::{
-        icrc1_balance, icrc1_transfer, ledger_account_balance, nns_governance_get_full_neuron,
+        icrc1_balance, ledger_account_balance, nns_governance_get_full_neuron,
         nns_governance_get_proposal_info_as_anonymous, nns_governance_make_proposal,
         nns_join_community_fund, nns_leave_community_fund, set_controllers,
         set_up_universal_canister, setup_nns_canisters, sns_governance_get_mode, sns_make_proposal,
@@ -47,19 +47,15 @@ use ic_sns_init::pb::v1::{
     FractionalDeveloperVotingPower, NeuronDistribution, SnsInitPayload, SwapDistribution,
     TreasuryDistribution,
 };
-use ic_sns_swap::{
-    pb::v1::{
-        self as swap_pb, set_mode_call_result, GetOpenTicketResponse, GetStateRequest,
-        GetStateResponse, Init, NeuronBasketConstructionParameters, RefreshBuyerTokensResponse,
-    },
-    swap::principal_to_subaccount,
+use ic_sns_swap::pb::v1::{
+    self as swap_pb, set_mode_call_result, GetStateRequest, GetStateResponse, Init,
+    NeuronBasketConstructionParameters,
 };
 use ic_sns_test_utils::{
     now_seconds,
     state_test_helpers::{
-        get_open_ticket, new_sale_ticket, participate_in_swap, refresh_buyer_tokens,
-        sns_governance_get_nervous_system_parameters, sns_governance_list_neurons,
-        sns_root_register_dapp_canisters, swap_get_state,
+        participate_in_swap, sns_governance_get_nervous_system_parameters,
+        sns_governance_list_neurons, sns_root_register_dapp_canisters, swap_get_state,
     },
 };
 use ic_sns_wasm::pb::v1::SnsCanisterIds;
@@ -83,7 +79,6 @@ const EXPECTED_SNS_CREATION_FEE: u128 = 180 * ONE_TRILLION;
 const SALE_DURATION_SECONDS: u64 = 13 * SECONDS_PER_DAY;
 
 const DEFAULT_MAX_COMMUNITY_FUND_RELATIVE_ERROR: f64 = 0.0;
-use ic_nns_constants::LEDGER_CANISTER_ID;
 
 lazy_static! {
     static ref INITIAL_ICP_BALANCE: ExplosiveTokens = ExplosiveTokens::from_e8s(1000 * E8);
@@ -1967,234 +1962,4 @@ fn test_upgrade() {
         .expect("Unable to call get_state on the Swap canister");
     let state_after_upgrade = Decode!(&state_after_upgrade.bytes(), GetStateResponse).unwrap();
     assert_eq!(state_before_upgrade, state_after_upgrade);
-}
-
-#[test]
-fn test_deletion_of_sale_ticket_legacy() {
-    // Step 1: Prepare the world.
-    let mut state_machine = StateMachineBuilder::new().with_current_time().build();
-
-    let direct_participant_principal_ids = vec![*TEST_USER1_PRINCIPAL];
-    let planned_participation_amount_per_account = ExplosiveTokens::from_e8s(70 * E8);
-    let neuron_basket_count = 3;
-    let sns_canister_ids = begin_swap_legacy(
-        &mut state_machine,
-        &direct_participant_principal_ids,
-        &[], // additional_nns_neurons
-        planned_participation_amount_per_account,
-        ExplosiveTokens::from_e8s(30 * E8), // planned_community_fund_participation_amount
-        neuron_basket_count,
-        DEFAULT_MAX_COMMUNITY_FUND_RELATIVE_ERROR,
-        do_nothing_special_before_proposal_is_adopted,
-    )
-    .0;
-
-    // Create a ticket for TEST_USER1_PRINCIPAL as a prerequisite to be able to call refresh_buyer_tokens with a valid ticket
-    let ticket = new_sale_ticket(
-        &state_machine,
-        sns_canister_ids.swap(),
-        *TEST_USER1_PRINCIPAL,
-        E8 * 5 / 4,
-        None,
-    )
-    .unwrap();
-
-    // Make sure the ticket can be retrieved
-    assert_eq!(
-        get_open_ticket(
-            &state_machine,
-            sns_canister_ids.swap(),
-            *TEST_USER1_PRINCIPAL
-        ),
-        GetOpenTicketResponse::ok(Some(ticket.clone()))
-    );
-
-    //Transfer ICP to the SNS Sale canister. The balance of USER2 on the corresponding subaccount of the SNS sale canister has now been topped up
-    assert!(icrc1_transfer(
-        &state_machine,
-        LEDGER_CANISTER_ID,
-        *TEST_USER1_PRINCIPAL,
-        TransferArg {
-            from_subaccount: None,
-            to: Account {
-                owner: sns_canister_ids.swap().into(),
-                subaccount: Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL))
-            },
-            fee: None,
-            created_at_time: None,
-            memo: None,
-            amount: Nat::from(E8 * 5 / 4)
-        },
-    )
-    .is_ok());
-
-    //Check the balance on the icp ledger to make sure the balance on the subaccount of TEST_USER1_PRINCIPAL shows up on the icp ledger
-    assert_eq!(
-        &ticket.amount_icp_e8s,
-        &icrc1_balance(
-            &state_machine,
-            LEDGER_CANISTER_ID,
-            Account {
-                owner: PrincipalId::from(sns_canister_ids.swap()).0,
-                subaccount: Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL))
-            }
-        )
-        .get_e8s()
-    );
-
-    //Call refresh buyer tokens. There exists a valid ticket and the refresh call is expected to be successful --> the ticket should no longer exist afterwards
-    let refresh_response = refresh_buyer_tokens(
-        &state_machine,
-        &sns_canister_ids.swap(),
-        &TEST_USER1_PRINCIPAL,
-        None,
-    );
-    assert_eq!(
-        refresh_response.unwrap(),
-        RefreshBuyerTokensResponse {
-            icp_accepted_participation_e8s: ticket.amount_icp_e8s,
-            icp_ledger_account_balance_e8s: ticket.amount_icp_e8s
-        }
-    );
-
-    //Ticket should be deleted as transfer was successful
-    assert_eq!(
-        get_open_ticket(
-            &state_machine,
-            sns_canister_ids.swap(),
-            *TEST_USER1_PRINCIPAL
-        ),
-        GetOpenTicketResponse::ok(None)
-    );
-
-    // Make sure a new ticket can be created after the prior ticket was deleted
-    let ticket_new = new_sale_ticket(
-        &state_machine,
-        sns_canister_ids.swap(),
-        *TEST_USER1_PRINCIPAL,
-        E8 * 5 / 4 + 1,
-        None,
-    )
-    .unwrap();
-
-    // Make sure that the ticket ids are unique, i.e. the tickets created by TEST_USER1_PRINCIPAL have different ticket ids.
-    assert_ne!(ticket_new.ticket_id, ticket.ticket_id);
-
-    //Transfer less ICP than what is stated on the new ticket
-    assert!(icrc1_transfer(
-        &state_machine,
-        LEDGER_CANISTER_ID,
-        *TEST_USER1_PRINCIPAL,
-        TransferArg {
-            from_subaccount: None,
-            to: Account {
-                owner: sns_canister_ids.swap().into(),
-                subaccount: Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL))
-            },
-            fee: None,
-            created_at_time: None,
-            memo: None,
-            amount: Nat::from(ticket_new.amount_icp_e8s - 1)
-        },
-    )
-    .is_ok());
-
-    //Call refresh buyer tokens --> Should fail as the balance on the icp ledger used to make new sns token purchases is lower than specified by the ticket.
-    let refresh_response = refresh_buyer_tokens(
-        &state_machine,
-        &sns_canister_ids.swap(),
-        &TEST_USER1_PRINCIPAL,
-        None,
-    );
-    assert!(refresh_response.unwrap_err().contains("smaller"));
-
-    //Ticket should still be available since the refresh buyer token call was unsuccessful
-    assert_eq!(
-        get_open_ticket(
-            &state_machine,
-            sns_canister_ids.swap(),
-            *TEST_USER1_PRINCIPAL
-        ),
-        GetOpenTicketResponse::ok(Some(ticket_new.clone()))
-    );
-
-    // Send the missing ICP tokens so that the balance matches the amount on the ticket: Missing amount is 1 since that is the previous ticket amount was E8 * 5 / 4 - 1
-    assert!(icrc1_transfer(
-        &state_machine,
-        LEDGER_CANISTER_ID,
-        *TEST_USER1_PRINCIPAL,
-        TransferArg {
-            from_subaccount: None,
-            to: Account {
-                owner: sns_canister_ids.swap().into(),
-                subaccount: Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL))
-            },
-            fee: None,
-            created_at_time: None,
-            memo: None,
-            amount: Nat::from(ticket_new.amount_icp_e8s - (ticket_new.amount_icp_e8s - 1))
-        },
-    )
-    .is_ok());
-
-    // Refresh tokens so ticket is deleted: Call is successful and the existing ticket is deleted.
-    let refresh_response = refresh_buyer_tokens(
-        &state_machine,
-        &sns_canister_ids.swap(),
-        &TEST_USER1_PRINCIPAL,
-        None,
-    );
-    assert_eq!(
-        refresh_response.unwrap(),
-        RefreshBuyerTokensResponse {
-            icp_accepted_participation_e8s: ticket.amount_icp_e8s + ticket_new.amount_icp_e8s,
-            icp_ledger_account_balance_e8s: ticket.amount_icp_e8s + ticket_new.amount_icp_e8s
-        }
-    );
-
-    // There should be no open ticket right now.
-    assert_eq!(
-        get_open_ticket(
-            &state_machine,
-            sns_canister_ids.swap(),
-            *TEST_USER1_PRINCIPAL
-        ),
-        GetOpenTicketResponse::ok(None)
-    );
-
-    // Make another transfer so refresh token can be called again
-    assert!(icrc1_transfer(
-        &state_machine,
-        LEDGER_CANISTER_ID,
-        *TEST_USER1_PRINCIPAL,
-        TransferArg {
-            from_subaccount: None,
-            to: Account {
-                owner: sns_canister_ids.swap().into(),
-                subaccount: Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL))
-            },
-            fee: None,
-            created_at_time: None,
-            memo: None,
-            amount: Nat::from(E8 * 5 / 4)
-        },
-    )
-    .is_ok());
-
-    // If no ticket was provided make sure the payment flow works as before ticket system was introduced
-    let refresh_response = refresh_buyer_tokens(
-        &state_machine,
-        &sns_canister_ids.swap(),
-        &TEST_USER1_PRINCIPAL,
-        None,
-    );
-    assert_eq!(
-        refresh_response.unwrap(),
-        RefreshBuyerTokensResponse {
-            icp_accepted_participation_e8s: ticket.amount_icp_e8s - 1
-                + ticket_new.amount_icp_e8s * 2,
-            icp_ledger_account_balance_e8s: ticket.amount_icp_e8s - 1
-                + ticket_new.amount_icp_e8s * 2
-        }
-    );
 }
