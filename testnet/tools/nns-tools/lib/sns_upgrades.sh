@@ -25,19 +25,45 @@ sns_wasm_hash_for_canister() {
     echo "$HASH_VERSIONS" | jq -r ".${SNS_CANISTER_TYPE}_wasm_hash"
 }
 
+wasm_bytes_write_to_binary() {
+    local WASM_FILE=$1
+
+    python3 \
+        -c 'import sys;open(sys.argv[1], "wb").write(bytes([int(line.strip()) for line in sys.stdin]))' \
+        $WASM_FILE
+}
+
 sns_wasm_hash_to_git_commit() {
-    local HASH=$1
-    cat "$NNS_TOOLS_DIR/sns_publish_log.txt" \
-        | grep "$HASH" \
-        | awk '{ print $3 }'
+    ensure_variable_set IDL2JSON
+    ensure_variable_set IC_WASM
+
+    local NNS_URL=$1
+    local HASH=$2
+
+    local IC=$(repo_root)
+    local SNS_W_DID="$IC/rs/nns/sns-wasm/canister/sns-wasm.did"
+    local BYTE_ARRAY_HASH=$(hex_to_idl_byte_array $HASH)
+
+    # Make a temporary file to store the wasm that will be un-gzipped later.
+    WASM_FILE=$(mktemp)
+    rm -rf ${WASM_FILE}
+
+    __dfx -q canister --network $NNS_URL \
+        call --candid "$SNS_W_DID" \
+        qaa6y-5yaaa-aaaaa-aaafa-cai get_wasm "(record { hash = vec ${BYTE_ARRAY_HASH}: vec nat8})" \
+        | $IDL2JSON | jq -r .wasm[0].wasm[] | wasm_bytes_write_to_binary "${WASM_FILE}.gz"
+    gzip -d "${WASM_FILE}.gz"
+    GIT_COMMIT_ID=$($IC_WASM ${WASM_FILE} metadata git_commit_id)
+    rm -rf ${WASM_FILE}
+
+    echo $GIT_COMMIT_ID
 }
 
 sns_mainnet_git_commit_id() {
     local SNS_CANISTER_TYPE=$1
-    local VERSION_INDEX=${2:--1} #default to latest
 
-    WASM_HASH=$(sns_mainnet_wasm_hash ${SNS_CANISTER_TYPE} ${VERSION_INDEX})
-    sns_wasm_hash_to_git_commit ${WASM_HASH}
+    WASM_HASH=$(sns_mainnet_wasm_hash $SNS_CANISTER_TYPE)
+    sns_wasm_hash_to_git_commit ic $WASM_HASH
 }
 
 create_sns_for_upgrade_test() {
@@ -109,7 +135,7 @@ reset_sns_w_versions() {
 
     for SNS_CANISTER in "${SNS_CANISTERS[@]}"; do
         WASM_HASH=$(sns_wasm_hash_for_canister "${HASH_VERSIONS}" ${SNS_CANISTER})
-        GIT_COMMIT_ID=$(sns_wasm_hash_to_git_commit ${WASM_HASH})
+        GIT_COMMIT_ID=$(sns_wasm_hash_to_git_commit ${NNS_URL} ${WASM_HASH})
         upload_canister_git_version_to_sns_wasm \
             ${NNS_URL} ${NEURON_ID} ${PEM} ${SNS_CANISTER} ${GIT_COMMIT_ID}
     done
