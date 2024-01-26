@@ -18,32 +18,20 @@ pub trait Render: Sync + Send {
 }
 
 pub struct Renderer {
-    template_with_service_worker: String,
-    template_with_icx_proxy: String,
-    no_sw_domains: Vec<String>,
+    template: String,
 }
 
 impl Renderer {
-    pub fn new(
-        template_with_service_worker: &str,
-        template_with_icx_proxy: &str,
-        no_sw_domains: Vec<String>,
-    ) -> Self {
+    pub fn new(template: &str) -> Self {
         Self {
-            template_with_service_worker: template_with_service_worker.to_owned(),
-            template_with_icx_proxy: template_with_icx_proxy.to_owned(),
-            no_sw_domains: no_sw_domains.to_owned(),
+            template: template.to_owned(),
         }
     }
 }
 
 impl Render for Renderer {
     fn render(&self, cx: &Context) -> Result<String, Error> {
-        let out = if self.no_sw_domains.contains(&cx.name.to_string()) {
-            self.template_with_icx_proxy.clone()
-        } else {
-            self.template_with_service_worker.clone()
-        };
+        let out = self.template.clone();
         let out = out.replace("{name}", cx.name);
         let out = out.replace("{ssl_certificate_key_path}", cx.ssl_certificate_key_path);
         let out = out.replace("{ssl_certificate_path}", cx.ssl_certificate_path);
@@ -80,11 +68,7 @@ mod tests {
 
     #[test]
     fn test_render() {
-        let r = Renderer::new(
-            "{name}|{ssl_certificate_key_path}|{ssl_certificate_path}",
-            "{name}|{ssl_certificate_path}|{ssl_certificate_key_path}",
-            vec!["X".to_string(), "Y".to_string(), "Z".to_string()],
-        );
+        let r = Renderer::new("{name}|{ssl_certificate_key_path}|{ssl_certificate_path}");
 
         let out = r
             .render(&Context {
@@ -104,6 +88,6 @@ mod tests {
             })
             .expect("failed to render");
 
-        assert_eq!(out, "X|3|2");
+        assert_eq!(out, "X|2|3");
     }
 }
