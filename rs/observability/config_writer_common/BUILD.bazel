@@ -4,8 +4,8 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/observability/service_discovery",
+    "//rs/sys",
     "//rs/types/types",
-    "//rs/utils",
     "@crate_index//:crossbeam",
     "@crate_index//:crossbeam-channel",
     "@crate_index//:erased-serde",

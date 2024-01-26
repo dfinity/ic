@@ -9,8 +9,8 @@ documentation.workspace = true
 [dependencies]
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-registry-common-proto = { path = "../proto" }
+ic-sys = { path = "../../sys" }
 ic-types = { path = "../../types/types" }
-ic-utils = { path = "../../utils" }
 prost = { workspace = true }
 
 [dev-dependencies]

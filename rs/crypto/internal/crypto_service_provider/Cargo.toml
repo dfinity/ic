@@ -36,8 +36,8 @@ ic-interfaces = { path = "../../../interfaces" }
 ic-logger = { path = "../../../monitoring/logger" }
 ic-metrics = { path = "../../../monitoring/metrics" }
 ic-protobuf = { path = "../../../protobuf" }
+ic-sys = { path = "../../../sys" }
 ic-types = { path = "../../../types/types" }
-ic-utils = { path = "../../../utils" }
 parking_lot = "0.12.1"
 prost = { workspace = true }
 rand = "0.8"

@@ -8,9 +8,9 @@ pub use checkpoint::{CheckpointSerialization, MappingSerialization};
 use ic_config::flag_status::FlagStatus;
 use ic_metrics::buckets::{decimal_buckets, linear_buckets};
 use ic_metrics::MetricsRegistry;
-use ic_sys::PageBytes;
+use ic_sys::{fs::write_all_vectored, PageBytes};
 pub use ic_sys::{PageIndex, PAGE_SIZE};
-use ic_utils::{deterministic_operations::deterministic_copy_from_slice, fs::write_all_vectored};
+use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 pub use page_allocator::{
     allocated_pages_count, PageAllocator, PageAllocatorRegistry, PageAllocatorSerialization,
     PageDeltaSerialization, PageSerialization,

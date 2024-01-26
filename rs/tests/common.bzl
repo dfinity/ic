@@ -87,6 +87,7 @@ DEPENDENCIES = [
     "//rs/sns/init",
     "//rs/sns/root",
     "//rs/sns/swap",
+    "//rs/sys",
     "//rs/test_utilities",
     "//rs/test_utilities/identity",
     "//rs/test_utilities/time",

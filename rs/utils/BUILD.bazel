@@ -12,21 +12,7 @@ rust_library(
         "@crate_index//:prost",
         "@crate_index//:scoped_threadpool",
         "@crate_index//:serde",
-    ] + select({
-        "@rules_rust//rust/platform:unix": [
-            "@crate_index//:rand",
-        ],
-        "//conditions:default": [],
-    }) + select({
-        "@rules_rust//rust/platform:linux": [
-            "//rs/sys",
-            "@crate_index//:cvt",
-            "@crate_index//:libc",
-            "@crate_index//:nix",
-            "@crate_index//:thiserror",
-        ],
-        "//conditions:default": [],
-    }),
+    ],
 )
 
 rust_test(

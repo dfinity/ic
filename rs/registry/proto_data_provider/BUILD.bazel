@@ -5,9 +5,9 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "//rs/interfaces/registry",
     "//rs/registry/proto",
+    "//rs/sys",
     "//rs/registry/transport",
     "//rs/types/types",
-    "//rs/utils",
     "@crate_index//:bytes",
     "@crate_index//:thiserror",
 ]

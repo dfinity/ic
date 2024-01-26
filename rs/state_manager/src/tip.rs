@@ -26,8 +26,8 @@ use ic_state_layout::{
     error::LayoutError, CanisterStateBits, CheckpointLayout, ExecutionStateBits, ReadOnly,
     RwPolicy, StateLayout, TipHandler,
 };
+use ic_sys::fs::defrag_file_partially;
 use ic_types::{malicious_flags::MaliciousFlags, CanisterId, Height};
-use ic_utils::fs::defrag_file_partially;
 use ic_utils::thread::parallel_map;
 use ic_utils::thread::JoinOnDrop;
 use prometheus::HistogramTimer;
