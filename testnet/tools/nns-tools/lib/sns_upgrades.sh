@@ -50,7 +50,7 @@ sns_wasm_hash_to_git_commit() {
 
     __dfx -q canister --network $NNS_URL \
         call --candid "$SNS_W_DID" \
-        qaa6y-5yaaa-aaaaa-aaafa-cai get_wasm "(record { hash = vec ${BYTE_ARRAY_HASH}: vec nat8})" \
+        ${SNS_W} get_wasm "(record { hash = vec ${BYTE_ARRAY_HASH}: vec nat8})" \
         | $IDL2JSON | jq -r .wasm[0].wasm[] | wasm_bytes_write_to_binary "${WASM_FILE}.gz"
     gzip -d "${WASM_FILE}.gz"
     GIT_COMMIT_ID=$($IC_WASM ${WASM_FILE} metadata git_commit_id)
@@ -253,7 +253,7 @@ set_sns_wasms_allowed_subnets() {
     #  Remove all from current list
     #  and add new one
 
-    CURRENT_SUBNETS=$(__dfx -q canister --network "$NNS_URL" call qaa6y-5yaaa-aaaaa-aaafa-cai get_sns_subnet_ids '(record {})' \
+    CURRENT_SUBNETS=$(__dfx -q canister --network "$NNS_URL" call ${SNS_W} get_sns_subnet_ids '(record {})' \
         | grep principal \
         | sed 's/.*"\(.*\)";/\1/')
 
