@@ -182,7 +182,7 @@ set_sns_wasms_allowed_subnets() {
     #  Remove all from current list
     #  and add new one
 
-    CURRENT_SUBNETS=$(__dfx canister --network "$NNS_URL" call qaa6y-5yaaa-aaaaa-aaafa-cai get_sns_subnet_ids '(record {})' \
+    CURRENT_SUBNETS=$(__dfx canister --network "$NNS_URL" call ${SNS_W} get_sns_subnet_ids '(record {})' \
         | grep principal \
         | sed 's/.*"\(.*\)";/\1/')
 
@@ -368,7 +368,7 @@ sns_w_list_upgrade_steps() {
 
     __dfx -q canister --network "$NNS_URL" \
         call --candid "$SNS_W_DID" \
-        qaa6y-5yaaa-aaaaa-aaafa-cai list_upgrade_steps "(record {limit = 0: nat32; sns_governance_canister_id = $SNS_GOVERNANCE_CANISTER_ID})"
+        ${SNS_W} list_upgrade_steps "(record {limit = 0: nat32; sns_governance_canister_id = $SNS_GOVERNANCE_CANISTER_ID})"
 }
 
 ##: list_deployed_snses
@@ -382,7 +382,7 @@ list_deployed_snses() {
 
     __dfx -q canister --network $NNS_URL \
         call --candid "$SNS_W_DID" \
-        qaa6y-5yaaa-aaaaa-aaafa-cai list_deployed_snses '(record {})'
+        ${SNS_W} list_deployed_snses '(record {})'
 }
 
 sns_w_latest_version() {
@@ -393,7 +393,7 @@ sns_w_latest_version() {
 
     __dfx -q canister --network $NNS_URL \
         call --candid "$SNS_W_DID" \
-        qaa6y-5yaaa-aaaaa-aaafa-cai get_latest_sns_version_pretty '(null)'
+        ${SNS_W} get_latest_sns_version_pretty '(null)'
 }
 
 ##: sns_list_my_neurons
@@ -446,7 +446,7 @@ sns_w_get_next_sns_version() {
 
     __dfx -q canister --network $NNS_URL call \
         --candid $SNS_W_DID \
-        qaa6y-5yaaa-aaaaa-aaafa-cai get_next_sns_version \
+        ${SNS_W} get_next_sns_version \
         "(record {
                     governance_canister_id =  $SNS_GOVERNANCE_CANISTER_ID;
                     current_version = opt $CURRENT_VERSION_CANDID
