@@ -1674,7 +1674,10 @@ pub fn redirect_to_non_raw_test(env: TestEnv) {
     .expect("test suite failed");
 }
 
-pub fn sw_test(env: TestEnv) {
+// this tests the HTTP endpoint of the boundary node (anything that goes to icx-proxy)
+// in particular, it ensure that the service worker uninstall script is served for
+// anyone still having a service worker lingering around.
+pub fn http_endpoint_test(env: TestEnv) {
     let logger_orig = env.logger();
 
     let boundary_node = env
@@ -1703,12 +1706,13 @@ pub fn sw_test(env: TestEnv) {
 
     let futs = FuturesUnordered::new();
 
+    // fetching standard assets (html page, JS script) through icx-proxy
     let host = host_orig.clone();
     let logger = logger_orig.clone();
     let asset_canister = asset_canister_orig.clone();
     futs.push(rt.spawn({
         let client = client.clone();
-        let name = "get index.html with sw.js include from root path";
+        let name = "get index.html with response verification";
         info!(&logger, "Starting subtest {}", name);
 
         async move {
@@ -1778,6 +1782,7 @@ pub fn sw_test(env: TestEnv) {
         }
     }));
 
+    // fetching assets from non-root path
     let host = host_orig.clone();
     let logger = logger_orig.clone();
     let asset_canister = asset_canister_orig.clone();
@@ -1825,6 +1830,9 @@ pub fn sw_test(env: TestEnv) {
         }
     }));
 
+    // making sure the BN serves the uninstall script for any service worker
+    // request on the root path. This is necessary as clients that haven't visited
+    // a dapp for a long time, still have a service worker installed.
     let host = host_orig.clone();
     let logger = logger_orig.clone();
     let asset_canister = asset_canister_orig.clone();
@@ -1871,6 +1879,8 @@ pub fn sw_test(env: TestEnv) {
         }
     }));
 
+    // Make sure, we don't serve our uninstall script on any other path than
+    // the root path.
     let host = host_orig.clone();
     let logger = logger_orig.clone();
     let asset_canister = asset_canister_orig.clone();
