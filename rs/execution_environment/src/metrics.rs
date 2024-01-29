@@ -394,12 +394,16 @@ fn instructions_buckets() -> Vec<f64> {
         buckets.push(NumInstructions::from(value));
     }
 
-    buckets.push(NumInstructions::from(1_000_000_000_000));
+    // Add buckets for counting install_code messages
+    for value in (100_000_000_000..=1_000_000_000_000).step_by(100_000_000_000) {
+        buckets.push(NumInstructions::from(value));
+    }
 
     // Ensure that all buckets are unique.
     buckets.sort_unstable();
     buckets.dedup();
-    // Buckets are [0, 10, 1K, 10K, 20K, ..., 100B, 200B, 500B, 1T] + [1B, 2B, 3B, ..., 9B]
+    // Buckets are [0, 10, 1K, 10K, 20K, ..., 100B, 200B, 500B, 1T] + [1B, 2B, 3B, ..., 9B] + [100B,
+    // 200B, 300B, ..., 900B].
     buckets.into_iter().map(|x| x.get() as f64).collect()
 }
 
@@ -767,7 +771,21 @@ mod tests {
             .map(|x| x as u64)
             .collect();
         assert!(!buckets.is_empty());
-        let limits = [10, 1_000, 1_000_000_000, 200_000_000_000, 500_000_000_000];
+        let limits = [
+            10,
+            1_000,
+            1_000_000_000,
+            2_000_000_000,
+            3_000_000_000,
+            5_000_000_000,
+            7_000_000_000,
+            100_000_000_000,
+            200_000_000_000,
+            300_000_000_000,
+            500_000_000_000,
+            700_000_000_000,
+            1_000_000_000_000,
+        ];
         for l in limits {
             assert!(buckets.contains(&l));
         }
