@@ -3,6 +3,7 @@ use crate::eth_rpc::{
     Hash, HttpOutcallError, HttpResponsePayload, JsonRpcError, LogEntry, ProviderError,
     ResponseSizeEstimate, RpcError, SendRawTransactionResult,
 };
+use crate::eth_rpc_client::eth_rpc::HEADER_SIZE_LIMIT;
 use crate::eth_rpc_client::providers::{RpcService, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS};
 use crate::eth_rpc_client::requests::GetTransactionCountParams;
 use crate::eth_rpc_client::responses::TransactionReceipt;
@@ -14,7 +15,7 @@ use async_trait::async_trait;
 use candid::CandidType;
 use ic_canister_log::log;
 use ic_cdk::api::management_canister::http_request::{CanisterHttpRequestArgument, HttpResponse};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::marker::PhantomData;
@@ -62,24 +63,36 @@ impl RpcTransport for DefaultTransport {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Default, CandidType, Deserialize)]
+pub struct RpcConfig {
+    #[serde(rename = "responseSizeEstimate")]
+    pub response_size_estimate: Option<u64>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EthRpcClient<T: RpcTransport> {
     chain: EthereumNetwork,
     providers: Option<Vec<RpcService>>,
+    config: RpcConfig,
     phantom: PhantomData<T>,
 }
 
 impl<T: RpcTransport> EthRpcClient<T> {
-    pub const fn new(chain: EthereumNetwork, providers: Option<Vec<RpcService>>) -> Self {
+    pub const fn new(
+        chain: EthereumNetwork,
+        providers: Option<Vec<RpcService>>,
+        config: RpcConfig,
+    ) -> Self {
         Self {
             chain,
             providers,
+            config,
             phantom: PhantomData,
         }
     }
 
-    pub const fn from_state(state: &State) -> Self {
-        Self::new(state.ethereum_network(), None)
+    pub fn from_state(state: &State) -> Self {
+        Self::new(state.ethereum_network(), None, RpcConfig::default())
     }
 
     fn providers(&self) -> &[RpcService] {
@@ -90,6 +103,10 @@ impl<T: RpcTransport> EthRpcClient<T> {
                 EthereumNetwork::Sepolia => SEPOLIA_PROVIDERS,
             },
         }
+    }
+
+    fn response_size_estimate(&self, estimate: u64) -> ResponseSizeEstimate {
+        ResponseSizeEstimate::new(self.config.response_size_estimate.unwrap_or(estimate))
     }
 
     /// Query all providers in sequence until one returns an ok result
@@ -178,9 +195,12 @@ impl<T: RpcTransport> EthRpcClient<T> {
         &self,
         params: GetLogsParam,
     ) -> Result<Vec<LogEntry>, MultiCallError<Vec<LogEntry>>> {
-        // We expect most of the calls to contain zero events.
         let results: MultiCallResults<Vec<LogEntry>> = self
-            .parallel_call("eth_getLogs", vec![params], ResponseSizeEstimate::new(100))
+            .parallel_call(
+                "eth_getLogs",
+                vec![params],
+                self.response_size_estimate(1024 + HEADER_SIZE_LIMIT),
+            )
             .await;
         results.reduce_with_equality()
     }
@@ -203,7 +223,7 @@ impl<T: RpcTransport> EthRpcClient<T> {
                     block,
                     include_full_transactions: false,
                 },
-                ResponseSizeEstimate::new(expected_block_size),
+                self.response_size_estimate(expected_block_size + HEADER_SIZE_LIMIT),
             )
             .await;
         results.reduce_with_equality()
@@ -217,7 +237,7 @@ impl<T: RpcTransport> EthRpcClient<T> {
             .parallel_call(
                 "eth_getTransactionReceipt",
                 vec![tx_hash],
-                ResponseSizeEstimate::new(700),
+                self.response_size_estimate(700 + HEADER_SIZE_LIMIT),
             )
             .await;
         results.reduce_with_equality()
@@ -229,7 +249,11 @@ impl<T: RpcTransport> EthRpcClient<T> {
     ) -> Result<FeeHistory, MultiCallError<FeeHistory>> {
         // A typical response is slightly above 300 bytes.
         let results: MultiCallResults<FeeHistory> = self
-            .parallel_call("eth_feeHistory", params, ResponseSizeEstimate::new(512))
+            .parallel_call(
+                "eth_feeHistory",
+                params,
+                self.response_size_estimate(512 + HEADER_SIZE_LIMIT),
+            )
             .await;
         results.reduce_with_strict_majority_by_key(|fee_history| fee_history.oldest_block)
     }
@@ -243,7 +267,7 @@ impl<T: RpcTransport> EthRpcClient<T> {
         self.sequential_call_until_ok(
             "eth_sendRawTransaction",
             vec![raw_signed_transaction_hex],
-            ResponseSizeEstimate::new(256),
+            self.response_size_estimate(256 + HEADER_SIZE_LIMIT),
         )
         .await
     }
@@ -255,7 +279,7 @@ impl<T: RpcTransport> EthRpcClient<T> {
         self.parallel_call(
             "eth_sendRawTransaction",
             vec![raw_signed_transaction_hex],
-            ResponseSizeEstimate::new(256),
+            self.response_size_estimate(256 + HEADER_SIZE_LIMIT),
         )
         .await
         .reduce_with_equality()
@@ -268,7 +292,7 @@ impl<T: RpcTransport> EthRpcClient<T> {
         self.parallel_call(
             "eth_getTransactionCount",
             params,
-            ResponseSizeEstimate::new(50),
+            self.response_size_estimate(50 + HEADER_SIZE_LIMIT),
         )
         .await
     }

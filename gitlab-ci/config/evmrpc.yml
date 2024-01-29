@@ -1,0 +1,6 @@
+build-cketh-minter:
+  rules:
+      - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+  image: rustlang/rust:nightly
+  script:
+    - cargo build --package ic-cketh-minter

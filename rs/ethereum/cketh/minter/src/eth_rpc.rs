@@ -35,7 +35,7 @@ mod tests;
 // the headers size to 8 KiB. We chose a lower limit because headers observed on most providers
 // fit in the constant defined below, and if there is spike, then the payload size adjustment
 // should take care of that.
-const HEADER_SIZE_LIMIT: u64 = 2 * 1024;
+pub const HEADER_SIZE_LIMIT: u64 = 2 * 1024;
 
 // This constant comes from the IC specification:
 // > If provided, the value must not exceed 2MB
@@ -710,16 +710,18 @@ pub type HttpOutcallResult<T> = Result<T, HttpOutcallError>;
 
 #[derive(Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord, CandidType, Deserialize)]
 pub enum ValidationError {
+    // #[error("{0}")]
+    Custom(String),
     // #[error("invalid hex data: {0}")]
     InvalidHex(String),
     // #[error("URL parse error: {0}")]
     UrlParseError(String),
     // #[error("hostname not allowed: {0}")]
     HostNotAllowed(String),
-    // #[error("credential path not allowed: {0}")]
-    CredentialPathNotAllowed(String),
-    // #[error("credential header not allowed: {0}")]
-    CredentialHeaderNotAllowed(String),
+    // #[error("credential path not allowed")]
+    CredentialPathNotAllowed,
+    // #[error("credential header not allowed")]
+    CredentialHeaderNotAllowed,
 }
 
 pub fn are_errors_consistent<T: PartialEq>(
@@ -811,7 +813,7 @@ where
         let payload = serde_json::to_string(&rpc_request).unwrap();
         log!(TRACE_HTTP, "Calling url: {}, with payload: {payload}", url);
 
-        let effective_size_estimate = response_size_estimate.get() + HEADER_SIZE_LIMIT;
+        let effective_size_estimate = response_size_estimate.get();
         let transform_op = O::response_transform()
             .as_ref()
             .map(|t| {
@@ -833,7 +835,14 @@ where
             )),
         };
 
-        let response = match T::http_request(provider, &eth_method, request, effective_size_estimate).await {
+        let response = match T::http_request(
+            provider,
+            &eth_method,
+            request,
+            effective_size_estimate,
+        )
+        .await
+        {
             Err(RpcError::HttpOutcallError(HttpOutcallError::IcError { code, message }))
                 if is_response_too_large(&code, &message) =>
             {
