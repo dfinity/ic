@@ -627,10 +627,8 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::UninstallCode) => {
-                let res = match UninstallCodeArgs::decode(payload) {
-                    Err(err) => Err(err),
-                    Ok(args) => self
-                        .canister_manager
+                let res = UninstallCodeArgs::decode(payload).and_then(|args| {
+                    self.canister_manager
                         .uninstall_code(
                             msg.canister_change_origin(args.get_sender_canister_version()),
                             args.get_canister_id(),
@@ -638,8 +636,8 @@ impl ExecutionEnvironment {
                             &self.metrics.canister_not_found_error,
                         )
                         .map(|()| EmptyBlob.encode())
-                        .map_err(|err| err.into()),
-                };
+                        .map_err(|err| err.into())
+                });
                 Some((res, msg.take_cycles()))
             }
 
@@ -715,28 +713,26 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::CanisterStatus) => {
-                let res = match CanisterIdRecord::decode(payload) {
-                    Err(err) => Err(err),
-                    Ok(args) => self.get_canister_status(
+                let res = CanisterIdRecord::decode(payload).and_then(|args| {
+                    self.get_canister_status(
                         *msg.sender(),
                         args.get_canister_id(),
                         &mut state,
                         registry_settings.subnet_size,
-                    ),
-                };
+                    )
+                });
                 Some((res, msg.take_cycles()))
             }
 
             Ok(Ic00Method::CanisterInfo) => match &msg {
                 CanisterCall::Request(_) => {
-                    let res = match CanisterInfoRequest::decode(payload) {
-                        Err(err) => Err(err),
-                        Ok(record) => self.get_canister_info(
+                    let res = CanisterInfoRequest::decode(payload).and_then(|record| {
+                        self.get_canister_info(
                             record.canister_id(),
                             record.num_requested_changes(),
                             &state,
-                        ),
-                    };
+                        )
+                    });
                     Some((res, msg.take_cycles()))
                 }
                 CanisterCall::Ingress(_) => {
@@ -745,12 +741,9 @@ impl ExecutionEnvironment {
             },
 
             Ok(Ic00Method::StartCanister) => {
-                let res = match CanisterIdRecord::decode(payload) {
-                    Err(err) => Err(err),
-                    Ok(args) => {
-                        self.start_canister(args.get_canister_id(), *msg.sender(), &mut state)
-                    }
-                };
+                let res = CanisterIdRecord::decode(payload).and_then(|args| {
+                    self.start_canister(args.get_canister_id(), *msg.sender(), &mut state)
+                });
                 Some((res, msg.take_cycles()))
             }
 
@@ -760,28 +753,25 @@ impl ExecutionEnvironment {
             },
 
             Ok(Ic00Method::DeleteCanister) => {
-                let res = match CanisterIdRecord::decode(payload) {
-                    Err(err) => Err(err),
-                    Ok(args) => {
-                        // Start logging execution time for `delete_canister`.
-                        let since = Instant::now();
+                let res = CanisterIdRecord::decode(payload).and_then(|args| {
+                    // Start logging execution time for `delete_canister`.
+                    let since = Instant::now();
 
-                        let result = self
-                            .canister_manager
-                            .delete_canister(*msg.sender(), args.get_canister_id(), &mut state)
-                            .map(|()| EmptyBlob.encode())
-                            .map_err(|err| err.into());
+                    let result = self
+                        .canister_manager
+                        .delete_canister(*msg.sender(), args.get_canister_id(), &mut state)
+                        .map(|()| EmptyBlob.encode())
+                        .map_err(|err| err.into());
 
-                        info!(
-                            self.log,
-                            "Finished executing delete_canister message on canister {:?} after {:?} with result: {:?}",
-                            args.get_canister_id(),
-                            since.elapsed().as_secs_f64(),
-                            result
-                        );
+                    info!(
+                        self.log,
+                        "Finished executing delete_canister message on canister {:?} after {:?} with result: {:?}",
+                        args.get_canister_id(),
+                        since.elapsed().as_secs_f64(),
                         result
-                    }
-                };
+                    );
+                    result
+                });
                 Some((res, msg.take_cycles()))
             }
 
@@ -957,9 +947,8 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::ProvisionalCreateCanisterWithCycles) => {
-                let res = match ProvisionalCreateCanisterWithCyclesArgs::decode(payload) {
-                    Err(err) => Err(err),
-                    Ok(args) => {
+                let res =
+                    ProvisionalCreateCanisterWithCyclesArgs::decode(payload).and_then(|args| {
                         let cycles_amount = args.to_u128();
                         let sender_canister_version = args.get_sender_canister_version();
                         match CanisterSettings::try_from(args.settings) {
@@ -984,22 +973,20 @@ impl ExecutionEnvironment {
                                 .map_err(|err| err.into()),
                             Err(err) => Err(err.into()),
                         }
-                    }
-                };
+                    });
                 Some((res, msg.take_cycles()))
             }
 
             Ok(Ic00Method::ProvisionalTopUpCanister) => {
-                let res = match ProvisionalTopUpCanisterArgs::decode(payload) {
-                    Err(err) => Err(err),
-                    Ok(args) => self.add_cycles(
+                let res = ProvisionalTopUpCanisterArgs::decode(payload).and_then(|args| {
+                    self.add_cycles(
                         *msg.sender(),
                         args.get_canister_id(),
                         args.to_u128(),
                         &mut state,
                         &registry_settings.provisional_whitelist,
-                    ),
-                };
+                    )
+                });
                 Some((res, msg.take_cycles()))
             }
 
@@ -1056,33 +1043,28 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::UploadChunk) => {
                 let resource_saturation =
                     self.subnet_memory_saturation(&round_limits.subnet_available_memory);
-                let res = match UploadChunkArgs::decode(payload) {
-                    Err(err) => Err(err),
-                    Ok(args) => self.upload_chunk(
+                let res = UploadChunkArgs::decode(payload).and_then(|args| {
+                    self.upload_chunk(
                         *msg.sender(),
                         &mut state,
                         args,
                         round_limits,
                         registry_settings.subnet_size,
                         &resource_saturation,
-                    ),
-                };
+                    )
+                });
                 Some((res, msg.take_cycles()))
             }
 
             Ok(Ic00Method::ClearChunkStore) => {
-                let res = match ClearChunkStoreArgs::decode(payload) {
-                    Err(err) => Err(err),
-                    Ok(args) => self.clear_chunk_store(*msg.sender(), &mut state, args),
-                };
+                let res = ClearChunkStoreArgs::decode(payload)
+                    .and_then(|args| self.clear_chunk_store(*msg.sender(), &mut state, args));
                 Some((res, msg.take_cycles()))
             }
 
             Ok(Ic00Method::StoredChunks) => {
-                let res = match StoredChunksArgs::decode(payload) {
-                    Err(err) => Err(err),
-                    Ok(args) => self.stored_chunks(*msg.sender(), &state, args),
-                };
+                let res = StoredChunksArgs::decode(payload)
+                    .and_then(|args| self.stored_chunks(*msg.sender(), &state, args));
                 Some((res, msg.take_cycles()))
             }
 
@@ -1095,10 +1077,8 @@ impl ExecutionEnvironment {
             )),
 
             Ok(Ic00Method::NodeMetricsHistory) => {
-                let res = match NodeMetricsHistoryArgs::decode(payload) {
-                    Err(err) => Err(err),
-                    Ok(args) => self.node_metrics_history(&state, args),
-                };
+                let res = NodeMetricsHistoryArgs::decode(payload)
+                    .and_then(|args| self.node_metrics_history(&state, args));
                 Some((res, msg.take_cycles()))
             }
 
