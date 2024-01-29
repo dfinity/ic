@@ -7,16 +7,17 @@ use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_transcript_id_for_tests;
 use ic_crypto_test_utils_canister_threshold_sigs::node::Node;
 use ic_crypto_test_utils_canister_threshold_sigs::node::Nodes;
-use ic_crypto_test_utils_canister_threshold_sigs::IDkgParticipants;
 use ic_crypto_test_utils_canister_threshold_sigs::{
     build_params_from_previous, copy_dealing_in_transcript,
-    corrupt_single_dealing_and_generate_complaint, generate_key_transcript,
+    corrupt_dealings_and_generate_complaints_for_random_complainer,
+    corrupt_random_dealing_and_generate_complaint, generate_key_transcript,
     generate_presig_quadruple, node_id, random_crypto_component_not_in_receivers, random_dealer_id,
     random_dealer_id_excluding, random_node_id_excluding, random_receiver_for_inputs,
     random_receiver_id, random_receiver_id_excluding, run_tecdsa_protocol,
     sig_share_from_each_receiver, swap_two_dealings_in_transcript,
     CanisterThresholdSigTestEnvironment, IntoBuilder,
 };
+use ic_crypto_test_utils_canister_threshold_sigs::{setup_masked_random_params, IDkgParticipants};
 use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
 use ic_interfaces::crypto::{IDkgProtocol, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner};
 use ic_types::crypto::canister_threshold_sig::error::{
@@ -52,7 +53,7 @@ mod create_dealing {
             let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
             let (dealers, receivers) =
                 env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let dealer = env.nodes.random_dealer(&params, rng);
 
             let dealing = dealer
@@ -91,7 +92,7 @@ mod create_dealing {
                 (random_dealers, receivers_with_new_node_id)
             };
             let params =
-                env.params_for_random_sharing(&dealers, &receivers_with_new_node_id, alg, rng);
+                setup_masked_random_params(&env, alg, &dealers, &receivers_with_new_node_id, rng);
             let dealer = env.nodes.random_dealer(&params, rng);
 
             let result = dealer.create_dealing(&params);
@@ -108,7 +109,7 @@ mod create_dealing {
             let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
             let (dealers, receivers) =
                 env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let bad_dealer_id = random_node_id_excluding(params.dealers().get(), rng);
             let bad_dealer = Node::new(bad_dealer_id, Arc::clone(&env.registry), rng);
 
@@ -128,7 +129,7 @@ mod create_dealing {
             let (dealers, receivers) = env
                 .choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
 
-            let initial_params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let initial_params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let initial_transcript = env
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&initial_params, rng);
@@ -163,7 +164,8 @@ mod create_dealing {
             let (dealers, receivers) = env
                 .choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
 
-            let masked_key_params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let masked_key_params =
+                setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
 
             let masked_key_transcript = env
                 .nodes
@@ -252,7 +254,8 @@ mod create_dealing {
             let (dealers, receivers) = env
                 .choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
 
-            let masked_key_params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let masked_key_params =
+                setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
 
             let masked_key_transcript = env
                 .nodes
@@ -301,7 +304,9 @@ mod create_dealing {
 
 mod create_transcript {
     use super::*;
-    use ic_crypto_test_utils_canister_threshold_sigs::CorruptBytesCollection;
+    use ic_crypto_test_utils_canister_threshold_sigs::{
+        setup_masked_random_params, CorruptBytesCollection,
+    };
 
     #[test]
     fn should_create_transcript() {
@@ -312,7 +317,7 @@ mod create_transcript {
             let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
             let (dealers, receivers) =
                 env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let signed_dealings = env.nodes.create_and_verify_signed_dealings(&params);
             let batch_signed_dealings = env
                 .nodes
@@ -335,7 +340,7 @@ mod create_transcript {
 
             let (dealers, receivers) =
                 env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
 
             let dealings: BTreeMap<NodeId, SignedIDkgDealing> = env
                 .nodes
@@ -378,7 +383,7 @@ mod create_transcript {
                 },
                 rng,
             );
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let signed_dealings = env.nodes.create_and_verify_signed_dealings(&params);
             let batch_signed_dealings = env
                 .nodes
@@ -425,7 +430,7 @@ mod create_transcript {
                 rng,
             );
 
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
 
             let signed_dealings = env.nodes.create_and_verify_signed_dealings(&params);
             let batch_signed_dealings = env
@@ -480,7 +485,7 @@ mod create_transcript {
                 rng,
             );
 
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
 
             let signed_dealings = env.nodes.create_and_verify_signed_dealings(&params);
             let insufficient_supporters: Nodes = env
@@ -511,7 +516,7 @@ mod create_transcript {
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let creator = env.nodes.random_receiver(params.receivers(), rng);
             let batch_signed_dealings = env.nodes.create_batch_signed_dealings(&params);
             let corrupted_dealings = batch_signed_dealings
@@ -541,7 +546,7 @@ mod create_transcript {
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let creator = env.nodes.random_receiver(params.receivers(), rng);
             let mut batch_signed_dealings = env.nodes.create_batch_signed_dealings(&params);
             batch_signed_dealings.insert_or_update({
@@ -573,7 +578,7 @@ mod create_transcript {
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let creator = env.nodes.random_receiver(params.receivers(), rng);
             let mut batch_signed_dealings = env.nodes.create_batch_signed_dealings(&params);
             batch_signed_dealings.insert_or_update({
@@ -600,7 +605,7 @@ mod create_transcript {
 
 mod load_transcript {
     use super::*;
-    use ic_crypto_test_utils_canister_threshold_sigs::node::Node;
+    use ic_crypto_test_utils_canister_threshold_sigs::{node::Node, setup_masked_random_params};
 
     #[test]
     fn should_return_ok_from_load_transcript_if_not_a_receiver() {
@@ -610,7 +615,7 @@ mod load_transcript {
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let transcript = env
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&params, rng);
@@ -636,7 +641,7 @@ mod load_transcript {
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let transcript = env
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&params, rng);
@@ -655,7 +660,7 @@ mod load_transcript {
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let transcript = env
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&params, rng);
@@ -669,32 +674,33 @@ mod load_transcript {
 }
 
 mod verify_complaint {
-    use ic_crypto_test_utils_canister_threshold_sigs::corrupt_dealings_and_generate_complaints;
-
     use super::*;
-    use ic_crypto_test_utils_canister_threshold_sigs::to_corrupt_complaint;
+    use ic_crypto_test_utils_canister_threshold_sigs::{
+        setup_masked_random_params, to_corrupt_complaint, IDkgMode, IDkgModeTestContext,
+        IDkgTestContextForComplaint,
+    };
+    use strum::IntoEnumIterator;
 
     #[test]
     fn should_verify_complaint() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(2..6);
-        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
-        let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
+        for mode in IDkgMode::iter() {
+            println!("IDKG mode is {mode:?}");
+            let subnet_size = mode.subnet_size_for_complaint(6, rng);
+            let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
+            for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
+                let context = IDkgModeTestContext::new_for_complaint(mode, &env, rng);
+                let IDkgTestContextForComplaint {
+                    transcript,
+                    complaint,
+                    complainer,
+                    verifier,
+                } = context.setup_outputs_for_complaint(&env, alg, rng);
 
-        for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
-            let mut transcript = env
-                .nodes
-                .run_idkg_and_create_and_verify_transcript(&params, rng);
-            let (complainer, complaint) =
-                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
+                let result = verifier.verify_complaint(&transcript, complainer.id(), &complaint);
 
-            let result = env
-                .nodes
-                .random_receiver(params.receivers(), rng)
-                .verify_complaint(&transcript, complainer.id(), &complaint);
-
-            assert_eq!(result, Ok(()));
+                assert_eq!(result, Ok(()));
+            }
         }
     }
 
@@ -706,14 +712,14 @@ mod verify_complaint {
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let mut transcript = env
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&params, rng);
 
             let num_of_complaints = rng.gen_range(1..=transcript.verified_dealings.len());
             let (complainer, corrupted_dealing_indices, complaints) =
-                corrupt_dealings_and_generate_complaints(
+                corrupt_dealings_and_generate_complaints_for_random_complainer(
                     &mut transcript,
                     num_of_complaints,
                     &params,
@@ -758,12 +764,12 @@ mod verify_complaint {
         );
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let mut transcript = env
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&params, rng);
             let (complainer, complaint) =
-                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
+                corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
 
             let wrong_complainer_id =
                 random_receiver_id_excluding(params.receivers(), complainer.id(), rng);
@@ -785,16 +791,15 @@ mod verify_complaint {
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let mut transcript = env
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&params, rng);
             let (complainer, complaint) =
-                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
+                corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
 
-            let other_transcript_id = env
-                .params_for_random_sharing(&dealers, &receivers, alg, rng)
-                .transcript_id();
+            let other_transcript_id =
+                setup_masked_random_params(&env, alg, &dealers, &receivers, rng).transcript_id();
             assert_ne!(other_transcript_id, params.transcript_id());
             let complaint = complaint
                 .into_builder()
@@ -835,20 +840,21 @@ mod verify_complaint {
         );
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let mut transcript = env
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&params, rng);
             assert!(params.collection_threshold().get() >= 2);
             let num_of_dealings_to_corrupt = 2;
 
-            let (complainer, _, complaints) = corrupt_dealings_and_generate_complaints(
-                &mut transcript,
-                num_of_dealings_to_corrupt,
-                &params,
-                &env,
-                rng,
-            );
+            let (complainer, _, complaints) =
+                corrupt_dealings_and_generate_complaints_for_random_complainer(
+                    &mut transcript,
+                    num_of_dealings_to_corrupt,
+                    &params,
+                    &env,
+                    rng,
+                );
             let complainer_id = complainer.id();
 
             let mut complaint_1 = complaints.first().unwrap().clone();
@@ -889,19 +895,20 @@ mod verify_complaint {
         );
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             assert!(params.collection_threshold().get() as usize >= num_of_dealings_to_corrupt);
             let mut transcript = env
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&params, rng);
 
-            let (complainer, _, complaints) = corrupt_dealings_and_generate_complaints(
-                &mut transcript,
-                num_of_dealings_to_corrupt,
-                &params,
-                &env,
-                rng,
-            );
+            let (complainer, _, complaints) =
+                corrupt_dealings_and_generate_complaints_for_random_complainer(
+                    &mut transcript,
+                    num_of_dealings_to_corrupt,
+                    &params,
+                    &env,
+                    rng,
+                );
             let complainer_id = complainer.id();
 
             let mut complaint_1 = complaints.first().unwrap().clone();
@@ -938,12 +945,12 @@ mod verify_complaint {
         );
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let mut transcript = env
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&params, rng);
             let (complainer, complaint) =
-                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
+                corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
             for complaint_corrupter in ComplaintCorrupter::iter() {
                 let corrupt_complaint = to_corrupt_complaint(&complaint, &complaint_corrupter);
                 assert_matches!(
@@ -960,7 +967,7 @@ mod verify_complaint {
 
 mod verify_transcript {
     use super::*;
-    use ic_crypto_test_utils_canister_threshold_sigs::IntoBuilder;
+    use ic_crypto_test_utils_canister_threshold_sigs::{setup_masked_random_params, IntoBuilder};
 
     #[test]
     fn should_run_idkg_successfully_for_random_dealing() {
@@ -971,7 +978,7 @@ mod verify_transcript {
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let transcript = env
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&params, rng);
@@ -990,7 +997,7 @@ mod verify_transcript {
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let initial_params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let initial_params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let initial_transcript = env
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&initial_params, rng);
@@ -1021,7 +1028,7 @@ mod verify_transcript {
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let initial_params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let initial_params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let initial_transcript = env
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&initial_params, rng);
@@ -1060,7 +1067,7 @@ mod verify_transcript {
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let masked_params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let masked_params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let masked_transcript = env
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&masked_params, rng);
@@ -1070,7 +1077,7 @@ mod verify_transcript {
 
             let unmasked_transcript = {
                 let masked_random_params =
-                    env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+                    setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
                 let masked_random_transcript = env
                     .nodes
                     .run_idkg_and_create_and_verify_transcript(&masked_random_params, rng);
@@ -1116,7 +1123,7 @@ mod verify_transcript {
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let random_params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let random_params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let random_transcript = env
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&random_params, rng);
@@ -1210,7 +1217,7 @@ mod verify_transcript {
         );
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
 
             let transcript = env
                 .nodes
@@ -1244,7 +1251,8 @@ mod verify_transcript {
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let masked_key_params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let masked_key_params =
+                setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
 
             let masked_key_transcript = env
                 .nodes
@@ -1293,7 +1301,7 @@ mod verify_transcript {
         );
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
 
             let mut transcript = env
                 .nodes
@@ -1354,7 +1362,7 @@ mod verify_transcript {
         );
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
 
             let transcript = env
                 .nodes
@@ -1402,7 +1410,7 @@ mod verify_transcript {
             rng,
         );
 
-        let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+        let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
 
         let transcript = env
             .nodes
@@ -1425,20 +1433,20 @@ mod verify_transcript {
 
     #[test]
     fn should_verify_transcript_reject_transcript_with_corrupted_internal_data() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let subnet_size = rng.gen_range(4..10);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let (env, params, transcript) = setup_for_verify_transcript(alg, &mut rng, subnet_size);
+            let (env, params, transcript) = setup_for_verify_transcript(alg, rng, subnet_size);
 
             let transcript = transcript
                 .into_builder()
-                .corrupt_internal_transcript_raw(&mut rng)
+                .corrupt_internal_transcript_raw(rng)
                 .build();
 
             let r = env
                 .nodes
-                .random_node(&mut rng)
+                .random_node(rng)
                 .verify_transcript(&params, &transcript);
 
             // Since the corruption is randomized, we might corrupt the CBOR or the commitments
@@ -1457,17 +1465,17 @@ mod verify_transcript {
 
     #[test]
     fn should_verify_transcript_reject_transcript_with_wrong_transcript_id() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let subnet_size = rng.gen_range(4..10);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let (env, params, transcript) = setup_for_verify_transcript(alg, &mut rng, subnet_size);
+            let (env, params, transcript) = setup_for_verify_transcript(alg, rng, subnet_size);
 
             let transcript = transcript.into_builder().corrupt_transcript_id().build();
 
             let r = env
                 .nodes
-                .random_node(&mut rng)
+                .random_node(rng)
                 .verify_transcript(&params, &transcript);
 
             assert_matches!(r,
@@ -1478,17 +1486,17 @@ mod verify_transcript {
 
     #[test]
     fn should_verify_transcript_reject_transcript_with_wrong_registry_version() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let subnet_size = rng.gen_range(4..10);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let (env, params, transcript) = setup_for_verify_transcript(alg, &mut rng, subnet_size);
+            let (env, params, transcript) = setup_for_verify_transcript(alg, rng, subnet_size);
 
             let transcript = transcript.into_builder().corrupt_registry_version().build();
 
             let r = env
                 .nodes
-                .random_node(&mut rng)
+                .random_node(rng)
                 .verify_transcript(&params, &transcript);
 
             assert_matches!(r,
@@ -1499,17 +1507,17 @@ mod verify_transcript {
 
     #[test]
     fn should_verify_transcript_reject_transcript_with_wrong_algorithm_id() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let subnet_size = rng.gen_range(4..10);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let (env, params, transcript) = setup_for_verify_transcript(alg, &mut rng, subnet_size);
+            let (env, params, transcript) = setup_for_verify_transcript(alg, rng, subnet_size);
 
             let transcript = transcript.into_builder().corrupt_algorithm_id().build();
 
             let r = env
                 .nodes
-                .random_node(&mut rng)
+                .random_node(rng)
                 .verify_transcript(&params, &transcript);
 
             assert_matches!(r,
@@ -1520,17 +1528,17 @@ mod verify_transcript {
 
     #[test]
     fn should_verify_transcript_reject_transcript_with_an_extra_receiver() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let subnet_size = rng.gen_range(4..10);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let (env, params, transcript) = setup_for_verify_transcript(alg, &mut rng, subnet_size);
+            let (env, params, transcript) = setup_for_verify_transcript(alg, rng, subnet_size);
 
             let transcript = transcript.into_builder().add_a_new_receiver().build();
 
             let r = env
                 .nodes
-                .random_node(&mut rng)
+                .random_node(rng)
                 .verify_transcript(&params, &transcript);
 
             assert_matches!(r,
@@ -1541,18 +1549,18 @@ mod verify_transcript {
 
     #[test]
     fn should_verify_transcript_reject_transcript_with_a_missing_receiver() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let subnet_size = rng.gen_range(6..10);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let (env, params, transcript) =
-                setup_for_verify_transcript_with_min_num_receivers(alg, &mut rng, subnet_size, 2);
+                setup_for_verify_transcript_with_min_num_receivers(alg, rng, subnet_size, 2);
 
             let transcript = transcript.into_builder().remove_a_receiver().build();
 
             let r = env
                 .nodes
-                .random_node(&mut rng)
+                .random_node(rng)
                 .verify_transcript(&params, &transcript);
 
             assert_matches!(r,
@@ -1563,17 +1571,17 @@ mod verify_transcript {
 
     #[test]
     fn should_verify_transcript_reject_transcript_with_wrong_transcript_type() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let subnet_size = rng.gen_range(4..10);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let (env, params, transcript) = setup_for_verify_transcript(alg, &mut rng, subnet_size);
+            let (env, params, transcript) = setup_for_verify_transcript(alg, rng, subnet_size);
 
             let transcript = transcript.into_builder().corrupt_transcript_type().build();
 
             let r = env
                 .nodes
-                .random_node(&mut rng)
+                .random_node(rng)
                 .verify_transcript(&params, &transcript);
 
             assert_matches!(r,
@@ -1631,25 +1639,17 @@ mod sign_share {
 
     #[test]
     fn should_fail_create_signature_if_not_receiver() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let subnet_size = rng.gen_range(1..10);
-            let env = CanisterThresholdSigTestEnvironment::new(subnet_size, &mut rng);
-            let (dealers, receivers) = env.choose_dealers_and_receivers(
-                &IDkgParticipants::RandomForThresholdSignature,
-                &mut rng,
-            );
+            let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
+            let (dealers, receivers) = env
+                .choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
 
-            let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, &mut rng);
-            let quadruple = generate_presig_quadruple(
-                &env,
-                &dealers,
-                &receivers,
-                alg,
-                &key_transcript,
-                &mut rng,
-            );
+            let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
+            let quadruple =
+                generate_presig_quadruple(&env, &dealers, &receivers, alg, &key_transcript, rng);
 
             let inputs = {
                 let derivation_path = ExtendedDerivationPath {
@@ -1670,7 +1670,7 @@ mod sign_share {
                 .expect("failed to create signature inputs")
             };
 
-            let bad_signer_id = random_node_id_excluding(inputs.receivers().get(), &mut rng);
+            let bad_signer_id = random_node_id_excluding(inputs.receivers().get(), rng);
             let bad_crypto_component = TempCryptoComponent::builder()
                 .with_registry(Arc::clone(&env.registry) as Arc<_>)
                 .with_node_id(bad_signer_id)
@@ -2155,7 +2155,7 @@ mod retain_active_transcripts {
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let transcript = env
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&params, rng);
@@ -2184,7 +2184,7 @@ mod load_transcript_with_openings {
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let transcript = env
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&params, rng);
@@ -2211,7 +2211,7 @@ mod load_transcript_with_openings {
             rng,
         );
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let mut transcript = env
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&params, rng);
@@ -2221,7 +2221,7 @@ mod load_transcript_with_openings {
             let number_of_openings = reconstruction_threshold;
 
             let (complainer, complaint) =
-                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
+                corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
             let complaint_with_openings = generate_and_verify_openings_for_complaint(
                 number_of_openings,
                 &transcript,
@@ -2250,7 +2250,7 @@ mod load_transcript_with_openings {
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let random_sharing_params =
-                env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+                setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let random_sharing_transcript = env
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&random_sharing_params, rng);
@@ -2267,7 +2267,7 @@ mod load_transcript_with_openings {
                     .expect("invalid number");
             let number_of_openings = reconstruction_threshold;
 
-            let (complainer, complaint) = corrupt_single_dealing_and_generate_complaint(
+            let (complainer, complaint) = corrupt_random_dealing_and_generate_complaint(
                 &mut key_transcript,
                 &unmasked_key_params,
                 &env,
@@ -2332,7 +2332,7 @@ mod load_transcript_with_openings {
             rng,
         );
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let mut transcript = env
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&params, rng);
@@ -2342,7 +2342,7 @@ mod load_transcript_with_openings {
             let number_of_openings = reconstruction_threshold - 1;
 
             let (complainer, complaint) =
-                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
+                corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
             let complaint_with_openings = generate_and_verify_openings_for_complaint(
                 number_of_openings,
                 &transcript,
@@ -2758,7 +2758,7 @@ mod verify_dealing_private {
     use super::*;
     use ic_crypto::CryptoComponentImpl;
     use ic_crypto_internal_logmon::metrics::CryptoMetrics;
-    use ic_crypto_test_utils_canister_threshold_sigs::IntoBuilder;
+    use ic_crypto_test_utils_canister_threshold_sigs::{setup_masked_random_params, IntoBuilder};
     use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
     use ic_crypto_test_utils_keys::public_keys::valid_idkg_dealing_encryption_public_key;
     use ic_interfaces_registry_mocks::MockRegistryClient;
@@ -2778,7 +2778,7 @@ mod verify_dealing_private {
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let dealer = env.nodes.random_dealer(&params, rng);
             let signed_dealing = dealer.create_dealing_or_panic(&params);
             let receiver = env.nodes.random_receiver(params.receivers(), rng);
@@ -2797,7 +2797,7 @@ mod verify_dealing_private {
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let dealer = env.nodes.random_dealer(&params, rng);
             let signed_dealing_with_corrupted_signature = dealer
                 .create_dealing_or_panic(&params)
@@ -2842,10 +2842,11 @@ mod verify_dealing_private {
         };
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(
+            let params = setup_masked_random_params(
+                &env,
+                alg,
                 &dealers_with_at_least_one_common_node,
                 &receivers_with_at_least_one_common_node,
-                alg,
                 rng,
             );
             let signed_dealing = dealer_and_receiver.create_dealing_or_panic(&params);
@@ -2864,7 +2865,7 @@ mod verify_dealing_private {
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let dealer = env.nodes.random_dealer(&params, rng);
             let signed_dealing = dealer.create_dealing_or_panic(&params);
             let receiver = env.nodes.random_receiver(params.receivers(), rng);
@@ -2889,7 +2890,7 @@ mod verify_dealing_private {
         let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let dealer = env.nodes.random_dealer(&params, rng);
             let signed_dealing = dealer.create_dealing_or_panic(&params);
             let receiver = env.nodes.random_receiver(params.receivers(), rng);
@@ -3013,7 +3014,7 @@ mod verify_dealing_private {
             let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
             let (dealers, receivers) =
                 env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let dealer = env.nodes.random_dealer(&params, rng);
             let signed_dealing = dealer.create_dealing_or_panic(&params);
             let node_id = *receivers
@@ -3076,19 +3077,18 @@ mod verify_dealing_public {
 
     #[test]
     fn should_successfully_verify_random_sharing_dealing_with_valid_input() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let subnet_size = rng.gen_range(1..10);
-        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, &mut rng);
-        let (dealers, receivers) =
-            env.choose_dealers_and_receivers(&IDkgParticipants::Random, &mut rng);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
+        let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, &mut rng);
-            let dealer = env.nodes.random_dealer(&params, &mut rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
+            let dealer = env.nodes.random_dealer(&params, rng);
 
             let signed_dealing = dealer.create_dealing_or_panic(&params);
 
-            let verifier_id = random_node_id_excluding(&env.nodes.ids(), &mut rng);
+            let verifier_id = random_node_id_excluding(&env.nodes.ids(), rng);
             let verifier = TempCryptoComponent::builder()
                 .with_registry(Arc::clone(&env.registry) as Arc<_>)
                 .with_node_id(verifier_id)
@@ -3102,22 +3102,21 @@ mod verify_dealing_public {
 
     #[test]
     fn should_fail_verify_dealing_public_with_invalid_signature() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let subnet_size = rng.gen_range(1..10);
-        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, &mut rng);
-        let (dealers, receivers) =
-            env.choose_dealers_and_receivers(&IDkgParticipants::Random, &mut rng);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
+        let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, &mut rng);
-            let dealer = env.nodes.random_dealer(&params, &mut rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
+            let dealer = env.nodes.random_dealer(&params, rng);
             let signed_dealing = dealer
                 .create_dealing_or_panic(&params)
                 .into_builder()
                 .corrupt_signature()
                 .build();
 
-            let verifier_id = random_node_id_excluding(&env.nodes.ids(), &mut rng);
+            let verifier_id = random_node_id_excluding(&env.nodes.ids(), rng);
             let verifier = TempCryptoComponent::builder()
                 .with_registry(Arc::clone(&env.registry) as Arc<_>)
                 .with_node_id(verifier_id)
@@ -3135,22 +3134,21 @@ mod verify_dealing_public {
 
     #[test]
     fn should_fail_verify_dealing_public_with_wrong_transcript_id() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let subnet_size = rng.gen_range(1..10);
-        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, &mut rng);
-        let (dealers, receivers) =
-            env.choose_dealers_and_receivers(&IDkgParticipants::Random, &mut rng);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
+        let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, &mut rng);
-            let dealer = env.nodes.random_dealer(&params, &mut rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
+            let dealer = env.nodes.random_dealer(&params, rng);
             let signed_dealing = dealer
                 .create_dealing_or_panic(&params)
                 .into_builder()
                 .corrupt_transcript_id()
                 .build_with_signature(&params, dealer, dealer.id());
 
-            let verifier_id = random_node_id_excluding(&env.nodes.ids(), &mut rng);
+            let verifier_id = random_node_id_excluding(&env.nodes.ids(), rng);
             let verifier = TempCryptoComponent::builder()
                 .with_registry(Arc::clone(&env.registry) as Arc<_>)
                 .with_node_id(verifier_id)
@@ -3169,20 +3167,20 @@ mod verify_dealing_public {
     #[test]
     fn should_fail_verify_dealing_public_with_wrong_dealer_id() {
         const MIN_NUM_NODES: usize = 2;
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let subnet_size = rng.gen_range(MIN_NUM_NODES..10); //need at least 2 nodes to have a dealer and another node
-        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, &mut rng);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(
             &IDkgParticipants::RandomWithAtLeast {
                 min_num_dealers: MIN_NUM_NODES,
                 min_num_receivers: 1,
             },
-            &mut rng,
+            rng,
         );
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, &mut rng);
-            let dealer = env.nodes.random_dealer(&params, &mut rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
+            let dealer = env.nodes.random_dealer(&params, rng);
             let other_dealer = env
                 .nodes
                 .dealers(&params)
@@ -3194,7 +3192,7 @@ mod verify_dealing_public {
                 .with_dealer_id(other_dealer.id())
                 .build_with_signature(&params, other_dealer, other_dealer.id());
 
-            let verifier_id = random_node_id_excluding(&env.nodes.ids(), &mut rng);
+            let verifier_id = random_node_id_excluding(&env.nodes.ids(), rng);
             let verifier = TempCryptoComponent::builder()
                 .with_registry(Arc::clone(&env.registry) as Arc<_>)
                 .with_node_id(verifier_id)
@@ -3212,20 +3210,19 @@ mod verify_dealing_public {
 
     #[test]
     fn should_fail_verify_dealing_public_with_wrong_dealer_index() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let subnet_size = rng.gen_range(1..10);
-        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, &mut rng);
-        let (dealers, receivers) =
-            env.choose_dealers_and_receivers(&IDkgParticipants::Random, &mut rng);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
+        let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, &mut rng);
-            let dealer = env.nodes.random_dealer(&params, &mut rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
+            let dealer = env.nodes.random_dealer(&params, rng);
             // We need the signature verification to succeed, so the public key of the valid dealer in
             // the registry needs to be copied to a non-dealer. The subsequent dealer index check will
             // fail (which is what we are testing), since the `NodeId` of the non-dealer is not
             // included in the list of dealers in params.
-            let not_a_dealer_node_id = random_node_id_excluding(&env.nodes.ids(), &mut rng);
+            let not_a_dealer_node_id = random_node_id_excluding(&env.nodes.ids(), rng);
             copy_node_signing_key_in_registry_from_one_node_to_another(
                 &env,
                 dealer.id(),
@@ -3239,7 +3236,7 @@ mod verify_dealing_public {
                 .with_dealer_id(not_a_dealer_node_id)
                 .build();
 
-            let verifier_id = random_node_id_excluding(&env.nodes.ids(), &mut rng);
+            let verifier_id = random_node_id_excluding(&env.nodes.ids(), rng);
             let verifier = TempCryptoComponent::builder()
                 .with_registry(Arc::clone(&env.registry) as Arc<_>)
                 .with_node_id(verifier_id)
@@ -3257,21 +3254,20 @@ mod verify_dealing_public {
 
     #[test]
     fn should_fail_verify_dealing_public_with_wrong_internal_dealing_raw() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let subnet_size = rng.gen_range(1..10);
-        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, &mut rng);
-        let (dealers, receivers) =
-            env.choose_dealers_and_receivers(&IDkgParticipants::Random, &mut rng);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
+        let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let params = env.params_for_random_sharing(&dealers, &receivers, alg, &mut rng);
-            let dealer = env.nodes.random_dealer(&params, &mut rng);
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
+            let dealer = env.nodes.random_dealer(&params, rng);
             let signed_dealing = dealer
                 .create_dealing_or_panic(&params)
                 .into_builder()
                 .corrupt_internal_dealing_raw_by_flipping_bit()
                 .build_with_signature(&params, dealer, dealer.id());
 
-            let verifier_id = random_node_id_excluding(&env.nodes.ids(), &mut rng);
+            let verifier_id = random_node_id_excluding(&env.nodes.ids(), rng);
             let verifier = TempCryptoComponent::builder()
                 .with_registry(Arc::clone(&env.registry) as Arc<_>)
                 .with_node_id(verifier_id)
@@ -3518,7 +3514,7 @@ mod open_transcript {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, complaint) =
-                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
+                corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
             let opener =
                 env.nodes
                     .random_receiver_excluding(complainer, &transcript.receivers, rng);
@@ -3534,7 +3530,7 @@ mod open_transcript {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, complaint) =
-                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
+                corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
             let opener = complainer; // opener's share is invalid
             let result = opener.open_transcript(&transcript, opener.id(), &complaint);
             assert_matches!(result, Err(IDkgOpenTranscriptError::InternalError { internal_error })
@@ -3548,7 +3544,7 @@ mod open_transcript {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, complaint) =
-                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
+                corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
             // Remove the corrupted dealing from the transcript.
             transcript.verified_dealings.remove(
                 &transcript
@@ -3571,7 +3567,7 @@ mod open_transcript {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, mut complaint) =
-                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
+                corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
             // Set "wrong" dealer_id in the complaint
             complaint.dealer_id = random_dealer_id_excluding(&transcript, complaint.dealer_id, rng);
 
@@ -3591,13 +3587,13 @@ mod open_transcript {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, complaint) =
-                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
+                corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
 
             // Create another environment of the same size, and generate a transcript for it.
             let env_2 = CanisterThresholdSigTestEnvironment::new(env.nodes.len(), rng);
             let (dealers_2, receivers_2) =
                 env_2.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
-            let params_2 = env_2.params_for_random_sharing(&dealers_2, &receivers_2, alg, rng);
+            let params_2 = setup_masked_random_params(&env_2, alg, &dealers_2, &receivers_2, rng);
             let transcript_2 = &env_2
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&params_2, rng);
@@ -3623,7 +3619,7 @@ mod verify_opening {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, complaint) =
-                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
+                corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
             let opener =
                 env.nodes
                     .random_receiver_excluding(complainer, &transcript.receivers, rng);
@@ -3643,7 +3639,7 @@ mod verify_opening {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, complaint) =
-                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
+                corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
             let opener =
                 env.nodes
                     .random_receiver_excluding(complainer, &transcript.receivers, rng);
@@ -3670,7 +3666,7 @@ mod verify_opening {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, mut complaint) =
-                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
+                corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
             let opener =
                 env.nodes
                     .random_receiver_excluding(complainer, &transcript.receivers, rng);
@@ -3698,7 +3694,7 @@ mod verify_opening {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, complaint) =
-                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
+                corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
             let opener =
                 env.nodes
                     .random_receiver_excluding(complainer, &transcript.receivers, rng);
@@ -3721,7 +3717,7 @@ mod verify_opening {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, complaint) =
-                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
+                corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
             let opener =
                 env.nodes
                     .random_receiver_excluding(complainer, &transcript.receivers, rng);
@@ -3751,7 +3747,7 @@ mod verify_opening {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, complaint) =
-                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
+                corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
             let opener =
                 env.nodes
                     .random_receiver_excluding(complainer, &transcript.receivers, rng);
@@ -3776,7 +3772,7 @@ mod verify_opening {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, complaint) =
-                corrupt_single_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
+                corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
             let opener =
                 env.nodes
                     .random_receiver_excluding(complainer, &transcript.receivers, rng);
@@ -4128,7 +4124,7 @@ fn environment_and_transcript_for_complaint<R: RngCore + CryptoRng>(
         rng,
     );
 
-    let params = env.params_for_random_sharing(&dealers, &receivers, alg, rng);
+    let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
     let transcript = env
         .nodes
         .run_idkg_and_create_and_verify_transcript(&params, rng);

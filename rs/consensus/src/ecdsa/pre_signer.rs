@@ -1339,7 +1339,7 @@ mod tests {
     use crate::ecdsa::test_utils::*;
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        CanisterThresholdSigTestEnvironment, IDkgParticipants,
+        setup_masked_random_params, CanisterThresholdSigTestEnvironment, IDkgParticipants,
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
@@ -2567,10 +2567,11 @@ mod tests {
             &IDkgParticipants::AllNodesAsDealersAndReceivers,
             &mut rng,
         );
-        let params = env.params_for_random_sharing(
+        let params = setup_masked_random_params(
+            &env,
+            AlgorithmId::ThresholdEcdsaSecp256k1,
             &dealers,
             &receivers,
-            AlgorithmId::ThresholdEcdsaSecp256k1,
             &mut rng,
         );
         let tid = params.transcript_id();

@@ -3,25 +3,26 @@ use criterion::BatchSize::SmallInput;
 use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion, SamplingMode};
 use ic_crypto_test_utils_canister_threshold_sigs::node::{Node, Nodes};
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    build_params_from_previous, corrupt_single_dealing_and_generate_complaint,
-    generate_and_verify_openings_for_complaint, random_transcript_id,
-    CanisterThresholdSigTestEnvironment, IDkgParticipants,
+    build_params_from_previous, create_transcript_or_panic,
+    generate_and_verify_openings_for_complaint, load_previous_transcripts_for_all_dealers,
+    load_transcript_or_panic, random_transcript_id, run_idkg_without_complaint,
+    setup_masked_random_params, CanisterThresholdSigTestEnvironment, IDkgMode, IDkgModeTestContext,
+    IDkgParticipants, IDkgTestContextForComplaint,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_interfaces::crypto::IDkgProtocol;
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealings, IDkgComplaint, IDkgDealers, IDkgReceivers, IDkgTranscript,
-    IDkgTranscriptOperation, IDkgTranscriptParams, InitialIDkgDealings, SignedIDkgDealing,
+    IDkgDealers, IDkgReceivers, IDkgTranscript, IDkgTranscriptOperation, IDkgTranscriptParams,
+    InitialIDkgDealings, SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::PreSignatureQuadruple;
 use ic_types::crypto::AlgorithmId;
 use rand::{CryptoRng, RngCore};
 use std::collections::HashSet;
-use std::fmt::{Display, Formatter};
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
-#[derive(strum_macros::EnumIter, PartialEq, Copy, Clone, Default)]
+#[derive(EnumIter, PartialEq, Copy, Clone, Default)]
 enum VaultType {
     Local,
     #[default]
@@ -41,9 +42,8 @@ criterion_main!(benches);
 criterion_group!(benches, crypto_idkg_benchmarks);
 
 fn crypto_idkg_benchmarks(criterion: &mut Criterion) {
-    let number_of_nodes = [1, 4, 13, 28, 40];
-
-    let test_cases = generate_test_cases(&number_of_nodes);
+    let nums_of_nodes = [1, 4, 13, 28, 40];
+    let test_cases = generate_test_cases(&nums_of_nodes);
 
     let rng = &mut ReproducibleRng::new();
     for test_case in test_cases {
@@ -54,19 +54,15 @@ fn crypto_idkg_benchmarks(criterion: &mut Criterion) {
                 .sample_size(test_case.sample_size)
                 .sampling_mode(test_case.sampling_mode);
 
-            IDkgMode::iter()
-                .for_each(|mode| bench_create_dealing(group, &test_case, &mode, vault_type, rng));
-
-            IDkgMode::iter().for_each(|mode| {
-                bench_verify_dealing_private(group, &test_case, &mode, vault_type, rng)
-            });
-
-            IDkgMode::iter()
-                .for_each(|mode| bench_load_transcript(group, &test_case, &mode, vault_type, rng));
+            for mode in IDkgMode::iter() {
+                bench_create_dealing(group, &test_case, mode, vault_type, rng);
+                bench_verify_dealing_private(group, &test_case, mode, vault_type, rng);
+                bench_load_transcript(group, &test_case, mode, vault_type, rng);
+            }
 
             bench_retain_active_transcripts(group, &test_case, 1, vault_type, rng);
 
-            if test_case.num_of_nodes > 1 {
+            if test_case.num_of_nodes >= IDkgMode::Random.min_subnet_size_for_complaint() {
                 bench_open_transcript(group, &test_case, vault_type, rng);
                 bench_load_transcript_with_openings(group, &test_case, vault_type, rng);
             }
@@ -74,21 +70,16 @@ fn crypto_idkg_benchmarks(criterion: &mut Criterion) {
             // The following benchmarks are not affected by the choice of the
             // vault, we benchmark them only once with the default vault type.
             if vault_type == VaultType::default() {
-                IDkgMode::iter().for_each(|mode| {
-                    bench_verify_dealing_public(group, &test_case, &mode, vault_type, rng)
-                });
+                for mode in IDkgMode::iter() {
+                    bench_verify_dealing_public(group, &test_case, mode, vault_type, rng);
+                    bench_create_transcript(group, &test_case, mode, vault_type, rng);
+                    bench_verify_transcript(group, &test_case, mode, vault_type, rng);
+                }
 
                 bench_verify_initial_dealings(group, &test_case, vault_type, rng);
-                IDkgMode::iter().for_each(|mode| {
-                    bench_create_transcript(group, &test_case, &mode, vault_type, rng)
-                });
-                IDkgMode::iter().for_each(|mode| {
-                    bench_verify_transcript(group, &test_case, &mode, vault_type, rng)
-                });
 
-                bench_verify_complaint(group, &test_case, vault_type, rng);
-
-                if test_case.num_of_nodes > 1 {
+                if test_case.num_of_nodes >= IDkgMode::Random.min_subnet_size_for_complaint() {
+                    bench_verify_complaint(group, &test_case, vault_type, rng);
                     bench_verify_opening(group, &test_case, vault_type, rng);
                 }
             }
@@ -99,14 +90,13 @@ fn crypto_idkg_benchmarks(criterion: &mut Criterion) {
 fn bench_create_dealing<M: Measurement, R: RngCore + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
-    mode: &IDkgMode,
+    mode: IDkgMode,
     vault_type: VaultType,
     rng: &mut R,
 ) {
     let env = test_case.new_test_environment(vault_type, rng);
-    let (dealers, receivers) =
-        env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
-    let params = mode.setup_params(&env, test_case.alg(), &dealers, &receivers, rng);
+    let context = IDkgModeTestContext::new(mode, &env, rng);
+    let params = context.setup_params(&env, test_case.alg(), rng);
 
     group.bench_function(format!("create_dealing_{mode}"), |bench| {
         bench.iter_batched(
@@ -120,14 +110,13 @@ fn bench_create_dealing<M: Measurement, R: RngCore + CryptoRng>(
 fn bench_verify_dealing_public<M: Measurement, R: RngCore + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
-    mode: &IDkgMode,
+    mode: IDkgMode,
     vault_type: VaultType,
     rng: &mut R,
 ) {
     let env = test_case.new_test_environment(vault_type, rng);
-    let (dealers, receivers) =
-        env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
-    let params = mode.setup_params(&env, test_case.alg(), &dealers, &receivers, rng);
+    let context = IDkgModeTestContext::new(mode, &env, rng);
+    let params = context.setup_params(&env, test_case.alg(), rng);
 
     group.bench_function(format!("verify_dealing_public_{mode}"), |bench| {
         bench.iter_batched_ref(
@@ -146,14 +135,13 @@ fn bench_verify_dealing_public<M: Measurement, R: RngCore + CryptoRng>(
 fn bench_verify_dealing_private<M: Measurement, R: RngCore + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
-    mode: &IDkgMode,
+    mode: IDkgMode,
     vault_type: VaultType,
     rng: &mut R,
 ) {
     let env = test_case.new_test_environment(vault_type, rng);
-    let (dealers, receivers) =
-        env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
-    let params = mode.setup_params(&env, test_case.alg(), &dealers, &receivers, rng);
+    let context = IDkgModeTestContext::new(mode, &env, rng);
+    let params = context.setup_params(&env, test_case.alg(), rng);
 
     group.bench_function(format!("verify_dealing_private_{mode}"), |bench| {
         bench.iter_batched_ref(
@@ -193,10 +181,11 @@ fn bench_verify_initial_dealings<M: Measurement, R: RngCore + CryptoRng>(
     group.bench_function("verify_initial_dealings", |bench| {
         bench.iter_batched_ref(
             || {
-                let initial_params = dealers_env.params_for_random_sharing(
+                let initial_params = setup_masked_random_params(
+                    &dealers_env,
+                    test_case.alg(),
                     &src_dealers,
                     &src_receivers,
-                    test_case.alg(),
                     rng,
                 );
                 let initial_transcript =
@@ -246,14 +235,13 @@ fn bench_verify_initial_dealings<M: Measurement, R: RngCore + CryptoRng>(
 fn bench_create_transcript<M: Measurement, R: RngCore + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
-    mode: &IDkgMode,
+    mode: IDkgMode,
     vault_type: VaultType,
     rng: &mut R,
 ) {
     let env = test_case.new_test_environment(vault_type, rng);
-    let (dealers, receivers) =
-        env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
-    let params = mode.setup_params(&env, test_case.alg(), &dealers, &receivers, rng);
+    let context = IDkgModeTestContext::new(mode, &env, rng);
+    let params = context.setup_params(&env, test_case.alg(), rng);
 
     group.bench_function(format!("create_transcript_{mode}"), |bench| {
         bench.iter_batched_ref(
@@ -265,7 +253,7 @@ fn bench_create_transcript<M: Measurement, R: RngCore + CryptoRng>(
                     .support_dealings_from_all_receivers(dealings, &params);
                 (receiver, dealings_with_receivers_support)
             },
-            |(receiver, dealings)| create_transcript(receiver, &params, dealings),
+            |(receiver, dealings)| create_transcript_or_panic(receiver, &params, dealings),
             SmallInput,
         )
     });
@@ -274,14 +262,13 @@ fn bench_create_transcript<M: Measurement, R: RngCore + CryptoRng>(
 fn bench_verify_transcript<M: Measurement, R: RngCore + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
-    mode: &IDkgMode,
+    mode: IDkgMode,
     vault_type: VaultType,
     rng: &mut R,
 ) {
     let env = test_case.new_test_environment(vault_type, rng);
-    let (dealers, receivers) =
-        env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
-    let params = mode.setup_params(&env, test_case.alg(), &dealers, &receivers, rng);
+    let context = IDkgModeTestContext::new(mode, &env, rng);
+    let params = context.setup_params(&env, test_case.alg(), rng);
 
     group.bench_function(format!("verify_transcript_{mode}"), |bench| {
         bench.iter_batched_ref(
@@ -292,7 +279,7 @@ fn bench_verify_transcript<M: Measurement, R: RngCore + CryptoRng>(
                     .support_dealings_from_all_receivers(dealings, &params);
                 let receiver = env.nodes.random_receiver(params.receivers(), rng);
                 let transcript =
-                    create_transcript(receiver, &params, &dealings_with_receivers_support);
+                    create_transcript_or_panic(receiver, &params, &dealings_with_receivers_support);
                 let other_receiver = other_receiver_or_same_if_only_one(
                     params.receivers(),
                     receiver,
@@ -301,7 +288,7 @@ fn bench_verify_transcript<M: Measurement, R: RngCore + CryptoRng>(
                 );
                 (other_receiver, transcript)
             },
-            |(receiver, transcript)| verify_transcript(receiver, &params, transcript),
+            |(receiver, transcript)| verify_transcript_or_panic(receiver, &params, transcript),
             SmallInput,
         )
     });
@@ -310,14 +297,13 @@ fn bench_verify_transcript<M: Measurement, R: RngCore + CryptoRng>(
 fn bench_load_transcript<M: Measurement, R: RngCore + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
-    mode: &IDkgMode,
+    mode: IDkgMode,
     vault_type: VaultType,
     rng: &mut R,
 ) {
     let env = test_case.new_test_environment(vault_type, rng);
-    let (dealers, receivers) =
-        env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
-    let params = mode.setup_params(&env, test_case.alg(), &dealers, &receivers, rng);
+    let context = IDkgModeTestContext::new(mode, &env, rng);
+    let params = context.setup_params(&env, test_case.alg(), rng);
 
     group.bench_function(format!("load_transcript_{mode}"), |bench| {
         bench.iter_batched_ref(
@@ -328,7 +314,7 @@ fn bench_load_transcript<M: Measurement, R: RngCore + CryptoRng>(
                     .support_dealings_from_all_receivers(dealings, &params);
                 let receiver = env.nodes.random_receiver(params.receivers(), rng);
                 let transcript =
-                    create_transcript(receiver, &params, &dealings_with_receivers_support);
+                    create_transcript_or_panic(receiver, &params, &dealings_with_receivers_support);
                 let other_receiver = other_receiver_or_same_if_only_one(
                     params.receivers(),
                     receiver,
@@ -337,7 +323,7 @@ fn bench_load_transcript<M: Measurement, R: RngCore + CryptoRng>(
                 );
                 (other_receiver, transcript)
             },
-            |(receiver, transcript)| load_transcript(receiver, transcript),
+            |(receiver, transcript)| load_transcript_or_panic(receiver, transcript),
             SmallInput,
         )
     });
@@ -359,7 +345,7 @@ fn bench_retain_active_transcripts<M: Measurement, R: RngCore + CryptoRng>(
     // This is the case because all nodes in CanisterThresholdSigTestEnvironment act as receivers
     // and all involved IDkgTranscriptParams include all nodes from CanisterThresholdSigTestEnvironment.
     let receiver = env.nodes.random_receiver(&key_transcript.receivers, rng);
-    load_transcript(receiver, &key_transcript);
+    load_transcript_or_panic(receiver, &key_transcript);
 
     let num_transcripts_to_delete = num_pre_sig_quadruples * 4;
     group.bench_function(
@@ -396,28 +382,20 @@ fn bench_verify_complaint<M: Measurement, R: RngCore + CryptoRng>(
     rng: &mut R,
 ) {
     let env = test_case.new_test_environment(vault_type, rng);
-    let (dealers, receivers) =
-        env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
-    let params = env.params_for_random_sharing(&dealers, &receivers, test_case.alg, rng);
+    let context = IDkgModeTestContext::new_for_complaint(IDkgMode::Random, &env, rng);
 
     group.bench_function("verify_complaint_random", |bench| {
         bench.iter_batched_ref(
-            || {
-                let mut transcript = env
-                    .nodes
-                    .run_idkg_and_create_and_verify_transcript(&params, rng);
-                let (complainer, complaint) = corrupt_single_dealing_and_generate_complaint(
-                    &mut transcript,
-                    &params,
-                    &env,
-                    rng,
-                );
-                let receiver = env.nodes.random_receiver(params.receivers(), rng);
-                (receiver, transcript, complainer.id(), complaint)
-            },
-            |(receiver, transcript, complainer_id, complaint)| {
-                receiver
-                    .verify_complaint(transcript, *complainer_id, complaint)
+            || context.setup_outputs_for_complaint(&env, test_case.alg, rng),
+            |complaint_context| {
+                let IDkgTestContextForComplaint {
+                    transcript,
+                    complaint,
+                    complainer,
+                    verifier,
+                } = complaint_context;
+                verifier
+                    .verify_complaint(transcript, complainer.id(), complaint)
                     .expect("failed to verify complaint")
             },
             SmallInput,
@@ -432,30 +410,31 @@ fn bench_open_transcript<M: Measurement, R: RngCore + CryptoRng>(
     rng: &mut R,
 ) {
     let env = test_case.new_test_environment(vault_type, rng);
-    let (dealers, receivers) =
-        env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
-    let params = env.params_for_random_sharing(&dealers, &receivers, test_case.alg, rng);
+    let context = IDkgModeTestContext::new_for_complaint(IDkgMode::Random, &env, rng);
 
     group.bench_function("open_transcript_random", |bench| {
         bench.iter_batched_ref(
             || {
-                let mut transcript = env
-                    .nodes
-                    .run_idkg_and_create_and_verify_transcript(&params, rng);
-                let (complainer, complaint) = corrupt_single_dealing_and_generate_complaint(
-                    &mut transcript,
-                    &params,
-                    &env,
-                    rng,
-                );
-                let opener =
-                    env.nodes
-                        .random_receiver_excluding(complainer, params.receivers(), rng);
-                (opener, transcript, complainer.id(), complaint)
+                let complaint_context =
+                    context.setup_outputs_for_complaint(&env, test_case.alg, rng);
+                let opener = {
+                    env.nodes.random_receiver_excluding(
+                        complaint_context.complainer,
+                        complaint_context.transcript.receivers.clone(),
+                        rng,
+                    )
+                };
+                (complaint_context, opener)
             },
-            |(opener, transcript, complainer_id, complaint)| {
+            |(complaint_context, opener)| {
+                let IDkgTestContextForComplaint {
+                    transcript,
+                    complaint,
+                    complainer,
+                    ..
+                } = complaint_context;
                 opener
-                    .open_transcript(transcript, *complainer_id, complaint)
+                    .open_transcript(transcript, complainer.id(), complaint)
                     .expect("failed to open transcript")
             },
             SmallInput,
@@ -470,31 +449,28 @@ fn bench_verify_opening<M: Measurement, R: RngCore + CryptoRng>(
     rng: &mut R,
 ) {
     let env = test_case.new_test_environment(vault_type, rng);
-    let (dealers, receivers) =
-        env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
-    let params = env.params_for_random_sharing(&dealers, &receivers, test_case.alg, rng);
+    let context = IDkgModeTestContext::new_for_complaint(IDkgMode::Random, &env, rng);
 
     group.bench_function("verify_opening_random", |bench| {
         bench.iter_batched_ref(
             || {
-                let mut transcript = env
-                    .nodes
-                    .run_idkg_and_create_and_verify_transcript(&params, rng);
-                let (complainer, complaint) = corrupt_single_dealing_and_generate_complaint(
-                    &mut transcript,
-                    &params,
-                    &env,
+                let complaint_context =
+                    context.setup_outputs_for_complaint(&env, test_case.alg, rng);
+                let IDkgTestContextForComplaint {
+                    transcript,
+                    complaint,
+                    verifier,
+                    complainer,
+                } = complaint_context;
+                let opener = env.nodes.random_receiver_excluding(
+                    complainer,
+                    transcript.receivers.clone(),
                     rng,
                 );
-                let opener =
-                    env.nodes
-                        .random_receiver_excluding(complainer, &transcript.receivers, rng);
                 let opening = opener
                     .open_transcript(&transcript, complainer.id(), &complaint)
                     .expect("Unexpected failure of open_transcript");
-                let opener_id = opener.id();
-                let verifier = env.nodes.random_receiver(params.receivers(), rng);
-                (verifier, transcript, opener_id, complaint, opening)
+                (verifier, transcript, opener.id(), complaint, opening)
             },
             |(verifier, transcript, opener_id, complaint, opening)| {
                 verifier
@@ -513,38 +489,35 @@ fn bench_load_transcript_with_openings<M: Measurement, R: RngCore + CryptoRng>(
     rng: &mut R,
 ) {
     let env = test_case.new_test_environment(vault_type, rng);
-    let (dealers, receivers) =
-        env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
-    let params = env.params_for_random_sharing(&dealers, &receivers, test_case.alg, rng);
+    let context = IDkgModeTestContext::new_for_complaint(IDkgMode::Random, &env, rng);
 
     group.bench_function("load_transcript_with_openings_random", |bench| {
         bench.iter_batched_ref(
             || {
-                let mut transcript = env
-                    .nodes
-                    .run_idkg_and_create_and_verify_transcript(&params, rng);
-                let reconstruction_threshold =
-                    usize::try_from(transcript.reconstruction_threshold().get())
-                        .expect("invalid number");
+                let complaint_context =
+                    context.setup_outputs_for_complaint(&env, test_case.alg, rng);
+                let reconstruction_threshold = usize::try_from(
+                    complaint_context
+                        .transcript
+                        .reconstruction_threshold()
+                        .get(),
+                )
+                .expect("invalid number");
                 let number_of_openings = reconstruction_threshold;
-
-                let (complainer, complaint) = corrupt_single_dealing_and_generate_complaint(
-                    &mut transcript,
-                    &params,
-                    &env,
-                    rng,
-                );
                 let complaint_with_openings = generate_and_verify_openings_for_complaint(
                     number_of_openings,
-                    &transcript,
+                    &complaint_context.transcript,
                     &env,
-                    complainer,
-                    complaint,
+                    complaint_context.complainer,
+                    complaint_context.complaint.clone(),
                 );
-                (complainer, transcript, complaint_with_openings)
+                (complaint_context, complaint_with_openings)
             },
-            |(complainer, transcript, complaint_with_openings)| {
-                complainer.load_transcript_with_openings(transcript, complaint_with_openings)
+            |(complaint_context, complaint_with_openings)| {
+                complaint_context.complainer.load_transcript_with_openings(
+                    &complaint_context.transcript,
+                    complaint_with_openings,
+                )
             },
             SmallInput,
         )
@@ -616,64 +589,11 @@ fn verify_initial_dealings(
         })
 }
 
-fn create_transcript(
+fn verify_transcript_or_panic(
     receiver: &Node,
     params: &IDkgTranscriptParams,
-    dealings: &BatchSignedIDkgDealings,
-) -> IDkgTranscript {
-    receiver
-        .create_transcript(params, dealings)
-        .unwrap_or_else(|error| {
-            panic!(
-                "failed to create IDKG transcript by receiver {:?} with parameters {:?}: {:?}",
-                receiver.id(),
-                params,
-                error
-            )
-        })
-}
-
-fn run_idkg_without_complaint<R: RngCore + CryptoRng>(
-    params: &IDkgTranscriptParams,
-    nodes: &Nodes,
-    rng: &mut R,
-) -> IDkgTranscript {
-    load_previous_transcripts_for_all_dealers(params, nodes);
-    let receiver = nodes.random_receiver(params.receivers(), rng);
-    let dealings = nodes.create_dealings(params);
-    let dealings_with_receivers_support =
-        nodes.support_dealings_from_all_receivers(dealings, params);
-    create_transcript(receiver, params, &dealings_with_receivers_support)
-}
-
-fn load_previous_transcripts_for_all_dealers(params: &IDkgTranscriptParams, nodes: &Nodes) {
-    let mut transcripts_to_load = Vec::with_capacity(2);
-    match params.operation_type() {
-        IDkgTranscriptOperation::Random => {}
-        IDkgTranscriptOperation::ReshareOfMasked(transcript) => {
-            transcripts_to_load.push(transcript)
-        }
-        IDkgTranscriptOperation::ReshareOfUnmasked(transcript) => {
-            transcripts_to_load.push(transcript)
-        }
-        IDkgTranscriptOperation::UnmaskedTimesMasked(transcript1, transcript2) => {
-            transcripts_to_load.push(transcript1);
-            transcripts_to_load.push(transcript2)
-        }
-    }
-
-    nodes.dealers(params).for_each(|dealer| {
-        transcripts_to_load.iter().for_each(|transcript| {
-            assert_eq!(
-                load_transcript(dealer, transcript),
-                vec![],
-                "did not expect any complaint"
-            )
-        });
-    });
-}
-
-fn verify_transcript(receiver: &Node, params: &IDkgTranscriptParams, transcript: &IDkgTranscript) {
+    transcript: &IDkgTranscript,
+) {
     receiver
         .verify_transcript(params, transcript)
         .unwrap_or_else(|error| {
@@ -686,30 +606,21 @@ fn verify_transcript(receiver: &Node, params: &IDkgTranscriptParams, transcript:
         })
 }
 
-fn load_transcript(receiver: &Node, transcript: &IDkgTranscript) -> Vec<IDkgComplaint> {
-    receiver
-        .load_transcript(transcript)
-        .unwrap_or_else(|error| {
-            panic!(
-                "failed to load IDKG transcript by receiver {:?}: {:?}",
-                receiver.id(),
-                error
-            )
-        })
-}
-
 fn load_pre_signature_quadruple(receiver: &Node, quadruple: &PreSignatureQuadruple) {
     assert_eq!(
-        load_transcript(receiver, quadruple.kappa_unmasked()),
-        vec![]
-    );
-    assert_eq!(load_transcript(receiver, quadruple.lambda_masked()), vec![]);
-    assert_eq!(
-        load_transcript(receiver, quadruple.kappa_times_lambda()),
+        load_transcript_or_panic(receiver, quadruple.kappa_unmasked()),
         vec![]
     );
     assert_eq!(
-        load_transcript(receiver, quadruple.key_times_lambda()),
+        load_transcript_or_panic(receiver, quadruple.lambda_masked()),
+        vec![]
+    );
+    assert_eq!(
+        load_transcript_or_panic(receiver, quadruple.kappa_times_lambda()),
+        vec![]
+    );
+    assert_eq!(
+        load_transcript_or_panic(receiver, quadruple.key_times_lambda()),
         vec![]
     );
 }
@@ -733,7 +644,7 @@ fn generate_key_transcript<R: RngCore + CryptoRng>(
     receivers: &IDkgReceivers,
     rng: &mut R,
 ) -> IDkgTranscript {
-    let masked_key_params = env.params_for_random_sharing(dealers, receivers, alg, rng);
+    let masked_key_params = setup_masked_random_params(env, alg, dealers, receivers, rng);
     let masked_key_transcript = run_idkg_without_complaint(&masked_key_params, &env.nodes, rng);
 
     let unmasked_key_params = build_params_from_previous(
@@ -753,11 +664,11 @@ fn generate_pre_sig_quadruple<R: RngCore + CryptoRng>(
     key_transcript: IDkgTranscript,
     rng: &mut R,
 ) -> PreSignatureQuadruple {
-    let lambda_params = env.params_for_random_sharing(dealers, receivers, alg, rng);
+    let lambda_params = setup_masked_random_params(env, alg, dealers, receivers, rng);
     let lambda_transcript = run_idkg_without_complaint(&lambda_params, &env.nodes, rng);
 
     let kappa_transcript = {
-        let masked_kappa_params = env.params_for_random_sharing(dealers, receivers, alg, rng);
+        let masked_kappa_params = setup_masked_random_params(env, alg, dealers, receivers, rng);
         let masked_kappa_transcript =
             run_idkg_without_complaint(&masked_kappa_params, &env.nodes, rng);
 
@@ -812,76 +723,6 @@ fn other_receiver_or_same_if_only_one<'a, R: RngCore + CryptoRng>(
         1 => nodes.iter().next().expect("one node"),
         _ => nodes.random_receiver_excluding(exclusion, receivers, rng),
     }
-}
-
-fn setup_reshare_of_masked_params<R: RngCore + CryptoRng>(
-    env: &CanisterThresholdSigTestEnvironment,
-    alg: AlgorithmId,
-    dealers: &IDkgDealers,
-    receivers: &IDkgReceivers,
-    rng: &mut R,
-) -> IDkgTranscriptParams {
-    let params = env.params_for_random_sharing(dealers, receivers, alg, rng);
-    let masked_transcript = run_idkg_without_complaint(&params, &env.nodes, rng);
-    let reshare_params = build_params_from_previous(
-        params,
-        IDkgTranscriptOperation::ReshareOfMasked(masked_transcript),
-        rng,
-    );
-    load_previous_transcripts_for_all_dealers(&reshare_params, &env.nodes);
-    reshare_params
-}
-
-fn setup_reshare_of_unmasked_params<R: RngCore + CryptoRng>(
-    env: &CanisterThresholdSigTestEnvironment,
-    alg: AlgorithmId,
-    dealers: &IDkgDealers,
-    receivers: &IDkgReceivers,
-    rng: &mut R,
-) -> IDkgTranscriptParams {
-    let params = env.params_for_random_sharing(dealers, receivers, alg, rng);
-    let masked_transcript = run_idkg_without_complaint(&params, &env.nodes, rng);
-    let unmasked_params = build_params_from_previous(
-        params,
-        IDkgTranscriptOperation::ReshareOfMasked(masked_transcript),
-        rng,
-    );
-    load_previous_transcripts_for_all_dealers(&unmasked_params, &env.nodes);
-    let unmasked_transcript = run_idkg_without_complaint(&unmasked_params, &env.nodes, rng);
-    let unmasked_reshare_params = build_params_from_previous(
-        unmasked_params,
-        IDkgTranscriptOperation::ReshareOfUnmasked(unmasked_transcript),
-        rng,
-    );
-    load_previous_transcripts_for_all_dealers(&unmasked_reshare_params, &env.nodes);
-    unmasked_reshare_params
-}
-
-fn setup_unmasked_times_masked_params<R: RngCore + CryptoRng>(
-    env: &CanisterThresholdSigTestEnvironment,
-    alg: AlgorithmId,
-    dealers: &IDkgDealers,
-    receivers: &IDkgReceivers,
-    rng: &mut R,
-) -> IDkgTranscriptParams {
-    let masked_params = env.params_for_random_sharing(dealers, receivers, alg, rng);
-    let masked_random_transcript = run_idkg_without_complaint(&masked_params, &env.nodes, rng);
-
-    let unmasked_params = build_params_from_previous(
-        masked_params,
-        IDkgTranscriptOperation::ReshareOfMasked(masked_random_transcript.clone()),
-        rng,
-    );
-    load_previous_transcripts_for_all_dealers(&unmasked_params, &env.nodes);
-    let unmasked_transcript = run_idkg_without_complaint(&unmasked_params, &env.nodes, rng);
-
-    let product_params = build_params_from_previous(
-        unmasked_params,
-        IDkgTranscriptOperation::UnmaskedTimesMasked(unmasked_transcript, masked_random_transcript),
-        rng,
-    );
-    load_previous_transcripts_for_all_dealers(&product_params, &env.nodes);
-    product_params
 }
 
 struct TestCase {
@@ -952,51 +793,4 @@ fn generate_test_cases(node_counts: &[usize]) -> Vec<TestCase> {
     }
 
     test_cases
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash, EnumIter)]
-enum IDkgMode {
-    Random,
-    ReshareOfMasked,
-    ReshareOfUnmasked,
-    UnmaskedTimesMasked,
-}
-
-impl IDkgMode {
-    fn setup_params<R: RngCore + CryptoRng>(
-        &self,
-        env: &CanisterThresholdSigTestEnvironment,
-        alg: AlgorithmId,
-        dealers: &IDkgDealers,
-        receivers: &IDkgReceivers,
-        rng: &mut R,
-    ) -> IDkgTranscriptParams {
-        match self {
-            IDkgMode::Random => env.params_for_random_sharing(dealers, receivers, alg, rng),
-            IDkgMode::ReshareOfMasked => {
-                setup_reshare_of_masked_params(env, alg, dealers, receivers, rng)
-            }
-            IDkgMode::ReshareOfUnmasked => {
-                setup_reshare_of_unmasked_params(env, alg, dealers, receivers, rng)
-            }
-            IDkgMode::UnmaskedTimesMasked => {
-                setup_unmasked_times_masked_params(env, alg, dealers, receivers, rng)
-            }
-        }
-    }
-}
-
-impl Display for IDkgMode {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                IDkgMode::Random => "random",
-                IDkgMode::ReshareOfMasked => "reshare_of_masked",
-                IDkgMode::ReshareOfUnmasked => "reshare_of_unmasked",
-                IDkgMode::UnmaskedTimesMasked => "product",
-            }
-        )
-    }
 }
