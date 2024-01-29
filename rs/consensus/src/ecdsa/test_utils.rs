@@ -10,7 +10,8 @@ use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    generate_key_transcript, CanisterThresholdSigTestEnvironment, IDkgParticipants, IntoBuilder,
+    generate_key_transcript, setup_masked_random_params, CanisterThresholdSigTestEnvironment,
+    IDkgParticipants, IntoBuilder,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_ic00_types::EcdsaKeyId;
@@ -742,10 +743,11 @@ pub(crate) fn create_valid_transcript<R: Rng + CryptoRng>(
 ) -> (NodeId, IDkgTranscriptParams, IDkgTranscript) {
     let (dealers, receivers) =
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
-    let params = env.params_for_random_sharing(
+    let params = setup_masked_random_params(
+        env,
+        AlgorithmId::ThresholdEcdsaSecp256k1,
         &dealers,
         &receivers,
-        AlgorithmId::ThresholdEcdsaSecp256k1,
         rng,
     );
     let dealings = env.nodes.create_and_verify_signed_dealings(&params);
@@ -829,10 +831,11 @@ pub(crate) fn create_dealing_with_payload<R: Rng + CryptoRng>(
     let env = CanisterThresholdSigTestEnvironment::new(2, rng);
     let (dealers, receivers) =
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
-    let params = env.params_for_random_sharing(
+    let params = setup_masked_random_params(
+        &env,
+        AlgorithmId::ThresholdEcdsaSecp256k1,
         &dealers,
         &receivers,
-        AlgorithmId::ThresholdEcdsaSecp256k1,
         rng,
     );
     let dealer = env.nodes.dealers(&params).next().unwrap();

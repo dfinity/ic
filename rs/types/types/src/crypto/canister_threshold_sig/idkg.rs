@@ -740,14 +740,15 @@ pub enum IDkgTranscriptOperation {
 
     /// Starts from a `masked` transcript and returns an `unmasked` transcript.
     ///
-    /// Useful to reveal `g^a_0` (where `a_0` is the shared secret and g is a group's generator) to
+    /// Takes in a secret share `x` and outputs `g^x` (g is a group's generator) to
     /// all parties.
+    ///
+    /// Useful to compute the public key from a masked transcript.
     ReshareOfMasked(IDkgTranscript),
 
     /// Starts from an `unmasked` transcript and returns an `unmasked` transcript.
     ///
-    /// Useful to reshare the public key if there was for example a change in the subnet's
-    /// topology.
+    /// Reshares the public key. Needed, e.g., after subnet topology changes.
     ReshareOfUnmasked(IDkgTranscript),
 
     /// Starts from a pair of transcripts (the first being `unmasked` while the second is `masked`)
