@@ -7,7 +7,8 @@ use candid::Principal;
 use ic_cdk::trap;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{Cell, DefaultMemoryImpl, Storable};
-use minicbor::{Decode, Encode};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_bytes::ByteBuf;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -28,16 +29,32 @@ thread_local! {
     .expect("failed to initialize stable cell for state"));
 }
 
-#[derive(Debug, PartialEq, Encode, Decode, Clone)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct Wasm {
-    #[cbor(n(0), with = "minicbor::bytes")]
+    #[serde(with = "serde_bytes")]
     binary: Vec<u8>,
-    #[n(1)]
     hash: WasmHash,
 }
 
-#[derive(Debug, PartialEq, Encode, Decode, Clone)]
-pub struct WasmHash(#[cbor(n(0), with = "minicbor::bytes")] [u8; WASM_HASH_LENGTH]);
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[serde(try_from = "serde_bytes::ByteBuf", into = "serde_bytes::ByteBuf")]
+pub struct WasmHash([u8; WASM_HASH_LENGTH]);
+
+impl TryFrom<ByteBuf> for WasmHash {
+    type Error = String;
+
+    fn try_from(value: ByteBuf) -> Result<Self, Self::Error> {
+        Ok(WasmHash(value.to_vec().try_into().map_err(
+            |e: Vec<u8>| format!("expected {} bytes, but got {}", WASM_HASH_LENGTH, e.len()),
+        )?))
+    }
+}
+
+impl From<WasmHash> for ByteBuf {
+    fn from(value: WasmHash) -> Self {
+        ByteBuf::from(value.0.to_vec())
+    }
+}
 
 impl From<[u8; WASM_HASH_LENGTH]> for WasmHash {
     fn from(value: [u8; WASM_HASH_LENGTH]) -> Self {
@@ -66,19 +83,15 @@ impl From<Vec<u8>> for Wasm {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Encode, Decode, Default)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, Default)]
 pub struct ManagedCanisters {
-    #[n(0)]
     canisters: BTreeMap<Erc20Contract, Canisters>,
 }
 
-#[derive(Default, Debug, PartialEq, Encode, Decode, Clone)]
+#[derive(Default, Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct Canisters {
-    #[n(0)]
     pub ledger: Option<LedgerCanister>,
-    #[n(1)]
     pub index: Option<IndexCanister>,
-    #[cbor(n(2), with = "crate::cbor::principal::vec")]
     pub archives: Vec<Principal>,
 }
 
@@ -114,22 +127,6 @@ impl<T> PartialEq for Canister<T> {
     }
 }
 
-impl<C, T> minicbor::Encode<C> for Canister<T> {
-    fn encode<W: minicbor::encode::Write>(
-        &self,
-        e: &mut minicbor::Encoder<W>,
-        ctx: &mut C,
-    ) -> Result<(), minicbor::encode::Error<W::Error>> {
-        ManagedCanisterStatus::encode(&self.status, e, ctx)
-    }
-}
-
-impl<'b, C, T> minicbor::Decode<'b, C> for Canister<T> {
-    fn decode(d: &mut minicbor::Decoder<'b>, ctx: &mut C) -> Result<Self, minicbor::decode::Error> {
-        ManagedCanisterStatus::decode(d, ctx).map(Self::new)
-    }
-}
-
 impl<T> Canister<T> {
     pub fn new(status: ManagedCanisterStatus) -> Self {
         Self {
@@ -143,6 +140,18 @@ impl<T> Canister<T> {
     }
 }
 
+impl<T> Serialize for Canister<T> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.status.serialize(serializer)
+    }
+}
+
+impl<'de, T> Deserialize<'de> for Canister<T> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        ManagedCanisterStatus::deserialize(deserializer).map(Self::new)
+    }
+}
+
 #[derive(Debug)]
 pub enum Ledger {}
 pub type LedgerCanister = Canister<Ledger>;
@@ -151,24 +160,17 @@ pub type LedgerCanister = Canister<Ledger>;
 pub enum Index {}
 pub type IndexCanister = Canister<Index>;
 
-#[derive(Debug, PartialEq, Encode, Decode, Clone)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub enum ManagedCanisterStatus {
     /// Canister created with the given principal
     /// but wasm module is not yet installed.
-    #[n(1)]
-    Created {
-        #[cbor(n(0), with = "crate::cbor::principal")]
-        canister_id: Principal,
-    },
+    Created { canister_id: Principal },
 
     /// Canister created and wasm module installed.
     /// The wasm_hash reflects the installed wasm module by the orchestrator
     /// but *may differ* from the one being currently deployed (if another controller did an upgrade)
-    #[n(2)]
     Installed {
-        #[cbor(n(0), with = "crate::cbor::principal")]
         canister_id: Principal,
-        #[n(1)]
         installed_wasm_hash: WasmHash,
     },
 }
@@ -205,7 +207,8 @@ impl Storable for ConfigState {
             ConfigState::Uninitialized => Cow::Borrowed(&[]),
             ConfigState::Initialized(config) => {
                 let mut buf = vec![];
-                minicbor::encode(config, &mut buf).expect("state encoding should always succeed");
+                ciborium::ser::into_writer(config, &mut buf)
+                    .expect("failed to encode a minter event");
                 Cow::Owned(buf)
             }
         }
@@ -216,26 +219,20 @@ impl Storable for ConfigState {
             return ConfigState::Uninitialized;
         }
         ConfigState::Initialized(
-            minicbor::decode(bytes.as_ref()).unwrap_or_else(|e| {
+            ciborium::de::from_reader(bytes.as_ref()).unwrap_or_else(|e| {
                 panic!("failed to decode state bytes {}: {e}", hex::encode(bytes))
             }),
         )
     }
 }
 
-#[derive(Debug, PartialEq, Encode, Decode, Clone)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct State {
-    #[n(0)]
     ledger_wasm: Wasm,
-    #[n(1)]
     index_wasm: Wasm,
-    #[n(2)]
     archive_wasm: Wasm,
-    #[n(3)]
     managed_canisters: ManagedCanisters,
-    #[n(4)]
     tasks: Tasks,
-    #[n(5)]
     processing_tasks_guard: bool,
 }
 

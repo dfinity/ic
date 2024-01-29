@@ -1,5 +1,4 @@
 pub mod candid;
-pub mod cbor;
 pub mod guard;
 pub mod lifecycle;
 pub mod logs;
