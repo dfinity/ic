@@ -1,5 +1,6 @@
 use crate::{InitArgs, Ledger};
 use ic_base_types::PrincipalId;
+use ic_canister_log::Sink;
 use ic_icrc1::{Operation, Transaction};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyError};
@@ -16,6 +17,13 @@ use ic_icrc1_ledger_sm_tests::{
 };
 
 use std::time::Duration;
+
+#[derive(Clone)]
+struct DummyLogger;
+
+impl Sink for DummyLogger {
+    fn append(&self, _entry: ic_canister_log::LogEntry) {}
+}
 
 fn test_account_id(n: u64) -> Account {
     Account {
@@ -67,7 +75,7 @@ fn default_init_args() -> InitArgs {
 fn test_approvals_are_not_cumulative() {
     let now = ts(12345678);
 
-    let mut ctx = Ledger::from_init_args(default_init_args(), now);
+    let mut ctx = Ledger::from_init_args(DummyLogger, default_init_args(), now);
 
     let from = test_account_id(1);
     let spender = test_account_id(2);
@@ -136,7 +144,7 @@ fn test_approvals_are_not_cumulative() {
 fn test_approval_transfer_from() {
     let now = ts(1);
 
-    let mut ctx = Ledger::from_init_args(default_init_args(), now);
+    let mut ctx = Ledger::from_init_args(DummyLogger, default_init_args(), now);
 
     let from = test_account_id(1);
     let spender = test_account_id(2);
@@ -239,7 +247,7 @@ fn test_approval_transfer_from() {
 fn test_approval_expiration_override() {
     let now = ts(1000);
 
-    let mut ctx = Ledger::from_init_args(default_init_args(), now);
+    let mut ctx = Ledger::from_init_args(DummyLogger, default_init_args(), now);
 
     let from = test_account_id(1);
     let spender = test_account_id(2);
@@ -327,7 +335,7 @@ fn test_approval_expiration_override() {
 fn test_approval_no_fee_on_reject() {
     let now = ts(1000);
 
-    let mut ctx = Ledger::from_init_args(default_init_args(), now);
+    let mut ctx = Ledger::from_init_args(DummyLogger, default_init_args(), now);
 
     let from = test_account_id(1);
     let spender = test_account_id(2);
@@ -364,7 +372,7 @@ fn test_approval_no_fee_on_reject() {
 fn test_self_transfer_from() {
     let now = ts(1000);
 
-    let mut ctx = Ledger::from_init_args(default_init_args(), now);
+    let mut ctx = Ledger::from_init_args(DummyLogger, default_init_args(), now);
 
     let from = test_account_id(1);
     let to = test_account_id(2);
@@ -397,7 +405,7 @@ fn test_self_transfer_from() {
 fn test_approval_allowance_covers_fee() {
     let now = ts(1);
 
-    let mut ctx = Ledger::from_init_args(default_init_args(), now);
+    let mut ctx = Ledger::from_init_args(DummyLogger, default_init_args(), now);
 
     let from = test_account_id(1);
     let spender = test_account_id(2);
@@ -482,7 +490,7 @@ fn test_approval_allowance_covers_fee() {
 fn test_burn_smoke() {
     let now = ts(1);
 
-    let mut ctx = Ledger::from_init_args(default_init_args(), now);
+    let mut ctx = Ledger::from_init_args(DummyLogger, default_init_args(), now);
 
     let from = test_account_id(1);
 
@@ -509,7 +517,7 @@ fn test_burn_smoke() {
 fn test_approval_burn_from() {
     let now = ts(1);
 
-    let mut ctx = Ledger::from_init_args(default_init_args(), now);
+    let mut ctx = Ledger::from_init_args(DummyLogger, default_init_args(), now);
 
     let from = test_account_id(1);
     let spender = test_account_id(2);
