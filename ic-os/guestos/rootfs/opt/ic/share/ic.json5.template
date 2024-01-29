@@ -98,6 +98,12 @@
         // generator and scenario tests (corresponds to the hardcoded,
         // DER-encoded keypair that these tools use).
         create_funds_whitelist: "5o66h-77qch-43oup-7aaui-kz5ty-tww4j-t2wmx-e3lym-cbtct-l3gpw-wae",
+
+        // Enable Query Stats
+        query_stats_aggregation: {{ query_stats_aggregation }},
+
+        // Length of an epoch for query stats collection.
+        query_stats_epoch_length: {{ query_stats_epoch_length }},
     },
 
     // ====================================

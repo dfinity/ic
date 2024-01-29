@@ -109,6 +109,10 @@ options may be specified:
     The Json-object corresponds to this Rust-structure:
       ic_types::malicious_behaviour::MaliciousBehaviour
 
+  --query_stats_epoch_length length
+    The length of the epoch in seconds. To be used in
+    systems tests only.
+
   --bitcoind_addr address
     The IP address of a running bitcoind instance. To be used in
     systems tests only.
@@ -134,6 +138,7 @@ function build_ic_bootstrap_tar() {
     local ACCOUNTS_SSH_AUTHORIZED_KEYS
     local REPLICA_LOG_DEBUG_OVERRIDES
     local MALICIOUS_BEHAVIOR
+    local QUERY_STATS_EPOCH_LENGTH
     local BITCOIND_ADDR
 
     while true; do
@@ -199,6 +204,9 @@ function build_ic_bootstrap_tar() {
             --malicious_behavior)
                 MALICIOUS_BEHAVIOR="$2"
                 ;;
+            --query_stats_epoch_length)
+                QUERY_STATS_EPOCH_LENGTH="$2"
+                ;;
             --bitcoind_addr)
                 BITCOIND_ADDR="$2"
                 ;;
@@ -252,6 +260,9 @@ EOF
     fi
     if [ "${MALICIOUS_BEHAVIOR}" != "" ]; then
         echo "malicious_behavior=${MALICIOUS_BEHAVIOR}" >"${BOOTSTRAP_TMPDIR}/malicious_behavior.conf"
+    fi
+    if [ "${QUERY_STATS_EPOCH_LENGTH}" != "" ]; then
+        echo "query_stats_epoch_length=${QUERY_STATS_EPOCH_LENGTH}" >"${BOOTSTRAP_TMPDIR}/query_stats.conf"
     fi
     if [ "${BITCOIND_ADDR}" != "" ]; then
         echo "bitcoind_addr=${BITCOIND_ADDR}" >"${BOOTSTRAP_TMPDIR}/bitcoind_addr.conf"

@@ -395,6 +395,18 @@ impl InternetComputer {
         }
     }
 
+    pub fn get_query_stats_epoch_length_of_node(&self, node_id: NodeId) -> Option<u64> {
+        self.subnets
+            .iter()
+            .find(|subnet| {
+                subnet
+                    .nodes
+                    .iter()
+                    .any(|node| node.secret_key_store.as_ref().unwrap().node_id == node_id)
+            })
+            .and_then(|subnet| subnet.query_stats_epoch_length)
+    }
+
     pub fn get_ipv4_config_of_node(&self, node_id: NodeId) -> Option<Ipv4Config> {
         let node_filter_map = |n: &Node| {
             if n.secret_key_store.as_ref().unwrap().node_id == node_id {
@@ -469,6 +481,7 @@ pub struct Subnet {
     pub ssh_backup_access: Vec<String>,
     pub ecdsa_config: Option<EcdsaConfig>,
     pub running_state: SubnetRunningState,
+    pub query_stats_epoch_length: Option<u64>,
 }
 
 impl Subnet {
@@ -496,6 +509,7 @@ impl Subnet {
             ssh_backup_access: vec![],
             ecdsa_config: None,
             running_state: SubnetRunningState::Active,
+            query_stats_epoch_length: None,
         }
     }
 
@@ -639,6 +653,11 @@ impl Subnet {
         self
     }
 
+    pub fn with_query_stats_epoch_length(mut self, length: u64) -> Self {
+        self.query_stats_epoch_length = Some(length);
+        self
+    }
+
     pub fn halted(mut self) -> Self {
         self.running_state = SubnetRunningState::Halted;
         self
@@ -710,6 +729,7 @@ impl Default for Subnet {
             ssh_backup_access: vec![],
             ecdsa_config: None,
             running_state: SubnetRunningState::Active,
+            query_stats_epoch_length: None,
         }
     }
 }
