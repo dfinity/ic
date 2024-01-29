@@ -3272,9 +3272,13 @@ fn test_canister_settings_log_visibility_set_to_public() {
 }
 
 #[test]
-fn test_fetch_canister_logs_should_accept_ingress_message_log_visibility_public_succeeds() {
+fn test_fetch_canister_logs_should_accept_ingress_message_disabled() {
     // Arrange.
-    let mut test = ExecutionTestBuilder::new().build();
+    // - disable the fetch_canister_logs API
+    // - set the log visibility to public so any user can read the logs
+    let mut test = ExecutionTestBuilder::new()
+        .with_fetch_canister_logs(FlagStatus::Disabled)
+        .build();
     let canister_id = test.universal_canister().unwrap();
     let not_a_controller = user_test_id(42);
     test.set_log_visibility(canister_id, LogVisibility::Public)
@@ -3290,17 +3294,27 @@ fn test_fetch_canister_logs_should_accept_ingress_message_log_visibility_public_
         .encode(),
     );
     // Assert.
-    assert_eq!(result, Ok(()));
+    // Expect error because the API is disabled.
+    assert_eq!(
+        result,
+        Err(UserError::new(
+            ErrorCode::CanisterContractViolation,
+            "fetch_canister_logs API is not enabled on this subnet"
+        ))
+    );
 }
 
 #[test]
-fn test_fetch_canister_logs_should_accept_ingress_message_log_visibility_invalid_controller_fails()
-{
+fn test_fetch_canister_logs_should_accept_ingress_message_enabled() {
     // Arrange.
-    let mut test = ExecutionTestBuilder::new().build();
+    // - enable the fetch_canister_logs API
+    // - set the log visibility to public so any user can read the logs
+    let mut test = ExecutionTestBuilder::new()
+        .with_fetch_canister_logs(FlagStatus::Enabled)
+        .build();
     let canister_id = test.universal_canister().unwrap();
     let not_a_controller = user_test_id(42);
-    test.set_log_visibility(canister_id, LogVisibility::Controllers)
+    test.set_log_visibility(canister_id, LogVisibility::Public)
         .unwrap();
     // Act.
     test.set_user_id(not_a_controller);
@@ -3313,37 +3327,12 @@ fn test_fetch_canister_logs_should_accept_ingress_message_log_visibility_invalid
         .encode(),
     );
     // Assert.
+    // Expect error since `should_accept_ingress_message` is only called in replicated mode which is not supported.
     assert_eq!(
         result,
         Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
-            format!(
-                "Caller {not_a_controller} is not allowed to call ic00 method fetch_canister_logs"
-            ),
+            "fetch_canister_logs API is only accessible in non-replicated mode"
         ))
     );
-}
-
-#[test]
-fn test_fetch_canister_logs_should_accept_ingress_message_log_visibility_valid_controller_succeeds()
-{
-    // Arrange.
-    let mut test = ExecutionTestBuilder::new().build();
-    let canister_id = test.universal_canister().unwrap();
-    let controller = user_test_id(42);
-    test.set_log_visibility(canister_id, LogVisibility::Controllers)
-        .unwrap();
-    test.set_controller(canister_id, controller.get()).unwrap();
-    // Act.
-    test.set_user_id(controller);
-    let result = test.should_accept_ingress_message(
-        test.state().metadata.own_subnet_id.into(),
-        Method::FetchCanisterLogs,
-        FetchCanisterLogsRequest {
-            canister_id: canister_id.into(),
-        }
-        .encode(),
-    );
-    // Assert.
-    assert_eq!(result, Ok(()));
 }

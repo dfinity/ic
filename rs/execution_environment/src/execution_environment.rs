@@ -1102,17 +1102,28 @@ impl ExecutionEnvironment {
                 Some((res, msg.take_cycles()))
             }
 
-            Ok(Ic00Method::FetchCanisterLogs) => Some((
-                // TODO(IC-272).
-                Err(UserError::new(
-                    ErrorCode::CanisterRejectedMessage,
-                    format!(
-                        "{} API is not yet implemented.",
-                        Ic00Method::FetchCanisterLogs
-                    ),
+            Ok(Ic00Method::FetchCanisterLogs) => match self.config.fetch_canister_logs {
+                FlagStatus::Enabled => Some((
+                    Err(UserError::new(
+                        ErrorCode::CanisterRejectedMessage,
+                        format!(
+                            "{} API is only accessible in non-replicated mode",
+                            Ic00Method::FetchCanisterLogs
+                        ),
+                    )),
+                    msg.take_cycles(),
                 )),
-                msg.take_cycles(),
-            )),
+                FlagStatus::Disabled => {
+                    let err = Err(UserError::new(
+                        ErrorCode::CanisterContractViolation,
+                        format!(
+                            "{} API is not enabled on this subnet",
+                            Ic00Method::FetchCanisterLogs
+                        ),
+                    ));
+                    Some((err, msg.take_cycles()))
+                }
+            },
 
             Ok(Ic00Method::TakeCanisterSnapshot) => match self.config.canister_snapshots {
                 FlagStatus::Enabled => {
@@ -1872,6 +1883,7 @@ impl ExecutionEnvironment {
                 provisional_whitelist,
                 ingress,
                 effective_canister_id,
+                self.config.fetch_canister_logs,
             );
         }
 
