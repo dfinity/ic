@@ -170,7 +170,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/monitoring/backtrace/                               @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/networking-team
 /rs/nervous_system/                                     @dfinity-lab/teams/nns-team
 /rs/nns/                                                @dfinity-lab/teams/nns-team
-/rs/observability/                                      @dfinity-lab/teams/DRE
 /rs/orchestrator/                                       @dfinity-lab/teams/consensus-owners
 /rs/orchestrator/src/hostos_upgrade.rs                  @dfinity-lab/teams/consensus-owners @dfinity-lab/teams/node-team
 /rs/p2p/                                                @dfinity-lab/teams/networking-team
