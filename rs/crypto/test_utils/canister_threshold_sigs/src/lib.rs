@@ -936,6 +936,7 @@ pub mod node {
         ) -> SignedIDkgDealing {
             match params.operation_type() {
                 IDkgTranscriptOperation::Random => (),
+                IDkgTranscriptOperation::RandomUnmasked => (),
                 IDkgTranscriptOperation::ReshareOfMasked(transcript)
                 | IDkgTranscriptOperation::ReshareOfUnmasked(transcript) => {
                     loader.load_transcript_or_panic(transcript);
@@ -1724,6 +1725,7 @@ pub fn load_previous_transcripts_for_all_dealers(params: &IDkgTranscriptParams, 
     let mut transcripts_to_load = Vec::with_capacity(2);
     match params.operation_type() {
         IDkgTranscriptOperation::Random => {}
+        IDkgTranscriptOperation::RandomUnmasked => {}
         IDkgTranscriptOperation::ReshareOfMasked(transcript) => {
             transcripts_to_load.push(transcript)
         }
@@ -2364,6 +2366,11 @@ impl IDkgTranscriptBuilder {
     pub fn corrupt_transcript_type(mut self) -> Self {
         self.transcript_type = match self.transcript_type {
             IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random) => {
+                IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareUnmasked(
+                    self.transcript_id,
+                ))
+            }
+            IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random) => {
                 IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareUnmasked(
                     self.transcript_id,
                 ))

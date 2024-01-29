@@ -3963,6 +3963,63 @@ mod reshare_key_transcript {
     }
 
     #[test]
+    fn should_reshare_random_unmasked_transcript_to_new_receivers() {
+        let rng = &mut reproducible_rng();
+        let even_subnet_size = (1..=10)
+            .map(|n| n * 2)
+            .choose(rng)
+            .expect("non-empty iterator");
+
+        for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
+            let env = CanisterThresholdSigTestEnvironment::new(even_subnet_size, rng);
+            let (source_subnet_nodes, target_subnet_nodes) = env
+                .nodes
+                .partition(|(index, _node)| *index < even_subnet_size / 2);
+            assert_eq!(source_subnet_nodes.len(), target_subnet_nodes.len());
+            let (source_dealers, source_receivers) = source_subnet_nodes
+                .choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
+            let source_key_transcript = {
+                let key_params = IDkgTranscriptParams::new(
+                    random_transcript_id(rng),
+                    source_dealers.get().clone(),
+                    source_receivers.get().clone(),
+                    env.newest_registry_version,
+                    alg,
+                    IDkgTranscriptOperation::RandomUnmasked,
+                )
+                .expect("failed to create random IDkgTranscriptParams");
+                source_subnet_nodes.run_idkg_and_create_and_verify_transcript(&key_params, rng)
+            };
+            let source_tecdsa_master_public_key =
+                get_tecdsa_master_public_key(&source_key_transcript).expect("valid public key");
+
+            let reshare_params = IDkgTranscriptParams::new(
+                random_transcript_id(rng),
+                source_receivers.get().clone(),
+                target_subnet_nodes.ids(),
+                source_key_transcript.registry_version,
+                source_key_transcript.algorithm_id,
+                IDkgTranscriptOperation::ReshareOfUnmasked(source_key_transcript),
+            )
+            .expect("invalid reshare of unmasked parameters");
+
+            let nodes_involved_in_resharing: Nodes = source_subnet_nodes
+                .into_receivers(&source_receivers)
+                .chain(target_subnet_nodes.into_iter())
+                .collect();
+            let reshared_key_transcript = nodes_involved_in_resharing
+                .run_idkg_and_create_and_verify_transcript(&reshare_params, rng);
+            let target_tecdsa_master_public_key =
+                get_tecdsa_master_public_key(&reshared_key_transcript).expect("valid public key");
+
+            assert_eq!(
+                source_tecdsa_master_public_key,
+                target_tecdsa_master_public_key
+            );
+        }
+    }
+
+    #[test]
     fn should_reshare_key_transcript_from_dealers_to_receivers_and_back() {
         let rng = &mut ReproducibleRng::new();
         let subnet_size = rng.gen_range(1..10);

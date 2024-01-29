@@ -251,6 +251,7 @@ pub(super) fn load_transcripts(
 pub(super) fn transcript_op_summary(op: &IDkgTranscriptOperation) -> String {
     match op {
         IDkgTranscriptOperation::Random => "Random".to_string(),
+        IDkgTranscriptOperation::RandomUnmasked => "RandomUnmasked".to_string(),
         IDkgTranscriptOperation::ReshareOfMasked(t) => {
             format!("ReshareOfMasked({:?})", t.transcript_id)
         }

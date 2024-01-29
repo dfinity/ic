@@ -800,6 +800,7 @@ impl EcdsaPreSignerImpl {
     ) -> Option<EcdsaChangeSet> {
         match &transcript_params.operation_type() {
             IDkgTranscriptOperation::Random => None,
+            IDkgTranscriptOperation::RandomUnmasked => None,
             IDkgTranscriptOperation::ReshareOfMasked(t) => {
                 load_transcripts(ecdsa_pool, transcript_loader, &[t])
             }
