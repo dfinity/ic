@@ -399,7 +399,7 @@ impl IDkgTranscriptParams {
 
     /// Returns the dealer index of a node, or `None` if the node is not included in the set of dealers.
     ///
-    /// For a Random transcript, the index of a dealer correspond to the position of `node_id` in the dealer set.
+    /// For a Random or RandomUnmasked transcript, the index of a dealer correspond to the position of `node_id` in the dealer set.
     /// For all other transcript operations, the dealer index corresponds to its position of `node_id` in the previous set of receivers.
     pub fn dealer_index(&self, node_id: NodeId) -> Option<NodeIndex> {
         let index = self
@@ -414,6 +414,7 @@ impl IDkgTranscriptParams {
             })?;
         match &self.operation_type {
             IDkgTranscriptOperation::Random => Some(index),
+            IDkgTranscriptOperation::RandomUnmasked => Some(index),
             IDkgTranscriptOperation::ReshareOfMasked(transcript) => {
                 transcript.index_for_signer_id(node_id)
             }
@@ -442,7 +443,7 @@ impl IDkgTranscriptParams {
     /// Number of verified dealings needed to create a transcript.
     pub fn collection_threshold(&self) -> NumberOfNodes {
         match &self.operation_type {
-            IDkgTranscriptOperation::Random => {
+            IDkgTranscriptOperation::Random | IDkgTranscriptOperation::RandomUnmasked => {
                 let faulty = get_faults_tolerated(self.dealers.count().get() as usize);
                 number_of_nodes_from_usize(faulty + 1).expect("by construction, this fits in a u32")
             }
@@ -462,6 +463,7 @@ impl IDkgTranscriptParams {
         match &self.operation_type {
             // Random operation not currently supported for distinct dealer and receiver subnets.
             IDkgTranscriptOperation::Random => None,
+            IDkgTranscriptOperation::RandomUnmasked => None,
             // Reshare of masked transcript not currently supported for distinct dealer and receiver subnets.
             IDkgTranscriptOperation::ReshareOfMasked(_) => None,
             IDkgTranscriptOperation::ReshareOfUnmasked(_) => {
@@ -514,6 +516,7 @@ impl IDkgTranscriptParams {
     fn check_consistency_of_input_transcripts(&self) -> Result<(), IDkgParamsValidationError> {
         match &self.operation_type {
             IDkgTranscriptOperation::Random => Ok(()),
+            IDkgTranscriptOperation::RandomUnmasked => Ok(()),
             IDkgTranscriptOperation::ReshareOfMasked(IDkgTranscript {
                 receivers: original_receivers,
                 transcript_type: IDkgTranscriptType::Masked(_),
@@ -682,6 +685,7 @@ pub enum IDkgMaskedTranscriptOrigin {
 pub enum IDkgUnmaskedTranscriptOrigin {
     ReshareMasked(IDkgTranscriptId),
     ReshareUnmasked(IDkgTranscriptId),
+    Random,
 }
 
 /// Type and origin of an IDkg transcript.
@@ -763,12 +767,19 @@ pub enum IDkgTranscriptOperation {
     /// for sharing the aforementioned random value `lambda`, compute the masked transcript for
     /// sharing the value `alpha * lambda`.
     UnmaskedTimesMasked(IDkgTranscript, IDkgTranscript),
+
+    /// Generates a new public/private key pair shared among the replicas.
+    ///
+    /// The resulting transcript is `unmasked`; the public key is immediately
+    /// revealed to all parties
+    RandomUnmasked,
 }
 
 impl Debug for IDkgTranscriptOperation {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Random => write!(f, "IDkgTranscriptOperation::Random"),
+            Self::RandomUnmasked => write!(f, "IDkgTranscriptOperation::RandomUnmasked"),
             Self::ReshareOfMasked(transcript) => write!(
                 f,
                 "IDkgTranscriptOperation::ReshareOfMasked({:?})",
@@ -883,6 +894,7 @@ impl IDkgTranscript {
         type Iuto = IDkgUnmaskedTranscriptOrigin;
         let transcript_type_from_params_op = match params.operation_type() {
             Itop::Random => Itt::Masked(Imto::Random),
+            Itop::RandomUnmasked => Itt::Unmasked(Iuto::Random),
             Itop::ReshareOfMasked(r) => Itt::Unmasked(Iuto::ReshareMasked(r.transcript_id)),
             Itop::ReshareOfUnmasked(r) => Itt::Unmasked(Iuto::ReshareUnmasked(r.transcript_id)),
             Itop::UnmaskedTimesMasked(l, r) => {

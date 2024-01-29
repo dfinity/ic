@@ -959,6 +959,7 @@ pub enum IDkgTranscriptOperationRef {
     ReshareOfMasked(MaskedTranscript),
     ReshareOfUnmasked(UnmaskedTranscript),
     UnmaskedTimesMasked(UnmaskedTranscript, MaskedTranscript),
+    RandomUnmasked,
 }
 
 #[derive(Clone, Debug)]
@@ -977,6 +978,7 @@ impl IDkgTranscriptOperationRef {
     ) -> Result<IDkgTranscriptOperation, TranscriptOperationError> {
         match self {
             Self::Random => Ok(IDkgTranscriptOperation::Random),
+            Self::RandomUnmasked => Ok(IDkgTranscriptOperation::RandomUnmasked),
             Self::ReshareOfMasked(r) => Ok(IDkgTranscriptOperation::ReshareOfMasked(
                 resolver
                     .transcript(r.as_ref())
@@ -1002,6 +1004,7 @@ impl IDkgTranscriptOperationRef {
     pub fn get_refs(&self) -> Vec<TranscriptRef> {
         match self {
             Self::Random => vec![],
+            Self::RandomUnmasked => vec![],
             Self::ReshareOfMasked(r) => vec![*r.as_ref()],
             Self::ReshareOfUnmasked(r) => vec![*r.as_ref()],
             Self::UnmaskedTimesMasked(r1, r2) => vec![*r1.as_ref(), *r2.as_ref()],
@@ -1012,6 +1015,7 @@ impl IDkgTranscriptOperationRef {
     pub fn update(&mut self, height: Height) {
         match self {
             Self::Random => (),
+            Self::RandomUnmasked => (),
             Self::ReshareOfMasked(r) => {
                 r.as_mut().update(height);
             }
@@ -1029,6 +1033,7 @@ impl IDkgTranscriptOperationRef {
     pub fn get_refs_and_update(&mut self, height: Option<Height>) -> Vec<TranscriptRef> {
         match self {
             Self::Random => vec![],
+            Self::RandomUnmasked => vec![],
             Self::ReshareOfMasked(r) => vec![r.as_mut().get_and_update(height)],
             Self::ReshareOfUnmasked(r) => vec![r.as_mut().get_and_update(height)],
             Self::UnmaskedTimesMasked(r1, r2) => {
@@ -1043,6 +1048,7 @@ impl IDkgTranscriptOperationRef {
     pub fn as_str(&self) -> String {
         match self {
             Self::Random => "Random".to_string(),
+            Self::RandomUnmasked => "RandomUnmasked".to_string(),
             Self::ReshareOfMasked(_) => "ReshareOfMasked".to_string(),
             Self::ReshareOfUnmasked(_) => "ReshareOfMasked".to_string(),
             Self::UnmaskedTimesMasked(_, _) => "UnmaskedTimesMasked".to_string(),
@@ -1055,6 +1061,11 @@ impl From<&IDkgTranscriptOperationRef> for pb::IDkgTranscriptOperationRef {
         match op_ref {
             IDkgTranscriptOperationRef::Random => Self {
                 op_type: subnet_pb::IDkgTranscriptOperation::Random as i32,
+                masked: None,
+                unmasked: None,
+            },
+            IDkgTranscriptOperationRef::RandomUnmasked => Self {
+                op_type: subnet_pb::IDkgTranscriptOperation::RandomUnmasked as i32,
                 masked: None,
                 unmasked: None,
             },
@@ -1082,6 +1093,8 @@ impl TryFrom<&pb::IDkgTranscriptOperationRef> for IDkgTranscriptOperationRef {
     fn try_from(op_ref: &pb::IDkgTranscriptOperationRef) -> Result<Self, Self::Error> {
         if op_ref.op_type == (subnet_pb::IDkgTranscriptOperation::Random as i32) {
             Ok(Self::Random)
+        } else if op_ref.op_type == (subnet_pb::IDkgTranscriptOperation::RandomUnmasked as i32) {
+            Ok(Self::RandomUnmasked)
         } else if op_ref.op_type == (subnet_pb::IDkgTranscriptOperation::ReshareOfMasked as i32) {
             Ok(Self::ReshareOfMasked(try_from_option_field(
                 op_ref.masked.as_ref(),

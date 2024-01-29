@@ -142,6 +142,9 @@ impl From<&IDkgTranscriptParams> for TestTranscriptParams {
                 algorithm_id: params.algorithm_id(),
                 operation_type_ref: match params.operation_type() {
                     IDkgTranscriptOperation::Random => IDkgTranscriptOperationRef::Random,
+                    IDkgTranscriptOperation::RandomUnmasked => {
+                        IDkgTranscriptOperationRef::RandomUnmasked
+                    }
                     IDkgTranscriptOperation::ReshareOfMasked(t) => {
                         IDkgTranscriptOperationRef::ReshareOfMasked(
                             MaskedTranscript::try_from((h, t)).unwrap(),

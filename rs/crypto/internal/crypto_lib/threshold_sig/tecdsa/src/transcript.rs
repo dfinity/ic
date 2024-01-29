@@ -114,6 +114,7 @@ impl TryFrom<&IDkgTranscriptOperation> for IDkgTranscriptOperationInternal {
     ) -> Result<Self, ThresholdEcdsaSerializationError> {
         match idkm_transcript_op {
             IDkgTranscriptOperation::Random => Ok(Self::Random),
+            IDkgTranscriptOperation::RandomUnmasked => Ok(Self::RandomUnmasked),
             IDkgTranscriptOperation::ReshareOfMasked(idkm_transcript) => {
                 let transcript = IDkgTranscriptInternal::try_from(idkm_transcript)?;
                 Ok(Self::ReshareOfMasked(
