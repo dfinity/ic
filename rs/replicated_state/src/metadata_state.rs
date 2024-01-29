@@ -45,7 +45,6 @@ use ic_types::{
 };
 use ic_wasm_types::WasmHash;
 use serde::{Deserialize, Serialize};
-use std::net::{Ipv4Addr, Ipv6Addr};
 use std::ops::Bound::{Included, Unbounded};
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
@@ -96,6 +95,8 @@ pub struct SystemMetadata {
 
     /// DER-encoded public keys of the subnet's nodes.
     pub node_public_keys: BTreeMap<NodeId, Vec<u8>>,
+
+    pub api_boundary_nodes: BTreeMap<NodeId, ApiBoundaryNodeEntry>,
 
     /// "Subnet split in progress" marker: `Some(original_subnet_id)` if this
     /// replicated state is in the process of being split from `original_subnet_id`;
@@ -201,9 +202,9 @@ pub struct ApiBoundaryNodeEntry {
     /// Domain name, required field from NodeRecord
     pub domain: String,
     /// Ipv4, optional field from NodeRecord
-    pub ipv4_address: Option<Ipv4Addr>,
+    pub ipv4_address: Option<String>,
     /// Ipv6, required field from NodeRecord
-    pub ipv6_address: Ipv6Addr,
+    pub ipv6_address: String,
     pub pubkey: Option<Vec<u8>>,
 }
 
@@ -587,6 +588,19 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
                     public_key: public_key.clone(),
                 })
                 .collect(),
+            api_boundary_nodes: item
+                .api_boundary_nodes
+                .iter()
+                .map(
+                    |(node_id, api_boundary_node_entry)| pb_metadata::ApiBoundaryNodeEntry {
+                        node_id: Some(node_id_into_protobuf(*node_id)),
+                        domain: api_boundary_node_entry.domain.clone(),
+                        ipv4_address: api_boundary_node_entry.ipv4_address.clone(),
+                        ipv6_address: api_boundary_node_entry.ipv6_address.clone(),
+                        pubkey: api_boundary_node_entry.pubkey.clone(),
+                    },
+                )
+                .collect(),
             blockmaker_metrics_time_series: Some((&item.blockmaker_metrics_time_series).into()),
         }
     }
@@ -651,6 +665,19 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             node_public_keys.insert(node_id_try_from_option(entry.node_id)?, entry.public_key);
         }
 
+        let mut api_boundary_nodes = BTreeMap::<NodeId, ApiBoundaryNodeEntry>::new();
+        for entry in item.api_boundary_nodes {
+            api_boundary_nodes.insert(
+                node_id_try_from_option(entry.node_id)?,
+                ApiBoundaryNodeEntry {
+                    domain: entry.domain,
+                    ipv4_address: entry.ipv4_address,
+                    ipv6_address: entry.ipv6_address,
+                    pubkey: entry.pubkey,
+                },
+            );
+        }
+
         Ok(Self {
             own_subnet_id: subnet_id_try_from_protobuf(try_from_option_field(
                 item.own_subnet_id,
@@ -662,6 +689,7 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             own_subnet_type: SubnetType::default(),
             own_subnet_features: item.own_subnet_features.unwrap_or_default().into(),
             node_public_keys,
+            api_boundary_nodes,
             // Note: `load_checkpoint()` will set this to the contents of `split_marker.pbuf`,
             // when present.
             split_from: None,
@@ -722,6 +750,7 @@ impl SystemMetadata {
             subnet_call_context_manager: Default::default(),
             own_subnet_features: SubnetFeatures::default(),
             node_public_keys: Default::default(),
+            api_boundary_nodes: Default::default(),
             split_from: None,
             // StateManager populates proper values of these fields before
             // committing each state.
@@ -996,6 +1025,7 @@ impl SystemMetadata {
             own_subnet_features: _,
             // Overwritten as soon as the round begins, no explicit action needed.
             node_public_keys: _,
+            api_boundary_nodes: _,
             ref mut split_from,
             subnet_call_context_manager: _,
             // Set by `commit_and_certify()` at the end of the round. Not used before.
@@ -2282,6 +2312,7 @@ pub(crate) mod testing {
             subnet_call_context_manager: Default::default(),
             own_subnet_features: SubnetFeatures::default(),
             node_public_keys: Default::default(),
+            api_boundary_nodes: Default::default(),
             split_from: None,
             prev_state_hash: Default::default(),
             state_sync_version: CURRENT_STATE_SYNC_VERSION,

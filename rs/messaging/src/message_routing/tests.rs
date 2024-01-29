@@ -40,7 +40,6 @@ use ic_types::{
     NodeId, PrincipalId, Randomness,
 };
 use maplit::{btreemap, btreeset};
-use std::net::{Ipv4Addr, Ipv6Addr};
 use std::{fmt::Debug, str::FromStr, sync::Arc, time::Duration};
 use tempfile::TempDir;
 
@@ -487,10 +486,12 @@ impl StateMachine for FakeStateMachine {
         subnet_features: SubnetFeatures,
         registry_settings: &RegistryExecutionSettings,
         node_public_keys: NodePublicKeys,
+        api_boundary_nodes: ApiBoundaryNodes,
     ) -> ReplicatedState {
         state.metadata.network_topology = network_topology;
         state.metadata.own_subnet_features = subnet_features;
         state.metadata.node_public_keys = node_public_keys;
+        state.metadata.api_boundary_nodes = api_boundary_nodes;
         let mut canister_states = BTreeMap::new();
         canister_states.insert(
             canister_test_id(1),
@@ -825,10 +826,8 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             entry_1,
             &ApiBoundaryNodeEntry {
                 domain: "api-bn11.example.org".to_string(),
-                ipv4_address: Some("127.0.0.1".parse::<Ipv4Addr>().unwrap()),
-                ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334"
-                    .parse::<Ipv6Addr>()
-                    .unwrap(),
+                ipv4_address: Some("127.0.0.1".to_string()),
+                ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
                 pubkey: None,
             }
         );
@@ -838,9 +837,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             &ApiBoundaryNodeEntry {
                 domain: "api-bn12.example.org".to_string(),
                 ipv4_address: None,
-                ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7335"
-                    .parse::<Ipv6Addr>()
-                    .unwrap(),
+                ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7335".to_string(),
                 pubkey: None,
             }
         );

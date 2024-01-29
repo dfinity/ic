@@ -246,6 +246,14 @@ message NodePublicKeyEntry {
   bytes public_key = 2;
 }
 
+message ApiBoundaryNodeEntry {
+  types.v1.NodeId node_id = 1;
+  string domain = 2;
+  optional string ipv4_address = 3;
+  string ipv6_address = 4;
+  optional bytes pubkey = 5;
+}
+
 message NodeBlockmakerStats {
   types.v1.NodeId node_id = 1;
   uint64 blocks_proposed_total = 2;
@@ -302,6 +310,8 @@ message SystemMetadata {
   repeated NodePublicKeyEntry node_public_keys = 19;
 
   BlockmakerMetricsTimeSeries blockmaker_metrics_time_series = 20;
+
+  repeated ApiBoundaryNodeEntry api_boundary_nodes = 21;
 }
 
 message StableMemory {
