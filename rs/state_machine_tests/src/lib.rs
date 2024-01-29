@@ -12,7 +12,10 @@ use ic_crypto_internal_threshold_sig_bls12381::api::{
 };
 use ic_crypto_internal_threshold_sig_bls12381::types::SecretKeyBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
-use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, LabeledTree::SubTree};
+use ic_crypto_tree_hash::{
+    flatmap, sparse_labeled_tree_from_paths, Label, LabeledTree, LabeledTree::SubTree,
+    Path as LabeledTreePath,
+};
 use ic_cycles_account_manager::CyclesAccountManager;
 pub use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::{ExecutionServices, IngressHistoryReaderImpl};
@@ -97,7 +100,8 @@ use ic_types::crypto::{
 };
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::messages::{
-    CallbackId, Certificate, RejectContext, Response, EXPECTED_MESSAGE_ID_LENGTH,
+    CallbackId, Certificate, CertificateDelegation, RejectContext, Response,
+    EXPECTED_MESSAGE_ID_LENGTH,
 };
 use ic_types::signature::ThresholdSignature;
 use ic_types::time::GENESIS;
@@ -1321,6 +1325,49 @@ impl StateMachine {
             .build()
     }
 
+    pub fn get_delegation_for_subnet(
+        &self,
+        subnet_id: SubnetId,
+    ) -> Result<CertificateDelegation, String> {
+        self.certify_latest_state();
+        let certified_state_reader = match self.state_manager.get_certified_state_snapshot() {
+            Some(reader) => reader,
+            None => {
+                return Err("No certified state available.".to_string());
+            }
+        };
+        let paths = vec![
+            LabeledTreePath::new(vec![
+                b"subnet".into(),
+                subnet_id.get().into(),
+                b"public_key".into(),
+            ]),
+            LabeledTreePath::new(vec![
+                b"subnet".into(),
+                subnet_id.get().into(),
+                b"canister_ranges".into(),
+            ]),
+            LabeledTreePath::from(Label::from("time")),
+        ];
+        let labeled_tree = sparse_labeled_tree_from_paths(&paths).unwrap();
+        let (tree, certification) = match certified_state_reader.read_certified_state(&labeled_tree)
+        {
+            Some(r) => r,
+            None => {
+                return Err("Certified state could not be read.".to_string());
+            }
+        };
+        let signature = certification.signed.signature.signature.get().0;
+        Ok(CertificateDelegation {
+            subnet_id: Blob(subnet_id.get().to_vec()),
+            certificate: Blob(into_cbor(&Certificate {
+                tree,
+                signature: Blob(signature),
+                delegation: None,
+            })),
+        })
+    }
+
     /// If the argument is true, the state machine will create an on-disk
     /// checkpoint for each new state it creates.
     ///
@@ -2114,6 +2161,18 @@ impl StateMachine {
         method: impl ToString,
         method_payload: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
+        self.query_as_with_delegation(sender, receiver, method, method_payload, None)
+    }
+
+    /// Queries the canister with the specified ID and with an optional subnet delegation from the NNS.
+    pub fn query_as_with_delegation(
+        &self,
+        sender: PrincipalId,
+        receiver: CanisterId,
+        method: impl ToString,
+        method_payload: Vec<u8>,
+        delegation: Option<CertificateDelegation>,
+    ) -> Result<WasmResult, UserError> {
         self.certify_latest_state();
         let path = SubTree(flatmap! {
             Label::from("canister") => SubTree(
@@ -2128,7 +2187,7 @@ impl StateMachine {
         let data_certificate = into_cbor(&Certificate {
             tree,
             signature: Blob(certification.signed.signature.signature.get().0),
-            delegation: None,
+            delegation,
         });
         self.query_handler.query(
             UserQuery {
