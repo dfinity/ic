@@ -11,7 +11,6 @@ CALLSERVICE_FUZZER_DEPENDENCIES = [
     "//rs/interfaces/registry",
     "//rs/interfaces/registry/mocks",
     "//rs/monitoring/logger",
-    "//rs/monitoring/metrics",
     "//rs/protobuf",
     "//rs/registry/keys",
     "//rs/registry/provisional_whitelist",
@@ -36,6 +35,7 @@ CALLSERVICE_FUZZER_DEPENDENCIES = [
 
 # required to compile tests/common
 DEV_DEPENDENCIES = [
+    "//rs/monitoring/metrics",
     "//rs/certification/test-utils",
     "//rs/crypto/tree_hash",
     "//rs/crypto/tls_interfaces/mocks",

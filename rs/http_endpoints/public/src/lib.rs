@@ -18,6 +18,7 @@ mod status;
 mod threads;
 mod types;
 
+pub use call::CallServiceBuilder;
 pub use query::QueryServiceBuilder;
 pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
 
@@ -35,7 +36,6 @@ cfg_if::cfg_if! {
 
 use crate::{
     body::BodyReceiverLayer,
-    call::CallService,
     catch_up_package::CatchUpPackageService,
     common::{
         get_cors_headers, get_root_threshold_public_key, make_plaintext_response,
@@ -52,7 +52,6 @@ use crate::{
     state_reader_executor::StateReaderExecutor,
     status::StatusService,
     types::*,
-    validator_executor::ValidatorExecutor,
 };
 use byte_unit::Byte;
 use bytes::Bytes;
@@ -298,22 +297,26 @@ pub fn start_server(
     let health_status = Arc::new(AtomicCell::new(ReplicaHealthStatus::Starting));
     let state_reader_clone = state_reader.clone();
     let state_reader_executor = StateReaderExecutor::new(state_reader);
-    let call_service = CallService::new_service(
-        config.clone(),
-        log.clone(),
-        metrics.clone(),
-        node_id,
-        subnet_id,
-        Arc::clone(&registry_client),
-        ValidatorExecutor::new(
-            Arc::clone(&registry_client),
-            ingress_verifier.clone(),
-            &malicious_flags,
-            log.clone(),
-        ),
-        ingress_filter,
-        ingress_throttler,
-        ingress_tx,
+    let call_service = BoxCloneService::new(
+        ServiceBuilder::new()
+            .layer(GlobalConcurrencyLimitLayer::new(
+                config.max_call_concurrent_requests,
+            ))
+            .service(
+                CallServiceBuilder::builder(
+                    node_id,
+                    subnet_id,
+                    registry_client.clone(),
+                    ingress_verifier.clone(),
+                    ingress_filter,
+                    ingress_throttler,
+                    ingress_tx,
+                )
+                .with_logger(log.clone())
+                .with_metrics(metrics.clone())
+                .with_malicious_flags(malicious_flags.clone())
+                .build(),
+            ),
     );
     let query_service = BoxCloneService::new(
         ServiceBuilder::new()
