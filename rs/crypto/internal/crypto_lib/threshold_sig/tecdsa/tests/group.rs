@@ -263,6 +263,25 @@ fn test_point_negate() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
+fn test_mul_by_g_is_correct() -> ThresholdEcdsaResult<()> {
+    let rng = &mut reproducible_rng();
+
+    for curve_type in EccCurveType::all() {
+        let g = EccPoint::generator_g(curve_type);
+        for small in 0..1024 {
+            let s = EccScalar::from_u64(curve_type, small);
+            assert_eq!(g.scalar_mul(&s)?, EccPoint::mul_by_g(&s));
+        }
+
+        for _iteration in 0..300 {
+            let s = EccScalar::random(curve_type, rng);
+            assert_eq!(g.scalar_mul(&s)?, EccPoint::mul_by_g(&s));
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn test_y_is_even() -> ThresholdEcdsaResult<()> {
     let rng = &mut reproducible_rng();
 
