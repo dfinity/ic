@@ -13,14 +13,14 @@ use ic_ethereum_types::Address;
 use ic_icrc1_index_ng::{IndexArg, InitArg as IndexInitArg};
 use ic_icrc1_ledger::{ArchiveOptions, InitArgs as LedgerInitArgs, LedgerArgument};
 use icrc_ledger_types::icrc1::account::Account;
-use minicbor::{Decode, Encode as CborEncode};
+use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::str::FromStr;
 
 /// A list of *independent* tasks to be executed in order.
-#[derive(Debug, PartialEq, CborEncode, Decode, Clone, Default)]
-pub struct Tasks(#[n(0)] VecDeque<Task>);
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, Default)]
+pub struct Tasks(VecDeque<Task>);
 
 impl Tasks {
     pub fn new() -> Self {
@@ -54,10 +54,9 @@ impl Tasks {
     }
 }
 
-#[derive(Debug, PartialEq, CborEncode, Decode, Clone)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub enum Task {
-    #[n(0)]
-    InstallLedgerSuite(#[n(0)] Erc20Contract),
+    InstallLedgerSuite(Erc20Contract),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -224,12 +223,12 @@ where
     Ok(())
 }
 
-#[derive(Debug, PartialEq, Clone, Ord, PartialOrd, Eq, CborEncode, Decode)]
-pub struct Erc20Contract(#[n(0)] ChainId, #[n(1)] Address);
+#[derive(Debug, PartialEq, Clone, Ord, PartialOrd, Eq, Serialize, Deserialize)]
+pub struct Erc20Contract(ChainId, Address);
 
-#[derive(Debug, PartialEq, Clone, Eq, Ord, PartialOrd, CborEncode, Decode)]
-#[cbor(transparent)]
-pub struct ChainId(#[n(0)] u64);
+#[derive(Debug, PartialEq, Clone, Eq, Ord, PartialOrd, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ChainId(u64);
 
 impl TryFrom<crate::candid::Erc20Contract> for Erc20Contract {
     type Error = String;
