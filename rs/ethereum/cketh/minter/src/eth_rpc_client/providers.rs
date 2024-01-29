@@ -16,7 +16,7 @@ pub(crate) const SEPOLIA_PROVIDERS: &[RpcService] = &[
     RpcService::EthSepolia(EthSepoliaService::PublicNode),
 ];
 
-#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Deserialize, CandidType)]
+#[derive(Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Deserialize, CandidType)]
 pub struct RpcApi {
     pub url: String,
     pub headers: Vec<HttpHeader>,
