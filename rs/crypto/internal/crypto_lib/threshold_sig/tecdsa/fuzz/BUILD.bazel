@@ -39,3 +39,10 @@ rust_fuzz_test_binary(
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
+
+rust_fuzz_test_binary(
+    name = "cbor_deserialize_ecc_point",
+    srcs = ["fuzz_targets/cbor_deserialize_ecc_point.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
