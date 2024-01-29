@@ -1922,6 +1922,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_fetch_canister_logs(mut self, status: FlagStatus) -> Self {
+        self.execution_config.fetch_canister_logs = status;
+        self
+    }
+
     pub fn with_time(mut self, time: Time) -> Self {
         self.time = time;
         self

@@ -17,8 +17,8 @@ use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterStatusResultV2,
-    CanisterStatusType, InstallChunkedCodeArgs, InstallCodeArgsV2, LogVisibility,
-    Method as Ic00Method, StoredChunksReply, UploadChunkReply,
+    CanisterStatusType, InstallChunkedCodeArgs, InstallCodeArgsV2, Method as Ic00Method,
+    StoredChunksReply, UploadChunkReply,
 };
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, IngressHistoryWriter, SubnetAvailableMemory,
@@ -437,6 +437,7 @@ impl CanisterManager {
         provisional_whitelist: &ProvisionalWhitelist,
         ingress: &SignedIngressContent,
         effective_canister_id: Option<CanisterId>,
+        fetch_canister_logs: FlagStatus,
     ) -> Result<(), UserError> {
         let method_name = ingress.method_name();
         let sender = ingress.sender();
@@ -524,7 +525,7 @@ impl CanisterManager {
                             )),
                         }
                     },
-                    None =>  Err(UserError::new(
+                    None => Err(UserError::new(
                         ErrorCode::InvalidManagementPayload,
                         format!("Failed to decode payload for ic00 method: {}", method_name),
                     )),
@@ -532,25 +533,21 @@ impl CanisterManager {
             },
 
             Ok(Ic00Method::FetchCanisterLogs) => {
-                match effective_canister_id {
-                    Some(canister_id) => {
-                        let canister = state.canister_state(&canister_id).ok_or_else(|| UserError::new(
-                            ErrorCode::CanisterNotFound,
-                            format!("Canister {} not found", canister_id),
-                        ))?;
-                        match canister.log_visibility() {
-                            LogVisibility::Public => Ok(()),
-                            LogVisibility::Controllers if canister.controllers().contains(&sender.get()) => Ok(()),
-                            LogVisibility::Controllers => Err(UserError::new(
-                                ErrorCode::CanisterRejectedMessage,
-                                format!("Caller {} is not allowed to call ic00 method {}", sender, method_name),
-                            )),
-                        }
-                    },
-                    None =>  Err(UserError::new(
-                        ErrorCode::InvalidManagementPayload,
-                        format!("Failed to decode payload for ic00 method: {}", method_name),
+                match fetch_canister_logs {
+                    FlagStatus::Enabled => Err(UserError::new(
+                        ErrorCode::CanisterRejectedMessage,
+                        format!(
+                            "{} API is only accessible in non-replicated mode",
+                            Ic00Method::FetchCanisterLogs
+                        ),
                     )),
+                    FlagStatus::Disabled => Err(UserError::new(
+                        ErrorCode::CanisterContractViolation,
+                        format!(
+                            "{} API is not enabled on this subnet",
+                            Ic00Method::FetchCanisterLogs
+                        ),
+                    ))
                 }
             },
 

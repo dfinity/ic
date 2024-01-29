@@ -250,6 +250,10 @@ pub struct Config {
 
     /// Indicates whether canister backup and restore feature is enabled or not.
     pub canister_snapshots: FlagStatus,
+
+    // TODO(IC-272): remove this flag once the feature is enabled by default.
+    /// Indicates whether fetching canister logs API is enabled or not.
+    pub fetch_canister_logs: FlagStatus,
 }
 
 impl Default for Config {
@@ -319,6 +323,7 @@ impl Default for Config {
             wasm_chunk_store: FlagStatus::Enabled,
             stop_canister_timeout_duration: STOP_CANISTER_TIMEOUT_DURATION,
             canister_snapshots: FlagStatus::Disabled,
+            fetch_canister_logs: FlagStatus::Disabled,
         }
     }
 }
