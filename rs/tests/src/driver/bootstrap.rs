@@ -260,6 +260,7 @@ pub fn setup_and_start_vms_k8s(
                 malicious_behaviour,
                 None,
                 None,
+                None,
                 &t_env,
                 &group_name,
             )?;
@@ -315,6 +316,7 @@ pub fn setup_and_start_vms(
         let t_env = env.clone();
         let ic_name = ic.name();
         let malicious_behaviour = ic.get_malicious_behavior_of_node(node.node_id);
+        let query_stats_epoch_length = ic.get_query_stats_epoch_length_of_node(node.node_id);
         let ipv4_config = ic.get_ipv4_config_of_node(node.node_id);
         let domain = ic.get_domain_of_node(node.node_id);
         nodes_info.insert(node.node_id, malicious_behaviour.clone());
@@ -323,6 +325,7 @@ pub fn setup_and_start_vms(
                 &ic_name,
                 &node,
                 malicious_behaviour,
+                query_stats_epoch_length,
                 ipv4_config,
                 domain,
                 &t_env,
@@ -420,10 +423,11 @@ pub fn upload_config_disk_image(
 
 /// side-effectful function that creates the config disk images in the node
 /// directories.
-pub fn create_config_disk_image(
+fn create_config_disk_image(
     ic_name: &str,
     node: &InitializedNode,
     malicious_behavior: Option<MaliciousBehaviour>,
+    query_stats_epoch_length: Option<u64>,
     ipv4_config: Option<Ipv4Config>,
     domain: Option<String>,
     test_env: &TestEnv,
@@ -473,6 +477,17 @@ pub fn create_config_disk_image(
         );
         cmd.arg("--malicious_behavior")
             .arg(serde_json::to_string(&malicious_behavior)?);
+    }
+
+    if let Some(query_stats_epoch_length) = query_stats_epoch_length {
+        info!(
+            test_env.logger(),
+            "Node with id={} has query_stats_epoch_length={:?}",
+            node.node_id,
+            query_stats_epoch_length
+        );
+        cmd.arg("--query_stats_epoch_length")
+            .arg(format!("{}", query_stats_epoch_length));
     }
 
     if let Some(ipv4_config) = ipv4_config {

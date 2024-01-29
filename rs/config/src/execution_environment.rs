@@ -104,7 +104,7 @@ const QUERY_CACHE_CAPACITY: NumBytes = NumBytes::new(200 * MIB);
 const QUERY_CACHE_MAX_EXPIRY_TIME: Duration = Duration::from_secs(600);
 
 /// Length of an epoch of query statistics in blocks
-pub const QUERY_STATS_EPOCH_LENGTH: u64 = 2000;
+pub const QUERY_STATS_EPOCH_LENGTH: u64 = 1800;
 
 // The ID of the Bitcoin testnet canister.
 pub const BITCOIN_TESTNET_CANISTER_ID: &str = "g4xu7-jiaaa-aaaan-aaaaq-cai";
