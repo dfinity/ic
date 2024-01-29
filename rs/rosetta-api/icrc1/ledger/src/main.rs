@@ -82,7 +82,7 @@ fn init(args: LedgerArgument) {
         LedgerArgument::Init(init_args) => {
             let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
             LEDGER.with(|cell| {
-                *cell.borrow_mut() = Some(Ledger::<Tokens>::from_init_args(init_args, now))
+                *cell.borrow_mut() = Some(Ledger::<Tokens>::from_init_args(&LOG, init_args, now))
             })
         }
         LedgerArgument::Upgrade(_) => {
@@ -112,7 +112,7 @@ fn post_upgrade(args: Option<LedgerArgument>) {
             LedgerArgument::Init(_) => panic!("Cannot upgrade the canister with an Init argument. Please provide an Upgrade argument."),
             LedgerArgument::Upgrade(upgrade_args) => {
                 if let Some(upgrade_args) = upgrade_args {
-                    Access::with_ledger_mut(|ledger| ledger.upgrade(upgrade_args));
+                    Access::with_ledger_mut(|ledger| ledger.upgrade(&LOG, upgrade_args));
                 }
             }
         }
@@ -285,9 +285,6 @@ async fn execute_transfer(
     created_at_time: Option<u64>,
 ) -> Result<Nat, CoreTransferError<Tokens>> {
     let block_idx = Access::with_ledger_mut(|ledger| {
-        if spender.is_some() && !ledger.feature_flags().icrc2 {
-            ic_cdk::trap("ICRC-2 features are not enabled on the ledger.");
-        }
         let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
         let created_at_time = created_at_time.map(TimeStamp::from_nanos_since_unix_epoch);
 
@@ -469,17 +466,16 @@ fn archives() -> Vec<ArchiveInfo> {
 #[query(name = "icrc1_supported_standards")]
 #[candid_method(query, rename = "icrc1_supported_standards")]
 fn supported_standards() -> Vec<StandardRecord> {
-    let mut standards = vec![StandardRecord {
-        name: "ICRC-1".to_string(),
-        url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-1".to_string(),
-    }];
-    let icrc2 = Access::with_ledger(|ledger| ledger.feature_flags().icrc2);
-    if icrc2 {
-        standards.push(StandardRecord {
+    let standards = vec![
+        StandardRecord {
+            name: "ICRC-1".to_string(),
+            url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-1".to_string(),
+        },
+        StandardRecord {
             name: "ICRC-2".to_string(),
             url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-2".to_string(),
-        });
-    }
+        },
+    ];
     standards
 }
 
@@ -517,9 +513,6 @@ fn get_data_certificate() -> DataCertificate {
 #[candid_method(update)]
 async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
     let block_idx = Access::with_ledger_mut(|ledger| {
-        if !ledger.feature_flags().icrc2 {
-            ic_cdk::trap("ICRC-2 features are not enabled on the ledger.");
-        }
         let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
 
         let from_account = Account {
@@ -598,9 +591,6 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
 #[candid_method(query)]
 fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
     Access::with_ledger(|ledger| {
-        if !ledger.feature_flags().icrc2 {
-            ic_cdk::trap("ICRC-2 features are not enabled on the ledger.");
-        }
         let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
         let allowance = ledger
             .approvals()

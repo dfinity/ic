@@ -1,10 +1,11 @@
 use candid::{CandidType, Decode, Encode, Nat};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1_ledger::{ChangeFeeCollector, InitArgs, LedgerArgument};
+use ic_icrc1_ledger::{ChangeFeeCollector, FeatureFlags, InitArgs, LedgerArgument};
 use ic_icrc1_ledger_sm_tests::{
-    ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY,
-    INT_META_VALUE, MINTER, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY,
-    TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL,
+    get_allowance, send_approval, send_transfer_from, ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY,
+    BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY, INT_META_VALUE, MINTER, NAT_META_KEY,
+    NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY, TEXT_META_VALUE, TOKEN_NAME,
+    TOKEN_SYMBOL,
 };
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::BlockIndex;
@@ -12,6 +13,9 @@ use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
+use icrc_ledger_types::icrc2::allowance::Allowance;
+use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
+use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
 use num_traits::ToPrimitive;
 use std::path::PathBuf;
 
@@ -228,11 +232,6 @@ fn test_approve_from_minter() {
 }
 
 #[test]
-fn test_feature_flags() {
-    ic_icrc1_ledger_sm_tests::test_feature_flags(ledger_wasm(), encode_init_args);
-}
-
-#[test]
 fn test_transfer_from_smoke() {
     ic_icrc1_ledger_sm_tests::test_transfer_from_smoke(ledger_wasm(), encode_init_args);
 }
@@ -406,6 +405,97 @@ fn test_upgrade_from_first_version() {
     transfer(&env, ledger_id, MINTER, account(1), 2_000_000);
     transfer(&env, ledger_id, MINTER, account(2), 3_000_000);
     transfer(&env, ledger_id, account(1), account(3), 1_000_000);
+}
+
+#[test]
+fn test_icrc2_feature_flag_doesnt_disable_icrc2_endpoints() {
+    // Disable ICRC-2 and check the endpoints still work
+
+    let env = StateMachine::new();
+    let init_args = Encode!(&LedgerArgument::Init(InitArgs {
+        minting_account: MINTER,
+        fee_collector_account: None,
+        initial_balances: vec![],
+        transfer_fee: FEE.into(),
+        token_name: TOKEN_NAME.to_string(),
+        decimals: Some(DECIMAL_PLACES),
+        token_symbol: TOKEN_SYMBOL.to_string(),
+        metadata: vec![],
+        archive_options: ArchiveOptions {
+            trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
+            num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE as usize,
+            node_max_memory_size_bytes: None,
+            max_message_size_bytes: None,
+            controller_id: PrincipalId::new_user_test_id(100),
+            cycles_for_archive_creation: None,
+            max_transactions_per_response: None,
+        },
+        max_memo_length: None,
+        feature_flags: Some(FeatureFlags { icrc2: false }),
+        maximum_number_of_accounts: None,
+        accounts_overflow_trim_quantity: None,
+    }))
+    .unwrap();
+    let ledger_id = env
+        .install_canister(ledger_wasm(), init_args, None)
+        .unwrap();
+    let user1 = account(1);
+    let user2 = account(2);
+    let user3 = account(3);
+
+    // if ICRC-2 is enabled then none of the following operations
+    // should trap
+
+    assert_eq!(
+        get_allowance(&env, ledger_id, user1, user2),
+        Allowance {
+            allowance: 0u32.into(),
+            expires_at: None
+        }
+    );
+
+    let approval_result = send_approval(
+        &env,
+        ledger_id,
+        user1.owner,
+        &ApproveArgs {
+            from_subaccount: None,
+            spender: user3,
+            amount: 1_000_000u32.into(),
+            expected_allowance: None,
+            expires_at: None,
+            fee: None,
+            memo: None,
+            created_at_time: None,
+        },
+    );
+    assert_eq!(
+        approval_result,
+        Err(ApproveError::InsufficientFunds {
+            balance: 0u32.into()
+        })
+    );
+
+    let transfer_from_result = send_transfer_from(
+        &env,
+        ledger_id,
+        user3.owner,
+        &TransferFromArgs {
+            spender_subaccount: None,
+            from: user1,
+            to: user2,
+            amount: 1_000_000u32.into(),
+            fee: None,
+            memo: None,
+            created_at_time: None,
+        },
+    );
+    assert_eq!(
+        transfer_from_result,
+        Err(TransferFromError::InsufficientAllowance {
+            allowance: 0u32.into()
+        })
+    );
 }
 
 mod verify_written_blocks {
