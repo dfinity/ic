@@ -218,9 +218,9 @@ impl CatchUpPackageMaker {
                             error!(
                                 self.log,
                                 "Cannot make ECDSA CUP at height {}: `get_state_hash_at` \
-                                succeeded but `get_state_at` failed with {:?}. Will retry",
-                                err,
+                                succeeded but `get_state_at` failed with {}. Will retry",
                                 height,
+                                err,
                             )
                         })
                         .ok()?;
