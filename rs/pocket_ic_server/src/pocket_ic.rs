@@ -15,6 +15,7 @@ use ic_state_machine_tests::{
     StateMachineConfig, SubmitIngressError, Time,
 };
 use ic_test_utilities::types::ids::subnet_test_id;
+use ic_types::messages::CertificateDelegation;
 use ic_types::{CanisterId, PrincipalId, SubnetId};
 use itertools::Itertools;
 use pocket_ic::common::rest::{
@@ -219,6 +220,13 @@ impl PocketIc {
         self.any_subnet()
     }
 
+    fn nns_subnet(&self) -> Option<Arc<StateMachine>> {
+        self.topology.get_nns().map(|nns_subnet_id| {
+            self.get_subnet_with_id(PrincipalId(nns_subnet_id).into())
+                .unwrap()
+        })
+    }
+
     fn get_subnet_with_id(&self, subnet_id: SubnetId) -> Option<Arc<StateMachine>> {
         self.subnets
             .read()
@@ -245,6 +253,20 @@ impl PocketIc {
             self.get_subnet_with_id(subnet_id)
         } else {
             None
+        }
+    }
+
+    fn get_nns_delegation_for_subnet(&self, subnet_id: SubnetId) -> Option<CertificateDelegation> {
+        let nns_subnet = match self.nns_subnet() {
+            Some(nns_subnet) => nns_subnet,
+            None => {
+                return None;
+            }
+        };
+        if nns_subnet.get_subnet_id() == subnet_id {
+            None
+        } else {
+            nns_subnet.get_delegation_for_subnet(subnet_id).ok()
         }
     }
 }
@@ -572,14 +594,18 @@ impl Operation for Query {
         let canister_call = self.0.clone();
         let subnet = route_call(pic, canister_call);
         match subnet {
-            Ok(subnet) => subnet
-                .query_as(
-                    self.0.sender,
-                    self.0.canister_id,
-                    self.0.method,
-                    self.0.payload,
-                )
-                .into(),
+            Ok(subnet) => {
+                let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
+                subnet
+                    .query_as_with_delegation(
+                        self.0.sender,
+                        self.0.canister_id,
+                        self.0.method,
+                        self.0.payload,
+                        delegation,
+                    )
+                    .into()
+            }
             Err(e) => OpOut::Error(PocketIcError::BadIngressMessage(e)),
         }
     }
