@@ -1003,24 +1003,26 @@ impl BatchProcessorImpl {
                 continue;
             };
 
-            let Ok(ipv6_address) = http.ip_addr.parse::<Ipv6Addr>() else {
+            let ipv6_address = http.ip_addr;
+            if ipv6_address.parse::<Ipv6Addr>().is_err() {
                 raise_critical_error_for_api_boundary_nodes(&format!(
                     "failed to parse ipv6 field in NodeRecord for node_id {api_bn_id}",
                 ));
                 continue;
-            };
+            }
 
             // ipv4 is not mandatory for the node record. No critical errors need to be raised if it is `None`.
-            let Ok(ipv4_address) = node_record
+            let ipv4_address = node_record
                 .public_ipv4_config
-                .map(|public_ipv4_config| public_ipv4_config.ip_addr.parse::<Ipv4Addr>())
-                .transpose()
-            else {
-                raise_critical_error_for_api_boundary_nodes(&format!(
-                    "failed to parse ipv4 address of node {api_bn_id}",
-                ));
-                continue;
-            };
+                .map(|ipv4_config| ipv4_config.ip_addr);
+            if let Some(ref ipv4) = ipv4_address {
+                if ipv4.parse::<Ipv4Addr>().is_err() {
+                    raise_critical_error_for_api_boundary_nodes(&format!(
+                        "failed to parse ipv4 address of node {api_bn_id}",
+                    ));
+                    continue;
+                }
+            }
 
             api_boundary_nodes.insert(
                 api_bn_id,
@@ -1095,7 +1097,7 @@ impl BatchProcessor for BatchProcessorImpl {
             subnet_features,
             registry_execution_settings,
             node_public_keys,
-            _api_boundary_nodes,
+            api_boundary_nodes,
         ) = self.read_registry(registry_version, state.metadata.own_subnet_id);
 
         self.metrics.blocks_proposed_total.inc();
@@ -1114,6 +1116,7 @@ impl BatchProcessor for BatchProcessorImpl {
             subnet_features,
             &registry_execution_settings,
             node_public_keys,
+            api_boundary_nodes,
         );
         // Garbage collect empty canister queue pairs before checkpointing.
         if certification_scope == CertificationScope::Full {

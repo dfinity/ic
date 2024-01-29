@@ -454,6 +454,14 @@ fn roundtrip_encoding() {
     system_metadata.node_public_keys = btreemap! {
         node_test_id(1) => pk_der,
     };
+    system_metadata.api_boundary_nodes = btreemap! {
+        node_test_id(1) => ApiBoundaryNodeEntry {
+            domain: "api-example.com".to_string(),
+            ipv4_address: Some("127.0.0.1".to_string()),
+            ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
+            pubkey: None,
+        },
+    };
     system_metadata.bitcoin_get_successors_follow_up_responses =
         btreemap! { 10.into() => vec![vec![1], vec![2]] };
 

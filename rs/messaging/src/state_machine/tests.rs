@@ -171,6 +171,7 @@ fn state_machine_populates_network_topology() {
             Default::default(),
             &test_registry_settings(),
             Default::default(),
+            Default::default(),
         );
 
         assert_eq!(state.metadata.network_topology, fixture.network_topology);
@@ -199,6 +200,7 @@ fn test_delivered_batch(provided_batch: Batch) -> ReplicatedState {
             provided_batch,
             Default::default(),
             &test_registry_settings(),
+            Default::default(),
             Default::default(),
         )
     })
@@ -270,6 +272,7 @@ fn test_batch_time_regression() {
             provided_batch,
             Default::default(),
             &test_registry_settings(),
+            Default::default(),
             Default::default(),
         );
 

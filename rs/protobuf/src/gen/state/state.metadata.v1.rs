@@ -381,6 +381,20 @@ pub struct NodePublicKeyEntry {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ApiBoundaryNodeEntry {
+    #[prost(message, optional, tag = "1")]
+    pub node_id: ::core::option::Option<super::super::super::types::v1::NodeId>,
+    #[prost(string, tag = "2")]
+    pub domain: ::prost::alloc::string::String,
+    #[prost(string, optional, tag = "3")]
+    pub ipv4_address: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, tag = "4")]
+    pub ipv6_address: ::prost::alloc::string::String,
+    #[prost(bytes = "vec", optional, tag = "5")]
+    pub pubkey: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeBlockmakerStats {
     #[prost(message, optional, tag = "1")]
     pub node_id: ::core::option::Option<super::super::super::types::v1::NodeId>,
@@ -455,6 +469,8 @@ pub struct SystemMetadata {
     pub node_public_keys: ::prost::alloc::vec::Vec<NodePublicKeyEntry>,
     #[prost(message, optional, tag = "20")]
     pub blockmaker_metrics_time_series: ::core::option::Option<BlockmakerMetricsTimeSeries>,
+    #[prost(message, repeated, tag = "21")]
+    pub api_boundary_nodes: ::prost::alloc::vec::Vec<ApiBoundaryNodeEntry>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
