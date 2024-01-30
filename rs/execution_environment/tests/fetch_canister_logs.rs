@@ -7,7 +7,8 @@ use ic_ic00_types::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
-    ErrorCode, PrincipalId, StateMachine, StateMachineBuilder, StateMachineConfig, UserError,
+    ErrorCode, PrincipalId, StateMachine, StateMachineBuilder, StateMachineConfig,
+    SubmitIngressError, UserError,
 };
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use ic_test_utilities_execution_environment::get_reply;
@@ -41,7 +42,43 @@ fn setup(fetch_canister_logs: FlagStatus) -> (StateMachine, CanisterId) {
 }
 
 #[test]
-fn test_fetch_canister_logs_ingress_disabled() {
+fn test_fetch_canister_logs_disabled_submit_ingress_fails() {
+    // Arrange.
+    // - disable the fetch_canister_logs API
+    // - set the log visibility to public so that any user can read the logs
+    let (env, canister_id) = setup(FlagStatus::Disabled);
+    let not_a_controller = PrincipalId::new_user_test_id(42);
+    env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(LogVisibility::Public)
+            .build(),
+    )
+    .unwrap();
+    // Act.
+    let result = env.submit_ingress_as(
+        not_a_controller,
+        CanisterId::ic_00(),
+        "fetch_canister_logs",
+        FetchCanisterLogsRequest {
+            canister_id: canister_id.into(),
+        }
+        .encode(),
+    );
+    // Assert.
+    // Expect to get an error because the fetch_canister_logs API is disabled,
+    // despite the fact that the log visibility is set to public.
+    assert_eq!(
+        result,
+        Err(SubmitIngressError::UserError(UserError::new(
+            ErrorCode::CanisterContractViolation,
+            "fetch_canister_logs API is not enabled on this subnet"
+        )))
+    );
+}
+
+#[test]
+fn test_fetch_canister_logs_disabled_execute_ingress_fails() {
     // Arrange.
     // - disable the fetch_canister_logs API
     // - set the log visibility to public so that any user can read the logs
@@ -78,7 +115,42 @@ fn test_fetch_canister_logs_ingress_disabled() {
 }
 
 #[test]
-fn test_fetch_canister_logs_ingress_enabled() {
+fn test_fetch_canister_logs_enabled_submit_ingress_rejected() {
+    // Arrange.
+    // - enable the fetch_canister_logs API
+    // - set the log visibility to public so that any user can read the logs
+    let (env, canister_id) = setup(FlagStatus::Enabled);
+    let not_a_controller = PrincipalId::new_user_test_id(42);
+    env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(LogVisibility::Public)
+            .build(),
+    )
+    .unwrap();
+    // Act.
+    let result = env.submit_ingress_as(
+        not_a_controller,
+        CanisterId::ic_00(),
+        "fetch_canister_logs",
+        FetchCanisterLogsRequest {
+            canister_id: canister_id.into(),
+        }
+        .encode(),
+    );
+    // Assert.
+    // Expect error because an update calls are not allowed.
+    assert_eq!(
+        result,
+        Err(SubmitIngressError::UserError(UserError::new(
+            ErrorCode::CanisterRejectedMessage,
+            "fetch_canister_logs API is only accessible in non-replicated mode"
+        )))
+    );
+}
+
+#[test]
+fn test_fetch_canister_logs_enabled_execute_ingress_rejected() {
     // Arrange.
     // - enable the fetch_canister_logs API
     // - set the log visibility to public so that any user can read the logs
@@ -114,7 +186,7 @@ fn test_fetch_canister_logs_ingress_enabled() {
 }
 
 #[test]
-fn test_fetch_canister_logs_query_disabled() {
+fn test_fetch_canister_logs_disabled_query_fails() {
     // Arrange.
     // - disable the fetch_canister_logs API
     // - set the log visibility to public so that any user can read the logs
@@ -151,7 +223,7 @@ fn test_fetch_canister_logs_query_disabled() {
 }
 
 #[test]
-fn test_fetch_canister_logs_query_log_visibility_public_succeeds() {
+fn test_fetch_canister_logs_enabled_query_log_visibility_public_succeeds() {
     // Arrange.
     // - enable the fetch_canister_logs API
     // - set the log visibility to public so that any user can read the logs
@@ -186,7 +258,7 @@ fn test_fetch_canister_logs_query_log_visibility_public_succeeds() {
 }
 
 #[test]
-fn test_fetch_canister_logs_query_log_visibility_invalid_controller_fails() {
+fn test_fetch_canister_logs_enabled_query_log_visibility_invalid_controller_fails() {
     // Arrange.
     // - enable the fetch_canister_logs API
     // - restrict log visibility to controllers only
@@ -224,7 +296,7 @@ fn test_fetch_canister_logs_query_log_visibility_invalid_controller_fails() {
 }
 
 #[test]
-fn test_fetch_canister_logs_query_log_visibility_valid_controller_succeeds() {
+fn test_fetch_canister_logs_enabled_query_log_visibility_valid_controller_succeeds() {
     // Arrange.
     // - enable the fetch_canister_logs API
     // - restrict log visibility to controllers only
