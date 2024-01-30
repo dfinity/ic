@@ -2,14 +2,15 @@ use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
 use ic_ic00_types::{
-    CanisterInstallMode, CanisterSettingsArgsBuilder, FetchCanisterLogsRequest, LogVisibility,
-    Payload,
+    CanisterInstallMode, CanisterSettingsArgsBuilder, FetchCanisterLogsRequest,
+    FetchCanisterLogsResponse, LogVisibility, Payload,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
     ErrorCode, PrincipalId, StateMachine, StateMachineBuilder, StateMachineConfig, UserError,
 };
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
+use ic_test_utilities_execution_environment::get_reply;
 use ic_types::{CanisterId, Cycles};
 
 fn setup(fetch_canister_logs: FlagStatus) -> (StateMachine, CanisterId) {
@@ -112,4 +113,149 @@ fn test_fetch_canister_logs_ingress_enabled() {
     );
 }
 
-// TODO(IC-272): add query call tests.
+#[test]
+fn test_fetch_canister_logs_query_disabled() {
+    // Arrange.
+    // - disable the fetch_canister_logs API
+    // - set the log visibility to public so that any user can read the logs
+    let (env, canister_id) = setup(FlagStatus::Disabled);
+    let not_a_controller = PrincipalId::new_user_test_id(42);
+    env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(LogVisibility::Public)
+            .build(),
+    )
+    .unwrap();
+    // Act.
+    // Make a query call.
+    let result = env.query_as(
+        not_a_controller,
+        CanisterId::ic_00(),
+        "fetch_canister_logs",
+        FetchCanisterLogsRequest {
+            canister_id: canister_id.into(),
+        }
+        .encode(),
+    );
+    // Assert.
+    // Expect to get an error because the fetch_canister_logs API is disabled,
+    // despite the fact that the log visibility is set to public.
+    assert_eq!(
+        result,
+        Err(UserError::new(
+            ErrorCode::CanisterContractViolation,
+            "fetch_canister_logs API is not enabled on this subnet"
+        ))
+    );
+}
+
+#[test]
+fn test_fetch_canister_logs_query_log_visibility_public_succeeds() {
+    // Arrange.
+    // - enable the fetch_canister_logs API
+    // - set the log visibility to public so that any user can read the logs
+    let (env, canister_id) = setup(FlagStatus::Enabled);
+    let not_a_controller = PrincipalId::new_user_test_id(42);
+    env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(LogVisibility::Public)
+            .build(),
+    )
+    .unwrap();
+    // Act.
+    // Make a query call.
+    let result = env.query_as(
+        not_a_controller,
+        CanisterId::ic_00(),
+        "fetch_canister_logs",
+        FetchCanisterLogsRequest {
+            canister_id: canister_id.into(),
+        }
+        .encode(),
+    );
+    // Assert.
+    // Expect some non-empty result.
+    assert_eq!(
+        FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
+        FetchCanisterLogsResponse {
+            canister_log_records: vec![]
+        }
+    );
+}
+
+#[test]
+fn test_fetch_canister_logs_query_log_visibility_invalid_controller_fails() {
+    // Arrange.
+    // - enable the fetch_canister_logs API
+    // - restrict log visibility to controllers only
+    let (env, canister_id) = setup(FlagStatus::Enabled);
+    let not_a_controller = PrincipalId::new_user_test_id(42);
+    env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(LogVisibility::Controllers)
+            .build(),
+    )
+    .unwrap();
+    // Act.
+    // Make a query call from a non-controller.
+    let result = env.query_as(
+        not_a_controller,
+        CanisterId::ic_00(),
+        "fetch_canister_logs",
+        FetchCanisterLogsRequest {
+            canister_id: canister_id.into(),
+        }
+        .encode(),
+    );
+    // Assert.
+    // Expect an error because the caller is not a controller.
+    assert_eq!(
+        result,
+        Err(UserError::new(
+            ErrorCode::CanisterRejectedMessage,
+            format!(
+                "Caller {not_a_controller} is not allowed to query ic00 method fetch_canister_logs"
+            ),
+        ))
+    );
+}
+
+#[test]
+fn test_fetch_canister_logs_query_log_visibility_valid_controller_succeeds() {
+    // Arrange.
+    // - enable the fetch_canister_logs API
+    // - restrict log visibility to controllers only
+    // - add new controller
+    let (env, canister_id) = setup(FlagStatus::Enabled);
+    let new_controller = PrincipalId::new_user_test_id(42);
+    env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(LogVisibility::Controllers)
+            .with_controller(new_controller)
+            .build(),
+    )
+    .unwrap();
+    // Act.
+    // Make a query call from a controller.
+    let result = env.query_as(
+        new_controller,
+        CanisterId::ic_00(),
+        "fetch_canister_logs",
+        FetchCanisterLogsRequest {
+            canister_id: canister_id.into(),
+        }
+        .encode(),
+    );
+    // Assert.
+    // Expect some non-empty result.
+    assert_eq!(
+        FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
+        FetchCanisterLogsResponse {
+            canister_log_records: vec![]
+        }
+    );
+}

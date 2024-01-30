@@ -2246,6 +2246,7 @@ impl Payload<'_> for BitcoinSendTransactionInternalArgs {}
 pub enum QueryMethod {
     BitcoinGetUtxosQuery,
     BitcoinGetBalanceQuery,
+    FetchCanisterLogs,
 }
 
 /// `CandidType` for `NodeMetricsHistoryArgs`
@@ -2313,6 +2314,37 @@ impl FetchCanisterLogsRequest {
         CanisterId::unchecked_from_principal(self.canister_id)
     }
 }
+
+/// `CandidType` for `CanisterLogRecord`
+/// ```text
+/// record {
+///     idx: nat;
+///     timestamp_nanos: nat;
+///     content: blob;
+/// }
+/// ```
+#[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq)]
+pub struct CanisterLogRecord {
+    pub idx: u64,
+    pub timestamp_nanos: u64,
+    #[serde(with = "serde_bytes")]
+    pub content: Vec<u8>,
+}
+
+impl Payload<'_> for CanisterLogRecord {}
+
+/// `CandidType` for `FetchCanisterLogsResponse`
+/// ```text
+/// record {
+///     canister_log_records: vec canister_log_record;
+/// }
+/// ```
+#[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq)]
+pub struct FetchCanisterLogsResponse {
+    pub canister_log_records: Vec<CanisterLogRecord>,
+}
+
+impl Payload<'_> for FetchCanisterLogsResponse {}
 
 /// Struct used for encoding/decoding
 /// `(record {
