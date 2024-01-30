@@ -14,7 +14,7 @@ use dfn_candid::candid_one;
 use ic_base_types::CanisterId;
 use ic_ic00_types::CanisterInstallMode;
 use ic_ledger_suite_orchestrator::candid::{
-    AddErc20Arg, Erc20Contract, InitArg, ManagedCanisterIds, OrchestratorArg,
+    AddErc20Arg, Erc20Contract, InitArg, LedgerInitArg, ManagedCanisterIds, OrchestratorArg,
 };
 use ic_nervous_system_clients::canister_status::CanisterStatusResult;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
@@ -103,7 +103,10 @@ pub fn ic_xc_ledger_suite_orchestrator_test(env: TestEnv) {
             &root_canister,
             ledger_orchestrator_wasm,
             &ledger_orchestrator,
-            usdc_contract(),
+            AddErc20Arg {
+                contract: usdc_contract(),
+                ledger_init_arg: usdc_ledger_init_arg(),
+            },
         )
         .await
     });
@@ -115,7 +118,7 @@ pub fn ic_xc_ledger_suite_orchestrator_test(env: TestEnv) {
                 .query_("icrc1_name", candid_one, ())
         })
         .await;
-        assert_eq!(token_name, "Test Token".to_string());
+        assert_eq!(token_name, "USD Coin".to_string());
     });
     info!(
         &logger,
@@ -241,16 +244,15 @@ async fn add_erc_20_by_nns_proposal<'a>(
     root_canister: &Canister<'_>,
     canister_wasm: Wasm,
     orchestrator: &LedgerOrchestratorCanister<'a>,
-    erc20_token: Erc20Contract,
+    erc20_token: AddErc20Arg,
 ) -> ManagedCanisters<'a> {
     use ic_canister_client::Sender;
     use ic_nervous_system_clients::canister_status::CanisterStatusType;
     use ic_nns_common::types::{NeuronId, ProposalId};
     use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
 
-    let upgrade_arg = OrchestratorArg::AddErc20Arg(AddErc20Arg {
-        contract: erc20_token.clone(),
-    });
+    let erc20_contract = erc20_token.contract.clone();
+    let upgrade_arg = OrchestratorArg::AddErc20Arg(erc20_token);
     let wasm = canister_wasm.bytes();
     let proposal_payload = ChangeCanisterRequest::new(
         true,
@@ -296,7 +298,7 @@ async fn add_erc_20_by_nns_proposal<'a>(
         Duration::from_secs(100),
         Duration::from_secs(1),
         || async {
-            let managed_canister_ids = orchestrator.call_canister_ids(erc20_token.clone()).await;
+            let managed_canister_ids = orchestrator.call_canister_ids(erc20_contract.clone()).await;
             match managed_canister_ids {
                 None => bail!("No managed canister IDs yet"),
                 Some(x) => Ok(x),
@@ -307,12 +309,12 @@ async fn add_erc_20_by_nns_proposal<'a>(
     .unwrap_or_else(|e| {
         panic!(
             "Canisters for contract {:?} were not created: {}",
-            erc20_token, e
+            erc20_contract, e
         )
     });
     info!(
         &logger,
-        "Created canister IDs: {} for contract {:?}", created_canister_ids, erc20_token
+        "Created canister IDs: {} for contract {:?}", created_canister_ids, erc20_contract
     );
 
     ManagedCanisters::from(orchestrator.as_ref().runtime(), created_canister_ids)
@@ -326,6 +328,38 @@ fn usdc_contract() -> Erc20Contract {
     Erc20Contract {
         chain_id: Nat::from(1_u8),
         address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".to_string(),
+    }
+}
+
+fn usdc_ledger_init_arg() -> LedgerInitArg {
+    use ic_icrc1_ledger::FeatureFlags as LedgerFeatureFlags;
+    use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
+    use std::str::FromStr;
+
+    const CKETH_TOKEN_LOGO: &str = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTQ2IiBoZWlnaHQ9IjE0NiIgdmlld0JveD0iMCAwIDE0NiAxNDYiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxNDYiIGhlaWdodD0iMTQ2IiByeD0iNzMiIGZpbGw9IiMzQjAwQjkiLz4KPHBhdGggZmlsbC1ydWxlPSJldmVub2RkIiBjbGlwLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik0xNi4zODM3IDc3LjIwNTJDMTguNDM0IDEwNS4yMDYgNDAuNzk0IDEyNy41NjYgNjguNzk0OSAxMjkuNjE2VjEzNS45NEMzNy4zMDg3IDEzMy44NjcgMTIuMTMzIDEwOC42OTEgMTAuMDYwNSA3Ny4yMDUySDE2LjM4MzdaIiBmaWxsPSJ1cmwoI3BhaW50MF9saW5lYXJfMTEwXzU4NikiLz4KPHBhdGggZmlsbC1ydWxlPSJldmVub2RkIiBjbGlwLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik02OC43NjQ2IDE2LjM1MzRDNDAuNzYzOCAxOC40MDM2IDE4LjQwMzcgNDAuNzYzNyAxNi4zNTM1IDY4Ljc2NDZMMTAuMDMwMyA2OC43NjQ2QzEyLjEwMjcgMzcuMjc4NCAzNy4yNzg1IDEyLjEwMjYgNjguNzY0NiAxMC4wMzAyTDY4Ljc2NDYgMTYuMzUzNFoiIGZpbGw9IiMyOUFCRTIiLz4KPHBhdGggZmlsbC1ydWxlPSJldmVub2RkIiBjbGlwLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik0xMjkuNjE2IDY4LjczNDNDMTI3LjU2NiA0MC43MzM0IDEwNS4yMDYgMTguMzczMyA3Ny4yMDUxIDE2LjMyMzFMNzcuMjA1MSA5Ljk5OTk4QzEwOC42OTEgMTIuMDcyNCAxMzMuODY3IDM3LjI0ODEgMTM1LjkzOSA2OC43MzQzTDEyOS42MTYgNjguNzM0M1oiIGZpbGw9InVybCgjcGFpbnQxX2xpbmVhcl8xMTBfNTg2KSIvPgo8cGF0aCBmaWxsLXJ1bGU9ImV2ZW5vZGQiIGNsaXAtcnVsZT0iZXZlbm9kZCIgZD0iTTc3LjIzNTQgMTI5LjU4NkMxMDUuMjM2IDEyNy41MzYgMTI3LjU5NiAxMDUuMTc2IDEyOS42NDcgNzcuMTc0OUwxMzUuOTcgNzcuMTc0OUMxMzMuODk3IDEwOC42NjEgMTA4LjcyMiAxMzMuODM3IDc3LjIzNTQgMTM1LjkwOUw3Ny4yMzU0IDEyOS41ODZaIiBmaWxsPSIjMjlBQkUyIi8+CjxwYXRoIGQ9Ik03My4xOTA0IDMxVjYxLjY4MThMOTkuMTIzIDczLjI2OTZMNzMuMTkwNCAzMVoiIGZpbGw9IndoaXRlIiBmaWxsLW9wYWNpdHk9IjAuNiIvPgo8cGF0aCBkPSJNNzMuMTkwNCAzMUw0Ny4yNTQ0IDczLjI2OTZMNzMuMTkwNCA2MS42ODE4VjMxWiIgZmlsbD0id2hpdGUiLz4KPHBhdGggZD0iTTczLjE5MDQgOTMuMTUyM1YxMTRMOTkuMTQwMyA3OC4wOTg0TDczLjE5MDQgOTMuMTUyM1oiIGZpbGw9IndoaXRlIiBmaWxsLW9wYWNpdHk9IjAuNiIvPgo8cGF0aCBkPSJNNzMuMTkwNCAxMTRWOTMuMTQ4OEw0Ny4yNTQ0IDc4LjA5ODRMNzMuMTkwNCAxMTRaIiBmaWxsPSJ3aGl0ZSIvPgo8cGF0aCBkPSJNNzMuMTkwNCA4OC4zMjY5TDk5LjEyMyA3My4yNjk2TDczLjE5MDQgNjEuNjg4N1Y4OC4zMjY5WiIgZmlsbD0id2hpdGUiIGZpbGwtb3BhY2l0eT0iMC4yIi8+CjxwYXRoIGQ9Ik00Ny4yNTQ0IDczLjI2OTZMNzMuMTkwNCA4OC4zMjY5VjYxLjY4ODdMNDcuMjU0NCA3My4yNjk2WiIgZmlsbD0id2hpdGUiIGZpbGwtb3BhY2l0eT0iMC42Ii8+CjxkZWZzPgo8bGluZWFyR3JhZGllbnQgaWQ9InBhaW50MF9saW5lYXJfMTEwXzU4NiIgeDE9IjUzLjQ3MzYiIHkxPSIxMjIuNzkiIHgyPSIxNC4wMzYyIiB5Mj0iODkuNTc4NiIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPgo8c3RvcCBvZmZzZXQ9IjAuMjEiIHN0b3AtY29sb3I9IiNFRDFFNzkiLz4KPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjNTIyNzg1Ii8+CjwvbGluZWFyR3JhZGllbnQ+CjxsaW5lYXJHcmFkaWVudCBpZD0icGFpbnQxX2xpbmVhcl8xMTBfNTg2IiB4MT0iMTIwLjY1IiB5MT0iNTUuNjAyMSIgeDI9IjgxLjIxMyIgeTI9IjIyLjM5MTQiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KPHN0b3Agb2Zmc2V0PSIwLjIxIiBzdG9wLWNvbG9yPSIjRjE1QTI0Ii8+CjxzdG9wIG9mZnNldD0iMC42ODQxIiBzdG9wLWNvbG9yPSIjRkJCMDNCIi8+CjwvbGluZWFyR3JhZGllbnQ+CjwvZGVmcz4KPC9zdmc+Cg==";
+
+    LedgerInitArg {
+        minting_account: LedgerAccount {
+            owner: Principal::from_str("sv3dd-oaaaa-aaaar-qacoa-cai").unwrap(),
+            subaccount: None,
+        },
+        fee_collector_account: Some(LedgerAccount {
+            owner: Principal::from_str("sv3dd-oaaaa-aaaar-qacoa-cai").unwrap(),
+            subaccount: Some([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0xf, 0xe, 0xe,
+            ]),
+        }),
+        initial_balances: vec![],
+        transfer_fee: 2_000_000_000_000_u64.into(),
+        decimals: Some(6),
+        token_name: "USD Coin".to_string(),
+        token_symbol: "USDC".to_string(),
+        token_logo: CKETH_TOKEN_LOGO.to_string(),
+        max_memo_length: Some(80),
+        feature_flags: Some(LedgerFeatureFlags { icrc2: true }),
+        maximum_number_of_accounts: None,
+        accounts_overflow_trim_quantity: None,
     }
 }
 

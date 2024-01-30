@@ -35,4 +35,5 @@ candid_parser = { workspace = true }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
 mockall = { workspace = true }
+paste = "1.0.12"
 tokio = { workspace = true }
