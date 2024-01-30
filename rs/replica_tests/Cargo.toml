@@ -8,7 +8,6 @@ documentation.workspace = true
 
 [dependencies]
 crossbeam-channel = "0.5.5"
-futures = { workspace = true }
 ic-async-utils = { path = "../async_utils" }
 ic-btc-service = { path = "../bitcoin/service" }
 ic-btc-interface = { workspace = true }
@@ -20,7 +19,6 @@ ic-execution-environment = { path = "../execution_environment" }
 ic-ic00-types = { path = "../types/ic00_types" }
 ic-replica = { path = "../replica" }
 ic-registry-client-fake = { path = "../registry/fake" }
-ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
@@ -28,17 +26,13 @@ ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
-ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-prep = { path = "../prep" }
 ic-protobuf = { path = "../protobuf" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
-ic-state-manager = { path = "../state_manager" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
-ic-test-utilities-registry = { path = "../test_utilities/registry" }
-ic-crypto = { path = "../crypto" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-base-types = { path = "../types/base_types" }
@@ -48,7 +42,6 @@ slog-scope = "4.1.2"
 tempfile = "3.3.0"
 tonic = { workspace = true }
 tokio = { workspace = true }
-prometheus = { workspace = true }
 prost = { workspace = true }
 wat = "1.0.52"
 

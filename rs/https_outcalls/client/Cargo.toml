@@ -18,7 +18,6 @@ ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
-ic-protobuf = { path = "../../protobuf" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-types = { path = "../../types/types" }
 prometheus = { workspace = true }

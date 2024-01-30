@@ -14,7 +14,6 @@ hex-literal = "0.4.1"
 ic-base-types = { path = "../types/base_types" }
 ic-btc-types-internal = { path = "../bitcoin/types/internal" }
 ic-canister-client-sender = { path = "../canister_client/sender" }
-ic-certification-version = { path = "../canonical_state/certification_version" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-crypto-interfaces-sig-verification = { path = "../crypto/interfaces/sig_verification" }

@@ -5,7 +5,6 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "//rs/nervous_system/proxied_canister_calls_tracker",
     "//rs/nervous_system/runtime",
-    "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/types/base_types",
     "//rs/types/error_types",
@@ -13,7 +12,6 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:num-traits",
     "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
 ]
 
 DEV_DEPENDENCIES = DEPENDENCIES + [

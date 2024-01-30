@@ -12,7 +12,6 @@ ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-registry-common-proto = { path = "../proto" }
 ic-registry-client-helpers = { path = "../helpers" }
-ic-registry-keys = { path = "../keys" }
 ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
 prometheus = { workspace = true }

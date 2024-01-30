@@ -13,11 +13,9 @@ ic-canister-client-sender = { path = "./sender" }
 ic-canonical-state = { path = "../canonical_state" }
 ic-certification = { path = "../certification" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
-ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-protobuf = { path = "../protobuf" }
 ic-ic00-types = { path = "../types/ic00_types" }
 ic-types = { path = "../types/types" }
-async-trait = "0.1.36"
 futures-util = "0.3.21"
 hyper = { version = "0.14.18", features = ["client", "tcp", "http1", "http2"] }
 hyper-rustls = { version = "0.24.0", features = ["http2"] }
@@ -25,7 +23,6 @@ itertools = { workspace = true }
 prost = { workspace = true }
 rustls = { version = "^0.21.0", features = ["dangerous_configuration"] }
 serde = { workspace = true }
-serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 tokio = { workspace = true }
 tree-deserializer = { path = "../tree_deserializer" }

@@ -11,7 +11,6 @@ candid = { workspace = true }
 ic-protobuf = { path = "../../protobuf" }
 ic-base-types = { path = "../../types/base_types" }
 prost = { workspace = true }
-bytes = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]

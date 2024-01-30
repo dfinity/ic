@@ -9,7 +9,6 @@ DEPENDENCIES = [
     "@crate_index//:libc",
     "@crate_index//:prometheus",
     "@crate_index//:slog",
-    "@crate_index//:slog-async",
     "@crate_index//:tokio",
     "@crate_index//:tokio-metrics",
 ] + select({

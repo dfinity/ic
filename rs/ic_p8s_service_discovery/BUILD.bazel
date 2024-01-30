@@ -9,7 +9,6 @@ DEPENDENCIES = [
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/elastic_common_schema",
     "//rs/ic_p8s_service_discovery/log",
-    "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/monitoring/metrics",
     "//rs/http_endpoints/metrics",
@@ -27,12 +26,10 @@ DEPENDENCIES = [
     "@crate_index//:gflags",
     "@crate_index//:crossbeam",
     "@crate_index//:crossbeam-channel",
-    "@crate_index//:erased-serde",
     "@crate_index//:futures-util",
     "@crate_index//:humantime",
     "@crate_index//:humantime-serde",
     "@crate_index//:hyper",
-    "@crate_index//:lazy_static",
     "@crate_index//:parse_int",
     "@crate_index//:prometheus",
     "@crate_index//:serde",
@@ -40,7 +37,6 @@ DEPENDENCIES = [
     "@crate_index//:slog",
     "@crate_index//:slog-async",
     "@crate_index//:slog-term",
-    "@crate_index//:strum",
     "@crate_index//:tempfile",
     "@crate_index//:thiserror",
     "@crate_index//:tokio",
@@ -48,7 +44,6 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
-    "@crate_index//:slog_derive",
     "@crate_index//:strum_macros",
     "@crate_index//:gflags-derive",
 ]

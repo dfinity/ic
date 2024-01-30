@@ -12,7 +12,6 @@ clap = { workspace = true }
 crossbeam = "0.8.0"
 crossbeam-channel = "0.5.5"
 elastic_common_schema = { path = "../elastic_common_schema" }
-erased-serde = "0.3.11"
 futures-util = "0.3.5"
 gflags = "0.3.7"
 gflags-derive = "0.1"
@@ -21,7 +20,6 @@ humantime-serde = "1.0"
 hyper = { version = "0.14.18", features = ["full"] }
 ic-async-utils = { path = "../async_utils" }
 ic-config = { path = "../config" }
-ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-p8s-service-discovery-log = { path = "./log" }
 ic-metrics = { path = "../monitoring/metrics" }
@@ -35,7 +33,6 @@ ic-registry-local-store = { path = "../registry/local_store" }
 ic-registry-local-store-artifacts = { path = "../registry/local_store/artifacts" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
-lazy_static = "1.4.0"
 parse_int = "0.4.0"
 prometheus = { workspace = true }
 serde = { workspace = true }
@@ -44,8 +41,6 @@ tempfile = "3.1.0"
 slog = { workspace = true }
 slog-async = { version = "2.5", features = ["nested-values"] }
 slog-term = "2.6.0"
-slog_derive = "0.2.0"
-strum = { workspace = true }
 strum_macros = { workspace = true }
 thiserror = "1.0"
 tokio = { workspace = true }

@@ -7,7 +7,6 @@ edition = "2021"
 async-trait = "0.1.42"
 dfn_core = { path = "../../../rust_canisters/dfn_core" }
 futures = { workspace = true }
-ic-icrc1 = { path = "../../../rosetta-api/icrc1" }
 icp-ledger = { path = "../../../rosetta-api/icp_ledger" }
 ic-nervous-system-common = { path = "../../common" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }

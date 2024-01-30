@@ -10,7 +10,6 @@ path = "src/lib.rs"
 [dependencies]
 async-trait = "0.1.42"
 candid = { workspace = true }
-dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 ic-base-types = { path = "../../types/base_types" }
 ic-nervous-system-proxied-canister-calls-tracker = { path = "../proxied_canister_calls_tracker" }
@@ -19,7 +18,6 @@ ic-error-types = { path = "../../types/error_types" }
 ic-ic00-types = { path = "../../types/ic00_types" }
 num-traits = "0.2.15"
 serde = { workspace = true }
-serde_bytes = { workspace = true }
 
 [dev-dependencies]
 futures = { workspace = true }

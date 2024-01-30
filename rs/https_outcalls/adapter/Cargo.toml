@@ -5,7 +5,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-socks5 = "0.5.1"
 async-stream = "0.3.2"
 byte-unit = "4.0.14"
 clap = { workspace = true }
@@ -20,13 +19,10 @@ ic-config = { path = "../../config" }
 ic-https-outcalls-service = { path = "../service" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
-itertools = { workspace = true }
 prometheus = { workspace = true }
-prost = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
-slog-async = "2.7.0"
 thiserror = "1.0.26"
 tokio = { workspace = true }
 tonic = { workspace = true }

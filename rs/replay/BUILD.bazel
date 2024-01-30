@@ -12,7 +12,6 @@ DEPENDENCIES = [
     "//rs/consensus/utils",
     "//rs/crypto",
     "//rs/crypto/for_verification_only",
-    "//rs/crypto/utils/threshold_sig_der",
     "//rs/cycles_account_manager",
     "//rs/execution_environment",
     "//rs/interfaces",

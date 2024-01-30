@@ -16,7 +16,6 @@ DEPENDENCIES = [
     "//rs/types/error_types",
     "//rs/types/types",
     "@crate_index//:prometheus",
-    "@crate_index//:prost",
     "@crate_index//:slog",
 ]
 

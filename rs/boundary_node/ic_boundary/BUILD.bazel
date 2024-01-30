@@ -3,7 +3,6 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/certification/test-utils",
     "//rs/config",
     "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",

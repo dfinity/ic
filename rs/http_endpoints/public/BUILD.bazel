@@ -27,7 +27,6 @@ DEPENDENCIES = [
     "//rs/registry/provisional_whitelist",
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
-    "//rs/phantom_newtype",
     "//rs/types/error_types",
     "//rs/types/types",
     "//rs/validator",
