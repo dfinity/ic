@@ -1,5 +1,5 @@
 {
-  "checksum": "43204614b00820e26be48107de22bcc25c07cfdf74439c452d1f16399b782f68",
+  "checksum": "ada80293cbbdb26776359704565e243858a278b9255af00167565e4d2a5b5de0",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1634,7 +1634,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             }
           ],
@@ -4035,7 +4035,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
@@ -5250,7 +5250,7 @@
                 "target": "addr2line"
               },
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               },
               {
@@ -8420,7 +8420,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             }
           ],
@@ -9243,7 +9243,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ]
@@ -10046,7 +10046,7 @@
               "target": "glob"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -10509,7 +10509,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -11095,7 +11095,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -11178,7 +11178,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -11521,7 +11521,7 @@
               "target": "core_foundation_sys"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             }
           ],
@@ -11702,19 +11702,19 @@
           "selects": {
             "aarch64-linux-android": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
             "cfg(all(target_arch = \"aarch64\", target_os = \"linux\"))": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
             "cfg(all(target_arch = \"aarch64\", target_vendor = \"apple\"))": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ]
@@ -12211,7 +12211,7 @@
           "selects": {
             "cfg(any(target_arch = \"s390x\", target_arch = \"riscv64\"))": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ]
@@ -12981,7 +12981,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               },
               {
@@ -15667,7 +15667,7 @@
               "target": "leb128"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -16260,7 +16260,7 @@
               "target": "uuid"
             },
             {
-              "id": "vsock 0.3.0",
+              "id": "vsock 0.4.0",
               "target": "vsock"
             },
             {
@@ -16606,7 +16606,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
@@ -16664,7 +16664,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
@@ -16717,7 +16717,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
@@ -17853,19 +17853,19 @@
             ],
             "cfg(target_os = \"hermit\")": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
             "cfg(target_os = \"wasi\")": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
@@ -17918,19 +17918,19 @@
           "selects": {
             "cfg(target_os = \"hermit\")": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
             "cfg(target_os = \"wasi\")": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
@@ -17988,7 +17988,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             }
           ],
@@ -18735,7 +18735,7 @@
               "target": "errno"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             }
           ],
@@ -19161,7 +19161,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
@@ -19219,7 +19219,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             }
           ],
@@ -19972,7 +19972,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             }
           ],
@@ -21034,7 +21034,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ]
@@ -21098,7 +21098,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ]
@@ -22277,7 +22277,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             }
           ],
@@ -22735,7 +22735,7 @@
           "selects": {
             "cfg(any(unix, target_os = \"redox\"))": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
@@ -26866,7 +26866,7 @@
               "target": "inotify_sys"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             }
           ],
@@ -26905,7 +26905,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             }
           ],
@@ -27255,7 +27255,7 @@
           "selects": {
             "cfg(not(windows))": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
@@ -27343,7 +27343,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ]
@@ -27776,7 +27776,7 @@
               "target": "jemalloc_sys"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -27839,7 +27839,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             }
           ],
@@ -27908,7 +27908,7 @@
               "target": "jemalloc_sys"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             }
           ],
@@ -27949,7 +27949,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ]
@@ -29788,13 +29788,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "libc 0.2.149": {
+    "libc 0.2.152": {
       "name": "libc",
-      "version": "0.2.149",
+      "version": "0.2.152",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/libc/0.2.149/download",
-          "sha256": "a08173bc88b7955d1b3145aa561539096c421ac8debde8cbc3612ec635fee29b"
+          "url": "https://crates.io/api/v1/crates/libc/0.2.152/download",
+          "sha256": "13e3bf6590cbc649f4d1a3eefc9d5d6eb746f5200ffb04e5e142700b8faa56e7"
         }
       },
       "targets": [
@@ -29833,14 +29833,14 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2015",
-        "version": "0.2.149"
+        "version": "0.2.152"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -30143,7 +30143,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             }
           ],
@@ -30207,7 +30207,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -30617,7 +30617,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -30717,7 +30717,7 @@
               "target": "bit_set"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -30769,7 +30769,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -30842,7 +30842,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -31217,7 +31217,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
@@ -31638,7 +31638,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -31738,7 +31738,7 @@
           "selects": {
             "cfg(any(target_os = \"macos\", target_os = \"ios\"))": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ]
@@ -31785,7 +31785,7 @@
           "selects": {
             "cfg(any(target_os = \"macos\", target_os = \"ios\"))": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ]
@@ -32211,7 +32211,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ]
@@ -32951,7 +32951,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
@@ -33021,7 +33021,7 @@
           "selects": {
             "cfg(target_os = \"wasi\")": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               },
               {
@@ -33031,7 +33031,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
@@ -33708,7 +33708,7 @@
               "target": "byteorder"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -33829,7 +33829,7 @@
           "selects": {
             "cfg(any(unix, target_os = \"wasi\"))": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
@@ -33951,7 +33951,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             }
           ],
@@ -34013,7 +34013,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             }
           ],
@@ -34021,6 +34021,66 @@
         },
         "edition": "2018",
         "version": "0.26.4"
+      },
+      "license": "MIT"
+    },
+    "nix 0.27.1": {
+      "name": "nix",
+      "version": "0.27.1",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/nix/0.27.1/download",
+          "sha256": "2eb04e9c688eff1c89d72b407f168cf79bb9e867a9d3323ed6c01519eb9cc053"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "nix",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "nix",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "ioctl",
+            "memoffset",
+            "socket"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.4.1",
+              "target": "bitflags"
+            },
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "libc 0.2.152",
+              "target": "libc"
+            },
+            {
+              "id": "memoffset 0.9.0",
+              "target": "memoffset"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.27.1"
       },
       "license": "MIT"
     },
@@ -34244,7 +34304,7 @@
               "target": "filetime"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -35224,7 +35284,7 @@
           "selects": {
             "cfg(not(windows))": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
@@ -35375,7 +35435,7 @@
           "selects": {
             "cfg(any(target_os = \"macos\", target_os = \"ios\", target_os = \"freebsd\"))": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ]
@@ -36106,7 +36166,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -37552,7 +37612,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
@@ -37632,7 +37692,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
@@ -39477,7 +39537,7 @@
           "selects": {
             "cfg(any(unix, target_os = \"fuchsia\", target_os = \"vxworks\"))": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
@@ -39790,7 +39850,7 @@
               "target": "inferno"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -41152,7 +41212,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             }
           ],
@@ -41222,7 +41282,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -42180,7 +42240,7 @@
             ],
             "cfg(not(any(target_os = \"macos\", target_os = \"ios\", target_os = \"windows\", target_arch = \"wasm32\")))": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
@@ -42556,7 +42616,7 @@
               "target": "bytes"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -42811,7 +42871,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
@@ -42905,7 +42965,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ]
@@ -42968,7 +43028,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ]
@@ -43523,7 +43583,7 @@
           "selects": {
             "cfg(any(target_os = \"macos\", target_os = \"ios\"))": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
@@ -43593,7 +43653,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
@@ -43830,7 +43890,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -45302,7 +45362,7 @@
             ],
             "cfg(any(target_os = \"android\", target_os = \"linux\"))": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               },
               {
@@ -45683,7 +45743,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -45882,7 +45942,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -45953,7 +46013,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -46413,7 +46473,7 @@
             ],
             "cfg(all(not(rustix_use_libc), not(miri), target_os = \"linux\", any(target_arch = \"x86\", all(target_arch = \"x86_64\", target_pointer_width = \"64\"), all(target_endian = \"little\", any(target_arch = \"arm\", all(target_arch = \"aarch64\", target_pointer_width = \"64\"), target_arch = \"powerpc64\", target_arch = \"riscv64\", target_arch = \"mips\", target_arch = \"mips64\")))))": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               },
               {
@@ -46428,7 +46488,7 @@
                 "alias": "libc_errno"
               },
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
@@ -46527,7 +46587,7 @@
                 "alias": "libc_errno"
               },
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
@@ -46833,7 +46893,7 @@
                 "alias": "libc_errno"
               },
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
@@ -48306,7 +48366,7 @@
               "target": "core_foundation_sys"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -48359,7 +48419,7 @@
               "target": "core_foundation_sys"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             }
           ],
@@ -49742,7 +49802,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -50213,7 +50273,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -50272,7 +50332,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -50320,7 +50380,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             }
           ],
@@ -51442,7 +51502,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
@@ -51495,7 +51555,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
@@ -51694,7 +51754,7 @@
               "target": "bitflags"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -51792,7 +51852,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -53045,7 +53105,7 @@
               "target": "core_foundation_sys"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -53197,7 +53257,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               },
               {
@@ -53739,7 +53799,7 @@
           "selects": {
             "cfg(not(windows))": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
@@ -53784,7 +53844,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             }
           ],
@@ -53908,7 +53968,7 @@
               "target": "getopts"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -54276,7 +54336,7 @@
           "selects": {
             "cfg(target_family = \"unix\")": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               },
               {
@@ -54722,7 +54782,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               },
               {
@@ -58060,7 +58120,7 @@
               "target": "foreign_types"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -58136,7 +58196,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -58649,13 +58709,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "vsock 0.3.0": {
+    "vsock 0.4.0": {
       "name": "vsock",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/vsock/0.3.0/download",
-          "sha256": "4c8e1df0bf1e1b28095c24564d1b90acae64ca69b097ed73896e342fa6649c57"
+          "url": "https://crates.io/api/v1/crates/vsock/0.4.0/download",
+          "sha256": "2dfb6e7a74830912f1f4a7655227c9ded1ea4e9136676311fedf54bedb412f35"
         }
       },
       "targets": [
@@ -58677,18 +58737,18 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
-              "id": "nix 0.24.3",
+              "id": "nix 0.27.1",
               "target": "nix"
             }
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "0.3.0"
+        "edition": "2021",
+        "version": "0.4.0"
       },
       "license": "Apache-2.0"
     },
@@ -58722,7 +58782,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ]
@@ -60221,7 +60281,7 @@
               "target": "indexmap"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -60818,7 +60878,7 @@
           "selects": {
             "cfg(any(target_os = \"linux\", target_os = \"macos\", target_os = \"freebsd\", target_os = \"android\"))": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
@@ -60884,7 +60944,7 @@
               "target": "indexmap"
             },
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {
@@ -61492,7 +61552,7 @@
           "selects": {
             "cfg(all(unix, not(target_arch = \"wasm32\")))": [
               {
-                "id": "libc 0.2.149",
+                "id": "libc 0.2.152",
                 "target": "libc"
               }
             ],
@@ -64068,7 +64128,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             }
           ],
@@ -64461,7 +64521,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.149",
+              "id": "libc 0.2.152",
               "target": "libc"
             },
             {

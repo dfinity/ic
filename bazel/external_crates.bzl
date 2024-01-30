@@ -1298,7 +1298,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "vsock": crate.spec(
-                version = "^0.3",
+                version = "^0.4",
             ),
             "walrus": crate.spec(
                 version = "^0.19.0",
