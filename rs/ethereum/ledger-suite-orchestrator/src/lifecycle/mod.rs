@@ -27,7 +27,7 @@ pub fn add_erc20(token: AddErc20Arg) {
     let contract = Erc20Contract::try_from(token.contract.clone())
         .unwrap_or_else(|e| ic_cdk::trap(&format!("Invalid ERC-20 contract {:?}: {}", token, e)));
     //TODO XC-29: ensure that contract is not already managed, otherwise trap
-    mutate_state(|s| s.add_task(Task::InstallLedgerSuite(contract)));
+    mutate_state(|s| s.add_task(Task::InstallLedgerSuite(contract, token.ledger_init_arg)));
 
     ic_cdk_timers::set_timer(Duration::from_secs(0), || ic_cdk::spawn(execute_tasks()));
     setup_timers()

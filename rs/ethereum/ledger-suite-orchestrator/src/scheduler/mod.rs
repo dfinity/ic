@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests;
 
+use crate::candid::LedgerInitArg;
 use crate::logs::INFO;
 use crate::management::{CallError, CanisterRuntime};
 use crate::state::{
@@ -8,15 +9,18 @@ use crate::state::{
     ManagedCanisterStatus, RetrieveCanisterWasm, State,
 };
 use candid::{CandidType, Encode, Principal};
+use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use ic_icrc1_index_ng::{IndexArg, InitArg as IndexInitArg};
 use ic_icrc1_ledger::{ArchiveOptions, InitArgs as LedgerInitArgs, LedgerArgument};
-use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::str::FromStr;
+
+const HUNDRED_TRILLIONS: u64 = 100_000_000_000_000;
+const THREE_GIGA_BYTES: u64 = 3_221_225_472;
 
 /// A list of *independent* tasks to be executed in order.
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone, Default)]
@@ -56,7 +60,7 @@ impl Tasks {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub enum Task {
-    InstallLedgerSuite(Erc20Contract),
+    InstallLedgerSuite(Erc20Contract, LedgerInitArg),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -68,47 +72,28 @@ pub enum TaskError {
 impl Task {
     pub async fn execute<R: CanisterRuntime>(&self, runtime: &R) -> Result<(), TaskError> {
         match self {
-            Task::InstallLedgerSuite(contract) => install_ledger_suite(contract, runtime).await,
+            Task::InstallLedgerSuite(contract, ledger_init_arg) => {
+                install_ledger_suite(contract, ledger_init_arg, runtime).await
+            }
         }
     }
 }
 
 async fn install_ledger_suite<R: CanisterRuntime>(
     contract: &Erc20Contract,
+    ledger_init_arg: &LedgerInitArg,
     runtime: &R,
 ) -> Result<(), TaskError> {
     let ledger_canister_id = create_canister_once::<Ledger, _>(contract, runtime).await?;
-
-    //TODO XC-29: init args should come from `contract` argument
-    let ledger_arg = LedgerInitArgs {
-        minting_account: Account {
-            owner: Principal::anonymous(),
-            subaccount: None,
-        },
-        fee_collector_account: None,
-        initial_balances: vec![],
-        transfer_fee: 10_000_u32.into(),
-        decimals: None,
-        token_name: "Test Token".to_string(),
-        token_symbol: "XTK".to_string(),
-        metadata: vec![],
-        archive_options: ArchiveOptions {
-            trigger_threshold: 1000,
-            num_blocks_to_archive: 1000,
-            node_max_memory_size_bytes: None,
-            max_message_size_bytes: None,
-            //TODO: orchestrator must control the archive to be able to upgrade it. We should validate the given config
-            controller_id: runtime.id().into(),
-            cycles_for_archive_creation: None,
-            max_transactions_per_response: None,
-        },
-        max_memo_length: None,
-        feature_flags: None,
-        maximum_number_of_accounts: None,
-        accounts_overflow_trim_quantity: None,
-    };
-    install_canister_once::<Ledger, _, _>(contract, &LedgerArgument::Init(ledger_arg), runtime)
-        .await?;
+    install_canister_once::<Ledger, _, _>(
+        contract,
+        &LedgerArgument::Init(icrc1_ledger_init_arg(
+            ledger_init_arg.clone(),
+            runtime.id().into(),
+        )),
+        runtime,
+    )
+    .await?;
 
     let _index_principal = create_canister_once::<Index, _>(contract, runtime).await?;
     let index_arg = Some(IndexArg::Init(IndexInitArg {
@@ -116,6 +101,44 @@ async fn install_ledger_suite<R: CanisterRuntime>(
     }));
     install_canister_once::<Index, _, _>(contract, &index_arg, runtime).await?;
     Ok(())
+}
+
+fn icrc1_ledger_init_arg(
+    ledger_init_arg: LedgerInitArg,
+    archive_controller_id: PrincipalId,
+) -> LedgerInitArgs {
+    use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
+
+    LedgerInitArgs {
+        minting_account: ledger_init_arg.minting_account,
+        fee_collector_account: ledger_init_arg.fee_collector_account,
+        initial_balances: ledger_init_arg.initial_balances,
+        transfer_fee: ledger_init_arg.transfer_fee,
+        decimals: ledger_init_arg.decimals,
+        token_name: ledger_init_arg.token_name,
+        token_symbol: ledger_init_arg.token_symbol,
+        metadata: vec![(
+            "icrc1:logo".to_string(),
+            LedgerMetadataValue::from(ledger_init_arg.token_logo),
+        )],
+        archive_options: icrc1_archive_options(archive_controller_id),
+        max_memo_length: ledger_init_arg.max_memo_length,
+        feature_flags: ledger_init_arg.feature_flags,
+        maximum_number_of_accounts: ledger_init_arg.maximum_number_of_accounts,
+        accounts_overflow_trim_quantity: ledger_init_arg.accounts_overflow_trim_quantity,
+    }
+}
+
+fn icrc1_archive_options(archive_controller_id: PrincipalId) -> ArchiveOptions {
+    ArchiveOptions {
+        trigger_threshold: 2_000,
+        num_blocks_to_archive: 1_000,
+        node_max_memory_size_bytes: Some(THREE_GIGA_BYTES),
+        max_message_size_bytes: None,
+        controller_id: archive_controller_id,
+        cycles_for_archive_creation: Some(HUNDRED_TRILLIONS),
+        max_transactions_per_response: None,
+    }
 }
 
 async fn create_canister_once<C, R>(

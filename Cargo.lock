@@ -8590,6 +8590,7 @@ dependencies = [
  "icrc-ledger-types",
  "mockall",
  "num-traits",
+ "paste 1.0.14",
  "proptest",
  "serde",
  "serde_bytes",

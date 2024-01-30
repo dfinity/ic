@@ -1,4 +1,4 @@
-use crate::candid::InitArg;
+use crate::candid::{InitArg, LedgerInitArg};
 use crate::management::{CallError, Reason};
 use crate::scheduler::tests::mock::MockCanisterRuntime;
 use crate::scheduler::{Erc20Contract, Task, TaskError, Tasks};
@@ -15,7 +15,7 @@ const INDEX_PRINCIPAL: Principal = Principal::from_slice(&[2_u8; 29]);
 async fn should_install_ledger_suite() {
     init_state();
     let mut tasks = Tasks::default();
-    tasks.add_task(Task::InstallLedgerSuite(usdc()));
+    tasks.add_task(Task::InstallLedgerSuite(usdc(), ledger_init_arg()));
     let mut runtime = MockCanisterRuntime::new();
 
     runtime
@@ -58,7 +58,7 @@ async fn should_install_ledger_suite() {
 async fn should_not_retry_successful_operation_after_failing_one() {
     init_state();
     let mut tasks = Tasks::default();
-    tasks.add_task(Task::InstallLedgerSuite(usdc()));
+    tasks.add_task(Task::InstallLedgerSuite(usdc(), ledger_init_arg()));
     let mut runtime = MockCanisterRuntime::new();
 
     runtime
@@ -198,6 +198,28 @@ fn usdc() -> Erc20Contract {
     }
     .try_into()
     .unwrap()
+}
+
+fn ledger_init_arg() -> LedgerInitArg {
+    use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
+
+    LedgerInitArg {
+        minting_account: LedgerAccount {
+            owner: Principal::anonymous(),
+            subaccount: None,
+        },
+        fee_collector_account: None,
+        initial_balances: vec![],
+        transfer_fee: 10_000_u32.into(),
+        decimals: None,
+        token_name: "Test Token".to_string(),
+        token_symbol: "XTK".to_string(),
+        token_logo: "".to_string(),
+        max_memo_length: None,
+        feature_flags: None,
+        maximum_number_of_accounts: None,
+        accounts_overflow_trim_quantity: None,
+    }
 }
 
 fn read_index_wasm_hash() -> WasmHash {
