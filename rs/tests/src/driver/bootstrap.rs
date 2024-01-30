@@ -440,6 +440,18 @@ fn create_config_disk_image(
         .prep_dir(ic_name)
         .expect("no no-name IC")
         .registry_local_store_path();
+    let ipv6_prefixes: Vec<String> = test_env
+        .read_json_object("dependencies/rs/tests/src/ipv6_prefixes.json")
+        .unwrap();
+    let ipv6_prefixes = format!(
+        "[{}]",
+        ipv6_prefixes
+            .iter()
+            .map(|s| format!("\"{s}\""))
+            .collect::<Vec<_>>()
+            .join(", "),
+    );
+
     cmd.arg(img_path.clone())
         .arg("--hostname")
         .arg(node.node_id.to_string())
@@ -448,7 +460,9 @@ fn create_config_disk_image(
         .arg("--ic_crypto")
         .arg(node.crypto_path())
         .arg("--elasticsearch_tags")
-        .arg(format!("system_test {}", group_name));
+        .arg(format!("system_test {}", group_name))
+        .arg("--ipv6_prefixes")
+        .arg(ipv6_prefixes);
 
     // We've seen k8s nodes fail to pick up RA correctly, so we specify their
     // addresses directly. Ideally, all nodes should do this, to match mainnet.
