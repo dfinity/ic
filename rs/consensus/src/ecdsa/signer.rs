@@ -872,7 +872,12 @@ mod tests {
                     AlgorithmId::ThresholdEcdsaSecp256k1,
                     &mut rng,
                 );
-                let crypto = env.nodes.receivers(&sig_inputs).next().unwrap().crypto();
+                let crypto = env
+                    .nodes
+                    .filter_by_receivers(&sig_inputs)
+                    .next()
+                    .unwrap()
+                    .crypto();
                 let (_, signer) =
                     create_signer_dependencies_with_crypto(pool_config, logger, Some(crypto));
                 let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
@@ -1227,8 +1232,12 @@ mod tests {
                 );
 
                 let metrics = EcdsaPayloadMetrics::new(MetricsRegistry::new());
-                let crypto: Arc<dyn ConsensusCrypto> =
-                    env.nodes.receivers(&sig_inputs).next().unwrap().crypto();
+                let crypto: Arc<dyn ConsensusCrypto> = env
+                    .nodes
+                    .filter_by_receivers(&sig_inputs)
+                    .next()
+                    .unwrap()
+                    .crypto();
 
                 {
                     let sig_builder = EcdsaSignatureBuilderImpl::new(
@@ -1247,7 +1256,7 @@ mod tests {
                 // Generate signature shares and add to validated
                 let change_set = env
                     .nodes
-                    .receivers(&sig_inputs)
+                    .filter_by_receivers(&sig_inputs)
                     .map(|receiver| {
                         receiver.load_input_transcripts(&sig_inputs);
                         let share = receiver

@@ -757,7 +757,11 @@ pub(crate) fn create_valid_transcript<R: Rng + CryptoRng>(
     let dealings = env
         .nodes
         .support_dealings_from_all_receivers(dealings, &params);
-    let dealer = env.nodes.dealers(&params).next().expect("Empty dealers");
+    let dealer = env
+        .nodes
+        .filter_by_dealers(&params)
+        .next()
+        .expect("Empty dealers");
     let idkg_transcript = dealer.create_transcript_or_panic(&params, &dealings);
     (dealer.id(), params, idkg_transcript)
 }
@@ -788,7 +792,7 @@ pub(crate) fn get_dealings_and_support(
     let supports = dealings
         .iter()
         .flat_map(|(_, dealing)| {
-            env.nodes.receivers(&params).map(|signer| {
+            env.nodes.filter_by_receivers(&params).map(|signer| {
                 let c: Arc<dyn ConsensusCrypto> = signer.crypto();
                 let sig_share = c
                     .sign(dealing, signer.id(), params.registry_version())
@@ -841,7 +845,7 @@ pub(crate) fn create_dealing_with_payload<R: Rng + CryptoRng>(
         &receivers,
         rng,
     );
-    let dealer = env.nodes.dealers(&params).next().unwrap();
+    let dealer = env.nodes.filter_by_dealers(&params).next().unwrap();
     let dealing = dealer.create_dealing_or_panic(&params);
     let mut content = create_dealing_content(transcript_id);
     content.internal_dealing_raw = dealing.content.internal_dealing_raw;

@@ -745,7 +745,7 @@ pub mod node {
             (nodes_true, nodes_false)
         }
 
-        pub fn into_receivers<'a, T: AsRef<IDkgReceivers> + 'a>(
+        pub fn into_filtered_by_receivers<'a, T: AsRef<IDkgReceivers> + 'a>(
             self,
             idkg_receivers: T,
         ) -> impl Iterator<Item = Node> + 'a {
@@ -754,7 +754,7 @@ pub mod node {
                 .filter(move |node| idkg_receivers.as_ref().contains(node.id))
         }
 
-        pub fn receivers<'a, T: AsRef<IDkgReceivers> + 'a>(
+        pub fn filter_by_receivers<'a, T: AsRef<IDkgReceivers> + 'a>(
             &'a self,
             idkg_receivers: T,
         ) -> impl Iterator<Item = &Node> + 'a {
@@ -762,7 +762,7 @@ pub mod node {
                 .filter(move |node| idkg_receivers.as_ref().contains(node.id))
         }
 
-        pub fn dealers<'a, T: AsRef<IDkgDealers> + 'a>(
+        pub fn filter_by_dealers<'a, T: AsRef<IDkgDealers> + 'a>(
             &'a self,
             idkg_dealers: T,
         ) -> impl Iterator<Item = &Node> + 'a {
@@ -799,33 +799,23 @@ pub mod node {
             self.iter().choose_multiple(rng, size).into_iter()
         }
 
-        pub fn into_random_receiver<R: Rng>(
-            self,
-            idkg_receivers: &IDkgReceivers,
-            rng: &mut R,
-        ) -> Node {
-            self.into_receivers(idkg_receivers)
-                .choose(rng)
-                .expect("empty receivers")
-        }
-
-        pub fn random_receiver<'a, T: AsRef<IDkgReceivers> + 'a, R: Rng>(
+        pub fn random_filtered_by_receivers<'a, T: AsRef<IDkgReceivers> + 'a, R: Rng>(
             &'a self,
             idkg_receivers: T,
             rng: &mut R,
         ) -> &Node {
-            self.receivers(idkg_receivers)
+            self.filter_by_receivers(idkg_receivers)
                 .choose(rng)
                 .expect("empty receivers")
         }
 
-        pub fn random_receiver_excluding<'a, T: AsRef<IDkgReceivers> + 'a, R: Rng>(
+        pub fn random_filtered_by_receivers_excluding<'a, T: AsRef<IDkgReceivers> + 'a, R: Rng>(
             &'a self,
             exclusion: &Node,
             idkg_receivers: T,
             rng: &mut R,
         ) -> &Node {
-            self.receivers(idkg_receivers)
+            self.filter_by_receivers(idkg_receivers)
                 .filter(|node| *node != exclusion)
                 .choose(rng)
                 .expect("empty receivers")
@@ -836,7 +826,9 @@ pub mod node {
             params: &'a IDkgTranscriptParams,
             rng: &mut R,
         ) -> &Node {
-            self.dealers(params).choose(rng).expect("empty dealers")
+            self.filter_by_dealers(params)
+                .choose(rng)
+                .expect("empty dealers")
         }
 
         pub fn random_node<R: Rng>(&self, rng: &mut R) -> &Node {
@@ -850,7 +842,7 @@ pub mod node {
         ) -> BatchSignedIDkgDealing {
             let signature = {
                 let mut signatures_map = BTreeMap::new();
-                for signer in self.receivers(&params) {
+                for signer in self.filter_by_receivers(&params) {
                     let signature = signer
                         .sign_basic(&signed_dealing, signer.id(), params.registry_version())
                         .expect("failed to generate basic-signature");
@@ -869,7 +861,7 @@ pub mod node {
             &self,
             params: &IDkgTranscriptParams,
         ) -> BTreeMap<NodeId, SignedIDkgDealing> {
-            self.dealers(params)
+            self.filter_by_dealers(params)
                 .map(|dealer| (dealer.id(), dealer.create_dealing_or_panic(params)))
                 .collect()
         }
@@ -899,7 +891,7 @@ pub mod node {
             &self,
             params: &IDkgTranscriptParams,
         ) -> BTreeMap<NodeId, SignedIDkgDealing> {
-            self.dealers(params)
+            self.filter_by_dealers(params)
                 .map(|dealer| {
                     let dealing = self.create_and_verify_signed_dealing(params, dealer);
                     (dealer.id(), dealing)
@@ -920,7 +912,7 @@ pub mod node {
                 .expect("unexpectedly invalid dealing");
 
             // Verify the dealing is privately valid for all receivers
-            for receiver in self.receivers(&params) {
+            for receiver in self.filter_by_receivers(&params) {
                 receiver
                     .verify_dealing_private(params, &signed_dealing)
                     .expect("unexpectedly invalid dealing (private verification)");
@@ -954,7 +946,7 @@ pub mod node {
             &self,
             params: &IDkgTranscriptParams,
         ) -> BTreeMap<NodeId, SignedIDkgDealing> {
-            self.dealers(params)
+            self.filter_by_dealers(params)
                 .map(|dealer| {
                     let signed_dealing =
                         self.load_previous_transcripts_and_create_signed_dealing(params, dealer);
@@ -973,11 +965,11 @@ pub mod node {
         ) -> IDkgTranscript {
             let dealings = self.load_previous_transcripts_and_create_signed_dealings(params);
             let multisigned_dealings = self.support_dealings_from_all_receivers(dealings, params);
-            let transcript_creator = self.receivers(params).next().unwrap();
+            let transcript_creator = self.filter_by_receivers(params).next().unwrap();
             let transcript =
                 transcript_creator.create_transcript_or_panic(params, &multisigned_dealings);
             assert!(self
-                .random_receiver(params.receivers(), rng)
+                .random_filtered_by_receivers(params.receivers(), rng)
                 .verify_transcript(params, &transcript)
                 .is_ok());
             transcript
@@ -1597,7 +1589,9 @@ impl IDkgModeTestContext {
 
         let (complainer, complaint): (&'a Node, _) =
             corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, env, rng);
-        let verifier: &Node = env.nodes.random_receiver(self.receivers().clone(), rng);
+        let verifier: &Node = env
+            .nodes
+            .random_filtered_by_receivers(self.receivers().clone(), rng);
         IDkgTestContextForComplaint {
             transcript,
             complaint,
@@ -1738,7 +1732,7 @@ pub fn load_previous_transcripts_for_all_dealers(params: &IDkgTranscriptParams, 
         }
     }
 
-    nodes.dealers(params).for_each(|dealer| {
+    nodes.filter_by_dealers(params).for_each(|dealer| {
         transcripts_to_load.iter().for_each(|transcript| {
             assert_eq!(
                 load_transcript_or_panic(dealer, transcript),
@@ -1787,7 +1781,7 @@ pub fn run_idkg_without_complaint<R: RngCore + CryptoRng>(
     rng: &mut R,
 ) -> IDkgTranscript {
     load_previous_transcripts_for_all_dealers(params, nodes);
-    let receiver = nodes.random_receiver(params.receivers(), rng);
+    let receiver = nodes.random_filtered_by_receivers(params.receivers(), rng);
     let dealings = nodes.create_dealings(params);
     let dealings_with_receivers_support =
         nodes.support_dealings_from_all_receivers(dealings, params);
@@ -1884,7 +1878,7 @@ pub fn sig_share_from_each_receiver(
 ) -> BTreeMap<NodeId, ThresholdEcdsaSigShare> {
     let sig_shares: BTreeMap<_, _> = env
         .nodes
-        .receivers(&inputs)
+        .filter_by_receivers(&inputs)
         .map(|receiver| {
             receiver.load_input_transcripts(inputs);
             let sig_share = receiver
@@ -2473,7 +2467,9 @@ pub fn corrupt_dealings_and_generate_complaints_for_random_complainer<
     env: &'a CanisterThresholdSigTestEnvironment,
     rng: &mut R,
 ) -> (&'a Node, Vec<NodeIndex>, Vec<IDkgComplaint>) {
-    let complainer = env.nodes.random_receiver(params.receivers().clone(), rng);
+    let complainer = env
+        .nodes
+        .random_filtered_by_receivers(params.receivers().clone(), rng);
     let (dealing_indices_to_corrupt, complaints) = corrupt_dealings_and_generate_complaints(
         params,
         transcript,
@@ -2543,7 +2539,7 @@ pub fn generate_and_verify_openings_for_complaint(
 ) -> BTreeMap<IDkgComplaint, BTreeMap<NodeId, IDkgOpening>> {
     let openers = env
         .nodes
-        .receivers(&transcript)
+        .filter_by_receivers(&transcript)
         .filter(|node| *node != complainer);
     let openings: BTreeMap<_, _> = openers
         .take(number_of_openings)

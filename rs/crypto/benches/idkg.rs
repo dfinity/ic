@@ -121,7 +121,9 @@ fn bench_verify_dealing_public<M: Measurement, R: RngCore + CryptoRng>(
     group.bench_function(format!("verify_dealing_public_{mode}"), |bench| {
         bench.iter_batched_ref(
             || {
-                let receiver = env.nodes.random_receiver(params.receivers(), rng);
+                let receiver = env
+                    .nodes
+                    .random_filtered_by_receivers(params.receivers(), rng);
                 let dealer = env.nodes.random_dealer(&params, rng);
                 let dealing = create_dealing(dealer, &params);
                 (receiver, dealing)
@@ -146,7 +148,9 @@ fn bench_verify_dealing_private<M: Measurement, R: RngCore + CryptoRng>(
     group.bench_function(format!("verify_dealing_private_{mode}"), |bench| {
         bench.iter_batched_ref(
             || {
-                let receiver = env.nodes.random_receiver(params.receivers(), rng);
+                let receiver = env
+                    .nodes
+                    .random_filtered_by_receivers(params.receivers(), rng);
                 let dealer = env.nodes.random_dealer(&params, rng);
                 let dealing = create_dealing(dealer, &params);
                 (receiver, dealing)
@@ -246,7 +250,9 @@ fn bench_create_transcript<M: Measurement, R: RngCore + CryptoRng>(
     group.bench_function(format!("create_transcript_{mode}"), |bench| {
         bench.iter_batched_ref(
             || {
-                let receiver = env.nodes.random_receiver(params.receivers(), rng);
+                let receiver = env
+                    .nodes
+                    .random_filtered_by_receivers(params.receivers(), rng);
                 let dealings = env.nodes.create_dealings(&params);
                 let dealings_with_receivers_support = env
                     .nodes
@@ -277,7 +283,9 @@ fn bench_verify_transcript<M: Measurement, R: RngCore + CryptoRng>(
                 let dealings_with_receivers_support = env
                     .nodes
                     .support_dealings_from_all_receivers(dealings, &params);
-                let receiver = env.nodes.random_receiver(params.receivers(), rng);
+                let receiver = env
+                    .nodes
+                    .random_filtered_by_receivers(params.receivers(), rng);
                 let transcript =
                     create_transcript_or_panic(receiver, &params, &dealings_with_receivers_support);
                 let other_receiver = other_receiver_or_same_if_only_one(
@@ -312,7 +320,9 @@ fn bench_load_transcript<M: Measurement, R: RngCore + CryptoRng>(
                 let dealings_with_receivers_support = env
                     .nodes
                     .support_dealings_from_all_receivers(dealings, &params);
-                let receiver = env.nodes.random_receiver(params.receivers(), rng);
+                let receiver = env
+                    .nodes
+                    .random_filtered_by_receivers(params.receivers(), rng);
                 let transcript =
                     create_transcript_or_panic(receiver, &params, &dealings_with_receivers_support);
                 let other_receiver = other_receiver_or_same_if_only_one(
@@ -344,7 +354,9 @@ fn bench_retain_active_transcripts<M: Measurement, R: RngCore + CryptoRng>(
     // For this benchmark we need a node which acts as receiver in *all* created transcripts.
     // This is the case because all nodes in CanisterThresholdSigTestEnvironment act as receivers
     // and all involved IDkgTranscriptParams include all nodes from CanisterThresholdSigTestEnvironment.
-    let receiver = env.nodes.random_receiver(&key_transcript.receivers, rng);
+    let receiver = env
+        .nodes
+        .random_filtered_by_receivers(&key_transcript.receivers, rng);
     load_transcript_or_panic(receiver, &key_transcript);
 
     let num_transcripts_to_delete = num_pre_sig_quadruples * 4;
@@ -418,7 +430,7 @@ fn bench_open_transcript<M: Measurement, R: RngCore + CryptoRng>(
                 let complaint_context =
                     context.setup_outputs_for_complaint(&env, test_case.alg, rng);
                 let opener = {
-                    env.nodes.random_receiver_excluding(
+                    env.nodes.random_filtered_by_receivers_excluding(
                         complaint_context.complainer,
                         complaint_context.transcript.receivers.clone(),
                         rng,
@@ -462,7 +474,7 @@ fn bench_verify_opening<M: Measurement, R: RngCore + CryptoRng>(
                     verifier,
                     complainer,
                 } = complaint_context;
-                let opener = env.nodes.random_receiver_excluding(
+                let opener = env.nodes.random_filtered_by_receivers_excluding(
                     complainer,
                     transcript.receivers.clone(),
                     rng,
@@ -721,7 +733,7 @@ fn other_receiver_or_same_if_only_one<'a, R: RngCore + CryptoRng>(
     match receivers.get().len() {
         0 => panic!("IDkgReceivers is guaranteed to be non-empty"),
         1 => nodes.iter().next().expect("one node"),
-        _ => nodes.random_receiver_excluding(exclusion, receivers, rng),
+        _ => nodes.random_filtered_by_receivers_excluding(exclusion, receivers, rng),
     }
 }
 

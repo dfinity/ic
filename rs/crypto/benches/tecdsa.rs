@@ -55,7 +55,9 @@ fn bench_sign_share<M: Measurement, R: RngCore + CryptoRng>(
     let (dealers, receivers) =
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
     let key_transcript = generate_key_transcript(&env, &dealers, &receivers, test_case.alg(), rng);
-    let signer = env.nodes.random_receiver(&key_transcript.receivers, rng);
+    let signer = env
+        .nodes
+        .random_filtered_by_receivers(&key_transcript.receivers, rng);
 
     group.bench_function(format!("sign_share_{vault_type:?}"), |bench| {
         bench.iter_batched_ref(
@@ -118,10 +120,14 @@ fn bench_verify_sig_share<M: Measurement, R: RngCore + CryptoRng>(
                     test_case.alg(),
                     rng,
                 );
-                let signer = env.nodes.random_receiver(&key_transcript.receivers, rng);
+                let signer = env
+                    .nodes
+                    .random_filtered_by_receivers(&key_transcript.receivers, rng);
                 signer.load_input_transcripts(&inputs);
                 let sig_share = sign_share(signer, &inputs);
-                let verifier = env.nodes.random_receiver(&key_transcript.receivers, rng);
+                let verifier = env
+                    .nodes
+                    .random_filtered_by_receivers(&key_transcript.receivers, rng);
                 (verifier, signer.id(), inputs, sig_share)
             },
             |(verifier, signer_id, inputs, sig_share)| {
