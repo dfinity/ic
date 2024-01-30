@@ -12,14 +12,14 @@ LimitNOFILE=524288
 Environment="RUST_BACKTRACE=1"
 EnvironmentFile=/run/ic-node/etc/icx-proxy/env
 ExecStart=/opt/ic/bin/icx-proxy                                  \
-    --address 127.0.0.1:9500                                     \
+    --unix-socket /run/ic-node/icx-proxy.socket                  \
     --canister-alias "personhood:g3wsl-eqaaa-aaaan-aaaaa-cai"    \
     --canister-alias "identity:rdmx6-jaaaa-aaaaa-aaadq-cai"      \
     --canister-alias "nns:qoctq-giaaa-aaaaa-aaaea-cai"           \
     --canister-alias "dscvr:h5aet-waaaa-aaaab-qaamq-cai"         \
     --metrics-addr "[::]:9314"                                   \
     --root-key "/run/ic-node/etc/icx-proxy/root_key.der"         \
-    --replica http://127.0.0.1:4444                              \
+    --replica-unix-socket /run/ic-node/ic-boundary.socket        \
     --quiet                                                      \
     $DOMAINS                                                     \
     $SSL_OPTIONS

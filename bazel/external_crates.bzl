@@ -519,6 +519,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "rustls",
                 ],
             ),
+            "hyperlocal": crate.spec(
+                version = "^0.8.0",
+            ),
             "ic0": crate.spec(
                 version = "^0.18.11",
             ),

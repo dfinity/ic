@@ -1,5 +1,5 @@
 {
-  "checksum": "97aab7393be8a8abf743c95040f8be453223c8e994725d92dd986e239ecf69dd",
+  "checksum": "1f2ee1509cbdc312f461d1fe19805d1a814d73157d47bdceae60d3da6b9b47e7",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -15376,6 +15376,10 @@
               "target": "hyper_socks2"
             },
             {
+              "id": "hyperlocal 0.8.0",
+              "target": "hyperlocal"
+            },
+            {
               "id": "ic-agent 0.32.0",
               "target": "ic_agent"
             },
@@ -24172,6 +24176,69 @@
         },
         "edition": "2018",
         "version": "0.1.2"
+      },
+      "license": "MIT"
+    },
+    "hyperlocal 0.8.0": {
+      "name": "hyperlocal",
+      "version": "0.8.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/hyperlocal/0.8.0/download",
+          "sha256": "0fafdf7b2b2de7c9784f76e02c0935e65a8117ec3b768644379983ab333ac98c"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "hyperlocal",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "hyperlocal",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "client",
+            "default",
+            "server"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "futures-util 0.3.30",
+              "target": "futures_util"
+            },
+            {
+              "id": "hex 0.4.3",
+              "target": "hex"
+            },
+            {
+              "id": "hyper 0.14.27",
+              "target": "hyper"
+            },
+            {
+              "id": "pin-project 1.1.2",
+              "target": "pin_project"
+            },
+            {
+              "id": "tokio 1.35.1",
+              "target": "tokio"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.8.0"
       },
       "license": "MIT"
     },

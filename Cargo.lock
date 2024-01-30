@@ -4850,6 +4850,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hyperlocal"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0fafdf7b2b2de7c9784f76e02c0935e65a8117ec3b768644379983ab333ac98c"
+dependencies = [
+ "futures-util",
+ "hex",
+ "hyper 0.14.26",
+ "pin-project",
+ "tokio",
+]
+
+[[package]]
 name = "iana-time-zone"
 version = "0.1.53"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5243,6 +5256,7 @@ dependencies = [
  "http-body 0.4.5",
  "hyper 0.14.26",
  "hyper-rustls",
+ "hyperlocal",
  "ic-base-types",
  "ic-btc-interface",
  "ic-certification-test-utils",
@@ -12227,6 +12241,7 @@ dependencies = [
  "http-body 0.4.5",
  "hyper 0.14.26",
  "hyper-rustls",
+ "hyperlocal",
  "ic-agent",
  "ic-http-certification",
  "ic-response-verification",
@@ -12247,6 +12262,7 @@ dependencies = [
  "tower-http 0.3.5",
  "tracing",
  "tracing-subscriber",
+ "url",
 ]
 
 [[package]]
