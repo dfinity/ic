@@ -423,12 +423,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bddcadddf5e9015d310179a59bb28c4d4b9920ad0f11e8e14dbadf654890c9a6"
 
 [[package]]
-name = "argv"
-version = "0.1.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2f1055db52c224c48c2f2bd86b543fe8985d699eb58b07c9b14db5067674893"
-
-[[package]]
 name = "arrayref"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2718,16 +2712,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ctor"
-version = "0.1.26"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d2301688392eb071b0bf1a37be05c469d3cc4dbbd95df672fe28ab021e6a096"
-dependencies = [
- "quote 1.0.35",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "curve25519-dalek"
 version = "3.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4158,52 +4142,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gflags"
-version = "0.3.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8331d16d5d69b23e753a00b3aaeee0c33b3bab7b93044afa48d2e6e6c28d621a"
-dependencies = [
- "argv",
- "gflags-impl",
- "inventory",
- "ref-cast",
-]
-
-[[package]]
-name = "gflags-derive"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5f0b1b5644ef64a224a3bf1feea56b7aa34e28f04b1a3ef9ac8f3f0e28219b9"
-dependencies = [
- "proc-macro-error",
- "proc-macro2 1.0.75",
- "quote 1.0.35",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "gflags-impl"
-version = "0.3.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c746dc576d32875419faf6928ea7f74027f4c34aeee5bd9b540fb37b4448561"
-dependencies = [
- "proc-macro2 1.0.75",
- "quote 1.0.35",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "ghost"
-version = "0.1.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69e0cd8a998937e25c6ba7cc276b96ec5cc3f4dc4ab5de9ede4fb152bdd5c5eb"
-dependencies = [
- "proc-macro2 1.0.75",
- "quote 1.0.35",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "gimli"
 version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4728,16 +4666,6 @@ name = "humantime"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
-
-[[package]]
-name = "humantime-serde"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57a3db5ea5923d99402c94e9feb261dc5ee9b4efa158b0315f788cf549cc200c"
-dependencies = [
- "humantime",
- "serde",
-]
 
 [[package]]
 name = "hyper"
@@ -9590,69 +9518,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-p8s-service-discovery"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "clap 3.2.25",
- "crossbeam",
- "crossbeam-channel",
- "elastic_common_schema",
- "futures-util",
- "gflags",
- "gflags-derive",
- "humantime",
- "humantime-serde",
- "hyper 0.14.26",
- "ic-async-utils",
- "ic-config",
- "ic-crypto-utils-threshold-sig-der",
- "ic-http-endpoints-metrics",
- "ic-interfaces-registry",
- "ic-metrics",
- "ic-p8s-service-discovery-log",
- "ic-protobuf",
- "ic-registry-client",
- "ic-registry-client-helpers",
- "ic-registry-local-registry",
- "ic-registry-local-store",
- "ic-registry-local-store-artifacts",
- "ic-registry-nns-data-provider-wrappers",
- "ic-sys",
- "ic-test-utilities",
- "ic-types",
- "itertools 0.12.0",
- "parse_int",
- "prometheus",
- "serde",
- "serde_json",
- "slog",
- "slog-async",
- "slog-term",
- "strum_macros 0.25.3",
- "tempfile",
- "thiserror",
- "tokio",
- "url",
-]
-
-[[package]]
-name = "ic-p8s-service-discovery-log"
-version = "0.9.0"
-dependencies = [
- "chrono",
- "elastic_common_schema",
- "gflags",
- "gflags-derive",
- "serde",
- "slog",
- "slog-async",
- "strum 0.25.0",
- "strum_macros 0.25.3",
- "thiserror",
-]
-
-[[package]]
 name = "ic-peer-manager"
 version = "0.1.0"
 dependencies = [
@@ -12476,16 +12341,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "inventory"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "498ae1c9c329c7972b917506239b557a60386839192f1cf0ca034f345b65db99"
-dependencies = [
- "ctor",
- "ghost",
-]
-
-[[package]]
 name = "io-lifetimes"
 version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -14464,15 +14319,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "parse_int"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "82db48cac18f0963b10ddad303fa88447b95bbe0e6dbe3385f98402b63d0cc48"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
 name = "partition_tools"
 version = "0.1.0"
 dependencies = [
@@ -15798,26 +15644,6 @@ dependencies = [
  "getrandom 0.2.8",
  "redox_syscall 0.2.16",
  "thiserror",
-]
-
-[[package]]
-name = "ref-cast"
-version = "1.0.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a9af2cf09ef80e610097515e80095b7f76660a92743c4185aff5406cd5ce3dd5"
-dependencies = [
- "ref-cast-impl",
-]
-
-[[package]]
-name = "ref-cast-impl"
-version = "1.0.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c501201393982e275433bc55de7d6ae6f00e7699cd5572c5b57581cd69c881b"
-dependencies = [
- "proc-macro2 1.0.75",
- "quote 1.0.35",
- "syn 1.0.109",
 ]
 
 [[package]]

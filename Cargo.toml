@@ -144,8 +144,6 @@ members = [
   "rs/ic_os/vsock/guest",
   "rs/ic_os/vsock/host",
   "rs/ic_os/vsock/vsock_lib",
-  "rs/ic_p8s_service_discovery",
-  "rs/ic_p8s_service_discovery/log",
   "rs/identity",
   "rs/ingress_manager",
   "rs/interfaces",

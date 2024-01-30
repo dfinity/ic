@@ -143,7 +143,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/https_outcalls/                                     @dfinity-lab/teams/networking-team
 /rs/https_outcalls/consensus/                           @dfinity-lab/teams/consensus-owners
 /rs/ic_os/                                              @dfinity-lab/teams/node-team
-/rs/ic_p8s_service_discovery/                           @dfinity-lab/teams/ic-testing-verification
 /rs/ingress_manager/                                    @dfinity-lab/teams/consensus-owners
 /rs/interfaces/                                         @dfinity-lab/teams/interface-owners
 /rs/interfaces/adapter_client/                          @dfinity-lab/teams/networking-team
