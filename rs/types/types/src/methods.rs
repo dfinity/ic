@@ -232,13 +232,9 @@ pub const UNKNOWN_CANISTER_ID: CanisterId =
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Callback {
     pub call_context_id: CallContextId,
-    /// The request's sender ID.
-    ///
-    /// `UNKNOWN_CANISTER_ID` if the `Callback` was created before February 2022.
+    /// The request sender's ID.
     pub originator: CanisterId,
     /// The ID of the principal that the request was addressed to.
-    ///
-    /// `UNKNOWN_CANISTER_ID` if the `Callback` was created before February 2022.
     pub respondent: CanisterId,
     /// The number of cycles that were sent in the original request.
     pub cycles_sent: Cycles,
@@ -283,68 +279,19 @@ impl Callback {
             on_cleanup,
         }
     }
-
-    pub fn originator(&self) -> Option<CanisterId> {
-        if self.originator == UNKNOWN_CANISTER_ID {
-            None
-        } else {
-            Some(self.originator)
-        }
-    }
-
-    pub fn respondent(&self) -> Option<CanisterId> {
-        if self.respondent == UNKNOWN_CANISTER_ID {
-            None
-        } else {
-            Some(self.respondent)
-        }
-    }
-
-    pub fn prepayment_for_response_execution(&self) -> Option<Cycles> {
-        if self.prepayment_for_response_execution.is_zero() {
-            None
-        } else {
-            Some(self.prepayment_for_response_execution)
-        }
-    }
-
-    pub fn prepayment_for_response_transmission(&self) -> Option<Cycles> {
-        if self.prepayment_for_response_transmission.is_zero() {
-            None
-        } else {
-            Some(self.prepayment_for_response_transmission)
-        }
-    }
 }
 
 impl From<&Callback> for pb::Callback {
     fn from(item: &Callback) -> Self {
         Self {
             call_context_id: item.call_context_id.get(),
-            originator: if item.originator == UNKNOWN_CANISTER_ID {
-                None
-            } else {
-                Some(pb_types::CanisterId::from(item.originator))
-            },
-            respondent: if item.respondent == UNKNOWN_CANISTER_ID {
-                None
-            } else {
-                Some(pb_types::CanisterId::from(item.respondent))
-            },
+            originator: Some(pb_types::CanisterId::from(item.originator)),
+            respondent: Some(pb_types::CanisterId::from(item.respondent)),
             cycles_sent: Some(item.cycles_sent.into()),
-            prepayment_for_response_execution: if item.prepayment_for_response_execution.is_zero() {
-                None
-            } else {
-                Some(item.prepayment_for_response_execution.into())
-            },
-            prepayment_for_response_transmission: if item
-                .prepayment_for_response_transmission
-                .is_zero()
-            {
-                None
-            } else {
-                Some(item.prepayment_for_response_transmission.into())
-            },
+            prepayment_for_response_execution: Some(item.prepayment_for_response_execution.into()),
+            prepayment_for_response_transmission: Some(
+                item.prepayment_for_response_transmission.into(),
+            ),
             on_reply: Some(pb::WasmClosure {
                 func_idx: item.on_reply.func_idx,
                 env: item.on_reply.env,
