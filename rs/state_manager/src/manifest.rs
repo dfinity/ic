@@ -948,6 +948,10 @@ pub fn compute_manifest(
         .chunk_table_length
         .set(manifest.chunk_table.len() as i64);
 
+    metrics
+        .file_table_length
+        .set(manifest.file_table.len() as i64);
+
     let file_chunk_id_range_length = FILE_GROUP_CHUNK_ID_OFFSET as usize - FILE_CHUNK_ID_OFFSET;
     if manifest.chunk_table.len() > file_chunk_id_range_length / 2 {
         error!(
