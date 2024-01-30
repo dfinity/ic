@@ -22,7 +22,6 @@ DEPENDENCIES = [
     "//rs/certification",
     "//rs/crypto/ecdsa_secp256k1",
     "//rs/crypto/tree_hash",
-    "//rs/crypto/utils/threshold_sig_der",
     "//rs/protobuf",
     "//rs/tree_deserializer",
     "//rs/types/ic00_types",
@@ -35,15 +34,12 @@ DEPENDENCIES = [
     "@crate_index//:prost",
     "@crate_index//:rustls",
     "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
     "@crate_index//:serde_cbor",
     "@crate_index//:tokio",
     "@crate_index//:url",
 ]
 
-MACRO_DEPENDENCIES = [
-    "@crate_index//:async-trait",
-]
+MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
     "//rs/certification/test-utils",

@@ -10,17 +10,14 @@ documentation.workspace = true
 anyhow = "1.0.31"
 ic-prep = { path = "../../prep" }
 async-trait = "0.1.51"
-bytes = { workspace = true }
 base64 = { workspace = true }
 clap = { workspace = true }
 futures = { workspace = true }
 hex = "0.4"
-humantime = "2.1.0"
 cycles-minting-canister = { path = "../../nns/cmc" }
 ic-admin-derive = { path = "../admin-derive" }
 ic-btc-interface = { workspace = true }
 ic-nns-init = { path = "../../nns/init" }
-ic-base-types = { path = "../../types/base_types" }
 ic-canister-client = { path = "../../canister_client" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-config = { path = "../../config" }
@@ -29,7 +26,6 @@ ic-crypto-internal-types = { path = "../../crypto/internal/crypto_lib/types" }
 ic-http-utils = { path = "../../http_utils" }
 ic-ic00-types = { path = "../../types/ic00_types" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-nns-handler-lifeline-interface = { path = "../../nns/handlers/lifeline/interface" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-client = { path = "../client" }
 ic-registry-client-helpers = { path = "../helpers" }
@@ -59,20 +55,15 @@ ic-sns-wasm = { path = "../../nns/sns-wasm" }
 ic-sns-swap = { path = "../../sns/swap" }
 itertools = { workspace = true }
 maplit = "1.0.2"
-on_wire = { path = "../../rust_canisters/on_wire" }
 pretty_assertions = { workspace = true }
 prost = { workspace = true }
 registry-canister = { path = "../canister" }
 serde = { workspace = true }
-serde_cbor = { workspace = true }
 serde_json = { workspace = true }
-serde-bytes-repr = "0.1.5"
 tokio = { workspace = true }
 candid = { workspace = true }
 tempfile = "3.1.0"
 url = { version = "2.1.1", features = ["serde"] }
-strum = { workspace = true }
-strum_macros = { workspace = true }
 chrono = { workspace = true }
 indexmap = { workspace = true }
 

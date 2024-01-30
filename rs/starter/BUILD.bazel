@@ -18,7 +18,6 @@ DEPENDENCIES = [
     "@crate_index//:serde_json",
     "@crate_index//:slog",
     "@crate_index//:tempfile",
-    "@crate_index//:url",
 ]
 
 MACRO_DEPENDENCIES = []

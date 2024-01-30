@@ -7,7 +7,6 @@ DEPENDENCIES = [
     "//rs/config",
     "//rs/consensus",
     "//rs/consensus/utils",
-    "//rs/crypto",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/interfaces/state_manager",
@@ -18,7 +17,6 @@ DEPENDENCIES = [
     "//rs/test_utilities",
     "//rs/test_utilities/time",
     "//rs/types/types",
-    "@crate_index//:tempfile",
 ]
 
 MACRO_DEPENDENCIES = []

@@ -18,7 +18,6 @@ ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-consensus-utils = { path = "../consensus/utils" }
 ic-crypto-for-verification-only = { path = "../crypto/for_verification_only" }
-ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-interfaces = { path = "../interfaces" }

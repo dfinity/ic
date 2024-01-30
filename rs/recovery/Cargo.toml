@@ -15,7 +15,6 @@ ic-canister-sandbox-launcher = { path = "../canister_sandbox/sandbox_launcher" }
 ic-config = { path = "../config" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-cup-explorer = { path = "../cup_explorer" }
-ic-logger = { path = "../monitoring/logger" }
 ic-http-utils = { path = "../http_utils" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }

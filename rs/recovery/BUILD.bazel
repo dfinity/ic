@@ -10,7 +10,6 @@ DEPENDENCIES = [
     "//rs/http_utils",
     "//rs/interfaces",
     "//rs/interfaces/registry",
-    "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/orchestrator/registry_replicator",
     "//rs/protobuf",

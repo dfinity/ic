@@ -7,17 +7,11 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-bincode = "1.2.1"
-ic-constants = { path = "../constants" }
 ic-interfaces = { path = "../interfaces" }
-ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-types = { path = "../types/types" }
 crossbeam-channel = "0.5.5"
-slog = { workspace = true }
 prometheus = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
 
 [dev-dependencies]
 ic-config = { path = "../config" }

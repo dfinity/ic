@@ -20,15 +20,11 @@ path = "src/main.rs"
 anyhow = "1"
 async-trait = "0.1"
 axum = "0.6.1"
-base64 = { workspace = true }
 bytes = { workspace = true }
 candid = { workspace = true }
 clap = { version = "4", features = ["cargo", "derive"] }
-flate2 = "1"
 form_urlencoded = "1"
 futures = { workspace = true }
-h2 = "0.3.24"
-hex = "0.4"
 http = "0.2.6"
 http-body = "0.4"
 hyper = { version = "0.14.26", features = ["client", "http2", "http1"] }
@@ -48,10 +44,6 @@ tower = { workspace = true }
 tower-http = { version = "0.3", features = ["trace"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["json"] }
-serde = { workspace = true }
-serde_cbor = { workspace = true }
-serde_json = { workspace = true }
-sha2 = "0.10"
 tokio = { workspace = true }
 ic-response-verification = { workspace = true }
 ic-http-certification = { workspace = true }

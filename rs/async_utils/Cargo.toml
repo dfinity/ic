@@ -14,11 +14,9 @@ derive_more = { git = "https://github.com/dfinity-lab/derive_more", rev = "9f1b8
 futures = { workspace = true }
 futures-util = "0.3.13"
 hyper = { version = "0.14.16", features = ["full"] }
-ic-types = { path = "../types/types" }
 slog = { workspace = true }
 tokio = { workspace = true }
 tonic = { workspace = true }
-tower = { workspace = true }
 
 [dev-dependencies]
 rand = "0.8.3"

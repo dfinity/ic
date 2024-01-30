@@ -20,11 +20,7 @@ DEPENDENCIES = [
     "@crate_index//:prometheus",
     "@crate_index//:prost",
     "@crate_index//:scoped_threadpool",
-    "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
-    "@crate_index//:serde_cbor",
     "@crate_index//:slog",
-    "@crate_index//:tempfile",
 ]
 
 MACRO_DEPENDENCIES = []

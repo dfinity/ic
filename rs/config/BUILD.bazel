@@ -13,7 +13,6 @@ rust_library(
         "//rs/sys",
         "//rs/types/base_types",
         "//rs/types/types",
-        "@crate_index//:base64",
         "@crate_index//:json5",
         "@crate_index//:serde",
         "@crate_index//:slog",

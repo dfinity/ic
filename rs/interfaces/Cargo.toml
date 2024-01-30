@@ -7,11 +7,9 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-async-trait = "0.1.36"
 derive_more = { git = "https://github.com/dfinity-lab/derive_more", rev = "9f1b894e6fde640da4e9ea71a8fc0e4dd98d01da" }
 ic-base-types = { path = "../types/base_types" }
 ic-crypto-interfaces-sig-verification = { path = "../crypto/interfaces/sig_verification" }
-ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-error-types = { path = "../types/error_types" }
 ic-ic00-types = { path = "../types/ic00_types" }
 ic-interfaces-state-manager = { path = "./state_manager" }
@@ -20,13 +18,10 @@ ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist"
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
-ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
 phantom_newtype = { path = "../phantom_newtype" }
 prost = { workspace = true }
-rand = "0.8"
 serde = { workspace = true }
-serde_bytes = { workspace = true }
 tower = { workspace = true }
 thiserror = "1.0"
 
