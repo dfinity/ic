@@ -13,6 +13,7 @@ use crate::{
     hypervisor::Hypervisor,
     metrics::{MeasurementScope, QueryHandlerMetrics},
 };
+use candid::Encode;
 use ic_btc_interface::NetworkInRequest as BitcoinNetwork;
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
@@ -36,7 +37,7 @@ use ic_types::{
         Blob, Certificate, CertificateDelegation, HttpQueryResponse, HttpQueryResponseReply,
         UserQuery,
     },
-    CanisterId, NumInstructions,
+    CanisterId, NumInstructions, PrincipalId,
 };
 use serde::Serialize;
 use std::convert::Infallible;
@@ -51,7 +52,10 @@ use tokio::sync::oneshot;
 use tower::{util::BoxCloneService, Service};
 
 pub(crate) use self::query_scheduler::{QueryScheduler, QuerySchedulerFlag};
-use ic_ic00_types::{BitcoinGetBalanceArgs, BitcoinGetUtxosArgs, Payload, QueryMethod};
+use ic_ic00_types::{
+    BitcoinGetBalanceArgs, BitcoinGetUtxosArgs, FetchCanisterLogsRequest,
+    FetchCanisterLogsResponse, LogVisibility, Payload, QueryMethod,
+};
 use ic_replicated_state::NetworkTopology;
 
 /// Convert an object into CBOR binary.
@@ -209,18 +213,32 @@ impl QueryHandler for InternalHttpQueryHandler {
         if query.receiver == CanisterId::ic_00() {
             let network = match QueryMethod::from_str(query.method_name.as_str()) {
                 Ok(QueryMethod::BitcoinGetUtxosQuery) => {
-                    let args = BitcoinGetUtxosArgs::decode(&query.method_payload)?;
-                    args.network
+                    BitcoinGetUtxosArgs::decode(&query.method_payload)?.network
                 }
                 Ok(QueryMethod::BitcoinGetBalanceQuery) => {
-                    let args = BitcoinGetBalanceArgs::decode(&query.method_payload)?;
-                    args.network
+                    BitcoinGetBalanceArgs::decode(&query.method_payload)?.network
+                }
+                Ok(QueryMethod::FetchCanisterLogs) => {
+                    return match self.config.fetch_canister_logs {
+                        FlagStatus::Enabled => fetch_canister_logs(
+                            query.source.get(),
+                            state.get_ref(),
+                            FetchCanisterLogsRequest::decode(&query.method_payload)?,
+                        ),
+                        FlagStatus::Disabled => Err(UserError::new(
+                            ErrorCode::CanisterContractViolation,
+                            format!(
+                                "{} API is not enabled on this subnet",
+                                QueryMethod::FetchCanisterLogs
+                            ),
+                        )),
+                    }
                 }
                 Err(_) => {
                     return Err(UserError::new(
                         ErrorCode::CanisterMethodNotFound,
                         format!("Query method {} not found.", query.method_name),
-                    ))
+                    ));
                 }
             };
 
@@ -291,6 +309,39 @@ impl QueryHandler for InternalHttpQueryHandler {
         }
         result
     }
+}
+
+fn fetch_canister_logs(
+    sender: PrincipalId,
+    state: &ReplicatedState,
+    args: FetchCanisterLogsRequest,
+) -> Result<WasmResult, UserError> {
+    let canister_id = args.get_canister_id();
+    let canister = state.canister_state(&canister_id).ok_or_else(|| {
+        UserError::new(
+            ErrorCode::CanisterNotFound,
+            format!("Canister {canister_id} not found"),
+        )
+    })?;
+
+    match canister.log_visibility() {
+        LogVisibility::Public => Ok(()),
+        LogVisibility::Controllers if canister.controllers().contains(&sender) => Ok(()),
+        LogVisibility::Controllers => Err(UserError::new(
+            ErrorCode::CanisterRejectedMessage,
+            format!(
+                "Caller {} is not allowed to query ic00 method {}",
+                sender,
+                QueryMethod::FetchCanisterLogs
+            ),
+        )),
+    }?;
+
+    // TODO(IC-272): temporarily return empty logs until full implementation is ready.
+    let response = FetchCanisterLogsResponse {
+        canister_log_records: Vec::new(),
+    };
+    Ok(WasmResult::Reply(Encode!(&response).unwrap()))
 }
 
 impl HttpQueryHandler {
