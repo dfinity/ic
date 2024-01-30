@@ -33,6 +33,7 @@ hex = "0.4.3"
 http = "0.2.6"
 http-body = "0.4"
 hyper = "0.14.18"
+hyperlocal = "0.8.0"
 hyper-rustls = "0.24.0"
 ic-base-types = { path = "../../types/base_types" }
 ic-btc-interface = { workspace = true }

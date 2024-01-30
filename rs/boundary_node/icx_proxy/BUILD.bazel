@@ -14,6 +14,7 @@ DEPENDENCIES = [
     "@crate_index//:http-body",
     "@crate_index//:hyper",
     "@crate_index//:hyper-rustls",
+    "@crate_index//:hyperlocal",
     "@crate_index//:itertools",
     "@crate_index//:ic-agent",
     "@crate_index//:ic-utils",
@@ -33,6 +34,7 @@ DEPENDENCIES = [
     "@crate_index//:ic-response-verification",
     "@crate_index//:ic-http-certification",
     "@crate_index//:thiserror",
+    "@crate_index//:url",
 ]
 
 MACRO_DEPENDENCIES = [

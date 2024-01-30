@@ -21,12 +21,12 @@ pub struct ResolverState {
 pub struct QueryParam(pub Principal);
 
 #[async_trait]
-impl<V: Sync + Send, C: Sync + Send> FromRequestParts<AppState<V, C>> for QueryParam {
+impl<V: Sync + Send> FromRequestParts<AppState<V>> for QueryParam {
     type Rejection = &'static str;
 
     async fn from_request_parts(
         parts: &mut Parts,
-        state: &AppState<V, C>,
+        state: &AppState<V>,
     ) -> Result<Self, Self::Rejection> {
         FromRequestParts::from_request_parts(parts, state.resolver()).await
     }
@@ -72,12 +72,12 @@ impl FromRequestParts<ResolverState> for QueryParam {
 pub struct UriHost(pub Principal);
 
 #[async_trait]
-impl<V: Sync + Send, C: Sync + Send> FromRequestParts<AppState<V, C>> for UriHost {
+impl<V: Sync + Send> FromRequestParts<AppState<V>> for UriHost {
     type Rejection = &'static str;
 
     async fn from_request_parts(
         parts: &mut Parts,
-        state: &AppState<V, C>,
+        state: &AppState<V>,
     ) -> Result<Self, Self::Rejection> {
         FromRequestParts::from_request_parts(parts, state.resolver()).await
     }
@@ -107,12 +107,12 @@ impl FromRequestParts<ResolverState> for UriHost {
 pub struct HostHeader(pub Principal);
 
 #[async_trait]
-impl<V: Sync + Send, C: Sync + Send> FromRequestParts<AppState<V, C>> for HostHeader {
+impl<V: Sync + Send> FromRequestParts<AppState<V>> for HostHeader {
     type Rejection = &'static str;
 
     async fn from_request_parts(
         parts: &mut Parts,
-        state: &AppState<V, C>,
+        state: &AppState<V>,
     ) -> Result<Self, Self::Rejection> {
         FromRequestParts::from_request_parts(parts, state.resolver()).await
     }
@@ -148,12 +148,12 @@ impl FromRequestParts<ResolverState> for HostHeader {
 pub struct RefererHeaderHost(pub Principal);
 
 #[async_trait]
-impl<V: Sync + Send, C: Sync + Send> FromRequestParts<AppState<V, C>> for RefererHeaderHost {
+impl<V: Sync + Send> FromRequestParts<AppState<V>> for RefererHeaderHost {
     type Rejection = &'static str;
 
     async fn from_request_parts(
         parts: &mut Parts,
-        state: &AppState<V, C>,
+        state: &AppState<V>,
     ) -> Result<Self, Self::Rejection> {
         FromRequestParts::from_request_parts(parts, state.resolver()).await
     }
@@ -199,12 +199,12 @@ impl FromRequestParts<ResolverState> for RefererHeaderHost {
 pub struct RefererHeaderQueryParam(pub Principal);
 
 #[async_trait]
-impl<V: Sync + Send, C: Sync + Send> FromRequestParts<AppState<V, C>> for RefererHeaderQueryParam {
+impl<V: Sync + Send> FromRequestParts<AppState<V>> for RefererHeaderQueryParam {
     type Rejection = &'static str;
 
     async fn from_request_parts(
         parts: &mut Parts,
-        state: &AppState<V, C>,
+        state: &AppState<V>,
     ) -> Result<Self, Self::Rejection> {
         FromRequestParts::from_request_parts(parts, state.resolver()).await
     }

@@ -616,7 +616,6 @@ pub async fn metrics_middleware_status(
 // middleware to log and measure proxied requests
 pub async fn metrics_middleware(
     State(metric_params): State<HttpMetricParams>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     RawQuery(query_string): RawQuery,
     headers: HeaderMap,
     Extension(request_id): Extension<RequestId>,
@@ -628,6 +627,11 @@ pub async fn metrics_middleware(
         .to_str()
         .unwrap_or("bad_request_id")
         .to_string();
+
+    let connect_info = request
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .cloned();
 
     // Perform the request & measure duration
     let start_time = Instant::now();
@@ -657,7 +661,9 @@ pub async fn metrics_middleware(
     let sender = ctx.sender.map(|x| x.to_string());
     let node_id = node.as_ref().map(|x| x.id.to_string());
     let subnet_id = node.as_ref().map(|x| x.subnet_id.to_string());
-    let ip_family = if addr.is_ipv4() { "4" } else { "6" };
+    let ip_family = connect_info
+        .map(|x| if x.is_ipv4() { "4" } else { "6" })
+        .unwrap_or("0");
 
     let HttpMetricParams {
         action,

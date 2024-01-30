@@ -52,6 +52,9 @@ use crate::{
     tls_verify::TlsVerifier,
 };
 
+#[cfg(not(feature = "tls"))]
+use {hyperlocal::UnixServerExt, std::os::unix::fs::PermissionsExt};
+
 #[cfg(feature = "tls")]
 use {
     crate::{
@@ -186,16 +189,38 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     let routers_http = routers_https;
 
     // HTTP
-    let srvs_http = Server::bind(SocketAddr::new(
-        Ipv6Addr::UNSPECIFIED.into(),
-        cli.listen.http_port,
-    ))
-    .acceptor(DefaultAcceptor)
-    .serve(
-        routers_http
-            .clone()
-            .into_make_service_with_connect_info::<SocketAddr>(),
-    );
+    let srvs_http = cli.listen.http_port.map(|x| {
+        Server::bind(SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), x))
+            .acceptor(DefaultAcceptor)
+            .serve(
+                routers_http
+                    .clone()
+                    .into_make_service_with_connect_info::<SocketAddr>(),
+            )
+    });
+
+    // HTTP Unix Socket
+    #[cfg(not(feature = "tls"))]
+    let srvs_http_unix = cli.listen.http_unix_socket.map(|x| {
+        // Remove the socket file if it's there
+        if x.exists() {
+            std::fs::remove_file(&x).expect("unable to remove socket");
+        }
+
+        let srv = hyper::Server::bind_unix(&x)
+            .expect("cannot bind to the socket")
+            .serve(routers_http.clone().into_make_service());
+
+        std::fs::set_permissions(&x, std::fs::Permissions::from_mode(0o666))
+            .expect("unable to set permissions on socket");
+
+        srv
+    });
+
+    #[cfg(not(feature = "tls"))]
+    if srvs_http.is_none() && srvs_http_unix.is_none() {
+        panic!("at least one of --http-port or --http-unix-socket must be specified");
+    }
 
     // HTTPS
     #[cfg(feature = "tls")]
@@ -368,7 +393,14 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         }
 
         // Servers
-        s.spawn(srvs_http.map_err(|err| anyhow!("failed to start http server: {:?}", err)));
+        if let Some(v) = srvs_http {
+            s.spawn(v.map_err(|err| anyhow!("failed to start http server: {:?}", err)));
+        }
+
+        #[cfg(not(feature = "tls"))]
+        if let Some(v) = srvs_http_unix {
+            s.spawn(v.map_err(|err| anyhow!("failed to start http unix socket server: {:?}", err)));
+        }
 
         #[cfg(feature = "tls")]
         s.spawn(srvs_https.map_err(|err| anyhow!("failed to start https server: {:?}", err)));

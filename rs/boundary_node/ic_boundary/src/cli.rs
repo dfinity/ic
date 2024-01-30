@@ -67,9 +67,14 @@ pub struct RegistryConfig {
 
 #[derive(Args)]
 pub struct ListenConfig {
-    /// Port to listen for HTTP
-    #[clap(long, default_value = "80")]
-    pub http_port: u16,
+    /// Port to listen on for HTTP (listens on wildcard ::)
+    #[clap(long)]
+    pub http_port: Option<u16>,
+
+    /// Unix socket to listen on for HTTP
+    #[cfg(not(feature = "tls"))]
+    #[clap(long)]
+    pub http_unix_socket: Option<PathBuf>,
 
     /// Port to listen for HTTPS
     #[cfg(feature = "tls")]
