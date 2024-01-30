@@ -2054,8 +2054,6 @@ fn observe_replicated_state_metrics(
     let mut canisters_not_in_routing_table = 0;
     let mut canisters_with_old_open_call_contexts = 0;
     let mut old_call_contexts_count = 0;
-    let mut callbacks_without_originator = 0;
-    let mut callbacks_without_prepayment = 0;
     let mut num_stop_canister_calls_without_call_id = 0;
 
     let canister_id_ranges = state.routing_table().ranges(own_subnet_id);
@@ -2129,17 +2127,6 @@ fn observe_replicated_state_metrics(
                 old_call_contexts_count += old_call_contexts.len();
                 canisters_with_old_open_call_contexts += 1;
             }
-
-            for callback in manager.callbacks().values() {
-                if callback.originator().is_none() || callback.respondent().is_none() {
-                    callbacks_without_originator += 1;
-                }
-                if callback.prepayment_for_response_execution().is_none()
-                    || callback.prepayment_for_response_transmission().is_none()
-                {
-                    callbacks_without_prepayment += 1;
-                }
-            }
         }
     });
     metrics
@@ -2150,12 +2137,6 @@ fn observe_replicated_state_metrics(
         .canisters_with_old_open_call_contexts
         .with_label_values(&[OLD_CALL_CONTEXT_LABEL_ONE_DAY])
         .set(canisters_with_old_open_call_contexts as i64);
-    metrics
-        .callbacks_without_originator
-        .set(callbacks_without_originator as i64);
-    metrics
-        .callbacks_without_prepayment
-        .set(callbacks_without_prepayment as i64);
     let streams_response_bytes = state
         .metadata
         .streams()

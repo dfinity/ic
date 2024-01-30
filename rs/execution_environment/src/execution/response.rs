@@ -159,20 +159,13 @@ impl ResponseHelper {
         // possible response when the request is being sent. Now that we
         // have received the response, we can refund the cycles based on
         // the actual size of the response.
-        let prepayment_for_response_transmission =
-            match original.callback.prepayment_for_response_transmission() {
-                Some(cycles) => cycles,
-                None => round
-                    .cycles_account_manager
-                    .prepayment_for_response_transmission(original.subnet_size),
-            };
         let refund_for_response_transmission = round
             .cycles_account_manager
             .refund_for_response_transmission(
                 round.log,
                 round.counters.response_cycles_refund_error,
                 response,
-                prepayment_for_response_transmission,
+                original.callback.prepayment_for_response_transmission,
                 original.subnet_size,
             );
 
@@ -536,19 +529,11 @@ impl ResponseHelper {
             round.counters.ingress_with_cycles_error,
         );
 
-        let prepayment_for_response_execution =
-            match original.callback.prepayment_for_response_execution() {
-                Some(cycles) => cycles,
-                None => round
-                    .cycles_account_manager
-                    .prepayment_for_response_execution(original.subnet_size),
-            };
-
         round.cycles_account_manager.refund_unused_execution_cycles(
             &mut self.canister.system_state,
             instructions_left,
             original.message_instruction_limit,
-            prepayment_for_response_execution,
+            original.callback.prepayment_for_response_execution,
             round.counters.execution_refund_error,
             original.subnet_size,
             round.log,
