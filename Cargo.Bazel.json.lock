@@ -1,5 +1,5 @@
 {
-  "checksum": "40ddefbb8fda979cb7abf6c6924a1b138fd03c20320ad7c1de53b1fb31ca6375",
+  "checksum": "97aab7393be8a8abf743c95040f8be453223c8e994725d92dd986e239ecf69dd",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -16129,7 +16129,7 @@
               "target": "uuid"
             },
             {
-              "id": "vsock 0.3.0",
+              "id": "vsock 0.4.0",
               "target": "vsock"
             },
             {
@@ -34041,6 +34041,66 @@
         },
         "edition": "2018",
         "version": "0.26.4"
+      },
+      "license": "MIT"
+    },
+    "nix 0.27.1": {
+      "name": "nix",
+      "version": "0.27.1",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/nix/0.27.1/download",
+          "sha256": "2eb04e9c688eff1c89d72b407f168cf79bb9e867a9d3323ed6c01519eb9cc053"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "nix",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "nix",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "ioctl",
+            "memoffset",
+            "socket"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.4.1",
+              "target": "bitflags"
+            },
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "libc 0.2.150",
+              "target": "libc"
+            },
+            {
+              "id": "memoffset 0.9.0",
+              "target": "memoffset"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.27.1"
       },
       "license": "MIT"
     },
@@ -58632,13 +58692,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "vsock 0.3.0": {
+    "vsock 0.4.0": {
       "name": "vsock",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/vsock/0.3.0/download",
-          "sha256": "4c8e1df0bf1e1b28095c24564d1b90acae64ca69b097ed73896e342fa6649c57"
+          "url": "https://crates.io/api/v1/crates/vsock/0.4.0/download",
+          "sha256": "2dfb6e7a74830912f1f4a7655227c9ded1ea4e9136676311fedf54bedb412f35"
         }
       },
       "targets": [
@@ -58664,14 +58724,14 @@
               "target": "libc"
             },
             {
-              "id": "nix 0.24.3",
+              "id": "nix 0.27.1",
               "target": "nix"
             }
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "0.3.0"
+        "edition": "2021",
+        "version": "0.4.0"
       },
       "license": "Apache-2.0"
     },
