@@ -323,7 +323,9 @@ mod create_transcript {
                 .nodes
                 .support_dealings_from_all_receivers(signed_dealings, &params);
 
-            let creator = env.nodes.random_receiver(params.receivers(), rng);
+            let creator = env
+                .nodes
+                .random_filtered_by_receivers(params.receivers(), rng);
             let result = creator.create_transcript(&params, &batch_signed_dealings);
 
             assert_matches!(result, Ok(transcript) if transcript.transcript_id == params.transcript_id())
@@ -344,7 +346,7 @@ mod create_transcript {
 
             let dealings: BTreeMap<NodeId, SignedIDkgDealing> = env
                 .nodes
-                .dealers(&params)
+                .filter_by_dealers(&params)
                 .take(params.collection_threshold().get() as usize - 1) // NOTE: Not enough!
                 .map(|dealer| {
                     let dealing = env.nodes.create_and_verify_signed_dealing(&params, dealer);
@@ -355,7 +357,9 @@ mod create_transcript {
             let batch_signed_dealings = env
                 .nodes
                 .support_dealings_from_all_receivers(dealings.clone(), &params);
-            let creator = env.nodes.random_receiver(params.receivers(), rng);
+            let creator = env
+                .nodes
+                .random_filtered_by_receivers(params.receivers(), rng);
 
             let result = creator.create_transcript(&params, &batch_signed_dealings);
 
@@ -403,7 +407,9 @@ mod create_transcript {
                 )
                 .expect("valid IDkgTranscriptParams")
             };
-            let creator = env.nodes.random_receiver(params.receivers(), rng);
+            let creator = env
+                .nodes
+                .random_filtered_by_receivers(params.receivers(), rng);
             let result =
                 creator.create_transcript(&params_with_removed_dealer, &batch_signed_dealings);
 
@@ -456,7 +462,9 @@ mod create_transcript {
                 (removed_node_id, modified_params)
             };
 
-            let creator = env.nodes.random_receiver(modified_params.receivers(), rng);
+            let creator = env
+                .nodes
+                .random_filtered_by_receivers(modified_params.receivers(), rng);
             let result = creator.create_transcript(&modified_params, &batch_signed_dealings);
             let err = result.unwrap_err();
             assert_matches!(
@@ -490,14 +498,15 @@ mod create_transcript {
             let signed_dealings = env.nodes.create_and_verify_signed_dealings(&params);
             let insufficient_supporters: Nodes = env
                 .nodes
-                .into_receivers(params.receivers())
+                .into_filtered_by_receivers(params.receivers())
                 .take(params.verification_threshold().get() as usize - 1) // Not enough!
                 .collect();
 
             let insufficient_batch_signed_dealings = insufficient_supporters
                 .support_dealings_from_all_receivers(signed_dealings, &params);
 
-            let creator = insufficient_supporters.random_receiver(params.receivers(), rng);
+            let creator =
+                insufficient_supporters.random_filtered_by_receivers(params.receivers(), rng);
             let result = creator.create_transcript(&params, &insufficient_batch_signed_dealings);
             let err = result.unwrap_err();
             assert_matches!(
@@ -517,7 +526,9 @@ mod create_transcript {
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
-            let creator = env.nodes.random_receiver(params.receivers(), rng);
+            let creator = env
+                .nodes
+                .random_filtered_by_receivers(params.receivers(), rng);
             let batch_signed_dealings = env.nodes.create_batch_signed_dealings(&params);
             let corrupted_dealings = batch_signed_dealings
                 .into_iter()
@@ -547,7 +558,9 @@ mod create_transcript {
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
-            let creator = env.nodes.random_receiver(params.receivers(), rng);
+            let creator = env
+                .nodes
+                .random_filtered_by_receivers(params.receivers(), rng);
             let mut batch_signed_dealings = env.nodes.create_batch_signed_dealings(&params);
             batch_signed_dealings.insert_or_update({
                 let mut corrupted_dealing = batch_signed_dealings
@@ -579,7 +592,9 @@ mod create_transcript {
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
-            let creator = env.nodes.random_receiver(params.receivers(), rng);
+            let creator = env
+                .nodes
+                .random_filtered_by_receivers(params.receivers(), rng);
             let mut batch_signed_dealings = env.nodes.create_batch_signed_dealings(&params);
             batch_signed_dealings.insert_or_update({
                 let mut corrupted_dealing = batch_signed_dealings
@@ -645,7 +660,9 @@ mod load_transcript {
             let transcript = env
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&params, rng);
-            let loader = env.nodes.random_receiver(params.receivers(), rng);
+            let loader = env
+                .nodes
+                .random_filtered_by_receivers(params.receivers(), rng);
 
             assert_matches!(loader.load_transcript(&transcript), Ok(_));
             assert_matches!(loader.load_transcript(&transcript), Ok(_));
@@ -664,7 +681,9 @@ mod load_transcript {
             let transcript = env
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&params, rng);
-            let loader = env.nodes.random_receiver(params.receivers(), rng);
+            let loader = env
+                .nodes
+                .random_filtered_by_receivers(params.receivers(), rng);
 
             let result = loader.load_transcript(&transcript);
 
@@ -731,7 +750,7 @@ mod verify_complaint {
                 assert_eq!(complaint.transcript_id, transcript.transcript_id);
                 assert_eq!(
                     env.nodes
-                        .random_receiver(params.receivers(), rng)
+                        .random_filtered_by_receivers(params.receivers(), rng)
                         .verify_complaint(&transcript, complainer.id(), complaint),
                     Ok(())
                 );
@@ -776,7 +795,7 @@ mod verify_complaint {
 
             assert_matches!(
                 env.nodes
-                    .random_receiver(params.receivers(), rng)
+                    .random_filtered_by_receivers(params.receivers(), rng)
                     .verify_complaint(&transcript, wrong_complainer_id, &complaint,),
                 Err(IDkgVerifyComplaintError::InvalidComplaint)
             );
@@ -808,7 +827,7 @@ mod verify_complaint {
 
             let result = env
                 .nodes
-                .random_receiver(params.receivers(), rng)
+                .random_filtered_by_receivers(params.receivers(), rng)
                 .verify_complaint(&transcript, complainer.id(), &complaint);
 
             assert_matches!(
@@ -955,7 +974,7 @@ mod verify_complaint {
                 let corrupt_complaint = to_corrupt_complaint(&complaint, &complaint_corrupter);
                 assert_matches!(
                     env.nodes
-                        .random_receiver(params.receivers(), rng)
+                        .random_filtered_by_receivers(params.receivers(), rng)
                         .verify_complaint(&transcript, complainer.id(), &corrupt_complaint),
                     Err(IDkgVerifyComplaintError::InvalidComplaint),
                     "failed for {complaint_corrupter:?}"
@@ -1225,7 +1244,7 @@ mod verify_transcript {
 
             let dealers = env
                 .nodes
-                .dealers(&params)
+                .filter_by_dealers(&params)
                 .take(params.collection_threshold().get() as usize)
                 .choose_multiple(rng, 2);
 
@@ -1234,7 +1253,7 @@ mod verify_transcript {
 
             let r = env
                 .nodes
-                .random_receiver(params.receivers(), rng)
+                .random_filtered_by_receivers(params.receivers(), rng)
                 .verify_transcript(&params, &transcript);
 
             assert_matches!(r, Ok(()));
@@ -1270,7 +1289,7 @@ mod verify_transcript {
 
             let dealers = env
                 .nodes
-                .dealers(&params)
+                .filter_by_dealers(&params)
                 .take(params.collection_threshold().get() as usize)
                 .choose_multiple(rng, 2);
 
@@ -1279,7 +1298,7 @@ mod verify_transcript {
 
             let r = env
                 .nodes
-                .random_receiver(params.receivers(), rng)
+                .random_filtered_by_receivers(params.receivers(), rng)
                 .verify_transcript(&params, &transcript);
 
             assert_matches!(r, Err(IDkgVerifyTranscriptError::InvalidTranscript));
@@ -1309,7 +1328,7 @@ mod verify_transcript {
 
             let dealers = env
                 .nodes
-                .dealers(&params)
+                .filter_by_dealers(&params)
                 .take(params.collection_threshold().get() as usize)
                 .choose_multiple(rng, 2);
             let dealer0 = dealers[0];
@@ -1340,7 +1359,7 @@ mod verify_transcript {
 
             let r = env
                 .nodes
-                .random_receiver(params.receivers(), rng)
+                .random_filtered_by_receivers(params.receivers(), rng)
                 .verify_transcript(&params, &transcript);
 
             assert_matches!(r, Err(IDkgVerifyTranscriptError::InvalidTranscript));
@@ -1383,7 +1402,7 @@ mod verify_transcript {
 
             let r = env
                 .nodes
-                .random_receiver(params.receivers(), rng)
+                .random_filtered_by_receivers(params.receivers(), rng)
                 .verify_transcript(&params, &transcript);
 
             assert_matches!(r, Err(IDkgVerifyTranscriptError::InvalidArgument(msg))
@@ -1630,7 +1649,9 @@ mod sign_share {
                 .expect("failed to create signature inputs")
             };
 
-            let receiver = env.nodes.random_receiver(inputs.receivers(), rng);
+            let receiver = env
+                .nodes
+                .random_filtered_by_receivers(inputs.receivers(), rng);
             receiver.load_input_transcripts(&inputs);
             let result = receiver.sign_share(&inputs);
             assert_matches!(result, Ok(_));
@@ -1715,7 +1736,9 @@ mod sign_share {
                 .expect("failed to create signature inputs")
             };
 
-            let receiver = env.nodes.random_receiver(inputs.receivers(), rng);
+            let receiver = env
+                .nodes
+                .random_filtered_by_receivers(inputs.receivers(), rng);
             receiver.load_input_transcripts(&inputs);
             assert_matches!(receiver.sign_share(&inputs), Ok(_));
             let another_key_transcript =
@@ -1865,7 +1888,7 @@ mod sign_share {
 
                     let receiver = env
                         .nodes
-                        .random_receiver(inputs.receivers(), &mut inner_rng);
+                        .random_filtered_by_receivers(inputs.receivers(), &mut inner_rng);
                     receiver.load_input_transcripts(&inputs);
                     assert_matches!(
                         receiver.sign_share(&inputs),
@@ -1924,7 +1947,9 @@ mod verify_sig_share {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let (env, inputs, _, _) = environment_with_sig_inputs(1..10, alg, rng);
             let (signer_id, sig_share) = signature_share_from_random_receiver(&env, &inputs, rng);
-            let verifier = env.nodes.random_receiver(inputs.receivers(), rng);
+            let verifier = env
+                .nodes
+                .random_filtered_by_receivers(inputs.receivers(), rng);
 
             let result = verifier.verify_sig_share(signer_id, &inputs, &sig_share);
 
@@ -1944,7 +1969,9 @@ mod verify_sig_share {
                 .corrupt_hashed_message()
                 .build();
             let (signer_id, sig_share) = signature_share_from_random_receiver(&env, &inputs, rng);
-            let verifier = env.nodes.random_receiver(inputs.receivers(), rng);
+            let verifier = env
+                .nodes
+                .random_filtered_by_receivers(inputs.receivers(), rng);
 
             let result = verifier.verify_sig_share(signer_id, &inputs_with_wrong_hash, &sig_share);
 
@@ -1962,7 +1989,9 @@ mod verify_sig_share {
             let (env, inputs, _, _) = environment_with_sig_inputs(1..10, alg, rng);
             let inputs_with_wrong_nonce = inputs.clone().into_builder().corrupt_nonce().build();
             let (signer_id, sig_share) = signature_share_from_random_receiver(&env, &inputs, rng);
-            let verifier = env.nodes.random_receiver(inputs.receivers(), rng);
+            let verifier = env
+                .nodes
+                .random_filtered_by_receivers(inputs.receivers(), rng);
 
             let result = verifier.verify_sig_share(signer_id, &inputs_with_wrong_nonce, &sig_share);
 
@@ -1983,7 +2012,9 @@ mod verify_sig_share {
                     signature_share_from_random_receiver(&env, &inputs, rng);
                 (signer_id, sig_share.clone_with_bit_flipped())
             };
-            let verifier = env.nodes.random_receiver(inputs.receivers(), rng);
+            let verifier = env
+                .nodes
+                .random_filtered_by_receivers(inputs.receivers(), rng);
 
             let result = verifier.verify_sig_share(signer_id, &inputs, &corrupted_sig_share);
 
@@ -2002,7 +2033,9 @@ mod verify_sig_share {
             assert_eq!(inputs.key_transcript().reconstruction_threshold().get(), 1);
             let (signer_id, sig_share) = signature_share_from_random_receiver(&env, &inputs, rng);
             let other_signer_id = random_receiver_id_excluding(inputs.receivers(), signer_id, rng);
-            let verifier = env.nodes.random_receiver(inputs.receivers(), rng);
+            let verifier = env
+                .nodes
+                .random_filtered_by_receivers(inputs.receivers(), rng);
 
             let result = verifier.verify_sig_share(other_signer_id, &inputs, &sig_share);
 
@@ -2017,7 +2050,9 @@ mod verify_sig_share {
             let (env, inputs, _, _) = environment_with_sig_inputs(4..10, alg, rng);
             let (signer_id, sig_share) = signature_share_from_random_receiver(&env, &inputs, rng);
             let other_signer_id = random_receiver_id_excluding(inputs.receivers(), signer_id, rng);
-            let verifier = env.nodes.random_receiver(inputs.receivers(), rng);
+            let verifier = env
+                .nodes
+                .random_filtered_by_receivers(inputs.receivers(), rng);
 
             let result = verifier.verify_sig_share(other_signer_id, &inputs, &sig_share);
 
@@ -2036,7 +2071,9 @@ mod verify_sig_share {
             let (signer_id, sig_share) = signature_share_from_random_receiver(&env, &inputs, rng);
             let unknown_signer_id = NodeId::from(PrincipalId::new_node_test_id(1));
             assert_ne!(signer_id, unknown_signer_id);
-            let verifier = env.nodes.random_receiver(inputs.receivers(), rng);
+            let verifier = env
+                .nodes
+                .random_filtered_by_receivers(inputs.receivers(), rng);
 
             let result = verifier.verify_sig_share(unknown_signer_id, &inputs, &sig_share);
 
@@ -2053,7 +2090,9 @@ mod verify_sig_share {
         let rng = &mut reproducible_rng();
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let (env, inputs, _, _) = environment_with_sig_inputs(1..10, alg, rng);
-            let verifier = env.nodes.random_receiver(inputs.receivers(), rng);
+            let verifier = env
+                .nodes
+                .random_filtered_by_receivers(inputs.receivers(), rng);
             let signer_id = random_receiver_for_inputs(&inputs, rng);
             let invalid_sig_share = ThresholdEcdsaSigShare {
                 sig_share_raw: Vec::new(),
@@ -2074,7 +2113,9 @@ mod verify_sig_share {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let (env, inputs, dealers, receivers) = environment_with_sig_inputs(1..10, alg, rng);
             let (signer_id, sig_share) = signature_share_from_random_receiver(&env, &inputs, rng);
-            let verifier = env.nodes.random_receiver(inputs.receivers(), rng);
+            let verifier = env
+                .nodes
+                .random_filtered_by_receivers(inputs.receivers(), rng);
             let inputs_with_other_key_internal_transcript_raw = {
                 let another_key_transcript =
                     generate_key_transcript(&env, &dealers, &receivers, alg, rng);
@@ -2111,7 +2152,9 @@ mod verify_sig_share {
         inputs: &ThresholdEcdsaSigInputs,
         rng: &mut R,
     ) -> (NodeId, ThresholdEcdsaSigShare) {
-        let signer = env.nodes.random_receiver(inputs.receivers(), rng);
+        let signer = env
+            .nodes
+            .random_filtered_by_receivers(inputs.receivers(), rng);
         signer.load_input_transcripts(inputs);
         let sig_share = signer
             .sign_share(inputs)
@@ -2160,7 +2203,9 @@ mod retain_active_transcripts {
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&params, rng);
 
-            let retainer = env.nodes.random_receiver(params.receivers(), rng);
+            let retainer = env
+                .nodes
+                .random_filtered_by_receivers(params.receivers(), rng);
 
             let active_transcripts = hashset!(transcript);
             assert_eq!(
@@ -2188,7 +2233,9 @@ mod load_transcript_with_openings {
             let transcript = env
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&params, rng);
-            let loader = env.nodes.random_receiver(params.receivers(), rng);
+            let loader = env
+                .nodes
+                .random_filtered_by_receivers(params.receivers(), rng);
             let openings = BTreeMap::new();
 
             let result = loader.load_transcript_with_openings(&transcript, &openings);
@@ -2311,7 +2358,7 @@ mod load_transcript_with_openings {
             let sig_result = complainer.sign_share(&inputs).expect("signing failed");
             let verifier = env
                 .nodes
-                .random_receiver_excluding(complainer, &receivers, rng);
+                .random_filtered_by_receivers_excluding(complainer, &receivers, rng);
             verifier
                 .verify_sig_share(complainer.id(), &inputs, &sig_result)
                 .expect("verification failed");
@@ -2781,7 +2828,9 @@ mod verify_dealing_private {
             let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let dealer = env.nodes.random_dealer(&params, rng);
             let signed_dealing = dealer.create_dealing_or_panic(&params);
-            let receiver = env.nodes.random_receiver(params.receivers(), rng);
+            let receiver = env
+                .nodes
+                .random_filtered_by_receivers(params.receivers(), rng);
 
             let result = receiver.verify_dealing_private(&params, &signed_dealing);
 
@@ -2804,7 +2853,9 @@ mod verify_dealing_private {
                 .into_builder()
                 .corrupt_signature()
                 .build();
-            let receiver = env.nodes.random_receiver(params.receivers(), rng);
+            let receiver = env
+                .nodes
+                .random_filtered_by_receivers(params.receivers(), rng);
 
             let (result_verify_public, result_verify_private) = verify_dealing_public_and_private(
                 receiver,
@@ -2868,7 +2919,9 @@ mod verify_dealing_private {
             let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let dealer = env.nodes.random_dealer(&params, rng);
             let signed_dealing = dealer.create_dealing_or_panic(&params);
-            let receiver = env.nodes.random_receiver(params.receivers(), rng);
+            let receiver = env
+                .nodes
+                .random_filtered_by_receivers(params.receivers(), rng);
 
             let result = receiver.verify_dealing_private(
                 &params,
@@ -2893,7 +2946,9 @@ mod verify_dealing_private {
             let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
             let dealer = env.nodes.random_dealer(&params, rng);
             let signed_dealing = dealer.create_dealing_or_panic(&params);
-            let receiver = env.nodes.random_receiver(params.receivers(), rng);
+            let receiver = env
+                .nodes
+                .random_filtered_by_receivers(params.receivers(), rng);
 
             let result = receiver.verify_dealing_private(
                 &params,
@@ -3183,7 +3238,7 @@ mod verify_dealing_public {
             let dealer = env.nodes.random_dealer(&params, rng);
             let other_dealer = env
                 .nodes
-                .dealers(&params)
+                .filter_by_dealers(&params)
                 .find(|node| *node != dealer)
                 .expect("not enough nodes");
             let signed_dealing = dealer
@@ -3484,7 +3539,7 @@ mod verify_initial_dealings {
         .expect("invalid reshare of unmasked parameters");
 
         let nodes_involved_in_resharing: Nodes = source_subnet_nodes
-            .into_receivers(&source_receivers)
+            .into_filtered_by_receivers(&source_receivers)
             .chain(target_subnet_nodes)
             .collect();
         let initial_dealings = {
@@ -3515,9 +3570,11 @@ mod open_transcript {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, complaint) =
                 corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
-            let opener =
-                env.nodes
-                    .random_receiver_excluding(complainer, &transcript.receivers, rng);
+            let opener = env.nodes.random_filtered_by_receivers_excluding(
+                complainer,
+                &transcript.receivers,
+                rng,
+            );
 
             let result = opener.open_transcript(&transcript, complainer.id(), &complaint);
             assert_matches!(result, Ok(_));
@@ -3552,9 +3609,11 @@ mod open_transcript {
                     .expect("Missing dealer of corrupted dealing"),
             );
 
-            let opener =
-                env.nodes
-                    .random_receiver_excluding(complainer, &transcript.receivers, rng);
+            let opener = env.nodes.random_filtered_by_receivers_excluding(
+                complainer,
+                &transcript.receivers,
+                rng,
+            );
             let result = opener.open_transcript(&transcript, complainer.id(), &complaint);
             assert_matches!(result, Err(IDkgOpenTranscriptError::InternalError { internal_error })
                             if internal_error.contains("MissingDealing"));
@@ -3571,9 +3630,11 @@ mod open_transcript {
             // Set "wrong" dealer_id in the complaint
             complaint.dealer_id = random_dealer_id_excluding(&transcript, complaint.dealer_id, rng);
 
-            let opener =
-                env.nodes
-                    .random_receiver_excluding(complainer, &transcript.receivers, rng);
+            let opener = env.nodes.random_filtered_by_receivers_excluding(
+                complainer,
+                &transcript.receivers,
+                rng,
+            );
             let result = opener.open_transcript(&transcript, complainer.id(), &complaint);
             assert_matches!(result, Err(IDkgOpenTranscriptError::InternalError { internal_error })
                             if internal_error.contains("InvalidComplaint"));
@@ -3599,9 +3660,11 @@ mod open_transcript {
                 .run_idkg_and_create_and_verify_transcript(&params_2, rng);
 
             // Try `open_transcript` but with a wrong transcript.
-            let opener =
-                env.nodes
-                    .random_receiver_excluding(complainer, &transcript.receivers, rng);
+            let opener = env.nodes.random_filtered_by_receivers_excluding(
+                complainer,
+                &transcript.receivers,
+                rng,
+            );
             let result = opener.open_transcript(transcript_2, complainer.id(), &complaint);
             assert_matches!(result, Err(IDkgOpenTranscriptError::InternalError { internal_error })
                             if internal_error.contains("InvalidArgumentMismatchingTranscriptIDs"));
@@ -3620,14 +3683,18 @@ mod verify_opening {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, complaint) =
                 corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
-            let opener =
-                env.nodes
-                    .random_receiver_excluding(complainer, &transcript.receivers, rng);
+            let opener = env.nodes.random_filtered_by_receivers_excluding(
+                complainer,
+                &transcript.receivers,
+                rng,
+            );
 
             let opening = opener
                 .open_transcript(&transcript, complainer.id(), &complaint)
                 .expect("Unexpected failure of open_transcript");
-            let verifier = env.nodes.random_receiver(&transcript.receivers, rng);
+            let verifier = env
+                .nodes
+                .random_filtered_by_receivers(&transcript.receivers, rng);
             let result = verifier.verify_opening(&transcript, opener.id(), &opening, &complaint);
             assert_eq!(result, Ok(()));
         }
@@ -3640,9 +3707,11 @@ mod verify_opening {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, complaint) =
                 corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
-            let opener =
-                env.nodes
-                    .random_receiver_excluding(complainer, &transcript.receivers, rng);
+            let opener = env.nodes.random_filtered_by_receivers_excluding(
+                complainer,
+                &transcript.receivers,
+                rng,
+            );
 
             let mut opening = opener
                 .open_transcript(&transcript, complainer.id(), &complaint)
@@ -3653,7 +3722,9 @@ mod verify_opening {
                 "Unexpected collision with a random transcript_id"
             );
             opening.transcript_id = wrong_transcript_id;
-            let verifier = env.nodes.random_receiver(&transcript.receivers, rng);
+            let verifier = env
+                .nodes
+                .random_filtered_by_receivers(&transcript.receivers, rng);
             let result = verifier.verify_opening(&transcript, opener.id(), &opening, &complaint);
             assert_matches!(result, Err(IDkgVerifyOpeningError::TranscriptIdMismatch));
         }
@@ -3667,9 +3738,11 @@ mod verify_opening {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, mut complaint) =
                 corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
-            let opener =
-                env.nodes
-                    .random_receiver_excluding(complainer, &transcript.receivers, rng);
+            let opener = env.nodes.random_filtered_by_receivers_excluding(
+                complainer,
+                &transcript.receivers,
+                rng,
+            );
 
             let opening = opener
                 .open_transcript(&transcript, complainer.id(), &complaint)
@@ -3680,7 +3753,9 @@ mod verify_opening {
                 "Unexpected collision with a random transcript_id"
             );
             complaint.transcript_id = wrong_transcript_id;
-            let verifier = env.nodes.random_receiver(&transcript.receivers, rng);
+            let verifier = env
+                .nodes
+                .random_filtered_by_receivers(&transcript.receivers, rng);
 
             let result = verifier.verify_opening(&transcript, opener.id(), &opening, &complaint);
             assert_matches!(result, Err(IDkgVerifyOpeningError::TranscriptIdMismatch));
@@ -3695,15 +3770,19 @@ mod verify_opening {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, complaint) =
                 corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
-            let opener =
-                env.nodes
-                    .random_receiver_excluding(complainer, &transcript.receivers, rng);
+            let opener = env.nodes.random_filtered_by_receivers_excluding(
+                complainer,
+                &transcript.receivers,
+                rng,
+            );
 
             let mut opening = opener
                 .open_transcript(&transcript, complainer.id(), &complaint)
                 .expect("Unexpected failure of open_transcript");
             opening.dealer_id = random_dealer_id_excluding(&transcript, opening.dealer_id, rng);
-            let verifier = env.nodes.random_receiver(&transcript.receivers, rng);
+            let verifier = env
+                .nodes
+                .random_filtered_by_receivers(&transcript.receivers, rng);
 
             let result = verifier.verify_opening(&transcript, opener.id(), &opening, &complaint);
             assert_matches!(result, Err(IDkgVerifyOpeningError::DealerIdMismatch));
@@ -3718,14 +3797,18 @@ mod verify_opening {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, complaint) =
                 corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
-            let opener =
-                env.nodes
-                    .random_receiver_excluding(complainer, &transcript.receivers, rng);
+            let opener = env.nodes.random_filtered_by_receivers_excluding(
+                complainer,
+                &transcript.receivers,
+                rng,
+            );
 
             let opening = opener
                 .open_transcript(&transcript, complainer.id(), &complaint)
                 .expect("Unexpected failure of open_transcript");
-            let verifier = env.nodes.random_receiver(&transcript.receivers, rng);
+            let verifier = env
+                .nodes
+                .random_filtered_by_receivers(&transcript.receivers, rng);
             let wrong_opener_id = node_id(123456789);
             assert!(
                 !transcript.receivers.contains(wrong_opener_id),
@@ -3748,9 +3831,11 @@ mod verify_opening {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, complaint) =
                 corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
-            let opener =
-                env.nodes
-                    .random_receiver_excluding(complainer, &transcript.receivers, rng);
+            let opener = env.nodes.random_filtered_by_receivers_excluding(
+                complainer,
+                &transcript.receivers,
+                rng,
+            );
 
             let mut opening = opener
                 .open_transcript(&transcript, complainer.id(), &complaint)
@@ -3758,7 +3843,9 @@ mod verify_opening {
             opening
                 .internal_opening_raw
                 .truncate(opening.internal_opening_raw.len() - 1);
-            let verifier = env.nodes.random_receiver(&transcript.receivers, rng);
+            let verifier = env
+                .nodes
+                .random_filtered_by_receivers(&transcript.receivers, rng);
 
             let result = verifier.verify_opening(&transcript, opener.id(), &opening, &complaint);
             assert_matches!(result, Err(IDkgVerifyOpeningError::InternalError { .. }));
@@ -3773,14 +3860,18 @@ mod verify_opening {
             let (env, params, mut transcript) = environment_and_transcript_for_complaint(alg, rng);
             let (complainer, complaint) =
                 corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
-            let opener =
-                env.nodes
-                    .random_receiver_excluding(complainer, &transcript.receivers, rng);
+            let opener = env.nodes.random_filtered_by_receivers_excluding(
+                complainer,
+                &transcript.receivers,
+                rng,
+            );
 
             let opening = opener
                 .open_transcript(&transcript, complainer.id(), &complaint)
                 .expect("Unexpected failure of open_transcript");
-            let verifier = env.nodes.random_receiver(&transcript.receivers, rng);
+            let verifier = env
+                .nodes
+                .random_filtered_by_receivers(&transcript.receivers, rng);
             let dealings = transcript.verified_dealings.clone();
             let (dealer_index, _signed_dealing) = dealings
                 .iter()
@@ -3854,7 +3945,7 @@ mod reshare_key_transcript {
             .expect("invalid reshare of unmasked parameters");
 
             let nodes_involved_in_resharing: Nodes = source_subnet_nodes
-                .into_receivers(&source_receivers)
+                .into_filtered_by_receivers(&source_receivers)
                 .chain(target_subnet_nodes.into_iter())
                 .collect();
             let initial_dealings = {
@@ -3867,7 +3958,7 @@ mod reshare_key_transcript {
                 .expect("should create initial dealings");
                 assert_eq!(
                     nodes_involved_in_resharing
-                        .random_receiver(&reshare_params, rng)
+                        .random_filtered_by_receivers(&reshare_params, rng)
                         .verify_initial_dealings(&reshare_params, &initial_dealings),
                     Ok(())
                 );
@@ -3885,7 +3976,7 @@ mod reshare_key_transcript {
                     })
                     .collect();
                 nodes_involved_in_resharing
-                    .random_receiver(&reshare_params, rng)
+                    .random_filtered_by_receivers(&reshare_params, rng)
                     .create_transcript_or_panic(&reshare_params, &dealings)
             };
             let target_tecdsa_master_public_key =
@@ -3947,7 +4038,7 @@ mod reshare_key_transcript {
             .expect("invalid reshare of unmasked parameters");
 
             let nodes_involved_in_resharing: Nodes = source_subnet_nodes
-                .into_receivers(&source_receivers)
+                .into_filtered_by_receivers(&source_receivers)
                 .chain(target_subnet_nodes.into_iter())
                 .collect();
             let reshared_key_transcript = nodes_involved_in_resharing
@@ -4004,7 +4095,7 @@ mod reshare_key_transcript {
             .expect("invalid reshare of unmasked parameters");
 
             let nodes_involved_in_resharing: Nodes = source_subnet_nodes
-                .into_receivers(&source_receivers)
+                .into_filtered_by_receivers(&source_receivers)
                 .chain(target_subnet_nodes.into_iter())
                 .collect();
             let reshared_key_transcript = nodes_involved_in_resharing
@@ -4114,7 +4205,7 @@ mod reshare_key_transcript {
                 let num_receivers_to_remove = rng.gen_range(1..=receivers.get().len() - 1);
                 let removed_receivers = env
                     .nodes
-                    .receivers(&receivers)
+                    .filter_by_receivers(&receivers)
                     .choose_multiple(rng, num_receivers_to_remove);
                 let mut new_receivers = receivers.get().clone();
                 for removed_receiver in removed_receivers.iter() {
