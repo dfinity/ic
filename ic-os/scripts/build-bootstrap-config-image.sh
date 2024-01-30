@@ -33,6 +33,9 @@ options may be specified:
     script, e.g. --ipv6_name_servers "2606:4700:4700::1111
     2606:4700:4700::1001").
 
+  --ipv6_prefixes prefixes
+    Comma separated list of IPv6 networks that are whitelisted in the guestOS' firewall on orchestrator startup.
+
   --ipv4_address a.b.c.d/n
     (optional) The IPv4 address to assign. Must include prefix length (e.g.
     18.208.190.35/28).
@@ -126,7 +129,7 @@ function build_ic_bootstrap_tar() {
     local OUT_FILE="$1"
     shift
 
-    local IPV6_ADDRESS IPV6_GATEWAY IPV6_NAME_SERVERS DOMAIN HOSTNAME
+    local IPV6_ADDRESS IPV6_GATEWAY IPV6_NAME_SERVERS IVP6_PREFIXES DOMAIN HOSTNAME
     local IC_CRYPTO IC_REGISTRY_LOCAL_STORE
     local NNS_URL NNS_PUBLIC_KEY NODE_OPERATOR_PRIVATE_KEY
     local BACKUP_RETENTION_TIME_SECS BACKUP_PURGING_INTERVAL_SECS
@@ -150,6 +153,9 @@ function build_ic_bootstrap_tar() {
                 ;;
             --ipv6_name_servers)
                 IPV6_NAME_SERVERS="$2"
+                ;;
+            --ipv6_prefixes)
+                IPV6_PREFIXES="$2"
                 ;;
             --ipv4_address)
                 IPV4_ADDRESS="$2"
@@ -226,6 +232,7 @@ function build_ic_bootstrap_tar() {
 ${IPV6_ADDRESS:+ipv6_address=$IPV6_ADDRESS}
 ${IPV6_GATEWAY:+ipv6_gateway=$IPV6_GATEWAY}
 name_servers=$IPV6_NAME_SERVERS
+ipv6_prefixes=$IPV6_PREFIXES
 hostname=$HOSTNAME
 ${IPV4_ADDRESS:+ipv4_address=$IPV4_ADDRESS}
 ${IPV4_GATEWAY:+ipv4_gateway=$IPV4_GATEWAY}

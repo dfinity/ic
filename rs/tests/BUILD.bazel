@@ -95,6 +95,10 @@ exports_files([
     "create-universal-vm-config-image.sh",
 ])
 
+exports_files([
+    "src/ipv6_prefixes.json",
+])
+
 filegroup(
     name = "grafana_dashboards",
     srcs = glob(["dashboards/**/*"]),

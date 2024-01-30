@@ -7,6 +7,7 @@ use clap::Parser;
 use reqwest::blocking::Client;
 use serde::Serialize;
 use slog::{o, Drain};
+use std::fs::File;
 use tempfile::tempdir;
 use url::Url;
 
@@ -39,6 +40,9 @@ struct Args {
     /// Path to `build-bootstrap-config-image.sh` script
     #[clap(long)]
     build_bootstrap_script: PathBuf,
+    /// Path to ipv6_prefixes.json
+    #[clap(long)]
+    ipv6_prefixes_path: PathBuf,
     /// Key to be used for `admin` SSH
     #[clap(long)]
     ssh_key_path: Option<PathBuf>,
@@ -60,6 +64,7 @@ fn main() {
     let url = args.url;
     let sha256 = args.sha256;
     let build_bootstrap_script = args.build_bootstrap_script;
+    let ipv6_prefixes_path = args.ipv6_prefixes_path;
     let ssh_key_path = args.ssh_key_path;
 
     let test_name = "test_single_vm";
@@ -173,6 +178,16 @@ fn main() {
     let filename = "config.tar.gz";
     let config_path = tempdir.as_ref().join(filename);
     let local_store = prep_dir.join("ic_registry_local_store");
+    let ipv6_prefixes: Vec<String> =
+        serde_json::from_reader(File::open(ipv6_prefixes_path).unwrap()).unwrap();
+    let ipv6_prefixes = format!(
+        "[{}]",
+        ipv6_prefixes
+            .iter()
+            .map(|s| format!("\"{s}\""))
+            .collect::<Vec<_>>()
+            .join(", "),
+    );
     Command::new(build_bootstrap_script)
         .arg(&config_path)
         .arg("--nns_url")
@@ -183,6 +198,8 @@ fn main() {
         .arg(&local_store)
         .arg("--accounts_ssh_authorized_keys")
         .arg(&keys_dir)
+        .arg("--ipv6_prefixes")
+        .arg(ipv6_prefixes)
         .status()
         .unwrap();
 

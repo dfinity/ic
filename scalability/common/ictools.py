@@ -50,10 +50,15 @@ def build_bootstrap_config_image(name, **kwargs):
 
     p = Path(__file__).parents[2]
     bootstrap_script = os.path.join(p, "ic-os/scripts/build-bootstrap-config-image.sh")
+    ipv6_prefixes_path = os.path.join(p, "rs/tests/src/ipv6_prefixes.json")
+    with open(ipv6_prefixes_path) as f:
+        ipv6_prefixes = f.read()
     args = [bootstrap_script, config_image]
     for key, value in kwargs.items():
         args.append("--" + key)
         args.append(value)
+    args.append("--ipv6_prefixes")
+    args.append(ipv6_prefixes)
     subprocess.run(args, stdout=subprocess.DEVNULL, check=True)
     return config_image
 

@@ -20,7 +20,7 @@ Environment=RUST_BACKTRACE=1
 # only on ExecStartPre by ic-replica.service. As a temporary workaround, we are generating
 # an ic-csp-service-specific version of ic.json5 of which only the parts related to crypto
 # and logging are relevant.
-ExecStartPre=+/opt/ic/bin/generate-replica-config.sh -i /opt/ic/share/ic.json5.template -o /run/ic-node/config/ic-crypto-csp.json5
+ExecStartPre=+/opt/ic/bin/generate-replica-config.sh -n /boot/config/network.conf -i /opt/ic/share/ic.json5.template -o /run/ic-node/config/ic-crypto-csp.json5
 ExecStart=/opt/ic/bin/ic-crypto-csp --replica-config-file /run/ic-node/config/ic-crypto-csp.json5
 NotifyAccess=main
 Restart=always

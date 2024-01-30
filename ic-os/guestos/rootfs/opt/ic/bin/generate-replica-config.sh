@@ -75,6 +75,7 @@ function read_network_variables() {
             "ipv6_address") ipv6_address="${value}" ;;
             "ipv6_gateway") ipv6_gateway="${value}" ;;
             "name_servers") name_servers="${value}" ;;
+            "ipv6_prefixes") ipv6_prefixes="${value}" ;;
             "ipv4_address") ipv4_address="${value}" ;;
             "ipv4_gateway") ipv4_gateway="${value}" ;;
             "domain") domain="${value}" ;;
@@ -202,6 +203,7 @@ fi
 INTERFACE=($(find /sys/class/net -type l -not -lname '*virtual*' -exec basename '{}' ';'))
 IPV6_ADDRESS="${ipv6_address%/*}"
 IPV6_ADDRESS="${IPV6_ADDRESS:-$(get_if_address_retries 6 ${INTERFACE} 12)}"
+IPV6_PREFIXES="${ipv6_prefixes:-}"
 IPV4_ADDRESS="${ipv4_address:-}"
 IPV4_GATEWAY="${ipv4_gateway:-}"
 DOMAIN="${domain:-}"
@@ -238,6 +240,7 @@ if [ "${hostname}" == "" ]; then
 fi
 
 sed -e "s@{{ ipv6_address }}@${IPV6_ADDRESS}@" \
+    -e "s@{{ ipv6_prefixes }}@${IPV6_PREFIXES}@" \
     -e "s@{{ ipv4_address }}@${IPV4_ADDRESS}@" \
     -e "s@{{ ipv4_gateway }}@${IPV4_GATEWAY}@" \
     -e "s@{{ domain }}@${DOMAIN}@" \
