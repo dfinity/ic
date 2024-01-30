@@ -8886,6 +8886,8 @@ dependencies = [
  "pocket-ic",
  "prost",
  "registry-canister",
+ "rust_decimal",
+ "rust_decimal_macros",
  "rustc-hash",
  "serde",
  "xrc-mock",
