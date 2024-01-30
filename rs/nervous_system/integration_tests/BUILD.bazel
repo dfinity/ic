@@ -16,6 +16,7 @@ BASE_DEPENDENCIES = [
     "@crate_index//:assert_matches",
     "@crate_index//:candid",
     "@crate_index//:lazy_static",
+    "@crate_index//:rust_decimal",
     "@crate_index//:prost",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
@@ -72,7 +73,9 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     ],
 })
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    "@crate_index//:rust_decimal_macros",
+]
 
 DEV_DEPENDENCIES = []
 
