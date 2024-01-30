@@ -707,7 +707,10 @@ mod non_interactive_distributed_key_generation {
         }
     }
 
+    // This test marked #[ignore] as it is quite expensive to run and
+    // it is not necessary to recheck the transcript sizes on every CI build.
     #[test]
+    #[ignore]
     fn should_have_expected_size_for_nidkg_transcript_serializations() {
         fn protobuf_encoding_of_initial_dkg_transcript_record(
             rng: &mut ReproducibleRng,
