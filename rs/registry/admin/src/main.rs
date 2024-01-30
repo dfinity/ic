@@ -822,7 +822,14 @@ impl ProposalPayload<UpdateUnassignedNodesConfigPayload>
 {
     async fn payload(&self, _: Url) -> UpdateUnassignedNodesConfigPayload {
         UpdateUnassignedNodesConfigPayload {
-            ssh_readonly_access: self.ssh_readonly_access.clone(),
+            ssh_readonly_access: self.ssh_readonly_access.as_ref().map(|keys| {
+                keys.iter()
+                    .filter_map(|k| match k.trim() {
+                        "" => None,
+                        k => Some(k.to_string()),
+                    })
+                    .collect::<Vec<_>>()
+            }),
             replica_version: self.replica_version_id.clone(),
         }
     }
