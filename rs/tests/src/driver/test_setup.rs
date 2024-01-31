@@ -47,6 +47,23 @@ impl TestEnvAttribute for GroupSetup {
     }
 }
 
+#[derive(Clone, Deserialize, Serialize, Default, Debug)]
+pub struct TNetInfo {
+    pub index: u32,
+}
+
+impl TNetInfo {
+    pub fn new(index: u32) -> Self {
+        Self { index }
+    }
+}
+
+impl TestEnvAttribute for TNetInfo {
+    fn attribute_name() -> String {
+        "tnetinfo".to_string()
+    }
+}
+
 #[derive(Clone, Deserialize, Serialize, Debug, PartialEq)]
 pub enum InfraProvider {
     Farm,
