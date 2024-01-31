@@ -125,6 +125,7 @@ LOCAL_REPLICA_ENV = {
 
 rust_test_suite_with_extra_srcs(
     name = "icrc_rosetta_integration",
+    size = "large",
     srcs = [
         "tests/integration_tests.rs",
     ],
