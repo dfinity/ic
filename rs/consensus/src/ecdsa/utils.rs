@@ -14,6 +14,7 @@ use ic_protobuf::registry::subnet::v1 as pb;
 use ic_registry_client_helpers::ecdsa_keys::EcdsaKeysRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::EcdsaConfig;
+use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
 use ic_types::consensus::ecdsa::{PreSignatureQuadrupleRef, QuadrupleId};
 use ic_types::consensus::Block;
 use ic_types::consensus::{
@@ -215,6 +216,18 @@ pub(super) fn block_chain_cache(
             pool_reader.get_catch_up_height()
         )))
     }
+}
+
+/// Helper to build the [`RequestId`] if the context is already completed
+pub(super) fn get_context_request_id(context: &SignWithEcdsaContext) -> Option<RequestId> {
+    context
+        .matched_quadruple
+        .clone()
+        .map(|(quadruple_id, height)| RequestId {
+            quadruple_id,
+            pseudo_random_id: context.pseudo_random_id,
+            height,
+        })
 }
 
 /// Load the given transcripts
