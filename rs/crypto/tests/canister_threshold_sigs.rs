@@ -245,6 +245,241 @@ mod create_dealing {
     }
 
     #[test]
+    fn should_have_expected_size_for_initial_idkg_dealings() {
+        use ic_protobuf::registry::subnet::v1::InitialIDkgDealings as InitialIDkgDealingsProto;
+        use prost::Message;
+
+        let rng = &mut reproducible_rng();
+
+        const ALLOWED_OVERHEAD: f64 = 1.25;
+
+        // Sizes based on the optimium possible size computed using
+        // the following, plugged into the cost_estimator.py script:
+
+        /*
+        subnet_size = 13
+
+        # by default assume sending and reciving subnet are same size
+        dealers = subnet_size
+        receivers = subnet_size
+
+        # size of NodeID in bytes
+        node_id_bytes = 29
+
+        # size of a TranscriptID in bytes
+        transcript_id_bytes = 45
+
+        point_bytes = 32
+
+        faults_tolerated = (receivers - 1) // 3
+
+        # Size of a polynomial commitment in bytes
+        commitment_bytes = point_bytes*(1 + faults_tolerated)
+
+        # Size of a MeGA ciphertext in bytes
+        ciphertext_bytes = point_bytes*(4 + receivers)
+
+        # Size of an EdDSA signature in bytes
+        signature_bytes = 64
+
+        # Size in bytes of a dealing issued by a dealer
+        dealing_bytes = node_id_bytes + transcript_id_bytes + signature_bytes + ciphertext_bytes + commitment_bytes
+
+        # Size in bytes of a dealing with maximum support shares
+        verified_dealing = dealing_bytes + receivers*(node_id_bytes + signature_bytes)
+
+        # Size of an IDKG transcript in bytes
+        transcript_bytes = transcript_id_bytes + commitment_bytes + node_id_bytes*receivers + verified_dealing*(1 + faults_tolerated)
+
+        # Size of the IDKG params in bytes
+        params_bytes = transcript_id_bytes + node_id_bytes*(dealers + receivers) + transcript_bytes
+
+        # Size of initial IDKG dealings for XNet resharing in bytes
+        initial_dealings_bytes = params_bytes + dealing_bytes*(1 + 2*faults_tolerated)
+         */
+        let testcases = [
+            (AlgorithmId::ThresholdEcdsaSecp256k1, 13, 19214),
+            (AlgorithmId::ThresholdEcdsaSecp256k1, 28, 71864),
+            (AlgorithmId::ThresholdEcdsaSecp256k1, 40, 137852),
+        ];
+
+        for (alg, subnet_size, expected_size) in &testcases {
+            let env = CanisterThresholdSigTestEnvironment::new(subnet_size * 2, rng);
+
+            let (source_subnet_nodes, destination_subnet_nodes) =
+                env.nodes.partition(|(index, _node)| *index < *subnet_size);
+
+            let (initial_dealings, _params) = verify_initial_dealings::generate_initial_dealings(
+                *alg,
+                env.newest_registry_version,
+                source_subnet_nodes,
+                destination_subnet_nodes,
+                false,
+                rng,
+            );
+
+            let proto = InitialIDkgDealingsProto::from(&initial_dealings);
+
+            let mut record_pb = vec![];
+            proto
+                .encode(&mut record_pb)
+                .expect("Protobuf encoding failed");
+            let len = record_pb.len();
+
+            let lower_bound = *expected_size;
+            let upper_bound = (*expected_size as f64 * ALLOWED_OVERHEAD) as usize;
+
+            assert!(len >= lower_bound);
+            assert!(len <= upper_bound);
+        }
+    }
+
+    #[test]
+    fn should_have_expected_size_for_idkg_transcripts() {
+        let rng = &mut reproducible_rng();
+
+        fn transcript_bytes(transcript: &IDkgTranscript) -> usize {
+            use ic_protobuf::registry::subnet::v1::IDkgTranscript as IDkgTranscriptProto;
+            use prost::Message;
+
+            let proto = IDkgTranscriptProto::from(transcript);
+
+            let mut record_pb = vec![];
+            proto
+                .encode(&mut record_pb)
+                .expect("Protobuf encoding failed");
+            record_pb.len()
+        }
+
+        fn check_size(what: &str, transcript: &IDkgTranscript, expected_size: usize) {
+            let allowed_overhead = 1.05;
+
+            let tb = transcript_bytes(transcript);
+            println!(
+                "{} transcript is {} bytes expected {}",
+                what, tb, expected_size
+            );
+            assert!(tb >= expected_size);
+            assert!(tb as f64 <= expected_size as f64 * allowed_overhead);
+        }
+
+        struct IDkgTranscriptSizes {
+            alg: AlgorithmId,
+            subnet_size: usize,
+            unmasked_key: usize,
+            kappa_unmasked: usize,
+            lambda_masked: usize,
+            kappa_times_lambda: usize,
+            key_times_lambda: usize,
+        }
+
+        impl IDkgTranscriptSizes {
+            fn new(
+                alg: AlgorithmId,
+                subnet_size: usize,
+                unmasked_key: usize,
+                kappa_unmasked: usize,
+                lambda_masked: usize,
+                kappa_times_lambda: usize,
+                key_times_lambda: usize,
+            ) -> Self {
+                Self {
+                    alg,
+                    subnet_size,
+                    unmasked_key,
+                    kappa_unmasked,
+                    lambda_masked,
+                    kappa_times_lambda,
+                    key_times_lambda,
+                }
+            }
+        }
+
+        let test_config = [
+            IDkgTranscriptSizes::new(
+                AlgorithmId::ThresholdEcdsaSecp256k1,
+                28,
+                49000,
+                49000,
+                57900,
+                111800,
+                111800,
+            ),
+            IDkgTranscriptSizes::new(
+                AlgorithmId::ThresholdEcdsaSecp256k1,
+                40,
+                93500,
+                93500,
+                112300,
+                219000,
+                219000,
+            ),
+        ];
+
+        for config in &test_config {
+            println!("{:?} {}", config.alg, config.subnet_size);
+            let env = CanisterThresholdSigTestEnvironment::new(config.subnet_size, rng);
+            let (dealers, receivers) = env.choose_dealers_and_receivers(
+                &IDkgParticipants::AllNodesAsDealersAndReceivers,
+                rng,
+            );
+
+            let masked_key_params =
+                setup_masked_random_params(&env, config.alg, &dealers, &receivers, rng);
+
+            let masked_key_transcript = env
+                .nodes
+                .run_idkg_and_create_and_verify_transcript(&masked_key_params, rng);
+
+            let unmasked_key_params = build_params_from_previous(
+                masked_key_params,
+                IDkgTranscriptOperation::ReshareOfMasked(masked_key_transcript.clone()),
+                rng,
+            );
+
+            let unmasked_key_transcript = env
+                .nodes
+                .run_idkg_and_create_and_verify_transcript(&unmasked_key_params, rng);
+
+            check_size(
+                "unmasked_key",
+                &unmasked_key_transcript,
+                config.unmasked_key,
+            );
+
+            let quadruple = generate_presig_quadruple(
+                &env,
+                &dealers,
+                &receivers,
+                config.alg,
+                &unmasked_key_transcript,
+                rng,
+            );
+
+            check_size(
+                "kappa_unmasked",
+                quadruple.kappa_unmasked(),
+                config.kappa_unmasked,
+            );
+            check_size(
+                "lambda_masked",
+                quadruple.lambda_masked(),
+                config.lambda_masked,
+            );
+            check_size(
+                "kappa_times_lambda",
+                quadruple.kappa_times_lambda(),
+                config.kappa_times_lambda,
+            );
+            check_size(
+                "key_times_lambda",
+                quadruple.key_times_lambda(),
+                config.key_times_lambda,
+            );
+        }
+    }
+
+    #[test]
     fn should_fail_to_create_dealing_when_reshared_unmasked_key_transcript_not_retained() {
         let rng = &mut reproducible_rng();
 
@@ -3498,7 +3733,7 @@ mod verify_initial_dealings {
         }
     }
 
-    fn generate_initial_dealings<R: RngCore + CryptoRng>(
+    pub(crate) fn generate_initial_dealings<R: RngCore + CryptoRng>(
         alg: AlgorithmId,
         registry_version: RegistryVersion,
         source_subnet_nodes: Nodes,
