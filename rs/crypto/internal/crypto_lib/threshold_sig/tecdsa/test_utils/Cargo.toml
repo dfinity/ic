@@ -1,0 +1,11 @@
+[package]
+name = "ic-crypto-internal-threshold-sig-ecdsa-test-utils"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-crypto-internal-threshold-sig-ecdsa = { path = ".." }
+rand = "0.8"
