@@ -1,3 +1,4 @@
+use assert_matches::assert_matches;
 use candid::Encode;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ic00_types::CanisterInstallMode;
@@ -60,10 +61,11 @@ fn upgrade_canister() {
             .command
             .expect("Making NNS proposal failed");
 
-    assert_eq!(
+    assert_matches!(
         response,
         Command::MakeProposal(MakeProposalResponse {
-            proposal_id: Some(ic_nns_common::pb::v1::ProposalId { id: 1 })
+            proposal_id: Some(ic_nns_common::pb::v1::ProposalId { id: 1 }),
+            ..
         })
     );
 

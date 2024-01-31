@@ -126,8 +126,12 @@ pub fn exec(args: ProposeArgs) {
     match result {
         Ok(MakeProposalResponse {
             proposal_id: Some(proposal_id),
+            message,
         }) => {
             println!("🚀 Success!");
+            if let Some(message) = message {
+                println!("Message from NNS governance: {:?}", message);
+            }
             if network == "ic" {
                 println!("View the proposal here:");
                 println!(

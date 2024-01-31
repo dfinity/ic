@@ -288,7 +288,10 @@ type ListProposalInfo = record {
   include_status : vec int32;
 };
 type ListProposalInfoResponse = record { proposal_info : vec ProposalInfo };
-type MakeProposalResponse = record { proposal_id : opt NeuronId };
+type MakeProposalResponse = record {
+  message : opt text;
+  proposal_id : opt NeuronId;
+};
 type MakingSnsProposal = record {
   proposal : opt Proposal;
   caller : opt principal;

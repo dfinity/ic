@@ -980,6 +980,7 @@ pub fn nns_propose_upgrade_nns_canister(
                 Some(nns_governance_pb::manage_neuron_response::Command::MakeProposal(
                     nns_governance_pb::manage_neuron_response::MakeProposalResponse {
                         proposal_id: Some(proposal_id),
+                        ..
                     },
                 )),
         } => proposal_id,

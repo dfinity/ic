@@ -1081,6 +1081,7 @@ message ManageNeuronResponse {
   message MakeProposalResponse {
     // The ID of the created proposal
     ic_nns_common.pb.v1.ProposalId proposal_id = 1;
+    optional string message = 2;
   }
 
   message RegisterVoteResponse {}
