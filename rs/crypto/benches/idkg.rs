@@ -58,14 +58,13 @@ fn crypto_idkg_benchmarks(criterion: &mut Criterion) {
                 bench_create_dealing(group, &test_case, mode, vault_type, rng);
                 bench_verify_dealing_private(group, &test_case, mode, vault_type, rng);
                 bench_load_transcript(group, &test_case, mode, vault_type, rng);
+                if test_case.num_of_nodes >= mode.min_subnet_size_for_complaint() {
+                    bench_open_transcript(group, &test_case, mode, vault_type, rng);
+                    bench_load_transcript_with_openings(group, &test_case, mode, vault_type, rng);
+                }
             }
 
             bench_retain_active_transcripts(group, &test_case, 1, vault_type, rng);
-
-            if test_case.num_of_nodes >= IDkgMode::Random.min_subnet_size_for_complaint() {
-                bench_open_transcript(group, &test_case, vault_type, rng);
-                bench_load_transcript_with_openings(group, &test_case, vault_type, rng);
-            }
 
             // The following benchmarks are not affected by the choice of the
             // vault, we benchmark them only once with the default vault type.
@@ -74,14 +73,13 @@ fn crypto_idkg_benchmarks(criterion: &mut Criterion) {
                     bench_verify_dealing_public(group, &test_case, mode, vault_type, rng);
                     bench_create_transcript(group, &test_case, mode, vault_type, rng);
                     bench_verify_transcript(group, &test_case, mode, vault_type, rng);
+                    if test_case.num_of_nodes >= mode.min_subnet_size_for_complaint() {
+                        bench_verify_complaint(group, &test_case, mode, vault_type, rng);
+                        bench_verify_opening(group, &test_case, mode, vault_type, rng);
+                    }
                 }
 
                 bench_verify_initial_dealings(group, &test_case, vault_type, rng);
-
-                if test_case.num_of_nodes >= IDkgMode::Random.min_subnet_size_for_complaint() {
-                    bench_verify_complaint(group, &test_case, vault_type, rng);
-                    bench_verify_opening(group, &test_case, vault_type, rng);
-                }
             }
         }
     }
@@ -390,13 +388,14 @@ fn bench_retain_active_transcripts<M: Measurement, R: RngCore + CryptoRng>(
 fn bench_verify_complaint<M: Measurement, R: RngCore + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
+    mode: IDkgMode,
     vault_type: VaultType,
     rng: &mut R,
 ) {
     let env = test_case.new_test_environment(vault_type, rng);
-    let context = IDkgModeTestContext::new_for_complaint(IDkgMode::Random, &env, rng);
+    let context = IDkgModeTestContext::new_for_complaint(mode, &env, rng);
 
-    group.bench_function("verify_complaint_random", |bench| {
+    group.bench_function(format!("verify_complaint_{mode}"), |bench| {
         bench.iter_batched_ref(
             || context.setup_outputs_for_complaint(&env, test_case.alg, rng),
             |complaint_context| {
@@ -418,13 +417,14 @@ fn bench_verify_complaint<M: Measurement, R: RngCore + CryptoRng>(
 fn bench_open_transcript<M: Measurement, R: RngCore + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
+    mode: IDkgMode,
     vault_type: VaultType,
     rng: &mut R,
 ) {
     let env = test_case.new_test_environment(vault_type, rng);
-    let context = IDkgModeTestContext::new_for_complaint(IDkgMode::Random, &env, rng);
+    let context = IDkgModeTestContext::new_for_complaint(mode, &env, rng);
 
-    group.bench_function("open_transcript_random", |bench| {
+    group.bench_function(format!("open_transcript_{mode}"), |bench| {
         bench.iter_batched_ref(
             || {
                 let complaint_context =
@@ -457,13 +457,14 @@ fn bench_open_transcript<M: Measurement, R: RngCore + CryptoRng>(
 fn bench_verify_opening<M: Measurement, R: RngCore + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
+    mode: IDkgMode,
     vault_type: VaultType,
     rng: &mut R,
 ) {
     let env = test_case.new_test_environment(vault_type, rng);
-    let context = IDkgModeTestContext::new_for_complaint(IDkgMode::Random, &env, rng);
+    let context = IDkgModeTestContext::new_for_complaint(mode, &env, rng);
 
-    group.bench_function("verify_opening_random", |bench| {
+    group.bench_function(format!("verify_opening_{mode}"), |bench| {
         bench.iter_batched_ref(
             || {
                 let complaint_context =
@@ -497,13 +498,14 @@ fn bench_verify_opening<M: Measurement, R: RngCore + CryptoRng>(
 fn bench_load_transcript_with_openings<M: Measurement, R: RngCore + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
+    mode: IDkgMode,
     vault_type: VaultType,
     rng: &mut R,
 ) {
     let env = test_case.new_test_environment(vault_type, rng);
-    let context = IDkgModeTestContext::new_for_complaint(IDkgMode::Random, &env, rng);
+    let context = IDkgModeTestContext::new_for_complaint(mode, &env, rng);
 
-    group.bench_function("load_transcript_with_openings_random", |bench| {
+    group.bench_function(format!("load_transcript_with_openings_{mode}"), |bench| {
         bench.iter_batched_ref(
             || {
                 let complaint_context =
