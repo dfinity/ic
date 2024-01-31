@@ -1041,8 +1041,7 @@ mod test {
                     lambda_masked_ref: masked_transcript_1,
                     kappa_times_lambda_ref: masked_transcript_1,
                     key_times_lambda_ref: masked_transcript_1,
-                    //TODO(CON-1193): change to `transcript_ref_0`
-                    key_unmasked_ref: None,
+                    key_unmasked_ref: Some(transcript_ref_0),
                 },
             );
         }
