@@ -45,6 +45,7 @@ fn get_hostos_version() -> Response {
     Ok(Payload::HostOSVersion(version))
 }
 
+// HostOSVsockVersion command used for backwards compatibility
 fn get_hostos_vsock_version() -> Response {
     Ok(Payload::HostOSVsockVersion(VSOCK_VERSION))
 }
