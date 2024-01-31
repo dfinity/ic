@@ -468,16 +468,12 @@ impl Firewall {
             "Checking for firewall config registry version: {}", registry_version
         );
 
-        match self.check_for_firewall_config(registry_version).await {
-            Ok(()) => self
-                .metrics
-                .datacenter_registry_version
-                .set(registry_version.get() as i64),
-            Err(e) => info!(
+        if let Err(e) = self.check_for_firewall_config(registry_version).await {
+            info!(
                 self.logger,
                 "Failed to check for firewall config at version {}: {}", registry_version, e
-            ),
-        };
+            )
+        }
     }
 
     pub fn get_last_applied_version(&self) -> Arc<RwLock<RegistryVersion>> {
