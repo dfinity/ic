@@ -108,6 +108,13 @@ RUN systemctl enable \
     systemd-resolved \
     systemd-journal-gatewayd
 
+RUN systemctl disable \
+    apt-daily.service \
+    apt-daily.timer \
+    apt-daily-upgrade.service \
+    apt-daily-upgrade.timer \
+    motd-news.service
+
 # Add user/group entries specified here: /usr/lib/sysusers.d/systemd.conf E.g., systemd-timesync/coredump. 
 ## `systemd-sysusers` does not honor the SOURCE_DATE_EPOCH env var. 
 ## With `podman --timestamp=0` each file gets written with timestamp of the Unix epoch. 
