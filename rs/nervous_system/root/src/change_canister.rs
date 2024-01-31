@@ -98,8 +98,6 @@ impl ChangeCanisterRequest {
         mode: CanisterInstallMode,
         canister_id: CanisterId,
     ) -> Self {
-        let default_memory_allocation = 1_u64 << 30;
-
         Self {
             stop_before_installing,
             mode,
@@ -107,7 +105,7 @@ impl ChangeCanisterRequest {
             wasm_module: Vec::new(),
             arg: Encode!().unwrap(),
             compute_allocation: None,
-            memory_allocation: Some(candid::Nat::from(default_memory_allocation)),
+            memory_allocation: None,
             query_allocation: None,
         }
     }
