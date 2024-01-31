@@ -14,9 +14,10 @@ use ic_crypto_test_utils_canister_threshold_sigs::{
     IDkgParticipants, IntoBuilder,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_ic00_types::EcdsaKeyId;
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaPool};
-use ic_interfaces_state_manager::Labeled;
+use ic_interfaces_state_manager::{CertifiedStateSnapshot, Labeled};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
@@ -27,6 +28,7 @@ use ic_test_utilities::types::ids::{node_test_id, NODE_1, NODE_2};
 use ic_test_utilities::types::messages::RequestBuilder;
 use ic_test_utilities_time::mock_time;
 use ic_types::artifact::EcdsaMessageId;
+use ic_types::consensus::certification::Certification;
 use ic_types::consensus::ecdsa::{
     self, EcdsaArtifactId, EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent,
     EcdsaKeyTranscript, EcdsaMessage, EcdsaOpening, EcdsaOpeningContent, EcdsaPayload,
@@ -110,10 +112,30 @@ pub fn fake_sign_with_ecdsa_context_with_quadruple(
     (CallbackId::from(id as u64), context)
 }
 
-pub fn fake_state_with_ecdsa_contexts(
+pub fn fake_completed_sign_with_ecdsa_context(
+    id: u8,
+    quadruple_id: QuadrupleId,
+) -> (CallbackId, SignWithEcdsaContext) {
+    let context = SignWithEcdsaContext {
+        request: RequestBuilder::new().build(),
+        message_hash: [0; 32],
+        derivation_path: vec![],
+        batch_time: mock_time(),
+        key_id: quadruple_id.key_id().unwrap().clone(),
+        pseudo_random_id: [id; 32],
+        matched_quadruple: Some((quadruple_id, Height::from(1))),
+        nonce: Some([0; 32]),
+    };
+    (CallbackId::from(id as u64), context)
+}
+
+pub fn fake_state_with_ecdsa_contexts<T>(
     height: Height,
-    contexts: Vec<(CallbackId, SignWithEcdsaContext)>,
-) -> Labeled<Arc<ReplicatedState>> {
+    contexts: T,
+) -> Labeled<Arc<ReplicatedState>>
+where
+    T: IntoIterator<Item = (CallbackId, SignWithEcdsaContext)>,
+{
     let mut state = ReplicatedStateBuilder::default().build();
     state
         .metadata
@@ -520,6 +542,31 @@ impl EcdsaSignatureBuilder for TestEcdsaSignatureBuilder {
         request_id: &RequestId,
     ) -> Option<ThresholdEcdsaCombinedSignature> {
         self.signatures.get(request_id).cloned()
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct FakeCertifiedStateSnapshot {
+    pub height: Height,
+    pub state: Arc<ReplicatedState>,
+}
+
+impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {
+    type State = ReplicatedState;
+
+    fn get_state(&self) -> &Self::State {
+        &self.state
+    }
+
+    fn get_height(&self) -> Height {
+        self.height
+    }
+
+    fn read_certified_state(
+        &self,
+        _paths: &LabeledTree<()>,
+    ) -> Option<(MixedHashTree, Certification)> {
+        None
     }
 }
 

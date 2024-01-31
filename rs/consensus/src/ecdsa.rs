@@ -190,6 +190,7 @@ use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
+use ic_types::consensus::ecdsa::ECDSA_IMPROVED_LATENCY;
 use ic_types::crypto::canister_threshold_sig::error::IDkgRetainKeysError;
 use ic_types::{
     artifact::{EcdsaMessageId, Priority, PriorityFn},
@@ -220,6 +221,8 @@ pub use payload_builder::make_bootstrap_summary;
 pub(crate) use payload_builder::{create_data_payload, create_summary_payload};
 pub(crate) use payload_verifier::{validate_payload, PermanentError, TransientError};
 pub use stats::EcdsaStatsImpl;
+
+use self::utils::get_context_request_id;
 
 /// Similar to consensus, we don't fetch artifacts too far ahead in future.
 const LOOK_AHEAD: u64 = 10;
@@ -458,7 +461,7 @@ struct EcdsaPriorityFnArgs {
 
 impl EcdsaPriorityFnArgs {
     fn new(
-        block_reader: &EcdsaBlockReaderImpl,
+        block_reader: &dyn EcdsaBlockReader,
         state_reader: &dyn StateReader<State = ReplicatedState>,
     ) -> Self {
         let mut requested_transcripts = BTreeSet::new();
@@ -466,39 +469,34 @@ impl EcdsaPriorityFnArgs {
             requested_transcripts.insert(params.transcript_id);
         }
 
-        let mut requested_signatures = BTreeSet::new();
-        for (request_id, _) in block_reader.requested_signatures() {
-            requested_signatures.insert(request_id.clone());
-        }
-
         let mut active_transcripts = BTreeSet::new();
         for transcript_ref in block_reader.active_transcripts() {
             active_transcripts.insert(transcript_ref.transcript_id);
         }
 
-        let (certified_height, _) =
-            state_reader
-                .get_certified_state_snapshot()
-                .map_or(Default::default(), |snapshot| {
-                    let certified_height = snapshot.get_height();
-                    let requested_signatures = snapshot
-                        .get_state()
-                        .sign_with_ecdsa_contexts()
-                        .values()
-                        .flat_map(|context| {
-                            context
-                                .matched_quadruple
-                                .clone()
-                                .map(|(quadruple_id, height)| RequestId {
-                                    quadruple_id,
-                                    pseudo_random_id: context.pseudo_random_id,
-                                    height,
-                                })
-                        })
-                        .collect::<BTreeSet<_>>();
+        let (certified_height, request_contexts) = state_reader
+            .get_certified_state_snapshot()
+            .map_or(Default::default(), |snapshot| {
+                let request_contexts = snapshot
+                    .get_state()
+                    .sign_with_ecdsa_contexts()
+                    .values()
+                    .flat_map(get_context_request_id)
+                    .collect::<BTreeSet<_>>();
 
-                    (certified_height, requested_signatures)
-                });
+                (snapshot.get_height(), request_contexts)
+            });
+
+        let requested_signatures = if ECDSA_IMPROVED_LATENCY {
+            request_contexts
+        } else {
+            BTreeSet::from_iter(
+                block_reader
+                    .requested_signatures()
+                    .map(|(request_id, _)| request_id)
+                    .cloned(),
+            )
+        };
 
         Self {
             finalized_height: block_reader.tip_height(),
@@ -558,6 +556,23 @@ fn compute_priority(
                 Priority::Stash
             }
         }
+        EcdsaMessageAttribute::EcdsaSigShare(request_id) if ECDSA_IMPROVED_LATENCY => {
+            if request_id.height <= args.certified_height {
+                if args.requested_signatures.contains(request_id) {
+                    Priority::Fetch
+                } else {
+                    metrics
+                        .dropped_adverts
+                        .with_label_values(&[attr.as_str()])
+                        .inc();
+                    Priority::Drop
+                }
+            } else if request_id.height < args.certified_height + Height::from(LOOK_AHEAD) {
+                Priority::Fetch
+            } else {
+                Priority::Stash
+            }
+        }
         EcdsaMessageAttribute::EcdsaSigShare(request_id) => {
             if request_id.height <= args.finalized_height {
                 if args.requested_signatures.contains(request_id) {
@@ -601,11 +616,62 @@ fn compute_priority(
 
 #[cfg(test)]
 mod tests {
+    use self::test_utils::{
+        fake_completed_sign_with_ecdsa_context, fake_sign_with_ecdsa_context_with_quadruple,
+        fake_state_with_ecdsa_contexts, FakeCertifiedStateSnapshot, TestEcdsaBlockReader,
+    };
+
     use super::test_utils::fake_ecdsa_key_id;
     use super::*;
-    use ic_types::consensus::ecdsa::EcdsaUIDGenerator;
+    use ic_test_utilities::state_manager::RefMockStateManager;
+    use ic_types::consensus::ecdsa::{EcdsaUIDGenerator, QuadrupleId};
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
     use ic_types::{consensus::ecdsa::RequestId, PrincipalId, SubnetId};
+    use tests::test_utils::create_sig_inputs;
+
+    #[test]
+    fn test_ecdsa_priority_fn_args() {
+        let state_manager = Arc::new(RefMockStateManager::default());
+        let height = Height::from(100);
+        let key_id = fake_ecdsa_key_id();
+        // Add two contexts to state, one with, and one without quadruple
+        let quadruple_id = QuadrupleId(0, Some(key_id.clone()));
+        let context_with_quadruple =
+            fake_completed_sign_with_ecdsa_context(0, quadruple_id.clone());
+        let context_without_quadruple =
+            fake_sign_with_ecdsa_context_with_quadruple(1, key_id.clone(), None);
+        let state = fake_state_with_ecdsa_contexts(
+            height,
+            [
+                context_with_quadruple.clone(),
+                context_without_quadruple.clone(),
+            ],
+        )
+        .take();
+        let snapshot = Box::new(FakeCertifiedStateSnapshot { height, state });
+        state_manager
+            .get_mut()
+            .expect_get_certified_state_snapshot()
+            .returning(move || Some(snapshot.clone() as Box<_>));
+
+        let expected_request_id = get_context_request_id(&context_with_quadruple.1).unwrap();
+        assert_eq!(expected_request_id.pseudo_random_id, [0; 32]);
+        assert_eq!(expected_request_id.quadruple_id, quadruple_id);
+
+        let block_reader = TestEcdsaBlockReader::for_signer_test(
+            height,
+            vec![(expected_request_id.clone(), create_sig_inputs(0))],
+        );
+
+        // Only the context with matched quadruple should be in "requested"
+        let args = EcdsaPriorityFnArgs::new(&block_reader, state_manager.as_ref());
+        assert_eq!(args.certified_height, height);
+        assert_eq!(args.requested_signatures.len(), 1);
+        assert_eq!(
+            args.requested_signatures.first().unwrap(),
+            &expected_request_id
+        );
+    }
 
     // Tests the priority computation for dealings/support.
     #[test]

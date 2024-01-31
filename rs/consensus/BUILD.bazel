@@ -42,6 +42,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/temp_crypto",
     "//rs/crypto/test_utils/ni-dkg",
     "//rs/crypto/test_utils/reproducible_rng",
+    "//rs/crypto/tree_hash",
     "//rs/execution_environment",
     "//rs/ingress_manager",
     "//rs/interfaces/certified_stream_store",
