@@ -695,6 +695,7 @@ impl ExecutionEnvironment {
                                         induction_cost,
                                         registry_settings.subnet_size,
                                         CyclesUseCase::IngressInduction,
+                                        false, // we ignore the error anyway => no need to reveal top up balance
                                     );
                                 }
                             }
@@ -1841,6 +1842,9 @@ impl ExecutionEnvironment {
 
             if let IngressInductionCost::Fee { payer, cost } = induction_cost {
                 let paying_canister = canister(payer)?;
+                let reveal_top_up = paying_canister
+                    .controllers()
+                    .contains(&ingress.sender().get());
                 if let Err(err) = self.cycles_account_manager.can_withdraw_cycles(
                     &paying_canister.system_state,
                     cost,
@@ -1848,6 +1852,7 @@ impl ExecutionEnvironment {
                     paying_canister.message_memory_usage(),
                     paying_canister.scheduler_state.compute_allocation,
                     subnet_size,
+                    reveal_top_up,
                 ) {
                     return Err(UserError::new(
                         ErrorCode::CanisterOutOfCycles,

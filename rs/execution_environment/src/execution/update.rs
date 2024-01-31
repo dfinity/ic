@@ -51,6 +51,10 @@ pub fn execute_update(
                 let mut canister = clean_canister;
                 let memory_usage = canister.memory_usage();
                 let message_memory_usage = canister.message_memory_usage();
+                let reveal_top_up = call_or_task
+                    .caller()
+                    .map(|caller| canister.controllers().contains(&caller))
+                    .unwrap_or_default();
                 let prepaid_execution_cycles =
                     match round.cycles_account_manager.prepay_execution_cycles(
                         &mut canister.system_state,
@@ -59,6 +63,7 @@ pub fn execute_update(
                         execution_parameters.compute_allocation,
                         execution_parameters.instruction_limits.message(),
                         subnet_size,
+                        reveal_top_up,
                     ) {
                         Ok(cycles) => cycles,
                         Err(err) => {
@@ -371,12 +376,17 @@ impl UpdateHelper {
         if let Some(state_changes) = &canister_state_changes {
             let old_balance = self.canister.system_state.balance();
             let requested = state_changes.system_state_changes.removed_cycles();
+            let reveal_top_up = self
+                .canister
+                .controllers()
+                .contains(&original.call_origin.get_principal());
             if old_balance < requested + original.freezing_threshold {
                 let err = CanisterOutOfCyclesError {
                     canister_id: self.canister.canister_id(),
                     available: old_balance,
                     requested,
                     threshold: original.freezing_threshold,
+                    reveal_top_up,
                 };
                 let err = UserError::new(ErrorCode::CanisterOutOfCycles, err);
                 info!(

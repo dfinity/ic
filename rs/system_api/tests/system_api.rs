@@ -1093,6 +1093,7 @@ fn test_fail_add_cycles_when_not_enough_balance() {
             available: cycles_amount,
             threshold: Cycles::zero(),
             requested: amount,
+            reveal_top_up: false,
         })
     );
     //Check cycles balance after call_add_cycles.
@@ -1142,6 +1143,7 @@ fn test_fail_adding_more_cycles_when_not_enough_balance() {
             available: Cycles::from(cycles_amount - amount),
             threshold: Cycles::zero(),
             requested: Cycles::from(amount),
+            reveal_top_up: false,
         })
     );
     // Balance unchanged after the second call_add_cycles.

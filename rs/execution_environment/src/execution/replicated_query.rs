@@ -41,6 +41,7 @@ pub fn execute_replicated_query(
     let message_memory_usage = canister.message_memory_usage();
     let compute_allocation = canister.scheduler_state.compute_allocation;
 
+    let reveal_top_up = canister.controllers().contains(req.sender());
     let prepaid_execution_cycles = match round.cycles_account_manager.prepay_execution_cycles(
         &mut canister.system_state,
         memory_usage,
@@ -48,6 +49,7 @@ pub fn execute_replicated_query(
         compute_allocation,
         instruction_limit,
         subnet_size,
+        reveal_top_up,
     ) {
         Ok(cycles) => cycles,
         Err(err) => {

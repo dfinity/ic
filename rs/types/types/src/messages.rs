@@ -468,6 +468,13 @@ impl CanisterCallOrTask {
             CanisterCallOrTask::Task(_) => Cycles::zero(),
         }
     }
+
+    pub fn caller(&self) -> Option<PrincipalId> {
+        match self {
+            CanisterCallOrTask::Call(msg) => Some(*msg.sender()),
+            CanisterCallOrTask::Task(_) => None,
+        }
+    }
 }
 
 #[cfg(test)]

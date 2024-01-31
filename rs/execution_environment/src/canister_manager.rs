@@ -941,6 +941,7 @@ impl CanisterManager {
             None => {
                 let memory_usage = canister.memory_usage();
                 let message_memory_usage = canister.message_memory_usage();
+                let reveal_top_up = canister.controllers().contains(message.sender());
                 match self.cycles_account_manager.prepay_execution_cycles(
                     &mut canister.system_state,
                     memory_usage,
@@ -948,6 +949,7 @@ impl CanisterManager {
                     execution_parameters.compute_allocation,
                     execution_parameters.instruction_limits.message(),
                     subnet_size,
+                    reveal_top_up,
                 ) {
                     Ok(cycles) => cycles,
                     Err(err) => {
@@ -1613,6 +1615,7 @@ impl CanisterManager {
         let current_memory_usage = canister.memory_usage();
         let message_memory = canister.message_memory_usage();
         let compute_allocation = canister.compute_allocation();
+        let reveal_top_up = canister.controllers().contains(&sender);
         // Charge for the upload.
         let prepaid_cycles = self
             .cycles_account_manager
@@ -1623,6 +1626,7 @@ impl CanisterManager {
                 compute_allocation,
                 instructions,
                 subnet_size,
+                reveal_top_up,
             )
             .map_err(|err| CanisterManagerError::WasmChunkStoreError {
                 message: format!("Error charging for 'upload_chunk': {}", err),
