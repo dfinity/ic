@@ -6,6 +6,7 @@ package(default_visibility = ["//visibility:public"])
 system_test(
     name = "rosetta_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = ["experimental_system_test_colocation"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "moderate",
     runtime_deps =
