@@ -13,10 +13,10 @@
         listening_port: 4100,
     },
 
-    // ============================================
-    // Configuration of IPv4 networking
-    // ============================================
-    ipv4_config: {
+    // =========================================================
+    // Configuration of IPv4 networking (provided at first boot)
+    // =========================================================
+    initial_ipv4_config: {
         public_address: "{{ ipv4_address }}",
         public_gateway: "{{ ipv4_gateway }}",
     },

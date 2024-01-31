@@ -8,7 +8,7 @@ use candid::Encode;
 use ic_canister_client::{Agent, Sender};
 use ic_config::{
     http_handler::Config as HttpConfig,
-    ipv4_config::IPv4Config,
+    initial_ipv4_config::IPv4Config,
     message_routing::Config as MsgRoutingConfig,
     metrics::{Config as MetricsConfig, Exporter},
     transport::TransportConfig,
@@ -213,7 +213,10 @@ impl NodeRegistration {
             p2p_flow_endpoints: vec![],
             chip_id: get_snp_chip_id().expect("Failed to retrieve chip_id from snp firmware"),
             prometheus_metrics_endpoint: "".to_string(),
-            public_ipv4_config: ipv4_config_to_vec(&self.log, &self.node_config.ipv4_config),
+            public_ipv4_config: ipv4_config_to_vec(
+                &self.log,
+                &self.node_config.initial_ipv4_config,
+            ),
             domain: process_domain_name(&self.log, &self.node_config.domain)
                 .expect("Domain name is invalid"),
         }
