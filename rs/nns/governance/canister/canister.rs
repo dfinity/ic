@@ -881,21 +881,24 @@ fn update_node_provider_(req: UpdateNodeProvider) -> Result<(), GovernanceError>
     governance_mut().update_node_provider(&caller(), req)
 }
 
-/// TODO[NNS1-2617]: Deprecate this function.
 #[export_name = "canister_update settle_community_fund_participation"]
 fn settle_community_fund_participation() {
     debug_log("settle_community_fund_participation");
     over_async(candid_one, settle_community_fund_participation_)
 }
 
-/// TODO[NNS1-2617]: Deprecate this function.
+/// Obsolete, so always returns an error. Please use `settle_neurons_fund_participation`
+/// instead.
 #[candid_method(update, rename = "settle_community_fund_participation")]
 async fn settle_community_fund_participation_(
-    request: SettleCommunityFundParticipation,
+    _request: SettleCommunityFundParticipation,
 ) -> Result<(), GovernanceError> {
-    governance_mut()
-        .settle_community_fund_participation(caller(), &request)
-        .await
+    Err(GovernanceError::new_with_message(
+        ErrorType::Unavailable,
+        "settle_community_fund_participation is obsolete; please \
+        use settle_neurons_fund_participation instead."
+            .to_string(),
+    ))
 }
 
 #[export_name = "canister_update settle_neurons_fund_participation"]

@@ -50,7 +50,7 @@ use ic_nns_governance::{
         manage_neuron::Command,
         proposal::Action,
         AddOrRemoveNodeProvider, CreateServiceNervousSystem, GovernanceError, ManageNeuron,
-        NnsFunction, NodeProvider, OpenSnsTokenSwap, Proposal, RewardNodeProviders,
+        NnsFunction, NodeProvider, Proposal, RewardNodeProviders,
     },
     proposals::proposal_submission::{
         create_external_update_proposal_candid, create_make_proposal_payload,
@@ -108,7 +108,6 @@ use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures, DEFAULT_ECDSA_MAX
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::Error;
 use ic_sns_init::pb::v1::SnsInitPayload; // To validate CreateServiceNervousSystem.
-use ic_sns_swap::pb::v1::NeuronBasketConstructionParameters;
 use ic_sns_wasm::pb::v1::{
     AddWasmRequest, InsertUpgradePathEntriesRequest, PrettySnsVersion, SnsCanisterType, SnsUpgrade,
     SnsVersion, SnsWasm, UpdateAllowedPrincipalsRequest, UpdateSnsSubnetListRequest,
@@ -437,7 +436,8 @@ enum SubCommand {
     ProposeToUpdateSnsSubnetIdsInSnsWasm(ProposeToUpdateSnsSubnetIdsInSnsWasmCmd),
     /// Propose to update the list of Principals that are allowed to deploy SNS instances
     ProposeToUpdateSnsDeployWhitelist(ProposeToUpdateSnsDeployWhitelistCmd),
-    /// Propose to start a decentralization sale
+    /// Propose to start a decentralization swap. This subcommand is obsolete; please use
+    /// `ProposeToCreateServiceNervousSystem` instead.
     ProposeToOpenSnsTokenSwap(ProposeToOpenSnsTokenSwap),
     /// Propose to set the Bitcoin configuration
     ProposeToSetBitcoinConfig(ProposeToSetBitcoinConfig),
@@ -2393,159 +2393,10 @@ struct ProposeToUpdateSnsDeployWhitelistCmd {
     pub removed_principals: Vec<PrincipalId>,
 }
 
+/// Obsolete; please use `CreateServiceNervousSystem` instead.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser, Clone)]
-struct ProposeToOpenSnsTokenSwap {
-    #[clap(long)]
-    /// The swap canister of the SNS up for sale
-    target_swap_canister_id: PrincipalId,
-
-    #[clap(long)]
-    /// The minimum number of investors needed for the sale to succeed.
-    min_participants: u32,
-
-    #[clap(long)]
-    /// The minimum ICP e8s that must be invested, in total over all investors, for the sale to succeed.
-    ///
-    /// This is equivalent to the reserve price at auctions.
-    min_icp_e8s: u64,
-
-    #[clap(long)]
-    /// The maximum ICP e8s that may be invested, in total over all investors.  If this threshold is reached
-    /// then a decision will be made immediately about whether the sale has succeeded, rather than waiting
-    /// for the specified sale end time.
-    ///
-    /// This is comparable to the "buy now" price at auctions.
-    max_icp_e8s: u64,
-
-    #[clap(long)]
-    /// The minimum ICP e8s that any one investor may contribute.
-    ///
-    /// If the level is too low you the value of the neuron may be dwarfed by trivialities such as transaction fees.
-    min_participant_icp_e8s: u64,
-
-    #[clap(long)]
-    /// The maximum ICP e8s that any one investor may contribute.
-    ///
-    /// A low level will limit the power of any one investor and improve decentralisation but may reduce
-    /// the funds committed to the sale.
-    ///
-    /// A high level may allow a small number of large investors to take control of the dapp and render
-    /// the decentralisation meaningless.
-    max_participant_icp_e8s: u64,
-
-    #[clap(long)]
-    /// The time, in seconds since 1 Jan 1970, at which the sale is closed if it has not already reached
-    /// its funding limit.
-    swap_due_timestamp_seconds: u64,
-
-    #[clap(long)]
-    /// The number of project tokens offered for sale.
-    ///
-    /// Note that the units are e8s, so 100_000_000 corresponds to a single project token.
-    sns_token_e8s: u64,
-
-    #[clap(long)]
-    /// The number of neurons each investor will receive after the
-    /// decentralization swap. The total tokens swapped for will be
-    /// evenly distributed across the `count` neurons.
-    neuron_basket_count: u64,
-
-    #[clap(long)]
-    /// The interval in seconds that the dissolve delay of each neuron in the
-    /// basket will be increased by. The 0th neuron created will have its dissolve
-    /// delay set to 0, and each subsequent neuron will have a dissolve delay
-    /// calculated by:
-    /// `(i * dissolve_delay_interval_seconds) + rand(0..dissolve_delay_interval_seconds)`
-    neuron_basket_dissolve_delay_interval_seconds: u64,
-
-    #[clap(long)]
-    /// The amount that the community fund will collectively spend in maturity on
-    /// the swap.
-    community_fund_investment_e8s: Option<u64>,
-
-    #[clap(long)]
-    /// An optional delay, so that the actual sale does not get opened immediately
-    /// after the adoption of the sale proposal.
-    sale_delay_seconds: Option<u64>,
-}
-
-impl From<&ProposeToOpenSnsTokenSwap> for OpenSnsTokenSwap {
-    fn from(cli_proposal: &ProposeToOpenSnsTokenSwap) -> OpenSnsTokenSwap {
-        let min_direct_participation_icp_e8s =
-            cli_proposal
-                .community_fund_investment_e8s
-                .map(|community_fund_investment_e8s| {
-                    cli_proposal
-                        .min_participant_icp_e8s
-                        .checked_sub(community_fund_investment_e8s)
-                        .unwrap()
-                });
-        let max_direct_participation_icp_e8s =
-            cli_proposal
-                .community_fund_investment_e8s
-                .map(|community_fund_investment_e8s| {
-                    cli_proposal
-                        .max_participant_icp_e8s
-                        .checked_sub(community_fund_investment_e8s)
-                        .unwrap()
-                });
-
-        let ProposeToOpenSnsTokenSwap {
-            target_swap_canister_id,
-            min_participants,
-            min_icp_e8s,
-            max_icp_e8s,
-            min_participant_icp_e8s,
-            max_participant_icp_e8s,
-            swap_due_timestamp_seconds,
-            sns_token_e8s,
-            neuron_basket_count,
-            neuron_basket_dissolve_delay_interval_seconds,
-            community_fund_investment_e8s,
-            sale_delay_seconds,
-            // General proposal fields.  These are listed explicitly
-            // so that it is clear which fields we are not using.
-            proposer: _,
-            test_neuron_proposer: _,
-            proposal_url: _,
-            proposal_title: _,
-            summary: _,
-            summary_file: _,
-            dry_run: _,
-            json: _,
-        } = (*cli_proposal).clone();
-        OpenSnsTokenSwap {
-            target_swap_canister_id: Some(target_swap_canister_id),
-            params: Some(ic_sns_swap::pb::v1::Params {
-                min_participants,
-                min_icp_e8s,
-                max_icp_e8s,
-                min_direct_participation_icp_e8s,
-                max_direct_participation_icp_e8s,
-                min_participant_icp_e8s,
-                max_participant_icp_e8s,
-                swap_due_timestamp_seconds,
-                sns_token_e8s,
-                neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-                    count: neuron_basket_count,
-                    dissolve_delay_interval_seconds: neuron_basket_dissolve_delay_interval_seconds,
-                }),
-                sale_delay_seconds,
-            }),
-            community_fund_investment_e8s,
-        }
-    }
-}
-
-impl ProposalTitle for ProposeToOpenSnsTokenSwap {
-    fn title(&self) -> String {
-        match &self.proposal_title {
-            Some(title) => title.clone(),
-            None => "Open SNS Token swap".to_string(),
-        }
-    }
-}
+struct ProposeToOpenSnsTokenSwap {}
 
 impl ProposalTitle for ProposeToUpdateSnsDeployWhitelistCmd {
     fn title(&self) -> String {
@@ -4508,7 +4359,6 @@ async fn main() {
             SubCommand::ProposeXdrIcpConversionRate(_) => (),
             SubCommand::ProposeToUpdateSnsSubnetIdsInSnsWasm(_) => (),
             SubCommand::ProposeToUpdateSnsDeployWhitelist(_) => (),
-            SubCommand::ProposeToOpenSnsTokenSwap(_) => (),
             SubCommand::ProposeToInsertSnsWasmUpgradePathEntries(_) => (),
             SubCommand::ProposeToUpdateElectedHostosVersions(_) => (),
             SubCommand::ProposeToUpdateNodesHostosVersion(_) => (),
@@ -4517,6 +4367,10 @@ async fn main() {
             SubCommand::ProposeToAddApiBoundaryNode(_) => (),
             SubCommand::ProposeToRemoveApiBoundaryNodes(_) => (),
             SubCommand::ProposeToUpdateApiBoundaryNodesVersion(_) => (),
+            SubCommand::ProposeToOpenSnsTokenSwap(_) => panic!(
+                "Subcommand OpenSnsTokenSwap is obsolete; please use \
+                ProposeToCreateServiceNervousSystem instead"
+            ),
             _ => panic!(
                 "Specifying a secret key or HSM is only supported for \
                      methods that interact with NNS handlers."
@@ -5571,21 +5425,6 @@ async fn main() {
             )
             .await;
         }
-        SubCommand::ProposeToOpenSnsTokenSwap(cmd) => {
-            let (proposer, sender) =
-                get_proposer_and_sender(cmd.proposer, sender, cmd.test_neuron_proposer);
-            propose_to_open_sns_token_swap(
-                cmd,
-                make_canister_client(
-                    reachable_nns_urls,
-                    opts.verify_nns_responses,
-                    opts.nns_public_key_pem_file,
-                    sender,
-                ),
-                proposer,
-            )
-            .await;
-        }
         SubCommand::ProposeToInsertSnsWasmUpgradePathEntries(cmd) => {
             let (proposer, sender) =
                 get_proposer_and_sender(cmd.proposer, sender, cmd.test_neuron_proposer);
@@ -5747,6 +5586,9 @@ async fn main() {
                     .expect("Failed to serialize the records to JSON")
             );
         }
+        // Since we're matching on the `SubCommand` type the second time, this match doesn't have
+        // to be exhaustive, e.g., we've already verified that the subcommand is not obsolete.
+        _ => unreachable!(),
     }
 }
 
@@ -6493,75 +6335,6 @@ pub fn store_threshold_sig_pk<P: AsRef<Path>>(pk: &PublicKey, path: P) {
     let path = path.as_ref();
     std::fs::write(path, bytes)
         .unwrap_or_else(|e| panic!("failed to store public key to {}: {}", path.display(), e));
-}
-
-/// Submit a proposal to open a decentralized SNS dapp token swap
-async fn propose_to_open_sns_token_swap(
-    cmd: ProposeToOpenSnsTokenSwap,
-    agent: Agent,
-    proposer: NeuronId,
-) {
-    /// Make the proposal, capturing any errors.
-    async fn make_proposal(
-        cmd: ProposeToOpenSnsTokenSwap,
-        agent: Agent,
-        proposer: NeuronId,
-    ) -> anyhow::Result<Option<ProposalId>> {
-        let ProposeToOpenSnsTokenSwap { proposal_url, .. } = cmd.clone();
-        let canister_client = GovernanceCanisterClient(NnsCanisterClient::new(
-            agent,
-            GOVERNANCE_CANISTER_ID,
-            Some(proposer),
-        ));
-        let payload = OpenSnsTokenSwap::from(&cmd);
-        print_proposal(&payload, &cmd);
-
-        if cmd.is_dry_run() {
-            return Ok(None);
-        }
-
-        let title = cmd
-            .proposal_title
-            .clone()
-            .ok_or_else(|| anyhow!("Please specify a proposal title"))?;
-        let summary = cmd
-            .summary
-            .clone()
-            .ok_or_else(|| anyhow!("Please specify a proposal summary"))?;
-
-        let serialized = Encode!(&ManageNeuron {
-            id: Some((*canister_client.0.proposal_author()).into()),
-            neuron_id_or_subaccount: None,
-            command: Some(Command::MakeProposal(Box::new(Proposal {
-                title: Some(title),
-                summary,
-                url: parse_proposal_url(proposal_url),
-                action: Some(Action::OpenSnsTokenSwap(payload)),
-            }))),
-        })
-        .map_err(|e| {
-            anyhow!(
-                "Cannot candid-serialize the open_sns_token_swap_proposal payload: {}",
-                e
-            )
-        })?;
-        let response = canister_client
-            .0
-            .execute_update("manage_neuron", serialized)
-            .await
-            .map_err(|e| anyhow!("Proposal creation failed: {e}"))?
-            .ok_or_else(|| anyhow!("submit_proposal replied nothing."))?;
-
-        decode_make_proposal_response(response)
-            .map_err(|e| anyhow!("Failed to decode response: {e}"))
-            .map(Some)
-    }
-    if let Some(proposal_id) = make_proposal(cmd, agent, proposer)
-        .await
-        .expect("Failed to propose to open SNS token swap")
-    {
-        println!("{proposal_id}");
-    }
 }
 
 /// Submit a proposal to add a new node provider record

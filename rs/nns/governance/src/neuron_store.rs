@@ -617,20 +617,7 @@ impl NeuronStore {
             .collect()
     }
 
-    /// List all neuron ids that are in the community fund.
-    pub fn list_community_fund_neuron_ids(&self) -> Vec<NeuronId> {
-        let filter = |n: &Neuron| {
-            n.joined_community_fund_timestamp_seconds
-                .unwrap_or_default()
-                > 0
-        };
-        self.map_heap_neurons_filtered(filter, |n| n.id)
-            .into_iter()
-            .flatten()
-            .collect()
-    }
-
-    /// List all neuron ids that are in the community fund.
+    /// List all neuron ids that are in the Neurons' Fund.
     pub fn list_active_neurons_fund_neurons(&self) -> Vec<NeuronsFundNeuron> {
         let now = self.now();
         let filter = |n: &Neuron| {

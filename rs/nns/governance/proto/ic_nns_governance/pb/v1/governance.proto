@@ -2331,7 +2331,7 @@ message MostRecentMonthlyNodeProviderRewards {
 
 // TODO(NNS1-1589): Until the Jira ticket gets solved, changes here need to be
 // manually propagated to (sns) swap.proto.
-/// TODO[NNS1-2617]: Deprecate this message.
+// This message is obsolete; please use SettleNeuronsFundParticipation instead.
 message SettleCommunityFundParticipation {
   // The caller's principal ID must match the value in the
   // target_swap_canister_id field in the proposal (more precisely, in the
