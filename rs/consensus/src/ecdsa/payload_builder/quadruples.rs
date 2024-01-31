@@ -198,8 +198,7 @@ pub(super) fn update_quadruples_in_creation(
                     lambda_masked,
                     kappa_times_lambda,
                     key_times_lambda,
-                    //TODO(CON-1193) fill with key_transcript.unmasked_transcript(),
-                    None,
+                    Some(key_transcript.unmasked_transcript()),
                 ),
             );
         }

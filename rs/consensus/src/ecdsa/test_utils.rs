@@ -226,8 +226,7 @@ impl From<&ThresholdEcdsaSigInputs> for TestSigInputs {
                 .unwrap(),
                 key_times_lambda_ref: MaskedTranscript::try_from((height, quad.key_times_lambda()))
                     .unwrap(),
-                //TODO(CON-1193): fill with `key_transcript_ref` below
-                key_unmasked_ref: None,
+                key_unmasked_ref: Some(UnmaskedTranscript::try_from((height, key)).unwrap()),
             },
             key_transcript_ref: UnmaskedTranscript::try_from((height, key)).unwrap(),
         };
@@ -1046,8 +1045,7 @@ pub(crate) fn create_sig_inputs_with_args(
         lambda_masked_ref,
         kappa_unmasked_times_lambda_masked_ref,
         key_unmasked_times_lambda_masked_ref,
-        //TODO(CON-1193): fill with `key_unmasked_ref`
-        None,
+        Some(key_unmasked_ref),
     );
     let sig_inputs_ref = ThresholdEcdsaSigInputsRef::new(
         ExtendedDerivationPath {
