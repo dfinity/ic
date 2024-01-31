@@ -56,7 +56,7 @@ upgrade_nns_governance_to_test_version "${NNS_URL}" "${NEURON_ID}" "${PEM}"
 echo "$PERMUTATIONS" | while read -r ORDERING; do
 
     echo "Reset versions to mainnet" | tee -a "${LOG_FILE}"
-    reset_sns_w_versions_to_mainnet "$NNS_URL" "$NEURON_ID"
+    reset_sns_w_versions_to_mainnet "$NNS_URL" "$NEURON_ID" "$PEM"
 
     echo "Set SNS-W to mainnet version"
     MAINNET_VERSION_SNS_W=$(nns_canister_git_version "ic" "sns-wasm")

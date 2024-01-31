@@ -6,7 +6,7 @@ source "$NNS_TOOLS_DIR/lib/include.sh"
 
 help() {
     print_green "
-Usage: $0 <SNS_CANISTER_TYPE> <LAST_PUBLISHED_VERSION> <TARGET_VERSION> (<OUTPUT_FILE>)
+Usage: $0 <SNS_CANISTER_TYPE> <TARGET_VERSION> <LAST_PUBLISHED_VERSION> (<OUTPUT_FILE>)
   SNS_CANISTER_TYPE: Canister type to be published (root, governance, ledger, swap, archive, index)
   TARGET_VERSION: Git hash of new version to be published to production
   OUTPUT_FILE: File to write contents to (otherwise stdout is used)
