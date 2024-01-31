@@ -1,4 +1,4 @@
-= The ckETH Minter Canister +
+= ckETH +
 
 The ckETH minter canister converts ETH to ckETH and back, where ckETH is a token issued on the Internet Computer that is backed 1:1 by ETH.
 The minter works with a link:../../../rosetta-api/icrc1/README.md[Ledger Canister], handling the ckETH token transfers and with https://internetcomputer.org/https-outcalls[HTTP outcalls], to query multiple JSON-RPC providers to interact with the Ethereum blockchain.
@@ -269,11 +269,3 @@ a| Approval
 Set by `transfer_fee` decided in proposal https://dashboard.internetcomputer.org/proposal/126309[126309].
 | Approval with https://dashboard.internetcomputer.org/ethereum/transaction/3[ledger index 3]
 |===
-
-== History of Proposals
-
-. https://dashboard.internetcomputer.org/proposal/126171[126171]: install minter canister
-. https://dashboard.internetcomputer.org/proposal/126173[126173]: install index canister
-. https://dashboard.internetcomputer.org/proposal/126309[126309]: install ledger canister
-. https://dashboard.internetcomputer.org/proposal/126314[126314]: upgrade minter canister
-. https://dashboard.internetcomputer.org/proposal/126397[126397]: upgrade ledger canister

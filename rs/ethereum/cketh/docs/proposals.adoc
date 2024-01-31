@@ -1,0 +1,7 @@
+= History of Proposals
+
+. https://dashboard.internetcomputer.org/proposal/126171[126171]: install ckETH minter canister
+. https://dashboard.internetcomputer.org/proposal/126173[126173]: install ckETH index canister
+. https://dashboard.internetcomputer.org/proposal/126309[126309]: install ckETH ledger canister
+. https://dashboard.internetcomputer.org/proposal/126314[126314]: upgrade ckETH minter canister
+. https://dashboard.internetcomputer.org/proposal/126397[126397]: upgrade ckETH ledger canister
