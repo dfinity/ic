@@ -24,8 +24,10 @@ use crate::driver::{
     pot_dsl::{PotSetupFn, SysTestFn},
     test_env::{TestEnv, TestEnvAttribute},
     test_env_api::HasIcDependencies,
-    test_setup::{GroupSetup, InfraProvider},
+    test_setup::{GroupSetup, InfraProvider, TNetInfo},
 };
+use crate::k8s::tnet::TNet;
+use crate::util::block_on;
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -923,6 +925,9 @@ impl SystemTestGroup {
                     Self::delete_farm_group(group_ctx.clone());
                 }
                 if report.failure.is_empty() {
+                    if args.k8s {
+                        Self::delete_tnet(group_ctx.clone());
+                    }
                     Ok(Outcome::FromParentProcess(report))
                 } else {
                     bail!(SystemTestGroupError::SystemTestFailure(report))
@@ -963,6 +968,13 @@ impl SystemTestGroup {
         let farm = Farm::new(farm_url, env.logger());
         let group_name = group_setup.infra_group_name;
         farm.delete_group(&group_name);
+    }
+
+    fn delete_tnet(ctx: GroupContext) {
+        info!(ctx.log(), "Deleting k8s tnet.");
+        let env = ensure_setup_env(ctx);
+        let tnet_info = TNetInfo::read_attribute(&env);
+        block_on(TNet::delete(tnet_info.index)).expect("asdf");
     }
 }
 

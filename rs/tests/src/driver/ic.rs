@@ -5,7 +5,7 @@ use crate::driver::{
     resource::{allocate_resources, allocate_resources_k8s, get_resource_request, ResourceGroup},
     test_env::{TestEnv, TestEnvAttribute},
     test_env_api::{HasRegistryLocalStore, HasTopologySnapshot},
-    test_setup::{GroupSetup, InfraProvider},
+    test_setup::{GroupSetup, InfraProvider, TNetInfo},
 };
 use anyhow::Result;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
@@ -239,6 +239,7 @@ impl InternetComputer {
             &env.logger(),
             self.use_specified_ids_allocation_range,
         )?;
+        TNetInfo::new(tnet.index.unwrap()).write_attribute(env);
 
         // save initial registry snapshot for this pot
         let local_store_path = env
