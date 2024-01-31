@@ -133,6 +133,11 @@ type FirewallRulesScope = variant {
 type GetSubnetForCanisterRequest = record { "principal" : opt principal };
 type GetSubnetForCanisterResponse = record { subnet_id : opt principal };
 type Gps = record { latitude : float32; longitude : float32 };
+type IPv4Config = record {
+  prefix_length : nat32;
+  gateway_ip_addr : text;
+  ip_addr : text;
+};
 type NodeOperatorRecord = record {
   ipv6 : opt text;
   node_operator_principal_id : vec nat8;
@@ -224,10 +229,8 @@ type UpdateNodeDomainDirectlyPayload = record {
   domain : opt text;
 };
 type UpdateNodeIPv4ConfigDirectlyPayload = record {
+  ipv4_config : opt IPv4Config;
   node_id : principal;
-  gateway_ip_addrs : vec text;
-  prefix_length : nat32;
-  ip_addr : text;
 };
 type UpdateNodeOperatorConfigDirectlyPayload = record {
   node_operator_id : opt principal;

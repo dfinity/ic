@@ -18,11 +18,12 @@ use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::p2p::build_default_gossip_config;
 use ic_types::{Height, NodeId, PrincipalId};
 use phantom_newtype::AmountOf;
+use registry_canister::mutations::node_management::do_update_node_ipv4_config_directly::IPv4Config;
 use serde::{Deserialize, Serialize};
 use slog::info;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::net::{Ipv6Addr, SocketAddr};
 use std::path::Path;
 use std::time::Duration;
 
@@ -143,7 +144,7 @@ impl InternetComputer {
     }
 
     /// Add a single unassigned node with the given IPv4 configuration
-    pub fn with_ipv4_enabled_unassigned_node(mut self, ipv4_config: Ipv4Config) -> Self {
+    pub fn with_ipv4_enabled_unassigned_node(mut self, ipv4_config: IPv4Config) -> Self {
         self.unassigned_nodes.push(
             Node::new_with_settings(
                 self.default_vm_resources,
@@ -408,7 +409,7 @@ impl InternetComputer {
             .and_then(|subnet| subnet.query_stats_epoch_length)
     }
 
-    pub fn get_ipv4_config_of_node(&self, node_id: NodeId) -> Option<Ipv4Config> {
+    pub fn get_ipv4_config_of_node(&self, node_id: NodeId) -> Option<IPv4Config> {
         let node_filter_map = |n: &Node| {
             if n.secret_key_store.as_ref().unwrap().node_id == node_id {
                 Some(n.ipv4.clone())
@@ -417,7 +418,7 @@ impl InternetComputer {
             }
         };
         // extract ipv4-enabled nodes all subnet nodes
-        let mut ipv4_enabled_nodes: Vec<Option<Ipv4Config>> = self
+        let mut ipv4_enabled_nodes: Vec<Option<IPv4Config>> = self
             .subnets
             .iter()
             .flat_map(|s| s.nodes.iter().filter_map(node_filter_map))
@@ -684,7 +685,7 @@ impl Subnet {
         })
     }
 
-    pub fn add_node_with_ipv4(self, ipv4_config: Ipv4Config) -> Self {
+    pub fn add_node_with_ipv4(self, ipv4_config: IPv4Config) -> Self {
         let default_vm_resources = self.default_vm_resources;
         let vm_allocation = self.vm_allocation.clone();
         let required_host_features = self.required_host_features.clone();
@@ -773,7 +774,7 @@ pub struct Node {
     pub secret_key_store: Option<NodeSecretKeyStore>,
     pub ipv6: Option<Ipv6Addr>,
     pub malicious_behaviour: Option<MaliciousBehaviour>,
-    pub ipv4: Option<Ipv4Config>,
+    pub ipv4: Option<IPv4Config>,
     pub domain: Option<String>,
 }
 
@@ -806,7 +807,7 @@ impl Node {
         self
     }
 
-    pub fn with_ipv4_config(mut self, ipv4_config: Ipv4Config) -> Self {
+    pub fn with_ipv4_config(mut self, ipv4_config: IPv4Config) -> Self {
         self.ipv4 = Some(ipv4_config);
         self
     }
@@ -815,11 +816,4 @@ impl Node {
         self.domain = Some(domain);
         self
     }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Ipv4Config {
-    pub ip_addr: Ipv4Addr,
-    pub gateway_ip_addr: Ipv4Addr,
-    pub prefix_length: u32,
 }

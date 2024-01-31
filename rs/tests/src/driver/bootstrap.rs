@@ -2,7 +2,7 @@ use crate::driver::{
     config::NODES_INFO,
     driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
     farm::{Farm, FarmResult, FileId},
-    ic::{InternetComputer, Ipv4Config, Node},
+    ic::{InternetComputer, Node},
     nested::{NestedNode, NestedVms, NESTED_CONFIGURED_IMAGE_PATH},
     node_software_version::NodeSoftwareVersion,
     port_allocator::AddrType,
@@ -28,6 +28,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::ReplicaVersion;
+use registry_canister::mutations::node_management::do_update_node_ipv4_config_directly::IPv4Config;
 use slog::{info, warn, Logger};
 use std::{
     collections::BTreeMap,
@@ -428,7 +429,7 @@ fn create_config_disk_image(
     node: &InitializedNode,
     malicious_behavior: Option<MaliciousBehaviour>,
     query_stats_epoch_length: Option<u64>,
-    ipv4_config: Option<Ipv4Config>,
+    ipv4_config: Option<IPv4Config>,
     domain: Option<String>,
     test_env: &TestEnv,
     group_name: &str,
@@ -507,18 +508,13 @@ fn create_config_disk_image(
     if let Some(ipv4_config) = ipv4_config {
         info!(
             test_env.logger(),
-            "Node with id={} is IPv4-enabled: IP address {:?}/{:?}, IP gateway {:?}",
-            node.node_id,
-            ipv4_config.ip_addr,
-            ipv4_config.prefix_length,
-            ipv4_config.gateway_ip_addr
+            "Node with id={} is IPv4-enabled: {:?}", node.node_id, ipv4_config
         );
         cmd.arg("--ipv4_address").arg(format!(
-            "{:?}/{:?}",
+            "{}/{:?}",
             ipv4_config.ip_addr, ipv4_config.prefix_length
         ));
-        cmd.arg("--ipv4_gateway")
-            .arg(ipv4_config.gateway_ip_addr.to_string());
+        cmd.arg("--ipv4_gateway").arg(&ipv4_config.gateway_ip_addr);
     }
 
     if let Some(domain) = domain {

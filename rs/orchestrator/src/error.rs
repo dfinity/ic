@@ -61,6 +61,9 @@ pub enum OrchestratorError {
 
     /// SNP error while registering a SEV-SNP node
     SnpError(String),
+
+    /// Network configuration error
+    NetworkConfigurationError(String),
 }
 
 impl OrchestratorError {
@@ -139,6 +142,9 @@ impl fmt::Display for OrchestratorError {
             ),
             OrchestratorError::UpgradeError(msg) => write!(f, "Failed to upgrade: {}", msg),
             OrchestratorError::SnpError(msg) => write!(f, "SEV-SNP Error: {}", msg),
+            OrchestratorError::NetworkConfigurationError(msg) => {
+                write!(f, "Failed to apply network configuration: {}", msg)
+            }
         }
     }
 }
