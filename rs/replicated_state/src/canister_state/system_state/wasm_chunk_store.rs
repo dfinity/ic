@@ -8,7 +8,7 @@ use crate::{page_map::PageAllocatorFileDescriptor, PageMap};
 
 const PAGES_PER_CHUNK: u64 = 256;
 const CHUNK_SIZE: u64 = PAGES_PER_CHUNK * (PAGE_SIZE as u64);
-pub(crate) const DEFAULT_MAX_SIZE: NumBytes = NumBytes::new(100 * 1024 * 1024); // 100 MiB
+pub const DEFAULT_MAX_SIZE: NumBytes = NumBytes::new(100 * 1024 * 1024); // 100 MiB
 
 #[test]
 fn check_chunk_size() {
