@@ -8,6 +8,7 @@ pub const PROMETHEUS_HTTP_PORT: u16 = 9091;
 pub struct OrchestratorMetrics {
     pub ssh_access_registry_version: IntGauge,
     pub firewall_registry_version: IntGauge,
+    pub ipv4_registry_version: IntGauge,
     pub reboot_duration: IntGauge,
     pub orchestrator_info: IntGaugeVec,
     pub key_rotation_status: IntGaugeVec,
@@ -48,6 +49,10 @@ impl OrchestratorMetrics {
             firewall_registry_version: metrics_registry.int_gauge(
                 "firewall_registry_version",
                 "Latest registry version used for firewall configuration",
+            ),
+            ipv4_registry_version: metrics_registry.int_gauge(
+                "ipv4_registry_version",
+                "Latest registry version used for the IPv4 configuration",
             ),
             reboot_duration: metrics_registry.int_gauge(
                 "reboot_duration_seconds",

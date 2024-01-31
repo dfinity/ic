@@ -4,6 +4,7 @@ use crate::catch_up_package_provider::CatchUpPackageProvider;
 use crate::dashboard::{Dashboard, OrchestratorDashboard};
 use crate::firewall::Firewall;
 use crate::hostos_upgrade::HostosUpgrader;
+use crate::ipv4_network::Ipv4Configurator;
 use crate::metrics::OrchestratorMetrics;
 use crate::process_manager::ProcessManager;
 use crate::registration::NodeRegistration;
@@ -51,6 +52,7 @@ pub struct Orchestrator {
     subnet_id: Arc<RwLock<Option<SubnetId>>>,
     // Handles of async tasks used to wait for their completion
     task_handles: Vec<JoinHandle<()>>,
+    ipv4_configurator: Option<Ipv4Configurator>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -257,7 +259,7 @@ impl Orchestrator {
             Arc::clone(&metrics),
             replica_version.clone(),
             node_id,
-            ic_binary_directory,
+            ic_binary_directory.clone(),
             logger.clone(),
         );
 
@@ -267,6 +269,13 @@ impl Orchestrator {
             Arc::clone(&metrics),
             config.firewall.clone(),
             cup_provider.clone(),
+            logger.clone(),
+        );
+
+        let ipv4_configurator = Ipv4Configurator::new(
+            Arc::clone(&registry),
+            Arc::clone(&metrics),
+            ic_binary_directory,
             logger.clone(),
         );
 
@@ -280,6 +289,7 @@ impl Orchestrator {
             node_id,
             ssh_access_manager.get_last_applied_parameters(),
             firewall.get_last_applied_version(),
+            ipv4_configurator.get_last_applied_version(),
             replica_process,
             Arc::clone(&subnet_id),
             replica_version,
@@ -305,6 +315,7 @@ impl Orchestrator {
             exit_signal,
             subnet_id,
             task_handles: Default::default(),
+            ipv4_configurator: Some(ipv4_configurator),
         })
     }
 
@@ -416,10 +427,11 @@ impl Orchestrator {
             info!(log, "Shut down the tECDSA key rotation loop");
         }
 
-        async fn ssh_key_and_firewall_rules_checks(
+        async fn ssh_key_and_firewall_rules_and_ipv4_config_checks(
             maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
             mut ssh_access_manager: SshAccessManager,
             mut firewall: Firewall,
+            mut ipv4_configurator: Ipv4Configurator,
             mut exit_signal: Receiver<bool>,
             log: ReplicaLogger,
         ) {
@@ -430,12 +442,17 @@ impl Orchestrator {
                     .await;
                 // Check and update the firewall rules
                 firewall.check_and_update().await;
+                // Check and update the network configuration
+                ipv4_configurator.check_and_update().await;
                 tokio::select! {
                     _ = tokio::time::sleep(CHECK_INTERVAL_SECS) => {}
                     _ = exit_signal.changed() => {}
                 }
             }
-            info!(log, "Shut down the ssh keys & firewall monitoring loop");
+            info!(
+                log,
+                "Shut down the ssh keys, firewall, and IPv4 config monitoring loop"
+            );
         }
 
         async fn serve_dashboard(
@@ -475,20 +492,25 @@ impl Orchestrator {
             )));
         }
 
-        if let (Some(ssh), Some(firewall)) = (self.ssh_access_manager.take(), self.firewall.take())
-        {
+        if let (Some(ssh), Some(firewall), Some(ipv4_configurator)) = (
+            self.ssh_access_manager.take(),
+            self.firewall.take(),
+            self.ipv4_configurator.take(),
+        ) {
             info!(
                 self.logger,
                 "Spawning the ssh-key and firewall rules check loop"
             );
-            self.task_handles
-                .push(tokio::spawn(ssh_key_and_firewall_rules_checks(
+            self.task_handles.push(tokio::spawn(
+                ssh_key_and_firewall_rules_and_ipv4_config_checks(
                     Arc::clone(&self.subnet_id),
                     ssh,
                     firewall,
+                    ipv4_configurator,
                     self.exit_signal.clone(),
                     self.logger.clone(),
-                )));
+                ),
+            ));
         }
         if let Some(dashboard) = self.orchestrator_dashboard.take() {
             info!(self.logger, "Spawning the orchestrator dashboard");
