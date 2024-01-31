@@ -7215,7 +7215,7 @@ fn make_proposal_with_action(
     proposer_n: &NeuronId,
     action: proposal::Action,
 ) -> ProposalId {
-    match gov
+    let response = match gov
         .manage_neuron(
             proposer_p,
             &ManageNeuron {
@@ -7235,9 +7235,10 @@ fn make_proposal_with_action(
         .command
         .unwrap()
     {
-        manage_neuron_response::Command::MakeProposal(resp) => resp.proposal_id.unwrap(),
+        manage_neuron_response::Command::MakeProposal(resp) => resp,
         _ => panic!("Invalid response"),
-    }
+    };
+    response.proposal_id.unwrap()
 }
 
 // When a neuron A follows neuron B on topic Unspecified, and B votes on topic
@@ -8299,6 +8300,69 @@ fn test_filter_proposal_ballots() {
                 },
         }
     );
+}
+
+#[tokio::test]
+async fn test_make_proposal_message() {
+    let principal1 = principal(1);
+
+    let mut driver = fake::FakeDriver::default();
+
+    let proposal = Proposal {
+        action: Some(Action::CreateServiceNervousSystem(
+            CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone(),
+        )),
+        // Fill in the rest of the fields with those of a motion proposal.
+        // (They are not relevant to this test.)
+        ..new_motion_proposal()
+    };
+
+    let proto = GovernanceProto {
+        wait_for_quiet_threshold_seconds: 100,
+        economics: Some(NetworkEconomics::with_default_values()),
+        neurons: btreemap! {
+            1 => Neuron {
+                id: Some(NeuronId { id: 1 }),
+                controller: Some(principal1),
+                hot_keys: vec![],
+                cached_neuron_stake_e8s: 10 * E8,
+                account: driver.random_byte_array().to_vec(),
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS)),
+                ..Default::default()
+            },
+        },
+        ..Default::default()
+    };
+
+    let mut gov = Governance::new(
+        proto,
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+
+    // submit proposal
+    let make_proposal_response = match gov
+        .manage_neuron(
+            &principal1,
+            &ManageNeuron {
+                id: None,
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 1 })),
+                command: Some(Command::MakeProposal(Box::new(proposal))),
+            },
+        )
+        .await
+        .command
+        .expect("Couldn't submit proposal.")
+    {
+        manage_neuron_response::Command::MakeProposal(resp) => resp,
+        r => panic!("Invalid response {:?}", r),
+    };
+
+    assert_eq!(
+        make_proposal_response.message,
+        Some("The proposal has been created successfully.".to_string())
+    )
 }
 
 #[test]

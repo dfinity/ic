@@ -77,6 +77,7 @@ fn uninstall_canister_by_proposal() {
     let _proposal_id = match response {
         Command::MakeProposal(MakeProposalResponse {
             proposal_id: Some(ic_nns_common::pb::v1::ProposalId { id }),
+            ..
         }) => id,
         _ => panic!("Response did not contain a proposal_id: {:#?}", response),
     };

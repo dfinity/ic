@@ -1077,6 +1077,8 @@ pub mod manage_neuron_response {
         /// The ID of the created proposal
         #[prost(message, optional, tag = "1")]
         pub proposal_id: ::core::option::Option<::ic_nns_common::pb::v1::ProposalId>,
+        #[prost(string, optional, tag = "2")]
+        pub message: ::core::option::Option<::prost::alloc::string::String>,
     }
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
     #[allow(clippy::derive_partial_eq_without_eq)]

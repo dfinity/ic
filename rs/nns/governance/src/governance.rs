@@ -466,11 +466,15 @@ impl ManageNeuronResponse {
         }
     }
 
-    pub fn make_proposal_response(proposal_id: ProposalId) -> Self {
+    pub fn make_proposal_response(proposal_id: ProposalId, message: String) -> Self {
         let proposal_id = Some(proposal_id);
+        let message = Some(message);
         ManageNeuronResponse {
             command: Some(manage_neuron_response::Command::MakeProposal(
-                manage_neuron_response::MakeProposalResponse { proposal_id },
+                manage_neuron_response::MakeProposalResponse {
+                    proposal_id,
+                    message,
+                },
             )),
         }
     }
@@ -5844,9 +5848,14 @@ impl Governance {
             Some(Command::Follow(f)) => self
                 .follow(&id, caller, f)
                 .map(|_| ManageNeuronResponse::follow_response()),
-            Some(Command::MakeProposal(p)) => self
-                .make_proposal(&id, caller, p)
-                .map(ManageNeuronResponse::make_proposal_response),
+            Some(Command::MakeProposal(p)) => {
+                self.make_proposal(&id, caller, p).map(|proposal_id| {
+                    ManageNeuronResponse::make_proposal_response(
+                        proposal_id,
+                        "The proposal has been created successfully.".to_string(),
+                    )
+                })
+            }
             Some(Command::RegisterVote(v)) => self
                 .register_vote(&id, caller, v)
                 .map(|_| ManageNeuronResponse::register_vote_response()),
