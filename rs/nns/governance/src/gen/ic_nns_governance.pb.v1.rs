@@ -2814,7 +2814,7 @@ pub struct MostRecentMonthlyNodeProviderRewards {
 }
 /// TODO(NNS1-1589): Until the Jira ticket gets solved, changes here need to be
 /// manually propagated to (sns) swap.proto.
-/// / TODO\[NNS1-2617\]: Deprecate this message.
+/// This message is obsolete; please use SettleNeuronsFundParticipation instead.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

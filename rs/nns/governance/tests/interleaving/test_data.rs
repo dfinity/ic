@@ -1,13 +1,10 @@
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::E8;
 use ic_nns_governance::{
-    governance::{test_data::CREATE_SERVICE_NERVOUS_SYSTEM, ONE_DAY_SECONDS, ONE_YEAR_SECONDS},
-    pb::v1::{proposal::Action, OpenSnsTokenSwap, Proposal},
+    governance::test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
+    pb::v1::{proposal::Action, Proposal},
 };
 use ic_sns_root::{CanisterSummary, GetSnsCanistersSummaryResponse};
-use ic_sns_swap::pb::v1::{
-    GetStateResponse, Init, NeuronBasketConstructionParameters, Params, Swap,
-};
+use ic_sns_swap::pb::v1::{GetStateResponse, Init, Swap};
 use ic_sns_wasm::pb::v1::{
     DeployNewSnsResponse, DeployedSns, ListDeployedSnsesResponse, SnsCanisterIds,
 };
@@ -69,37 +66,12 @@ lazy_static! {
             }),
             ..Default::default()
         };
-    pub(crate) static ref OPEN_SNS_TOKEN_SWAP_PROPOSAL: Proposal = Proposal {
-        title: Some("OSTS Proposal".to_string()),
-        summary: "Summary of the proposal".to_string(),
-        url: "".to_string(),
-        action: Some(Action::OpenSnsTokenSwap(OpenSnsTokenSwap {
-            target_swap_canister_id: Some(SNS_SWAP_CANISTER_ID.get()),
-            params: Some(Params {
-                min_participants: 5,
-                min_icp_e8s: 100 * E8,
-                max_icp_e8s: 1_000 * E8,
-                min_direct_participation_icp_e8s: Some(100 * E8),
-                max_direct_participation_icp_e8s: Some(1_000 * E8),
-                min_participant_icp_e8s: E8,
-                max_participant_icp_e8s: 10 * E8,
-                swap_due_timestamp_seconds: ONE_DAY_SECONDS,
-                sns_token_e8s: 1_000 * E8,
-                neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-                    count: 3,
-                    dissolve_delay_interval_seconds: ONE_YEAR_SECONDS,
-                },),
-                sale_delay_seconds: None,
-            }),
-            community_fund_investment_e8s: Some(0),
-        })),
-    };
     pub(crate) static ref CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL: Proposal = Proposal {
         title: Some("CSNS Proposal".to_string()),
         summary: "Summary of the proposal".to_string(),
         url: "".to_string(),
         action: Some(Action::CreateServiceNervousSystem(
-            CREATE_SERVICE_NERVOUS_SYSTEM.clone(),
+            CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone(),
         ))
     };
     pub static ref DEPLOY_NEW_SNS_RESPONSE: DeployNewSnsResponse = DeployNewSnsResponse {
