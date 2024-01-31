@@ -215,6 +215,7 @@
       - bazel-build-log*.json*
     reports:
       dotenv: nns.release.env
+    when: always
   extends:
     - ".ic-build-image"
   image:
@@ -281,10 +282,6 @@
 ".build-k8s":
   artifacts:
     expire_in: 3 days
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
     when: always
   extends:
     - ".ic-build-image"
@@ -300,6 +297,7 @@
 ".ic-build-image":
   artifacts:
     expire_in: 3 days
+    when: always
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:f46892f10dba6d7839a6e07e30787217a3c06180843472129ceb61534ab1fc9d
   tags:
@@ -357,10 +355,6 @@
 after-script-test:
   artifacts:
     expire_in: 3 days
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
     when: always
   extends:
     - ".build-k8s"
@@ -1787,10 +1781,6 @@ benchmarks:
 build-base-images-ref-update:
   artifacts:
     expire_in: 3 days
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
     when: always
   dependencies:
     - build-guestos-base
@@ -1997,10 +1987,6 @@ build-boundaryos-base-snp:
 build-determinism:
   artifacts:
     expire_in: 3 days
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
     when: always
   extends:
     - ".build-k8s"
@@ -2043,10 +2029,6 @@ build-determinism:
 build-determinism-release:
   artifacts:
     expire_in: 3 days
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
     when: always
   extends:
     - ".build-k8s"
@@ -2445,6 +2427,7 @@ build-ic:
     reports:
       dotenv:
         - nns.release.env
+    when: always
   extends:
     - ".build-ic"
     - ".rules-master-pipeline-no-merge-train"
@@ -2521,6 +2504,7 @@ build-ic-release:
     reports:
       dotenv:
         - nns.release.env
+    when: always
   extends:
     - ".build-ic"
   image:
@@ -2762,10 +2746,6 @@ build-setupos-base-dev-sev:
 cargo-build-release-linux:
   artifacts:
     expire_in: 3 days
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
     when: always
   extends:
     - ".build-k8s"
@@ -2791,10 +2771,6 @@ cargo-build-release-linux:
 cargo-clippy-linux:
   artifacts:
     expire_in: 3 days
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
     when: always
   extends:
     - ".build-k8s"
@@ -2822,6 +2798,7 @@ cargo-clippy-linux:
 commit-lint:
   artifacts:
     expire_in: 3 days
+    when: always
   extends:
     - ".ic-build-image"
   image:
@@ -2849,10 +2826,6 @@ commit-lint:
 container-autobuild:
   artifacts:
     expire_in: 3 days
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
     when: always
   extends:
     - ".build-k8s"
@@ -2942,10 +2915,6 @@ container-autobuild:
 container-autobuild-protected:
   artifacts:
     expire_in: 3 days
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
     when: always
   extends:
     - ".build-k8s"
@@ -2990,10 +2959,6 @@ container-autobuild-protected:
 cut-release-candidate:
   artifacts:
     expire_in: 3 days
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
     when: always
   dependencies: []
   extends:
@@ -3080,10 +3045,6 @@ dependencies-check:
   allow_failure: false
   artifacts:
     expire_in: 3 days
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
     when: always
   extends:
     - ".build-k8s"
@@ -3113,10 +3074,6 @@ dependency-scan-nightly:
   allow_failure: true
   artifacts:
     expire_in: 3 days
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
     when: always
   extends:
     - ".build-k8s"
@@ -3154,10 +3111,6 @@ dependency-scan-release-cut:
   allow_failure: false
   artifacts:
     expire_in: 3 days
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
     when: always
   extends:
     - ".build-k8s"
@@ -3297,10 +3250,6 @@ large-response-downloading-nightly:
 lock-generate:
   artifacts:
     expire_in: 3 days
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
     when: always
   extends:
     - ".build-k8s"
@@ -3949,6 +3898,7 @@ maximum-capacity-system-baseline-update:
 no-interrupt:
   artifacts:
     expire_in: 3 days
+    when: always
   extends:
     - ".ic-build-image"
   image:
@@ -3965,10 +3915,6 @@ no-interrupt:
 notify-gitlab-failure:
   artifacts:
     expire_in: 3 days
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
     when: always
   dependencies: []
   extends:
@@ -3991,6 +3937,7 @@ notify-gitlab-failure:
 notify-gitlab-success:
   artifacts:
     expire_in: 3 days
+    when: always
   dependencies: []
   extends:
     - ".ic-build-image"
@@ -4011,6 +3958,7 @@ notify-gitlab-success:
 pre-commit:
   artifacts:
     expire_in: 3 days
+    when: always
   extends:
     - ".ic-build-image"
     - ".rules-master-pipeline-and-merge-request"
@@ -4086,10 +4034,6 @@ python-gitlab-ci-tests:
 rosetta-api-docker-image:
   artifacts:
     expire_in: 3 days
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
     when: always
   extends:
     - ".build-k8s"
@@ -4150,10 +4094,6 @@ rosetta-api-docker-image:
 rosetta-release:
   artifacts:
     expire_in: 3 days
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
     when: always
   extends:
     - ".build-k8s"
@@ -4426,10 +4366,6 @@ tecdsa:
 test-push-branch:
   artifacts:
     expire_in: 3 days
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
     when: always
   dependencies: []
   extends:
@@ -4517,6 +4453,7 @@ xnet-nightly:
 zz-generated-gitlab:
   artifacts:
     expire_in: 3 days
+    when: always
   extends:
     - ".ic-build-image"
   image:
