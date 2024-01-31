@@ -1301,13 +1301,17 @@ pub fn random_node_ids_excluding<R: RngCore + CryptoRng>(
 }
 
 pub fn node_id(id: u64) -> NodeId {
+    NodeId::from(PrincipalId::new_self_authenticating(&id.to_be_bytes()))
+}
+
+pub fn ordered_node_id(id: u64) -> NodeId {
     NodeId::from(PrincipalId::new_node_test_id(id))
 }
 
 pub fn set_of_nodes(ids: &[u64]) -> BTreeSet<NodeId> {
     let mut nodes = BTreeSet::new();
     for id in ids.iter() {
-        nodes.insert(node_id(*id));
+        nodes.insert(ordered_node_id(*id));
     }
     nodes
 }
@@ -1333,7 +1337,7 @@ pub fn n_random_node_ids<R: RngCore + CryptoRng>(n: usize, rng: &mut R) -> BTree
 }
 
 fn random_node_id<R: RngCore + CryptoRng>(rng: &mut R) -> NodeId {
-    NodeId::from(PrincipalId::new_node_test_id(rng.gen()))
+    node_id(rng.gen())
 }
 
 pub fn random_receiver_id<R: RngCore + CryptoRng>(
@@ -2351,7 +2355,7 @@ impl IDkgTranscriptBuilder {
 
     pub fn add_a_new_receiver(mut self) -> Self {
         let mut receivers = self.receivers.get().clone();
-        let extra_receiver = NodeId::from(PrincipalId::new_node_test_id(i64::MAX as u64));
+        let extra_receiver = node_id(i64::MAX as u64);
         receivers.insert(extra_receiver);
         self.receivers = IDkgReceivers::new(receivers).unwrap();
         self
