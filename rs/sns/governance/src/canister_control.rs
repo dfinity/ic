@@ -89,15 +89,13 @@ async fn install_code(
     wasm: Vec<u8>,
     arg: Vec<u8>,
 ) -> Result<(), GovernanceError> {
-    const MEMORY_ALLOCATION_BYTES: u64 = 1_u64 << 30;
-
     let install_code_args = ic_ic00_types::InstallCodeArgs {
         mode: ic_ic00_types::CanisterInstallMode::Upgrade,
         canister_id: canister_id.get(),
         wasm_module: wasm,
         arg,
         compute_allocation: None,
-        memory_allocation: Some(candid::Nat::from(MEMORY_ALLOCATION_BYTES)),
+        memory_allocation: None,
         query_allocation: None,
         sender_canister_version: env.canister_version(),
     };

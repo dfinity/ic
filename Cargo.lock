@@ -10635,6 +10635,7 @@ dependencies = [
  "ic-nns-governance",
  "ic-nns-test-utils",
  "ic-protobuf",
+ "ic-registry-subnet-type",
  "ic-sns-governance",
  "ic-sns-init",
  "ic-sns-root",

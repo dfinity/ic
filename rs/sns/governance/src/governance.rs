@@ -7121,7 +7121,7 @@ mod tests {
                         wasm_module: vec![9, 8, 7, 6, 5, 4, 3, 2],
                         arg: Encode!().unwrap(),
                         compute_allocation: None,
-                        memory_allocation: Some(candid::Nat::from(1_u64 << 30)), // local const in install_code()
+                        memory_allocation: None, // local const in install_code()
                         query_allocation: None,
                         sender_canister_version: None,
                     })
