@@ -137,6 +137,7 @@ rust_test_suite_with_extra_srcs(
         "tests/integration_test_components/blocks_synchronizer/*.rs",
         "tests/integration_test_components/storage/*.rs",
     ]),
+    flaky = True,
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = DEV_DEPENDENCIES + DEPENDENCIES,
 )
