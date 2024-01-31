@@ -374,6 +374,7 @@ impl CyclesAccountManager {
         cycles: Cycles,
         subnet_size: usize,
         reserved_balance: Cycles,
+        reveal_top_up: bool,
     ) -> Result<(), CanisterOutOfCyclesError> {
         self.withdraw_with_threshold(
             canister_id,
@@ -388,6 +389,7 @@ impl CyclesAccountManager {
                 subnet_size,
                 reserved_balance,
             ),
+            reveal_top_up,
         )
     }
 
@@ -408,6 +410,7 @@ impl CyclesAccountManager {
         canister_compute_allocation: ComputeAllocation,
         cycles: Cycles,
         subnet_size: usize,
+        reveal_top_up: bool,
     ) -> Result<(), CanisterOutOfCyclesError> {
         let threshold = self.freeze_threshold_cycles(
             canister.system_state.freeze_threshold,
@@ -425,6 +428,7 @@ impl CyclesAccountManager {
                     available: canister.system_state.debited_balance(),
                     requested: cycles,
                     threshold,
+                    reveal_top_up,
                 });
             }
             canister
@@ -437,6 +441,7 @@ impl CyclesAccountManager {
                 cycles,
                 threshold,
                 CyclesUseCase::IngressInduction,
+                reveal_top_up,
             )
         }
     }
@@ -460,6 +465,7 @@ impl CyclesAccountManager {
         cycles: Cycles,
         subnet_size: usize,
         use_case: CyclesUseCase,
+        reveal_top_up: bool,
     ) -> Result<(), CanisterOutOfCyclesError> {
         let threshold = self.freeze_threshold_cycles(
             system_state.freeze_threshold,
@@ -470,7 +476,7 @@ impl CyclesAccountManager {
             subnet_size,
             system_state.reserved_balance(),
         );
-        self.consume_with_threshold(system_state, cycles, threshold, use_case)
+        self.consume_with_threshold(system_state, cycles, threshold, use_case, reveal_top_up)
     }
 
     /// Prepays the cost of executing a message with the given number of
@@ -491,6 +497,7 @@ impl CyclesAccountManager {
         canister_compute_allocation: ComputeAllocation,
         num_instructions: NumInstructions,
         subnet_size: usize,
+        reveal_top_up: bool,
     ) -> Result<Cycles, CanisterOutOfCyclesError> {
         let cost = self.execution_cost(num_instructions, subnet_size);
         self.consume_with_threshold(
@@ -506,6 +513,7 @@ impl CyclesAccountManager {
                 system_state.reserved_balance(),
             ),
             CyclesUseCase::Instructions,
+            reveal_top_up,
         )
         .map(|_| cost)
     }
@@ -724,6 +732,7 @@ impl CyclesAccountManager {
         prepayment_for_response_transmission: Cycles,
         subnet_size: usize,
         reserved_balance: Cycles,
+        reveal_top_up: bool,
     ) -> Result<Vec<(CyclesUseCase, Cycles)>, CanisterOutOfCyclesError> {
         // The total amount charged consists of:
         //   - the fee to do the xnet call (request + response)
@@ -751,6 +760,7 @@ impl CyclesAccountManager {
                 subnet_size,
                 reserved_balance,
             ),
+            reveal_top_up,
         )?;
 
         Ok(Vec::from([
@@ -830,6 +840,7 @@ impl CyclesAccountManager {
         canister_current_message_memory_usage: NumBytes,
         canister_compute_allocation: ComputeAllocation,
         subnet_size: usize,
+        reveal_top_up: bool,
     ) -> Result<(), CanisterOutOfCyclesError> {
         let threshold = self.freeze_threshold_cycles(
             system_state.freeze_threshold,
@@ -847,6 +858,7 @@ impl CyclesAccountManager {
                 available: system_state.balance(),
                 requested,
                 threshold,
+                reveal_top_up,
             })
         } else {
             Ok(())
@@ -861,6 +873,7 @@ impl CyclesAccountManager {
         cycles: Cycles,
         threshold: Cycles,
         use_case: CyclesUseCase,
+        reveal_top_up: bool,
     ) -> Result<(), CanisterOutOfCyclesError> {
         let effective_cycles_balance = match use_case {
             CyclesUseCase::Memory | CyclesUseCase::ComputeAllocation | CyclesUseCase::Uninstall => {
@@ -884,6 +897,7 @@ impl CyclesAccountManager {
             effective_cycles_balance,
             cycles,
             threshold,
+            reveal_top_up,
         )?;
 
         debug_assert_ne!(use_case, CyclesUseCase::NonConsumed);
@@ -897,6 +911,7 @@ impl CyclesAccountManager {
         cycles_balance: Cycles,
         cycles: Cycles,
         threshold: Cycles,
+        reveal_top_up: bool,
     ) -> Result<(), CanisterOutOfCyclesError> {
         let cycles_available = if cycles_balance > threshold {
             cycles_balance - threshold
@@ -910,6 +925,7 @@ impl CyclesAccountManager {
                 available: cycles_balance,
                 requested: cycles,
                 threshold,
+                reveal_top_up,
             });
         }
         Ok(())
@@ -930,8 +946,15 @@ impl CyclesAccountManager {
         cycles_balance: &mut Cycles,
         cycles: Cycles,
         threshold: Cycles,
+        reveal_top_up: bool,
     ) -> Result<(), CanisterOutOfCyclesError> {
-        self.verify_cycles_balance_with_threshold(canister_id, *cycles_balance, cycles, threshold)?;
+        self.verify_cycles_balance_with_threshold(
+            canister_id,
+            *cycles_balance,
+            cycles,
+            threshold,
+            reveal_top_up,
+        )?;
 
         *cycles_balance -= cycles;
         Ok(())
@@ -1052,6 +1075,7 @@ impl CyclesAccountManager {
                 cycles,
                 Cycles::zero(),
                 use_case,
+                false, // caller is system => no need to reveal top up balance
             ) {
                 info!(
                     log,

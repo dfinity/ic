@@ -480,6 +480,7 @@ impl IngressManager {
                         canister.message_memory_usage(),
                         canister.scheduler_state.compute_allocation,
                         subnet_size,
+                        false, // error here is not returned back to the user => no need to reveal top up balance
                     ) {
                         return Err(ValidationError::Permanent(
                             IngressPermanentError::InsufficientCycles(err),

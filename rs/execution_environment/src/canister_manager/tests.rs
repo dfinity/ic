@@ -4476,6 +4476,51 @@ fn unfreezing_of_frozen_canister() {
 }
 
 #[test]
+fn frozen_canister_reveal_top_up() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test
+        .universal_canister_with_cycles(Cycles::new(1_000_000_000_000))
+        .unwrap();
+
+    // Set the freezing threshold high to freeze the canister.
+    let payload = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(1_000_000_000_000)
+            .build(),
+        sender_canister_version: None,
+    }
+    .encode();
+    test.subnet_message(Method::UpdateSettings, payload)
+        .unwrap();
+
+    // Sending an ingress message to a frozen canister fails with a verbose error message.
+    let err = test
+        .ingress(canister_id, "update", wasm().reply().build())
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterOutOfCycles, err.code());
+    assert!(err.description().starts_with(&format!(
+        "Canister {} is out of cycles: please top up the canister with at least",
+        canister_id
+    )));
+
+    // Blackhole the canister.
+    test.canister_update_controller(canister_id, vec![])
+        .unwrap();
+
+    // Sending an ingress message to a frozen canister fails without revealing
+    // top up balance to non-controllers.
+    let err = test
+        .ingress(canister_id, "update", wasm().reply().build())
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterOutOfCycles, err.code());
+    assert_eq!(
+        err.description(),
+        format!("Canister {} is out of cycles", canister_id)
+    );
+}
+
+#[test]
 fn create_canister_fails_if_memory_capacity_exceeded() {
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_execution_memory(MEMORY_CAPACITY.get() as i64)

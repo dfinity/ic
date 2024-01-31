@@ -294,6 +294,7 @@ impl ValidSetRuleImpl {
                 let memory_usage = canister.memory_usage();
                 let message_memory_usage = canister.message_memory_usage();
                 let compute_allocation = canister.scheduler_state.compute_allocation;
+                let reveal_top_up = canister.controllers().contains(&ingress.source.get());
                 if let Err(err) = self.cycles_account_manager.charge_ingress_induction_cost(
                     canister,
                     memory_usage,
@@ -301,6 +302,7 @@ impl ValidSetRuleImpl {
                     compute_allocation,
                     cost,
                     subnet_size,
+                    reveal_top_up,
                 ) {
                     return Err(StateError::CanisterOutOfCycles(err));
                 }

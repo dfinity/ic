@@ -1111,6 +1111,7 @@ impl SystemApiImpl {
                                 self.memory_usage.current_usage,
                                 self.memory_usage.current_message_usage,
                                 amount,
+                                false, // synchronous error => no need to reveal top up balance
                             )?;
                         request.add_cycles(amount);
                         Ok(())

@@ -372,11 +372,16 @@ impl ResponseHelper {
             let requested = state_changes.system_state_changes.removed_cycles();
             // Note that we ignore the freezing threshold as required by the spec.
             if old_balance < requested {
+                let reveal_top_up = self
+                    .canister
+                    .controllers()
+                    .contains(&original.call_origin.get_principal());
                 let err = CanisterOutOfCyclesError {
                     canister_id: self.canister.canister_id(),
                     available: old_balance,
                     requested,
                     threshold: original.freezing_threshold,
+                    reveal_top_up,
                 };
                 info!(
                     round.log,
