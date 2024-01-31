@@ -186,16 +186,17 @@
   chain INPUT {\n\
     type filter hook input priority 0; policy drop;\n\
     iif lo accept\n\
-    ct state new add @rate_limit { ip saddr limit rate over 1000/minute } drop\n\
+    ct state new add @rate_limit { ip saddr limit rate over 1000/minute burst 500 packets } log prefix \"Drop - rate limit: \" drop\n\
     #  Notes about the rule below:\n\
     #   - The rule allows a maximum of <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> persistent connections to any ip address.\n\
     #   - The rule drops all new connections that goes over the configured limit.\n\
-    ct state new add @connection_limit { ip saddr ct count over <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> } drop\n\
+    ct state new add @connection_limit { ip saddr ct count over <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> } log prefix \"Drop - connection limit: \" drop\n\
     icmp type parameter-problem accept\n\
     icmp type echo-request accept\n\
     icmp type echo-reply accept\n\
     <<IPv4_TCP_RULES>>\n\
     <<IPv4_UDP_RULES>>\n\
+    log prefix \"Drop - default policy: \"\n\
   }\n\
 \n\
   chain FORWARD {\n\
@@ -227,7 +228,7 @@ table ip6 filter {\n\
     iif lo accept\n\
     ct state { invalid } drop\n\
     ct state { established, related } accept\n\
-    ct state new add @rate_limit { ip6 saddr limit rate over 100000/minute } log prefix \"Drop - rate limit: \" drop\n\
+    ct state new add @rate_limit { ip6 saddr limit rate over 1000/minute burst 500 packets } log prefix \"Drop - rate limit: \" drop\n\
     #  Notes about the rule below:\n\
     #   - The rule allows a maximum of <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> persistent connections to any ip6 address.\n\
     #   - The rule drops all new connections that goes over the configured limit.\n\
