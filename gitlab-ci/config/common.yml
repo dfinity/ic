@@ -89,12 +89,6 @@ after_script:
 .build-k8s:
   extends:
     - .ic-build-image
-  artifacts:
-    paths:
-      - "junit_data/*"
-      - "coredumps/*.txt"
-      - "coredumps/*.gz"
-    when: always
   variables:
     GET_SOURCES_ATTEMPTS: 5
     GIT_DEPTH: 0  # Pull the complete repo initially
@@ -105,6 +99,7 @@ after_script:
 .ic-build-image:
   artifacts:
     expire_in: 3 days
+    when: always
   image:
     name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:f46892f10dba6d7839a6e07e30787217a3c06180843472129ceb61534ab1fc9d"
   tags:
