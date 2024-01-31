@@ -1,4 +1,5 @@
 use crate::api::CspCreateMEGaKeyError;
+use crate::keygen::utils::idkg_dealing_encryption_pk_to_proto;
 use crate::secret_key_store::SecretKeyStoreInsertionError;
 use crate::vault::api::IDkgProtocolCspVault;
 use crate::vault::local_csp_vault::PublicKeyStore;
@@ -12,7 +13,6 @@ use std::sync::Arc;
 mod idkg_gen_dealing_encryption_key_pair {
     use super::*;
     use crate::canister_threshold::IDKG_MEGA_SCOPE;
-    use crate::keygen::utils::idkg_dealing_encryption_pk_to_proto;
     use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
     use crate::public_key_store::PublicKeyAddError;
     use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
@@ -520,5 +520,209 @@ mod idkg_retain_active_keys {
         }
         assert_eq!(rotated_public_keys.len(), number_of_key_pairs_to_generate);
         rotated_public_keys
+    }
+}
+
+mod idkg_create_dealing {
+    use crate::vault::api::{IDkgCreateDealingVaultError, IDkgDealingInternalBytes};
+    use assert_matches::assert_matches;
+    use ic_crypto_internal_threshold_sig_ecdsa::{
+        CombinedCommitment, EccCurveType, IDkgTranscriptInternal, PolynomialCommitmentType,
+    };
+    use ic_crypto_internal_threshold_sig_ecdsa_test_utils::random_polynomial_commitment;
+    use ic_crypto_internal_types::NodeIndex;
+    use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_transcript_id_for_tests;
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+    use ic_protobuf::registry::crypto::v1::PublicKey;
+    use ic_types::{
+        crypto::{
+            canister_threshold_sig::idkg::{
+                IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript, IDkgTranscriptOperation,
+                IDkgTranscriptType,
+            },
+            AlgorithmId,
+        },
+        NumberOfNodes, RegistryVersion,
+    };
+    use ic_types_test_utils::ids::node_test_id;
+    use rand::{CryptoRng, Rng};
+
+    use super::*;
+    #[test]
+    fn should_work() {
+        assert_matches!(IDkgCreateDealingTest::new_with_valid_params().run(), Ok(_));
+    }
+
+    #[test]
+    fn should_fail_on_malformed_mega_pubkey() {
+        let mut test = IDkgCreateDealingTest::new_with_valid_params();
+        let invalid_key_serialization = vec![0xFF, 100];
+        {
+            let invalid_key_serialization = invalid_key_serialization.clone();
+            test.receiver_key_modifier_fn =
+                Box::new(|algorithm_id, _key_value| (algorithm_id, invalid_key_serialization));
+        }
+        assert_matches!(
+            test.run(),
+            Err(IDkgCreateDealingVaultError::MalformedPublicKey {
+                receiver_index,
+                key_bytes
+            })
+            if receiver_index == 0 && key_bytes == invalid_key_serialization
+        );
+    }
+
+    #[test]
+    fn should_fail_on_invalid_algorithm_id_in_pubkey() {
+        let mut test = IDkgCreateDealingTest::new_with_valid_params();
+        let invalid_algorithm_id = AlgorithmId::MultiBls12_381;
+        test.receiver_key_modifier_fn =
+            Box::new(move |_algorithm_id, key_value| (invalid_algorithm_id, key_value));
+        assert_matches!(
+            test.run(),
+            Err(IDkgCreateDealingVaultError::UnsupportedAlgorithm(proto_alg_id))
+            if proto_alg_id.expect("missing algorithm id") as i32 == invalid_algorithm_id as i32
+        );
+    }
+
+    #[test]
+    fn should_fail_on_invalid_serialization_of_transcript_operation() {
+        let mut test = IDkgCreateDealingTest::new_with_valid_params();
+        test.transcript_operation =
+            IDkgTranscriptOperation::ReshareOfMasked(transcript_with_invalid_encoding());
+        assert_matches!(
+            test.run(),
+            Err(IDkgCreateDealingVaultError::SerializationError(e))
+            if e.contains("ThresholdEcdsaSerializationError")
+        );
+    }
+
+    #[test]
+    fn should_fail_if_required_opening_not_in_sks() {
+        let rng = &mut reproducible_rng();
+        let mut test = IDkgCreateDealingTest::new_with_valid_params();
+        test.transcript_operation =
+            IDkgTranscriptOperation::ReshareOfMasked(transcript_with_random_ecc_point(rng));
+        assert_matches!(
+            test.run(),
+            Err(IDkgCreateDealingVaultError::SecretSharesNotFound { .. })
+        );
+    }
+
+    #[test]
+    fn should_fail_if_reconstruction_threshold_is_invalid() {
+        let mut test = IDkgCreateDealingTest::new_with_valid_params();
+        test.reconstruction_threshold = 0.into();
+        assert_matches!(
+            test.run(),
+            Err(IDkgCreateDealingVaultError::InternalError(e))
+            if e.contains("InvalidThreshold")
+        );
+    }
+
+    #[test]
+    fn should_fail_if_requested_algorithm_id_is_invalid_for_dealing() {
+        let mut test = IDkgCreateDealingTest::new_with_valid_params();
+        test.algorithm_id = AlgorithmId::MultiBls12_381;
+        assert_matches!(
+            test.run(),
+            Err(IDkgCreateDealingVaultError::InternalError(e))
+            if e.contains("UnsupportedAlgorithm")
+        );
+    }
+
+    struct IDkgCreateDealingTest {
+        algorithm_id: AlgorithmId,
+        context_data: Vec<u8>,
+        dealer_index: NodeIndex,
+        reconstruction_threshold: NumberOfNodes,
+        receiver_key_modifier_fn: ReceiverKeyModifierFn,
+        transcript_operation: IDkgTranscriptOperation,
+    }
+
+    type ReceiverKeyModifierFn = Box<dyn FnOnce(AlgorithmId, Vec<u8>) -> (AlgorithmId, Vec<u8>)>;
+
+    impl IDkgCreateDealingTest {
+        fn new_with_valid_params() -> IDkgCreateDealingTest {
+            IDkgCreateDealingTest {
+                algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+                context_data: vec![49; 10],
+                dealer_index: 0,
+                reconstruction_threshold: 1.into(),
+                receiver_key_modifier_fn: Box::new(|algorithm_id, key_value| {
+                    (algorithm_id, key_value)
+                }),
+                transcript_operation: IDkgTranscriptOperation::Random,
+            }
+        }
+
+        fn run(self) -> Result<IDkgDealingInternalBytes, IDkgCreateDealingVaultError> {
+            let vault = LocalCspVault::builder_for_test().build();
+            let receiver_key = {
+                let valid_pk = vault
+                    .idkg_gen_dealing_encryption_key_pair()
+                    .expect("failed to generate key pair");
+                let valid_algorithm_id = AlgorithmId::MegaSecp256k1;
+                let valid_key_serialization = valid_pk.serialize();
+                let (algorithm_id, key_value) =
+                    (self.receiver_key_modifier_fn)(valid_algorithm_id, valid_key_serialization);
+                PublicKey {
+                    version: 0,
+                    algorithm: algorithm_id as i32,
+                    key_value,
+                    proof_data: None,
+                    timestamp: None,
+                }
+            };
+
+            vault.idkg_create_dealing(
+                self.algorithm_id,
+                self.context_data,
+                self.dealer_index,
+                self.reconstruction_threshold,
+                vec![receiver_key],
+                self.transcript_operation,
+            )
+        }
+    }
+
+    fn transcript_with_invalid_encoding() -> IDkgTranscript {
+        let invalid_internal_transcript_raw = vec![0xFF, 100];
+        IDkgTranscript {
+            transcript_id: dummy_idkg_transcript_id_for_tests(123),
+            receivers: dummy_receivers(),
+            registry_version: RegistryVersion::from(1),
+            verified_dealings: Default::default(),
+            transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
+            algorithm_id: AlgorithmId::Placeholder,
+            internal_transcript_raw: invalid_internal_transcript_raw,
+        }
+    }
+
+    fn transcript_with_random_ecc_point<R: Rng + CryptoRng>(rng: &mut R) -> IDkgTranscript {
+        let transcript_internal = IDkgTranscriptInternal {
+            combined_commitment: CombinedCommitment::BySummation(random_polynomial_commitment(
+                1,
+                PolynomialCommitmentType::Simple,
+                EccCurveType::K256,
+                rng,
+            )),
+        };
+        let internal_transcript_raw = serde_cbor::to_vec(&transcript_internal)
+            .expect("failed to serialize internal transcript operation");
+        IDkgTranscript {
+            transcript_id: dummy_idkg_transcript_id_for_tests(123),
+            receivers: dummy_receivers(),
+            registry_version: RegistryVersion::from(1),
+            verified_dealings: Default::default(),
+            transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
+            algorithm_id: AlgorithmId::Placeholder,
+            internal_transcript_raw,
+        }
+    }
+
+    fn dummy_receivers() -> IDkgReceivers {
+        IDkgReceivers::new([node_test_id(456)].into_iter().collect())
+            .expect("should not fail to create IDkgReceivers with constant inputs")
     }
 }
