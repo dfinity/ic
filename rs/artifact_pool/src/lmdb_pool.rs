@@ -971,19 +971,7 @@ impl PoolArtifact for ConsensusMessage {
     where
         <T as TryFrom<Self>>::Error: Debug,
     {
-        let bytes = tx.get(artifacts, &key)?;
-        let protobuf = log_err!(
-            pb::ValidatedConsensusArtifact::decode(bytes),
-            log,
-            "ConsensusArtifact::load_as protobuf decoding"
-        )
-        .ok_or(lmdb::Error::Panic)?;
-        let artifact: ValidatedConsensusArtifact = log_err!(
-            protobuf.try_into(),
-            log,
-            "ConsensusArtifact::load_as protobuf conversion"
-        )
-        .ok_or(lmdb::Error::Panic)?;
+        let artifact = tx_get_validated_consensus_artifact(key, artifacts, tx, log)?;
 
         let msg = match artifact.msg {
             ConsensusMessage::BlockProposal(mut proposal) => {
@@ -1016,6 +1004,27 @@ impl PoolArtifact for ConsensusMessage {
         )
         .ok_or(lmdb::Error::Panic)
     }
+}
+
+fn tx_get_validated_consensus_artifact(
+    key: &IdKey,
+    artifacts: Database,
+    tx: &impl Transaction,
+    log: &ReplicaLogger,
+) -> lmdb::Result<ValidatedConsensusArtifact> {
+    let bytes = tx.get(artifacts, &key)?;
+    let protobuf = log_err!(
+        pb::ValidatedConsensusArtifact::decode(bytes),
+        log,
+        "tx_get_validated_consensus_artifact: protobuf decoding"
+    )
+    .ok_or(lmdb::Error::Panic)?;
+    log_err!(
+        ValidatedConsensusArtifact::try_from(protobuf),
+        log,
+        "tx_get_validated_consensus_artifact: protobuf conversion"
+    )
+    .ok_or(lmdb::Error::Panic)
 }
 
 /// Block payloads are loaded separately on demand.
@@ -1918,8 +1927,8 @@ mod tests {
     use crate::{
         consensus_pool::MutablePoolSection,
         test_utils::{
-            fake_random_beacon, finalization_share_ops, notarization_share_ops, random_beacon_ops,
-            PoolTestHelper,
+            block_proposal_ops, fake_random_beacon, finalization_share_ops, notarization_share_ops,
+            random_beacon_ops, PoolTestHelper,
         },
     };
     use ic_test_utilities_logger::with_test_replica_logger;
@@ -2017,35 +2026,73 @@ mod tests {
     fn test_purge_survives_reboot() {
         run_persistent_pool_test("test_purge_survives_reboot", |config, log| {
             // create a pool and purge at height 10
-            let height10 = Height::from(10);
+            const PURGE_HEIGHT: Height = Height::new(10);
+            const RANDOM_BEACONS_INITIAL_MIN_HEIGHT: u64 = 6;
+            const RANDOM_BEACONS_INITIAL_MAX_HEIGHT: u64 = 18;
+            const BLOCK_PROPOSALS_INITIAL_MIN_HEIGHT: u64 = 8;
+            const BLOCK_PROPOSALS_INITIAL_MAX_HEIGHT: u64 = 15;
             {
                 let mut pool = PersistentHeightIndexedPool::new_consensus_pool(
                     config.clone(),
-                    false,
+                    /*read_only=*/ false,
                     log.clone(),
                 );
                 // insert a few things
-                let rb_ops = random_beacon_ops();
+                // random beacons
+                let rb_ops = random_beacon_ops(
+                    RANDOM_BEACONS_INITIAL_MIN_HEIGHT..=RANDOM_BEACONS_INITIAL_MAX_HEIGHT,
+                );
                 pool.mutate(rb_ops.clone());
-                let iter = pool.random_beacon().get_all();
-                let msgs_from_pool = iter;
-                assert_eq!(msgs_from_pool.count(), rb_ops.ops.len());
+                assert_eq!(pool.random_beacon().size(), rb_ops.ops.len());
+                // block proposals
+                let block_proposal_ops = block_proposal_ops(
+                    BLOCK_PROPOSALS_INITIAL_MIN_HEIGHT..=BLOCK_PROPOSALS_INITIAL_MAX_HEIGHT,
+                );
+                pool.mutate(block_proposal_ops.clone());
+                assert_eq!(pool.block_proposal().size(), block_proposal_ops.ops.len());
+
                 // purge at height 10
                 let mut purge_ops = PoolSectionOps::new();
-                purge_ops.purge_below(height10);
+                purge_ops.purge_below(PURGE_HEIGHT);
                 pool.mutate(purge_ops);
+
+                // verify that the artifacts have been purged
                 assert_eq!(
-                    pool.random_beacon().height_range().map(|r| r.min),
-                    Some(height10)
+                    pool.random_beacon().height_range(),
+                    Some(HeightRange {
+                        min: PURGE_HEIGHT,
+                        max: Height::new(RANDOM_BEACONS_INITIAL_MAX_HEIGHT)
+                    })
                 );
+                assert_eq!(
+                    pool.block_proposal().height_range(),
+                    Some(HeightRange {
+                        min: PURGE_HEIGHT,
+                        max: Height::new(BLOCK_PROPOSALS_INITIAL_MAX_HEIGHT)
+                    })
+                );
+                assert_consistency(&pool);
             }
             // create the same pool again, check if purge was persisted
             {
-                let pool = PersistentHeightIndexedPool::new_consensus_pool(config, false, log);
-                assert_eq!(
-                    pool.random_beacon().height_range().map(|r| r.min),
-                    Some(height10)
+                let pool = PersistentHeightIndexedPool::new_consensus_pool(
+                    config, /*read_only=*/ false, log,
                 );
+                assert_eq!(
+                    pool.random_beacon().height_range(),
+                    Some(HeightRange {
+                        min: PURGE_HEIGHT,
+                        max: Height::from(RANDOM_BEACONS_INITIAL_MAX_HEIGHT)
+                    })
+                );
+                assert_eq!(
+                    pool.block_proposal().height_range(),
+                    Some(HeightRange {
+                        min: PURGE_HEIGHT,
+                        max: Height::from(BLOCK_PROPOSALS_INITIAL_MAX_HEIGHT)
+                    })
+                );
+                assert_consistency(&pool);
             }
         });
     }
@@ -2068,7 +2115,7 @@ mod tests {
                 pool.mutate(fs_ops.clone());
                 let ns_ops = notarization_share_ops();
                 pool.mutate(ns_ops.clone());
-                pool.mutate(random_beacon_ops());
+                pool.mutate(random_beacon_ops(/*heights=*/ 3..19));
                 // min height of finalization shares should be less than 10
                 assert!(pool.finalization_share().height_range().map(|r| r.min) < Some(height10));
                 // min height of notarization shares should be less than 13
@@ -2145,7 +2192,7 @@ mod tests {
 
         let tx = pool.db_env.begin_ro_txn().unwrap();
         // get all ids from all indices
-        let mut ids_index = pool
+        let ids_index = pool
             .indices
             .iter()
             .flat_map(|(_, db)| {
@@ -2159,10 +2206,43 @@ mod tests {
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
-        ids_index.sort();
+
+        let block_proposal_ids_index = {
+            let block_proposal_index_db = pool.get_index_db(&BLOCK_PROPOSAL_KEY);
+            let mut cursor = tx.open_ro_cursor(block_proposal_index_db).unwrap();
+            cursor
+                .iter()
+                .map(|res| {
+                    let (_, id_key) = res.unwrap();
+                    IdKey::from(id_key)
+                })
+                .collect::<Vec<_>>()
+        };
+
+        let block_payload_ids_from_block_proposals = block_proposal_ids_index
+            .iter()
+            .map(|block_proposal_id| {
+                let artifact = tx_get_validated_consensus_artifact(
+                    block_proposal_id,
+                    pool.artifacts,
+                    &tx,
+                    &pool.log,
+                )
+                .expect("The payload should exist in the artifacts db");
+
+                let ConsensusMessage::BlockProposal(proposal) = artifact.msg else {
+                    panic!("Referenced artifact is not a block proposal");
+                };
+
+                let block = proposal.content.as_ref();
+                let payload_hash = block.payload.get_hash().clone();
+
+                IdKey::from((block.height(), payload_hash.get_ref()))
+            })
+            .collect::<Vec<_>>();
 
         // get all ids from artifacts db
-        let ids_artifacts = {
+        let mut ids_artifacts = {
             let mut cursor = tx.open_ro_cursor(pool.artifacts).unwrap();
             cursor
                 .iter()
@@ -2173,9 +2253,22 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         tx.commit().unwrap();
+        ids_artifacts.sort();
 
         // they should be equal
-        assert_eq!(ids_index, ids_artifacts);
+        assert_eq!(
+            block_proposal_ids_index.len(),
+            block_payload_ids_from_block_proposals.len()
+        );
+        assert_eq!(
+            ids_index.len() + block_proposal_ids_index.len(),
+            ids_artifacts.len()
+        );
+
+        let mut all_id_references = [ids_index, block_payload_ids_from_block_proposals].concat();
+        all_id_references.sort();
+
+        assert_eq!(all_id_references, ids_artifacts);
     }
 
     #[test]
