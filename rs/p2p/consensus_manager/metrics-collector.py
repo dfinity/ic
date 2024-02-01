@@ -14,16 +14,20 @@ instances = sys.argv[1:]
 
 # RPS 
 # 11 node
-peer_data = [b"1", b"3", b"5", b"7", b"10", b"15", b"30"]  # Add more values as needed
-# peer_data = [b"3", b"5", b"8", b"10"]  # Add more values as needed
+# peer_data = [b"10", b"15", b"30"]  # Add more values as needed
+# peer_data = [b"1", b"2", b"3", b"4", b"5"]  # Add more values as needed
 # 21 node 1Mb
-# peer_data = [b"5", b"10", b"15", b"25", b"50"]  # Add more values as needed
+# peer_data = [b"1", b"3", b"5", b"8", b"10", b"12", b"14", b"16",b"18", b"20"];
+# peer_data = [b"5", b"7", b"9", b"25", b"50"]  # Add more values as needed
 # 31 nodes 2Mb
+# peer_data = [b"3", b"5", b"10",b"15",b"20", b"0"]
 # peer_data = [b"3", b"5", b"10", b"15", b"20"]  # Add more values as needed
 # 31 node 500Kb msg
-# peer_data = [b"1", b"2", b"3", b"5", b"7", b"10"]  # Add more values as needed
+# peer_data = [b"1", b"3", b"5",b"8",b"10", b"15"]  # Add more values as needed
 # 11  node 25kb msg
-# peer_data = [b"10", b"20", b"50", b"100", b"200"]  # Add more values as needed
+# peer_data = [b"10", b"20", b"50", b"100", b"200", b"500"]  # Add more values as needed
+# outage
+peer_data = [b"1"]
 
 def send_to_peers(data):
     for instance in instances:
@@ -100,7 +104,7 @@ while True:
         last_scrape_time = current_time
 
     # Send the next value to peers every 3 minutes
-    if current_time - last_update_time >= 180:
+    if current_time - last_update_time >= 90:
         print("UPDATING RPS TO ", peer_data[current_peer_data_index])
         send_to_peers([peer_data[current_peer_data_index]])
         

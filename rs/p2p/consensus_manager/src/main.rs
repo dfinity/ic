@@ -241,7 +241,7 @@ async fn load_generator(
     let mut produce_and_send_artifact = tokio::time::interval(
         Duration::from_secs(1)
             .checked_div(*rps_rx.borrow() as u32)
-            .unwrap_or(Duration::from_secs(1000000)),
+            .unwrap_or(Duration::from_secs(3)),
     );
 
     // Calculated such that not exceed 20000 active adverts
@@ -277,7 +277,10 @@ async fn load_generator(
                         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
                         let latency = now - Duration::from_secs_f64(f64::from_le_bytes(message[16..24].try_into().unwrap()));
                         metrics.message_latency.observe(latency.as_secs_f64());
+                        let id = TestArtifact::message_to_advert(&message).id;
+                        let message_id = u64::from_le_bytes(id[..8].try_into().unwrap());
 
+                        // if relaying && message_id % 20 == 0 {
                         if relaying {
                             // purge_queue.insert(TestArtifact::message_to_advert(&message), Duration::from_secs(60));
                             match artifact_processor_rx.send(ArtifactProcessorEvent::Advert((TestArtifact::message_to_advert(&message),false))).await {
@@ -296,7 +299,7 @@ async fn load_generator(
                 produce_and_send_artifact = tokio::time::interval(
                     Duration::from_secs(1)
                         .checked_div(*rps_rx.borrow() as u32)
-                        .unwrap_or(Duration::from_secs(u64::MAX)),
+                        .unwrap_or(Duration::from_secs(100000000)),
                 );
                 info!(
                     log,
@@ -478,7 +481,7 @@ async fn main() {
         );
     }
 
-    let (rps_tx, rps_rx) = tokio::sync::watch::channel(0);
+    let (rps_tx, rps_rx) = tokio::sync::watch::channel(1);
 
     rt_handle.spawn(load_generator(
         args.id,
@@ -630,10 +633,10 @@ fn start_libp2p(
         .with_tokio()
         .with_quic_config(|mut cfg| {
             // ms
-            cfg.max_idle_timeout = 1_000_000;
+            cfg.max_idle_timeout = 1_000;
             cfg.max_connection_data = 1_000_000_000;
             cfg.max_concurrent_stream_limit = 1000;
-            cfg.handshake_timeout = Duration::from_secs(100000);
+            // cfg.handshake_timeout = Duration::from_secs(100000);
             cfg
         })
         // .with_tcp(

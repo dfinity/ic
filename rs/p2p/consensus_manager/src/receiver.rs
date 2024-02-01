@@ -91,8 +91,12 @@ async fn update_handler<Artifact: ArtifactKind>(
     Extension(conn_id): Extension<ConnId>,
     payload: Bytes,
 ) -> Result<(), StatusCode> {
-    let update: AdvertUpdate<Artifact> =
-        pb::AdvertUpdate::proxy_decode(&payload).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let update = tokio::task::spawn_blocking(move || {
+        let update: AdvertUpdate<Artifact> = pb::AdvertUpdate::proxy_decode(&payload).unwrap();
+        update
+    })
+    .await
+    .unwrap();
 
     if sender.send((update, peer, conn_id)).await.is_err() {
         error!(

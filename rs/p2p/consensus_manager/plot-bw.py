@@ -12,6 +12,7 @@ def calculate_rate(df):
     df['rate_libp2p_tx_mbits_s'] = df['libp2p_tx_Mbits'].diff() / df['Time'].diff().dt.total_seconds()
     df['libp2p_rx_Mbits'] = df['libp2p_rx'] * 8 / 1e6  # Convert bytes to Mbits
     df['rate_libp2p_rx_mbits_s'] = df['libp2p_rx_Mbits'].diff() / df['Time'].diff().dt.total_seconds()
+    df['Artifacts'] = df['Artifacts']
     return df
 
 def plot_data(folder):
@@ -23,7 +24,8 @@ def plot_data(folder):
         # df = pd.read_csv(file, names=['Time', 'Bytes', 'Artifacts', 'Sent', 'udp_tx', 'udp_rx', 'libp2p_tx', 'libp2p_rx'])
         df = pd.read_csv(file, names=['Time', 'Bytes', 'Artifacts', 'Sent', 'udp_tx', 'udp_rx', 'libp2p_tx', 'libp2p_rx', 'latency'])
         df = calculate_rate(df)
-        plt.plot(df['Time'], df['Rate_Mbit_s'], marker='o', label=os.path.basename(file))
+        # plt.plot(df['Time'], df['Rate_Mbit_s'], marker='o', label=os.path.basename(file))
+        plt.plot(df['Time'], df['Artifacts'], marker='o', label=os.path.basename(file))
         # plt.plot(df['Time'], df['rate_libp2p_rx_mbits_s'], marker='o', label=os.path.basename(file))
         # plt.plot(df['Time'], df['rate_libp2p_tx_mbits_s'], marker='o', label=os.path.basename(file))
         # plt.plot(df['Time'], df['Libp2p RX'], marker='o', label=os.path.basename(file))

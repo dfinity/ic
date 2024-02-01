@@ -44,10 +44,17 @@ pub(crate) async fn run_stream_acceptor(
     // A better approach will be to use a router implemented as a tower service and accept
     // streams iff the router is ready. Then the actual number of buffered messages is determined
     // by the handlers instead by the underlying implementation.
+    let mut bytes_sent = 0;
+    let mut bytes_received = 0;
     loop {
         tokio::select! {
              _ = quic_metrics_scrape.tick() => {
-                metrics.collect_quic_connection_stats(&connection, &peer_id);
+                let cur_bytes_sent = connection.stats().udp_tx.bytes;
+                let cur_bytes_received = connection.stats().udp_rx.bytes;
+                metrics.collect_quic_connection_stats(&connection, &peer_id, cur_bytes_sent-bytes_sent, cur_bytes_received- bytes_received);
+                bytes_sent = cur_bytes_sent;
+                bytes_received= cur_bytes_received;
+
             }
             uni = connection.accept_uni() => {
                 match uni {

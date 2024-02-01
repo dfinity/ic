@@ -76,7 +76,7 @@ use crate::{metrics::QuicTransportMetrics, request_handler::run_stream_acceptor}
 const KEEP_ALIVE_INTERVAL: Duration = Duration::from_millis(200);
 /// Timeout after which quic marks connections as broken. This timeout is used to detect connections
 /// that were not explicitly closed. I.e replica crash
-const IDLE_TIMEOUT: Duration = Duration::from_secs(1000);
+const IDLE_TIMEOUT: Duration = Duration::from_millis(1000);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const CONNECT_RETRY_BACKOFF: Duration = Duration::from_secs(3);
 const GRUEZI_HANDSHAKE: &str = "gruezi";
@@ -235,12 +235,12 @@ pub(crate) fn start_connection_manager(
     // STREAM_RWN 1_250_000
     // stream_receive_window: STREAM_RWND.into(),
     // send_window: (8 * STREAM_RWND).into()
-    transport_config.send_window(400_000_000);
+    transport_config.send_window(1_000_000_000);
     // Upper bound on receive memory consumption.
     transport_config.receive_window(VarInt::from_u32(3_000_000_000));
     transport_config.stream_receive_window(VarInt::from_u32(20_000_000));
-    transport_config.max_concurrent_bidi_streams(VarInt::from_u32(10_000));
-    transport_config.max_concurrent_uni_streams(VarInt::from_u32(10000));
+    // transport_config.max_concurrent_bidi_streams(VarInt::from_u32(25));
+    // transport_config.max_concurrent_uni_streams(VarInt::from_u32(25));
     let transport_config = Arc::new(transport_config);
     let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(rustls_server_config));
     server_config.transport_config(transport_config.clone());
@@ -259,11 +259,11 @@ pub(crate) fn start_connection_manager(
             // 2Gb/s * 100ms ~ 200M bits = 25MB
             // To this only on to avoid unecessary error in dfx on MacOS
             #[cfg(target_os = "linux")]
-            if let Err(e) = socket2.set_recv_buffer_size(225_000_000) {
+            if let Err(e) = socket2.set_recv_buffer_size(525_000_000) {
                 info!(log, "Failed to set receive udp buffer. {}", e)
             }
             #[cfg(target_os = "linux")]
-            if let Err(e) = socket2.set_send_buffer_size(225_000_000) {
+            if let Err(e) = socket2.set_send_buffer_size(525_000_000) {
                 info!(log, "Failed to set send udp buffer. {}", e)
             }
             info!(

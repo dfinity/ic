@@ -103,6 +103,62 @@ resource "null_resource" "deletable-prov-REGION" {
 }
 """
 
+outage_template = """
+resource "aws_instance" "deletable-instance-REGION" {
+  provider        = aws.eu_central_1
+  ami             = "AMI"
+  instance_type   = "MACHINE"
+  monitoring = true
+  key_name = aws_key_pair.deletable-key-eu_central_1.key_name
+  vpc_security_group_ids = [aws_security_group.deletable-sg-eu_central_1.id]
+
+  tags = {
+    Name = "experiment"
+  }
+  user_data = <<EOF
+#!/bin/bash
+
+sudo sysctl -w net.core.rmem_max=500000000
+sudo sysctl -w net.core.wmem_max=500000000
+sudo sysctl -w net.core.rmem_default=500000000
+sudo sysctl -w net.core.wmem_default=500000000
+sudo sysctl -w net.ipv4.tcp_window_scaling = 1
+sudo sysctl -w net.ipv4.tcp_wmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_rmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_wmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_rmem= 10240 16777216 33554432 
+
+# Download the binary from the pre-signed S3 URL
+curl -o /tmp/binary "${var.runner_url}"
+
+# Make binary executable
+chmod +x /tmp/binary
+EOF
+}
+
+
+resource "null_resource" "deletable-prov-REGION" {
+  depends_on = DEPENDS_ON
+
+  provisioner "remote-exec" {
+    connection {
+      host        = aws_instance.deletable-instance-REGION.public_ip
+      user        = "ubuntu"
+      private_key = tls_private_key.experiment.private_key_pem
+    }
+
+    inline = [
+      "sleep 30",
+      "ip addr show",
+      "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
+      "timeout 120 /tmp/binary --id ID --message-size MESSAGE_SIZE --message-rate MESSAGE_RATE --port 4100 --metrics-port 9090 --peers-addrs PEERS_ADDRS LIBP2P",
+      "sleep 30",
+      "/tmp/binary --id ID --message-size MESSAGE_SIZE --message-rate MESSAGE_RATE --port 4100 --metrics-port 9090 --peers-addrs PEERS_ADDRS LIBP2P"
+    ]
+  }
+}
+"""
+
 def keep_n_elements(d, n):
     new_dict = {}
     for key, value in d.items():
@@ -121,8 +177,8 @@ libp2p = sys.argv[4]
 if libp2p == "true":
     libp2p_option = "--libp2p"
 else:
-    # libp2p_option = "--relaying"
-    libp2p_option = ""
+    libp2p_option = "--relaying"
+    # libp2p_option = ""
 
 
 id = 0
@@ -133,7 +189,10 @@ for i in range(0, int(num_regions)):
   depends_on = f"[{', '.join(depends_on)}]"
   peers_addrs = [f"${{aws_instance.deletable-instance-{r}.private_ip}}:4100" for r in range(0, int(num_regions)) if r != i]
   peers_addrs = ' '.join(peers_addrs)
-  merged += instance_template.replace("REGION", str(i)).replace("AMI", ami).replace("DEPENDS_ON", depends_on).replace("PEERS_ADDRS", peers_addrs).replace("ID", str(id)).replace("MESSAGE_SIZE", message_size).replace("MESSAGE_RATE", message_rate).replace("MACHINE", instance).replace("LIBP2P",libp2p_option)
+  if i % 10 == 0:
+    merged += outage_template.replace("REGION", str(i)).replace("AMI", ami).replace("DEPENDS_ON", depends_on).replace("PEERS_ADDRS", peers_addrs).replace("ID", str(id)).replace("MESSAGE_SIZE", message_size).replace("MESSAGE_RATE", message_rate).replace("MACHINE", instance).replace("LIBP2P",libp2p_option)
+  else:    
+    merged += instance_template.replace("REGION", str(i)).replace("AMI", ami).replace("DEPENDS_ON", depends_on).replace("PEERS_ADDRS", peers_addrs).replace("ID", str(id)).replace("MESSAGE_SIZE", message_size).replace("MESSAGE_RATE", message_rate).replace("MACHINE", instance).replace("LIBP2P",libp2p_option)
   id += 1 
 
 depends_on = [f"aws_instance.deletable-instance-{region}" for region in range(0, int(num_regions))]
