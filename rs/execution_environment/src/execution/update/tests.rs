@@ -71,7 +71,6 @@ fn dts_update_concurrent_cycles_change_succeeds() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -176,7 +175,6 @@ fn dts_update_concurrent_cycles_change_fails() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -354,7 +352,6 @@ fn dts_update_resume_fails_due_to_cycles_change() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
         .with_slice_instruction_limit(10_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -412,7 +409,6 @@ fn dts_update_resume_fails_due_to_call_context_change() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
         .with_slice_instruction_limit(10_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -476,7 +472,6 @@ fn dts_update_does_not_expire_while_executing() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -546,7 +541,6 @@ fn dts_abort_of_call_works() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_initial_canister_cycles(initial_cycles)
         .with_manual_execution()
         .build();
@@ -630,7 +624,6 @@ fn dts_ingress_induction_cycles_debit_is_applied_on_aborts() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_initial_canister_cycles(initial_canister_cycles)
         .with_manual_execution()
         .build();
@@ -690,7 +683,6 @@ fn dts_uninstall_with_aborted_update() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
         .with_slice_instruction_limit(10_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 

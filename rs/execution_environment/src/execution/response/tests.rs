@@ -445,7 +445,6 @@ fn dts_works_in_response_callback() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -526,7 +525,6 @@ fn dts_works_in_cleanup_callback() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -604,7 +602,6 @@ fn dts_out_of_subnet_memory_in_response_callback() {
         .with_subnet_memory_reservation(40 * 1024 * 1024)
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -709,7 +706,6 @@ fn dts_out_of_subnet_memory_in_cleanup_callback() {
         .with_subnet_memory_reservation(40 * 1024 * 1024)
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -811,7 +807,6 @@ fn dts_abort_works_in_response_callback() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -907,7 +902,6 @@ fn dts_abort_works_in_cleanup_callback() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -1147,7 +1141,6 @@ fn dts_and_nondts_cycles_match_after_response() {
     let mut test_b = ExecutionTestBuilder::new()
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -1182,7 +1175,6 @@ fn dts_and_nondts_cycles_match_if_response_fails() {
     let mut test_b = ExecutionTestBuilder::new()
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -1209,7 +1201,6 @@ fn dts_and_nondts_cycles_match_if_cleanup_fails() {
     let mut test_b = ExecutionTestBuilder::new()
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -1245,7 +1236,6 @@ fn dts_response_concurrent_cycles_change_succeeds() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -1363,7 +1353,6 @@ fn dts_response_concurrent_cycles_change_fails() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -1497,7 +1486,6 @@ fn dts_response_with_cleanup_concurrent_cycles_change_fails() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -1681,7 +1669,6 @@ fn dts_uninstall_with_aborted_response() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
         .with_slice_instruction_limit(10_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -1836,7 +1823,6 @@ fn reserve_instructions_for_cleanup_callback_with_dts() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
         .with_slice_instruction_limit(slice_instruction_limit)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -1850,7 +1836,6 @@ fn response_callback_succeeds_with_memory_reservation() {
         .with_subnet_memory_reservation(80 * 1024 * 1024)
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -1974,7 +1959,6 @@ fn cleanup_callback_succeeds_with_memory_reservation() {
         .with_subnet_memory_reservation(80 * 1024 * 1024)
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -2100,7 +2084,6 @@ fn subnet_available_memory_does_not_change_on_response_abort() {
         .with_subnet_memory_reservation(80 * 1024 * 1024)
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -2177,7 +2160,6 @@ fn subnet_available_memory_does_not_change_on_cleanup_abort() {
         .with_subnet_memory_reservation(80 * 1024 * 1024)
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -2253,7 +2235,6 @@ fn subnet_available_memory_does_not_change_on_response_validation_failure() {
         .with_subnet_memory_reservation(80 * 1024 * 1024)
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -2326,7 +2307,6 @@ fn subnet_available_memory_does_not_change_on_response_resume_failure() {
         .with_subnet_memory_reservation(80 * 1024 * 1024)
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -2412,7 +2392,6 @@ fn subnet_available_memory_does_not_change_on_cleanup_resume_failure() {
         .with_subnet_memory_reservation(80 * 1024 * 1024)
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 

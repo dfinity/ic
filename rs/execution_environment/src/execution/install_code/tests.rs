@@ -101,7 +101,6 @@ fn dts_resume_works_in_install_code() {
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
         .with_install_code_slice_instruction_limit(1_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
@@ -152,7 +151,6 @@ fn dts_abort_works_in_install_code() {
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
         .with_install_code_slice_instruction_limit(1_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
@@ -225,7 +223,6 @@ fn install_code_validate_input_compute_allocation() {
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(1_000_000)
         .with_install_code_slice_instruction_limit(1_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
     test.create_canister_with_allocation(Cycles::new(2_000_000_000_000_000), Some(50), None)
@@ -268,7 +265,6 @@ fn install_code_validate_input_memory_allocation() {
         .with_subnet_memory_reservation(0)
         .with_install_code_instruction_limit(1_000_000)
         .with_install_code_slice_instruction_limit(1_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
     test.create_canister_with_allocation(
@@ -316,7 +312,6 @@ fn install_code_validate_input_controller() {
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(1_000_000)
         .with_install_code_slice_instruction_limit(1_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
     let controller = user_test_id(1);
@@ -358,7 +353,6 @@ fn install_code_validates_execution_state() {
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(1_000_000)
         .with_install_code_slice_instruction_limit(1_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
     let canister_id = test
@@ -403,7 +397,6 @@ fn install_code_fails_when_not_enough_wasm_custom_sections_memory() {
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(1_000_000_000)
         .with_install_code_slice_instruction_limit(1_000_000_000)
-        .with_deterministic_time_slicing()
         .with_subnet_wasm_custom_sections_memory(32)
         .with_manual_execution()
         .build();
@@ -434,7 +427,6 @@ fn install_code_succeeds_with_enough_wasm_custom_sections_memory() {
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(1_000_000_000)
         .with_install_code_slice_instruction_limit(1_000_000_000)
-        .with_deterministic_time_slicing()
         .with_subnet_wasm_custom_sections_memory(1024 * 1024) // 1MiB
         .with_manual_execution()
         .build();
@@ -476,7 +468,6 @@ fn install_code_respects_wasm_custom_sections_available_memory() {
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(1_000_000_000)
         .with_install_code_slice_instruction_limit(1_000_000_000)
-        .with_deterministic_time_slicing()
         .with_subnet_wasm_custom_sections_memory(available_wasm_custom_sections_memory)
         .with_manual_execution()
         .build();
@@ -591,7 +582,6 @@ fn install_code_with_start_with_err() {
         .with_instruction_limit(1_000_000)
         .with_install_code_instruction_limit(1_000_000)
         .with_install_code_slice_instruction_limit(1_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
     let canister_id = test
@@ -628,7 +618,6 @@ fn install_code_with_start_with_success() {
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(1_000_000)
         .with_install_code_slice_instruction_limit(1_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
     let canister_id = test
@@ -706,7 +695,6 @@ fn install_code_with_init_method_with_error() {
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(1_000_000)
         .with_install_code_slice_instruction_limit(1_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
     let canister_id = test
@@ -742,7 +730,6 @@ fn install_code_with_init_method_success() {
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(1_000_000)
         .with_install_code_slice_instruction_limit(1_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
     let canister_id = test
@@ -770,7 +757,6 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(1_000_000)
         .with_install_code_slice_instruction_limit(1_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
     // canister history memory usage at the beginning of attempted install
@@ -815,7 +801,6 @@ fn install_code_running_out_of_instructions() {
         // Set the install message limit very low to hit it while executing.
         .with_install_code_instruction_limit(1_500)
         .with_install_code_slice_instruction_limit(1000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .with_cost_to_compile_wasm_instruction(0)
         .build();
@@ -874,7 +859,6 @@ fn dts_uninstall_with_aborted_install_code() {
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(1_000_000)
         .with_install_code_slice_instruction_limit(1_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
     let canister_id = test
@@ -923,7 +907,6 @@ fn dts_install_code_creates_entry_in_subnet_call_context_manager() {
         .with_own_subnet_id(own_subnet)
         .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
         .with_install_code_slice_instruction_limit(1_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .with_caller(own_subnet, caller_canister)
         .build();
@@ -1004,7 +987,6 @@ fn subnet_call_context_manager_keeps_install_code_requests_when_abort() {
         .with_own_subnet_id(own_subnet)
         .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
         .with_install_code_slice_instruction_limit(1_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .with_caller(own_subnet, caller_canister)
         .build();
@@ -1104,7 +1086,6 @@ fn clean_in_progress_install_code_calls_from_subnet_call_context_manager() {
         .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
         // Ensure that all `install_code()` executions will get paused.
         .with_install_code_slice_instruction_limit(1_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .with_caller(own_subnet, caller_canister)
         .build();
@@ -1288,7 +1269,6 @@ fn consistent_install_code_calls_after_split() {
         .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
         // Ensure that all `install_code()` executions will get paused.
         .with_install_code_slice_instruction_limit(1_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .with_caller(subnet_a, caller_canister)
         .build();
@@ -1925,7 +1905,6 @@ fn install_with_dts_correctly_updates_system_state() {
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(1_000_000_000)
         .with_install_code_slice_instruction_limit(1_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -2055,7 +2034,6 @@ fn upgrade_with_dts_correctly_updates_system_state() {
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(1_000_000_000)
         .with_install_code_slice_instruction_limit(1_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -2332,7 +2310,6 @@ fn install_chunked_with_dts_works() {
         .with_wasm_chunk_store(FlagStatus::Enabled)
         .with_install_code_instruction_limit(1_000_000_000)
         .with_install_code_slice_instruction_limit(1_000)
-        .with_deterministic_time_slicing()
         .build();
 
     let canister_id = test.create_canister(CYCLES);

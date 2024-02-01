@@ -24,7 +24,7 @@ fn get_canister_version(env: &StateMachine, canister_id: CanisterId) -> u64 {
 }
 
 /// This function implements the functionality of `StateMachine::execute_ingress_as`
-/// and additionally asserts that DTS is used iff the parameter `dts` is true.
+/// and additionally asserts that DTS is used if the parameter `dts` is true.
 fn execute_ingress_with_dts(
     env: &StateMachine,
     sender: PrincipalId,

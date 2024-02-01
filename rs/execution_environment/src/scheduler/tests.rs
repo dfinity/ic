@@ -3844,7 +3844,6 @@ fn rate_limiting_of_install_code() {
             ..SchedulerConfig::application_subnet()
         })
         .with_rate_limiting_of_instructions()
-        .with_deterministic_time_slicing()
         .build();
 
     let canister = test.create_canister();
@@ -3926,7 +3925,6 @@ fn dts_long_execution_completes() {
             max_instructions_per_slice: NumInstructions::from(100),
             ..SchedulerConfig::application_subnet()
         })
-        .with_deterministic_time_slicing()
         .build();
 
     let canister = test.create_canister();
@@ -3962,7 +3960,6 @@ fn cannot_execute_management_message_for_targeted_long_execution_canister() {
             max_instructions_per_slice: NumInstructions::from(100),
             ..SchedulerConfig::application_subnet()
         })
-        .with_deterministic_time_slicing()
         .build();
 
     let canister = test.create_canister();
@@ -4029,7 +4026,6 @@ fn dts_long_execution_runs_out_of_instructions() {
             max_instructions_per_slice: NumInstructions::from(100),
             ..SchedulerConfig::application_subnet()
         })
-        .with_deterministic_time_slicing()
         .build();
 
     let canister = test.create_canister();
@@ -4070,7 +4066,6 @@ fn complete_concurrent_long_executions(
             max_paused_executions: num_canisters,
             ..SchedulerConfig::application_subnet()
         })
-        .with_deterministic_time_slicing()
         .build();
 
     let mut message_ids = vec![];
@@ -4112,7 +4107,6 @@ fn respect_max_paused_executions(
             max_paused_executions,
             ..SchedulerConfig::application_subnet()
         })
-        .with_deterministic_time_slicing()
         .build();
 
     let mut message_ids = vec![];
@@ -4166,7 +4160,6 @@ fn break_after_long_executions(#[strategy(2..10_usize)] scheduler_cores: usize) 
             max_paused_executions: num_canisters,
             ..SchedulerConfig::application_subnet()
         })
-        .with_deterministic_time_slicing()
         .build();
 
     // Create one canister with many long messages
@@ -4232,7 +4225,6 @@ fn filter_after_long_executions() {
             max_instructions_per_message_without_dts: max_instructions_per_slice.into(),
             ..SchedulerConfig::application_subnet()
         })
-        .with_deterministic_time_slicing()
         .build();
 
     // Create a canister with long messages
@@ -4275,7 +4267,6 @@ fn dts_allow_only_one_long_install_code_execution_at_any_time() {
             max_instructions_per_install_code_slice: NumInstructions::new(10),
             ..SchedulerConfig::application_subnet()
         })
-        .with_deterministic_time_slicing()
         .build();
 
     let canister_1 = test.create_canister();
@@ -4419,7 +4410,6 @@ fn dts_resume_install_code_after_abort() {
             max_instructions_per_install_code_slice: NumInstructions::new(10),
             ..SchedulerConfig::application_subnet()
         })
-        .with_deterministic_time_slicing()
         .build();
 
     let canister = test.create_canister();
@@ -4471,7 +4461,6 @@ fn dts_resume_long_execution_after_abort() {
             max_instructions_per_slice: NumInstructions::from(100),
             ..SchedulerConfig::application_subnet()
         })
-        .with_deterministic_time_slicing()
         .build();
 
     let canister = test.create_canister();
@@ -4520,7 +4509,6 @@ fn dts_update_and_heartbeat() {
             max_instructions_per_slice: NumInstructions::from(100),
             ..SchedulerConfig::application_subnet()
         })
-        .with_deterministic_time_slicing()
         .build();
 
     let canister = test.create_canister_with(
@@ -4653,9 +4641,7 @@ fn scheduler_resets_accumulated_priorities() {
 
 #[test]
 fn test_is_next_method_added_to_task_queue() {
-    let mut test = SchedulerTestBuilder::new()
-        .with_deterministic_time_slicing()
-        .build();
+    let mut test = SchedulerTestBuilder::new().build();
 
     let canister = test.create_canister_with(
         Cycles::new(1_000_000_000_000),
