@@ -129,6 +129,7 @@ system_test(
         "boot_image_minimal_size_gibibytes": 100,
     },
     env_inherit = ["SSH_AUTH_SOCK"],
+    flaky = True,
     tags = [
         "dynamic_testnet",
         "local",

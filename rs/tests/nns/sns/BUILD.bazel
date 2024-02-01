@@ -5,7 +5,6 @@ package(default_visibility = ["//visibility:public"])
 
 system_test(
     name = "sns_sale_load_test_1",
-    flaky = False,  # remove after when PFOPS-3148 is resolved
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",
@@ -19,7 +18,6 @@ system_test(
 
 system_test(
     name = "sns_sale_load_test_2",
-    flaky = False,  # remove after when PFOPS-3148 is resolved
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",
@@ -33,7 +31,6 @@ system_test(
 
 system_test(
     name = "sns_sale_load_test_3",
-    flaky = False,  # remove after when PFOPS-3148 is resolved
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",
@@ -47,6 +44,7 @@ system_test(
 
 system_test(
     name = "aggregation_canister_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     # TODO[NNS1-2658]: re-enable this test
     tags = [
@@ -62,7 +60,6 @@ system_test(
 
 system_test(
     name = "workload_static_testnet",
-    flaky = False,  # remove after when PFOPS-3148 is resolved
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",
@@ -76,7 +73,6 @@ system_test(
 
 system_test(
     name = "launchpad_direct_load_test",
-    flaky = False,  # remove after when PFOPS-3148 is resolved
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",
@@ -92,7 +88,6 @@ system_test(
 
 system_test(
     name = "launchpad_direct_auth_load_test",
-    flaky = False,  # remove after when PFOPS-3148 is resolved
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",
@@ -108,7 +103,6 @@ system_test(
 
 system_test(
     name = "launchpad_aggregator_load_test",
-    flaky = False,  # remove after when PFOPS-3148 is resolved
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",
@@ -124,6 +118,7 @@ system_test(
 
 system_test(
     name = "neurons_fund_swap_participation_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
@@ -138,6 +133,7 @@ system_test(
 
 system_test(
     name = "overpayment_fail_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
@@ -147,7 +143,6 @@ system_test(
 
 system_test(
     name = "payment_flow_load_test",
-    flaky = False,  # remove after when PFOPS-3148 is resolved
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",

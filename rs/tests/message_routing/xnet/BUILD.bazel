@@ -31,6 +31,7 @@ system_test(
 
 system_test(
     name = "xnet_slo_3_subnets_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_nightly",
@@ -43,6 +44,7 @@ system_test(
 
 system_test(
     name = "xnet_slo_29_subnets_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_nightly",
@@ -55,6 +57,7 @@ system_test(
 
 system_test(
     name = "xnet_malicious_slices",
+    flaky = True,
     malicious = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [

@@ -14,6 +14,7 @@ system_test(
 
 system_test(
     name = "rejoin_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
@@ -26,6 +27,7 @@ system_test(
 
 system_test(
     name = "rejoin_test_large_state",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hotfix",
@@ -39,6 +41,7 @@ system_test(
 
 system_test(
     name = "state_sync_malicious_chunk_test",
+    flaky = True,
     malicious = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [

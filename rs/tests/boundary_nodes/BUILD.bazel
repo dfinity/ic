@@ -13,6 +13,7 @@ TEST_CANISTERS_RUNTIME_DEPS = [
 
 system_test(
     name = "boundary_node_integration_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -22,6 +23,7 @@ system_test(
 
 system_test(
     name = "boundary_node_integration_on_playnet_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
@@ -34,6 +36,7 @@ system_test(
 
 system_test(
     name = "boundary_nodes_snp_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["manual"],  # TODO(VER-2274): remove "manual" when at least two hosts suitable for the test will be running.
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -43,6 +46,7 @@ system_test(
 
 system_test(
     name = "boundary_node_update_workload_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
@@ -120,7 +124,6 @@ system_test(
 
 system_test(
     name = "custom_domains_integration_test",
-    flaky = False,  # remove after when PFOPS-3148 is resolved
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",
@@ -137,6 +140,7 @@ system_test(
 
 system_test(
     name = "api_boundary_node_decentralization_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS

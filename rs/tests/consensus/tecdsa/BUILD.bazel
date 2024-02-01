@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 
 system_test(
     name = "tecdsa_complaint_test",
+    flaky = True,
     malicious = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -16,6 +17,7 @@ system_test(
 
 system_test(
     name = "tecdsa_add_nodes_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
@@ -24,6 +26,7 @@ system_test(
 
 system_test(
     name = "tecdsa_remove_nodes_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
@@ -32,6 +35,7 @@ system_test(
 
 system_test(
     name = "tecdsa_key_rotation_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
@@ -40,6 +44,7 @@ system_test(
 
 system_test(
     name = "tecdsa_signature_fails_without_cycles_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
@@ -52,6 +57,7 @@ system_test(
 
 system_test(
     name = "tecdsa_signature_from_nns_without_cycles_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
@@ -64,6 +70,7 @@ system_test(
 
 system_test(
     name = "tecdsa_signature_from_other_subnet_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
@@ -86,6 +93,7 @@ system_test(
 
 system_test(
     name = "tecdsa_signature_same_subnet_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
@@ -98,6 +106,7 @@ system_test(
 
 system_test(
     name = "tecdsa_signature_timeout_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
