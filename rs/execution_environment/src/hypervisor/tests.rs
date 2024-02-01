@@ -549,7 +549,9 @@ fn ic0_stable_read_traps_if_out_of_bounds() {
 
 #[test]
 fn ic0_stable_read_handles_overflows() {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_deterministic_time_slicing_disabled()
+        .build();
     let wat = r#"
         (module
             (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
@@ -4770,7 +4772,6 @@ fn dts_pause_resume_works_in_update_call() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
     let canister_id = test.universal_canister().unwrap();
@@ -4804,7 +4805,6 @@ fn dts_abort_works_in_update_call() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
     let canister_id = test.universal_canister().unwrap();
@@ -4891,7 +4891,6 @@ fn dts_concurrent_subnet_available_change() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
     let canister_id = test.universal_canister().unwrap();
@@ -4925,7 +4924,6 @@ fn system_state_apply_change_fails() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -6576,7 +6574,6 @@ fn yield_triggers_dts_slice_with_many_dirty_pages() {
     const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
 
     let mut test = ExecutionTestBuilder::new()
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .with_max_dirty_pages_optimization_embedder_config(pages_to_touch - 1)
         .build();
@@ -6608,7 +6605,6 @@ fn yield_does_not_trigger_dts_slice_without_enough_dirty_pages() {
     const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
 
     let mut test = ExecutionTestBuilder::new()
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .with_max_dirty_pages_optimization_embedder_config(pages_to_touch + 1)
         .build();
@@ -6635,7 +6631,6 @@ fn yield_abort_does_not_modify_state() {
     const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
 
     let mut test = ExecutionTestBuilder::new()
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .with_max_dirty_pages_optimization_embedder_config(pages_to_touch - 1)
         .build();
@@ -6694,7 +6689,6 @@ fn yield_for_dirty_page_copy_does_not_trigger_on_system_subnets() {
     const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
 
     let mut test = ExecutionTestBuilder::new()
-        .with_deterministic_time_slicing()
         .with_subnet_type(SubnetType::System)
         .with_slice_instruction_limit(
             SchedulerConfig::system_subnet()
@@ -6732,6 +6726,7 @@ fn yield_for_dirty_page_copy_does_not_trigger_on_system_subnets_without_dts() {
     const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
 
     let mut test = ExecutionTestBuilder::new()
+        .with_deterministic_time_slicing_disabled()
         .with_subnet_type(SubnetType::System)
         .with_manual_execution()
         .with_max_dirty_pages_optimization_embedder_config(pages_to_touch - 1)

@@ -84,7 +84,6 @@ fn execution_test_with_max_rounds(max_rounds: u64) -> ExecutionTest {
             )
             .into(),
         )
-        .with_deterministic_time_slicing()
         .with_install_code_slice_instruction_limit(MAX_INSTRUCTIONS_PER_SLICE)
         .with_install_code_instruction_limit(MAX_INSTRUCTIONS_PER_SLICE * max_rounds)
         .with_cost_to_compile_wasm_instruction(0)

@@ -637,7 +637,7 @@ impl Default for SchedulerTestBuilder {
             allocatable_compute_capacity_in_percent: 100,
             rate_limiting_of_instructions: false,
             rate_limiting_of_heap_delta: false,
-            deterministic_time_slicing: false,
+            deterministic_time_slicing: true,
             log: no_op_logger(),
             ecdsa_keys: vec![],
             metrics_registry: MetricsRegistry::new(),
@@ -683,13 +683,6 @@ impl SchedulerTestBuilder {
     pub fn with_rate_limiting_of_heap_delta(self) -> Self {
         Self {
             rate_limiting_of_heap_delta: true,
-            ..self
-        }
-    }
-
-    pub fn with_deterministic_time_slicing(self) -> Self {
-        Self {
-            deterministic_time_slicing: true,
             ..self
         }
     }

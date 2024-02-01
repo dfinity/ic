@@ -832,7 +832,6 @@ fn stop_canister_creates_entry_in_subnet_call_context_manager() {
     let caller_canister = canister_test_id(1);
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .with_caller(own_subnet, caller_canister)
         .build();
@@ -959,7 +958,6 @@ fn clean_in_progress_stop_canister_calls_from_subnet_call_context_manager() {
     let caller_canister = canister_test_id(1);
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .with_caller(own_subnet, caller_canister)
         .build();
@@ -1116,7 +1114,6 @@ fn consistent_stop_canister_calls_after_split() {
     let caller_canister = canister_test_id(1);
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(subnet_a)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .with_caller(subnet_a, caller_canister)
         .build();

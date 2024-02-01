@@ -1596,7 +1596,6 @@ impl Default for ExecutionTestBuilder {
         Self {
             execution_config: Config {
                 rate_limiting_of_instructions: FlagStatus::Disabled,
-                deterministic_time_slicing: FlagStatus::Disabled,
                 canister_sandboxing_flag: FlagStatus::Enabled,
                 composite_queries: FlagStatus::Disabled,
                 query_caching: FlagStatus::Disabled,
@@ -1799,8 +1798,8 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_deterministic_time_slicing(mut self) -> Self {
-        self.execution_config.deterministic_time_slicing = FlagStatus::Enabled;
+    pub fn with_deterministic_time_slicing_disabled(mut self) -> Self {
+        self.execution_config.deterministic_time_slicing = FlagStatus::Disabled;
         self
     }
 
