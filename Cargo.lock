@@ -10692,6 +10692,7 @@ dependencies = [
  "ic-sns-swap",
  "ic-test-utilities-compare-dirs",
  "icrc-ledger-types",
+ "maplit",
  "prost",
  "serde",
  "tempfile",

@@ -61,6 +61,15 @@ type ListSnsCanistersResponse = record {
   dapps : vec principal;
   archives : vec principal;
 };
+type ManageDappCanisterSettingsRequest = record {
+  freezing_threshold : opt nat64;
+  canister_ids : vec principal;
+  reserved_cycles_limit : opt nat64;
+  log_visibility : opt int32;
+  memory_allocation : opt nat64;
+  compute_allocation : opt nat64;
+};
+type ManageDappCanisterSettingsResponse = record { failure_reason : opt text };
 type RegisterDappCanisterRequest = record { canister_id : opt principal };
 type RegisterDappCanistersRequest = record { canister_ids : vec principal };
 type SetDappControllersRequest = record {
@@ -86,6 +95,9 @@ service : (SnsRootCanister) -> {
       GetSnsCanistersSummaryResponse,
     );
   list_sns_canisters : (record {}) -> (ListSnsCanistersResponse) query;
+  manage_dapp_canister_settings : (ManageDappCanisterSettingsRequest) -> (
+      ManageDappCanisterSettingsResponse,
+    );
   register_dapp_canister : (RegisterDappCanisterRequest) -> (record {});
   register_dapp_canisters : (RegisterDappCanistersRequest) -> (record {});
   set_dapp_controllers : (SetDappControllersRequest) -> (

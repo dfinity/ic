@@ -17,6 +17,7 @@ use ic_sns_root::{
     logs::{ERROR, INFO},
     pb::v1::{
         CanisterCallError, ListSnsCanistersRequest, ListSnsCanistersResponse,
+        ManageDappCanisterSettingsRequest, ManageDappCanisterSettingsResponse,
         RegisterDappCanisterRequest, RegisterDappCanisterResponse, RegisterDappCanistersRequest,
         RegisterDappCanistersResponse, SetDappControllersRequest, SetDappControllersResponse,
         SnsRootCanister,
@@ -304,6 +305,22 @@ async fn set_dapp_controllers(request: SetDappControllersRequest) -> SetDappCont
         &request,
     )
     .await
+}
+
+#[candid_method(update)]
+#[update]
+async fn manage_dapp_canister_settings(
+    request: ManageDappCanisterSettingsRequest,
+) -> ManageDappCanisterSettingsResponse {
+    log!(INFO, "manage_dapp_canister_settings");
+    assert_eq_governance_canister_id(PrincipalId(ic_cdk::api::caller()));
+
+    STATE.with_borrow(|state| {
+        state.manage_dapp_canister_settings(
+            request,
+            ManagementCanisterClientImpl::<CanisterRuntime>::new(None),
+        )
+    })
 }
 
 fn assert_state_is_valid(state: &SnsRootCanister) {

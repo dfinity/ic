@@ -106,6 +106,7 @@ generated_files_check(
 
 DEV_DEPENDENCIES = [
     "//rs/sns/root/protobuf_generator:lib",
+    "@crate_index//:maplit",
     "@crate_index//:tokio",
 ]
 

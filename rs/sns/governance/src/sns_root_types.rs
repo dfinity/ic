@@ -120,3 +120,75 @@ pub struct CanisterCallError {
     #[prost(string, tag = "2")]
     pub description: ::prost::alloc::string::String,
 }
+
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
+#[repr(i32)]
+pub enum LogVisibility {
+    Unspecified = 0,
+    /// The log is visible to the controllers of the dapp canister.
+    Controllers = 1,
+    /// The log is visible to the public.
+    Public = 2,
+}
+impl LogVisibility {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            LogVisibility::Unspecified => "LOG_VISIBILITY_UNSPECIFIED",
+            LogVisibility::Controllers => "LOG_VISIBILITY_CONTROLLERS",
+            LogVisibility::Public => "LOG_VISIBILITY_PUBLIC",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "LOG_VISIBILITY_UNSPECIFIED" => Some(Self::Unspecified),
+            "LOG_VISIBILITY_CONTROLLERS" => Some(Self::Controllers),
+            "LOG_VISIBILITY_PUBLIC" => Some(Self::Public),
+            _ => None,
+        }
+    }
+}
+
+#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ManageDappCanisterSettingsRequest {
+    #[prost(message, repeated, tag = "1")]
+    pub canister_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+    #[prost(uint64, optional, tag = "2")]
+    pub compute_allocation: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "3")]
+    pub memory_allocation: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "4")]
+    pub freezing_threshold: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "5")]
+    pub reserved_cycles_limit: ::core::option::Option<u64>,
+    #[prost(enumeration = "LogVisibility", optional, tag = "6")]
+    pub log_visibility: ::core::option::Option<i32>,
+}
+
+#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ManageDappCanisterSettingsResponse {
+    /// Absense of failure_reason indicates success.
+    #[prost(string, optional, tag = "1")]
+    pub failure_reason: ::core::option::Option<::prost::alloc::string::String>,
+}

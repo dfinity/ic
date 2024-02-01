@@ -104,3 +104,27 @@ message ListSnsCanistersResponse {
   repeated ic_base_types.pb.v1.PrincipalId archives = 6;
   ic_base_types.pb.v1.PrincipalId index = 7;
 }
+
+enum LogVisibility {
+  LOG_VISIBILITY_UNSPECIFIED = 0;
+
+  // The log is visible to the controllers of the dapp canister.
+  LOG_VISIBILITY_CONTROLLERS = 1;
+
+  // The log is visible to the public.
+  LOG_VISIBILITY_PUBLIC = 2;
+}
+
+message ManageDappCanisterSettingsRequest {
+  repeated ic_base_types.pb.v1.PrincipalId canister_ids = 1;
+  optional uint64 compute_allocation = 2;
+  optional uint64 memory_allocation = 3;
+  optional uint64 freezing_threshold = 4;
+  optional uint64 reserved_cycles_limit = 5;
+  optional LogVisibility log_visibility = 6;
+}
+
+message ManageDappCanisterSettingsResponse {
+  // Absense of failure_reason indicates success.
+  optional string failure_reason = 1;
+}

@@ -15,6 +15,7 @@ use crate::{
     },
     pb::{
         sns_root_types::{
+            ManageDappCanisterSettingsRequest, ManageDappCanisterSettingsResponse,
             RegisterDappCanistersRequest, RegisterDappCanistersResponse, SetDappControllersRequest,
             SetDappControllersResponse,
         },
@@ -49,12 +50,13 @@ use crate::{
             GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
             Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
             ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse,
-            ManageLedgerParameters, ManageNeuron, ManageNeuronResponse, ManageSnsMetadata,
-            MintSnsTokens, NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId,
-            NeuronPermission, NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
-            ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
-            RewardEvent, Tally, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
-            UpgradeSnsToNextVersion, Vote, VotingRewardsParameters, WaitForQuietState,
+            ManageDappCanisterSettings, ManageLedgerParameters, ManageNeuron, ManageNeuronResponse,
+            ManageSnsMetadata, MintSnsTokens, NervousSystemFunction, NervousSystemParameters,
+            Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
+            Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
+            RegisterDappCanisters, RewardEvent, Tally, TransferSnsTreasuryFunds,
+            UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
+            WaitForQuietState,
         },
     },
     proposal::{
@@ -2067,6 +2069,10 @@ impl Governance {
                 self.perform_manage_ledger_parameters(proposal_id, manage_ledger_parameters)
                     .await
             }
+            Action::ManageDappCanisterSettings(manage_dapp_canister_settings) => {
+                self.perform_manage_dapp_canister_settings(manage_dapp_canister_settings)
+                    .await
+            }
             // This should not be possible, because Proposal validation is performed when
             // a proposal is first made.
             Action::Unspecified(_) => Err(GovernanceError::new_with_message(
@@ -2784,6 +2790,49 @@ impl Governance {
                 ));
             }
         }
+    }
+
+    async fn perform_manage_dapp_canister_settings(
+        &self,
+        manage_dapp_canister_settings: ManageDappCanisterSettings,
+    ) -> Result<(), GovernanceError> {
+        let request = ManageDappCanisterSettingsRequest::from(manage_dapp_canister_settings);
+        let payload = candid::Encode!(&request).map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("Could not encode ManageDappCanisterSettings: {err:?}"),
+            )
+        })?;
+        self.env
+            .call_canister(
+                self.proto.root_canister_id_or_panic(),
+                "manage_dapp_canister_settings",
+                payload,
+            )
+            .await
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Canister method call failed: {err:?}"),
+                )
+            })
+            .and_then(
+                |reply| match candid::Decode!(&reply, ManageDappCanisterSettingsResponse) {
+                    Ok(ManageDappCanisterSettingsResponse { failure_reason }) => failure_reason
+                        .map_or(Ok(()), |failure_reason| {
+                            Err(GovernanceError::new_with_message(
+                                ErrorType::InvalidProposal,
+                                format!(
+                                    "Failed to manage dapp canister settings: {failure_reason}"
+                                ),
+                            ))
+                        }),
+                    Err(error) => Err(GovernanceError::new_with_message(
+                        ErrorType::External,
+                        format!("Could not decode ManageDappCanisterSettingsResponse: {error}"),
+                    )),
+                },
+            )
     }
 
     // Returns an option with the NervousSystemParameters

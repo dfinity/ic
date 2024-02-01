@@ -405,6 +405,31 @@ message DeregisterDappCanisters {
   repeated ic_base_types.pb.v1.PrincipalId new_controllers = 2;
 }
 
+enum LogVisibility {
+  LOG_VISIBILITY_UNSPECIFIED = 0;
+
+  // The log is visible to the controllers of the dapp canister.
+  LOG_VISIBILITY_CONTROLLERS = 1;
+
+  // The log is visible to the public.
+  LOG_VISIBILITY_PUBLIC = 2;
+}
+
+message ManageDappCanisterSettings {
+  // The canister IDs of the dapp canisters to be modified.
+  repeated ic_base_types.pb.v1.PrincipalId canister_ids = 1;
+
+  optional uint64 compute_allocation = 2;
+
+  optional uint64 memory_allocation = 3;
+
+  optional uint64 freezing_threshold = 4;
+
+  optional uint64 reserved_cycles_limit = 5;
+
+  optional LogVisibility log_visibility = 6;
+}
+
 // A proposal is the immutable input of a proposal submission.
 message Proposal {
   // The proposal's title as a text, which can be at most 256 bytes.
@@ -507,6 +532,11 @@ message Proposal {
     //
     // Id = 13
     ManageLedgerParameters manage_ledger_parameters = 17;
+
+    // Change canister settings for one or more dapp canister(s).
+    //
+    // Id = 14.
+    ManageDappCanisterSettings manage_dapp_canister_settings = 18;
   }
 }
 

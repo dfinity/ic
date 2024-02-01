@@ -13,6 +13,15 @@ pub struct UpdateSettings {
     pub sender_canister_version: Option<u64>,
 }
 
+#[derive(Default, Clone, Copy, CandidType, Deserialize, Debug, PartialEq, Eq, Hash)]
+pub enum LogVisibility {
+    #[default]
+    #[serde(rename = "controllers")]
+    Controllers,
+    #[serde(rename = "public")]
+    Public,
+}
+
 /// The CanisterSettings struct as defined in the ic-interface-spec
 /// https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-candid
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Deserialize, CandidType)]
@@ -21,6 +30,8 @@ pub struct CanisterSettings {
     pub compute_allocation: Option<candid::Nat>,
     pub memory_allocation: Option<candid::Nat>,
     pub freezing_threshold: Option<candid::Nat>,
+    pub reserved_cycles_limit: Option<candid::Nat>,
+    pub log_visibility: Option<LogVisibility>,
 }
 
 /// A wrapper call to the management canister `update_settings` API.
