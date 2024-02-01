@@ -12,7 +12,7 @@ use ic_agent::agent::{
     Agent, AgentError,
 };
 use opentelemetry::metrics::Meter;
-use tracing::{error, info};
+use tracing::{error, info, warn, Span};
 use url::Url;
 
 use crate::{
@@ -71,7 +71,10 @@ where
     fn handle_error(self, debug: bool) -> Response<B> {
         match self {
             Err(err) => {
-                error!("Internal Error during request:\n{}", err);
+                Span::current().record("code", 500);
+                Span::current().record("error", err.to_string());
+                error!("");
+
                 Response::builder()
                     .status(StatusCode::INTERNAL_SERVER_ERROR)
                     .body(if debug {
@@ -81,7 +84,19 @@ where
                     })
                     .unwrap()
             }
-            Ok(v) => v,
+
+            Ok(v) => {
+                let status = v.status().as_u16();
+                Span::current().record("code", status);
+
+                if status >= 500 {
+                    warn!("")
+                } else {
+                    info!("")
+                }
+
+                v
+            }
         }
     }
 }

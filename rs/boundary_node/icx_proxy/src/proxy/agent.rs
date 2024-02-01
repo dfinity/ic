@@ -13,25 +13,24 @@ use ic_agent::{
     AgentError,
 };
 use ic_response_verification::MAX_VERIFICATION_VERSION;
-use ic_utils::interfaces::http_request::HeaderField;
 use ic_utils::{
     call::{AsyncCall, SyncCall},
-    interfaces::http_request::HttpRequestCanister,
+    interfaces::http_request::{HeaderField, HttpRequestCanister},
 };
-use tracing::{info, warn};
+use tracing::{instrument, Span};
 
-use crate::http::request::HttpRequest;
-use crate::http::response::{AgentResponseAny, HttpResponse};
-use crate::http_client::{RequestHeaders, HEADER_X_REQUEST_ID, REQUEST_HEADERS};
-use crate::metrics::RequestContext;
 use crate::{
     canister_id,
+    error::ErrorFactory,
+    http::{
+        headers::{ACCEPT_ENCODING_HEADER_NAME, CACHE_HEADER_NAME},
+        request::HttpRequest,
+        response::{AgentResponseAny, HttpResponse},
+    },
+    http_client::{RequestHeaders, HEADER_X_REQUEST_ID, REQUEST_HEADERS},
+    metrics::RequestContext,
     proxy::{AppState, HandleError},
     validate::Validate,
-};
-use crate::{
-    error::ErrorFactory,
-    http::headers::{ACCEPT_ENCODING_HEADER_NAME, CACHE_HEADER_NAME},
 };
 
 pub struct Args<V> {
@@ -75,8 +74,22 @@ impl<V: Clone> FromRef<AppState<V>> for Args<V> {
     }
 }
 
-// The local thread pool is used to pin all async calls in the handler to a single thread
-// which is needed to use TLS (Thread Local Storage)
+#[instrument(
+    parent = None,
+    target = "",
+    skip_all,
+    fields(
+        request_id,
+        canister_id,
+        method,
+        uri,
+        code,
+        req_len,
+        resp_len,
+        stream,
+        error
+    )
+)]
 pub async fn handler<V: Validate + 'static>(
     State(args): State<Args<V>>,
     uri_canister_id: Option<canister_id::UriHost>,
@@ -128,13 +141,10 @@ async fn process_request(
         .map(|x| x.to_str().unwrap_or("<malformed id>").to_string())
         .unwrap_or("<unknown id>".into());
 
-    info!(
-        "{}: {}: {} {}",
-        request_id,
-        canister_id,
-        request.method(),
-        request.uri()
-    );
+    Span::current().record("request_id", &request_id);
+    Span::current().record("canister_id", &canister_id.to_string());
+    Span::current().record("method", request.method().as_str());
+    Span::current().record("uri", &request.uri().to_string());
 
     let (parts, body) = request.into_parts();
 
@@ -143,18 +153,19 @@ async fn process_request(
         x.borrow_mut().headers_out = parts.headers.clone();
     });
 
-    let http_request = HttpRequest::from((
-        &parts,
-        match HttpRequest::read_body(body).await {
-            Ok(data) => data,
-            Err(ErrorFactory::PayloadTooLarge) => {
-                return Ok(Response::builder()
-                    .status(StatusCode::PAYLOAD_TOO_LARGE)
-                    .body(Body::from("Request size exceeds limit"))?)
-            }
-            Err(e) => bail!(e),
-        },
-    ));
+    let body = match HttpRequest::read_body(body).await {
+        Ok(data) => data,
+        Err(ErrorFactory::PayloadTooLarge) => {
+            return Ok(Response::builder()
+                .status(StatusCode::PAYLOAD_TOO_LARGE)
+                .body(Body::from("Request size exceeds limit"))?)
+        }
+        Err(e) => bail!(e),
+    };
+
+    Span::current().record("req_len", body.len());
+
+    let http_request = HttpRequest::from((&parts, body));
 
     let canister = HttpRequestCanister::create(agent, canister_id);
     let header_fields = http_request
@@ -212,7 +223,11 @@ async fn process_request(
         agent_response
     };
 
+    Span::current().record("resp_len", agent_response.body.len());
+
     let http_response = HttpResponse::create(agent, &agent_response).await?;
+    Span::current().record("stream", http_response.has_streaming_body);
+
     let mut response_builder =
         Response::builder().status(StatusCode::from_u16(http_response.status_code)?);
 
@@ -226,7 +241,8 @@ async fn process_request(
 
         match validation_result {
             Err(err) => {
-                warn!("Request validation failed: {err}");
+                Span::current().record("error", format!("Request validation failed: {err}"));
+
                 return Ok(Response::builder()
                     .status(StatusCode::INTERNAL_SERVER_ERROR)
                     .body(err.into())
@@ -247,13 +263,17 @@ async fn process_request(
                 response_builder = response_builder.header(name, value);
             }
         }
+
         Some(validation_info) => {
             if validation_info.verification_version < 2 {
                 // status codes are not certified in v1, reject known dangerous status codes
                 if http_response.status_code >= 300 && http_response.status_code < 400 {
+                    let msg = "Response verification v1 does not allow redirects";
+                    Span::current().record("error", msg);
+
                     return Ok(Response::builder()
                         .status(StatusCode::INTERNAL_SERVER_ERROR)
-                        .body("Response verification v1 does not allow redirects".into())
+                        .body(msg.into())
                         .unwrap());
                 }
 
@@ -291,7 +311,7 @@ async fn process_request(
         )
         .body(match http_response.streaming_body {
             Some(body) => body,
-            None => Body::from(http_response.body.clone()),
+            None => Body::from(http_response.body),
         })?;
 
     // Extract response headers from task local storage
@@ -320,7 +340,9 @@ fn handle_result(
     use RejectCode::DestinationInvalid;
 
     let result = match result {
-        Ok((http_response,)) => return Ok(http_response),
+        Ok((http_response,)) => {
+            return Ok(http_response);
+        }
         Err(e) => e,
     };
 
@@ -331,7 +353,7 @@ fn handle_result(
             reject_message,
             ..
         }) => {
-            warn!("Destination Invalid");
+            Span::current().record("error", format!("Destination invalid: {reject_message}"));
             Response::builder()
                 .status(StatusCode::NOT_FOUND)
                 .body(reject_message.into())
@@ -341,14 +363,16 @@ fn handle_result(
         // If the result is a Replica error, returns the 500 code and message. There is no information
         // leak here because a user could use `dfx` to get the same reply.
         ReplicaError(response) => {
-            warn!("Replica Error");
-            let body = format!(
-                "Replica Error: reject code {:?}, reject message {}, error code {:?}",
+            let msg = format!(
+                "Replica Error: reject code {:?}, message {}, error code {:?}",
                 response.reject_code, response.reject_message, response.error_code,
             );
+
+            Span::current().record("error", &msg);
+
             Response::builder()
                 .status(StatusCode::BAD_GATEWAY)
-                .body(body.into())
+                .body(msg.into())
                 .unwrap()
         }
 
@@ -358,7 +382,7 @@ fn handle_result(
             content_type,
             content,
         }) => {
-            warn!("Denylist");
+            Span::current().record("error", "Denylisted");
             content_type
                 .into_iter()
                 .fold(Response::builder(), |r, c| r.header(CONTENT_TYPE, c))
@@ -368,7 +392,8 @@ fn handle_result(
         }
 
         ResponseSizeExceededLimit() => {
-            warn!("ResponseSizeExceededLimit");
+            Span::current().record("error", "Response size exceeds limit");
+
             Response::builder()
                 .status(StatusCode::INSUFFICIENT_STORAGE)
                 .body("Response size exceeds limit".into())
@@ -377,7 +402,6 @@ fn handle_result(
 
         // Handle all other errors
         e => {
-            warn!("Other error: {e}");
             return Err(Err(e.into()));
         }
     };
