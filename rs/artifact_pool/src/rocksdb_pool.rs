@@ -1312,7 +1312,7 @@ mod tests {
                 let mut pool =
                     PersistentHeightIndexedPool::new_consensus_pool(config.clone(), log.clone());
                 // insert a few things
-                let rb_ops = random_beacon_ops();
+                let rb_ops = random_beacon_ops(/*heights=*/ 3..19);
                 pool.mutate(rb_ops.clone());
                 let iter = pool.random_beacon().get_all();
                 let msgs_from_pool = iter;
