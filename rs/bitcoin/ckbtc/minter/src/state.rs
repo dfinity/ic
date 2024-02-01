@@ -303,6 +303,9 @@ pub struct CkBtcMinterState {
     /// transaction or sending to the Bitcoin network.
     pub requests_in_flight: BTreeMap<u64, InFlightStatus>,
 
+    /// Last transaction submission timestamp.
+    pub last_transaction_submission_time_ns: Option<u64>,
+
     /// BTC transactions waiting for finalization.
     pub submitted_transactions: Vec<SubmittedBtcTransaction>,
 
@@ -686,10 +689,23 @@ impl CkBtcMinterState {
             return true;
         }
 
-        match self.pending_retrieve_btc_requests.first() {
-            Some(req) => self.max_time_in_queue_nanos < now.saturating_sub(req.received_at),
-            None => false,
+        if let Some(req) = self.pending_retrieve_btc_requests.first() {
+            if self.max_time_in_queue_nanos < now.saturating_sub(req.received_at) {
+                return true;
+            }
         }
+
+        if let Some(req) = self.pending_retrieve_btc_requests.last() {
+            if let Some(last_submission_time) = self.last_transaction_submission_time_ns {
+                if self.max_time_in_queue_nanos
+                    < req.received_at.saturating_sub(last_submission_time)
+                {
+                    return true;
+                }
+            }
+        }
+
+        false
     }
 
     /// Forms a batch of retrieve_btc requests that the minter can fulfill.
@@ -1207,6 +1223,7 @@ impl From<InitArgs> for CkBtcMinterState {
             retrieve_btc_min_amount: args.retrieve_btc_min_amount,
             pending_retrieve_btc_requests: Default::default(),
             requests_in_flight: Default::default(),
+            last_transaction_submission_time_ns: None,
             submitted_transactions: Default::default(),
             replacement_txid: Default::default(),
             retrieve_btc_account_to_block_indices: Default::default(),
