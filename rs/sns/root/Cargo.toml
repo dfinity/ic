@@ -39,6 +39,7 @@ serde = { workspace = true }
 candid_parser = { workspace = true }
 ic-sns-root-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
+maplit = "1.0.2"
 tempfile = "3.1.0"
 tokio = { workspace = true }
 

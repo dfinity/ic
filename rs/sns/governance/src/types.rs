@@ -3,8 +3,8 @@ use crate::{
     logs::{ERROR, INFO},
     pb::{
         sns_root_types::{
-            set_dapp_controllers_request::CanisterIds, RegisterDappCanistersRequest,
-            SetDappControllersRequest,
+            set_dapp_controllers_request::CanisterIds, ManageDappCanisterSettingsRequest,
+            RegisterDappCanistersRequest, SetDappControllersRequest,
         },
         v1::{
             claim_swap_neurons_request::NeuronParameters,
@@ -23,11 +23,11 @@ use crate::{
             proposal::Action,
             ClaimSwapNeuronsError, ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus,
             DefaultFollowees, DeregisterDappCanisters, Empty, ExecuteGenericNervousSystemFunction,
-            GovernanceError, ManageNeuronResponse, MintSnsTokens, Motion, NervousSystemFunction,
-            NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
-            NeuronPermissionType, ProposalId, RegisterDappCanisters, RewardEvent,
-            TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
-            VotingRewardsParameters,
+            GovernanceError, ManageDappCanisterSettings, ManageNeuronResponse, MintSnsTokens,
+            Motion, NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId,
+            NeuronPermission, NeuronPermissionList, NeuronPermissionType, ProposalId,
+            RegisterDappCanisters, RewardEvent, TransferSnsTreasuryFunds,
+            UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
         },
     },
     proposal::ValidGenericNervousSystemFunction,
@@ -110,6 +110,9 @@ pub mod native_action_ids {
 
     /// ManageLedgerParameters Action.
     pub const MANAGE_LEDGER_PARAMETERS: u64 = 13;
+
+    /// ManageDappCanisterSettings Action.
+    pub const MANAGE_DAPP_CANISTER_SETTINGS: u64 = 14;
 }
 
 impl governance::Mode {
@@ -1097,6 +1100,14 @@ impl From<Action> for NervousSystemFunction {
                 ),
                 function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
             },
+            Action::ManageDappCanisterSettings(_) => NervousSystemFunction {
+                id: native_action_ids::MANAGE_DAPP_CANISTER_SETTINGS,
+                name: "Manage dapp canister settings".to_string(),
+                description: Some(
+                    "Proposal to change canister settings for some dapp canisters.".to_string(),
+                ),
+                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+            },
         }
     }
 }
@@ -1535,7 +1546,8 @@ impl Action {
             | UpgradeSnsToNextVersion(_)
             | ManageSnsMetadata(_)
             | ManageLedgerParameters(_)
-            | RegisterDappCanisters(_) => ProposalCriticality::Normal,
+            | RegisterDappCanisters(_)
+            | ManageDappCanisterSettings(_) => ProposalCriticality::Normal,
         }
     }
 }
@@ -1672,6 +1684,9 @@ impl From<&Action> for u64 {
             Action::TransferSnsTreasuryFunds(_) => native_action_ids::TRANSFER_SNS_TREASURY_FUNDS,
             Action::MintSnsTokens(_) => native_action_ids::MINT_SNS_TOKENS,
             Action::ManageLedgerParameters(_) => native_action_ids::MANAGE_LEDGER_PARAMETERS,
+            Action::ManageDappCanisterSettings(_) => {
+                native_action_ids::MANAGE_DAPP_CANISTER_SETTINGS
+            }
         }
     }
 }
@@ -2065,6 +2080,28 @@ impl From<DeregisterDappCanisters> for SetDappControllersRequest {
                 canister_ids: deregister_dapp_canisters.canister_ids,
             }),
             controller_principal_ids: deregister_dapp_canisters.new_controllers,
+        }
+    }
+}
+
+impl From<ManageDappCanisterSettings> for ManageDappCanisterSettingsRequest {
+    fn from(manage_dapp_canister_settings: ManageDappCanisterSettings) -> Self {
+        let ManageDappCanisterSettings {
+            canister_ids,
+            compute_allocation,
+            memory_allocation,
+            freezing_threshold,
+            reserved_cycles_limit,
+            log_visibility,
+        } = manage_dapp_canister_settings;
+
+        ManageDappCanisterSettingsRequest {
+            canister_ids,
+            compute_allocation,
+            memory_allocation,
+            freezing_threshold,
+            reserved_cycles_limit,
+            log_visibility,
         }
     }
 }

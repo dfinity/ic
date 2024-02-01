@@ -218,9 +218,7 @@ pub async fn change_canister_controllers(
         canister_id: change_canister_controllers_request.target_canister_id,
         settings: CanisterSettings {
             controllers: Some(change_canister_controllers_request.new_controllers),
-            compute_allocation: None,
-            memory_allocation: None,
-            freezing_threshold: None,
+            ..Default::default()
         },
         sender_canister_version: management_canister_client.canister_version(),
     };
