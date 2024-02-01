@@ -376,6 +376,7 @@ async fn submit_pending_requests() {
                         let (requests, used_utxos) = ScopeGuard::into_inner(requests_guard);
 
                         state::mutate_state(|s| {
+                            s.last_transaction_submission_time_ns = Some(ic_cdk::api::time());
                             state::audit::sent_transaction(
                                 s,
                                 state::SubmittedBtcTransaction {
