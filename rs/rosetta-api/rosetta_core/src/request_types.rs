@@ -276,3 +276,25 @@ pub struct ConstructionCombineRequest {
 
     pub signatures: Vec<Signature>,
 }
+
+/// The transaction submission request includes a signed transaction.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct ConstructionSubmitRequest {
+    pub network_identifier: NetworkIdentifier,
+
+    // = CBOR+hex-encoded 'SignedTransaction'
+    pub signed_transaction: String,
+}
+
+impl ConstructionSubmitRequest {
+    pub fn new(
+        network_identifier: NetworkIdentifier,
+        signed_transaction: String,
+    ) -> ConstructionSubmitRequest {
+        ConstructionSubmitRequest {
+            network_identifier,
+            signed_transaction,
+        }
+    }
+}

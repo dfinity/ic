@@ -14,6 +14,27 @@ pub struct TransactionOperationResults {
     pub operations: Vec<Operation>,
 }
 
+impl TryFrom<Option<ObjectMap>> for TransactionOperationResults {
+    type Error = ApiError;
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
+        serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
+            ApiError::internal_error(format!(
+                "Could not parse TransactionOperationResults metadata from metadata JSON object: {}",
+                e
+            ))
+        })
+    }
+}
+
+impl From<&TransactionOperationResults> for ObjectMap {
+    fn from(d: &TransactionOperationResults) -> Self {
+        match serde_json::to_value(d) {
+            Ok(Value::Object(o)) => o,
+            _ => ObjectMap::default(),
+        }
+    }
+}
+
 impl TransactionOperationResults {
     /// Parse a TransactionOperationResults from a Json object.
     pub fn parse(json: ObjectMap) -> Result<Self, ApiError> {
@@ -93,23 +114,5 @@ impl TransactionOperationResults {
         }
 
         Ok(TransactionOperationResults { operations })
-    }
-}
-
-impl From<TransactionOperationResults> for ObjectMap {
-    fn from(d: TransactionOperationResults) -> Self {
-        match serde_json::to_value(d) {
-            Ok(Value::Object(o)) => o,
-            _ => ObjectMap::default(),
-        }
-    }
-}
-
-impl From<&TransactionOperationResults> for ObjectMap {
-    fn from(d: &TransactionOperationResults) -> Self {
-        match serde_json::to_value(d) {
-            Ok(Value::Object(o)) => o,
-            _ => ObjectMap::default(),
-        }
     }
 }

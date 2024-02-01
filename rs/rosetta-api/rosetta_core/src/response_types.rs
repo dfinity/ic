@@ -306,3 +306,18 @@ pub struct ConstructionCombineResponse {
     /// CBOR+hex-encoded 'SignedTransaction'
     pub signed_transaction: String,
 }
+
+// This file is generated from https://github.com/coinbase/rosetta-specifications using openapi-generator
+// Then heavily tweaked because openapi-generator no longer generates valid rust
+// code
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConstructionSubmitResponse {
+    /// Transfers produce a real transaction identifier,
+    /// Neuron management requests produce a constant (pseudo) identifier.
+    ///
+    /// This field contains the transaction id of the last transfer operation.
+    /// If a transaction only contains neuron management operations
+    /// the constant identifier will be returned.
+    pub transaction_identifier: TransactionIdentifier,
+    pub metadata: Option<ObjectMap>,
+}

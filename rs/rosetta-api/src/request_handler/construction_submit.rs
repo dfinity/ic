@@ -1,9 +1,10 @@
 use crate::errors::ApiError;
-use crate::models::{ConstructionSubmitRequest, ConstructionSubmitResponse};
+use crate::models::{ConstructionSubmitRequest, ConstructionSubmitResponse, SignedTransaction};
 use crate::request::transaction_operation_results::TransactionOperationResults;
 use crate::request::transaction_results::TransactionResults;
 use crate::request_handler::{verify_network_id, RosettaRequestHandler};
 use crate::transaction_id::{self, TransactionIdentifier};
+use std::str::FromStr;
 
 impl RosettaRequestHandler {
     /// Submit a Signed Transaction.
@@ -16,7 +17,9 @@ impl RosettaRequestHandler {
         msg: ConstructionSubmitRequest,
     ) -> Result<ConstructionSubmitResponse, ApiError> {
         verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
-        let envelopes = msg.signed_transaction()?;
+        let envelopes = SignedTransaction::from_str(&msg.signed_transaction).map_err(|e| {
+            ApiError::invalid_transaction(format!("Failed to parse signed transaction: {}", e))
+        })?;
         let results = self.ledger.submit(envelopes).await?;
         let transaction_identifier = transaction_identifier(&results);
         let metadata = TransactionOperationResults::from_transaction_results(
@@ -25,7 +28,7 @@ impl RosettaRequestHandler {
         )?;
         Ok(ConstructionSubmitResponse {
             transaction_identifier: transaction_identifier.into(),
-            metadata,
+            metadata: Some((&metadata).into()),
         })
     }
 }
