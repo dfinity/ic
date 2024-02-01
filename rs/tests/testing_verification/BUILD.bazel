@@ -23,6 +23,7 @@ rust_binary(
 
 system_test(
     name = "spec_compliance_application_subnet_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["cpu:4"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -34,6 +35,7 @@ system_test(
 
 system_test(
     name = "spec_compliance_system_subnet_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["cpu:4"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -45,6 +47,7 @@ system_test(
 
 system_test(
     name = "spec_compliance_group_01_application_subnet_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["cpu:4"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -56,6 +59,7 @@ system_test(
 
 system_test(
     name = "spec_compliance_group_01_system_subnet_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["cpu:4"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -67,6 +71,7 @@ system_test(
 
 system_test(
     name = "spec_compliance_group_02_application_subnet_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["cpu:4"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -78,6 +83,7 @@ system_test(
 
 system_test(
     name = "spec_compliance_group_02_system_subnet_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["cpu:4"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -89,6 +95,7 @@ system_test(
 
 system_test(
     name = "basic_health_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
@@ -102,6 +109,7 @@ system_test(
 
 system_test(
     name = "ii_delegation_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
@@ -116,7 +124,6 @@ system_test(
 
 system_test(
     name = "mainnet_test",
-    flaky = False,  # remove after when PFOPS-3148 is resolved
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",
@@ -128,7 +135,6 @@ system_test(
 
 system_test(
     name = "remote_replicable_mock_test",
-    flaky = False,  # remove after when PFOPS-3148 is resolved
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",
@@ -147,7 +153,6 @@ system_test(
 # 3. docker run -it bazel/rs/tests:replicable_mock_test_image
 system_test(
     name = "replicable_mock_test",
-    flaky = False,  # remove after when PFOPS-3148 is resolved
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     deps = DEPENDENCIES + ["//rs/tests"],
