@@ -99,6 +99,10 @@ impl ApiError {
     pub fn invalid_tip_of_chain<T: Into<Details>>(t: T) -> ApiError {
         ApiError::InvalidTipOfChain(t.into())
     }
+
+    pub fn invalid_transaction<T: Into<Details>>(t: T) -> ApiError {
+        ApiError::InvalidTransaction(false, t.into())
+    }
 }
 
 impl From<BlockStoreError> for ApiError {
@@ -169,7 +173,7 @@ pub fn convert_to_error(api_err: &ApiError) -> Error {
         ApiError::TransactionExpired => (760, "Transaction expired", false, ObjectMap::default()),
         ApiError::OperationsErrors(e, token_name) => {
             match TransactionOperationResults::from_transaction_results(e.clone(), token_name) {
-                Ok(o) => (770, "Operation failed", e.retriable(), o.into()),
+                Ok(o) => (770, "Operation failed", e.retriable(), (&o).into()),
                 Err(_) => (
                     700,
                     "Internal server error",

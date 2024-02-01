@@ -4,7 +4,6 @@ pub mod seconds;
 pub mod timestamp;
 
 use crate::errors::convert_to_error;
-use crate::request::transaction_operation_results::TransactionOperationResults;
 use crate::{convert::from_hex, errors, errors::ApiError, request_types::RequestType};
 pub use ic_canister_client_sender::Ed25519KeyPair as EdKeypair;
 use ic_types::messages::{
@@ -18,21 +17,6 @@ pub use rosetta_core::response_types::*;
 use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
 use std::str::FromStr;
-
-// This file is generated from https://github.com/coinbase/rosetta-specifications using openapi-generator
-// Then heavily tweaked because openapi-generator no longer generates valid rust
-// code
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ConstructionSubmitResponse {
-    /// Transfers produce a real transaction identifier,
-    /// Neuron management requests produce a constant (pseudo) identifier.
-    ///
-    /// This field contains the transaction id of the last transfer operation.
-    /// If a transaction only contains neuron management operations
-    /// the constant identifier will be returned.
-    pub transaction_identifier: TransactionIdentifier,
-    pub metadata: TransactionOperationResults,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConstructionHashResponse {
@@ -167,7 +151,11 @@ impl FromStr for SignedTransaction {
         .map_err(|err| format!("{:?}", err))
     }
 }
-
+impl ToString for SignedTransaction {
+    fn to_string(&self) -> String {
+        hex::encode(serde_cbor::to_vec(self).unwrap())
+    }
+}
 /// A vector of update/read-state calls for different ingress windows
 /// of the same call.
 pub type Request = (RequestType, Vec<EnvelopePair>);
@@ -410,38 +398,6 @@ impl FromStr for UnsignedTransaction {
                 .as_slice(),
         )
         .map_err(|err| format!("{:?}", err))
-    }
-}
-
-/// The transaction submission request includes a signed transaction.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct ConstructionSubmitRequest {
-    #[serde(rename = "network_identifier")]
-    pub network_identifier: NetworkIdentifier,
-
-    #[serde(rename = "signed_transaction")]
-    pub signed_transaction: String, // = CBOR+hex-encoded 'SignedTransaction'
-}
-
-impl ConstructionSubmitRequest {
-    pub fn new(
-        network_identifier: NetworkIdentifier,
-        signed_transaction: SignedTransaction,
-    ) -> ConstructionSubmitRequest {
-        ConstructionSubmitRequest {
-            network_identifier,
-            signed_transaction: hex::encode(serde_cbor::to_vec(&signed_transaction).unwrap()),
-        }
-    }
-
-    pub fn signed_transaction(&self) -> Result<SignedTransaction, ApiError> {
-        serde_cbor::from_slice(&from_hex(&self.signed_transaction)?).map_err(|e| {
-            ApiError::invalid_request(format!(
-                "Cannot deserialize the submit request in CBOR format because of: {}",
-                e
-            ))
-        })
     }
 }
 

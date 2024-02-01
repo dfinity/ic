@@ -304,7 +304,7 @@ impl RosettaApiClient {
             request.1.shuffle(&mut rng);
         }
 
-        let req = ConstructionSubmitRequest::new(self.network_id(), signed_transaction);
+        let req = ConstructionSubmitRequest::new(self.network_id(), signed_transaction.to_string());
 
         to_rosetta_response::<ConstructionSubmitResponse>(
             self.post_json_request(
