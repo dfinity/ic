@@ -7,15 +7,18 @@ load("//bazel:defs.bzl", "rust_ic_test")
 package(default_visibility = ["//visibility:public"])
 
 sol_binary(
-    name = "minter_contract",
-    srcs = ["minter.sol"],
+    name = "contracts",
+    srcs = [
+        "ERC20DepositHelper.sol",
+        "EthDepositHelper.sol",
+    ],
 )
 
 # Export the compiled bytecode and ABI files as artifacts
 filegroup(
     name = "contract_artifacts",
     srcs = [
-        ":minter_contract",
+        ":contracts",
     ],
     visibility = ["//visibility:public"],
 )
