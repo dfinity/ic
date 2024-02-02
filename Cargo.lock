@@ -8770,8 +8770,10 @@ dependencies = [
  "icp-ledger",
  "icrc-ledger-types",
  "json5",
+ "lazy_static",
  "maplit",
  "mockall",
+ "num-traits",
  "priority-queue",
  "proptest",
  "prost",
@@ -8963,6 +8965,10 @@ dependencies = [
  "ic-base-types",
  "ic-cdk",
 ]
+
+[[package]]
+name = "ic-nervous-system-string"
+version = "0.0.1"
 
 [[package]]
 name = "ic-neurons-fund"
@@ -10566,6 +10572,30 @@ version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
  "prost-build",
+]
+
+[[package]]
+name = "ic-sns-governance-token-valuation"
+version = "0.0.1"
+dependencies = [
+ "async-trait",
+ "candid",
+ "cycles-minting-canister",
+ "futures",
+ "ic-base-types",
+ "ic-cdk",
+ "ic-ledger-core",
+ "ic-nervous-system-common",
+ "ic-nervous-system-runtime",
+ "ic-nervous-system-string",
+ "ic-nns-constants",
+ "ic-sns-swap",
+ "icrc-ledger-types",
+ "lazy_static",
+ "maplit",
+ "mockall",
+ "rust_decimal",
+ "tokio",
 ]
 
 [[package]]
