@@ -75,6 +75,7 @@ pub enum AlgorithmId {
     ThresholdEcdsaSecp256k1 = 15,
     MegaSecp256k1 = 16,
     ThresholdEcdsaSecp256r1 = 17,
+    ThresholdSchnorrBip340 = 18,
 }
 impl AlgorithmId {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -101,6 +102,7 @@ impl AlgorithmId {
             AlgorithmId::ThresholdEcdsaSecp256k1 => "ALGORITHM_ID_THRESHOLD_ECDSA_SECP_256K1",
             AlgorithmId::MegaSecp256k1 => "ALGORITHM_ID_MEGA_SECP_256K1",
             AlgorithmId::ThresholdEcdsaSecp256r1 => "ALGORITHM_ID_THRESHOLD_ECDSA_SECP_256R1",
+            AlgorithmId::ThresholdSchnorrBip340 => "ALGORITHM_ID_THRESHOLD_SCHNORR_BIP340",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -124,6 +126,7 @@ impl AlgorithmId {
             "ALGORITHM_ID_THRESHOLD_ECDSA_SECP_256K1" => Some(Self::ThresholdEcdsaSecp256k1),
             "ALGORITHM_ID_MEGA_SECP_256K1" => Some(Self::MegaSecp256k1),
             "ALGORITHM_ID_THRESHOLD_ECDSA_SECP_256R1" => Some(Self::ThresholdEcdsaSecp256r1),
+            "ALGORITHM_ID_THRESHOLD_SCHNORR_BIP340" => Some(Self::ThresholdSchnorrBip340),
             _ => None,
         }
     }
