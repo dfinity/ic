@@ -13,6 +13,7 @@ use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{debug, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
 use ic_replicated_state::ReplicatedState;
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::ecdsa::{
@@ -27,6 +28,8 @@ use ic_types::{Height, NodeId};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Debug, Formatter};
 use std::sync::Arc;
+
+use super::utils::build_signature_inputs;
 
 pub(crate) trait EcdsaSigner: Send {
     /// The on_state_change() called from the main ECDSA path.
@@ -418,6 +421,13 @@ pub(crate) trait EcdsaSignatureBuilder {
         &self,
         request_id: &RequestId,
     ) -> Option<ThresholdEcdsaCombinedSignature>;
+
+    /// Returns the signature for the given context, if it can be successfully
+    /// built from the current sig shares in the ECDSA pool
+    fn get_completed_signature_from_context(
+        &self,
+        context: &SignWithEcdsaContext,
+    ) -> Option<ThresholdEcdsaCombinedSignature>;
 }
 
 pub(crate) struct EcdsaSignatureBuilderImpl<'a> {
@@ -519,6 +529,44 @@ impl<'a> EcdsaSignatureBuilder for EcdsaSignatureBuilderImpl<'a> {
         // Combine the signatures.
         self.crypto_combine_signature_shares(
             request_id,
+            &sig_inputs,
+            &sig_shares,
+            self.ecdsa_pool.stats(),
+        )
+    }
+
+    fn get_completed_signature_from_context(
+        &self,
+        context: &SignWithEcdsaContext,
+    ) -> Option<ThresholdEcdsaCombinedSignature> {
+        // Find the sig inputs for the request and translate the refs.
+        let (request_id, sig_inputs_ref) = build_signature_inputs(context, self.block_reader)?;
+
+        let sig_inputs = match sig_inputs_ref.translate(self.block_reader) {
+            Ok(sig_inputs) => sig_inputs,
+            Err(error) => {
+                warn!(
+                    self.log,
+                    "get_completed_signature(): translate failed: sig_inputs_ref = {:?}, error = {:?}",
+                    sig_inputs_ref,
+                    error
+                );
+                self.metrics.payload_errors_inc("sig_inputs_translate");
+                return None;
+            }
+        };
+
+        // Collect the signature shares for the request.
+        let mut sig_shares = BTreeMap::new();
+        for (_, share) in self.ecdsa_pool.validated().signature_shares() {
+            if share.request_id == request_id {
+                sig_shares.insert(share.signer_id, share.share.clone());
+            }
+        }
+
+        // Combine the signatures.
+        self.crypto_combine_signature_shares(
+            &request_id,
             &sig_inputs,
             &sig_shares,
             self.ecdsa_pool.stats(),

@@ -57,6 +57,8 @@ use std::convert::TryFrom;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
+use super::utils::get_context_request_id;
+
 pub(crate) fn empty_response() -> ic_types::messages::Response {
     ic_types::messages::Response {
         originator: ic_types::CanisterId::ic_00(),
@@ -145,6 +147,29 @@ where
     Labeled::new(height, Arc::new(state))
 }
 
+pub fn insert_test_sig_inputs<T>(
+    block_reader: &mut TestEcdsaBlockReader,
+    ecdsa_payload: &mut EcdsaPayload,
+    inputs: T,
+) where
+    T: IntoIterator<Item = (QuadrupleId, TestSigInputs)>,
+{
+    for (quadruple_id, inputs) in inputs {
+        inputs
+            .idkg_transcripts
+            .iter()
+            .for_each(|(transcript_ref, transcript)| {
+                block_reader.add_transcript(*transcript_ref, transcript.clone())
+            });
+        ecdsa_payload.available_quadruples.insert(
+            quadruple_id.clone(),
+            inputs.sig_inputs_ref.presig_quadruple_ref.clone(),
+        );
+        block_reader
+            .add_available_quadruple(quadruple_id, inputs.sig_inputs_ref.presig_quadruple_ref);
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct TestTranscriptParams {
     pub(crate) idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript>,
@@ -189,6 +214,7 @@ impl From<&IDkgTranscriptParams> for TestTranscriptParams {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct TestSigInputs {
     pub(crate) idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript>,
     pub(crate) sig_inputs_ref: ThresholdEcdsaSigInputsRef,
@@ -346,6 +372,14 @@ impl TestEcdsaBlockReader {
         transcript: IDkgTranscript,
     ) {
         self.idkg_transcripts.insert(transcript_ref, transcript);
+    }
+
+    pub(crate) fn add_available_quadruple(
+        &mut self,
+        quadruple_id: QuadrupleId,
+        quadruple: PreSignatureQuadrupleRef,
+    ) {
+        self.available_quadruples.insert(quadruple_id, quadruple);
     }
 }
 
@@ -541,6 +575,14 @@ impl EcdsaSignatureBuilder for TestEcdsaSignatureBuilder {
         request_id: &RequestId,
     ) -> Option<ThresholdEcdsaCombinedSignature> {
         self.signatures.get(request_id).cloned()
+    }
+
+    fn get_completed_signature_from_context(
+        &self,
+        context: &SignWithEcdsaContext,
+    ) -> Option<ThresholdEcdsaCombinedSignature> {
+        let request_id = get_context_request_id(context)?;
+        self.signatures.get(&request_id).cloned()
     }
 }
 

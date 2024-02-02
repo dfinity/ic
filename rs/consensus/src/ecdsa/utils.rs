@@ -27,9 +27,10 @@ use ic_types::consensus::{
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings,
 };
-use ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
+use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterEcdsaPublicKey};
 use ic_types::registry::RegistryClientError;
 use ic_types::{Height, RegistryVersion, SubnetId};
+use phantom_newtype::Id;
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryInto;
 use std::sync::Arc;
@@ -228,6 +229,31 @@ pub(super) fn get_context_request_id(context: &SignWithEcdsaContext) -> Option<R
             pseudo_random_id: context.pseudo_random_id,
             height,
         })
+}
+
+/// Helper to build threshold signature inputs from the context and
+/// the pre-signature quadruple
+pub(super) fn build_signature_inputs(
+    context: &SignWithEcdsaContext,
+    block_reader: &dyn EcdsaBlockReader,
+) -> Option<(RequestId, ThresholdEcdsaSigInputsRef)> {
+    let request_id = get_context_request_id(context)?;
+    let extended_derivation_path = ExtendedDerivationPath {
+        caller: context.request.sender.into(),
+        derivation_path: context.derivation_path.clone(),
+    };
+    let quadruple = block_reader
+        .available_quadruple(&request_id.quadruple_id)?
+        .clone();
+    let key_transcript_ref = quadruple.key_unmasked_ref?;
+    let inputs = ThresholdEcdsaSigInputsRef::new(
+        extended_derivation_path,
+        context.message_hash,
+        Id::from(context.nonce?),
+        quadruple,
+        key_transcript_ref,
+    );
+    Some((request_id, inputs))
 }
 
 /// Load the given transcripts

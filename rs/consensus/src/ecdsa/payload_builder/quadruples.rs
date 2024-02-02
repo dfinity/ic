@@ -239,8 +239,7 @@ pub(super) fn purge_old_key_quadruples(
 pub(super) fn make_new_quadruples_if_needed(
     ecdsa_config: &EcdsaConfig,
     ecdsa_payload: &mut ecdsa::EcdsaPayload,
-    //TODO(CON-1149): Pass value to helper
-    _matched_quadruples: usize,
+    matched_quadruples: usize,
 ) {
     if let Some(key_transcript) = &ecdsa_payload.key_transcript.current {
         let node_ids: Vec<_> = key_transcript.receivers().iter().copied().collect();
@@ -249,7 +248,7 @@ pub(super) fn make_new_quadruples_if_needed(
             key_transcript.registry_version(),
             ecdsa_config,
             ecdsa_payload,
-            0,
+            matched_quadruples,
         )
     }
 }
