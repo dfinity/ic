@@ -82,7 +82,7 @@ use strum::IntoEnumIterator;
 /// | TypeKey | Meta |
 /// ------------------
 /// ```
-pub struct PersistentHeightIndexedPool<T> {
+pub(crate) struct PersistentHeightIndexedPool<T> {
     pool_type: PhantomData<T>,
     db_env: Arc<Environment>,
     meta: Database,
@@ -107,7 +107,7 @@ pub struct PersistentHeightIndexedPool<T> {
 /// ArtifactKind. It can be casted into individual messages using TryFrom.
 ///
 /// 3. Individual message type.
-pub trait PoolArtifact: Sized {
+pub(crate) trait PoolArtifact: Sized {
     /// Type of the object to store.
     type ObjectType;
     type Id;
@@ -141,7 +141,7 @@ pub trait PoolArtifact: Sized {
 /// A unique representation for each type of supported message.
 /// Internally it is just a const string.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub struct TypeKey {
+pub(crate) struct TypeKey {
     name: &'static str,
 }
 
@@ -158,24 +158,34 @@ impl AsRef<[u8]> for TypeKey {
 }
 
 /// Each support message gives a TypeKey.
-pub trait HasTypeKey {
+trait HasTypeKey {
     fn type_key() -> TypeKey;
 }
 
 /// Message id as Key. The first 8 bytes is the big-endian representation
 /// of the height, and the rest is hash.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
-pub struct IdKey(Vec<u8>);
+pub(crate) struct IdKey(Vec<u8>);
 
 impl IdKey {
-    pub fn height(&self) -> Height {
+    fn new(height: Height, hash: &CryptoHash) -> Self {
+        let hash_bytes = &hash.0;
+        let len = hash_bytes.len() + 8;
+        let mut bytes: Vec<u8> = vec![0; len];
+        let (left, right) = bytes.split_at_mut(8);
+        left.copy_from_slice(&u64::to_be_bytes(height.get()));
+        right.copy_from_slice(hash_bytes);
+
+        Self(bytes)
+    }
+
+    fn height(&self) -> Height {
         let mut bytes = [0; 8];
         bytes.copy_from_slice(&self.0[0..8]);
         Height::from(u64::from_be_bytes(bytes))
     }
 
-    #[allow(unused)]
-    pub fn hash(&self) -> CryptoHash {
+    fn hash(&self) -> CryptoHash {
         CryptoHash(self.0[8..].to_vec())
     }
 }
@@ -192,23 +202,11 @@ impl From<&[u8]> for IdKey {
     }
 }
 
-impl From<(Height, &CryptoHash)> for IdKey {
-    fn from((height, hash): (Height, &CryptoHash)) -> IdKey {
-        let hash_bytes = &hash.0;
-        let len = hash_bytes.len() + 8;
-        let mut bytes: Vec<u8> = vec![0; len];
-        let (left, right) = bytes.split_at_mut(8);
-        left.copy_from_slice(&u64::to_be_bytes(height.get()));
-        right.copy_from_slice(hash_bytes);
-        IdKey(bytes)
-    }
-}
-
 // This conversion is lossy because height and type tag are not preserved.
 // It is okay because we don't expect reverse conversion.
 impl<T: HasHeight + HasHash> From<&T> for IdKey {
     fn from(id: &T) -> IdKey {
-        IdKey::from((id.height(), id.hash()))
+        IdKey::new(id.height(), id.hash())
     }
 }
 
@@ -867,7 +865,7 @@ impl From<ConsensusMessageId> for ArtifactKey {
         Self {
             type_key,
             height_key: HeightKey::from(msg_id.height),
-            id_key: IdKey::from((msg_id.height, msg_id.hash.digest())),
+            id_key: IdKey::new(msg_id.height, msg_id.hash.digest()),
         }
     }
 }
@@ -929,7 +927,7 @@ impl PoolArtifact for ConsensusMessage {
             let start_height = payload.dkg_interval_start_height();
             let payload_type = payload.payload_type();
             {
-                let payload_key = IdKey::from((block.height(), payload_hash.get_ref()));
+                let payload_key = IdKey::new(block.height(), payload_hash.get_ref());
                 let bytes = log_err!(
                     bincode::serialize::<BlockPayload>(payload),
                     log,
@@ -978,7 +976,7 @@ impl PoolArtifact for ConsensusMessage {
                 // Lazy loading of block proposal and its payload
                 let block = proposal.content.as_mut();
                 let payload_hash = block.payload.get_hash();
-                let payload_key = IdKey::from((block.height(), payload_hash.get_ref()));
+                let payload_key = IdKey::new(block.height(), payload_hash.get_ref());
                 let log_clone = log.clone();
                 block.payload = Payload::new_with(
                     payload_hash.clone(),
@@ -1392,7 +1390,7 @@ impl PersistentHeightIndexedPool<CertificationMessage> {
     ) -> lmdb::Result<()> {
         let key = ArtifactKey {
             type_key: T::type_key(),
-            id_key: IdKey::from((value.height(), hash.get_ref())),
+            id_key: IdKey::new(value.height(), hash.get_ref()),
             height_key: HeightKey::from(value.height()),
         };
         let mut tx = self.db_env.begin_rw_txn()?;
@@ -1469,27 +1467,42 @@ impl crate::certification_pool::MutablePoolSection
 
 ///////////////////////////// ECDSA Pool /////////////////////////////
 
-impl From<EcdsaMessageId> for IdKey {
-    fn from(msg_id: EcdsaMessageId) -> IdKey {
+#[derive(Debug)]
+pub(crate) struct EcdsaIdKey(Vec<u8>);
+
+impl AsRef<[u8]> for EcdsaIdKey {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl From<&[u8]> for EcdsaIdKey {
+    fn from(bytes: &[u8]) -> EcdsaIdKey {
+        EcdsaIdKey(bytes.to_vec())
+    }
+}
+
+impl From<&EcdsaMessageId> for EcdsaIdKey {
+    fn from(msg_id: &EcdsaMessageId) -> EcdsaIdKey {
         let prefix = msg_id.prefix();
         let mut bytes = vec![];
         bytes.extend_from_slice(&u64::to_be_bytes(prefix.group_tag()));
         bytes.extend_from_slice(&u64::to_be_bytes(prefix.meta_hash()));
         bytes.extend_from_slice(&msg_id.hash().0);
-        IdKey(bytes)
+        EcdsaIdKey(bytes)
     }
 }
 
-impl From<EcdsaPrefix> for IdKey {
-    fn from(prefix: EcdsaPrefix) -> IdKey {
+impl From<&EcdsaPrefix> for EcdsaIdKey {
+    fn from(prefix: &EcdsaPrefix) -> EcdsaIdKey {
         let mut bytes = vec![];
         bytes.extend_from_slice(&u64::to_be_bytes(prefix.group_tag()));
         bytes.extend_from_slice(&u64::to_be_bytes(prefix.meta_hash()));
-        IdKey(bytes)
+        EcdsaIdKey(bytes)
     }
 }
 
-fn deser_ecdsa_message_id(message_type: EcdsaMessageType, id_key: IdKey) -> EcdsaMessageId {
+fn deser_ecdsa_message_id(message_type: EcdsaMessageType, id_key: EcdsaIdKey) -> EcdsaMessageId {
     let mut group_tag_bytes = [0; 8];
     group_tag_bytes.copy_from_slice(&id_key.0[0..8]);
 
@@ -1539,7 +1552,7 @@ impl EcdsaMessageDb {
     /// false otherwise.
     fn insert_txn(&self, message: EcdsaMessage, tx: &mut RwTransaction) -> bool {
         assert_eq!(EcdsaMessageType::from(&message), self.object_type);
-        let key = IdKey::from(EcdsaArtifactId::from(&message));
+        let key = EcdsaIdKey::from(&EcdsaArtifactId::from(&message));
         let bytes = match bincode::serialize::<EcdsaMessage>(&message) {
             Ok(bytes) => bytes,
             Err(err) => {
@@ -1565,7 +1578,7 @@ impl EcdsaMessageDb {
     }
 
     fn get_object(&self, id: &EcdsaMessageId) -> Option<EcdsaMessage> {
-        let key = IdKey::from(id.clone());
+        let key = EcdsaIdKey::from(id);
         let tx = match self.db_env.begin_ro_txn() {
             Ok(tx) => tx,
             Err(err) => {
@@ -1607,7 +1620,7 @@ impl EcdsaMessageDb {
     /// Adds the serialized <key> to be removed to the transaction. Returns true on success,
     /// false otherwise.
     fn remove_txn(&self, id: &EcdsaMessageId, tx: &mut RwTransaction) -> bool {
-        let key = IdKey::from(id.clone());
+        let key = EcdsaIdKey::from(id);
         if let Err(err) = tx.del(self.db, &key, None) {
             error!(
                 self.log,
@@ -1633,7 +1646,7 @@ impl EcdsaMessageDb {
             // Convert key bytes to EcdsaMessageId
             let mut key_bytes = Vec::<u8>::new();
             key_bytes.extend_from_slice(key);
-            let id_key = IdKey(key_bytes);
+            let id_key = EcdsaIdKey(key_bytes);
             let id = deser_ecdsa_message_id(message_type, id_key);
 
             // Stop iterating if we hit a different prefix.
@@ -1679,7 +1692,7 @@ impl EcdsaMessageDb {
             self.db_env.clone(),
             self.db,
             deserialize_fn,
-            prefix.map(|p| p.get().into()),
+            prefix.map(|p| EcdsaIdKey::from(&p.get())),
             self.log.clone(),
         ))
     }
@@ -1941,7 +1954,7 @@ mod tests {
         let msg = ConsensusMessage::RandomBeacon(beacon);
         let hash = msg.get_cm_hash();
         let height_key = HeightKey::from(height);
-        let id_key = IdKey::from((height, hash.digest()));
+        let id_key = IdKey::new(height, hash.digest());
         assert_eq!(Height::from(height_key), height, "height does not match");
         assert_eq!(id_key.height(), height, "Height of IdKey does not match");
         assert_eq!(
@@ -2237,7 +2250,7 @@ mod tests {
                 let block = proposal.content.as_ref();
                 let payload_hash = block.payload.get_hash().clone();
 
-                IdKey::from((block.height(), payload_hash.get_ref()))
+                IdKey::new(block.height(), payload_hash.get_ref())
             })
             .collect::<Vec<_>>();
 
