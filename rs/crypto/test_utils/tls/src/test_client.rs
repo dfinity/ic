@@ -1,5 +1,6 @@
 #![allow(clippy::unwrap_used)]
-use crate::tls_utils::{temp_crypto_component_with_tls_keys, REG_V1};
+use crate::registry::REG_V1;
+use crate::temp_crypto_component_with_tls_keys;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_crypto_tls_interfaces::{TlsClientHandshakeError, TlsHandshake};
