@@ -148,7 +148,6 @@ rust_test(
 
 rust_test_suite(
     name = "integration_suite",
-    size = "large",
     srcs = glob(
         ["tests/**/*.rs"],
         exclude = [
