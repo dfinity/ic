@@ -301,7 +301,11 @@ async fn add_erc_20_by_nns_proposal<'a>(
             let managed_canister_ids = orchestrator.call_canister_ids(erc20_contract.clone()).await;
             match managed_canister_ids {
                 None => bail!("No managed canister IDs yet"),
-                Some(x) => Ok(x),
+                Some(x) if x.ledger.is_some() && x.index.is_some() => Ok(x),
+                _ => bail!(
+                    "Not all canisters were created yet: {:?}",
+                    managed_canister_ids
+                ),
             }
         },
     )
