@@ -4,17 +4,23 @@ type OrchestratorArg = variant {
     AddErc20Arg : AddErc20Arg;
 };
 
-type InitArg = record {
-    ledger_wasm: blob;
-    index_wasm: blob;
-    archive_wasm: blob;
-};
+type InitArg = record {};
 
 type UpgradeArg = record {};
 
 type AddErc20Arg = record {
    contract: Erc20Contract;
    ledger_init_arg: LedgerInitArg;
+
+   // Hexadecimal encoding of the SHA2-256 ledger compressed wasm hash, e.g.,
+   // "3148f7a9f1b0ee39262c8abe3b08813480cf78551eee5a60ab1cf38433b5d9b0".
+   // This exact version will be used for the new ledger canister created for this ERC-20 token.
+   ledger_compressed_wasm_hash: text;
+
+   // Hexadecimal encoding of the SHA2-256 index compressed wasm hash, e.g.,
+   // "3a6d39b5e94cdef5203bca62720e75a28cd071ff434d22b9746403ac7ae59614".
+   // This exact version will be used for the new index canister created for this ERC-20 token.
+   index_compressed_wasm_hash: text;
 };
 
 type Erc20Contract = record {

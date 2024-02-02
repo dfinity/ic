@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_doc_test", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
@@ -11,11 +11,21 @@ rust_library(
             "src/main.rs",
         ],
     ),
+    compile_data = [
+        "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm.gz",
+        "//rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256.wasm.gz",
+        "//rs/rosetta-api/icrc1/archive:archive_canister_u256.wasm.gz",
+    ],
     crate_name = "ic_ledger_suite_orchestrator",
     proc_macro_deps = [
         "@crate_index//:async-trait",
         "@crate_index//:ic-cdk-macros",
     ],
+    rustc_env = {
+        "LEDGER_CANISTER_WASM_PATH": "$(execpath //rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm.gz)",
+        "INDEX_CANISTER_WASM_PATH": "$(execpath //rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256.wasm.gz)",
+        "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(execpath //rs/rosetta-api/icrc1/archive:archive_canister_u256.wasm.gz)",
+    },
     version = "0.1.0",
     deps = [
         "//packages/icrc-ledger-types:icrc_ledger_types",
@@ -44,16 +54,12 @@ rust_doc(
     crate = ":ledger_suite_orchestrator",
 )
 
-rust_doc_test(
-    name = "doc_test",
-    crate = ":ledger_suite_orchestrator",
-)
-
 rust_test(
     name = "lib_unit_tests",
     crate = ":ledger_suite_orchestrator",
     deps = [
         ":ledger_suite_orchestrator",
+        "@crate_index//:assert_matches",
         "@crate_index//:mockall",
         "@crate_index//:proptest",
         "@crate_index//:tokio",
@@ -103,14 +109,16 @@ rust_test(
         "ledger_suite_orchestrator_canister.wasm",
         "//rs/canister_sandbox",
         "//rs/canister_sandbox/sandbox_launcher",
-        "//rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256.wasm",
-        "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm",
+        "//rs/rosetta-api/icrc1/archive:archive_canister_u256.wasm.gz",
+        "//rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256.wasm.gz",
+        "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm.gz",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/ethereum/ledger-suite-orchestrator",
         "LEDGER_SUITE_ORCHESTRATOR_WASM_PATH": "$(rootpath :ledger_suite_orchestrator_canister.wasm)",
-        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm)",
-        "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256.wasm)",
+        "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm.gz)",
+        "INDEX_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256.wasm.gz)",
+        "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/archive:archive_canister_u256.wasm.gz)",
         "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
         "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     },

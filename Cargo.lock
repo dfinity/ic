@@ -8522,6 +8522,7 @@ dependencies = [
 name = "ic-ledger-suite-orchestrator"
 version = "0.1.0"
 dependencies = [
+ "assert_matches",
  "async-trait",
  "candid",
  "candid_parser",
