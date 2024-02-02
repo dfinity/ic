@@ -24,6 +24,7 @@ use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::EcdsaConfig;
 use ic_replicated_state::{metadata_state::subnet_call_context_manager::*, ReplicatedState};
+use ic_types::consensus::ecdsa::ECDSA_IMPROVED_LATENCY;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
@@ -288,24 +289,49 @@ fn create_summary_payload_helper(
     };
 
     let mut ecdsa_summary = if is_new_key_transcript {
-        ecdsa::EcdsaPayload {
-            signature_agreements: ecdsa_payload.signature_agreements.clone(),
-            ongoing_signatures: ecdsa_payload.ongoing_signatures.clone(),
-            available_quadruples: BTreeMap::new(),
-            quadruples_in_creation: BTreeMap::new(),
-            uid_generator: ecdsa_payload.uid_generator.clone(),
-            // This will clear the current ongoing reshares, and
-            // the execution requests will be restarted with the
-            // new key and different transcript IDs.
-            ongoing_xnet_reshares: BTreeMap::new(),
-            xnet_reshare_agreements: ecdsa_payload.xnet_reshare_agreements.clone(),
-            idkg_transcripts: BTreeMap::new(),
-            key_transcript,
+        if ECDSA_IMPROVED_LATENCY {
+            ecdsa::EcdsaPayload {
+                signature_agreements: ecdsa_payload.signature_agreements.clone(),
+                ongoing_signatures: BTreeMap::new(),
+                // We keep available quadruples for now, even if the key transcript
+                // changed, as we don't know if they are part of ongoing signature
+                // requests. Instead we will purge them once the certified state
+                // height catches up with the height of this summary block.
+                available_quadruples: ecdsa_payload.available_quadruples.clone(),
+                quadruples_in_creation: BTreeMap::new(),
+                uid_generator: ecdsa_payload.uid_generator.clone(),
+                // This will clear the current ongoing reshares, and
+                // the execution requests will be restarted with the
+                // new key and different transcript IDs.
+                ongoing_xnet_reshares: BTreeMap::new(),
+                xnet_reshare_agreements: ecdsa_payload.xnet_reshare_agreements.clone(),
+                idkg_transcripts: BTreeMap::new(),
+                key_transcript,
+            }
+        } else {
+            ecdsa::EcdsaPayload {
+                signature_agreements: ecdsa_payload.signature_agreements.clone(),
+                ongoing_signatures: ecdsa_payload.ongoing_signatures.clone(),
+                available_quadruples: BTreeMap::new(),
+                quadruples_in_creation: BTreeMap::new(),
+                uid_generator: ecdsa_payload.uid_generator.clone(),
+                // This will clear the current ongoing reshares, and
+                // the execution requests will be restarted with the
+                // new key and different transcript IDs.
+                ongoing_xnet_reshares: BTreeMap::new(),
+                xnet_reshare_agreements: ecdsa_payload.xnet_reshare_agreements.clone(),
+                idkg_transcripts: BTreeMap::new(),
+                key_transcript,
+            }
         }
     } else {
         ecdsa::EcdsaPayload {
             signature_agreements: ecdsa_payload.signature_agreements.clone(),
-            ongoing_signatures: ecdsa_payload.ongoing_signatures.clone(),
+            ongoing_signatures: if ECDSA_IMPROVED_LATENCY {
+                BTreeMap::new()
+            } else {
+                ecdsa_payload.ongoing_signatures.clone()
+            },
             available_quadruples: ecdsa_payload.available_quadruples.clone(),
             quadruples_in_creation: ecdsa_payload.quadruples_in_creation.clone(),
             uid_generator: ecdsa_payload.uid_generator.clone(),
@@ -614,31 +640,51 @@ pub(crate) fn create_data_payload_helper_2(
     let request_expiry_time = ecdsa_config
         .signature_request_timeout_ns
         .and_then(|timeout| context_time.checked_sub(Duration::from_nanos(timeout)));
-    signatures::update_signature_agreements(all_signing_requests, signature_builder, ecdsa_payload);
-    let new_signing_requests = get_signing_requests(
-        height,
-        request_expiry_time,
-        ecdsa_payload,
-        all_signing_requests,
-        enabled_signing_keys,
-        ecdsa_payload_metrics,
-    );
-    signatures::update_ongoing_signatures(
-        new_signing_requests,
-        ecdsa_config.quadruples_to_create_in_advance,
-        ecdsa_payload,
-        log,
-    )?;
+
+    if ECDSA_IMPROVED_LATENCY {
+        signatures::update_signature_agreements_improved_latency(
+            all_signing_requests,
+            signature_builder,
+            request_expiry_time,
+            ecdsa_payload,
+            enabled_signing_keys,
+            ecdsa_payload_metrics,
+        );
+    } else {
+        signatures::update_signature_agreements(
+            all_signing_requests,
+            signature_builder,
+            ecdsa_payload,
+        );
+        let new_signing_requests = get_signing_requests(
+            height,
+            request_expiry_time,
+            ecdsa_payload,
+            all_signing_requests,
+            enabled_signing_keys,
+            ecdsa_payload_metrics,
+        );
+        signatures::update_ongoing_signatures(
+            new_signing_requests,
+            ecdsa_config.quadruples_to_create_in_advance,
+            ecdsa_payload,
+            log,
+        )?;
+    }
 
     if matches!(certified_height, CertifiedHeight::ReachedSummaryHeight) {
         quadruples::purge_old_key_quadruples(ecdsa_payload, all_signing_requests);
     }
 
-    let matched_quadruples = all_signing_requests
-        .values()
-        .filter_map(|context| context.matched_quadruple.as_ref())
-        .filter(|(qid, _)| ecdsa_payload.available_quadruples.contains_key(qid))
-        .count();
+    let matched_quadruples = if ECDSA_IMPROVED_LATENCY {
+        all_signing_requests
+            .values()
+            .filter_map(|context| context.matched_quadruple.as_ref())
+            .filter(|(qid, _)| ecdsa_payload.available_quadruples.contains_key(qid))
+            .count()
+    } else {
+        0
+    };
     quadruples::make_new_quadruples_if_needed(ecdsa_config, ecdsa_payload, matched_quadruples);
 
     let mut new_transcripts =

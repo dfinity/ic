@@ -1,14 +1,18 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
-use ic_ic00_types::{Payload, SignWithECDSAReply};
+use ic_error_types::RejectCode;
+use ic_ic00_types::{EcdsaKeyId, Payload, SignWithECDSAReply};
 use ic_logger::{debug, ReplicaLogger};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
 use ic_types::{
-    consensus::ecdsa, crypto::canister_threshold_sig::ExtendedDerivationPath, messages::CallbackId,
+    consensus::ecdsa,
+    crypto::canister_threshold_sig::ExtendedDerivationPath,
+    messages::{CallbackId, RejectContext},
+    Time,
 };
 use phantom_newtype::Id;
 
-use crate::ecdsa::signer::EcdsaSignatureBuilder;
+use crate::{consensus::metrics::EcdsaPayloadMetrics, ecdsa::signer::EcdsaSignatureBuilder};
 
 use super::EcdsaPayloadError;
 
@@ -111,6 +115,132 @@ pub(crate) fn update_ongoing_signatures(
         }
     }
     Ok(())
+}
+
+/// Update signature agreements in the data payload by:
+/// - dropping agreements that don't have a [SignWithEcdsaContext] anymore (because
+///   the response has been delivered)
+/// - setting remaining agreements to "Reported" (the signing response was delivered
+///   in the previous round, the context will be removed when the previous block is
+///   finalized)
+/// - rejecting signature contexts that are expired or request an invalid key.
+/// - adding new agreements as "Unreported" by combining shares in the ECDSA pool.
+pub(crate) fn update_signature_agreements_improved_latency(
+    all_requests: &BTreeMap<CallbackId, SignWithEcdsaContext>,
+    signature_builder: &dyn EcdsaSignatureBuilder,
+    request_expiry_time: Option<Time>,
+    payload: &mut ecdsa::EcdsaPayload,
+    valid_keys: &BTreeSet<EcdsaKeyId>,
+    ecdsa_payload_metrics: Option<&EcdsaPayloadMetrics>,
+) {
+    let all_random_ids = all_requests
+        .iter()
+        .map(|(_, context)| context.pseudo_random_id)
+        .collect::<BTreeSet<_>>();
+
+    // We first clean up the existing signature_agreements by keeping those
+    // that can still be found in the signing_requests for dedup purpose.
+    // We only need the "Reported" status because they would have already
+    // been reported when the previous block become finalized.
+    payload.signature_agreements = payload
+        .signature_agreements
+        .keys()
+        .filter(|random_id| all_random_ids.contains(*random_id))
+        .map(|random_id| (*random_id, ecdsa::CompletedSignature::ReportedToExecution))
+        .collect();
+
+    // Then we collect new signatures into the signature_agreements
+    for (callback_id, context) in all_requests {
+        if payload
+            .signature_agreements
+            .contains_key(&context.pseudo_random_id)
+        {
+            continue;
+        }
+        if !valid_keys.contains(&context.key_id) {
+            // Reject new requests with unknown key Ids.
+            // Note that no quadruples are consumed at this stage.
+            let response = ic_types::messages::Response {
+                originator: context.request.sender,
+                respondent: ic_types::CanisterId::ic_00(),
+                originator_reply_callback: *callback_id,
+                refund: context.request.payment,
+                response_payload: ic_types::messages::Payload::Reject(RejectContext::new(
+                    RejectCode::CanisterReject,
+                    format!(
+                        "Invalid or disabled key_id in signature request: {:?}",
+                        context.key_id
+                    ),
+                )),
+            };
+            payload.signature_agreements.insert(
+                context.pseudo_random_id,
+                ecdsa::CompletedSignature::Unreported(response),
+            );
+
+            if let Some(metrics) = ecdsa_payload_metrics {
+                metrics.payload_errors_inc("invalid_keyid_requests");
+            }
+            continue;
+        }
+
+        // We can only remove expired requests once they were matched with a
+        // quadruple. Otherwise the context may be matched with a quadruple
+        // at the next certified state height, which then wouldn't be removed.
+        let Some((quadruple_id, _)) = context.matched_quadruple.as_ref() else {
+            continue;
+        };
+
+        if request_expiry_time.is_some_and(|expiry| context.batch_time < expiry) {
+            let response = ic_types::messages::Response {
+                originator: context.request.sender,
+                respondent: ic_types::CanisterId::ic_00(),
+                originator_reply_callback: *callback_id,
+                refund: context.request.payment,
+                response_payload: ic_types::messages::Payload::Reject(RejectContext::new(
+                    RejectCode::CanisterError,
+                    "Signature request expired",
+                )),
+            };
+            payload.signature_agreements.insert(
+                context.pseudo_random_id,
+                ecdsa::CompletedSignature::Unreported(response),
+            );
+            payload.available_quadruples.remove(quadruple_id);
+
+            if let Some(metrics) = ecdsa_payload_metrics {
+                metrics.payload_errors_inc("expired_requests");
+            }
+
+            continue;
+        }
+
+        let Some(signature) = signature_builder.get_completed_signature_from_context(context)
+        else {
+            continue;
+        };
+
+        let response = ic_types::messages::Response {
+            originator: context.request.sender,
+            respondent: ic_types::CanisterId::ic_00(),
+            originator_reply_callback: *callback_id,
+            // Execution is responsible for burning the appropriate cycles
+            // before pushing the new context, so any remaining cycles can
+            // be refunded to the canister.
+            refund: context.request.payment,
+            response_payload: ic_types::messages::Payload::Data(
+                SignWithECDSAReply {
+                    signature: signature.signature.clone(),
+                }
+                .encode(),
+            ),
+        };
+        payload.signature_agreements.insert(
+            context.pseudo_random_id,
+            ecdsa::CompletedSignature::Unreported(response),
+        );
+        payload.available_quadruples.remove(quadruple_id);
+    }
 }
 
 /// Helper to build threshold signature inputs from the context and
