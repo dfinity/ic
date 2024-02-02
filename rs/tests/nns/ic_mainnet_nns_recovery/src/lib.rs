@@ -1416,6 +1416,8 @@ fn write_sh_lib(
     let sns_quill =
         fs::canonicalize(env.get_dependency_path("external/sns_quill/sns-quill")).unwrap();
     let idl2json = fs::canonicalize(env.get_dependency_path("external/idl2json/idl2json")).unwrap();
+    let ic_wasm =
+        fs::canonicalize(env.get_dependency_path("rs/tests/recovery/binaries/ic-wasm")).unwrap();
     let dfx_home = fs::canonicalize(env.base_path()).unwrap();
     let didc_dir = fs::canonicalize(env.get_dependency_path("external/candid"))
         .unwrap()
@@ -1439,6 +1441,7 @@ fn write_sh_lib(
              export SNS_QUILL={sns_quill:?};\n\
              export IDL2JSON={idl2json:?};\n\
              export DFX_HOME={dfx_home:?};\n\
+             export IC_WASM={ic_wasm:?};\n\
              export PATH=\"{didc_dir}:{dfx_dir}:$PATH\";\n\
             "
         ),

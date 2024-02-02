@@ -135,6 +135,7 @@ symlink_dir(
         "//rs/state_tool:state-tool": "state-tool",
         "//rs/canister_sandbox/sandbox_launcher": "sandbox_launcher",
         "//rs/canister_sandbox": "canister_sandbox",
+        "@crate_index//:ic-wasm__ic-wasm": "ic-wasm",
     },
 )
 
