@@ -13,11 +13,7 @@ pub enum OrchestratorArg {
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct InitArg {
-    pub ledger_wasm: Vec<u8>,
-    pub index_wasm: Vec<u8>,
-    pub archive_wasm: Vec<u8>,
-}
+pub struct InitArg {}
 
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct UpgradeArg {}
@@ -26,6 +22,14 @@ pub struct UpgradeArg {}
 pub struct AddErc20Arg {
     pub contract: Erc20Contract,
     pub ledger_init_arg: LedgerInitArg,
+    pub ledger_compressed_wasm_hash: String,
+    pub index_compressed_wasm_hash: String,
+}
+
+impl AddErc20Arg {
+    pub fn token_name(&self) -> &str {
+        &self.ledger_init_arg.token_name
+    }
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]

@@ -2,7 +2,7 @@ use crate::candid::{AddErc20Arg, InitArg, UpgradeArg};
 use crate::guard::TimerGuard;
 use crate::logs::INFO;
 use crate::management::IcCanisterRuntime;
-use crate::scheduler::{Erc20Contract, Task};
+use crate::scheduler::{InstallLedgerSuiteArgs, Task};
 use crate::state::{init_state, mutate_state, read_state, State};
 use ic_canister_log::log;
 use std::time::Duration;
@@ -20,16 +20,25 @@ pub fn init(init_arg: InitArg) {
 }
 
 pub fn post_upgrade(_upgrade_arg: Option<UpgradeArg>) {
+    //TODO: in case UpgradeArg is present, 1) refresh wasms binaries in stable memory and plan upgrade of managed canisters
     setup_timers()
 }
 
 pub fn add_erc20(token: AddErc20Arg) {
-    let contract = Erc20Contract::try_from(token.contract.clone())
-        .unwrap_or_else(|e| ic_cdk::trap(&format!("Invalid ERC-20 contract {:?}: {}", token, e)));
-    //TODO XC-29: ensure that contract is not already managed, otherwise trap
-    mutate_state(|s| s.add_task(Task::InstallLedgerSuite(contract, token.ledger_init_arg)));
-
-    ic_cdk_timers::set_timer(Duration::from_secs(0), || ic_cdk::spawn(execute_tasks()));
+    match read_state(|s| InstallLedgerSuiteArgs::validate_add_erc20(s, token.clone())) {
+        Ok(args) => {
+            mutate_state(|s| s.add_task(Task::InstallLedgerSuite(args)));
+            ic_cdk_timers::set_timer(Duration::from_secs(0), || ic_cdk::spawn(execute_tasks()));
+        }
+        Err(e) => {
+            log!(
+                INFO,
+                "[add_erc20]: ERROR: invalid arguments to add erc20 token {:?}: {:?}",
+                token,
+                e
+            );
+        }
+    }
     setup_timers()
 }
 

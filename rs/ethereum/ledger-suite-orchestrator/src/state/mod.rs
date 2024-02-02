@@ -12,8 +12,13 @@ use serde_bytes::ByteBuf;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
+use std::str::FromStr;
+
+pub(crate) const LEDGER_BYTECODE: &[u8] = include_bytes!(env!("LEDGER_CANISTER_WASM_PATH"));
+pub(crate) const INDEX_BYTECODE: &[u8] = include_bytes!(env!("INDEX_CANISTER_WASM_PATH"));
+const ARCHIVE_NODE_BYTECODE: &[u8] = include_bytes!(env!("LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH"));
 
 const STATE_MEMORY_ID: MemoryId = MemoryId::new(0);
 const WASM_HASH_LENGTH: usize = 32;
@@ -56,9 +61,39 @@ impl From<WasmHash> for ByteBuf {
     }
 }
 
+impl AsRef<[u8]> for WasmHash {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
 impl From<[u8; WASM_HASH_LENGTH]> for WasmHash {
     fn from(value: [u8; WASM_HASH_LENGTH]) -> Self {
         Self(value)
+    }
+}
+
+impl FromStr for WasmHash {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let expected_num_hex_chars = WASM_HASH_LENGTH * 2;
+        if s.len() != expected_num_hex_chars {
+            return Err(format!(
+                "Invalid wasm hash: expected {} characters, got {}",
+                expected_num_hex_chars,
+                s.len()
+            ));
+        }
+        let mut bytes = [0u8; WASM_HASH_LENGTH];
+        hex::decode_to_slice(s, &mut bytes).map_err(|e| format!("Invalid hex string: {}", e))?;
+        Ok(Self(bytes))
+    }
+}
+
+impl Display for WasmHash {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", hex::encode(self.0))
     }
 }
 
@@ -80,6 +115,12 @@ impl Wasm {
 impl From<Vec<u8>> for Wasm {
     fn from(v: Vec<u8>) -> Self {
         Self::new(v)
+    }
+}
+
+impl From<&[u8]> for Wasm {
+    fn from(value: &[u8]) -> Self {
+        Self::new(value.to_vec())
     }
 }
 
@@ -408,33 +449,34 @@ impl ManageSingleCanister<Index> for Canisters {
 }
 
 pub trait RetrieveCanisterWasm<T> {
-    fn retrieve_wasm(&self) -> &Wasm;
+    /// Returns the compressed wasm module for the given canister type and hash.
+    fn retrieve_wasm(&self, compressed_wasm_hash: &WasmHash) -> Option<&Wasm>;
 }
 
 impl RetrieveCanisterWasm<Ledger> for State {
-    fn retrieve_wasm(&self) -> &Wasm {
-        self.ledger_wasm()
+    fn retrieve_wasm(&self, compressed_wasm_hash: &WasmHash) -> Option<&Wasm> {
+        if self.ledger_wasm.hash() == compressed_wasm_hash {
+            return Some(&self.ledger_wasm);
+        }
+        None
     }
 }
 
 impl RetrieveCanisterWasm<Index> for State {
-    fn retrieve_wasm(&self) -> &Wasm {
-        self.index_wasm()
+    fn retrieve_wasm(&self, compressed_wasm_hash: &WasmHash) -> Option<&Wasm> {
+        if self.index_wasm.hash() == compressed_wasm_hash {
+            return Some(&self.index_wasm);
+        }
+        None
     }
 }
 
 impl From<InitArg> for State {
-    fn from(
-        InitArg {
-            ledger_wasm,
-            index_wasm,
-            archive_wasm,
-        }: InitArg,
-    ) -> Self {
+    fn from(InitArg {}: InitArg) -> Self {
         Self {
-            ledger_wasm: Wasm::from(ledger_wasm),
-            index_wasm: Wasm::from(index_wasm),
-            archive_wasm: Wasm::from(archive_wasm),
+            ledger_wasm: Wasm::from(LEDGER_BYTECODE),
+            index_wasm: Wasm::from(INDEX_BYTECODE),
+            archive_wasm: Wasm::from(ARCHIVE_NODE_BYTECODE),
             managed_canisters: Default::default(),
             tasks: Default::default(),
             processing_tasks_guard: false,

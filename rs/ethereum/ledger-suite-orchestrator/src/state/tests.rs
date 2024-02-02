@@ -121,6 +121,34 @@ mod manage_canister {
     }
 }
 
+mod wasm_hash {
+    use crate::state::WasmHash;
+    use assert_matches::assert_matches;
+    use proptest::arbitrary::any;
+    use proptest::array::uniform32;
+    use proptest::{prop_assert_eq, proptest};
+    use std::str::FromStr;
+
+    proptest! {
+        #[test]
+        fn should_decode_display_string(hash in uniform32(any::<u8>())) {
+            let parsed_hash = WasmHash::from_str(&WasmHash::from(hash).to_string()).unwrap();
+            prop_assert_eq!(parsed_hash.as_ref(), &hash);
+        }
+
+        #[test]
+        fn should_error_on_invalid_hash(invalid_hash in "[0-9a-fA-F]{0,63}|[0-9a-fA-F]{65,}") {
+           assert_matches!(WasmHash::from_str(&invalid_hash), Err(_));
+        }
+
+         #[test]
+        fn should_accept_valid_hash(valid_hash in "[0-9a-fA-F]{64}") {
+            let result = WasmHash::from_str(&valid_hash).unwrap();
+            prop_assert_eq!(result.as_ref(), &hex::decode(valid_hash).unwrap()[..]);
+        }
+    }
+}
+
 fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(f: F, expected_message: &str) {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
     let error = result.unwrap_err();
@@ -142,11 +170,7 @@ fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(f: F, expecte
 }
 
 fn init_state() -> State {
-    State::from(InitArg {
-        ledger_wasm: vec![],
-        index_wasm: vec![],
-        archive_wasm: vec![],
-    })
+    State::from(InitArg {})
 }
 
 fn usdc() -> Erc20Contract {

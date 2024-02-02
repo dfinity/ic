@@ -4,13 +4,13 @@ use ic_icrc1_ledger::FeatureFlags as LedgerFeatureFlags;
 use ic_ledger_suite_orchestrator::candid::{
     AddErc20Arg, Erc20Contract, InitArg, LedgerInitArg, ManagedCanisterIds, OrchestratorArg,
 };
+use ic_ledger_suite_orchestrator::state::{Wasm, WasmHash};
 use ic_state_machine_tests::{
     CanisterStatusResultV2, Cycles, StateMachine, StateMachineBuilder, WasmResult,
 };
 use ic_test_utilities_load_wasm::load_wasm;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
 use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
-use std::path::PathBuf;
 use std::str::FromStr;
 
 const MAX_TICKS: usize = 10;
@@ -18,8 +18,10 @@ const MAX_TICKS: usize = 10;
 #[test]
 fn should_install_orchestrator_and_add_supported_erc20_tokens() {
     let mut orchestrator = LedgerSuiteOrchestrator::new();
+    let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
+    let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
 
-    for token in supported_erc20_tokens() {
+    for token in supported_erc20_tokens(embedded_ledger_wasm_hash, embedded_index_wasm_hash) {
         orchestrator = orchestrator
             .add_erc20_token(token)
             .expect_new_ledger_and_index_canisters()
@@ -59,10 +61,15 @@ fn should_spawn_ledger_with_correct_init_args() {
         accounts_overflow_trim_quantity: None,
     };
 
-    LedgerSuiteOrchestrator::new()
+    let orchestrator = LedgerSuiteOrchestrator::new();
+    let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
+    let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
+    orchestrator
         .add_erc20_token(AddErc20Arg {
             contract: usdc_erc20_contract(),
             ledger_init_arg: realistic_usdc_ledger_init_arg,
+            ledger_compressed_wasm_hash: embedded_ledger_wasm_hash.to_string(),
+            index_compressed_wasm_hash: embedded_index_wasm_hash.to_string(),
         })
         .expect_new_ledger_and_index_canisters()
         .assert_ledger_icrc1_fee(2_000_000_000_000_u64)
@@ -105,6 +112,8 @@ fn should_spawn_ledger_with_correct_init_args() {
 pub struct LedgerSuiteOrchestrator {
     pub env: StateMachine,
     pub ledger_suite_orchestrator_id: CanisterId,
+    pub embedded_ledger_wasm_hash: WasmHash,
+    pub embedded_index_wasm_hash: WasmHash,
 }
 
 impl Default for LedgerSuiteOrchestrator {
@@ -124,6 +133,8 @@ impl LedgerSuiteOrchestrator {
         Self {
             env,
             ledger_suite_orchestrator_id,
+            embedded_ledger_wasm_hash: ledger_wasm().hash().clone(),
+            embedded_index_wasm_hash: index_wasm().hash().clone(),
         }
     }
 
@@ -176,42 +187,13 @@ impl LedgerSuiteOrchestrator {
 }
 
 fn install_ledger_orchestrator(env: &StateMachine, ledger_suite_orchestrator_id: CanisterId) {
-    let args = OrchestratorArg::InitArg(InitArg {
-        ledger_wasm: ledger_wasm(),
-        index_wasm: index_wasm(),
-        archive_wasm: archive_wasm(),
-    });
+    let args = OrchestratorArg::InitArg(InitArg {});
     env.install_existing_canister(
         ledger_suite_orchestrator_id,
         ledger_suite_orchestrator_wasm(),
         Encode!(&args).unwrap(),
     )
     .unwrap();
-}
-
-fn ledger_wasm() -> Vec<u8> {
-    load_wasm(icrc1_path().join("ledger"), "ic-icrc1-ledger", &[])
-}
-
-fn index_wasm() -> Vec<u8> {
-    load_wasm(icrc1_path().join("index-ng"), "ic-icrc1-index-ng", &[])
-}
-
-fn icrc1_path() -> PathBuf {
-    PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("rosetta-api")
-        .join("icrc1")
-}
-
-fn archive_wasm() -> Vec<u8> {
-    //TODO: remove archive wasm from init args
-    vec![]
 }
 
 fn ledger_suite_orchestrator_wasm() -> Vec<u8> {
@@ -222,14 +204,43 @@ fn ledger_suite_orchestrator_wasm() -> Vec<u8> {
     )
 }
 
-fn supported_erc20_tokens() -> Vec<AddErc20Arg> {
-    vec![usdc(), usdt()]
+fn ledger_wasm() -> Wasm {
+    Wasm::from(load_wasm(
+        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
+        "ledger_canister",
+        &[],
+    ))
 }
 
-fn usdc() -> AddErc20Arg {
+fn index_wasm() -> Wasm {
+    Wasm::from(load_wasm(
+        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
+        "index_canister",
+        &[],
+    ))
+}
+fn supported_erc20_tokens(
+    ledger_compressed_wasm_hash: WasmHash,
+    index_compressed_wasm_hash: WasmHash,
+) -> Vec<AddErc20Arg> {
+    vec![
+        usdc(
+            ledger_compressed_wasm_hash.clone(),
+            index_compressed_wasm_hash.clone(),
+        ),
+        usdt(ledger_compressed_wasm_hash, index_compressed_wasm_hash),
+    ]
+}
+
+fn usdc(
+    ledger_compressed_wasm_hash: WasmHash,
+    index_compressed_wasm_hash: WasmHash,
+) -> AddErc20Arg {
     AddErc20Arg {
         contract: usdc_erc20_contract(),
         ledger_init_arg: ledger_init_arg("USD Coin", "USDC"),
+        ledger_compressed_wasm_hash: ledger_compressed_wasm_hash.to_string(),
+        index_compressed_wasm_hash: index_compressed_wasm_hash.to_string(),
     }
 }
 
@@ -240,13 +251,18 @@ fn usdc_erc20_contract() -> Erc20Contract {
     }
 }
 
-fn usdt() -> AddErc20Arg {
+fn usdt(
+    ledger_compressed_wasm_hash: WasmHash,
+    index_compressed_wasm_hash: WasmHash,
+) -> AddErc20Arg {
     AddErc20Arg {
         contract: Erc20Contract {
             chain_id: Nat::from(1_u8),
             address: "0xdAC17F958D2ee523a2206206994597C13D831ec7".to_string(),
         },
         ledger_init_arg: ledger_init_arg("Tether USD", "USDT"),
+        ledger_compressed_wasm_hash: ledger_compressed_wasm_hash.to_string(),
+        index_compressed_wasm_hash: index_compressed_wasm_hash.to_string(),
     }
 }
 

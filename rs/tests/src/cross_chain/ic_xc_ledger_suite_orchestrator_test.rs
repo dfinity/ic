@@ -9,12 +9,15 @@ use crate::orchestrator::utils::rw_message::install_nns_with_customizations_and_
 use crate::util::{block_on, runtime_from_url};
 use anyhow::{anyhow, bail};
 use candid::{Encode, Nat, Principal};
-use canister_test::{Canister, Runtime, Wasm};
+use canister_test::{Canister, Runtime};
 use dfn_candid::candid_one;
 use ic_base_types::CanisterId;
 use ic_ic00_types::CanisterInstallMode;
-use ic_ledger_suite_orchestrator::candid::{
-    AddErc20Arg, Erc20Contract, InitArg, LedgerInitArg, ManagedCanisterIds, OrchestratorArg,
+use ic_ledger_suite_orchestrator::{
+    candid::{
+        AddErc20Arg, Erc20Contract, InitArg, LedgerInitArg, ManagedCanisterIds, OrchestratorArg,
+    },
+    state::Wasm,
 };
 use ic_nervous_system_clients::canister_status::CanisterStatusResult;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
@@ -74,7 +77,7 @@ pub fn ic_xc_ledger_suite_orchestrator_test(env: TestEnv) {
         "rs/ethereum/ledger-suite-orchestrator/ledger_suite_orchestrator_canister.wasm",
     );
     let ledger_orchestrator = block_on(async {
-        let init_args = orchestrator_init_arg(&env);
+        let init_args = OrchestratorArg::InitArg(InitArg {});
         let canister = install_nns_controlled_canister(
             &logger,
             &application_subnet_runtime,
@@ -106,6 +109,8 @@ pub fn ic_xc_ledger_suite_orchestrator_test(env: TestEnv) {
             AddErc20Arg {
                 contract: usdc_contract(),
                 ledger_init_arg: usdc_ledger_init_arg(),
+                ledger_compressed_wasm_hash: embedded_ledger_wasm(&env).hash().to_string(),
+                index_compressed_wasm_hash: embedded_index_wasm(&env).hash().to_string(),
             },
         )
         .await
@@ -147,26 +152,6 @@ pub fn ic_xc_ledger_suite_orchestrator_test(env: TestEnv) {
     assert!(usdc_ledger_suite.archives.is_empty());
 }
 
-fn orchestrator_init_arg(env: &TestEnv) -> OrchestratorArg {
-    OrchestratorArg::InitArg(InitArg {
-        ledger_wasm: wasm_from_path(
-            env,
-            "rs/rosetta-api/icrc1/ledger/ledger_canister_u256.wasm.gz",
-        )
-        .bytes(),
-        index_wasm: wasm_from_path(
-            env,
-            "rs/rosetta-api/icrc1/index-ng/index_ng_canister_u256.wasm.gz",
-        )
-        .bytes(),
-        archive_wasm: wasm_from_path(
-            env,
-            "rs/rosetta-api/icrc1/archive/archive_canister_u256.wasm.gz",
-        )
-        .bytes(),
-    })
-}
-
 async fn install_nns_controlled_canister<'a>(
     logger: &slog::Logger,
     application_subnet_runtime: &'a Runtime,
@@ -201,8 +186,8 @@ async fn install_nns_controlled_canister<'a>(
         ROOT_CANISTER_ID
     );
 
-    let wasm = canister_wasm.bytes();
-    let new_module_hash = &ic_crypto_sha2::Sha256::hash(&wasm);
+    let new_module_hash = canister_wasm.hash().clone();
+    let wasm = canister_wasm.to_bytes();
     let proposal_payload =
         ChangeCanisterRequest::new(true, CanisterInstallMode::Install, canister.canister_id())
             .with_wasm(wasm)
@@ -229,7 +214,7 @@ async fn install_nns_controlled_canister<'a>(
 
     status_of_nns_controlled_canister_satisfy(logger, root_canister, &canister, |status| {
         status.status == CanisterStatusType::Running
-            && status.module_hash.as_deref() == Some(new_module_hash)
+            && status.module_hash.as_deref() == Some(new_module_hash.as_ref())
     })
     .await;
 
@@ -253,7 +238,7 @@ async fn add_erc_20_by_nns_proposal<'a>(
 
     let erc20_contract = erc20_token.contract.clone();
     let upgrade_arg = OrchestratorArg::AddErc20Arg(erc20_token);
-    let wasm = canister_wasm.bytes();
+    let wasm = canister_wasm.to_bytes();
     let proposal_payload = ChangeCanisterRequest::new(
         true,
         CanisterInstallMode::Upgrade,
@@ -321,7 +306,21 @@ async fn add_erc_20_by_nns_proposal<'a>(
 }
 
 fn wasm_from_path<P: AsRef<Path>>(env: &TestEnv, path: P) -> Wasm {
-    Wasm::from_file(env.get_dependency_path(path))
+    Wasm::from(canister_test::Wasm::from_file(env.get_dependency_path(path)).bytes())
+}
+
+fn embedded_ledger_wasm(env: &TestEnv) -> ic_ledger_suite_orchestrator::state::Wasm {
+    wasm_from_path(
+        env,
+        "rs/rosetta-api/icrc1/ledger/ledger_canister_u256.wasm.gz",
+    )
+}
+
+fn embedded_index_wasm(env: &TestEnv) -> ic_ledger_suite_orchestrator::state::Wasm {
+    wasm_from_path(
+        env,
+        "rs/rosetta-api/icrc1/index-ng/index_ng_canister_u256.wasm.gz",
+    )
 }
 
 fn usdc_contract() -> Erc20Contract {
