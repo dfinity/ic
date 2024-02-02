@@ -7027,10 +7027,15 @@ dependencies = [
 name = "ic-crypto-test-utils-keygen"
 version = "0.9.0"
 dependencies = [
+ "ic-crypto-temp-crypto",
+ "ic-interfaces",
+ "ic-interfaces-registry",
  "ic-protobuf",
+ "ic-registry-client-fake",
  "ic-registry-keys",
  "ic-registry-proto-data-provider",
  "ic-types",
+ "ic-types-test-utils",
 ]
 
 [[package]]
@@ -7129,8 +7134,10 @@ version = "0.9.0"
 dependencies = [
  "ic-crypto-ecdsa-secp256r1",
  "ic-crypto-internal-basic-sig-ed25519",
+ "ic-crypto-temp-crypto",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tls-interfaces",
+ "ic-interfaces",
  "ic-protobuf",
  "ic-registry-client-fake",
  "ic-registry-keys",

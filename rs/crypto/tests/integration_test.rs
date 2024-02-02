@@ -1,6 +1,5 @@
 #![allow(clippy::unwrap_used)]
 
-use crate::keygen_utils::TestKeygenCrypto;
 use assert_matches::assert_matches;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_config::crypto::CryptoConfig;
@@ -11,6 +10,7 @@ use ic_crypto_internal_csp_test_utils::remote_csp_vault::{
 use ic_crypto_internal_tls::generate_tls_key_pair_der;
 use ic_crypto_temp_crypto::{EcdsaSubnetConfig, NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_test_utils::files::temp_dir;
+use ic_crypto_test_utils_keygen::TestKeygenCrypto;
 use ic_crypto_test_utils_keygen::{add_public_key_to_registry, add_tls_cert_to_registry};
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_test_utils_tls::x509_certificates::generate_ed25519_cert;
@@ -40,8 +40,6 @@ use slog::Level;
 use std::sync::Arc;
 use std::time::Duration;
 use strum::IntoEnumIterator;
-
-mod keygen_utils;
 
 const REG_V1: RegistryVersion = RegistryVersion::new(1);
 const REG_V2: RegistryVersion = RegistryVersion::new(2);

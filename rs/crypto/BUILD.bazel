@@ -1,5 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc", "rust_doc_test", "rust_library", "rust_test")
-load("//bazel:defs.bzl", "rust_bench", "rust_test_suite_with_extra_srcs")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
+load("//bazel:defs.bzl", "rust_bench")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -146,22 +146,16 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-rust_test_suite_with_extra_srcs(
+rust_test_suite(
     name = "integration_suite",
     size = "large",
     srcs = glob(
         ["tests/**/*.rs"],
         exclude = [
-            "tests/**/test_*.rs",
-            "tests/*_utils/*.rs",
             "tests/parallelism/*.rs",
         ],
     ),
     aliases = ALIASES,
-    extra_srcs = glob([
-        "tests/**/test_*.rs",
-        "tests/*_utils/*.rs",
-    ]),
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":crypto"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
