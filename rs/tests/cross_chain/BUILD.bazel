@@ -12,7 +12,6 @@ CANISTER_RUNTIME_DEPS = [
 
 system_test(
     name = "ic_xc_ledger_suite_orchestrator_test",
-    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
