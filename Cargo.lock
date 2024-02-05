@@ -1736,16 +1736,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "canister_sandbox"
-version = "0.9.0"
-dependencies = [
- "cc",
- "ic-canister-sandbox-backend-lib",
- "ic-test-utilities",
- "libc",
-]
-
-[[package]]
 name = "cargo-platform"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5475,6 +5465,7 @@ dependencies = [
 name = "ic-canister-sandbox-backend-lib"
 version = "0.9.0"
 dependencies = [
+ "cc",
  "ic-base-types",
  "ic-canister-sandbox-common",
  "ic-config",

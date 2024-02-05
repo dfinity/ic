@@ -72,7 +72,7 @@ rust_binary(
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [
         ":recovery",
-        "//rs/canister_sandbox/backend_lib",
+        "//rs/canister_sandbox:backend_lib",
         "//rs/canister_sandbox/sandbox_launcher:sandbox_launcher_lib",
     ],
 )
