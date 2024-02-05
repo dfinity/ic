@@ -691,9 +691,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "libsecp256k1": crate.spec(
                 version = "^0.7.0",
             ),
-            "libusb": crate.spec(
-                version = "^0.3.0",
-            ),
             "libnss": crate.spec(
                 version = "^0.5.0",
             ),
@@ -984,6 +981,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "rstack-self": crate.spec(
                 version = "^0.3",
+            ),
+            "rusb": crate.spec(
+                version = "0.9",
             ),
             "rusqlite": crate.spec(
                 version = "^0.28.0",

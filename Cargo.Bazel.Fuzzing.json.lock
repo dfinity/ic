@@ -1,5 +1,5 @@
 {
-  "checksum": "97c43761d072bbe03d013ced69affc85dacfca255ce291e922ca9df6031b8cf9",
+  "checksum": "5ca3112bafe578aada98c754c4fa878fe0c87f0b2c6ab368dbdd1c1e33bb7d5f",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -6078,45 +6078,6 @@
         "version": "0.5.1"
       },
       "license": "Apache-2.0 OR MIT"
-    },
-    "bit-set 0.2.0": {
-      "name": "bit-set",
-      "version": "0.2.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/bit-set/0.2.0/download",
-          "sha256": "e6e1e6fb1c9e3d6fcdec57216a74eaa03e41f52a22f13a16438251d8e88b89da"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "bit_set",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "bit_set",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "bit-vec 0.6.3",
-              "target": "bit_vec"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.2.0"
-      },
-      "license": "MIT/Apache-2.0"
     },
     "bit-set 0.5.3": {
       "name": "bit-set",
@@ -15691,10 +15652,6 @@
               "target": "libsecp256k1"
             },
             {
-              "id": "libusb 0.3.0",
-              "target": "libusb"
-            },
-            {
               "id": "linked-hash-map 0.5.6",
               "target": "linked_hash_map"
             },
@@ -15969,6 +15926,10 @@
             {
               "id": "rstack-self 0.3.0",
               "target": "rstack_self"
+            },
+            {
+              "id": "rusb 0.9.3",
+              "target": "rusb"
             },
             {
               "id": "rusqlite 0.28.0",
@@ -30761,66 +30722,19 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "libusb 0.3.0": {
-      "name": "libusb",
-      "version": "0.3.0",
+    "libusb1-sys 0.6.4": {
+      "name": "libusb1-sys",
+      "version": "0.6.4",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/libusb/0.3.0/download",
-          "sha256": "5f990ddd929cbe53de4ecd6cf26e1f4e0c5b9796e4c629d9046570b03738aa53"
+          "url": "https://crates.io/api/v1/crates/libusb1-sys/0.6.4/download",
+          "sha256": "f9d0e2afce4245f2c9a418511e5af8718bcaf2fa408aefb259504d1a9cb25f27"
         }
       },
       "targets": [
         {
           "Library": {
-            "crate_name": "libusb",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "libusb",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "bit-set 0.2.0",
-              "target": "bit_set"
-            },
-            {
-              "id": "libc 0.2.152",
-              "target": "libc"
-            },
-            {
-              "id": "libusb-sys 0.2.3",
-              "target": "libusb_sys"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.3.0"
-      },
-      "license": "MIT"
-    },
-    "libusb-sys 0.2.3": {
-      "name": "libusb-sys",
-      "version": "0.2.3",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/libusb-sys/0.2.3/download",
-          "sha256": "4c53b6582563d64ad3e692f54ef95239c3ea8069e82c9eb70ca948869a7ad767"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "libusb_sys",
+            "crate_name": "libusb1_sys",
             "crate_root": "src/lib.rs",
             "srcs": [
               "**/*.rs"
@@ -30837,7 +30751,7 @@
           }
         }
       ],
-      "library_target_name": "libusb_sys",
+      "library_target_name": "libusb1_sys",
       "common_attrs": {
         "compile_data_glob": [
           "**"
@@ -30849,14 +30763,14 @@
               "target": "libc"
             },
             {
-              "id": "libusb-sys 0.2.3",
+              "id": "libusb1-sys 0.6.4",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
-        "edition": "2015",
-        "version": "0.2.3"
+        "edition": "2018",
+        "version": "0.6.4"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -30865,11 +30779,22 @@
         "deps": {
           "common": [
             {
+              "id": "cc 1.0.83",
+              "target": "cc"
+            },
+            {
               "id": "pkg-config 0.3.27",
               "target": "pkg_config"
             }
           ],
-          "selects": {}
+          "selects": {
+            "cfg(target_env = \"msvc\")": [
+              {
+                "id": "vcpkg 0.2.15",
+                "target": "vcpkg"
+              }
+            ]
+          }
         },
         "links": "usb-1.0"
       },
@@ -46223,6 +46148,76 @@
         "version": "0.3.0"
       },
       "license": "MIT/Apache-2.0"
+    },
+    "rusb 0.9.3": {
+      "name": "rusb",
+      "version": "0.9.3",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/rusb/0.9.3/download",
+          "sha256": "45fff149b6033f25e825cbb7b2c625a11ee8e6dac09264d49beb125e39aa97bf"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rusb",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "rusb",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "libc 0.2.152",
+              "target": "libc"
+            },
+            {
+              "id": "libusb1-sys 0.6.4",
+              "target": "libusb1_sys"
+            },
+            {
+              "id": "rusb 0.9.3",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.9.3"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ],
+        "link_deps": {
+          "common": [
+            {
+              "id": "libusb1-sys 0.6.4",
+              "target": "libusb1_sys"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "MIT"
     },
     "rusqlite 0.28.0": {
       "name": "rusqlite",
