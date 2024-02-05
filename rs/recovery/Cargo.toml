@@ -10,7 +10,7 @@ futures = { workspace = true }
 hex = "0.4.2"
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-base-types = { path = "../types/base_types/" }
-ic-canister-sandbox-backend-lib = { path = "../canister_sandbox/backend_lib" }
+ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
 ic-canister-sandbox-launcher = { path = "../canister_sandbox/sandbox_launcher" }
 ic-config = { path = "../config" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }

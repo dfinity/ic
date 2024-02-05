@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 ic-canister-sandbox-common = { path = "../common" }
-ic-canister-sandbox-backend-lib = { path = "../backend_lib" }
+ic-canister-sandbox-backend-lib = { path = ".." }
 ic-embedders = { path = "../../embedders" }
 ic-interfaces = { path = "../../interfaces" }
 ic-logger = { path = "../../monitoring/logger" }

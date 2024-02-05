@@ -3,7 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "//rs/canister_sandbox/backend_lib",
+    "//rs/canister_sandbox:backend_lib",
     "//rs/canister_sandbox/sandbox_launcher:sandbox_launcher_lib",
     "//rs/config",
     "//rs/cycles_account_manager",

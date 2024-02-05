@@ -4,7 +4,7 @@ load("//bazel:defs.bzl", "rust_ic_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "//rs/canister_sandbox/backend_lib",
+    "//rs/canister_sandbox:backend_lib",
     "//rs/canister_sandbox/common",
     "//rs/config",
     "//rs/embedders",

@@ -45,7 +45,6 @@ members = [
   "rs/https_outcalls/consensus",
   "rs/https_outcalls/service",
   "rs/canister_sandbox",
-  "rs/canister_sandbox/backend_lib",
   "rs/canister_sandbox/common",
   "rs/canister_sandbox/replica_controller",
   "rs/canister_sandbox/sandbox_launcher",

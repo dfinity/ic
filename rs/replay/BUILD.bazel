@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "//rs/artifact_pool",
     "//rs/canister_client",
-    "//rs/canister_sandbox/backend_lib",
+    "//rs/canister_sandbox:backend_lib",
     "//rs/canister_sandbox/sandbox_launcher:sandbox_launcher_lib",
     "//rs/config",
     "//rs/consensus",
