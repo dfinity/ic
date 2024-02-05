@@ -499,9 +499,12 @@ impl CommitmentOpening {
     /// * The dealings must have already been verified
     ///
     /// # Errors
-    /// * `ComplaintShouldBeIssued` if upon decrypting a ciphertext,
-    ///   the embedded secret was invalid with the dealing commitment.
-    ///   In this case a complaint must be issued.
+    /// * `ComplaintShouldBeIssued` if upon decrypting a ciphertext, the
+    ///   embedded secret was invalid with the dealing commitment. In this case
+    ///   a complaint must be issued.
+    /// * `InvalidCiphertext`: if a ciphertext cannot be decrypted.
+    /// * `UnableToCombineOpenings`: internal error denoting that the decrypted
+    ///   share cannot be combined.
     pub(crate) fn from_dealings(
         verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
         transcript_commitment: &CombinedCommitment,
