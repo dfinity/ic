@@ -70,6 +70,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) round_consensus_queue: ScopedMetrics,
     pub(super) round_postponed_raw_rand_queue: ScopedMetrics,
     pub(super) round_subnet_queue: ScopedMetrics,
+    pub(super) round_advance_long_install_code: ScopedMetrics,
     pub(super) round_scheduling_duration: Histogram,
     pub(super) round_update_sign_with_ecdsa_contexts_duration: Histogram,
     pub(super) round_inner: ScopedMetrics,
@@ -401,6 +402,32 @@ impl SchedulerMetrics {
                     "execution_round_subnet_queue_messages",
                     "The number of messages executed during subnet \
                           queue processing in an execution round",
+                    metrics_registry,
+                ),
+            },
+            round_advance_long_install_code: ScopedMetrics {
+                duration: duration_histogram(
+                    "execution_round_advance_long_install_code_duration_seconds",
+                    "The duration of advancing an in progress long install code in \
+                          an execution round",
+                    metrics_registry,
+                ),
+                instructions: instructions_histogram(
+                    "execution_round_advance_long_install_code_instructions",
+                    "The number of instructions executed during advancing \
+                        an in progress install code in an execution round",
+                    metrics_registry,
+                ),
+                slices: slices_histogram(
+                    "execution_round_advance_long_install_code_slices",
+                    "The number of slices executed executed during advancing \
+                        an in progress install code in an execution round",
+                    metrics_registry,
+                ),
+                messages: messages_histogram(
+                    "execution_round_advance_long_install_code_messages",
+                    "The number of messages executed during advancing \
+                        an in progress install code in an execution round",
                     metrics_registry,
                 ),
             },

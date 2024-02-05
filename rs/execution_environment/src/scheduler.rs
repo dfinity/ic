@@ -1606,8 +1606,10 @@ impl Scheduler for SchedulerImpl {
 
         // Subnet queues: execute long running install code call if present.
         {
-            let measurement_scope =
-                MeasurementScope::nested(&self.metrics.round_subnet_queue, &root_measurement_scope);
+            let measurement_scope = MeasurementScope::nested(
+                &self.metrics.round_advance_long_install_code,
+                &root_measurement_scope,
+            );
 
             let mut subnet_round_limits = scheduler_round_limits.subnet_round_limits();
             state = self.advance_long_running_install_code(
