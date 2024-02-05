@@ -1315,7 +1315,7 @@ fn certified_data_set() {
 fn data_certificate_copy() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let system_state = SystemStateBuilder::default().build();
-    let api = get_system_api(
+    let mut api = get_system_api(
         ApiType::replicated_query(
             mock_time(),
             vec![],

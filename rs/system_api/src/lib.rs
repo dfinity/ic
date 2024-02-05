@@ -1330,26 +1330,6 @@ impl SystemApiImpl {
         }
     }
 
-    /// Increase `ic0.call_perform()` system API call counter.
-    fn inc_call_perform_counter(&mut self) {
-        self.call_counters.call_perform += 1;
-    }
-
-    /// Increase `ic0.canister_cycle_balance()` system API call counter.
-    fn inc_canister_cycle_balance_counter(&mut self) {
-        self.call_counters.canister_cycle_balance += 1;
-    }
-
-    /// Increase `ic0.canister_cycle_balance128()` system API call counter.
-    fn inc_canister_cycle_balance128_counter(&mut self) {
-        self.call_counters.canister_cycle_balance128 += 1;
-    }
-
-    /// Increase `ic0.time()` system API call counter.
-    fn inc_time_counter(&mut self) {
-        self.call_counters.time += 1;
-    }
-
     /// Return tracked System API call counters.
     pub fn call_counters(&self) -> SystemApiCallCounters {
         self.call_counters.clone()
@@ -2050,7 +2030,7 @@ impl SystemApi for SystemApiImpl {
     // or the output queues are full. In this case, we need to perform the
     // necessary cleanups.
     fn ic0_call_perform(&mut self) -> HypervisorResult<i32> {
-        self.inc_call_perform_counter();
+        self.call_counters.call_perform += 1;
         let result = match &mut self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
@@ -2288,7 +2268,7 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn ic0_time(&mut self) -> HypervisorResult<Time> {
-        self.inc_time_counter();
+        self.call_counters.time += 1;
         let result = match &self.api_type {
             ApiType::Start { .. } => Err(self.error_for("ic0_time")),
             ApiType::Init { time, .. }
@@ -2510,7 +2490,7 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn ic0_canister_cycle_balance(&mut self) -> HypervisorResult<u64> {
-        self.inc_canister_cycle_balance_counter();
+        self.call_counters.canister_cycle_balance += 1;
         let result = {
             let (high_amount, low_amount) = self
                 .ic0_canister_cycle_balance_helper("ic0_canister_cycle_balance")?
@@ -2525,7 +2505,7 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn ic0_canister_cycle_balance128(&mut self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()> {
-        self.inc_canister_cycle_balance128_counter();
+        self.call_counters.canister_cycle_balance128 += 1;
         let result = {
             let method_name = "ic0_canister_cycle_balance128";
             let cycles = self.ic0_canister_cycle_balance_helper(method_name)?;
@@ -2673,12 +2653,13 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn ic0_data_certificate_copy(
-        &self,
+        &mut self,
         dst: u32,
         offset: u32,
         size: u32,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
+        self.call_counters.data_certificate_copy += 1;
         let result = match &self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }

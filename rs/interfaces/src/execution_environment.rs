@@ -199,6 +199,8 @@ pub enum SystemApiCallId {
 /// was invoked.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct SystemApiCallCounters {
+    /// Counter for `ic0.data_certificate_copy()`
+    pub data_certificate_copy: usize,
     /// Counter for `ic0.call_perform()`
     pub call_perform: usize,
     /// Counter for `ic0.canister_cycle_balance()`
@@ -211,6 +213,9 @@ pub struct SystemApiCallCounters {
 
 impl SystemApiCallCounters {
     pub fn saturating_add(&mut self, rhs: Self) {
+        self.data_certificate_copy = self
+            .data_certificate_copy
+            .saturating_add(rhs.data_certificate_copy);
         self.call_perform = self.call_perform.saturating_add(rhs.call_perform);
         self.canister_cycle_balance = self
             .canister_cycle_balance
@@ -1044,7 +1049,7 @@ pub trait SystemApi {
     /// (i.e. data_certificate_present returns 1).
     /// Traps if data_certificate_present returns 0.
     fn ic0_data_certificate_copy(
-        &self,
+        &mut self,
         dst: u32,
         offset: u32,
         size: u32,

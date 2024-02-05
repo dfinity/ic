@@ -1828,6 +1828,12 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_query_cache_data_certificate_expiry_time(mut self, time: Duration) -> Self {
+        self.execution_config
+            .query_cache_data_certificate_expiry_time = time;
+        self
+    }
+
     pub fn with_query_stats(mut self) -> Self {
         self.execution_config.query_stats_aggregation = FlagStatus::Enabled;
         self

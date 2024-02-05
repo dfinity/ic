@@ -25,6 +25,7 @@ pub(crate) struct QueryCacheMetrics {
     pub invalidated_entries: IntCounter,
     pub invalidated_entries_by_time: IntCounter,
     pub invalidated_entries_by_max_expiry_time: IntCounter,
+    pub invalidated_entries_by_data_certificate_expiry_time: IntCounter,
     pub invalidated_entries_by_canister_version: IntCounter,
     pub invalidated_entries_by_canister_balance: IntCounter,
     pub invalidated_entries_by_nested_call: IntCounter,
@@ -72,6 +73,10 @@ impl QueryCacheMetrics {
             invalidated_entries_by_max_expiry_time: metrics_registry.int_counter(
                 "execution_query_cache_invalidated_entries_by_max_expiry_time_total",
                 "The total number of invalidated entries due to the max expiry time",
+            ),
+            invalidated_entries_by_data_certificate_expiry_time: metrics_registry.int_counter(
+                "execution_query_cache_invalidated_entries_by_data_certificate_expiry_time_total",
+                "The total number of invalidated entries due to the data certificate expiry time",
             ),
             invalidated_entries_by_canister_version: metrics_registry.int_counter(
                 "execution_query_cache_invalidated_entries_by_canister_version_total",
@@ -171,6 +176,8 @@ pub(crate) struct EntryValue {
     env: EntryEnv,
     /// The result produced by the query.
     result: Result<WasmResult, UserError>,
+    /// If set, the cached entry should be expired after `data_certificate_expiry_time`.
+    includes_data_certificate: bool,
     /// If set, the `env.batch_time` might be ignored.
     ignore_batch_time: bool,
     /// If set, the `env.canister_balance` might be ignored.
@@ -189,6 +196,8 @@ impl EntryValue {
         result: Result<WasmResult, UserError>,
         system_api_call_counters: &SystemApiCallCounters,
     ) -> EntryValue {
+        // The cached entry should be expired after `data_certificate_expiry_time`.
+        let includes_data_certificate = system_api_call_counters.data_certificate_copy > 0;
         // It's safe to ignore `batch_time` changes if the query never calls `ic0.time()`.
         let ignore_batch_time = system_api_call_counters.time == 0;
         // It's safe to ignore `canister_balance` changes if the query never checks the balance.
@@ -197,14 +206,21 @@ impl EntryValue {
         EntryValue {
             env,
             result,
+            includes_data_certificate,
             ignore_batch_time,
             ignore_canister_balance,
         }
     }
 
-    fn is_valid(&self, env: &EntryEnv, max_expiry_time: Duration) -> bool {
+    fn is_valid(
+        &self,
+        env: &EntryEnv,
+        max_expiry_time: Duration,
+        data_certificate_expiry_time: Duration,
+    ) -> bool {
         self.is_valid_time(env)
-            && self.is_not_expired(env, max_expiry_time)
+            && !self.is_expired(env, max_expiry_time)
+            && !self.is_expired_data_certificate(env, data_certificate_expiry_time)
             && self.is_valid_canister_version(env)
             && self.is_valid_canister_balance(env)
     }
@@ -214,12 +230,24 @@ impl EntryValue {
     }
 
     /// Check cache entry max expiration time.
-    fn is_not_expired(&self, env: &EntryEnv, max_expiry_time: Duration) -> bool {
+    fn is_expired(&self, env: &EntryEnv, max_expiry_time: Duration) -> bool {
         if let Some(duration) = env.batch_time.checked_duration_since(self.env.batch_time) {
-            duration <= max_expiry_time
+            duration > max_expiry_time
         } else {
-            true
+            false
         }
+    }
+
+    /// Check cache entry data certificate expiration time.
+    fn is_expired_data_certificate(
+        &self,
+        env: &EntryEnv,
+        data_certificate_expiry_time: Duration,
+    ) -> bool {
+        if self.includes_data_certificate {
+            return self.is_expired(env, data_certificate_expiry_time);
+        }
+        false
     }
 
     fn is_valid_canister_version(&self, env: &EntryEnv) -> bool {
@@ -258,6 +286,8 @@ pub(crate) struct QueryCache {
     cache: Mutex<LruCache<EntryKey, EntryValue>>,
     /// The upper limit on how long the cache entry stays valid in the query cache.
     max_expiry_time: Duration,
+    /// The upper limit on how long the data certificate stays valid in the query cache.
+    data_certificate_expiry_time: Duration,
     /// Query cache metrics (public for tests)
     pub(crate) metrics: QueryCacheMetrics,
 }
@@ -274,10 +304,12 @@ impl QueryCache {
         metrics_registry: &MetricsRegistry,
         capacity: NumBytes,
         max_expiry_time: Duration,
+        data_certificate_expiry_time: Duration,
     ) -> Self {
         QueryCache {
             cache: Mutex::new(LruCache::new(capacity)),
             max_expiry_time,
+            data_certificate_expiry_time,
             metrics: QueryCacheMetrics::new(metrics_registry),
         }
     }
@@ -292,7 +324,7 @@ impl QueryCache {
         let now = env.batch_time;
 
         if let Some(value) = cache.get(key) {
-            if value.is_valid(env, self.max_expiry_time) {
+            if value.is_valid(env, self.max_expiry_time, self.data_certificate_expiry_time) {
                 let res = value.result();
                 // Update the metrics.
                 self.metrics.hits.inc();
@@ -315,8 +347,13 @@ impl QueryCache {
                 if !value.is_valid_time(env) {
                     self.metrics.invalidated_entries_by_time.inc();
                 }
-                if !value.is_not_expired(env, self.max_expiry_time) {
+                if value.is_expired(env, self.max_expiry_time) {
                     self.metrics.invalidated_entries_by_max_expiry_time.inc();
+                }
+                if value.is_expired_data_certificate(env, self.data_certificate_expiry_time) {
+                    self.metrics
+                        .invalidated_entries_by_data_certificate_expiry_time
+                        .inc();
                 }
                 if !value.is_valid_canister_version(env) {
                     self.metrics.invalidated_entries_by_canister_version.inc();

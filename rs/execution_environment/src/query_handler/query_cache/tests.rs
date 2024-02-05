@@ -16,6 +16,8 @@ use std::{sync::Arc, time::Duration};
 
 const MAX_EXPIRY_TIME: Duration = Duration::from_secs(10);
 const MORE_THAN_MAX_EXPIRY_TIME: Duration = Duration::from_secs(11);
+const DATA_CERTIFICATE_EXPIRY_TIME: Duration = Duration::from_secs(2);
+const MORE_THAN_DATA_CERTIFICATE_EXPIRY_TIME: Duration = Duration::from_secs(3);
 const ITERATIONS: usize = 5;
 const REPLY_SIZE: usize = 10_000;
 const BIG_REPLY_SIZE: usize = 1_000_000;
@@ -87,9 +89,11 @@ fn builder_with_query_cache_capacity(capacity: usize) -> ExecutionTestBuilder {
     builder_with_query_caching().with_query_cache_capacity(capacity as u64)
 }
 
-/// Return `ExecutionTestBuilder` with query cache max expiry time.
-fn builder_with_query_cache_max_expiry_time() -> ExecutionTestBuilder {
-    builder_with_query_caching().with_query_cache_max_expiry_time(MAX_EXPIRY_TIME)
+/// Return `ExecutionTestBuilder` with query cache expiry times.
+fn builder_with_query_cache_expiry_times() -> ExecutionTestBuilder {
+    builder_with_query_caching()
+        .with_query_cache_max_expiry_time(MAX_EXPIRY_TIME)
+        .with_query_cache_data_certificate_expiry_time(DATA_CERTIFICATE_EXPIRY_TIME)
 }
 
 #[test]
@@ -380,6 +384,10 @@ fn query_cache_different_batch_times_return_different_results() {
     assert_eq!(1, m.invalidated_entries.get());
     assert_eq!(1, m.invalidated_entries_by_time.get());
     assert_eq!(0, m.invalidated_entries_by_max_expiry_time.get());
+    assert_eq!(
+        0,
+        m.invalidated_entries_by_data_certificate_expiry_time.get()
+    );
     assert_eq!(0, m.invalidated_entries_by_canister_version.get());
     assert_eq!(0, m.invalidated_entries_by_canister_balance.get());
     assert_eq!(1, m.invalidated_entries_duration.get_sample_sum() as u64);
@@ -417,7 +425,7 @@ fn query_cache_different_batch_times_return_the_same_idempotent_result() {
 
 #[test]
 fn query_cache_different_batch_times_return_different_idempotent_results_after_expiry_time() {
-    let mut test = builder_with_query_cache_max_expiry_time().build();
+    let mut test = builder_with_query_cache_expiry_times().build();
     let id = test.universal_canister().unwrap();
     // The query does not depend on time.
     let q = wasm().reply_data(&[42]).build();
@@ -444,7 +452,7 @@ fn query_cache_different_batch_times_return_different_idempotent_results_after_e
 
 #[test]
 fn query_cache_always_returns_different_idempotent_results_after_expiry_time() {
-    let mut test = builder_with_query_cache_max_expiry_time().build();
+    let mut test = builder_with_query_cache_expiry_times().build();
     let id = test.universal_canister().unwrap();
     let q = wasm().reply_data(&[42]).build();
 
@@ -462,10 +470,47 @@ fn query_cache_always_returns_different_idempotent_results_after_expiry_time() {
     assert_eq!(1, m.invalidated_entries.get());
     assert_eq!(0, m.invalidated_entries_by_time.get());
     assert_eq!(1, m.invalidated_entries_by_max_expiry_time.get());
+    assert_eq!(
+        0,
+        m.invalidated_entries_by_data_certificate_expiry_time.get()
+    );
     assert_eq!(0, m.invalidated_entries_by_canister_version.get());
     assert_eq!(0, m.invalidated_entries_by_canister_balance.get());
     assert_eq!(
         MORE_THAN_MAX_EXPIRY_TIME.as_secs(),
+        m.invalidated_entries_duration.get_sample_sum() as u64
+    );
+    assert_eq!(1, m.invalidated_entries_duration.get_sample_count());
+}
+
+#[test]
+fn query_cache_always_returns_different_results_after_data_certificate_expiry_time() {
+    let mut test = builder_with_query_cache_expiry_times().build();
+    let id = test.universal_canister().unwrap();
+    let q = wasm().data_certificate().reply().build();
+
+    let res_1 = test.non_replicated_query(id, "query", q.clone());
+    assert_eq!(query_cache_metrics(&test).misses.get(), 1);
+    assert_eq!(res_1, Ok(WasmResult::Reply(vec![])));
+
+    // Change the batch time more than the max expiry time.
+    test.state_mut().metadata.batch_time += MORE_THAN_DATA_CERTIFICATE_EXPIRY_TIME;
+
+    let res_2 = test.non_replicated_query(id, "query", q);
+    let m = query_cache_metrics(&test);
+    assert_eq!(2, m.misses.get());
+    assert_eq!(res_1, res_2);
+    assert_eq!(1, m.invalidated_entries.get());
+    assert_eq!(0, m.invalidated_entries_by_time.get());
+    assert_eq!(0, m.invalidated_entries_by_max_expiry_time.get());
+    assert_eq!(
+        1,
+        m.invalidated_entries_by_data_certificate_expiry_time.get()
+    );
+    assert_eq!(0, m.invalidated_entries_by_canister_version.get());
+    assert_eq!(0, m.invalidated_entries_by_canister_balance.get());
+    assert_eq!(
+        MORE_THAN_DATA_CERTIFICATE_EXPIRY_TIME.as_secs(),
         m.invalidated_entries_duration.get_sample_sum() as u64
     );
     assert_eq!(1, m.invalidated_entries_duration.get_sample_count());
@@ -491,6 +536,10 @@ fn query_cache_invalidated_entries_work_with_negative_durations() {
     assert_eq!(res_1, res_2);
     assert_eq!(1, m.invalidated_entries_by_time.get());
     assert_eq!(0, m.invalidated_entries_by_max_expiry_time.get());
+    assert_eq!(
+        0,
+        m.invalidated_entries_by_data_certificate_expiry_time.get()
+    );
     // Negative durations should give just 0.
     assert_eq!(0, m.invalidated_entries_duration.get_sample_sum() as usize);
     assert_eq!(1, m.invalidated_entries_duration.get_sample_count());
@@ -516,6 +565,10 @@ fn query_cache_different_canister_versions_return_different_results() {
     assert_eq!(1, m.invalidated_entries.get());
     assert_eq!(0, m.invalidated_entries_by_time.get());
     assert_eq!(0, m.invalidated_entries_by_max_expiry_time.get());
+    assert_eq!(
+        0,
+        m.invalidated_entries_by_data_certificate_expiry_time.get()
+    );
     assert_eq!(1, m.invalidated_entries_by_canister_version.get());
     assert_eq!(0, m.invalidated_entries_by_canister_balance.get());
     assert_eq!(0, m.invalidated_entries_duration.get_sample_sum() as usize);
@@ -604,6 +657,10 @@ fn query_cache_different_canister_balance128s_return_different_results() {
     assert_eq!(1, m.invalidated_entries.get());
     assert_eq!(0, m.invalidated_entries_by_time.get());
     assert_eq!(0, m.invalidated_entries_by_max_expiry_time.get());
+    assert_eq!(
+        0,
+        m.invalidated_entries_by_data_certificate_expiry_time.get()
+    );
     assert_eq!(0, m.invalidated_entries_by_canister_version.get());
     assert_eq!(1, m.invalidated_entries_by_canister_balance.get());
     assert_eq!(0, m.invalidated_entries_duration.get_sample_sum() as usize);
@@ -612,10 +669,15 @@ fn query_cache_different_canister_balance128s_return_different_results() {
 
 #[test]
 fn query_cache_combined_invalidation_works() {
-    let mut test = builder_with_query_cache_max_expiry_time().build();
+    let mut test = builder_with_query_cache_expiry_times().build();
     let id = test.universal_canister().unwrap();
     // The query must get the time and balance, otherwise the entry won't be invalidated.
-    let q = wasm().time().cycles_balance().reply_data(&[42]).build();
+    let q = wasm()
+        .time()
+        .cycles_balance()
+        .data_certificate()
+        .reply()
+        .build();
 
     let res_1 = test.non_replicated_query(id, "query", q.clone());
 
@@ -633,6 +695,10 @@ fn query_cache_combined_invalidation_works() {
     assert_eq!(1, m.invalidated_entries.get());
     assert_eq!(1, m.invalidated_entries_by_time.get());
     assert_eq!(1, m.invalidated_entries_by_max_expiry_time.get());
+    assert_eq!(
+        1,
+        m.invalidated_entries_by_data_certificate_expiry_time.get()
+    );
     assert_eq!(1, m.invalidated_entries_by_canister_version.get());
     assert_eq!(1, m.invalidated_entries_by_canister_balance.get());
 }
@@ -752,6 +818,9 @@ fn query_cache_metrics_system_api_calls_work_on_composite_query() {
 
     let a = wasm()
         // Fist group of System API calls.
+        .data_certificate()
+        .data_certificate()
+        .data_certificate()
         .cycles_balance()
         .cycles_balance128()
         .time()
@@ -782,6 +851,10 @@ fn query_cache_metrics_system_api_calls_work_on_composite_query() {
             ),
         )
         // Second group of System API calls.
+        .data_certificate()
+        .data_certificate()
+        .data_certificate()
+        .data_certificate()
         .cycles_balance()
         .cycles_balance128()
         .time()
@@ -816,6 +889,13 @@ fn query_cache_metrics_system_api_calls_work_on_composite_query() {
         6,
         m.query_system_api_calls
             .with_label_values(&[metrics::SYSTEM_API_TIME])
+            .get()
+    );
+    // Seven `ic0.data_certificate_copy()` calls.
+    assert_eq!(
+        7,
+        m.query_system_api_calls
+            .with_label_values(&[metrics::SYSTEM_API_DATA_CERTIFICATE_COPY])
             .get()
     );
 }
@@ -879,7 +959,7 @@ fn query_cache_composite_queries_return_the_same_result() {
 
 #[test]
 fn query_cache_composite_queries_return_different_results_after_expiry_time() {
-    let mut test = builder_with_query_cache_max_expiry_time().build();
+    let mut test = builder_with_query_cache_expiry_times().build();
     let id = test.universal_canister().unwrap();
     // The query has no time or balance dependencies.
     let q = wasm().reply_data(&[42]).build();
