@@ -11,6 +11,7 @@ base64 = { workspace = true }
 bincode = "1.2"
 bytes = { workspace = true }
 educe = "0.4"
+futures = "0.3"
 hex = "0.4.2"
 ic-adapter-metrics = { path = "../../../monitoring/adapter_metrics" }
 ic-config = { path = "../../../config" }
@@ -50,7 +51,7 @@ slog = { workspace = true }
 stubborn-io = "0.3.2"
 strum = { workspace = true }
 strum_macros = { workspace = true }
-tarpc = { version = "0.32", features = ["full"] }
+tarpc = { version = "0.34", features = ["full"] }
 tempfile = "3.1.0"
 time = "0.3.20"
 thiserror = "1.0.26"
