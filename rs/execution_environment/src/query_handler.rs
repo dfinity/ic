@@ -133,7 +133,8 @@ impl InternalHttpQueryHandler {
         local_query_execution_stats: QueryStatsCollector,
     ) -> Self {
         let query_cache_capacity = config.query_cache_capacity;
-        let query_cache_max_expiry_time = config.query_cache_max_expiry_time;
+        let query_max_expiry_time = config.query_cache_max_expiry_time;
+        let query_data_certificate_expiry_time = config.query_cache_data_certificate_expiry_time;
         Self {
             log,
             hypervisor,
@@ -146,7 +147,8 @@ impl InternalHttpQueryHandler {
             query_cache: query_cache::QueryCache::new(
                 metrics_registry,
                 query_cache_capacity,
-                query_cache_max_expiry_time,
+                query_max_expiry_time,
+                query_data_certificate_expiry_time,
             ),
         }
     }
