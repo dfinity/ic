@@ -41,6 +41,7 @@
 use anyhow::Result;
 
 use ic_registry_subnet_type::SubnetType;
+use ic_tests::driver::boundary_node::BoundaryNodeVm;
 use ic_tests::driver::ic::{
     AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
 };
@@ -92,17 +93,26 @@ pub fn setup(env: TestEnv) {
         nns_dapp_customizations(),
     );
     set_authorized_subnets(&env);
+    let mut farm_url: Option<String> = None;
     for i in 0..NUM_BN {
         let bn_name = format!("boundary-node-{}", i);
-        BoundaryNode::new(bn_name)
+        BoundaryNode::new(bn_name.clone())
             .allocate_vm(&env)
             .expect("Allocation of BoundaryNode failed.")
             .for_ic(&env, "")
             .use_real_certs_and_dns()
             .start(&env)
             .expect("failed to setup BoundaryNode VM");
+        if farm_url.is_none() {
+            let boundary_node = env
+                .get_deployed_boundary_node(bn_name.as_str())
+                .unwrap()
+                .get_snapshot()
+                .unwrap();
+            farm_url = Some(boundary_node.get_playnet().unwrap());
+        }
     }
-    env.sync_with_prometheus();
+    env.sync_with_prometheus_by_name("", farm_url);
     for i in 0..NUM_BN {
         let bn_name = format!("boundary-node-{}", i);
         await_boundary_node_healthy(&env, &bn_name);

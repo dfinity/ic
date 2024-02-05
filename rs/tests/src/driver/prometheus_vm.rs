@@ -7,6 +7,7 @@ use std::{
 };
 
 use anyhow::Result;
+use maplit::hashmap;
 use reqwest::Url;
 use serde::Serialize;
 use serde_json::json;
@@ -73,6 +74,7 @@ const IC_PROGRESS_CLOCK_CREATED_EVENT_NAME: &str = "ic_progress_clock_created_ev
 const REPLICA_PROMETHEUS_TARGET: &str = "replica.json";
 const ORCHESTRATOR_PROMETHEUS_TARGET: &str = "orchestrator.json";
 const NODE_EXPORTER_PROMETHEUS_TARGET: &str = "node_exporter.json";
+const LEDGER_CANISTER_PROMETHEUS_TARGET: &str = "ledger_canister.json";
 const BN_PROMETHEUS_TARGET: &str = "boundary_nodes.json";
 const BN_EXPORTER_PROMETHEUS_TARGET: &str = "boundary_nodes_exporter.json";
 const BN_NGINX_PROMETHEUS_TARGET: &str = "boundary_nodes_nginx.json";
@@ -213,8 +215,9 @@ pub trait HasPrometheus {
     fn sync_with_prometheus(&self);
 
     /// Retrieves a topology snapshot by name, converts it into p8s scraping target
-    /// JSON files and scps them to the prometheus VM.
-    fn sync_with_prometheus_by_name(&self, name: &str);
+    /// JSON files and scps them to the prometheus VM. If `farm_url` is specified, add a
+    /// scraping target for NNS canisters (currently only the ICP ledger) to the prometheus VM.
+    fn sync_with_prometheus_by_name(&self, name: &str, farm_url: Option<String>);
 
     /// Downloads prometheus' data directory to the test artifacts
     /// such that we can run a local p8s on that later.
@@ -227,10 +230,14 @@ pub trait HasPrometheus {
 
 impl HasPrometheus for TestEnv {
     fn sync_with_prometheus(&self) {
-        self.sync_with_prometheus_by_name("")
+        self.sync_with_prometheus_by_name("", None)
     }
 
-    fn sync_with_prometheus_by_name(&self, name: &str) {
+    fn sync_with_prometheus_by_name(
+        &self,
+        name: &str,
+        farm_url_for_ledger_canister: Option<String>,
+    ) {
         let infra_provider = InfraProvider::read_attribute(self);
         let use_k8s = infra_provider == InfraProvider::K8s;
         if use_k8s {
@@ -246,6 +253,7 @@ impl HasPrometheus for TestEnv {
             prometheus_config_dir.clone(),
             group_name.clone(),
             self.topology_snapshot_by_name(name),
+            &farm_url_for_ledger_canister,
         )
         .expect("Failed to synchronize prometheus config with the latest IC topology!");
         sync_prometheus_config_dir_with_boundary_nodes(
@@ -260,14 +268,18 @@ impl HasPrometheus for TestEnv {
             .block_on_ssh_session()
             .unwrap_or_else(|e| panic!("Failed to setup SSH session to {vm_name} because: {e:?}!"));
         // scp the scraping target JSON files to prometheus VM.
-        for file in &[
+        let mut target_json_files = vec![
             REPLICA_PROMETHEUS_TARGET,
             ORCHESTRATOR_PROMETHEUS_TARGET,
             NODE_EXPORTER_PROMETHEUS_TARGET,
             BN_PROMETHEUS_TARGET,
             BN_EXPORTER_PROMETHEUS_TARGET,
             BN_NGINX_PROMETHEUS_TARGET,
-        ] {
+        ];
+        if farm_url_for_ledger_canister.is_some() {
+            target_json_files.push(LEDGER_CANISTER_PROMETHEUS_TARGET);
+        }
+        for file in &target_json_files {
             let from = prometheus_config_dir.join(file);
             let to = Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(file);
             let size = fs::metadata(&from).unwrap().len();
@@ -360,6 +372,8 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(ORCHESTRATOR_PROMETHEUS_TARGET);
     let node_exporter_scraping_targets_path =
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(NODE_EXPORTER_PROMETHEUS_TARGET);
+    let ledger_canister_scraping_target_path =
+        Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(LEDGER_CANISTER_PROMETHEUS_TARGET);
     let scrape_interval_str: String = format!("{}s", scrape_interval.as_secs());
     let prometheus_config = json!({
         "global": {"scrape_interval": scrape_interval_str},
@@ -383,6 +397,15 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
                 "file_sd_configs": [{"files": [node_exporter_scraping_targets_path]}],
                 "scheme": "https",
                 "tls_config": {"insecure_skip_verify": true},
+            },
+            {
+                "job_name": "ledger-canister",
+                "honor_timestamps": true,
+                "metrics_path": "/metrics",
+                "scheme": "https",
+                "follow_redirects": true,
+                "enable_http2": true,
+                "file_sd_configs": [{"files": [ledger_canister_scraping_target_path]}],
             },
         ],
     });
@@ -453,6 +476,7 @@ fn sync_prometheus_config_dir(
     prometheus_config_dir: PathBuf,
     group_name: String,
     topology_snapshot: TopologySnapshot,
+    farm_url_for_ledger_canister: &Option<String>,
 ) -> Result<()> {
     let mut replica_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
     let mut orchestrator_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
@@ -497,6 +521,16 @@ fn sync_prometheus_config_dir(
             targets: vec![scraping_target_url(&node, NODE_EXPORTER_METRICS_PORT)],
             labels,
         });
+    }
+    if let Some(farm_url) = farm_url_for_ledger_canister {
+        let ledger_canister_p8s_static_config = vec![PrometheusStaticConfig {
+            targets: vec![format!("ryjl3-tyaaa-aaaaa-aaaba-cai.raw.{}", farm_url)],
+            labels: hashmap! {"ic".to_string() => group_name.clone(), "token".to_string() => "icp".to_string()},
+        }];
+        serde_json::to_writer(
+            &File::create(prometheus_config_dir.join(LEDGER_CANISTER_PROMETHEUS_TARGET))?,
+            &ledger_canister_p8s_static_config,
+        )?;
     }
     for (name, p8s_static_configs) in &[
         (REPLICA_PROMETHEUS_TARGET, replica_p8s_static_configs),
