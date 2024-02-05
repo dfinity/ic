@@ -50,7 +50,6 @@ rosetta-api-docker-image:
 rosetta-release:
   extends:
     - .build-k8s
-    - .ic-build-image
   rules:
     - if: $CI_COMMIT_REF_PROTECTED == "true" && $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "rosetta-release"
   script:

@@ -18,10 +18,18 @@ default:
   # https://docs.gitlab.com/ee/ci/yaml/#interruptible
   # Jobs can override this by setting `interruptible: false`.
   interruptible: true
+  artifacts:
+    expire_in: 3 days
+    when: always
+  image:
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:f46892f10dba6d7839a6e07e30787217a3c06180843472129ceb61534ab1fc9d"
+  tags:
+    - dfinity-ic
 
 variables:
   TEST_ES_HOSTNAMES: >-
     elasticsearch.testnet.dfinity.network:443
+  GIT_CLONE_PATH: $CI_BUILDS_DIR/clean/$CI_PROJECT_NAME
 
 before_script:
   - |
@@ -87,25 +95,10 @@ after_script:
     echo -e "\e[0Ksection_end:$(date +%s):after_script\r\e[0K"
 
 .build-k8s:
-  extends:
-    - .ic-build-image
   variables:
     GET_SOURCES_ATTEMPTS: 5
     GIT_DEPTH: 0  # Pull the complete repo initially
     GIT_STRATEGY: "fetch"  # And then pull only new commits
-
-# Container images used by jobs.
-
-.ic-build-image:
-  artifacts:
-    expire_in: 3 days
-    when: always
-  image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:f46892f10dba6d7839a6e07e30787217a3c06180843472129ceb61534ab1fc9d"
-  tags:
-    - dfinity-ic
-  variables:
-    GIT_CLONE_PATH: $CI_BUILDS_DIR/clean/$CI_PROJECT_NAME
 
 # 1. If on the RC branch and "hotfix" (case insensitive) is in the commit message,
 #    then allow manual execution of prod hourly and nightly tests.
