@@ -1,4 +1,4 @@
-use ic_stable_structures::{BoundedStorable, Memory, StableBTreeMap, Storable};
+use ic_stable_structures::{Memory, StableBTreeMap, Storable};
 
 pub mod neuron_following;
 pub mod neuron_principal;
@@ -6,8 +6,8 @@ pub mod neuron_principal;
 /// Validates a StableBTreeMap by reading a value out of it. Should only be called in post_upgrade.
 pub(crate) fn validate_stable_btree_map<Key, Value, M>(btree_map: &StableBTreeMap<Key, Value, M>)
 where
-    Key: Storable + BoundedStorable + Ord + Clone,
-    Value: Storable + BoundedStorable,
+    Key: Storable + Ord + Clone,
+    Value: Storable,
     M: Memory,
 {
     // This is just to verify that any key-value pair can be deserialized without panicking. It is

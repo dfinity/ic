@@ -1,5 +1,5 @@
 {
-  "checksum": "1f2ee1509cbdc312f461d1fe19805d1a814d73157d47bdceae60d3da6b9b47e7",
+  "checksum": "93cb7e4e75351f6e7360907725f398bdd2564a2dea986e4eabc990c82006d7d4",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -15432,7 +15432,7 @@
               "target": "ic_response_verification"
             },
             {
-              "id": "ic-stable-structures 0.5.6",
+              "id": "ic-stable-structures 0.6.2",
               "target": "ic_stable_structures"
             },
             {
@@ -25389,13 +25389,13 @@
       },
       "license": "Apache-2.0"
     },
-    "ic-stable-structures 0.5.6": {
+    "ic-stable-structures 0.6.2": {
       "name": "ic-stable-structures",
-      "version": "0.5.6",
+      "version": "0.6.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-stable-structures/0.5.6/download",
-          "sha256": "95dce29e3ceb0e6da3e78b305d95365530f2efd2146ca18590c0ef3aa6038568"
+          "url": "https://crates.io/api/v1/crates/ic-stable-structures/0.6.2/download",
+          "sha256": "774d7d26420c095f2b5f0f71f7b2ff4a5b58b87e0959dccc78b3d513a7db5112"
         }
       },
       "targets": [
@@ -25414,8 +25414,17 @@
         "compile_data_glob": [
           "**"
         ],
+        "deps": {
+          "common": [
+            {
+              "id": "ic_principal 0.1.1",
+              "target": "ic_principal"
+            }
+          ],
+          "selects": {}
+        },
         "edition": "2021",
-        "version": "0.5.6"
+        "version": "0.6.2"
       },
       "license": "Apache-2.0"
     },

@@ -10869,9 +10869,12 @@ dependencies = [
 
 [[package]]
 name = "ic-stable-structures"
-version = "0.5.4"
+version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4e026318236de13568edafd85534ad29910908bf08cdcf177d4403fd4a5f6c4"
+checksum = "774d7d26420c095f2b5f0f71f7b2ff4a5b58b87e0959dccc78b3d513a7db5112"
+dependencies = [
+ "ic_principal",
+]
 
 [[package]]
 name = "ic-starter"
@@ -11980,16 +11983,14 @@ dependencies = [
 
 [[package]]
 name = "ic_principal"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "899a4e8ddada85b91a2fe32b4dc6c0d475ef7bfef3f51cf2aecb26ee4ac4724f"
+checksum = "1762deb6f7c8d8c2bdee4b6c5a47b60195b74e9b5280faa5ba29692f8e17429c"
 dependencies = [
  "arbitrary",
  "crc32fast",
  "data-encoding",
- "hex",
  "serde",
- "serde_bytes",
  "sha2 0.10.8",
  "thiserror",
 ]

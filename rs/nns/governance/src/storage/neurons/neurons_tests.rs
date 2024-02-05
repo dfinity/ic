@@ -353,8 +353,8 @@ fn test_store_simplest_nontrivial_case() {
         key_value_to_neuron_id: impl Fn(Key, Value) -> NeuronId,
         bad_neuron_id: NeuronId,
     ) where
-        Key: BoundedStorable + Ord + Copy + std::fmt::Debug,
-        Value: BoundedStorable + Clone + std::fmt::Debug,
+        Key: Storable + Ord + Copy + std::fmt::Debug,
+        Value: Storable + Clone + std::fmt::Debug,
         Memory: ic_stable_structures::Memory,
     {
         for (key, value) in map.iter() {
@@ -490,7 +490,7 @@ fn test_abridged_neuron_size() {
         )),
     };
 
-    assert!(abridged_neuron.encoded_len() as u32 <= AbridgedNeuron::MAX_SIZE);
+    assert!(abridged_neuron.encoded_len() as u32 <= AbridgedNeuron::BOUND.max_size());
     // This size can be updated. This assertion is created so that we are aware of the available
     // headroom.
     assert_eq!(abridged_neuron.encoded_len(), 197);

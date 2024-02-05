@@ -581,7 +581,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.1.1",
             ),
             "ic-stable-structures": crate.spec(
-                version = "^0.5.0",
+                version = "^0.6.0",
             ),
             "ic-response-verification": crate.spec(
                 version = "2.3.0",

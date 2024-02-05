@@ -10,7 +10,8 @@ use crate::{
 use candid::Principal;
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
-use ic_stable_structures::{BoundedStorable, StableBTreeMap, Storable};
+use ic_stable_structures::storable::Bound;
+use ic_stable_structures::{StableBTreeMap, Storable};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use maplit::hashmap;
@@ -502,7 +503,7 @@ pub(crate) fn new_heap_based() -> StableNeuronStore<VectorMemory> {
     .build()
 }
 
-// impl BoundedStorable for $ProtoMessage
+// impl Storable for $ProtoMessage
 // ======================================
 
 impl Storable for AbridgedNeuron {
@@ -516,15 +517,15 @@ impl Storable for AbridgedNeuron {
             // panic is unavoid able in the case of Err.)
             .expect("Unable to deserialize Neuron.")
     }
-}
-impl BoundedStorable for AbridgedNeuron {
-    const IS_FIXED_SIZE: bool = false;
 
-    // How this number was chosen: we constructed the largest abridged Neuron
-    // possible, and found that its serialized size was 190 bytes. This is 2x
-    // that, which seems to strike a good balance between comfortable room for
-    // growth vs. excessive wasted space.
-    const MAX_SIZE: u32 = 380;
+    const BOUND: Bound = Bound::Bounded {
+        // How this number was chosen: we constructed the largest abridged Neuron
+        // possible, and found that its serialized size was 190 bytes. This is 2x
+        // that, which seems to strike a good balance between comfortable room for
+        // growth vs. excessive wasted space.
+        max_size: 380,
+        is_fixed_size: false,
+    };
 }
 
 impl Storable for BallotInfo {
@@ -535,12 +536,12 @@ impl Storable for BallotInfo {
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         Self::decode(&bytes[..]).expect("Unable to deserialize Neuron.")
     }
-}
-impl BoundedStorable for BallotInfo {
-    const IS_FIXED_SIZE: bool = false;
 
-    // How this number was chosen: Similar to how MAX_SIZE was chosen for Neuron.
-    const MAX_SIZE: u32 = 48;
+    const BOUND: Bound = Bound::Bounded {
+        // How this number was chosen: Similar to how MAX_SIZE was chosen for Neuron.
+        max_size: 48,
+        is_fixed_size: false,
+    };
 }
 
 impl Storable for KnownNeuronData {
@@ -551,12 +552,12 @@ impl Storable for KnownNeuronData {
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         Self::decode(&bytes[..]).expect("Unable to deserialize Neuron.")
     }
-}
-impl BoundedStorable for KnownNeuronData {
-    const IS_FIXED_SIZE: bool = false;
 
-    // How this number was chosen: Similar to how MAX_SIZE was chosen for Neuron.
-    const MAX_SIZE: u32 = 6412;
+    const BOUND: Bound = Bound::Bounded {
+        // How this number was chosen: Similar to how MAX_SIZE was chosen for Neuron.
+        max_size: 6412,
+        is_fixed_size: false,
+    };
 }
 
 impl Storable for NeuronStakeTransfer {
@@ -567,12 +568,12 @@ impl Storable for NeuronStakeTransfer {
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         Self::decode(&bytes[..]).expect("Unable to deserialize Neuron.")
     }
-}
-impl BoundedStorable for NeuronStakeTransfer {
-    const IS_FIXED_SIZE: bool = false;
 
-    // How this number was chosen: Similar to how MAX_SIZE was chosen for Neuron.
-    const MAX_SIZE: u32 = 290;
+    const BOUND: Bound = Bound::Bounded {
+        // How this number was chosen: Similar to how MAX_SIZE was chosen for Neuron.
+        max_size: 290,
+        is_fixed_size: false,
+    };
 }
 
 // Private Helpers
@@ -760,7 +761,7 @@ fn update_repeated_field<Element, Memory>(
     new_elements: Vec<Element>,
     map: &mut StableBTreeMap<(NeuronId, /* index */ u64), Element, Memory>,
 ) where
-    Element: BoundedStorable,
+    Element: Storable,
     Memory: ic_stable_structures::Memory,
 {
     let new_entries = new_elements
@@ -789,8 +790,8 @@ fn update_range<Key, Value, Memory>(
     range: impl RangeBounds<Key>,
     map: &mut StableBTreeMap<Key, Value, Memory>,
 ) where
-    Key: BoundedStorable + Ord + Clone,
-    Value: BoundedStorable,
+    Key: Storable + Ord + Clone,
+    Value: Storable,
     Memory: ic_stable_structures::Memory,
 {
     let new_keys = new_entries.keys().cloned().collect::<HeapBTreeSet<Key>>();
@@ -815,7 +816,7 @@ fn update_singleton_field<Element, Memory>(
     element: Option<Element>,
     map: &mut StableBTreeMap<NeuronId, Element, Memory>,
 ) where
-    Element: BoundedStorable,
+    Element: Storable,
     Memory: ic_stable_structures::Memory,
 {
     match element {
@@ -829,7 +830,7 @@ fn read_repeated_field<Element, Memory>(
     map: &StableBTreeMap<(NeuronId, /* index */ u64), Element, Memory>,
 ) -> Vec<Element>
 where
-    Element: BoundedStorable,
+    Element: Storable,
     Memory: ic_stable_structures::Memory,
 {
     let first = (neuron_id, u64::MIN);
@@ -905,10 +906,8 @@ impl Storable for FolloweesKey {
             index,
         }
     }
-}
-impl BoundedStorable for FolloweesKey {
-    const IS_FIXED_SIZE: bool = FolloweesKeyEquivalentTuple::IS_FIXED_SIZE;
-    const MAX_SIZE: u32 = FolloweesKeyEquivalentTuple::MAX_SIZE;
+
+    const BOUND: Bound = <FolloweesKeyEquivalentTuple as Storable>::BOUND;
 }
 
 #[cfg(test)]
