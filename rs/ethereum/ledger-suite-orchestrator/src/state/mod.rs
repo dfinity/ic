@@ -6,7 +6,7 @@ use crate::scheduler::{Erc20Contract, Task, Tasks};
 use candid::Principal;
 use ic_cdk::trap;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
-use ic_stable_structures::{Cell, DefaultMemoryImpl, Storable};
+use ic_stable_structures::{storable::Bound, Cell, DefaultMemoryImpl, Storable};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_bytes::ByteBuf;
 use std::borrow::Cow;
@@ -265,6 +265,8 @@ impl Storable for ConfigState {
             }),
         )
     }
+
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]

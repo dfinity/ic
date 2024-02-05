@@ -16,10 +16,10 @@ use ic_icrc1_index_ng::{
 use ic_ledger_core::block::{BlockIndex as BlockIndex64, BlockType, EncodedBlock};
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub, Zero};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
-use ic_stable_structures::storable::Blob;
+use ic_stable_structures::storable::{Blob, Bound};
 use ic_stable_structures::{
-    memory_manager::MemoryManager, BoundedStorable, DefaultMemoryImpl, StableBTreeMap, StableCell,
-    StableLog, Storable,
+    memory_manager::MemoryManager, DefaultMemoryImpl, StableBTreeMap, StableCell, StableLog,
+    Storable,
 };
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc3::archive::{ArchivedRange, QueryBlockArchiveFn};
@@ -150,6 +150,8 @@ impl Storable for State {
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         ciborium::de::from_reader(&bytes[..]).expect("failed to decode index options")
     }
+
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -178,6 +180,11 @@ impl Storable for AccountDataType {
             panic!("Unknown AccountDataType {}", bytes[0]);
         }
     }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 1,
+        is_fixed_size: true,
+    };
 }
 
 #[test]
@@ -186,11 +193,6 @@ fn test_account_data_type_storable() {
         AccountDataType::Balance,
         AccountDataType::from_bytes(AccountDataType::Balance.to_bytes())
     );
-}
-
-impl BoundedStorable for AccountDataType {
-    const MAX_SIZE: u32 = 1;
-    const IS_FIXED_SIZE: bool = true;
 }
 
 /// A helper function to access the scalar state.

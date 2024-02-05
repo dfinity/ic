@@ -8,7 +8,7 @@ use ic_ckbtc_kyt::{
     LifecycleArg, WithdrawalAttempt,
 };
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory as VM};
-use ic_stable_structures::storable::Storable;
+use ic_stable_structures::storable::{Bound, Storable};
 use ic_stable_structures::{DefaultMemoryImpl, RestrictedMemory as RM, StableCell, StableLog};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -75,6 +75,8 @@ where
             }),
         )
     }
+
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 fn default_kyt_mode() -> KytMode {

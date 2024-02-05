@@ -1,4 +1,4 @@
-use ic_stable_structures::{BoundedStorable, Memory, StableBTreeMap};
+use ic_stable_structures::{Memory, StableBTreeMap, Storable};
 use num_traits::bounds::{LowerBounded, UpperBounded};
 use std::{
     cmp::Ord,
@@ -249,8 +249,8 @@ where
 /// A stable memory implementation of the index.
 pub struct StableNeuronFollowingIndex<NeuronId, Category, M>
 where
-    NeuronId: BoundedStorable + Clone + Default + Ord,
-    Category: BoundedStorable + Copy + Default + Ord,
+    NeuronId: Storable + Clone + Default + Ord,
+    Category: Storable + Copy + Default + Ord,
     M: Memory,
 {
     // The composite key cannot be easily flattened since (A, B, C) does not
@@ -260,8 +260,8 @@ where
 
 impl<NeuronId, Category, M> StableNeuronFollowingIndex<NeuronId, Category, M>
 where
-    NeuronId: BoundedStorable + Default + Clone + Ord,
-    Category: BoundedStorable + Default + Copy + Ord,
+    NeuronId: Storable + Default + Clone + Ord,
+    Category: Storable + Default + Copy + Ord,
     M: Memory,
 {
     pub fn new(memory: M) -> Self {
@@ -299,8 +299,8 @@ where
 impl<NeuronId, Category, M> NeuronFollowingIndex<NeuronId, Category>
     for StableNeuronFollowingIndex<NeuronId, Category, M>
 where
-    NeuronId: BoundedStorable + Clone + Default + LowerBounded + UpperBounded + Ord,
-    Category: BoundedStorable + Copy + Default + Ord,
+    NeuronId: Storable + Clone + Default + LowerBounded + UpperBounded + Ord,
+    Category: Storable + Copy + Default + Ord,
     M: Memory,
 {
     fn add_neuron_followee_for_category(
@@ -367,6 +367,7 @@ where
 mod tests {
     use super::*;
 
+    use ic_stable_structures::storable::Bound;
     use ic_stable_structures::{Storable, VectorMemory};
     use maplit::btreeset;
     use std::borrow::Cow;
@@ -382,11 +383,11 @@ mod tests {
         fn from_bytes(bytes: Cow<[u8]>) -> Self {
             TestNeuronId(<[u8; 32]>::from_bytes(bytes))
         }
-    }
 
-    impl BoundedStorable for TestNeuronId {
-        const MAX_SIZE: u32 = 32;
-        const IS_FIXED_SIZE: bool = true;
+        const BOUND: Bound = Bound::Bounded {
+            max_size: 32,
+            is_fixed_size: true,
+        };
     }
 
     impl LowerBounded for TestNeuronId {
@@ -428,11 +429,11 @@ mod tests {
         fn from_bytes(bytes: Cow<[u8]>) -> Self {
             i32::from_be_bytes(bytes.as_ref().try_into().unwrap()).into()
         }
-    }
 
-    impl BoundedStorable for Topic {
-        const MAX_SIZE: u32 = std::mem::size_of::<i32>() as u32;
-        const IS_FIXED_SIZE: bool = true;
+        const BOUND: Bound = Bound::Bounded {
+            max_size: std::mem::size_of::<i32>() as u32,
+            is_fixed_size: true,
+        };
     }
 
     fn get_stable_index() -> StableNeuronFollowingIndex<TestNeuronId, Topic, VectorMemory> {

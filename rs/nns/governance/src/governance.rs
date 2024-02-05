@@ -80,7 +80,8 @@ use ic_sns_swap::pb::v1::{self as sns_swap_pb, Lifecycle, NeuronsFundParticipati
 use ic_sns_wasm::pb::v1::{
     DeployNewSnsRequest, DeployNewSnsResponse, ListDeployedSnsesRequest, ListDeployedSnsesResponse,
 };
-use ic_stable_structures::{BoundedStorable, Storable};
+use ic_stable_structures::storable::Bound;
+use ic_stable_structures::Storable;
 use icp_ledger::{
     AccountIdentifier, Subaccount, Tokens, DEFAULT_TRANSFER_FEE, TOKEN_SUBDIVIDABLE_BY,
 };
@@ -1246,11 +1247,11 @@ impl Storable for Topic {
         Self::try_from(i32::from_le_bytes(bytes.as_ref().try_into().unwrap()))
             .expect("Failed to read i32 as Topic")
     }
-}
 
-impl BoundedStorable for Topic {
-    const MAX_SIZE: u32 = std::mem::size_of::<u32>() as u32;
-    const IS_FIXED_SIZE: bool = true;
+    const BOUND: Bound = Bound::Bounded {
+        max_size: std::mem::size_of::<u32>() as u32,
+        is_fixed_size: true,
+    };
 }
 
 impl Tally {

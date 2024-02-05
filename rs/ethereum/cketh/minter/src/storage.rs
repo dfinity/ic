@@ -2,7 +2,7 @@ use crate::state::event::{Event, EventType};
 use ic_stable_structures::{
     log::Log as StableLog,
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
-    storable::Storable,
+    storable::{Bound, Storable},
     DefaultMemoryImpl,
 };
 use std::borrow::Cow;
@@ -25,6 +25,8 @@ impl Storable for Event {
         minicbor::decode(bytes.as_ref())
             .unwrap_or_else(|e| panic!("failed to decode event bytes {}: {e}", hex::encode(bytes)))
     }
+
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 thread_local! {

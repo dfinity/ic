@@ -4,7 +4,7 @@ use crate::{governance::LOG_PREFIX, pb::v1::AuditEvent};
 use dfn_core::println;
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
-    BoundedStorable, DefaultMemoryImpl, Memory, StableBTreeMap, StableLog, Storable,
+    DefaultMemoryImpl, Memory, StableBTreeMap, StableLog, Storable,
 };
 use std::cell::RefCell;
 
@@ -167,8 +167,8 @@ pub fn validate_stable_storage() {
 
 pub(crate) fn validate_stable_btree_map<Key, Value, M>(btree_map: &StableBTreeMap<Key, Value, M>)
 where
-    Key: Storable + BoundedStorable + Ord + Clone,
-    Value: Storable + BoundedStorable,
+    Key: Storable + Ord + Clone,
+    Value: Storable,
     M: Memory,
 {
     // This is just to verify that any key-value pair can be deserialized without panicking. It is

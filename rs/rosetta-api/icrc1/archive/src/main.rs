@@ -6,7 +6,7 @@ use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::{
     cell::Cell as StableCell, log::Log as StableLog, memory_manager::MemoryManager,
-    DefaultMemoryImpl, RestrictedMemory, Storable,
+    storable::Bound, DefaultMemoryImpl, RestrictedMemory, Storable,
 };
 use icrc_ledger_types::icrc3::blocks::BlockRange;
 use icrc_ledger_types::icrc3::blocks::GenericBlock as IcrcBlock;
@@ -106,6 +106,8 @@ impl Storable for ArchiveConfig {
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         ciborium::de::from_reader(&bytes[..]).expect("failed to decode archive options")
     }
+
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 /// A helper function to access the configuration.

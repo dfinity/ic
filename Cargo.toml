@@ -455,7 +455,7 @@ ic-response-verification = "2.3.0"
 ic-http-certification = "2.3.0"
 ic-certification = "2.3.0"
 ic-cbor = "2.3.0"
-ic-stable-structures = "0.5.4"
+ic-stable-structures = "0.6.2"
 ic-utils = { version = "0.32.0", features = ["raw"] }
 ic-btc-interface = { git = "https://github.com/dfinity/bitcoin-canister", rev = "9b239d1d67253eb14a35be6061e3967d5ec9db9d" }
 indexmap = "2.1.0"

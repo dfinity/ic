@@ -1,5 +1,5 @@
 use ic_base_types::PrincipalId;
-use ic_stable_structures::{BoundedStorable, Memory, StableBTreeMap};
+use ic_stable_structures::{Memory, StableBTreeMap, Storable};
 use num_traits::bounds::LowerBounded;
 use std::{
     clone::Clone,
@@ -128,7 +128,7 @@ where
 /// A stable memory implementation of the index.
 pub struct StableNeuronPrincipalIndex<NeuronId, M>
 where
-    NeuronId: BoundedStorable + Default + Clone + Ord,
+    NeuronId: Storable + Default + Clone + Ord,
     M: Memory,
 {
     principal_id_and_neuron_id_set: StableBTreeMap<(PrincipalId, NeuronId), (), M>,
@@ -136,7 +136,7 @@ where
 
 impl<NeuronId, M> StableNeuronPrincipalIndex<NeuronId, M>
 where
-    NeuronId: BoundedStorable + Default + Clone + Ord,
+    NeuronId: Storable + Default + Clone + Ord,
     M: Memory,
 {
     pub fn new(memory: M) -> Self {
@@ -168,7 +168,7 @@ where
 
 impl<NeuronId, M> NeuronPrincipalIndex<NeuronId> for StableNeuronPrincipalIndex<NeuronId, M>
 where
-    NeuronId: BoundedStorable + Default + Clone + Ord + LowerBounded + Hash,
+    NeuronId: Storable + Default + Clone + Ord + LowerBounded + Hash,
     M: Memory,
 {
     fn add_neuron_id_principal_id(
@@ -204,6 +204,7 @@ where
 mod tests {
     use super::*;
 
+    use ic_stable_structures::storable::Bound;
     use ic_stable_structures::{Storable, VectorMemory};
     use maplit::hashset;
     use num_traits::bounds::LowerBounded;
@@ -220,11 +221,11 @@ mod tests {
         fn from_bytes(bytes: Cow<[u8]>) -> Self {
             TestNeuronId(<[u8; 32]>::from_bytes(bytes))
         }
-    }
 
-    impl BoundedStorable for TestNeuronId {
-        const MAX_SIZE: u32 = 32;
-        const IS_FIXED_SIZE: bool = true;
+        const BOUND: Bound = Bound::Bounded {
+            max_size: 32,
+            is_fixed_size: true,
+        };
     }
 
     impl LowerBounded for TestNeuronId {

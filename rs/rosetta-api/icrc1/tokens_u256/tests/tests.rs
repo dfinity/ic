@@ -1,6 +1,6 @@
 use candid::Nat;
 use ic_icrc1_tokens_u256::U256;
-use ic_stable_structures::storable::{BoundedStorable, Storable};
+use ic_stable_structures::storable::Storable;
 use proptest::prelude::*;
 
 fn arb_u256() -> impl Strategy<Value = U256> {
@@ -16,7 +16,7 @@ proptest! {
     #[test]
     fn storable_round_trip(v in arb_u256()) {
         let encoded_v = v.to_bytes();
-        prop_assert_eq!(U256::MAX_SIZE as usize, encoded_v.len());
+        prop_assert_eq!(U256::BOUND.max_size() as usize, encoded_v.len());
         prop_assert_eq!(v, U256::from_bytes(encoded_v));
     }
 
