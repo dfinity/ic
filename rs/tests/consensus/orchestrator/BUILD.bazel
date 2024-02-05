@@ -258,7 +258,12 @@ system_test(
     name = "upgrade_downgrade_app_subnet_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "system_test_hourly",
+        "system_test_nightly",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_timeout = "eternal",
     uses_guestos_dev_test = True,
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
@@ -270,6 +275,39 @@ system_test(
 
 system_test(
     name = "upgrade_downgrade_nns_subnet_test",
+    flaky = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "system_test_hourly",
+        "system_test_nightly",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_timeout = "eternal",
+    uses_guestos_dev_test = True,
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        NNS_CANISTER_RUNTIME_DEPS +
+        MAINNET_REVISION_RUNTIME_DEPS,
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "upgrade_app_subnet_test",
+    flaky = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    uses_guestos_dev_test = True,
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        NNS_CANISTER_RUNTIME_DEPS +
+        MAINNET_REVISION_RUNTIME_DEPS,
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "downgrade_app_subnet_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
