@@ -1211,15 +1211,6 @@ dependencies = [
 
 [[package]]
 name = "bit-set"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6e1e6fb1c9e3d6fcdec57216a74eaa03e41f52a22f13a16438251d8e88b89da"
-dependencies = [
- "bit-vec",
-]
-
-[[package]]
-name = "bit-set"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0700ddab506f33b20a03b13996eccd309a48e5ff77d0d95926aa0210fb4e95f1"
@@ -3102,7 +3093,6 @@ dependencies = [
  "libfuzzer-sys",
  "libnss",
  "libsecp256k1",
- "libusb",
  "linked-hash-map",
  "local-ip-address",
  "log",
@@ -3177,6 +3167,7 @@ dependencies = [
  "rolling-file",
  "rsa",
  "rstack-self",
+ "rusb",
  "rusqlite",
  "rust_decimal",
  "rust_decimal_macros",
@@ -5858,7 +5849,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da4081d44f4611b66c6dd725e6de3169f9f63905421e8626fcb86b6a898998b8"
 dependencies = [
  "ascii-canvas",
- "bit-set 0.5.3",
+ "bit-set",
  "diff",
  "ena",
  "is-terminal",
@@ -6126,24 +6117,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "libusb"
-version = "0.3.0"
+name = "libusb1-sys"
+version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f990ddd929cbe53de4ecd6cf26e1f4e0c5b9796e4c629d9046570b03738aa53"
+checksum = "f9d0e2afce4245f2c9a418511e5af8718bcaf2fa408aefb259504d1a9cb25f27"
 dependencies = [
- "bit-set 0.2.0",
- "libc",
- "libusb-sys",
-]
-
-[[package]]
-name = "libusb-sys"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c53b6582563d64ad3e692f54ef95239c3ea8069e82c9eb70ca948869a7ad767"
-dependencies = [
+ "cc",
  "libc",
  "pkg-config",
+ "vcpkg",
 ]
 
 [[package]]
@@ -8143,7 +8125,7 @@ version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e35c06b98bf36aba164cc17cb25f7e232f5c4aeea73baa14b8a9f0d92dbfa65"
 dependencies = [
- "bit-set 0.5.3",
+ "bit-set",
  "bitflags 1.3.2",
  "byteorder",
  "lazy_static",
@@ -9022,6 +9004,16 @@ dependencies = [
  "libc",
  "rstack",
  "serde",
+]
+
+[[package]]
+name = "rusb"
+version = "0.9.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "45fff149b6033f25e825cbb7b2c625a11ee8e6dac09264d49beb125e39aa97bf"
+dependencies = [
+ "libc",
+ "libusb1-sys",
 ]
 
 [[package]]
