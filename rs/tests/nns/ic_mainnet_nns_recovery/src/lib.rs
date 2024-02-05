@@ -192,7 +192,7 @@ pub fn setup(env: TestEnv) {
         .unwrap_or_else(|e| std::panic::resume_unwind(e));
 
     prometheus_thread.join().unwrap();
-    env.sync_with_prometheus_by_name(RECOVERED_NNS);
+    env.sync_with_prometheus_by_name(RECOVERED_NNS, None);
 }
 
 fn setup_recovered_nns(
