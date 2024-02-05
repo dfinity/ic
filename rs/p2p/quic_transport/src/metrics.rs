@@ -56,8 +56,8 @@ pub struct QuicTransportMetrics {
     quinn_path_congestion_window: IntGaugeVec,
     quinn_path_sent_packets: IntGaugeVec,
     quinn_path_lost_packets: IntGaugeVec,
-    quinn_path_sent_bytes: IntCounter,
-    quinn_path_received_bytes: IntCounter,
+    pub quinn_path_sent_bytes: IntCounter,
+    pub quinn_path_received_bytes: IntCounter,
 }
 
 impl QuicTransportMetrics {
@@ -217,7 +217,7 @@ impl QuicTransportMetrics {
         self.quinn_path_lost_packets
             .with_label_values(&peer_id_label)
             .set(path_stats.lost_packets as i64);
-        self.quinn_path_sent_bytes.inc_by(sent);
-        self.quinn_path_received_bytes.inc_by(recv);
+        // self.quinn_path_sent_bytes.inc_by(sent);
+        // self.quinn_path_received_bytes.inc_by(recv);
     }
 }

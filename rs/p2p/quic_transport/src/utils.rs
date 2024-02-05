@@ -54,7 +54,10 @@ fn bincode_config() -> impl Options {
         .with_limit(MAX_MESSAGE_SIZE_BYTES as u64)
 }
 
-pub(crate) async fn read_request(mut recv_stream: RecvStream) -> Result<Request<Body>, RecvError> {
+pub(crate) async fn read_request(
+    mut recv_stream: RecvStream,
+    metrics: &QuicTransportMetrics,
+) -> Result<Request<Body>, RecvError> {
     let raw_msg = recv_stream
         .read_to_end(MAX_MESSAGE_SIZE_BYTES)
         .await
@@ -64,6 +67,9 @@ pub(crate) async fn read_request(mut recv_stream: RecvStream) -> Result<Request<
                 MAX_MESSAGE_SIZE_BYTES
             ),
         })?;
+    metrics
+        .quinn_path_received_bytes
+        .inc_by(raw_msg.len() as u64);
     let msg: WireRequest =
         bincode_config()
             .deserialize(&raw_msg)
@@ -78,6 +84,7 @@ pub(crate) async fn read_request(mut recv_stream: RecvStream) -> Result<Request<
 
 pub(crate) async fn read_response(
     mut recv_stream: RecvStream,
+    metrics: &QuicTransportMetrics,
 ) -> Result<Response<Bytes>, SendError> {
     let raw_msg = recv_stream
         .read_to_end(MAX_MESSAGE_SIZE_BYTES)
@@ -90,6 +97,9 @@ pub(crate) async fn read_response(
             )),
             _ => SendError::Internal(err.to_string()),
         })?;
+    metrics
+        .quinn_path_received_bytes
+        .inc_by(raw_msg.len() as u64);
     let msg: WireResponse = bincode_config()
         .deserialize(&raw_msg)
         .map_err(|err| SendError::Internal(format!("Deserializing response failed: {}", err)))?;
@@ -102,6 +112,7 @@ pub(crate) async fn read_response(
 pub(crate) async fn write_request(
     send_stream: &mut SendStream,
     request: Request<Bytes>,
+    metrics: &QuicTransportMetrics,
 ) -> Result<(), SendError> {
     let (parts, body) = request.into_parts();
 
@@ -113,12 +124,14 @@ pub(crate) async fn write_request(
     let res = bincode_config()
         .serialize(&msg)
         .map_err(|err| SendError::Internal(err.to_string()))?;
+    metrics.quinn_path_sent_bytes.inc_by(res.len() as u64);
     Ok(send_stream.write_all(&res).await?)
 }
 
 pub(crate) async fn write_response(
     send_stream: &mut SendStream,
     response: Response<Body>,
+    metrics: &QuicTransportMetrics,
 ) -> Result<(), RecvError> {
     let (parts, body) = response.into_parts();
     // Check for axum error in body
@@ -138,6 +151,7 @@ pub(crate) async fn write_response(
         .map_err(|err| RecvError::SendResponseFailed {
             reason: err.to_string(),
         })?;
+    metrics.quinn_path_sent_bytes.inc_by(res.len() as u64);
     send_stream
         .write_all(&res)
         .await

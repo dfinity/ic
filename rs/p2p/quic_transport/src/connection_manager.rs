@@ -76,7 +76,7 @@ use crate::{metrics::QuicTransportMetrics, request_handler::run_stream_acceptor}
 const KEEP_ALIVE_INTERVAL: Duration = Duration::from_millis(200);
 /// Timeout after which quic marks connections as broken. This timeout is used to detect connections
 /// that were not explicitly closed. I.e replica crash
-const IDLE_TIMEOUT: Duration = Duration::from_millis(1000);
+const IDLE_TIMEOUT: Duration = Duration::from_secs(1000);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const CONNECT_RETRY_BACKOFF: Duration = Duration::from_secs(3);
 const GRUEZI_HANDSHAKE: &str = "gruezi";
@@ -239,8 +239,8 @@ pub(crate) fn start_connection_manager(
     // Upper bound on receive memory consumption.
     transport_config.receive_window(VarInt::from_u32(3_000_000_000));
     transport_config.stream_receive_window(VarInt::from_u32(20_000_000));
-    // transport_config.max_concurrent_bidi_streams(VarInt::from_u32(25));
-    // transport_config.max_concurrent_uni_streams(VarInt::from_u32(25));
+    transport_config.max_concurrent_bidi_streams(VarInt::from_u32(10000));
+    transport_config.max_concurrent_uni_streams(VarInt::from_u32(10000));
     let transport_config = Arc::new(transport_config);
     let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(rustls_server_config));
     server_config.transport_config(transport_config.clone());

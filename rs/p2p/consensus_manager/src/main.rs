@@ -241,7 +241,7 @@ async fn load_generator(
     let mut produce_and_send_artifact = tokio::time::interval(
         Duration::from_secs(1)
             .checked_div(*rps_rx.borrow() as u32)
-            .unwrap_or(Duration::from_secs(3)),
+            .unwrap_or(Duration::from_secs(1000000)),
     );
 
     // Calculated such that not exceed 20000 active adverts
@@ -280,8 +280,8 @@ async fn load_generator(
                         let id = TestArtifact::message_to_advert(&message).id;
                         let message_id = u64::from_le_bytes(id[..8].try_into().unwrap());
 
-                        // if relaying && message_id % 20 == 0 {
-                        if relaying {
+                        if relaying && message_id % 51== 0 {
+                        // if relaying {
                             // purge_queue.insert(TestArtifact::message_to_advert(&message), Duration::from_secs(60));
                             match artifact_processor_rx.send(ArtifactProcessorEvent::Advert((TestArtifact::message_to_advert(&message),false))).await {
                                 Ok(_) => {},
@@ -481,7 +481,7 @@ async fn main() {
         );
     }
 
-    let (rps_tx, rps_rx) = tokio::sync::watch::channel(1);
+    let (rps_tx, rps_rx) = tokio::sync::watch::channel(0);
 
     rt_handle.spawn(load_generator(
         args.id,

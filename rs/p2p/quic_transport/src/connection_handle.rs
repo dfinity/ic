@@ -73,7 +73,7 @@ impl ConnectionHandle {
             err
         })?;
 
-        write_request(&mut send_stream, request)
+        write_request(&mut send_stream, request, &self.metrics)
             .await
             .map_err(|err| {
                 self.metrics
@@ -91,13 +91,15 @@ impl ConnectionHandle {
             err
         })?;
 
-        let mut response = read_response(recv_stream).await.map_err(|err| {
-            self.metrics
-                .connection_handle_errors_total
-                .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_READ])
-                .inc();
-            err
-        })?;
+        let mut response = read_response(recv_stream, &self.metrics)
+            .await
+            .map_err(|err| {
+                self.metrics
+                    .connection_handle_errors_total
+                    .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_READ])
+                    .inc();
+                err
+            })?;
 
         // Propagate PeerId from this request to upper layers.
         response.extensions_mut().insert(self.peer_id);
@@ -127,7 +129,7 @@ impl ConnectionHandle {
             err
         })?;
 
-        write_request(&mut send_stream, request)
+        write_request(&mut send_stream, request, &self.metrics)
             .await
             .map_err(|err| {
                 self.metrics

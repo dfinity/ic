@@ -140,7 +140,7 @@ async fn handle_bi_stream(
     mut bi_tx: SendStream,
     bi_rx: RecvStream,
 ) {
-    let mut request = match read_request(bi_rx).await {
+    let mut request = match read_request(bi_rx, &metrics).await {
         Ok(request) => request,
         Err(e) => {
             info!(log, "Failed to read request from bidi stream: {}", e);
@@ -175,7 +175,7 @@ async fn handle_bi_stream(
     // We can ignore the errors because if both peers follow the protocol an errors will only occur
     // if the other peer has closed the connection. In this case `accept_bi` in the peer event
     // loop will close this connection.
-    if let Err(e) = write_response(&mut bi_tx, response).await {
+    if let Err(e) = write_response(&mut bi_tx, response, &metrics).await {
         info!(log, "Failed to write response to stream: {}", e);
         metrics
             .request_handle_errors_total
@@ -199,7 +199,7 @@ async fn handle_uni_stream(
     router: Router,
     uni_rx: RecvStream,
 ) {
-    let mut request = match read_request(uni_rx).await {
+    let mut request = match read_request(uni_rx, &metrics).await {
         Ok(request) => request,
         Err(e) => {
             info!(log, "Failed to read request from uni stream: {}", e);

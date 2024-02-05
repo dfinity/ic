@@ -25,16 +25,17 @@ instances = sys.argv[1:]
 # 31 node 500Kb msg
 # peer_data = [b"1", b"3", b"5",b"8",b"10", b"15"]  # Add more values as needed
 # 11  node 25kb msg
-# peer_data = [b"10", b"20", b"50", b"100", b"200", b"500"]  # Add more values as needed
+# peer_data = [b"10", b"20", b"50", b"100", b"200", b"500"]  # Add more alues as needed
 # outage
-peer_data = [b"1"]
+# peer_data = [b"1",b"2",b"5",b"10",b"15",b"20",b"25",b"0",b"0",b"0",b"0",b"0",b"0",b"0"]
+peer_data = [b"1",b"5",b"8",b"10",b"12",b"15",b"0",b"0",b"0",b"0",b"0"]
 
 def send_to_peers(data):
     for instance in instances:
         try:
             # Make a request to each peer with the corresponding data
             with urllib.request.urlopen(f"http://{instance}:9090/setrate", data=data) as response:
-                print(f"Sent data to {instance}: {value.decode('utf-8')}")
+                print(f"Sent data to {instance}: {alue.decode('utf-8')}")
         except Exception as e:
             print(f"Error sending data to {instance}: {e}")
 
