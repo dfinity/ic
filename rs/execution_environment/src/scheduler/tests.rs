@@ -2502,16 +2502,30 @@ fn execution_round_metrics_are_recorded() {
         13
     );
     assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 3);
-    assert_eq!(3, metrics.round_subnet_queue.duration.get_sample_count());
     assert_eq!(
-        3,
+        1,
+        metrics
+            .round_advance_long_install_code
+            .duration
+            .get_sample_count()
+    );
+    assert_eq!(
+        1,
+        metrics
+            .round_advance_long_install_code
+            .messages
+            .get_sample_count()
+    );
+    assert_eq!(2, metrics.round_subnet_queue.duration.get_sample_count());
+    assert_eq!(
+        2,
         metrics.round_subnet_queue.instructions.get_sample_count()
     );
     assert_eq!(
         30,
         metrics.round_subnet_queue.instructions.get_sample_sum() as u64,
     );
-    assert_eq!(3, metrics.round_subnet_queue.messages.get_sample_count());
+    assert_eq!(2, metrics.round_subnet_queue.messages.get_sample_count());
     assert_eq!(
         3,
         metrics.round_subnet_queue.messages.get_sample_sum() as u64,
@@ -4317,7 +4331,15 @@ fn dts_allow_only_one_long_install_code_execution_at_any_time() {
             .round_subnet_queue
             .slices
             .get_sample_sum(),
-        2.0
+        1.0
+    );
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .round_advance_long_install_code
+            .slices
+            .get_sample_sum(),
+        1.0
     );
     assert_eq!(
         test.scheduler()
@@ -4369,7 +4391,7 @@ fn dts_allow_only_one_long_install_code_execution_at_any_time() {
             .round_subnet_queue
             .slices
             .get_sample_sum(),
-        4.0
+        2.0
     );
     assert_eq!(
         test.scheduler()
@@ -4377,7 +4399,23 @@ fn dts_allow_only_one_long_install_code_execution_at_any_time() {
             .round_subnet_queue
             .messages
             .get_sample_sum(),
+        1.0
+    );
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .round_advance_long_install_code
+            .slices
+            .get_sample_sum(),
         2.0
+    );
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .round_advance_long_install_code
+            .messages
+            .get_sample_sum(),
+        1.0
     );
 
     // Execute another round to refresh the metrics
