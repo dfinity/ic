@@ -7096,21 +7096,12 @@ dependencies = [
 
 [[package]]
 name = "opentelemetry"
-version = "0.17.0"
+version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6105e89802af13fdf48c49d7646d3b533a70e536d818aae7e78ba0433d01acb8"
+checksum = "69d6c3d7288a106c0a363e4b0e8d308058d56902adefb16f4936f417ffef086e"
 dependencies = [
- "async-trait",
- "crossbeam-channel",
- "futures-channel",
- "futures-executor",
- "futures-util",
- "js-sys",
- "lazy_static",
- "percent-encoding 2.3.0",
- "pin-project",
- "rand 0.8.5",
- "thiserror",
+ "opentelemetry_api 0.18.0",
+ "opentelemetry_sdk 0.18.0",
 ]
 
 [[package]]
@@ -7119,7 +7110,7 @@ version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9591d937bc0e6d2feb6f71a559540ab300ea49955229c347a517a28d27784c54"
 dependencies = [
- "opentelemetry_api",
+ "opentelemetry_api 0.20.0",
  "opentelemetry_sdk 0.20.0",
 ]
 
@@ -7146,7 +7137,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c7d81bc254e2d572120363a2b16cdb0d715d301b5789be0cfc26ad87e4e10e53"
 dependencies = [
  "once_cell",
- "opentelemetry_api",
+ "opentelemetry_api 0.20.0",
  "opentelemetry_sdk 0.20.0",
  "prometheus",
  "protobuf",
@@ -7176,6 +7167,21 @@ dependencies = [
 
 [[package]]
 name = "opentelemetry_api"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c24f96e21e7acc813c7a8394ee94978929db2bcc46cf6b5014fc612bf7760c22"
+dependencies = [
+ "futures-channel",
+ "futures-util",
+ "indexmap 1.9.3",
+ "js-sys",
+ "once_cell",
+ "pin-project-lite",
+ "thiserror",
+]
+
+[[package]]
+name = "opentelemetry_api"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a81f725323db1b1206ca3da8bb19874bbd3f57c3bcd59471bfb04525b265b9b"
@@ -7192,6 +7198,24 @@ dependencies = [
 
 [[package]]
 name = "opentelemetry_sdk"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1ca41c4933371b61c2a2f214bf16931499af4ec90543604ec828f7a625c09113"
+dependencies = [
+ "async-trait",
+ "crossbeam-channel",
+ "futures-channel",
+ "futures-executor",
+ "futures-util",
+ "once_cell",
+ "opentelemetry_api 0.18.0",
+ "percent-encoding 2.3.0",
+ "rand 0.8.5",
+ "thiserror",
+]
+
+[[package]]
+name = "opentelemetry_sdk"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fa8e705a0612d48139799fcbaba0d4a90f06277153e43dd2bdc16c6f0edd8026"
@@ -7202,7 +7226,7 @@ dependencies = [
  "futures-executor",
  "futures-util",
  "once_cell",
- "opentelemetry_api",
+ "opentelemetry_api 0.20.0",
  "ordered-float 3.7.0",
  "percent-encoding 2.3.0",
  "rand 0.8.5",
@@ -10349,15 +10373,15 @@ checksum = "14c39fd04924ca3a864207c66fc2cd7d22d7c016007f9ce846cbb9326331930a"
 
 [[package]]
 name = "tarpc"
-version = "0.32.0"
+version = "0.34.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f07cb5fb67b0a90ea954b5ffd2fac9944ffef5937c801b987d3f8913f0c37348"
+checksum = "93a1870169fb9490fb3b37df7f50782986475c33cb90955f9f9b9ae659124200"
 dependencies = [
  "anyhow",
  "fnv",
  "futures",
  "humantime",
- "opentelemetry 0.17.0",
+ "opentelemetry 0.18.0",
  "pin-project",
  "rand 0.8.5",
  "serde",
@@ -10373,9 +10397,9 @@ dependencies = [
 
 [[package]]
 name = "tarpc-plugins"
-version = "0.12.0"
+version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ee42b4e559f17bce0385ebf511a7beb67d5cc33c12c96b7f4e9789919d9c10f"
+checksum = "ad8302bea2fb8a2b01b025d23414b0b4ed32a783b95e5d818c3320a8bc4baada"
 dependencies = [
  "proc-macro2 1.0.76",
  "quote 1.0.35",
@@ -11015,12 +11039,12 @@ dependencies = [
 
 [[package]]
 name = "tracing-opentelemetry"
-version = "0.17.4"
+version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fbbe89715c1dbbb790059e2565353978564924ee85017b5fff365c872ff6721f"
+checksum = "21ebb87a95ea13271332df069020513ab70bdb5637ca42d6e492dc3bbbad48de"
 dependencies = [
  "once_cell",
- "opentelemetry 0.17.0",
+ "opentelemetry 0.18.0",
  "tracing",
  "tracing-core",
  "tracing-subscriber",

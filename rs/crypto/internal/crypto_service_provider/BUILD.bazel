@@ -39,6 +39,7 @@ DEPENDENCIES = [
     "@crate_index//:base64",
     "@crate_index//:bincode",
     "@crate_index//:bytes",
+    "@crate_index//:futures",
     "@crate_index//:hex",
     "@crate_index//:time",
     "@crate_index//:parking_lot",

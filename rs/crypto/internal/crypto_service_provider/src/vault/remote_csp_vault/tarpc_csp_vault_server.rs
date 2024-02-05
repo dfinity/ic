@@ -14,6 +14,7 @@ use crate::vault::local_csp_vault::{LocalCspVault, ProdLocalCspVault};
 use crate::vault::remote_csp_vault::{remote_vault_codec_builder, TarpcCspVault};
 use crate::vault::remote_csp_vault::{PksAndSksContainsErrors, FOUR_GIGA_BYTES};
 use crate::ExternalPublicKeys;
+use futures::StreamExt;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
@@ -110,7 +111,6 @@ impl<C: CspVault> Clone for TarpcCspVaultServerWorker<C> {
     }
 }
 
-#[tarpc::server]
 impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     // `BasicSignatureCspVault`-methods.
     async fn sign(
@@ -632,9 +632,13 @@ impl<C: CspVault + 'static> TarpcCspVaultServerImpl<C> {
                     local_csp_vault,
                     thread_pool,
                 };
-                let channel_executor =
-                    BaseChannel::with_defaults(transport).execute(worker.serve());
-                channel_executor.await;
+                let channel = BaseChannel::with_defaults(transport);
+                channel
+                    .execute(worker.serve())
+                    .for_each(|rpc| async {
+                        tokio::spawn(rpc);
+                    })
+                    .await;
             });
         }
     }
