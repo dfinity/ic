@@ -8514,6 +8514,7 @@ dependencies = [
 name = "ic-ledger-suite-orchestrator"
 version = "0.1.0"
 dependencies = [
+ "askama",
  "assert_matches",
  "async-trait",
  "candid",
@@ -8522,6 +8523,7 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-canister-log 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ic-canisters-http-types",
  "ic-cdk",
  "ic-cdk-macros",
  "ic-cdk-timers",
@@ -8538,6 +8540,7 @@ dependencies = [
  "num-traits",
  "paste 1.0.14",
  "proptest",
+ "scraper",
  "serde",
  "serde_bytes",
  "serde_json",

@@ -8,12 +8,14 @@ name = "ic-leger-suite-orchestrator"
 path = "src/main.rs"
 
 [dependencies]
+askama = { workspace = true }
 async-trait = "0.1.73"
 candid = { workspace = true }
 ciborium = { workspace = true }
 hex = "0.4"
 ic-canister-log = "0.2.0"
 ic-base-types = { path = "../../types/base_types" }
+ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
@@ -37,4 +39,5 @@ ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
 mockall = { workspace = true }
 paste = "1.0.12"
+scraper = "0.17.1"
 tokio = { workspace = true }

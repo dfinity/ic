@@ -1,0 +1,89 @@
+{% macro etherscan_address_link(chain_id, address) -%}
+{% match chain_id %}
+{%- when 11155111 -%}
+<a href="https://sepolia.etherscan.io/address/{{address}}"><code>{{address}}</code></a>
+{%- when 1 -%}
+<a href="https://etherscan.io/address/{{address}}"><code>{{address}}</code></a>
+{%- else -%}
+({{chain_id}}, {{address}})
+{% endmatch %}
+{%- endmacro %}
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>Ledger Suite Orchestrator Dashboard</title>
+    <style>
+        body {
+            font-family: monospace;
+        }
+
+        table {
+            border: solid;
+            text-align: left;
+            width: 100%;
+            border-width: thin;
+        }
+
+        h3 {
+            font-variant: small-caps;
+            margin-top: 30px;
+            margin-bottom: 5px;
+        }
+
+        table table {
+            font-size: small;
+        }
+
+        .background {
+            margin: 0;
+            padding: 0;
+        }
+
+        .content {
+            max-width: 100vw;
+            width: fit-content;
+            margin: 0 auto;
+        }
+
+        tbody tr:nth-child(odd) {
+            background-color: #eeeeee;
+        }
+    </style>
+</head>
+
+<body>
+<div class="background">
+    <div class="content">
+        {% if !managed_canisters.is_empty() -%}
+        <h1 id="managed-canisters">Managed Canisters</h1>
+        {%- for (contract, canisters) in managed_canisters %}
+        {% if !canisters.is_empty() -%}
+        <!-- TODO XC-37: ckUSDC should not be hardcoded. We should record the ledger token symbol as well. -->
+        <h2 id="managed-canisters-{{contract.chain_id().as_ref()}}-{{contract.address()}}">ckUSDC({% call etherscan_address_link(contract.chain_id().as_ref(), contract.address()) %})</h2>
+        <table>
+            <thead>
+            <tr>
+                <th>ID</th>
+                <th>Type</th>
+                <th>Version installed by orchestrator</th>
+            </tr>
+            </thead>
+            <tbody>
+            {%- for canister in canisters %}
+            <tr>
+                <td>{{ canister.canister_id }}</td>
+                <td>{{ canister.canister_type }}</td>
+                <td>{{ canister.installed_from }}</td>
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+        {%- endif %}
+        {% endfor %}
+        {%- endif %}
+    </div>
+</div>
+</body>
+</html>

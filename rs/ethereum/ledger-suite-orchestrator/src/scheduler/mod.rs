@@ -1,4 +1,6 @@
 #[cfg(test)]
+pub mod test_fixtures;
+#[cfg(test)]
 mod tests;
 
 use crate::candid::{AddErc20Arg, LedgerInitArg};
@@ -351,9 +353,25 @@ where
 #[derive(Debug, PartialEq, Clone, Ord, PartialOrd, Eq, Serialize, Deserialize)]
 pub struct Erc20Contract(ChainId, Address);
 
+impl Erc20Contract {
+    pub fn chain_id(&self) -> &ChainId {
+        &self.0
+    }
+
+    pub fn address(&self) -> &Address {
+        &self.1
+    }
+}
+
 #[derive(Debug, PartialEq, Clone, Eq, Ord, PartialOrd, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ChainId(u64);
+
+impl AsRef<u64> for ChainId {
+    fn as_ref(&self) -> &u64 {
+        &self.0
+    }
+}
 
 impl TryFrom<crate::candid::Erc20Contract> for Erc20Contract {
     type Error = String;
