@@ -39,8 +39,6 @@
     reports:
       junit: bazel-testlogs-gitlab/**/test.xml
     when: always
-  extends:
-    - ".build-k8s"
   needs: []
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"
@@ -63,9 +61,6 @@
     BAZEL_COMMAND: test
     BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
     BAZEL_TARGETS: "//..."
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
 ".benchmark-spot-test":
   artifacts:
@@ -73,8 +68,6 @@
       - "$CI_JOB_STAGE/$CI_JOB_NAME"
     when: always
   dependencies: []
-  extends:
-    - ".build-k8s"
   resource_group: "$TESTNET"
   rules:
     - allow_failure: true
@@ -87,9 +80,6 @@
     CD_ENV: BENCHMARK_NIGHTLY
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdrc02
@@ -101,8 +91,6 @@
       - "$CI_JOB_STAGE/$CI_JOB_NAME"
     when: always
   dependencies: []
-  extends:
-    - ".build-k8s"
   resource_group: "$TESTNET"
   rules:
     - allow_failure: true
@@ -114,9 +102,6 @@
   variables:
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
@@ -142,7 +127,6 @@
     paths:
       - digestfile*
   extends:
-    - ".build-k8s"
     - ".rules-build-base-images"
   needs: []
   rules:
@@ -181,10 +165,6 @@
           echo "$REF_FILE" >> "digestfile-${IMAGE}"
           rm -f digestfile
       fi
-  variables:
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
 ".build-ic":
   artifacts:
     paths:
@@ -246,11 +226,6 @@
       if [ -f /tmp/nns.release.env ]; then
           mv /tmp/nns.release.env .
       fi
-".build-k8s":
-  variables:
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
 ".rules-build-base-images":
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-push-base-images"
@@ -301,7 +276,6 @@
       when: manual
 after-script-test:
   extends:
-    - ".build-k8s"
     - ".rules-master-pipeline-and-merge-request"
   needs: []
   rules:
@@ -317,10 +291,6 @@ after-script-test:
       shellcheck -x gitlab-ci/src/after_script/*.sh
 
       buildevents cmd "$CI_PIPELINE_ID" "$CI_JOB_ID" "$CI_JOB_NAME" -- "${CI_PROJECT_DIR}"/gitlab-ci/src/after_script/after_script.sh
-  variables:
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
 after_script:
   - |
     # Start the after_script section
@@ -400,9 +370,6 @@ bazel-build-fuzzers:
     BAZEL_EXTRA_ARGS: "--keep_going --config=fuzzing --build_tag_filters=libfuzzer"
     BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
     BAZEL_TARGETS: "//rs/..."
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
 bazel-build-fuzzers-afl:
   after_script:
@@ -470,9 +437,6 @@ bazel-build-fuzzers-afl:
     BAZEL_EXTRA_ARGS: "--keep_going --config=afl"
     BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
     BAZEL_TARGETS: "//rs/..."
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
 bazel-build-fuzzers-archives:
   after_script:
@@ -537,9 +501,6 @@ bazel-build-fuzzers-archives:
     BAZEL_COMMAND: test
     BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
     BAZEL_TARGETS: "//..."
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
 bazel-build-fuzzers-weekly:
   after_script:
@@ -604,9 +565,6 @@ bazel-build-fuzzers-weekly:
     BAZEL_COMMAND: test
     BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
     BAZEL_TARGETS: "//..."
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
 bazel-config-check-all-rebuild:
   after_script:
@@ -674,9 +632,6 @@ bazel-config-check-all-rebuild:
     BAZEL_EXTRA_ARGS: "--keep_going --config=check"
     BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
     BAZEL_TARGETS: "//rs/..."
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
 bazel-system-test-hotfix:
   after_script:
@@ -745,9 +700,6 @@ bazel-system-test-hotfix:
     BAZEL_EXTRA_ARGS: "--test_tag_filters=system_test_hotfix"
     BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
     BAZEL_TARGETS: "//..."
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
 bazel-system-test-hourly:
   after_script:
@@ -811,9 +763,6 @@ bazel-system-test-hourly:
     BAZEL_EXTRA_ARGS: "--test_tag_filters=system_test_hourly"
     BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
     BAZEL_TARGETS: "//..."
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
 bazel-system-test-nightly:
   after_script:
@@ -884,9 +833,6 @@ bazel-system-test-nightly:
     BAZEL_EXTRA_ARGS: "--test_tag_filters=system_test_nightly"
     BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
     BAZEL_TARGETS: "//..."
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
 bazel-system-test-nightly-nns:
   after_script:
@@ -949,9 +895,6 @@ bazel-system-test-nightly-nns:
     BAZEL_EXTRA_ARGS: "--test_tag_filters=system_test_nightly_nns"
     BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
     BAZEL_TARGETS: "//..."
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
 bazel-system-test-staging:
   after_script:
@@ -1022,9 +965,6 @@ bazel-system-test-staging:
     BAZEL_EXTRA_ARGS: "--test_tag_filters=system_test_staging"
     BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
     BAZEL_TARGETS: "//..."
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
 bazel-system-tests-k8s:
   after_script:
@@ -1089,9 +1029,6 @@ bazel-system-tests-k8s:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel $BAZEL_EXTRA_ARGS_RULES --test_tag_filters=k8s --k8s"
     BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
     BAZEL_TARGETS: "//..."
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     KUBECONFIG: "$KUBECONFIG_TNET_CREATOR"
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
     RUST_LOG: info
@@ -1163,9 +1100,6 @@ bazel-test-all:
     BAZEL_EXTRA_ARGS: "--keep_going $BAZEL_EXTRA_ARGS_RULES"
     BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
     BAZEL_TARGETS: "//..."
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
 bazel-test-all-rebuild:
   after_script:
@@ -1229,9 +1163,6 @@ bazel-test-all-rebuild:
     BAZEL_EXTRA_ARGS: "--repository_cache= --disk_cache= --noremote_accept_cached --remote_instance_name=${CI_COMMIT_SHA} --@rules_rust//rust/settings:pipelined_compilation=True"
     BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
     BAZEL_TARGETS: "//..."
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
 bazel-test-bare-metal:
   after_script:
@@ -1303,9 +1234,6 @@ bazel-test-bare-metal:
     BAZEL_COMMAND: test
     BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
     BAZEL_TARGETS: "//..."
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
 bazel-test-coverage:
   after_script:
@@ -1348,9 +1276,6 @@ bazel-test-coverage:
     BAZEL_EXTRA_ARGS: "--combined_report=lcov"
     BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
     BAZEL_TARGETS: "//..."
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
 bazel-test-macos:
   after_script:
@@ -1414,9 +1339,6 @@ bazel-test-macos:
     BAZEL_EXTRA_ARGS: "--test_tag_filters=test_macos"
     BAZEL_STARTUP_ARGS: "--output_base /var/tmp/bazel-output//${CI_CONCURRENT_ID}"
     BAZEL_TARGETS: "//rs/... //publish/binaries/..."
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
 before_script:
   - |
@@ -1496,9 +1418,6 @@ benchmark-response-payload:
   variables:
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
@@ -1540,9 +1459,6 @@ benchmark-xnet:
   variables:
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
@@ -1633,9 +1549,6 @@ benchmarks:
     BAZEL_COMMAND: run
     BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
     BAZEL_TARGETS: "//..."
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
     RUST_BACKTRACE: full
 build-base-images-ref-update:
@@ -1652,7 +1565,6 @@ build-base-images-ref-update:
     - build-setupos-base-dev
     - build-setupos-base-dev-sev
   extends:
-    - ".build-k8s"
     - ".rules-build-base-images"
   needs:
     - build-guestos-base
@@ -1717,10 +1629,6 @@ build-base-images-ref-update:
           -o merge_request.create \
           -o merge_request.title="Updating container base images refs [$TAG]" \
           origin "base-image-refs-update-${TAG}" 2>&1 | tee push.info
-  variables:
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
 build-boundaryos-base:
   artifacts:
     paths:
@@ -1766,9 +1674,6 @@ build-boundaryos-base:
       fi
   variables:
     CONTEXT: "${CI_PROJECT_DIR}/ic-os/boundary-guestos/rootfs"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     IMAGE: boundaryos-base
     REF_FILE: ic-os/boundary-guestos/rootfs/docker-base.prod
 build-boundaryos-base-snp:
@@ -1817,14 +1722,10 @@ build-boundaryos-base-snp:
       fi
   variables:
     CONTEXT: "${CI_PROJECT_DIR}/ic-os/boundary-guestos/rootfs"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     IMAGE: boundaryos-base-snp
     REF_FILE: ic-os/boundary-guestos/rootfs/docker-base.snp
 build-determinism:
   extends:
-    - ".build-k8s"
     - ".rules-master-pipeline-no-merge-train"
   needs:
     - artifacts: false
@@ -1852,13 +1753,7 @@ build-determinism:
     - |
       set -eExuo pipefail
       ./gitlab-ci/tools/build-diff.sh "$PATH0" "$PATH1"
-  variables:
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
 build-determinism-release:
-  extends:
-    - ".build-k8s"
   needs:
     - job: build-ic-release
   parallel:
@@ -1891,10 +1786,6 @@ build-determinism-release:
       P1="/${NNS_RELEASE_VERSION}/${PATH1}"
 
       ./gitlab-ci/tools/build-diff.sh "$P0" "$P1"
-  variables:
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
 build-guestos-base:
   artifacts:
     paths:
@@ -1940,9 +1831,6 @@ build-guestos-base:
       fi
   variables:
     CONTEXT: "${CI_PROJECT_DIR}/ic-os/guestos/rootfs"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     IMAGE: guestos-base
     REF_FILE: ic-os/guestos/rootfs/docker-base.prod
 build-guestos-base-dev:
@@ -1991,9 +1879,6 @@ build-guestos-base-dev:
       fi
   variables:
     CONTEXT: "${CI_PROJECT_DIR}/ic-os/guestos/rootfs"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     IMAGE: guestos-base-dev
     REF_FILE: ic-os/guestos/rootfs/docker-base.dev
 build-guestos-base-dev-sev:
@@ -2042,9 +1927,6 @@ build-guestos-base-dev-sev:
       fi
   variables:
     CONTEXT: "${CI_PROJECT_DIR}/ic-os/guestos/rootfs"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     IMAGE: guestos-base-dev-sev
     REF_FILE: ic-os/guestos/rootfs/docker-base.dev-sev
 build-hostos-base:
@@ -2092,9 +1974,6 @@ build-hostos-base:
       fi
   variables:
     CONTEXT: "${CI_PROJECT_DIR}/ic-os/hostos/rootfs"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     IMAGE: hostos-base
     REF_FILE: ic-os/hostos/rootfs/docker-base.prod
 build-hostos-base-dev:
@@ -2143,9 +2022,6 @@ build-hostos-base-dev:
       fi
   variables:
     CONTEXT: "${CI_PROJECT_DIR}/ic-os/hostos/rootfs"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     IMAGE: hostos-base-dev
     REF_FILE: ic-os/hostos/rootfs/docker-base.dev
 build-hostos-base-dev-sev:
@@ -2194,9 +2070,6 @@ build-hostos-base-dev-sev:
       fi
   variables:
     CONTEXT: "${CI_PROJECT_DIR}/ic-os/hostos/rootfs"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     IMAGE: hostos-base-dev-sev
     REF_FILE: ic-os/hostos/rootfs/docker-base.dev-sev
 build-ic:
@@ -2379,9 +2252,6 @@ build-setupos-base:
       fi
   variables:
     CONTEXT: "${CI_PROJECT_DIR}/ic-os/setupos/rootfs"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     IMAGE: setupos-base
     REF_FILE: ic-os/setupos/rootfs/docker-base.prod
 build-setupos-base-dev:
@@ -2430,9 +2300,6 @@ build-setupos-base-dev:
       fi
   variables:
     CONTEXT: "${CI_PROJECT_DIR}/ic-os/setupos/rootfs"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     IMAGE: setupos-base-dev
     REF_FILE: ic-os/setupos/rootfs/docker-base.dev
 build-setupos-base-dev-sev:
@@ -2481,14 +2348,10 @@ build-setupos-base-dev-sev:
       fi
   variables:
     CONTEXT: "${CI_PROJECT_DIR}/ic-os/setupos/rootfs"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     IMAGE: setupos-base-dev-sev
     REF_FILE: ic-os/setupos/rootfs/docker-base.dev-sev
 cargo-build-release-linux:
   extends:
-    - ".build-k8s"
     - ".rules-master-pipeline-and-merge-request"
   needs: []
   rules:
@@ -2499,13 +2362,8 @@ cargo-build-release-linux:
     - |
       set -eExuo pipefail
       buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- cargo build --release
-  variables:
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
 cargo-clippy-linux:
   extends:
-    - ".build-k8s"
     - ".rules-master-pipeline-and-merge-request"
   needs: []
   rules:
@@ -2519,9 +2377,6 @@ cargo-clippy-linux:
           "$CI_PROJECT_DIR"/gitlab-ci/src/rust_lint/lint.sh
   variables:
     CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
 commit-lint:
   needs: []
   rules:
@@ -2540,8 +2395,6 @@ commit-lint:
         exit 1
       fi
 container-autobuild:
-  extends:
-    - ".build-k8s"
   needs: []
   rules:
     - changes:
@@ -2616,13 +2469,7 @@ container-autobuild:
           "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" \
           || true
       git push --set-upstream origin HEAD:"$CI_COMMIT_REF_NAME"
-  variables:
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
 container-autobuild-protected:
-  extends:
-    - ".build-k8s"
   needs: []
   rules:
     - changes:
@@ -2652,14 +2499,8 @@ container-autobuild-protected:
         docker image prune -f
         docker container prune -f
       fi
-  variables:
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
 cut-release-candidate:
   dependencies: []
-  extends:
-    - ".build-k8s"
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "release-candidate-cut"
   script:
@@ -2674,10 +2515,6 @@ cut-release-candidate:
       RC_BRANCH_NAME="rc--$(date '+%Y-%m-%d_%H-%M')"
       git switch --force-create "$RC_BRANCH_NAME" HEAD
       git push --force --set-upstream origin  "$RC_BRANCH_NAME"
-  variables:
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
 default:
   artifacts:
     expire_in: 3 days
@@ -2728,16 +2565,11 @@ delegated-identity-bench:
   variables:
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
 dependencies-check:
   allow_failure: false
-  extends:
-    - ".build-k8s"
   needs: []
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
@@ -2750,15 +2582,10 @@ dependencies-check:
       $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_merge_job.py
   variables:
     CARGO_AUDIT_VERSION: 0.16.0
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     PYTHONPATH: "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
     SHELL_WRAPPER: "/usr/bin/time"
 dependency-scan-nightly:
   allow_failure: true
-  extends:
-    - ".build-k8s"
   needs: []
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "dependency-scan-nightly"
@@ -2778,16 +2605,11 @@ dependency-scan-nightly:
       $SHELL_WRAPPER python3 job/bazel_trivy_container_ic_scanner_periodic_job.py
   variables:
     CARGO_AUDIT_VERSION: 0.16.0
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     NVM_VERSION: '19'
     PYTHONPATH: "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
     SHELL_WRAPPER: "/usr/bin/time"
 dependency-scan-release-cut:
   allow_failure: false
-  extends:
-    - ".build-k8s"
   needs: []
   rules:
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
@@ -2800,9 +2622,6 @@ dependency-scan-release-cut:
       $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_release_job.py
   variables:
     CARGO_AUDIT_VERSION: 0.16.0
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     PYTHONPATH: "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
     SHELL_WRAPPER: "/usr/bin/time"
 heavy-memory-update-performance-test-nightly:
@@ -2845,9 +2664,6 @@ heavy-memory-update-performance-test-nightly:
     CD_ENV: BENCHMARK_NIGHTLY
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdrc02
@@ -2896,17 +2712,12 @@ large-response-downloading-nightly:
     CD_ENV: BENCHMARK_NIGHTLY
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdrc02
     WG_TESTNET: cdrc02
     cd_target_env: BENCHMARK_NIGHTLY
 lock-generate:
-  extends:
-    - ".build-k8s"
   needs: []
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -2957,10 +2768,6 @@ lock-generate:
   tags:
     - dfinity-ic
     - bazel
-  variables:
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
 maximum-capacity-boundary-nodes-queries:
   artifacts:
     paths:
@@ -2976,7 +2783,7 @@ maximum-capacity-boundary-nodes-queries:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "BENCHMARK_SUITE"
       when: always
   script:
-    - |-
+    - |
       set -eExou pipefail
       git fetch
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
@@ -2999,9 +2806,6 @@ maximum-capacity-boundary-nodes-queries:
   variables:
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
@@ -3060,9 +2864,6 @@ maximum-capacity-canister-http:
   variables:
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
@@ -3104,9 +2905,6 @@ maximum-capacity-large-memory-query:
   variables:
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
@@ -3148,9 +2946,6 @@ maximum-capacity-large-memory-update:
   variables:
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
@@ -3195,9 +2990,6 @@ maximum-capacity-mixed-counter-memory:
   variables:
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
@@ -3239,9 +3031,6 @@ maximum-capacity-mixed-workloads:
   variables:
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
@@ -3283,9 +3072,6 @@ maximum-capacity-multiple-large-memory-update:
   variables:
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
@@ -3327,9 +3113,6 @@ maximum-capacity-qr:
   variables:
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
@@ -3371,9 +3154,6 @@ maximum-capacity-sha256:
   variables:
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
@@ -3430,9 +3210,6 @@ maximum-capacity-system-baseline-query:
   variables:
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
@@ -3474,9 +3251,6 @@ maximum-capacity-system-baseline-update:
   variables:
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
@@ -3488,18 +3262,12 @@ no-interrupt:
     - echo "This pipeline is not interruptible"
 notify-gitlab-failure:
   dependencies: []
-  extends:
-    - ".build-k8s"
   rules:
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/
       when: on_failure
   script:
     - "pip3 install --ignore-installed -r requirements.txt\n\necho \"notify gitlab failure\"\nif [[ \"${CI_COMMIT_MESSAGE,,}\" =~ hotfix ]]; then\n    MESSAGE=\"✘ Hotfix pipeline <$CI_PIPELINE_URL|$CI_COMMIT_REF_NAME> failed. \U0001F336\U0001F336\U0001F336\"\nelse\n    MESSAGE=\"❌ Release candidate pipeline <$CI_PIPELINE_URL|$CI_COMMIT_REF_NAME> failed. \U0001F62D\U0001F62D\U0001F62D\"\nfi\ncd \"${CI_PROJECT_DIR}/gitlab-ci/src\" || true\nbuildevents cmd \"$ROOT_PIPELINE_ID\" \"$CI_JOB_ID\" notify-slack -- notify_slack/notify_slack.py \\\n    \"${MESSAGE}\" --channel \"release-management-alerts\"\n"
   stage: finalize
-  variables:
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
 notify-gitlab-success:
   dependencies: []
   rules:
@@ -3552,8 +3320,6 @@ python-gitlab-ci-tests:
     reports:
       junit:
         - test_report.xml
-  extends:
-    - ".build-k8s"
   needs: []
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
@@ -3566,13 +3332,8 @@ python-gitlab-ci-tests:
       cd gitlab-ci/src
       pytest -v -o junit_family=xunit1 --junitxml=../../test_report.xml --cov=. --cov-report=term --cov-report=term-missing --cov-report=html --cov-branch
   variables:
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     PYTHONPATH: "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
 rosetta-api-docker-image:
-  extends:
-    - ".build-k8s"
   needs:
     - artifacts: false
       job: bazel-test-all
@@ -3618,13 +3379,7 @@ rosetta-api-docker-image:
       docker push dfinity/rosetta-api:"$ROSETTA_API_DATE"
       docker push dfinity/rosetta-api:v"$ROSETTA_API_VERSION"
       docker push dfinity/rosetta-api:latest
-  variables:
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
 rosetta-release:
-  extends:
-    - ".build-k8s"
   rules:
     - if: $CI_COMMIT_REF_PROTECTED == "true" && $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "rosetta-release"
   script:
@@ -3661,10 +3416,6 @@ rosetta-release:
 
       git tag "rosetta-release-$ROSETTA_RELEASE_VERSION" "$CI_COMMIT_SHA"
       git push origin "rosetta-release-$ROSETTA_RELEASE_VERSION"
-  variables:
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
 stages:
   - ".pre"
   - init
@@ -3709,9 +3460,6 @@ statesync-experiment:
   variables:
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
@@ -3758,9 +3506,6 @@ system-baseline-query-performance-test-nightly:
     CD_ENV: BENCHMARK_NIGHTLY
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdrc02
@@ -3809,9 +3554,6 @@ system-baseline-update-performance-test-nightly:
     CD_ENV: BENCHMARK_NIGHTLY
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdrc02
@@ -3855,16 +3597,11 @@ tecdsa:
   variables:
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
 test-push-branch:
   dependencies: []
-  extends:
-    - ".build-k8s"
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
       when: on_success
@@ -3879,12 +3616,11 @@ test-push-branch:
 
       git switch --force-create post-merge-tests-passed HEAD
       git push --force --set-upstream origin post-merge-tests-passed
-  variables:
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
 variables:
+  GET_SOURCES_ATTEMPTS: 5
   GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
+  GIT_DEPTH: 0
+  GIT_STRATEGY: fetch
   TEST_ES_HOSTNAMES: elasticsearch.testnet.dfinity.network:443
 xnet-nightly:
   artifacts:
@@ -3927,9 +3663,6 @@ xnet-nightly:
     CD_ENV: BENCHMARK_NIGHTLY
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdrc02

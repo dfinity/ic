@@ -30,6 +30,9 @@ variables:
   TEST_ES_HOSTNAMES: >-
     elasticsearch.testnet.dfinity.network:443
   GIT_CLONE_PATH: $CI_BUILDS_DIR/clean/$CI_PROJECT_NAME
+  GET_SOURCES_ATTEMPTS: 5
+  GIT_DEPTH: 0  # Pull the complete repo initially
+  GIT_STRATEGY: "fetch"  # And then pull only new commits
 
 before_script:
   - |
@@ -93,12 +96,6 @@ after_script:
 
     # Finish and collapse the after_script section
     echo -e "\e[0Ksection_end:$(date +%s):after_script\r\e[0K"
-
-.build-k8s:
-  variables:
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0  # Pull the complete repo initially
-    GIT_STRATEGY: "fetch"  # And then pull only new commits
 
 # 1. If on the RC branch and "hotfix" (case insensitive) is in the commit message,
 #    then allow manual execution of prod hourly and nightly tests.
