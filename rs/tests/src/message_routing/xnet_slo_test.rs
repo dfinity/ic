@@ -28,7 +28,7 @@ use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, NnsInstallationBuilder,
 };
 use crate::util::{block_on, runtime_from_url};
 use canister_test::{Canister, Runtime};
@@ -138,14 +138,36 @@ pub async fn test_async(env: TestEnv, config: Config) {
             .expect("Could not install NNS canisters");
         info!(&logger, "NNS canisters installed successfully.");
     }
+
+    test_async_impl(
+        env,
+        topology.subnets().map(|s| s.nodes().next().unwrap()),
+        config,
+        &logger,
+    )
+    .await;
+}
+
+/// Takes as input a testing environment, a list of nodes s.t. each node is on
+/// one of the subnets to deploy XNet test canisters to, and a configuration,
+/// and runs an instance of the XNet SLO test. It assumes the IC instance under
+/// test is already set up and ignores all `config` parameters related to the
+/// IC topology (e.g., `nodes_per_subnet`).
+///
+///
+/// # Panics
+/// - If the nodes provided in `nodes` are incompatible with `config`.
+/// - On test failure.
+pub(crate) async fn test_async_impl(
+    env: TestEnv,
+    nodes: impl Iterator<Item = IcNodeSnapshot>,
+    config: Config,
+    logger: &slog::Logger,
+) {
     // Installing canisters on a subnet requires an Agent (or a Runtime wrapper around Agent).
     // We need only one agent (runtime) per subnet for canister installation.
-    let endpoints_runtime: Vec<Runtime> = topology
-        .subnets()
-        .map(|s| {
-            let node = s.nodes().next().unwrap();
-            runtime_from_url(node.get_public_url(), node.effective_canister_id())
-        })
+    let endpoints_runtime: Vec<Runtime> = nodes
+        .map(|node| runtime_from_url(node.get_public_url(), node.effective_canister_id()))
         .collect();
     assert_eq!(endpoints_runtime.len(), config.subnets);
     // Step 1: Install Xnet canisters on each subnet.
