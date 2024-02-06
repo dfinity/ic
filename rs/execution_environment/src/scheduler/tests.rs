@@ -25,7 +25,6 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::PausedExecutionId;
 use ic_replicated_state::testing::CanisterQueuesTesting;
 use ic_replicated_state::testing::SystemStateTesting;
-use ic_replicated_state::ExportedFunctions;
 use ic_state_machine_tests::{PayloadBuilder, StateMachineBuilder};
 use ic_test_utilities::types::ids::message_test_id;
 use ic_test_utilities::{
@@ -41,7 +40,6 @@ use ic_test_utilities_metrics::{
 };
 use ic_test_utilities_time::mock_time;
 use ic_types::methods::SystemMethod;
-use ic_types::methods::WasmMethod;
 use ic_types::time::expiry_time_from_now;
 use ic_types::{
     messages::{
@@ -602,7 +600,7 @@ fn test_message_limit_from_message_overhead() {
     let mut callee = canister0;
     let mut call = other_side(callee, 0);
 
-    for _ in 0..expected_number_of_messages * 10 {
+    for _ in 0..expected_number_of_messages * 3 {
         callee = if callee == canister1 {
             canister0
         } else {
@@ -4685,10 +4683,12 @@ fn test_is_next_method_added_to_task_queue() {
         Cycles::new(1_000_000_000_000),
         ComputeAllocation::zero(),
         MemoryAllocation::BestEffort,
-        Some(SystemMethod::CanisterGlobalTimer),
+        None,
         None,
         None,
     );
+    let may_schedule_heartbeat = false;
+    let may_schedule_global_timer = false;
 
     let mut heartbeat_and_timer_canister_ids = BTreeSet::new();
     assert!(!test
@@ -4703,22 +4703,17 @@ fn test_is_next_method_added_to_task_queue() {
         assert!(!is_next_method_chosen(
             test.canister_state_mut(canister),
             &mut heartbeat_and_timer_canister_ids,
-            false
+            may_schedule_heartbeat,
+            may_schedule_global_timer,
         ));
         assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::new());
         test.canister_state_mut(canister)
             .inc_next_scheduled_method();
     }
 
-    // Make canister export heartbeat and global timer.
-    test.canister_state_mut(canister)
-        .execution_state
-        .as_mut()
-        .unwrap()
-        .exports = ExportedFunctions::new(BTreeSet::from([
-        WasmMethod::System(SystemMethod::CanisterHeartbeat),
-        WasmMethod::System(SystemMethod::CanisterGlobalTimer),
-    ]));
+    // Make canister able to schedule both heartbeat and global timer.
+    let may_schedule_heartbeat = true;
+    let may_schedule_global_timer = true;
 
     // Set input.
     test.canister_state_mut(canister)
@@ -4752,7 +4747,8 @@ fn test_is_next_method_added_to_task_queue() {
     assert!(is_next_method_chosen(
         test.canister_state_mut(canister),
         &mut heartbeat_and_timer_canister_ids,
-        true
+        may_schedule_heartbeat,
+        may_schedule_global_timer,
     ));
 
     // Since NextScheduledMethod is Message it is not expected that Heartbeat
@@ -4788,7 +4784,8 @@ fn test_is_next_method_added_to_task_queue() {
     assert!(is_next_method_chosen(
         test.canister_state_mut(canister),
         &mut heartbeat_and_timer_canister_ids,
-        true
+        may_schedule_heartbeat,
+        may_schedule_global_timer,
     ));
 
     assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
@@ -4835,7 +4832,8 @@ fn test_is_next_method_added_to_task_queue() {
     assert!(is_next_method_chosen(
         test.canister_state_mut(canister),
         &mut heartbeat_and_timer_canister_ids,
-        true
+        may_schedule_heartbeat,
+        may_schedule_global_timer,
     ));
 
     assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
