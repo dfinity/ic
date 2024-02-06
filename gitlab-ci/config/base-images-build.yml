@@ -38,7 +38,6 @@
 
 .build-base-image-job:
   extends:
-    - .build-k8s
     - .rules-build-base-images
   needs: []
   artifacts:
@@ -158,7 +157,6 @@ build-setupos-base-dev-sev:
 
 build-base-images-ref-update:
   extends:
-    - .build-k8s
     - .rules-build-base-images
   needs:
     - build-guestos-base

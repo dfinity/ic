@@ -1,6 +1,4 @@
 rosetta-api-docker-image:
-  extends:
-    - .build-k8s
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
       when: manual
@@ -48,8 +46,6 @@ rosetta-api-docker-image:
       docker push dfinity/rosetta-api:latest
 
 rosetta-release:
-  extends:
-    - .build-k8s
   rules:
     - if: $CI_COMMIT_REF_PROTECTED == "true" && $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "rosetta-release"
   script:

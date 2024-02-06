@@ -7,7 +7,6 @@ no-interrupt:
 
 after-script-test:
   extends:
-    - .build-k8s
     - .rules-master-pipeline-and-merge-request
   needs: [] # don't wait on other jobs
   script:
@@ -70,8 +69,6 @@ bazel-build-fuzzers-archives:
       ./build-all-fuzzers.sh --zip
 
 .bazel-test-all:
-  extends:
-    - .build-k8s
   needs: []
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"'
@@ -350,8 +347,6 @@ build-ic-release:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-reproducibility"
 
 lock-generate:
-  extends:
-    - .build-k8s
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
   needs: []
@@ -438,8 +433,6 @@ pre-commit:
       fi
 
 python-gitlab-ci-tests:
-  extends:
-    - .build-k8s
   rules:
     # this job breaks when not run against the default branch
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH'
@@ -463,7 +456,6 @@ python-gitlab-ci-tests:
 cargo-clippy-linux:
   needs: [] # don't wait on other jobs
   extends:
-    - .build-k8s
     - .rules-master-pipeline-and-merge-request
   variables:
     CARGO_BUILD_TARGET: "x86_64-unknown-linux-gnu"
@@ -476,7 +468,6 @@ cargo-clippy-linux:
 cargo-build-release-linux:
   needs: [] # don't wait on other jobs
   extends:
-    - .build-k8s
     - .rules-master-pipeline-and-merge-request
   script:
     - |
@@ -539,7 +530,6 @@ benchmarks:
 
 build-determinism:
   extends:
-    - .build-k8s
     - .rules-master-pipeline-no-merge-train
   needs:
     - job: bazel-test-all
@@ -565,8 +555,6 @@ build-determinism:
       ./gitlab-ci/tools/build-diff.sh "$PATH0" "$PATH1"
 
 build-determinism-release:
-  extends:
-    - .build-k8s
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-reproducibility"
   needs:
@@ -601,8 +589,6 @@ build-determinism-release:
         PATH1: "guest-os/update-img"
 
 test-push-branch:
-  extends:
-    - .build-k8s
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
       when: on_success
@@ -620,8 +606,6 @@ test-push-branch:
       git push --force --set-upstream origin post-merge-tests-passed
 
 cut-release-candidate:
-  extends:
-    - .build-k8s
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "release-candidate-cut"'
   dependencies: [] # don't copy artifacts from other jobs
@@ -672,8 +656,6 @@ notify-gitlab-success:
       fi
 
 notify-gitlab-failure:
-  extends:
-    - .build-k8s
   rules:
     # Send a slack alert on rc--* pipeline failures.
     # Limit to "push" pipeline source so that GitLab doesn't send spurious alerts for manual or
