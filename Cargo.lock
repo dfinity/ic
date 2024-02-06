@@ -10594,6 +10594,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-sns-governance-treasury-transfer-limit"
+version = "0.0.1"
+dependencies = [
+ "candid",
+ "ic-base-types",
+ "ic-sns-governance-token-valuation",
+ "icrc-ledger-types",
+ "lazy_static",
+ "num-traits",
+ "rust_decimal",
+ "rust_decimal_macros",
+]
+
+[[package]]
 name = "ic-sns-init"
 version = "0.9.0"
 dependencies = [
