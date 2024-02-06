@@ -25,6 +25,9 @@ pub struct ArchiveOptions {
     pub node_max_memory_size_bytes: Option<u64>,
     pub max_message_size_bytes: Option<u64>,
     pub controller_id: PrincipalId,
+    // More principals to add as controller of the archive.
+    #[serde(default)]
+    pub more_controller_ids: Option<Vec<PrincipalId>>,
     // cycles to use for the call to create a new archive canister.
     #[serde(default)]
     pub cycles_for_archive_creation: Option<u64>,
@@ -89,6 +92,8 @@ pub struct Archive<Rt: Runtime, Wasm: ArchiveCanisterWasm> {
 
     controller_id: PrincipalId,
 
+    more_controller_ids: Option<Vec<PrincipalId>>,
+
     // BlockIndices of Blocks stored in each archive node.
 
     // We need this because Blocks are stored in encoded format as
@@ -140,6 +145,7 @@ impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> Archive<Rt, Wasm> {
         Self {
             nodes: vec![],
             controller_id: options.controller_id,
+            more_controller_ids: options.more_controller_ids,
             nodes_block_ranges: vec![],
             node_max_memory_size_bytes: options
                 .node_max_memory_size_bytes
@@ -304,7 +310,7 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
         cycles_for_archive_creation,
         node_block_height_offset,
         node_max_memory_size_bytes,
-        controller_id,
+        controller_ids,
         max_transactions_per_response,
     ) = inspect_archive(archive, |archive| {
         let node_block_height_offset: u64 = archive
@@ -316,7 +322,10 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
             archive.cycles_for_archive_creation,
             node_block_height_offset,
             archive.node_max_memory_size_bytes,
-            archive.controller_id,
+            vec![archive.controller_id]
+                .into_iter()
+                .chain(archive.more_controller_ids.clone().unwrap_or_default())
+                .collect(),
             archive.max_transactions_per_response,
         )
     });
@@ -350,8 +359,8 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
 
     log!(
         log_sink,
-        "[archive] setting controller_id for archive node: {}",
-        controller_id
+        "[archive] setting controller_id for archive node: {:?}",
+        controller_ids
     );
 
     let res: Result<(), (i32, String)> = Rt::call(
@@ -361,7 +370,7 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
         (ic_ic00_types::UpdateSettingsArgs::new(
             node_canister_id,
             ic_ic00_types::CanisterSettingsArgsBuilder::new()
-                .with_controllers(vec![controller_id])
+                .with_controllers(controller_ids)
                 .build(),
         ),),
     )

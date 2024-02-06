@@ -228,6 +228,7 @@ fn icrc1_archive_options(archive_controller_id: PrincipalId) -> ArchiveOptions {
         node_max_memory_size_bytes: Some(THREE_GIGA_BYTES),
         max_message_size_bytes: None,
         controller_id: archive_controller_id,
+        more_controller_ids: None,
         cycles_for_archive_creation: Some(HUNDRED_TRILLIONS),
         max_transactions_per_response: None,
     }

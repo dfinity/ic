@@ -136,6 +136,7 @@ impl InitArgsBuilder {
                 node_max_memory_size_bytes: None,
                 max_message_size_bytes: None,
                 controller_id: default_owner.into(),
+                more_controller_ids: None,
                 cycles_for_archive_creation: None,
                 max_transactions_per_response: None,
             },
@@ -267,6 +268,7 @@ pub struct UpgradeArgs {
 }
 
 #[derive(Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+#[allow(clippy::large_enum_variant)]
 pub enum LedgerArgument {
     Init(InitArgs),
     Upgrade(Option<UpgradeArgs>),

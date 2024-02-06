@@ -190,6 +190,7 @@ fn create_ledger_canister(
             node_max_memory_size_bytes: Some(1024 + 512), // about 10 blocks
             max_message_size_bytes: Some(2 * 1024 * 1024),
             controller_id: CanisterId::from_u64(876).into(),
+            more_controller_ids: None,
             cycles_for_archive_creation: Some(0),
             max_transactions_per_response: None,
         };

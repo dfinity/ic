@@ -268,6 +268,7 @@ pub(crate) async fn install_ledger(
                 node_max_memory_size_bytes: None,
                 max_message_size_bytes: None,
                 controller_id: minting_user,
+                more_controller_ids: None,
                 cycles_for_archive_creation: None,
                 max_transactions_per_response: None,
             })

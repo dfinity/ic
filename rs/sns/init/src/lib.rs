@@ -646,6 +646,7 @@ impl SnsInitPayload {
                     // 128kb
                     max_message_size_bytes: Some(128 * 1024),
                     controller_id: root_canister_id.get(),
+                    more_controller_ids: None,
                     // TODO: allow users to set this value
                     // 10 Trillion cycles
                     cycles_for_archive_creation: Some(10_000_000_000_000),
