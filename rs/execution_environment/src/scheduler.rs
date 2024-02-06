@@ -1160,10 +1160,7 @@ impl SchedulerImpl {
     /// through message routing.
     pub fn induct_messages_on_same_subnet(&self, state: &mut ReplicatedState) {
         // Compute subnet available memory *before* taking out the canisters.
-        let mut subnet_available_memory = self
-            .exec_env
-            .subnet_available_memory(state)
-            .get_message_memory();
+        let mut subnet_available_memory = self.exec_env.subnet_available_message_memory(state);
 
         let mut canisters = state.take_canister_states();
 

@@ -389,7 +389,7 @@ impl ExecutionEnvironment {
         &self.metrics.canister_not_found_error
     }
 
-    /// Look up the current amount of memory available on the subnet.
+    /// Computes the current amount of memory available on the subnet.
     pub fn subnet_available_memory(&self, state: &ReplicatedState) -> SubnetAvailableMemory {
         let memory_taken = state.memory_taken();
         SubnetAvailableMemory::new(
@@ -403,6 +403,15 @@ impl ExecutionEnvironment {
                 .get() as i64
                 - memory_taken.wasm_custom_sections().get() as i64,
         )
+    }
+
+    /// Computes the current amount of message memory available on the subnet.
+    ///
+    /// This is a more efficient alternative to `memory_taken()` for cases when only
+    /// the message memory usage is necessary.
+    pub fn subnet_available_message_memory(&self, state: &ReplicatedState) -> i64 {
+        self.config.subnet_message_memory_capacity.get() as i64
+            - state.message_memory_taken().get() as i64
     }
 
     /// Executes a replicated message sent to a subnet.
