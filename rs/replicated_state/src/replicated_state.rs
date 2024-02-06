@@ -588,7 +588,7 @@ impl ReplicatedState {
             .sum()
     }
 
-    /// Returns the memory taken by different types of memory resources.
+    /// Computes the memory taken by different types of memory resources.
     pub fn memory_taken(&self) -> MemoryTaken {
         let (
             raw_memory_taken,
@@ -631,6 +631,20 @@ impl ReplicatedState {
             wasm_custom_sections: wasm_custom_sections_memory_taken,
             canister_history: canister_history_memory_taken,
         }
+    }
+
+    /// Computes the memory taken by messages.
+    ///
+    /// This is a more efficient alternative to `memory_taken()` for cases when only
+    /// the message memory usage is necessary.
+    pub fn message_memory_taken(&self) -> NumBytes {
+        let canisters_memory_usage: NumBytes = self
+            .canisters_iter()
+            .map(|canister| canister.system_state.message_memory_usage())
+            .sum();
+        let subnet_memory_usage = (self.subnet_queues.memory_usage() as u64).into();
+
+        canisters_memory_usage + subnet_memory_usage
     }
 
     /// Returns the total memory taken by the ingress history in bytes.
