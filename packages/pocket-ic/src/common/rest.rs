@@ -10,6 +10,7 @@ use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 pub type InstanceId = usize;
 
@@ -300,8 +301,6 @@ pub struct SubnetConfigSet {
     pub bitcoin: bool,
     pub system: usize,
     pub application: usize,
-    pub nns_subnet_state: Option<String>,
-    pub nns_subnet_id: Option<RawSubnetId>,
 }
 
 impl SubnetConfigSet {
@@ -318,21 +317,103 @@ impl SubnetConfigSet {
         }
         Err("SubnetConfigSet must contain at least one subnet".to_owned())
     }
+}
 
-    /// Return the configured named subnets in order.
-    pub fn get_named(&self) -> Vec<(SubnetKind, Option<String>)> {
+impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
+    fn from(
+        SubnetConfigSet {
+            nns,
+            sns,
+            ii,
+            fiduciary: fid,
+            bitcoin,
+            system,
+            application,
+        }: SubnetConfigSet,
+    ) -> Self {
+        ExtendedSubnetConfigSet {
+            nns: if nns { Some(SubnetSpec::New) } else { None },
+            sns: if sns { Some(SubnetSpec::New) } else { None },
+            ii: if ii { Some(SubnetSpec::New) } else { None },
+            fiduciary: if fid { Some(SubnetSpec::New) } else { None },
+            bitcoin: if bitcoin { Some(SubnetSpec::New) } else { None },
+            system: vec![SubnetSpec::New; system],
+            application: vec![SubnetSpec::New; application],
+        }
+    }
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+pub struct ExtendedSubnetConfigSet {
+    pub nns: Option<SubnetSpec>,
+    pub sns: Option<SubnetSpec>,
+    pub ii: Option<SubnetSpec>,
+    pub fiduciary: Option<SubnetSpec>,
+    pub bitcoin: Option<SubnetSpec>,
+    pub system: Vec<SubnetSpec>,
+    pub application: Vec<SubnetSpec>,
+}
+
+/// Specifies whether the subnet should be created from scratch or loaded
+/// from a path.
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub enum SubnetSpec {
+    /// Create new subnet with empty state.
+    New,
+    /// Load existing subnet state from the given path.
+    /// The path must be on a filesystem accessible to the server process.
+    FromPath(PathBuf, RawSubnetId),
+    /// Load existing subnet state from blobstore. Needs to be uploaded first!
+    /// Not implemented!
+    FromBlobStore(BlobId, RawSubnetId),
+}
+
+impl SubnetSpec {
+    pub fn get_path(&self) -> Option<PathBuf> {
+        match self {
+            SubnetSpec::FromPath(path, _) => Some(path.clone()),
+            SubnetSpec::FromBlobStore(_, _) => None,
+            SubnetSpec::New => None,
+        }
+    }
+    pub fn get_subnet_id(&self) -> Option<RawSubnetId> {
+        match self {
+            SubnetSpec::FromPath(_, id) => Some(id.clone()),
+            SubnetSpec::FromBlobStore(_, id) => Some(id.clone()),
+            SubnetSpec::New => None,
+        }
+    }
+}
+
+impl ExtendedSubnetConfigSet {
+    // Return the configured named subnets in order.
+    pub fn get_named(&self) -> Vec<(SubnetKind, Option<PathBuf>)> {
         use SubnetKind::*;
         vec![
-            (self.nns, NNS, self.nns_subnet_state.clone()),
-            (self.sns, SNS, None),
-            (self.ii, II, None),
-            (self.fiduciary, Fiduciary, None),
-            (self.bitcoin, Bitcoin, None),
+            (self.nns.clone(), NNS),
+            (self.sns.clone(), SNS),
+            (self.ii.clone(), II),
+            (self.fiduciary.clone(), Fiduciary),
+            (self.bitcoin.clone(), Bitcoin),
         ]
         .into_iter()
-        .filter(|(flag, _, _)| *flag)
-        .map(|(_, kind, state_dir)| (kind, state_dir))
+        .filter(|(mb, _)| mb.is_some())
+        .map(|(mb, kind)| (kind, mb.unwrap().get_path()))
         .collect()
+    }
+
+    pub fn validate(&self) -> Result<(), String> {
+        if !self.system.is_empty()
+            || !self.application.is_empty()
+            || self.nns.is_some()
+            || self.sns.is_some()
+            || self.ii.is_some()
+            || self.fiduciary.is_some()
+            || self.bitcoin.is_some()
+        {
+            return Ok(());
+        }
+        Err("ExtendedSubnetConfigSet must contain at least one subnet".to_owned())
     }
 }
 

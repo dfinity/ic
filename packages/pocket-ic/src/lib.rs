@@ -2,7 +2,7 @@
 //!
 //! PocketIC is the local canister smart contract testing platform for the [Internet Computer](https://internetcomputer.org/).
 //!
-//! It consists of the PocketIC-server, which can run many independent IC instances, and a client library (this crate), which provides an interface to your IC instances.
+//! It consists of the PocketIC server, which can run many independent IC instances, and a client library (this crate), which provides an interface to your IC instances.
 //!
 //! With PocketIC, testing canisters is as simple as calling rust functions. Here is a minimal example:
 //!
@@ -15,6 +15,7 @@
 //!     let pic = PocketIc::new();
 //!     // Create an empty canister as the anonymous principal.
 //!     let canister_id = pic.create_canister(None);
+//!     pic.add_cycles(canister_id, 2_000_000_000_000); // 2T cycles
 //!     let wasm_bytes = load_counter_wasm(...);
 //!     pic.install_canister(canister_id, wasm_bytes, vec![], None);
 //!     // 'inc' is a counter canister method.
@@ -32,18 +33,15 @@
 //! For more information, see the [README](https://crates.io/crates/pocket-ic).
 //!
 use crate::common::rest::{
-    ApiResponse, BlobCompression, BlobId, CreateInstanceResponse, InstanceId, RawAddCycles,
-    RawCanisterCall, RawCanisterId, RawCanisterResult, RawCycles, RawSetStableMemory,
-    RawStableMemory, RawTime, RawWasmResult,
+    ApiResponse, BlobCompression, BlobId, CreateInstanceResponse, ExtendedSubnetConfigSet,
+    InstanceId, RawAddCycles, RawCanisterCall, RawCanisterId, RawCanisterResult, RawCycles,
+    RawEffectivePrincipal, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime,
+    RawVerifyCanisterSigArg, RawWasmResult, SubnetId, SubnetSpec, Topology,
 };
 use candid::{
     decode_args, encode_args,
     utils::{ArgumentDecoder, ArgumentEncoder},
     CandidType, Nat, Principal,
-};
-use common::rest::{
-    RawEffectivePrincipal, RawSubnetId, RawVerifyCanisterSigArg, SubnetConfigSet, SubnetId,
-    Topology,
 };
 use ic_cdk::api::management_canister::{
     main::{CanisterInstallMode, InstallCodeArgument, UpdateSettingsArgument},
@@ -70,14 +68,14 @@ const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
 pub struct PocketIcBuilder {
-    pub config: SubnetConfigSet,
+    config: ExtendedSubnetConfigSet,
 }
 
 #[allow(clippy::new_without_default)]
 impl PocketIcBuilder {
     pub fn new() -> Self {
         Self {
-            config: SubnetConfigSet::default(),
+            config: ExtendedSubnetConfigSet::default(),
         }
     }
 
@@ -85,15 +83,19 @@ impl PocketIcBuilder {
         PocketIc::from_config(self.config)
     }
 
+    /// Add an empty NNS subnet
     pub fn with_nns_subnet(self) -> Self {
         Self {
-            config: SubnetConfigSet {
-                nns: true,
+            config: ExtendedSubnetConfigSet {
+                nns: Some(SubnetSpec::New),
                 ..self.config
             },
         }
     }
 
+    /// Add an NNS subnet loaded form the given state directory. Note that the provided path must
+    /// be accessible for the PocketIC server process.
+    ///
     /// `path_to_nns_state` should lead to the `ic_state` directory which is expected to have
     /// the following structure:
     ///
@@ -125,78 +127,66 @@ impl PocketIcBuilder {
     /// ic-regedit snapshot <path-to-ic_registry_local_store> | jq -r ".nns_subnet_id"
     /// ```
     pub fn with_nns_state(self, nns_subnet_id: SubnetId, path_to_state: PathBuf) -> Self {
-        let path_to_state_str = path_to_state
-            .as_path()
-            .to_str()
-            .expect("cannot stringify path")
-            .to_string();
-        assert!(
-            path_to_state.exists(),
-            "the path to NNS state does not exist: {}",
-            path_to_state_str
-        );
         Self {
-            config: SubnetConfigSet {
-                nns: true,
-                nns_subnet_id: Some(RawSubnetId::from(nns_subnet_id)),
-                nns_subnet_state: Some(path_to_state_str),
+            config: ExtendedSubnetConfigSet {
+                nns: Some(SubnetSpec::FromPath(
+                    path_to_state,
+                    RawSubnetId::from(nns_subnet_id),
+                )),
                 ..self.config
             },
         }
     }
 
+    /// Add an empty sns subnet
     pub fn with_sns_subnet(self) -> Self {
         Self {
-            config: SubnetConfigSet {
-                sns: true,
+            config: ExtendedSubnetConfigSet {
+                sns: Some(SubnetSpec::New),
                 ..self.config
             },
         }
     }
-
+    /// Add an empty internet identity subnet
     pub fn with_ii_subnet(self) -> Self {
         Self {
-            config: SubnetConfigSet {
-                ii: true,
+            config: ExtendedSubnetConfigSet {
+                ii: Some(SubnetSpec::New),
                 ..self.config
             },
         }
     }
 
+    /// Add an empty fiduciary subnet
     pub fn with_fiduciary_subnet(self) -> Self {
         Self {
-            config: SubnetConfigSet {
-                fiduciary: true,
+            config: ExtendedSubnetConfigSet {
+                fiduciary: Some(SubnetSpec::New),
                 ..self.config
             },
         }
     }
 
+    /// Add an empty bitcoin subnet
     pub fn with_bitcoin_subnet(self) -> Self {
         Self {
-            config: SubnetConfigSet {
-                bitcoin: true,
+            config: ExtendedSubnetConfigSet {
+                bitcoin: Some(SubnetSpec::New),
                 ..self.config
             },
         }
     }
 
-    pub fn with_system_subnet(self) -> Self {
-        Self {
-            config: SubnetConfigSet {
-                system: self.config.system + 1,
-                ..self.config
-            },
-        }
+    /// Add an empty generic system subnet
+    pub fn with_system_subnet(mut self) -> Self {
+        self.config.system.push(SubnetSpec::New);
+        self
     }
 
-    pub fn with_application_subnet(self) -> Self {
-        Self {
-            config: SubnetConfigSet {
-                application: self.config.application + 1,
-                ..self.config
-            },
-        }
+    /// Add an empty generic application subnet
+    pub fn with_application_subnet(mut self) -> Self {
+        self.config.application.push(SubnetSpec::New);
+        self
     }
 }
 /// Main entry point for interacting with PocketIC.
@@ -218,7 +208,8 @@ impl PocketIc {
 
     /// Creates a new PocketIC instance with the specified subnet config.
     /// The server is started if it's not already running.
-    pub fn from_config(config: SubnetConfigSet) -> Self {
+    pub fn from_config(config: impl Into<ExtendedSubnetConfigSet>) -> Self {
+        let config = config.into();
         config.validate().unwrap();
 
         let parent_pid = std::os::unix::process::parent_id();

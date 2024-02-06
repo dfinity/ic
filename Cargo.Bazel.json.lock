@@ -1,5 +1,5 @@
 {
-  "checksum": "b0133f0e2e177527e61a14dcd924a02c5ac45bdc9aa89d40bcac7f4521fdaf52",
+  "checksum": "cf59c4e8dc8831e4e5e166a46ef8e835bc363522dcea6afae4584288c3f01fef",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1385,13 +1385,13 @@
       },
       "license": "Unlicense OR MIT"
     },
-    "aide 0.12.0": {
+    "aide 0.13.2": {
       "name": "aide",
-      "version": "0.12.0",
+      "version": "0.13.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/aide/0.12.0/download",
-          "sha256": "f0b9ab2c8531a5ac6bcc579cc4c308d1b4bd5b9910a0f08bf4e65b3452407400"
+          "url": "https://crates.io/api/v1/crates/aide/0.13.2/download",
+          "sha256": "98d2c16bfa7d1755d5a6a20a6decdb7303843c6fee13f4cff039c568291b5872"
         }
       },
       "targets": [
@@ -1421,7 +1421,7 @@
         "deps": {
           "common": [
             {
-              "id": "axum 0.6.20",
+              "id": "axum 0.7.3",
               "target": "axum"
             },
             {
@@ -1433,11 +1433,11 @@
               "target": "cfg_if"
             },
             {
-              "id": "http 0.2.9",
+              "id": "http 1.0.0",
               "target": "http"
             },
             {
-              "id": "indexmap 1.9.3",
+              "id": "indexmap 2.1.0",
               "target": "indexmap"
             },
             {
@@ -1481,7 +1481,7 @@
           ],
           "selects": {}
         },
-        "version": "0.12.0"
+        "version": "0.13.2"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -4798,7 +4798,8 @@
         ],
         "crate_features": {
           "common": [
-            "default"
+            "default",
+            "typed-header"
           ],
           "selects": {}
         },
@@ -4819,6 +4820,10 @@
             {
               "id": "futures-util 0.3.30",
               "target": "futures_util"
+            },
+            {
+              "id": "headers 0.4.0",
+              "target": "headers"
             },
             {
               "id": "http 1.0.0",
@@ -14919,7 +14924,7 @@
               "target": "addr"
             },
             {
-              "id": "aide 0.12.0",
+              "id": "aide 0.13.2",
               "target": "aide"
             },
             {
@@ -16048,6 +16053,11 @@
             {
               "id": "tower-http 0.4.4",
               "target": "tower_http"
+            },
+            {
+              "id": "tower-http 0.5.1",
+              "target": "tower_http",
+              "alias": "tower_http_0_5_1"
             },
             {
               "id": "tower-request-id 0.2.1",
@@ -22106,6 +22116,69 @@
       },
       "license": "MIT"
     },
+    "headers 0.4.0": {
+      "name": "headers",
+      "version": "0.4.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/headers/0.4.0/download",
+          "sha256": "322106e6bd0cba2d5ead589ddb8150a13d7c4217cf80d7c4f682ca994ccc6aa9"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "headers",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "headers",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "base64 0.21.6",
+              "target": "base64"
+            },
+            {
+              "id": "bytes 1.5.0",
+              "target": "bytes"
+            },
+            {
+              "id": "headers-core 0.3.0",
+              "target": "headers_core"
+            },
+            {
+              "id": "http 1.0.0",
+              "target": "http"
+            },
+            {
+              "id": "httpdate 1.0.2",
+              "target": "httpdate"
+            },
+            {
+              "id": "mime 0.3.17",
+              "target": "mime"
+            },
+            {
+              "id": "sha1 0.10.5",
+              "target": "sha1"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "0.4.0"
+      },
+      "license": "MIT"
+    },
     "headers-core 0.2.0": {
       "name": "headers-core",
       "version": "0.2.0",
@@ -22142,6 +22215,45 @@
         },
         "edition": "2015",
         "version": "0.2.0"
+      },
+      "license": "MIT"
+    },
+    "headers-core 0.3.0": {
+      "name": "headers-core",
+      "version": "0.3.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/headers-core/0.3.0/download",
+          "sha256": "54b4a22553d4242c49fddb9ba998a99962b5cc6f22cb5a3482bec22522403ce4"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "headers_core",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "headers_core",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "http 1.0.0",
+              "target": "http"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "0.3.0"
       },
       "license": "MIT"
     },
@@ -26569,8 +26681,6 @@
         ],
         "crate_features": {
           "common": [
-            "serde",
-            "serde-1",
             "std"
           ],
           "selects": {}
@@ -26584,10 +26694,6 @@
             {
               "id": "indexmap 1.9.3",
               "target": "build_script_build"
-            },
-            {
-              "id": "serde 1.0.195",
-              "target": "serde"
             }
           ],
           "selects": {}
@@ -32578,7 +32684,7 @@
               "target": "tower"
             },
             {
-              "id": "tower-http 0.5.0",
+              "id": "tower-http 0.5.1",
               "target": "tower_http"
             },
             {
@@ -47723,7 +47829,7 @@
             "default",
             "derive",
             "impl_json_schema",
-            "indexmap",
+            "indexmap2",
             "schemars_derive"
           ],
           "selects": {}
@@ -47735,8 +47841,9 @@
               "target": "dyn_clone"
             },
             {
-              "id": "indexmap 1.9.3",
-              "target": "indexmap"
+              "id": "indexmap 2.1.0",
+              "target": "indexmap",
+              "alias": "indexmap2"
             },
             {
               "id": "schemars 0.8.16",
@@ -56145,13 +56252,13 @@
       },
       "license": "MIT"
     },
-    "tower-http 0.5.0": {
+    "tower-http 0.5.1": {
       "name": "tower-http",
-      "version": "0.5.0",
+      "version": "0.5.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tower-http/0.5.0/download",
-          "sha256": "09e12e6351354851911bdf8c2b8f2ab15050c567d70a8b9a37ae7b8301a4080d"
+          "url": "https://crates.io/api/v1/crates/tower-http/0.5.1/download",
+          "sha256": "0da193277a4e2c33e59e09b5861580c33dd0a637c3883d0fa74ba40c0374af2e"
         }
       },
       "targets": [
@@ -56172,17 +56279,32 @@
         ],
         "crate_features": {
           "common": [
+            "async-compression",
+            "compression-br",
+            "compression-deflate",
+            "compression-full",
+            "compression-gzip",
+            "compression-zstd",
             "default",
-            "futures-util",
+            "futures-core",
+            "request-id",
             "timeout",
             "tokio",
+            "tokio-util",
+            "tower",
             "trace",
-            "tracing"
+            "tracing",
+            "util",
+            "uuid"
           ],
           "selects": {}
         },
         "deps": {
           "common": [
+            {
+              "id": "async-compression 0.4.3",
+              "target": "async_compression"
+            },
             {
               "id": "bitflags 2.4.1",
               "target": "bitflags"
@@ -56192,8 +56314,8 @@
               "target": "bytes"
             },
             {
-              "id": "futures-util 0.3.30",
-              "target": "futures_util"
+              "id": "futures-core 0.3.30",
+              "target": "futures_core"
             },
             {
               "id": "http 1.0.0",
@@ -56216,6 +56338,14 @@
               "target": "tokio"
             },
             {
+              "id": "tokio-util 0.7.10",
+              "target": "tokio_util"
+            },
+            {
+              "id": "tower 0.4.13",
+              "target": "tower"
+            },
+            {
               "id": "tower-layer 0.3.2",
               "target": "tower_layer"
             },
@@ -56226,12 +56356,16 @@
             {
               "id": "tracing 0.1.37",
               "target": "tracing"
+            },
+            {
+              "id": "uuid 1.5.0",
+              "target": "uuid"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.5.0"
+        "version": "0.5.1"
       },
       "license": "MIT"
     },
