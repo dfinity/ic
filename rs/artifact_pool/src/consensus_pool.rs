@@ -272,15 +272,12 @@ impl UncachedConsensusPoolImpl {
                 crate::lmdb_pool::PersistentHeightIndexedPool::new_consensus_pool(
                     lmdb_config,
                     config.persistent_pool_read_only,
-                    log.clone(),
+                    log,
                 ),
             ) as Box<_>,
             #[cfg(feature = "rocksdb_backend")]
             PersistentPoolBackend::RocksDB(config) => Box::new(
-                crate::rocksdb_pool::PersistentHeightIndexedPool::new_consensus_pool(
-                    config,
-                    log.clone(),
-                ),
+                crate::rocksdb_pool::PersistentHeightIndexedPool::new_consensus_pool(config, log),
             ) as Box<_>,
             #[allow(unreachable_patterns)]
             cfg => {
@@ -290,7 +287,7 @@ impl UncachedConsensusPoolImpl {
 
         UncachedConsensusPoolImpl {
             validated,
-            unvalidated: Box::new(InMemoryPoolSection::new(log)),
+            unvalidated: Box::new(InMemoryPoolSection::new()),
         }
     }
 }
