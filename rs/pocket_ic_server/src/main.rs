@@ -12,7 +12,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     middleware::{self, Next},
     response::IntoResponse,
-    Extension, Json, Server,
+    Extension, Json,
 };
 use clap::Parser;
 use ic_crypto_iccsa::{public_key_bytes_from_der, types::SignatureBytes, verify};
@@ -45,7 +45,7 @@ const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
 #[derive(Parser)]
-#[clap(version = "2.0.1")]
+#[clap(version = "3.0.0")]
 struct Args {
     /// If you use PocketIC from the command line, you should not use this flag.
     /// Client libraries use this flag to provide a common identifier (the process ID of the test
@@ -134,9 +134,6 @@ async fn start(runtime: Arc<Runtime>) {
             app_state.clone(),
             bump_last_request_timestamp,
         ))
-        // For examples on how to customize the logging spans:
-        // https://github.com/tokio-rs/axum/blob/main/examples/tracing-aka-logging/src/main.rs#L45
-        .layer(TraceLayer::new_for_http())
         .with_state(app_state.clone());
 
     let mut api = OpenApi {
@@ -147,32 +144,20 @@ async fn start(runtime: Arc<Runtime>) {
         ..OpenApi::default()
     };
 
-    let server_res = Server::try_bind(
-        &format!("127.0.0.1:{}", args.port)
-            .parse()
-            .expect("Invalid server address"),
-    )
-    .map(|s| {
-        s.serve(
-            router
-                // Generate documentation
-                .finish_api(&mut api)
-                // Expose documentation
-                .layer(Extension(api))
-                .into_make_service(),
-        )
-    });
-    let server = match server_res {
-        Ok(s) => s,
-        Err(e) => {
-            error!(
-                "Failed to start the PocketIC server on port {}: {}",
-                args.port, e
-            );
-            return;
-        }
-    };
-    let real_port = server.local_addr().port();
+    let addr = format!("127.0.0.1:{}", args.port);
+    let listener = tokio::net::TcpListener::bind(&addr)
+        .await
+        .unwrap_or_else(|_| panic!("Failed to start PocketIC server on port {}", args.port));
+    let real_port = listener.local_addr().unwrap().port();
+    let router = router
+        // Generate documentation
+        .finish_api(&mut api)
+        // Expose documentation
+        .layer(Extension(api))
+        // For examples on how to customize the logging spans:
+        // https://github.com/tokio-rs/axum/blob/main/examples/tracing-aka-logging/src/main.rs#L45
+        .layer(TraceLayer::new_for_http())
+        .into_make_service();
 
     if use_port_file {
         let _ = port_file
@@ -190,7 +175,7 @@ async fn start(runtime: Arc<Runtime>) {
     info!("The PocketIC server is listening on port {}", real_port);
 
     // This is a safeguard against orphaning this child process.
-    let shutdown_signal = async {
+    let shutdown_signal = async move {
         loop {
             let guard = app_state.min_alive_until.read().await;
             if guard.elapsed() > Duration::from_secs(args.ttl) {
@@ -206,8 +191,10 @@ async fn start(runtime: Arc<Runtime>) {
             let _ = std::fs::remove_file(port_file_path.unwrap());
         }
     };
-    let server = server.with_graceful_shutdown(shutdown_signal);
-    server.await.expect("Failed to launch the PocketIC server");
+    axum::serve(listener, router)
+        .with_graceful_shutdown(shutdown_signal)
+        .await
+        .unwrap();
 }
 
 async fn serve_api(Extension(api): Extension<OpenApi>) -> impl IntoApiResponse {
@@ -278,13 +265,13 @@ fn create_file_atomically<P: AsRef<std::path::Path>>(file_path: P) -> std::io::R
         .open(&file_path)
 }
 
-async fn bump_last_request_timestamp<B>(
+async fn bump_last_request_timestamp(
     State(AppState {
         min_alive_until, ..
     }): State<AppState>,
     headers: HeaderMap,
-    request: http::Request<B>,
-    next: Next<B>,
+    request: http::Request<axum::body::Body>,
+    next: Next,
 ) -> impl IntoApiResponse {
     // TTL should not decrease: If now + header_timeout is later
     // than the current TTL (from previous requests), reset it.

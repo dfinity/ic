@@ -1,10 +1,11 @@
 [package]
 name = "pocket-ic-server"
-version = "2.0.1"
+version = "3.0.0"
 edition = "2021"
 
 [dependencies]
-axum = { version = "^0.6.1", features = ["headers"] }
+axum-extra = { version = "^0.9.2", features = ["typed-header"] }
+axum = { version = "^0.7.4" }
 candid = { workspace = true }
 rand = "^0.8.5"
 itertools = { workspace = true }
@@ -30,12 +31,12 @@ time = "^0.3.20"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "^0.2.2"
-tower-http = { version = "^0.4.4", features = ["trace", "request-id", "util"] }
+tower-http = { version = "^0.5.1", features = ["trace", "request-id", "util"] }
 tempfile = "*"
 base64 = { workspace = true }
 wat = "1.0.52"
 flate2 = "1.0.27"
-aide = { version = "0.12.0", features = ["axum"] }
+aide = { version = "^0.13.0", features = ["axum"] }
 
 [dev-dependencies]
 reqwest = { workspace = true }

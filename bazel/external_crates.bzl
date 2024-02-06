@@ -97,7 +97,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "aide": crate.spec(
-                version = "^0.12.0",
+                version = "^0.13.0",
                 features = [
                     "axum",
                 ],
@@ -162,6 +162,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "axum-extra": crate.spec(
                 version = "^0.9.0",
+                features = ["typed-header"],
             ),
             "axum-server": crate.spec(
                 version = "^0.5.1",
@@ -1250,6 +1251,16 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "tower-http": crate.spec(
                 version = "^0.4.4",
+                features = [
+                    "trace",
+                    "request-id",
+                    "util",
+                    "compression-full",
+                ],
+            ),
+            "tower_http_0_5_1": crate.spec(
+                package = "tower-http",
+                version = "^0.5.1",
                 features = [
                     "trace",
                     "request-id",
