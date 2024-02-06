@@ -2,10 +2,12 @@ use crate::StateError;
 #[cfg(test)]
 mod tests;
 
+use ic_base_types::CanisterId;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::{ingress::v1 as pb_ingress, queues::v1 as pb_queues};
 use ic_types::messages::{Ingress, Request, RequestOrResponse, Response};
 use ic_types::{CountBytes, Cycles, Time};
+use std::collections::BTreeMap;
 use std::{
     collections::VecDeque,
     convert::{From, TryFrom, TryInto},
@@ -813,40 +815,117 @@ impl TryFrom<pb_queues::InputOutputQueue> for OutputQueue {
     }
 }
 
-/// Representation of the Ingress queue.  There is no upper bound on
+/// Representation of the Ingress queue. There is no upper bound on
 /// the number of messages it can store.
+///
+/// `IngressQueue` has a separate queue of Ingress messages for each
+/// target canister based on `effective_canister_id`, and `schedule`
+/// of executing target canisters with incoming Ingress messages.
+///
+/// When the Ingress message is pushed to the `IngressQueue`, it is added
+/// to the queue of Ingress messages of the target canister. If the target
+/// canister does not have other incoming Ingress messages it is added to
+/// the back of `schedule`.
+///
+/// When `pop()` is called `IngressQueue` returns the first Ingress message
+/// from the canister at the front of the `schedlue`. If that canister
+/// has other incoming Ingress messages it is moved to the
+/// back of `schedule`, otherwise it is removed from `schedule`.
+///
+/// When `skip_ingress_input()` is called canister from the front of the
+/// `schedule` is moved to its back.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(super) struct IngressQueue {
-    queue: VecDeque<Arc<Ingress>>,
-
+    // Schedule of canisters that have Ingress messages to be processed.
+    // Because `effective_canister_id` of `Ingress` message has type Option<CanisterId>,
+    // the same type is used for entries `schedule` and keys in `queues`.
+    schedule: VecDeque<Option<CanisterId>>,
+    // Per canister queue of Ingress messages.
+    queues: BTreeMap<Option<CanisterId>, VecDeque<Arc<Ingress>>>,
+    // Total number of Ingress messages that are waiting to be executed.
+    total_ingress_count: usize,
     /// Estimated size in bytes.
     size_bytes: usize,
 }
 
+const PER_CANISTER_QUEUE_OVERHEAD_BYTES: usize =
+    size_of::<Option<CanisterId>>() + size_of::<VecDeque<Arc<Ingress>>>();
+
 impl IngressQueue {
+    /// Pushes a new ingress message to the back of the queue.
     pub(super) fn push(&mut self, msg: Ingress) {
-        self.size_bytes += Self::ingress_size_bytes(&msg);
-        self.queue.push_back(Arc::new(msg));
-        debug_assert_eq!(Self::size_bytes(&self.queue), self.size_bytes);
-    }
+        let msg_size = Self::ingress_size_bytes(&msg);
+        let receiver_ingress_queue = self.queues.entry(msg.effective_canister_id).or_default();
 
-    pub(super) fn pop(&mut self) -> Option<Arc<Ingress>> {
-        let res = self.queue.pop_front();
-        if let Some(msg) = res.as_ref() {
-            self.size_bytes -= Self::ingress_size_bytes(msg.as_ref());
-            debug_assert_eq!(Self::size_bytes(&self.queue), self.size_bytes);
+        if receiver_ingress_queue.is_empty() {
+            self.schedule.push_back(msg.effective_canister_id);
+            self.size_bytes += PER_CANISTER_QUEUE_OVERHEAD_BYTES;
         }
-        res
+
+        receiver_ingress_queue.push_back(Arc::new(msg));
+
+        self.size_bytes += msg_size;
+        debug_assert_eq!(Self::size_bytes(&self.queues), self.size_bytes);
+
+        self.total_ingress_count += 1;
     }
 
-    pub(super) fn peek(&self) -> Option<&Arc<Ingress>> {
-        self.queue.front()
+    /// Returns `None` if the queue is empty, otherwise removes the first Ingress
+    /// message of the first scheduled canister, returns it, and moves
+    /// that canister at the end of the schedule if it has more messages.
+    pub(super) fn pop(&mut self) -> Option<Arc<Ingress>> {
+        let canister_id = self.schedule.pop_front()?;
+
+        let canister_ingress_queue = self.queues.get_mut(&canister_id).unwrap();
+
+        let res = canister_ingress_queue.pop_front();
+
+        if !canister_ingress_queue.is_empty() {
+            self.schedule.push_back(canister_id);
+        } else {
+            self.queues.remove(&canister_id);
+            self.size_bytes -= PER_CANISTER_QUEUE_OVERHEAD_BYTES;
+        }
+
+        let msg = res.unwrap();
+        self.size_bytes -= Self::ingress_size_bytes(msg.as_ref());
+        debug_assert_eq!(Self::size_bytes(&self.queues), self.size_bytes);
+
+        self.total_ingress_count -= 1;
+
+        Some(msg)
     }
 
+    /// Skips the ingress messages for the currently scheduled canister,
+    /// and moves the canister to the end of scheduling queue.
+    pub(super) fn skip_ingress_input(&mut self) {
+        if let Some(canister_id) = self.schedule.pop_front() {
+            self.schedule.push_back(canister_id);
+        }
+    }
+
+    /// Returns a reference to the ingress message at the front of the queue,
+    /// or `None` if the queue is empty.
+    pub(super) fn peek(&self) -> Option<Arc<Ingress>> {
+        let canister_id = self.schedule.front()?;
+        // It is safe to unwrap here since for every value in `self.schedule`
+        // we must have corresponding non-empty queue in `self.queues`.
+        let ingress = self.queues.get(canister_id).unwrap().front().unwrap();
+        Some(Arc::clone(ingress))
+    }
+
+    /// Returns the number of Ingress messages in the queue.
     pub(super) fn size(&self) -> usize {
-        self.queue.len()
+        self.total_ingress_count
     }
 
+    /// Returns the number of canisters with incoming ingress messages.
+    pub(super) fn ingress_schedule_size(&self) -> usize {
+        self.schedule.len()
+    }
+
+    /// Return true if there are no Ingress messages in the queue,
+    /// or false otherwise.
     pub(super) fn is_empty(&self) -> bool {
         self.size() == 0
     }
@@ -859,44 +938,70 @@ impl IngressQueue {
     where
         F: FnMut(&Arc<Ingress>) -> bool,
     {
-        // This method operates in place, visiting each element exactly once in the
-        // original order, and preserves the order of the dropped elements.
         let mut filtered_messages = vec![];
-        self.queue.retain_mut(|item| {
-            if filter(item) {
-                true
-            } else {
-                filtered_messages.push(Arc::clone(item));
+        for canister_ingress_queue in self.queues.values_mut() {
+            canister_ingress_queue.retain_mut(|item| {
+                if filter(item) {
+                    true
+                } else {
+                    // Empty `canister_ingress_queues` and their corresponding schedule entry
+                    // are pruned below.
+                    filtered_messages.push(Arc::clone(item));
+                    self.size_bytes -= Self::ingress_size_bytes(&(*item));
+                    self.total_ingress_count -= 1;
+                    false
+                }
+            });
+        }
+
+        self.schedule.retain_mut(|canister_id| {
+            let canister_ingress_queue = self.queues.get(canister_id).unwrap();
+            if canister_ingress_queue.is_empty() {
+                self.queues.remove(canister_id);
+                self.size_bytes -= PER_CANISTER_QUEUE_OVERHEAD_BYTES;
                 false
+            } else {
+                true
             }
         });
-        self.size_bytes = Self::size_bytes(&self.queue);
-        filtered_messages
-    }
 
-    /// Calculates the size in bytes of an `IngressQueue` holding the given
-    /// ingress messages.
-    ///
-    /// Time complexity: O(num_messages).
-    fn size_bytes(queue: &VecDeque<Arc<Ingress>>) -> usize {
-        size_of::<Self>()
-            + queue
-                .iter()
-                .map(|i| Self::ingress_size_bytes(i))
-                .sum::<usize>()
+        filtered_messages
     }
 
     /// Returns an estimate of the size of an ingress message in bytes.
     fn ingress_size_bytes(msg: &Ingress) -> usize {
         size_of::<Arc<Ingress>>() + msg.count_bytes()
     }
+
+    /// Calculates the size in bytes of an `IngressQueue` holding the given
+    /// ingress messages.
+    ///
+    /// Time complexity: O(num_messages).
+    fn size_bytes(
+        per_canister_queues: &BTreeMap<Option<CanisterId>, VecDeque<Arc<Ingress>>>,
+    ) -> usize {
+        let mut size = size_of::<Self>();
+        for queue in per_canister_queues.values() {
+            size += queue
+                .iter()
+                .map(|i| Self::ingress_size_bytes(i))
+                .sum::<usize>()
+                + PER_CANISTER_QUEUE_OVERHEAD_BYTES;
+        }
+        size
+    }
 }
 
 impl Default for IngressQueue {
     fn default() -> Self {
-        let queue = Default::default();
-        let size_bytes = Self::size_bytes(&queue);
-        Self { queue, size_bytes }
+        let queues = BTreeMap::new();
+        let size_bytes = Self::size_bytes(&queues);
+        Self {
+            schedule: VecDeque::new(),
+            queues,
+            total_ingress_count: 0,
+            size_bytes,
+        }
     }
 }
 
@@ -909,7 +1014,18 @@ impl CountBytes for IngressQueue {
 
 impl From<&IngressQueue> for Vec<pb_ingress::Ingress> {
     fn from(item: &IngressQueue) -> Self {
-        item.queue.iter().map(|i| i.as_ref().into()).collect()
+        // When serializing the IngressQueue, we iterate over
+        // `schedule` and persist the queues in that order.
+        item.schedule
+            .iter()
+            .flat_map(|canister_id| {
+                item.queues
+                    .get(canister_id)
+                    .unwrap()
+                    .iter()
+                    .map(|v| pb_ingress::Ingress::from(&(**v)))
+            })
+            .collect()
     }
 }
 
@@ -917,12 +1033,15 @@ impl TryFrom<Vec<pb_ingress::Ingress>> for IngressQueue {
     type Error = ProxyDecodeError;
 
     fn try_from(item: Vec<pb_ingress::Ingress>) -> Result<Self, Self::Error> {
-        let queue = item
-            .into_iter()
-            .map(|i| i.try_into().map(Arc::new))
-            .collect::<Result<VecDeque<_>, _>>()?;
-        let size_bytes = Self::size_bytes(&queue);
+        let mut res = Self::default();
 
-        Ok(IngressQueue { queue, size_bytes })
+        for ingress_pb in item {
+            // Because the contents of `Self::queues` were serialized in `Self::schedule`
+            // order, pushing the messages in that same order will implicitly reconstruct
+            // `Self::schedule`.
+            res.push(ingress_pb.try_into()?);
+        }
+
+        Ok(res)
     }
 }

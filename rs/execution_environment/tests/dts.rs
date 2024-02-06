@@ -1,5 +1,6 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use assert_matches::assert_matches;
 use candid::Encode;
 use ic_config::{
     embedders::{Config as EmbeddersConfig, MeteringType},
@@ -586,8 +587,8 @@ fn dts_pending_upgrade_with_heartbeat() {
 ///
 /// The expectations:
 /// - the install code messages run one by one.
-/// - the canister status messages are blocked by the corresponding
-///   install code messages.
+/// - the canister status messages are completed immediately except for one
+///   for the canister on which the code install is running.
 #[test]
 fn dts_scheduling_of_install_code() {
     if should_skip_test_due_to_disabled_dts() {
@@ -658,7 +659,7 @@ fn dts_scheduling_of_install_code() {
 
     for _ in 0..5 {
         // With checkpoints enabled, the first install code will be repeatedly
-        // aborted, so there will be no progress.
+        // aborted, so there will be no progress for other install code messages.
         env.tick();
     }
 
@@ -672,7 +673,8 @@ fn dts_scheduling_of_install_code() {
 
     let mut status = vec![];
 
-    // All other ingress messages are blocked by the first install code message.
+    // All other canister status messages are completed except for the canister
+    // on which the code install is running.
     for c in canister.iter().take(n - 1) {
         let id = env.send_ingress(
             user_id,
@@ -685,7 +687,7 @@ fn dts_scheduling_of_install_code() {
 
     for _ in 0..5 {
         // With checkpoints enabled, the first install code will be repeatedly
-        // aborted, so there will be no progress.
+        // aborted, so there will be no progress for other install code messages.
         env.tick();
     }
 
@@ -696,10 +698,18 @@ fn dts_scheduling_of_install_code() {
         }
     }
 
-    for s in status.iter().take(n - 1) {
-        assert_eq!(
+    // The canister status ingress message for the canister on which
+    // the code is installing is blocked.
+    assert_eq!(
+        ingress_state(env.ingress_status(&status[0])),
+        Some(IngressState::Received)
+    );
+
+    // Canister status ingress messages for all other canisters are executed.
+    for s in status.iter().take(n - 1).skip(1) {
+        assert_matches!(
             ingress_state(env.ingress_status(s)),
-            Some(IngressState::Received)
+            Some(IngressState::Completed(..))
         );
     }
 
