@@ -52,6 +52,12 @@ impl IngressBuilder {
         self
     }
 
+    /// Sets the `effective_canister_id` field.
+    pub fn effective_canister_id(mut self, effective_canister_id: Option<CanisterId>) -> Self {
+        self.ingress.effective_canister_id = effective_canister_id;
+        self
+    }
+
     /// Sets the `method_name` field.
     pub fn method_name<S: ToString>(mut self, method_name: S) -> Self {
         self.ingress.method_name = method_name.to_string();
