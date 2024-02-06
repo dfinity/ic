@@ -1,12 +1,14 @@
+use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_canisters_http_types::HttpRequest;
 use ic_icrc1_ledger::FeatureFlags as LedgerFeatureFlags;
 use ic_ledger_suite_orchestrator::candid::{
     AddErc20Arg, Erc20Contract, InitArg, LedgerInitArg, ManagedCanisterIds, OrchestratorArg,
 };
 use ic_ledger_suite_orchestrator::state::{Wasm, WasmHash};
 use ic_state_machine_tests::{
-    CanisterStatusResultV2, Cycles, StateMachine, StateMachineBuilder, WasmResult,
+    CanisterStatusResultV2, Cycles, ErrorCode, StateMachine, StateMachineBuilder, WasmResult,
 };
 use ic_test_utilities_load_wasm::load_wasm;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
@@ -107,6 +109,31 @@ fn should_spawn_ledger_with_correct_init_args() {
                 LedgerMetadataValue::from(80_u64),
             ),
         ]);
+}
+
+#[test]
+fn should_reject_update_calls_to_http_request() {
+    let orchestrator = LedgerSuiteOrchestrator::new();
+    let request = HttpRequest {
+        method: "GET".to_string(),
+        url: "/dashboard".to_string(),
+        headers: Default::default(),
+        body: Default::default(),
+    };
+
+    let message_id = orchestrator.env.send_ingress(
+        PrincipalId::new_user_test_id(1),
+        orchestrator.ledger_suite_orchestrator_id,
+        "http_request",
+        Encode!(&request).expect("failed to encode HTTP request"),
+    );
+
+    assert_matches!(
+        orchestrator
+            .env
+            .await_ingress(message_id.clone(), MAX_TICKS),
+        Err(e) if e.code() == ErrorCode::CanisterCalledTrap && e.description().contains("update call rejected")
+    );
 }
 
 pub struct LedgerSuiteOrchestrator {

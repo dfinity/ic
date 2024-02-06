@@ -9,6 +9,8 @@ rust_library(
         ["src/**/*.rs"],
         exclude = [
             "src/main.rs",
+            "src/dashboard/mod.rs",
+            "src/dashboard/tests.rs",
         ],
     ),
     compile_data = [
@@ -68,6 +70,7 @@ rust_test(
 
 rust_test(
     name = "canister_unit_tests",
+    srcs = ["src/dashboard/tests.rs"],
     crate = ":_wasm_ledger_suite_orchestrator_canister",
     data = [":ledger_suite_orchestrator.did"],
     env = {
@@ -76,15 +79,19 @@ rust_test(
     deps = [
         ":ledger_suite_orchestrator",
         "@crate_index//:candid_parser",
+        "@crate_index//:scraper",
     ],
 )
 
 rust_canister(
     name = "ledger_suite_orchestrator_canister",
     srcs = [
+        "src/dashboard/mod.rs",
+        "src/dashboard/tests.rs",
         "src/main.rs",
     ],
     compile_data = [
+        "templates/dashboard.html",
     ],
     crate_name = "ic_ledger_suite_orchestrator_canister",
     proc_macro_deps = [
@@ -93,6 +100,8 @@ rust_canister(
     service_file = "ledger_suite_orchestrator.did",
     deps = [
         ":ledger_suite_orchestrator",
+        "//rs/rust_canisters/http_types",
+        "@crate_index//:askama",
         "@crate_index//:candid",
         "@crate_index//:ic-canister-log",
         "@crate_index//:ic-cdk",
@@ -130,9 +139,11 @@ rust_test(
         ":ledger_suite_orchestrator",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/rosetta-api/icrc1/ledger",
+        "//rs/rust_canisters/http_types",
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
+        "@crate_index//:assert_matches",
         "@crate_index//:candid",
     ],
 )

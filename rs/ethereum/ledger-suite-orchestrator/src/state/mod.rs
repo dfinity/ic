@@ -179,6 +179,10 @@ impl<T> Canister<T> {
     pub fn canister_id(&self) -> &Principal {
         self.status.canister_id()
     }
+
+    pub fn installed_wasm_hash(&self) -> Option<&WasmHash> {
+        self.status.installed_wasm_hash()
+    }
 }
 
 impl<T> Serialize for Canister<T> {
@@ -221,6 +225,15 @@ impl ManagedCanisterStatus {
         match self {
             ManagedCanisterStatus::Created { canister_id }
             | ManagedCanisterStatus::Installed { canister_id, .. } => canister_id,
+        }
+    }
+    fn installed_wasm_hash(&self) -> Option<&WasmHash> {
+        match self {
+            ManagedCanisterStatus::Created { .. } => None,
+            ManagedCanisterStatus::Installed {
+                installed_wasm_hash,
+                ..
+            } => Some(installed_wasm_hash),
         }
     }
 }
@@ -306,6 +319,10 @@ impl State {
         }
         self.processing_tasks_guard = true;
         true
+    }
+
+    pub fn managed_canisters_iter(&self) -> impl Iterator<Item = (&Erc20Contract, &Canisters)> {
+        self.managed_canisters.canisters.iter()
     }
 
     pub fn managed_canisters(&self, contract: &Erc20Contract) -> Option<&Canisters> {

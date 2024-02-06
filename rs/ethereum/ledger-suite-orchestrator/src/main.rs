@@ -5,6 +5,8 @@ use ic_ledger_suite_orchestrator::lifecycle;
 use ic_ledger_suite_orchestrator::scheduler::Erc20Contract;
 use ic_ledger_suite_orchestrator::state::read_state;
 
+mod dashboard;
+
 #[query]
 async fn canister_ids(contract: CandidErc20Contract) -> Option<ManagedCanisterIds> {
     let contract = Erc20Contract::try_from(contract)
@@ -37,6 +39,30 @@ fn post_upgrade(orchestrator_arg: Option<OrchestratorArg>) {
             lifecycle::add_erc20(erc20);
         }
         None => lifecycle::post_upgrade(None),
+    }
+}
+
+#[query(hidden = true)]
+fn http_request(
+    req: ic_canisters_http_types::HttpRequest,
+) -> ic_canisters_http_types::HttpResponse {
+    use askama::Template;
+    use dashboard::DashboardTemplate;
+    use ic_canisters_http_types::HttpResponseBuilder;
+
+    if ic_cdk::api::data_certificate().is_none() {
+        ic_cdk::trap("update call rejected");
+    }
+
+    match req.path() {
+        "/dashboard" => {
+            let dashboard = read_state(DashboardTemplate::from_state);
+            HttpResponseBuilder::ok()
+                .header("Content-Type", "text/html; charset=utf-8")
+                .with_body_and_content_length(dashboard.render().unwrap())
+                .build()
+        }
+        _ => HttpResponseBuilder::not_found().build(),
     }
 }
 
