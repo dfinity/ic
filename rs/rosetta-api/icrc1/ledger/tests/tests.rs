@@ -87,6 +87,7 @@ fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> LedgerArgument 
             node_max_memory_size_bytes: None,
             max_message_size_bytes: None,
             controller_id: PrincipalId::new_user_test_id(100),
+            more_controller_ids: None,
             cycles_for_archive_creation: None,
             max_transactions_per_response: None,
         },
@@ -261,6 +262,21 @@ fn test_approval_trimming() {
     ic_icrc1_ledger_sm_tests::test_approval_trimming(ledger_wasm(), encode_init_args);
 }
 
+#[test]
+fn test_archive_controllers() {
+    ic_icrc1_ledger_sm_tests::test_archive_controllers(ledger_wasm());
+}
+
+#[test]
+fn test_archive_no_additional_controllers() {
+    ic_icrc1_ledger_sm_tests::test_archive_no_additional_controllers(ledger_wasm());
+}
+
+#[test]
+fn test_archive_duplicate_controllers() {
+    ic_icrc1_ledger_sm_tests::test_archive_duplicate_controllers(ledger_wasm());
+}
+
 // #[test]
 // fn test_icrc1_test_suite() {
 //     ic_icrc1_ledger_sm_tests::test_icrc1_test_suite(ledger_wasm(), encode_init_args);
@@ -377,6 +393,7 @@ fn test_upgrade_from_first_version() {
             node_max_memory_size_bytes: None,
             max_message_size_bytes: None,
             controller_id: PrincipalId::new_user_test_id(100),
+            more_controller_ids: None,
             cycles_for_archive_creation: None,
             max_transactions_per_response: None,
         },
@@ -427,6 +444,7 @@ fn test_icrc2_feature_flag_doesnt_disable_icrc2_endpoints() {
             node_max_memory_size_bytes: None,
             max_message_size_bytes: None,
             controller_id: PrincipalId::new_user_test_id(100),
+            more_controller_ids: None,
             cycles_for_archive_creation: None,
             max_transactions_per_response: None,
         },
@@ -753,6 +771,7 @@ mod verify_written_blocks {
                     node_max_memory_size_bytes: None,
                     max_message_size_bytes: None,
                     controller_id: PrincipalId::new_user_test_id(100),
+                    more_controller_ids: None,
                     cycles_for_archive_creation: None,
                     max_transactions_per_response: None,
                 },

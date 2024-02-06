@@ -264,6 +264,7 @@ type ArchiveOptions = record {
     node_max_memory_size_bytes : opt nat64;
     max_message_size_bytes : opt nat64;
     controller_id : principal;
+    more_controller_ids: opt vec principal;
     cycles_for_archive_creation : opt nat64;
     max_transactions_per_response : opt nat64;
 };

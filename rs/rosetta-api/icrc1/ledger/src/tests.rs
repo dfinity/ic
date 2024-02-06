@@ -61,6 +61,7 @@ fn default_init_args() -> InitArgs {
             node_max_memory_size_bytes: None,
             max_message_size_bytes: None,
             controller_id: PrincipalId::new_user_test_id(100),
+            more_controller_ids: None,
             cycles_for_archive_creation: None,
             max_transactions_per_response: None,
         },

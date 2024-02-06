@@ -1,6 +1,7 @@
 use candid::{CandidType, Decode, Encode, Int, Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_error_types::UserError;
+use ic_ic00_types::{self as ic00, CanisterInfoRequest, CanisterInfoResponse, Method, Payload};
 use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_icrc1::{endpoints::StandardRecord, hash::Hash, Block, Operation, Transaction};
 use ic_icrc1_ledger::FeatureFlags;
@@ -8,6 +9,8 @@ use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType};
 use ic_ledger_hash_of::HashOf;
 use ic_state_machine_tests::{CanisterId, ErrorCode, StateMachine, WasmResult};
+use ic_types::Cycles;
+use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc::generic_value::Value as GenericValue;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
@@ -282,6 +285,45 @@ fn get_archive_transactions(
     length: usize,
 ) -> TransactionRange {
     get_transactions_as(env, archive, start, length, "get_transactions".to_string())
+}
+
+fn universal_canister_payload(
+    receiver: &PrincipalId,
+    method: &str,
+    payload: Vec<u8>,
+    cycles: Cycles,
+) -> Vec<u8> {
+    wasm()
+        .call_with_cycles(
+            receiver,
+            method,
+            call_args()
+                .other_side(payload)
+                .on_reject(wasm().reject_message().reject()),
+            cycles,
+        )
+        .build()
+}
+
+fn get_canister_info(
+    env: &StateMachine,
+    ucan: CanisterId,
+    canister_id: CanisterId,
+) -> Result<CanisterInfoResponse, String> {
+    let info_request_payload = universal_canister_payload(
+        &PrincipalId::default(),
+        &Method::CanisterInfo.to_string(),
+        CanisterInfoRequest::new(canister_id, None).encode(),
+        Cycles::new(0),
+    );
+    let wasm_result = env
+        .execute_ingress(ucan, "update", info_request_payload)
+        .unwrap();
+    match wasm_result {
+        WasmResult::Reply(bytes) => Ok(CanisterInfoResponse::decode(&bytes[..])
+            .expect("failed to decode canister_info response")),
+        WasmResult::Reject(reason) => Err(reason),
+    }
 }
 
 fn get_transactions(
@@ -588,6 +630,7 @@ fn init_args(initial_balances: Vec<(Account, u64)>) -> InitArgs {
             node_max_memory_size_bytes: None,
             max_message_size_bytes: None,
             controller_id: PrincipalId::new_user_test_id(100),
+            more_controller_ids: None,
             cycles_for_archive_creation: None,
             max_transactions_per_response: None,
         },
@@ -1181,6 +1224,161 @@ where
 
     assert_eq!(10_000_000u64, balance_of(&env, canister_id, p1.0));
     assert_eq!(0u64, balance_of(&env, canister_id, p2.0));
+}
+
+fn test_controllers<T>(
+    expected_controllers: Vec<PrincipalId>,
+    ledger_wasm: &[u8],
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+
+    let (env, ledger_id) = setup(
+        ledger_wasm.to_vec(),
+        encode_init_args,
+        vec![(Account::from(p1.0), 10_000_000)],
+    );
+
+    const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
+
+    let ucan = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            Some(
+                ic00::CanisterSettingsArgsBuilder::new()
+                    .with_controllers(vec![p1])
+                    .build(),
+            ),
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+
+    for i in 0..ARCHIVE_TRIGGER_THRESHOLD {
+        transfer(&env, ledger_id, p1.0, p2.0, 10_000 + i).expect("transfer failed");
+    }
+
+    env.run_until_completion(/*max_ticks=*/ 10);
+
+    let archive_info = list_archives(&env, ledger_id);
+    assert_eq!(archive_info.len(), 1);
+
+    let archives_info = get_canister_info(
+        &env,
+        ucan,
+        CanisterId::unchecked_from_principal(archive_info[0].canister_id.into()),
+    )
+    .unwrap();
+
+    assert_eq!(archives_info.controllers(), expected_controllers);
+}
+
+pub fn test_archive_controllers(ledger_wasm: Vec<u8>) {
+    let p3 = PrincipalId::new_user_test_id(3);
+    let p4 = PrincipalId::new_user_test_id(4);
+    let p100 = PrincipalId::new_user_test_id(100);
+
+    let expected_controllers = vec![p3, p4, p100];
+
+    fn encode_init_args(args: InitArgs) -> LedgerArgument {
+        LedgerArgument::Init(InitArgs {
+            minting_account: MINTER,
+            fee_collector_account: args.fee_collector_account,
+            initial_balances: args.initial_balances,
+            transfer_fee: FEE.into(),
+            token_name: TOKEN_NAME.to_string(),
+            decimals: Some(DECIMAL_PLACES),
+            token_symbol: TOKEN_SYMBOL.to_string(),
+            metadata: vec![],
+            archive_options: ArchiveOptions {
+                trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
+                num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE as usize,
+                node_max_memory_size_bytes: None,
+                max_message_size_bytes: None,
+                controller_id: PrincipalId::new_user_test_id(100),
+                more_controller_ids: Some(vec![
+                    PrincipalId::new_user_test_id(3),
+                    PrincipalId::new_user_test_id(4),
+                ]),
+                cycles_for_archive_creation: None,
+                max_transactions_per_response: None,
+            },
+            feature_flags: args.feature_flags,
+            maximum_number_of_accounts: args.maximum_number_of_accounts,
+            accounts_overflow_trim_quantity: args.accounts_overflow_trim_quantity,
+        })
+    }
+
+    test_controllers(expected_controllers, &ledger_wasm, encode_init_args);
+}
+
+pub fn test_archive_no_additional_controllers(ledger_wasm: Vec<u8>) {
+    fn encode_init_args(args: InitArgs) -> LedgerArgument {
+        LedgerArgument::Init(InitArgs {
+            minting_account: MINTER,
+            fee_collector_account: args.fee_collector_account,
+            initial_balances: args.initial_balances,
+            transfer_fee: FEE.into(),
+            token_name: TOKEN_NAME.to_string(),
+            decimals: Some(DECIMAL_PLACES),
+            token_symbol: TOKEN_SYMBOL.to_string(),
+            metadata: vec![],
+            archive_options: ArchiveOptions {
+                trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
+                num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE as usize,
+                node_max_memory_size_bytes: None,
+                max_message_size_bytes: None,
+                controller_id: PrincipalId::new_user_test_id(100),
+                more_controller_ids: None,
+                cycles_for_archive_creation: None,
+                max_transactions_per_response: None,
+            },
+            feature_flags: args.feature_flags,
+            maximum_number_of_accounts: args.maximum_number_of_accounts,
+            accounts_overflow_trim_quantity: args.accounts_overflow_trim_quantity,
+        })
+    }
+
+    let p100 = PrincipalId::new_user_test_id(100);
+
+    test_controllers(vec![p100], &ledger_wasm, encode_init_args);
+}
+
+pub fn test_archive_duplicate_controllers(ledger_wasm: Vec<u8>) {
+    fn encode_init_args(args: InitArgs) -> LedgerArgument {
+        LedgerArgument::Init(InitArgs {
+            minting_account: MINTER,
+            fee_collector_account: args.fee_collector_account,
+            initial_balances: args.initial_balances,
+            transfer_fee: FEE.into(),
+            token_name: TOKEN_NAME.to_string(),
+            decimals: Some(DECIMAL_PLACES),
+            token_symbol: TOKEN_SYMBOL.to_string(),
+            metadata: vec![],
+            archive_options: ArchiveOptions {
+                trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
+                num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE as usize,
+                node_max_memory_size_bytes: None,
+                max_message_size_bytes: None,
+                controller_id: PrincipalId::new_user_test_id(100),
+                more_controller_ids: Some(vec![
+                    PrincipalId::new_user_test_id(100),
+                    PrincipalId::new_user_test_id(100),
+                ]),
+                cycles_for_archive_creation: None,
+                max_transactions_per_response: None,
+            },
+            feature_flags: args.feature_flags,
+            maximum_number_of_accounts: args.maximum_number_of_accounts,
+            accounts_overflow_trim_quantity: args.accounts_overflow_trim_quantity,
+        })
+    }
+    let p100 = PrincipalId::new_user_test_id(100);
+
+    test_controllers(vec![p100], &ledger_wasm, encode_init_args);
 }
 
 pub fn test_archiving<T>(
