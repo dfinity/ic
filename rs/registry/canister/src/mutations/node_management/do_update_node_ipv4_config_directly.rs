@@ -1,4 +1,6 @@
-use crate::mutations::node_management::common::get_node_operator_id_for_node;
+use crate::mutations::node_management::common::{
+    get_node_operator_id_for_node, node_exists_with_ipv4,
+};
 use crate::{
     common::LOG_PREFIX,
     mutations::common::{check_ipv4_config, encode_or_panic, node_exists_or_panic},
@@ -81,7 +83,13 @@ impl Registry {
                 ipv4_config.ip_addr.to_string(),
                 vec![ipv4_config.gateway_ip_addr.to_string()],
                 ipv4_config.prefix_length,
-            );
+            )
+            .expect("Invalid IPv4 config");
+
+            // Ensure that the IPv4 address is not used by any other node
+            if node_exists_with_ipv4(self, &ipv4_config.ip_addr) {
+                panic!("There is already at least one other node with the same IPv4 address",);
+            }
         }
     }
 
@@ -191,7 +199,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "The specified IPv4 address is not valid")]
+    #[should_panic(expected = "InvalidIPv4Address")]
     fn should_panic_if_ip_address_is_invalid() {
         let mut registry = invariant_compliant_registry(0);
 
@@ -224,7 +232,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "The specified IPv4 address of the gateway is not valid")]
+    #[should_panic(expected = "InvalidGatewayAddress")]
     fn should_panic_if_gateway_is_invalid() {
         let mut registry = invariant_compliant_registry(0);
 
@@ -257,7 +265,40 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "The specified IPv4 address is not a global address")]
+    #[should_panic(expected = "NotInSameSubnet")]
+    fn should_panic_if_address_and_gateway_not_in_same_subnet() {
+        let mut registry = invariant_compliant_registry(0);
+
+        // Add node to registry
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
+            1, // mutation id
+            1, // node count
+        );
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+
+        let node_id = node_ids_and_dkg_pks
+            .keys()
+            .next()
+            .expect("no node ids found")
+            .to_owned();
+        let node_operator_id =
+            PrincipalId::try_from(registry.get_node_or_panic(node_id).node_operator_id)
+                .expect("failed to get the node operator id");
+
+        // create IPv4 config with invalid gateway IP
+        let mut ipv4_config = init_ipv4_config();
+        ipv4_config.gateway_ip_addr = "193.105.231.137".into();
+
+        let payload = UpdateNodeIPv4ConfigDirectlyPayload {
+            node_id,
+            ipv4_config: Some(ipv4_config),
+        };
+
+        registry.do_update_node_ipv4_config(payload, node_operator_id);
+    }
+
+    #[test]
+    #[should_panic(expected = "NotGlobalIPv4Address")]
     fn should_panic_if_address_is_private() {
         let mut registry = invariant_compliant_registry(0);
 
@@ -291,7 +332,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "The prefix length is not valid")]
+    #[should_panic(expected = "InvalidPrefixLength")]
     fn should_panic_if_prefix_length_is_invalid() {
         let mut registry = invariant_compliant_registry(0);
 
@@ -404,5 +445,53 @@ mod tests {
         registry.do_update_node_ipv4_config(payload, node_operator_id);
         let node_record = registry.get_node_or_panic(node_id);
         assert_eq!(node_record.public_ipv4_config, None);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "There is already at least one other node with the same IPv4 address"
+    )]
+    fn should_panic_if_other_node_has_same_ipv4() {
+        let mut registry = invariant_compliant_registry(0);
+
+        // Add node to registry
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(
+            1, // mutation id
+            2, // node count
+        );
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+
+        let node_id_1 = node_ids_and_dkg_pks
+            .keys()
+            .next()
+            .expect("no node ids found")
+            .to_owned();
+
+        let node_id_2 = node_ids_and_dkg_pks
+            .keys()
+            .next()
+            .expect("no node ids found")
+            .to_owned();
+
+        let node_operator_id =
+            PrincipalId::try_from(registry.get_node_or_panic(node_id_1).node_operator_id)
+                .expect("failed to get the node operator id");
+
+        // create IPv4 config with an invalid prefix length
+        let ipv4_config = init_ipv4_config();
+
+        let payload = UpdateNodeIPv4ConfigDirectlyPayload {
+            node_id: node_id_1,
+            ipv4_config: Some(ipv4_config.clone()),
+        };
+
+        registry.do_update_node_ipv4_config(payload, node_operator_id);
+
+        let payload = UpdateNodeIPv4ConfigDirectlyPayload {
+            node_id: node_id_2,
+            ipv4_config: Some(ipv4_config),
+        };
+
+        registry.do_update_node_ipv4_config(payload, node_operator_id);
     }
 }

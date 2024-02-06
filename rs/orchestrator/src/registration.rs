@@ -8,7 +8,7 @@ use candid::Encode;
 use ic_canister_client::{Agent, Sender};
 use ic_config::{
     http_handler::Config as HttpConfig,
-    initial_ipv4_config::IPv4Config,
+    initial_ipv4_config::IPv4Config as InitialIPv4Config,
     message_routing::Config as MsgRoutingConfig,
     metrics::{Config as MetricsConfig, Exporter},
     transport::TransportConfig,
@@ -30,7 +30,12 @@ use ic_sys::utility_command::UtilityCommand;
 use ic_types::{crypto::KeyPurpose, messages::MessageId, NodeId, RegistryVersion, SubnetId};
 use prost::Message;
 use rand::prelude::*;
-use registry_canister::mutations::node_management::do_add_node::AddNodePayload;
+use registry_canister::mutations::{
+    common::check_ipv4_config,
+    node_management::{
+        do_add_node::AddNodePayload, do_update_node_ipv4_config_directly::IPv4Config,
+    },
+};
 use registry_canister::mutations::{
     common::is_valid_domain, do_update_node_directly::UpdateNodeDirectlyPayload,
 };
@@ -213,10 +218,11 @@ impl NodeRegistration {
             p2p_flow_endpoints: vec![],
             chip_id: get_snp_chip_id().expect("Failed to retrieve chip_id from snp firmware"),
             prometheus_metrics_endpoint: "".to_string(),
-            public_ipv4_config: ipv4_config_to_vec(
+            public_ipv4_config: process_ipv4_config(
                 &self.log,
                 &self.node_config.initial_ipv4_config,
-            ),
+            )
+            .expect("Invalid IPv4 configuration"),
             domain: process_domain_name(&self.log, &self.node_config.domain)
                 .expect("Domain name is invalid"),
         }
@@ -641,15 +647,41 @@ fn get_endpoint(log: &ReplicaLogger, ip_addr: String, port: u16) -> Orchestrator
     Ok(format!("{}:{}", ip_addr_str, port))
 }
 
-fn ipv4_config_to_vec(log: &ReplicaLogger, ipv4_config: &IPv4Config) -> Option<Vec<String>> {
+fn process_ipv4_config(
+    log: &ReplicaLogger,
+    ipv4_config: &InitialIPv4Config,
+) -> OrchestratorResult<Option<IPv4Config>> {
     info!(log, "Reading ipv4 config for registration");
     if !ipv4_config.public_address.is_empty() {
-        return Some(vec![
-            ipv4_config.public_address.clone(),
-            ipv4_config.public_gateway.clone(),
-        ]);
+        let (node_ip_address, prefix_length) = ipv4_config.public_address.split_once('/').ok_or(
+            OrchestratorError::invalid_configuration_error(format!(
+                "Failed to split the IPv4 public address into IP address and prefix: {}",
+                ipv4_config.public_address
+            )),
+        )?;
+
+        let prefix_length = prefix_length.parse::<u32>().map_err(|err| {
+            OrchestratorError::invalid_configuration_error(format!(
+                "IPv4 prefix length is malformed. It should be an integer: {err}",
+            ))
+        })?;
+
+        let ipv4_config = IPv4Config {
+            ip_addr: node_ip_address.to_string(),
+            gateway_ip_addr: ipv4_config.public_gateway.clone(),
+            prefix_length,
+        };
+
+        check_ipv4_config(
+            ipv4_config.ip_addr.to_string(),
+            vec![ipv4_config.gateway_ip_addr.to_string()],
+            ipv4_config.prefix_length,
+        )
+        .map_err(|err| OrchestratorError::invalid_configuration_error(format!("{err}",)))?;
+
+        return Ok(Some(ipv4_config));
     }
-    None
+    Ok(None)
 }
 
 fn process_domain_name(log: &ReplicaLogger, domain: &str) -> OrchestratorResult<Option<String>> {

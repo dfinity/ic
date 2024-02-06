@@ -9,7 +9,7 @@ use ic_registry_keys::{
 use ic_registry_transport::pb::v1::RegistryValue;
 use prost::Message;
 use std::{
-    cmp::Eq, collections::HashSet, convert::TryFrom, hash::Hash, net::Ipv4Addr, str::FromStr,
+    cmp::Eq, collections::HashSet, convert::TryFrom, fmt, hash::Hash, net::Ipv4Addr, str::FromStr,
 };
 
 /// Wraps around Message::encode and panics on error.
@@ -187,35 +187,72 @@ fn extract_subnet_bytes(ipv4_address: &str, subnet_mask: Ipv4Addr) -> Vec<u8> {
         .collect::<Vec<u8>>()
 }
 
+#[derive(Debug)]
+pub enum IPv4ConfigError {
+    InvalidIPv4Address,
+    InvalidGatewayAddress,
+    InvalidPrefixLength,
+    NotInSameSubnet,
+    NotGlobalIPv4Address,
+}
+
+impl fmt::Display for IPv4ConfigError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            IPv4ConfigError::InvalidIPv4Address => {
+                write!(f, "Invalid IPv4 address")
+            }
+            IPv4ConfigError::InvalidGatewayAddress => {
+                write!(f, "Invalid gateway IPv4 address")
+            }
+            IPv4ConfigError::InvalidPrefixLength => {
+                write!(f, "Invalid prefix length")
+            }
+            IPv4ConfigError::NotInSameSubnet => {
+                write!(f, "IP addresses are not in the same subnet")
+            }
+            IPv4ConfigError::NotGlobalIPv4Address => {
+                write!(f, "IPv4 address is not a global address")
+            }
+        }
+    }
+}
+
 // Check that a given IPv4 config is valid
-pub fn check_ipv4_config(ip_addr: String, gateway_ip_addrs: Vec<String>, prefix_length: u32) {
+pub fn check_ipv4_config(
+    ip_addr: String,
+    gateway_ip_addrs: Vec<String>,
+    prefix_length: u32,
+) -> Result<(), IPv4ConfigError> {
     // Ensure all are valid IPv4 addresses
     if !is_valid_ipv4_address(&ip_addr) {
-        panic!("The specified IPv4 address is not valid");
+        return Err(IPv4ConfigError::InvalidIPv4Address);
     }
 
     for gateway_ip_addr in &gateway_ip_addrs {
         if !is_valid_ipv4_address(gateway_ip_addr) {
-            panic!("The specified IPv4 address of the gateway is not valid");
+            return Err(IPv4ConfigError::InvalidGatewayAddress);
         }
     }
 
     // Ensure the prefix length is valid
     if !is_valid_ipv4_prefix_length(prefix_length) {
-        panic!("The prefix length is not valid");
+        return Err(IPv4ConfigError::InvalidPrefixLength);
     }
 
     // Ensure all IPv4 addresses are in the same subnet
     let mut all_ip_addrs = gateway_ip_addrs.clone();
     all_ip_addrs.push(ip_addr.clone());
     if !are_in_the_same_subnet(all_ip_addrs, prefix_length) {
-        panic!("The specified IPv4 addresses are not in the same subnet");
+        return Err(IPv4ConfigError::NotInSameSubnet);
     }
 
     // Ensure the IPv4 address is a routable address
     if !is_global_ipv4_address(&ip_addr) {
-        panic!("The specified IPv4 address is not a global address");
+        return Err(IPv4ConfigError::NotGlobalIPv4Address);
     }
+
+    Ok(())
 }
 
 /// Returns whether a list has duplicate elements.

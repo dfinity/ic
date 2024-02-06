@@ -207,6 +207,19 @@ pub fn scan_for_nodes_by_ip(registry: &Registry, ip_addr: &str) -> Vec<NodeId> {
         .collect()
 }
 
+/// Checks if there is a node with the provided IPv4 address
+pub fn node_exists_with_ipv4(registry: &Registry, ipv4_addr: &str) -> bool {
+    get_key_family::<NodeRecord>(registry, NODE_RECORD_KEY_PREFIX)
+        .into_iter()
+        .find_map(|(k, v)| {
+            v.public_ipv4_config.and_then(|config| {
+                (config.ip_addr == ipv4_addr)
+                    .then(|| NodeId::from(PrincipalId::from_str(&k).unwrap()))
+            })
+        })
+        .is_some()
+}
+
 /// Similar to `get_key_family` on the `RegistryClient`, return a list of
 /// tuples, (ID, value).
 fn get_key_family<T: prost::Message + Default>(

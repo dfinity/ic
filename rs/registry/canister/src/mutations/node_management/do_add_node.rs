@@ -14,12 +14,16 @@ use ic_protobuf::registry::{
     node::v1::{ConnectionEndpoint, IPv4InterfaceConfig, NodeRecord},
 };
 
-use crate::mutations::node_management::common::{
-    get_node_operator_record, make_add_node_registry_mutations, make_update_node_operator_mutation,
-    scan_for_nodes_by_ip,
-};
 use crate::mutations::{
-    common::check_ipv4_config, node_management::do_remove_node_directly::RemoveNodeDirectlyPayload,
+    common::check_ipv4_config,
+    node_management::{
+        common::{
+            get_node_operator_record, make_add_node_registry_mutations,
+            make_update_node_operator_mutation, node_exists_with_ipv4, scan_for_nodes_by_ip,
+        },
+        do_remove_node_directly::RemoveNodeDirectlyPayload,
+        do_update_node_ipv4_config_directly::IPv4Config,
+    },
 };
 use ic_types::crypto::CurrentNodePublicKeys;
 use ic_types::time::Time;
@@ -93,26 +97,37 @@ impl Registry {
             })
             .transpose()?;
 
+        // 5. If there is an IPv4 config, make sure that the IPv4 is not used by anyone else
+        let ipv4_intf_config = payload
+            .public_ipv4_config
+            .clone()
+            .map(make_valid_node_ivp4_config_or_panic);
+        if let Some(ipv4_config) = ipv4_intf_config.clone() {
+            if node_exists_with_ipv4(self, &ipv4_config.ip_addr) {
+                return Err(format!(
+                    "{}do_add_node: There is already another node with the same IPv4 address.",
+                    LOG_PREFIX,
+                ));
+            }
+        }
+
         println!("{}do_add_node: The node id is {:?}", LOG_PREFIX, node_id);
 
-        // 5. Create the Node Record
+        // 6. Create the Node Record
         let node_record = NodeRecord {
             xnet: Some(connection_endpoint_from_string(&payload.xnet_endpoint)),
             http: Some(connection_endpoint_from_string(&payload.http_endpoint)),
             node_operator_id: caller_id.into_vec(),
             hostos_version_id: None,
             chip_id: payload.chip_id.clone(),
-            public_ipv4_config: payload
-                .public_ipv4_config
-                .clone()
-                .map(make_valid_node_ivp4_config_or_panic),
+            public_ipv4_config: ipv4_intf_config,
             domain,
         };
 
-        // 6. Insert node, public keys, and crypto keys
+        // 7. Insert node, public keys, and crypto keys
         let mut mutations = make_add_node_registry_mutations(node_id, node_record, valid_pks);
 
-        // 7. Update the Node Operator record
+        // 8. Update the Node Operator record
         node_operator_record.node_allowance -= 1;
 
         let update_node_operator_record =
@@ -120,7 +135,7 @@ impl Registry {
 
         mutations.push(update_node_operator_record);
 
-        // 8. Check invariants before applying mutations
+        // 9. Check invariants before applying mutations
         self.maybe_apply_mutation_internal(mutations);
 
         println!("{}do_add_node finished: {:?}", LOG_PREFIX, payload);
@@ -149,7 +164,7 @@ pub struct AddNodePayload {
     pub p2p_flow_endpoints: Vec<String>,
     pub prometheus_metrics_endpoint: String,
 
-    pub public_ipv4_config: Option<Vec<String>>,
+    pub public_ipv4_config: Option<IPv4Config>,
     pub domain: Option<String>,
 }
 
@@ -261,38 +276,18 @@ fn now() -> Result<Time, String> {
     Ok(Time::from_nanos_since_unix_epoch(nanos))
 }
 
-fn make_valid_node_ivp4_config_or_panic(ip_addresses: Vec<String>) -> IPv4InterfaceConfig {
-    // the config needs to contain at least the node's IP address and one gateway
-    if ip_addresses.len() < 2 {
-        panic!("Node IPv4 config is malformed. It should contain at least two Strings: the node's IP and at least one gateway");
-    }
-
-    // the node's IP address
-    let (node_ip_address, prefix_length) = ip_addresses
-        .first()
-        .expect("Failed to get the node's IP config")
-        .split_once('/')
-        .expect("Failed to split the config into IP address and prefix");
-    let prefix_length = prefix_length
-        .parse::<u32>()
-        .expect("Prefix length is malformed. It should be an integer");
-
-    // iterate over all specified gateway addresses (and skip the first entry, which is the node's IP)
-    let mut gateway_addresses: Vec<String> = Vec::new();
-    for gateway_ip in ip_addresses.iter().skip(1) {
-        gateway_addresses.push(gateway_ip.to_string());
-    }
-
+fn make_valid_node_ivp4_config_or_panic(ipv4_config: IPv4Config) -> IPv4InterfaceConfig {
     check_ipv4_config(
-        node_ip_address.to_string(),
-        gateway_addresses.clone(),
-        prefix_length,
-    );
+        ipv4_config.ip_addr.to_string(),
+        vec![ipv4_config.gateway_ip_addr.to_string()],
+        ipv4_config.prefix_length,
+    )
+    .expect("Invalid IPv4 config");
 
     IPv4InterfaceConfig {
-        ip_addr: node_ip_address.to_string(),
-        gateway_ip_addr: gateway_addresses,
-        prefix_length,
+        ip_addr: ipv4_config.ip_addr,
+        gateway_ip_addr: vec![ipv4_config.gateway_ip_addr],
+        prefix_length: ipv4_config.prefix_length,
     }
 }
 
@@ -493,16 +488,18 @@ mod tests {
 
     #[test]
     fn should_succeed_if_ipv4_config_is_valid() {
-        let ipv4_config_raw = vec![
-            "204.153.51.58/24".to_string(),
-            "204.153.51.1".to_string(),
-            "204.153.51.2".to_string(),
-        ];
-        let ipv4_config = IPv4InterfaceConfig {
+        let ipv4_config_raw = IPv4Config {
             ip_addr: "204.153.51.58".to_string(),
-            gateway_ip_addr: vec!["204.153.51.1".to_string(), "204.153.51.2".to_string()],
+            gateway_ip_addr: "204.153.51.1".to_string(),
             prefix_length: 24,
         };
+
+        let ipv4_config = IPv4InterfaceConfig {
+            ip_addr: "204.153.51.58".to_string(),
+            gateway_ip_addr: vec!["204.153.51.1".to_string()],
+            prefix_length: 24,
+        };
+
         assert_eq!(
             make_valid_node_ivp4_config_or_panic(ipv4_config_raw),
             ipv4_config
@@ -510,62 +507,13 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(
-        expected = "Node IPv4 config is malformed. It should contain at least two Strings: the node's IP and at least one gateway"
-    )]
-    fn should_panic_if_ipv4_config_is_empty() {
-        make_valid_node_ivp4_config_or_panic(Vec::new());
-    }
-
-    #[test]
-    #[should_panic(
-        expected = "Node IPv4 config is malformed. It should contain at least two Strings: the node's IP and at least one gateway"
-    )]
-    fn should_panic_if_ipv4_config_is_incomplete() {
-        make_valid_node_ivp4_config_or_panic(vec!["204.153.51.58/24".to_string()]);
-    }
-
-    #[test]
-    #[should_panic(expected = "Failed to split the config into IP address and prefix")]
-    fn should_panic_if_prefix_length_is_missing() {
-        let ipv4_config_raw = vec![
-            "204.153.51.58".to_string(),
-            "204.153.51.1/24".to_string(),
-            "204.153.51.2/24".to_string(),
-        ];
-        make_valid_node_ivp4_config_or_panic(ipv4_config_raw);
-    }
-
-    #[test]
-    #[should_panic(expected = "Prefix length is malformed. It should be an integer")]
-    fn should_panic_if_prefix_length_is_invalid() {
-        let ipv4_config_raw = vec![
-            "204.153.51.58/3a2d".to_string(),
-            "204.153.51.1/24".to_string(),
-            "204.153.51.2/24".to_string(),
-        ];
-        make_valid_node_ivp4_config_or_panic(ipv4_config_raw);
-    }
-
-    #[test]
-    #[should_panic]
-    fn should_panic_if_prefix_length_is_specified_on_gateway() {
-        let ipv4_config_raw = vec![
-            "204.153.51.58/24".to_string(),
-            "204.153.51.1/24".to_string(),
-            "204.153.51.2".to_string(),
-        ];
-        make_valid_node_ivp4_config_or_panic(ipv4_config_raw);
-    }
-
-    #[test]
     #[should_panic]
     fn should_panic_if_ipv4_config_is_invalid() {
-        let ipv4_config_raw = vec![
-            "204.153.51.58/24".to_string(),
-            "204.153.49.1".to_string(),
-            "204.153.51.2".to_string(),
-        ];
+        let ipv4_config_raw = IPv4Config {
+            ip_addr: "204.153.51.58".to_string(),
+            gateway_ip_addr: "204.153.49.1".to_string(),
+            prefix_length: 24,
+        };
         make_valid_node_ivp4_config_or_panic(ipv4_config_raw);
     }
 
@@ -777,5 +725,42 @@ mod tests {
         let node_operator_record = get_node_operator_record(&registry, node_operator_id)
             .expect("failed to get node operator");
         assert_eq!(node_operator_record.node_allowance, 1);
+    }
+
+    #[test]
+    fn should_fail_for_adding_two_nodes_with_same_ipv4s() {
+        // Arrange
+        let mut registry = invariant_compliant_registry(0);
+        // Add node operator record first
+        let node_operator_record = NodeOperatorRecord {
+            node_allowance: 2, // Should be > 0 to add a new node
+            ..Default::default()
+        };
+        let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_node_operator_record_key(node_operator_id),
+            encode_or_panic(&node_operator_record),
+        )]);
+
+        // create an IPv4 config
+        let ipv4_config = Some(IPv4Config {
+            ip_addr: "204.153.51.58".to_string(),
+            gateway_ip_addr: "204.153.51.1".to_string(),
+            prefix_length: 24,
+        });
+
+        // create two node payloads with the same IPv4 config
+        let (mut payload_1, _) = prepare_add_node_payload(1);
+        payload_1.public_ipv4_config = ipv4_config.clone();
+
+        let (mut payload_2, _) = prepare_add_node_payload(2);
+        payload_2.public_ipv4_config = ipv4_config;
+
+        // Act
+        let _ = registry.do_add_node_(payload_1.clone(), node_operator_id);
+        let e = registry
+            .do_add_node_(payload_2.clone(), node_operator_id)
+            .unwrap_err();
+        assert!(e.contains("do_add_node: There is already another node with the same IPv4 address"));
     }
 }
