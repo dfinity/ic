@@ -118,17 +118,30 @@ pub fn fake_completed_sign_with_ecdsa_context(
     id: u8,
     quadruple_id: QuadrupleId,
 ) -> (CallbackId, SignWithEcdsaContext) {
+    fake_sign_with_ecdsa_context_from_request_id(&RequestId {
+        quadruple_id,
+        pseudo_random_id: [id; 32],
+        height: Height::from(1),
+    })
+}
+
+pub fn fake_sign_with_ecdsa_context_from_request_id(
+    request_id: &RequestId,
+) -> (CallbackId, SignWithEcdsaContext) {
+    let height = request_id.height;
+    let quadruple_id = request_id.quadruple_id.clone();
+    let callback_id = CallbackId::from(quadruple_id.0);
     let context = SignWithEcdsaContext {
         request: RequestBuilder::new().build(),
         message_hash: [0; 32],
         derivation_path: vec![],
         batch_time: mock_time(),
         key_id: quadruple_id.key_id().unwrap().clone(),
-        pseudo_random_id: [id; 32],
-        matched_quadruple: Some((quadruple_id, Height::from(1))),
+        pseudo_random_id: request_id.pseudo_random_id,
+        matched_quadruple: Some((quadruple_id, height)),
         nonce: Some([0; 32]),
     };
-    (CallbackId::from(id as u64), context)
+    (callback_id, context)
 }
 
 pub fn fake_state_with_ecdsa_contexts<T>(
@@ -674,6 +687,50 @@ pub(crate) fn create_signer_dependencies(
     logger: ReplicaLogger,
 ) -> (EcdsaPoolImpl, EcdsaSignerImpl) {
     create_signer_dependencies_with_crypto(pool_config, logger, None)
+}
+
+pub(crate) fn create_signer_dependencies_with_state(
+    pool_config: ArtifactPoolConfig,
+    logger: ReplicaLogger,
+    state: Labeled<Arc<ReplicatedState>>,
+) -> (EcdsaPoolImpl, EcdsaSignerImpl) {
+    create_signer_dependencies_with_state_and_crypto(pool_config, logger, state, None)
+}
+
+pub(crate) fn create_signer_dependencies_with_state_and_crypto(
+    pool_config: ArtifactPoolConfig,
+    logger: ReplicaLogger,
+    state: Labeled<Arc<ReplicatedState>>,
+    consensus_crypto: Option<Arc<dyn ConsensusCrypto>>,
+) -> (EcdsaPoolImpl, EcdsaSignerImpl) {
+    let metrics_registry = MetricsRegistry::new();
+    let Dependencies {
+        pool,
+        crypto,
+        state_manager,
+        ..
+    } = dependencies(pool_config.clone(), 1);
+
+    let snapshot = Box::new(FakeCertifiedStateSnapshot {
+        height: state.height(),
+        state: state.take(),
+    });
+    state_manager
+        .get_mut()
+        .expect_get_certified_state_snapshot()
+        .returning(move || Some(snapshot.clone() as Box<_>));
+
+    let signer = EcdsaSignerImpl::new(
+        NODE_1,
+        pool.get_block_cache(),
+        consensus_crypto.unwrap_or(crypto),
+        state_manager.clone(),
+        metrics_registry.clone(),
+        logger.clone(),
+    );
+    let ecdsa_pool = EcdsaPoolImpl::new(pool_config, logger, metrics_registry);
+
+    (ecdsa_pool, signer)
 }
 
 // Sets up the dependencies and creates the complaint handler
