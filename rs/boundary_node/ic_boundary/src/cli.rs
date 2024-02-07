@@ -67,7 +67,7 @@ pub struct RegistryConfig {
 
 #[derive(Args)]
 pub struct ListenConfig {
-    /// Port to listen on for HTTP (listens on wildcard ::)
+    /// Port to listen on for HTTP (listens on IPv6 wildcard "::")
     #[clap(long)]
     pub http_port: Option<u16>,
 
@@ -81,22 +81,31 @@ pub struct ListenConfig {
     #[clap(long, default_value = "443")]
     pub https_port: u16,
 
-    /// Timeout for the whole HTTP request in seconds
-    #[clap(long, default_value = "600")]
+    /// Timeout for the whole HTTP request in milliseconds.
+    /// From when it starts connecting until the response body is finished.
+    #[clap(long, default_value = "120000")]
     pub http_timeout: u64,
 
-    /// Timeout for the whole HTTP request in seconds when doing health checks
-    #[clap(long, default_value = "3")]
-    pub http_timeout_check: u64,
-
-    /// Timeout for the HTTP connect phase in seconds
-    #[clap(long, default_value = "2")]
+    /// Timeout for the HTTP connect phase in milliseconds.
+    /// This is applied to both normal and health check requests.
+    #[clap(long, default_value = "1500")]
     pub http_timeout_connect: u64,
 
-    /// Max number of in-flight requests that can be served in parallel
-    /// If this is exceeded - new requests would be throttled
-    #[clap(long, default_value = "512")]
-    pub max_concurrency: usize,
+    /// Max number of in-flight requests that can be served in parallel.
+    /// If this is exceeded - new requests would be throttled.
+    #[clap(long)]
+    pub max_concurrency: Option<usize>,
+
+    /// Exponential Weighted Moving Average parameter for load shedding algorithm.
+    /// Value of 0.1 means that the next measurement would account for 10% of moving average.
+    /// Should be in range 0..1.
+    #[clap(long)]
+    pub shed_ewma_param: Option<f64>,
+
+    /// Target latency for load shedding algorithm in milliseconds.
+    /// It tries to keep the request latency less than this.
+    #[clap(long, default_value = "1200", value_parser = clap::value_parser!(u64).range(10..))]
+    pub shed_target_latency: u64,
 
     /// How frequently to send TCP/HTTP2 keepalives, in seconds
     #[clap(long, default_value = "15")]
@@ -106,28 +115,33 @@ pub struct ListenConfig {
     #[clap(long, default_value = "3")]
     pub http_keepalive_timeout: u64,
 
-    /// How long to keep idle outgoing connections open
-    #[clap(long, default_value = "10")]
+    /// How long to keep idle outgoing connections open, in seconds
+    #[clap(long, default_value = "60")]
     pub http_idle_timeout: u64,
 }
 
 #[derive(Args)]
 pub struct HealthChecksConfig {
-    /// How frequently to run node checks in seconds
-    #[clap(long, default_value = "10")]
+    /// How frequently to run node checks in milliseconds
+    #[clap(long, default_value = "2000")]
     pub check_interval: u64,
 
     /// How many attempts to do when checking a node
-    #[clap(long, default_value = "3")]
+    #[clap(long, default_value = "1")]
     pub check_retries: u32,
 
-    /// Minimum required OK health checks
+    /// Timeout for the check request in milliseconds.
+    /// This includes connection phase and the actual HTTP request.
+    #[clap(long, default_value = "1850")]
+    pub check_timeout: u64,
+
+    /// Minimum required successful health checks
     /// for a replica to be included in the routing table
-    #[clap(long, default_value = "1")]
+    #[clap(long, default_value = "2")]
     pub min_ok_count: u8,
 
     /// Maximum block height lag for a replica to be included in the routing table
-    #[clap(long, default_value = "1000")]
+    #[clap(long, default_value = "50")]
     pub max_height_lag: u64,
 }
 

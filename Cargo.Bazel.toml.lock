@@ -3095,6 +3095,7 @@ dependencies = [
  "libnss",
  "libsecp256k1",
  "linked-hash-map",
+ "little-loadshedder",
  "local-ip-address",
  "log",
  "lru",
@@ -6188,6 +6189,17 @@ name = "linux-raw-sys"
 version = "0.4.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "969488b55f8ac402214f3f5fd243ebb7206cf82de60d3172994707a4bcc2b829"
+
+[[package]]
+name = "little-loadshedder"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "856dc94aeafb8a00035e563f6835585f7aa8d0d4e78aae7967a252f61675c535"
+dependencies = [
+ "thiserror",
+ "tokio",
+ "tower",
+]
 
 [[package]]
 name = "local-channel"

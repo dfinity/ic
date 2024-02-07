@@ -698,6 +698,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "linked-hash-map": crate.spec(
                 version = "^0.5.3",
             ),
+            "little-loadshedder": crate.spec(
+                version = "^0.1.0",
+            ),
             "local-ip-address": crate.spec(
                 version = "^0.5.6",
             ),

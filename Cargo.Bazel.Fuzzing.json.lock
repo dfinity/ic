@@ -1,5 +1,5 @@
 {
-  "checksum": "ba5ac8c2fbbe178491dc5746f5855665613e9459be08dfad1248c96da01f6e85",
+  "checksum": "a2bb9258739ff9e78486a371d431567ae3a30588d169242208ae82f86715fb6c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -15661,6 +15661,10 @@
               "target": "linked_hash_map"
             },
             {
+              "id": "little-loadshedder 0.1.0",
+              "target": "little_loadshedder"
+            },
+            {
               "id": "local-ip-address 0.5.6",
               "target": "local_ip_address"
             },
@@ -31235,6 +31239,53 @@
         "version": "0.4.10"
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT"
+    },
+    "little-loadshedder 0.1.0": {
+      "name": "little-loadshedder",
+      "version": "0.1.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/little-loadshedder/0.1.0/download",
+          "sha256": "856dc94aeafb8a00035e563f6835585f7aa8d0d4e78aae7967a252f61675c535"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "little_loadshedder",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "little_loadshedder",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "thiserror 1.0.56",
+              "target": "thiserror"
+            },
+            {
+              "id": "tokio 1.35.1",
+              "target": "tokio"
+            },
+            {
+              "id": "tower 0.4.13",
+              "target": "tower"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.0"
+      },
+      "license": "MIT OR Apache-2.0"
     },
     "local-channel 0.1.4": {
       "name": "local-channel",
