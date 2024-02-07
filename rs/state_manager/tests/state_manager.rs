@@ -5628,3 +5628,197 @@ fn query_stats_are_collected() {
     // (incorrectly) report query statistics for this canister.
     check_query_stats_unmodified(&env, &malicious_overreporting);
 }
+
+/// An operation against a state machine running a single `TEST_CANISTER`,
+/// including various update calls, checkpointing, canister upgrades and replica upgrades
+/// with different LSMT flags.
+#[derive(Clone, Copy, Debug)]
+enum TestCanisterOp {
+    UpdateCall(&'static str),
+    TriggerMerge,
+    CanisterUpgrade,
+    CanisterReinstall,
+    Checkpoint,
+    RestartWithLSMT(FlagStatus),
+}
+
+/// A strategy with an arbitrary enum element, including a selection of update functions
+/// on TEST_CANISTER.
+fn arbitrary_test_canister_op() -> impl Strategy<Value = TestCanisterOp> {
+    prop_oneof! {
+        Just(TestCanisterOp::UpdateCall("inc")),
+        Just(TestCanisterOp::UpdateCall("persist")),
+        Just(TestCanisterOp::UpdateCall("load")),
+        Just(TestCanisterOp::UpdateCall("write_heap_64k")),
+        Just(TestCanisterOp::TriggerMerge),
+        Just(TestCanisterOp::CanisterUpgrade),
+        Just(TestCanisterOp::CanisterReinstall),
+        Just(TestCanisterOp::Checkpoint),
+        Just(TestCanisterOp::RestartWithLSMT(FlagStatus::Enabled)),
+        Just(TestCanisterOp::RestartWithLSMT(FlagStatus::Disabled)),
+    }
+}
+
+proptest! {
+// We go for fewer, but longer runs
+#![proptest_config(ProptestConfig::with_cases(10))]
+
+#[test]
+fn random_canister_input_lsmt(ops in proptest::collection::vec(arbitrary_test_canister_op(), 1..200)) {
+    /// Execute op against the state machine `env`
+    fn execute_op(env: StateMachine, canister_id: CanisterId, op: TestCanisterOp) -> StateMachine {
+        match op {
+            TestCanisterOp::UpdateCall(func) => {
+                env.execute_ingress(canister_id, func, vec![]).unwrap();
+                env
+            }
+            TestCanisterOp::TriggerMerge => {
+                // This writes 10 overlay files if LSMT is enabled, so that it has to merge.
+                // In principle the same pattern can occur without this op, but this makes
+                // it much more likely to be covered each run.
+                let mut env = env;
+                for _ in 0..10 {
+                    env = execute_op(env, canister_id, TestCanisterOp::UpdateCall("inc"));
+                    env = execute_op(env, canister_id, TestCanisterOp::Checkpoint);
+                }
+                env
+            }
+            TestCanisterOp::CanisterUpgrade => {
+                env.upgrade_canister_wat(canister_id, TEST_CANISTER, vec![]);
+                env
+            }
+            TestCanisterOp::CanisterReinstall => {
+                env.reinstall_canister_wat(canister_id, TEST_CANISTER, vec![]);
+                env.execute_ingress(canister_id, "grow_page", vec![]).unwrap();
+                env
+            }
+            TestCanisterOp::Checkpoint => {
+                env.set_checkpoints_enabled(true);
+                env.tick();
+                env.set_checkpoints_enabled(false);
+                env
+            }
+            TestCanisterOp::RestartWithLSMT(flag) => {
+                let env = execute_op(env, canister_id, TestCanisterOp::Checkpoint);
+
+                env.restart_node_with_lsmt_override(Some(flag))
+            }
+        }
+    }
+
+    // Setup two state machines with a single TEST_CANISTER installed.
+    let mut lsmt_env = StateMachineBuilder::new()
+        .with_lsmt_override(Some(FlagStatus::Enabled))
+        .build();
+    let mut base_env = StateMachineBuilder::new()
+        .with_lsmt_override(Some(FlagStatus::Disabled))
+        .build();
+
+    let canister_id = lsmt_env.install_canister_wat(TEST_CANISTER, vec![], None);
+    let base_canister_id = base_env.install_canister_wat(TEST_CANISTER, vec![], None);
+    prop_assert_eq!(canister_id, base_canister_id);
+
+    lsmt_env
+        .execute_ingress(canister_id, "grow_page", vec![])
+        .unwrap();
+    base_env
+        .execute_ingress(canister_id, "grow_page", vec![])
+        .unwrap();
+
+    // Execute all operations against both state machines, except never enable LSTM on `base_env`.
+    for op in ops {
+        lsmt_env = execute_op(lsmt_env, canister_id, op);
+        if let TestCanisterOp::RestartWithLSMT(_) = op {
+            // With the base environment, we never enable LSMT
+            base_env = execute_op(
+                base_env,
+                canister_id,
+                TestCanisterOp::RestartWithLSMT(FlagStatus::Disabled),
+            );
+        } else {
+            base_env = execute_op(base_env, canister_id, op);
+        }
+
+        // Querying `read` should always give the same result on both state machines.
+        let lsmt_read = lsmt_env
+            .execute_ingress(canister_id, "read", vec![])
+            .unwrap()
+            .bytes();
+        let base_read = base_env
+            .execute_ingress(canister_id, "read", vec![])
+            .unwrap()
+            .bytes();
+
+        prop_assert_eq!(lsmt_read, base_read);
+    }
+
+    // Restart both of them to non-LSMT, do another checkpoint and check that the canister
+    // files are exactly the same.
+    let reset_to_base = |env| {
+        let env = execute_op(
+            env,
+            canister_id,
+            TestCanisterOp::RestartWithLSMT(FlagStatus::Disabled),
+        );
+        let env = execute_op(env, canister_id, TestCanisterOp::Checkpoint);
+        env.state_manager.flush_tip_channel();
+        env
+    };
+    lsmt_env = reset_to_base(lsmt_env);
+    base_env = reset_to_base(base_env);
+
+    lsmt_env = execute_op(
+        lsmt_env,
+        canister_id,
+        TestCanisterOp::RestartWithLSMT(FlagStatus::Disabled),
+    );
+    base_env = execute_op(
+        base_env,
+        canister_id,
+        TestCanisterOp::RestartWithLSMT(FlagStatus::Disabled),
+    );
+    lsmt_env = execute_op(lsmt_env, canister_id, TestCanisterOp::Checkpoint);
+    base_env = execute_op(base_env, canister_id, TestCanisterOp::Checkpoint);
+    lsmt_env.state_manager.flush_tip_channel();
+    base_env.state_manager.flush_tip_channel();
+
+    let latest_height = *lsmt_env.state_manager.checkpoint_heights().last().unwrap();
+    prop_assert_eq!(
+        latest_height,
+        *base_env.state_manager.checkpoint_heights().last().unwrap()
+    );
+
+    let canister_dir = |env: &StateMachine| {
+        env.state_manager
+            .state_layout()
+            .checkpoint(latest_height)
+            .unwrap()
+            .canister(&canister_id)
+            .unwrap()
+            .raw_path()
+    };
+    let lsmt_dir = canister_dir(&lsmt_env);
+    let base_dir = canister_dir(&base_env);
+
+    let mut lsmt_files: Vec<_> = std::fs::read_dir(lsmt_dir)
+        .unwrap()
+        .map(|file| file.unwrap())
+        .collect();
+    lsmt_files.sort_by_key(|file| file.path());
+    let mut base_files: Vec<_> = std::fs::read_dir(base_dir)
+        .unwrap()
+        .map(|file| file.unwrap())
+        .collect();
+    base_files.sort_by_key(|file| file.path());
+    prop_assert_eq!(lsmt_files.len(), base_files.len());
+    for (lsmt_file, base_file) in lsmt_files.iter().zip(base_files.iter()) {
+        prop_assert_eq!(lsmt_file.file_name(), base_file.file_name());
+        // No directories inside canisters, so no need to be recursive
+        prop_assert!(lsmt_file.file_type().unwrap().is_file());
+        prop_assert!(base_file.file_type().unwrap().is_file());
+        let lsmt_data: Vec<u8> = std::fs::read(lsmt_file.path()).unwrap();
+        let base_data: Vec<u8> = std::fs::read(base_file.path()).unwrap();
+        prop_assert_eq!(lsmt_data, base_data);
+    }
+}
+}
