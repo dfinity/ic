@@ -1116,7 +1116,7 @@ fn minter_wasm() -> Vec<u8> {
 fn install_minter(env: &StateMachine, ledger_id: CanisterId, minter_id: CanisterId) -> CanisterId {
     let args = MinterInitArgs {
         ecdsa_key_name: "master_ecdsa_public_key".parse().unwrap(),
-        ethereum_network: EthereumNetwork::Mainnet,
+        ethereum_network: EthereumNetwork::MAINNET,
         ledger_id: ledger_id.get().0,
         next_transaction_nonce: 0.into(),
         ethereum_block_height: CandidBlockTag::Finalized,

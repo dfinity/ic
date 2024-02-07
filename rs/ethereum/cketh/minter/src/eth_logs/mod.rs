@@ -90,7 +90,7 @@ pub async fn last_received_eth_events(
             from_block: from.into(),
             to_block: to.into(),
             address: vec![contract_address],
-            topics: vec![FixedSizeData(RECEIVED_ETH_EVENT_TOPIC)],
+            topics: vec![vec![FixedSizeData(RECEIVED_ETH_EVENT_TOPIC)]],
         })
         .await?;
 

@@ -370,7 +370,7 @@ prop_compose! {
         last_scraped_block_number in arb_nat(),
     ) -> InitArg {
         InitArg {
-            ethereum_network: EthereumNetwork::Sepolia,
+            ethereum_network: EthereumNetwork::SEPOLIA,
             ecdsa_key_name,
             ethereum_contract_address: contract_address.map(|addr| addr.to_string()),
             ledger_id,
@@ -710,7 +710,7 @@ fn state_equivalence() {
         },
     };
     let state = State {
-        ethereum_network: EthereumNetwork::Mainnet,
+        ethereum_network: EthereumNetwork::MAINNET,
         ecdsa_key_name: "test_key".to_string(),
         ledger_id: "apia6-jaaaa-aaaar-qabma-cai".parse().unwrap(),
         ethereum_contract_address: Some(
@@ -1137,7 +1137,7 @@ mod eth_balance {
 
             let max_fee = self.tx_fee.max_transaction_fee();
             let transaction = Eip1559TransactionRequest {
-                chain_id: EthereumNetwork::Sepolia.chain_id(),
+                chain_id: EthereumNetwork::SEPOLIA.chain_id(),
                 nonce: self.nonce,
                 max_priority_fee_per_gas: self.tx_fee.max_priority_fee_per_gas,
                 max_fee_per_gas: self.tx_fee.max_fee_per_gas,
