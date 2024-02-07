@@ -300,7 +300,7 @@ mod eth_transactions {
                 &withdrawal_request,
                 TransactionNonce::ZERO,
                 transaction_price(),
-                EthereumNetwork::Sepolia,
+                EthereumNetwork::SEPOLIA,
             )
             .unwrap();
 
@@ -322,7 +322,7 @@ mod eth_transactions {
                 &withdrawal_request,
                 TransactionNonce::ZERO,
                 transaction_price(),
-                EthereumNetwork::Sepolia,
+                EthereumNetwork::SEPOLIA,
             )
             .unwrap();
 
@@ -373,7 +373,7 @@ mod eth_transactions {
                     &withdrawal_request,
                     wrong_nonce,
                     transaction_price(),
-                    EthereumNetwork::Sepolia,
+                    EthereumNetwork::SEPOLIA,
                 )
                 .unwrap();
 
@@ -406,7 +406,7 @@ mod eth_transactions {
                 assert_eq!(
                     created_tx,
                     Eip1559TransactionRequest {
-                        chain_id: EthereumNetwork::Sepolia.chain_id(),
+                        chain_id: EthereumNetwork::SEPOLIA.chain_id(),
                         nonce: TransactionNonce::from(i),
                         max_priority_fee_per_gas: transaction_price.max_priority_fee_per_gas,
                         max_fee_per_gas: transaction_price.max_fee_per_gas,
@@ -1604,7 +1604,7 @@ mod create_transaction {
                 &withdrawal_request,
                 TransactionNonce::TWO,
                 transaction_price,
-                EthereumNetwork::Sepolia,
+                EthereumNetwork::SEPOLIA,
             );
 
             prop_assert_eq!(
@@ -1638,11 +1638,11 @@ mod create_transaction {
                 &withdrawal_request,
                 TransactionNonce::TWO,
                 transaction_price.clone(),
-                EthereumNetwork::Sepolia,
+                EthereumNetwork::SEPOLIA,
             );
 
             prop_assert_eq!(result, Ok(Eip1559TransactionRequest {
-                chain_id: EthereumNetwork::Sepolia.chain_id(),
+                chain_id: EthereumNetwork::SEPOLIA.chain_id(),
                 nonce: TransactionNonce::TWO,
                 max_priority_fee_per_gas: transaction_price.max_priority_fee_per_gas,
                 max_fee_per_gas: transaction_price.max_fee_per_gas,

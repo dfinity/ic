@@ -449,7 +449,7 @@ fn should_display_finalized_transactions_sorted_by_decreasing_ledger_burn_index(
 #[test]
 fn should_display_etherscan_links_according_to_chosen_network() {
     let sepolia_dashboard = DashboardTemplate {
-        ethereum_network: EthereumNetwork::Sepolia,
+        ethereum_network: EthereumNetwork::SEPOLIA,
         ..initial_dashboard()
     };
     DashboardAssert::assert_that(sepolia_dashboard).has_links_satisfying(
@@ -458,7 +458,7 @@ fn should_display_etherscan_links_according_to_chosen_network() {
     );
 
     let mainnet_dashboard = DashboardTemplate {
-        ethereum_network: EthereumNetwork::Mainnet,
+        ethereum_network: EthereumNetwork::MAINNET,
         ..initial_dashboard()
     };
     DashboardAssert::assert_that(mainnet_dashboard).has_links_satisfying(
@@ -673,7 +673,7 @@ fn withdrawal_flow(
     };
     let max_fee = fee.max_transaction_fee();
     let transaction = Eip1559TransactionRequest {
-        chain_id: EthereumNetwork::Sepolia.chain_id(),
+        chain_id: EthereumNetwork::SEPOLIA.chain_id(),
         nonce,
         max_priority_fee_per_gas: fee.max_priority_fee_per_gas,
         max_fee_per_gas: fee.max_fee_per_gas,

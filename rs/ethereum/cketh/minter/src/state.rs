@@ -25,7 +25,7 @@ mod tests;
 thread_local! {
     // pub static STATE: RefCell<Option<State>> = RefCell::default();
     pub static STATE: RefCell<Option<State>> = RefCell::new(Some(State {
-        ethereum_network: EthereumNetwork::Mainnet,
+        ethereum_network: EthereumNetwork::MAINNET,
         ecdsa_key_name: "".to_string(),
         ledger_id: Principal::anonymous(),
         ethereum_contract_address: None,

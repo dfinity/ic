@@ -4,7 +4,9 @@ use crate::eth_rpc::{
     ResponseSizeEstimate, RpcError, SendRawTransactionResult,
 };
 use crate::eth_rpc_client::eth_rpc::HEADER_SIZE_LIMIT;
-use crate::eth_rpc_client::providers::{RpcService, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS};
+use crate::eth_rpc_client::providers::{
+    RpcService, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS, UNKNOWN_PROVIDERS,
+};
 use crate::eth_rpc_client::requests::GetTransactionCountParams;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::lifecycle::EthereumNetwork;
@@ -99,8 +101,9 @@ impl<T: RpcTransport> EthRpcClient<T> {
         match self.providers {
             Some(ref providers) => providers,
             None => match self.chain {
-                EthereumNetwork::Mainnet => MAINNET_PROVIDERS,
-                EthereumNetwork::Sepolia => SEPOLIA_PROVIDERS,
+                EthereumNetwork::MAINNET => MAINNET_PROVIDERS,
+                EthereumNetwork::SEPOLIA => SEPOLIA_PROVIDERS,
+                _ => UNKNOWN_PROVIDERS,
             },
         }
     }
@@ -212,8 +215,9 @@ impl<T: RpcTransport> EthRpcClient<T> {
         use crate::eth_rpc::GetBlockByNumberParams;
 
         let expected_block_size = match self.chain {
-            EthereumNetwork::Sepolia => 12 * 1024,
-            EthereumNetwork::Mainnet => 24 * 1024,
+            EthereumNetwork::SEPOLIA => 12 * 1024,
+            EthereumNetwork::MAINNET => 24 * 1024,
+            _ => 24 * 1024, // Default for unknown networks
         };
 
         let results: MultiCallResults<Block> = self
@@ -332,7 +336,7 @@ impl<T: PartialEq> MultiCallResults<T> {
                 }
                 _ => match first_error {
                     None => {
-                        first_error = Some((*provider, result));
+                        first_error = Some((provider.clone(), result));
                     }
                     Some((first_error_provider, error)) => {
                         if !are_errors_consistent(&error, result) {
