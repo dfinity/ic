@@ -14,22 +14,33 @@ use std::collections::{BTreeMap, BTreeSet};
 fn should_create_quadruples_correctly() {
     let rng = &mut reproducible_rng();
     let common_receivers = set_of_nodes(&[1, 2, 3]);
-    let (kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda) =
+    let (mut kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda) =
         transcripts_for_quadruple(common_receivers, rng);
 
-    let result = PreSignatureQuadruple::new(
-        kappa_unmasked.clone(),
-        lambda_masked.clone(),
-        kappa_times_lambda.clone(),
-        key_times_lambda.clone(),
-    );
-    assert!(result.is_ok());
+    let kappa_unmasked_supported_types = vec![
+        IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
+            random_transcript_id(rng),
+        )),
+        IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random),
+    ];
 
-    let quadruple = result.unwrap();
-    assert_eq!(quadruple.kappa_unmasked(), &kappa_unmasked);
-    assert_eq!(quadruple.lambda_masked(), &lambda_masked);
-    assert_eq!(quadruple.kappa_times_lambda(), &kappa_times_lambda);
-    assert_eq!(quadruple.key_times_lambda(), &key_times_lambda);
+    for kappa_unmasked_type in kappa_unmasked_supported_types {
+        kappa_unmasked.transcript_type = kappa_unmasked_type;
+
+        let result = PreSignatureQuadruple::new(
+            kappa_unmasked.clone(),
+            lambda_masked.clone(),
+            kappa_times_lambda.clone(),
+            key_times_lambda.clone(),
+        );
+        assert!(result.is_ok());
+
+        let quadruple = result.unwrap();
+        assert_eq!(quadruple.kappa_unmasked(), &kappa_unmasked);
+        assert_eq!(quadruple.lambda_masked(), &lambda_masked);
+        assert_eq!(quadruple.kappa_times_lambda(), &kappa_times_lambda);
+        assert_eq!(quadruple.key_times_lambda(), &key_times_lambda);
+    }
 }
 
 #[test]
@@ -82,24 +93,33 @@ fn should_not_create_quadruples_with_inconsistent_receivers() {
 fn should_not_create_quadruples_for_kappa_with_wrong_type() {
     let rng = &mut reproducible_rng();
     let common_receivers = set_of_nodes(&[1, 2, 3]);
-    let wrong_kappa_unmasked_type = IDkgTranscriptType::Unmasked(
-        IDkgUnmaskedTranscriptOrigin::ReshareUnmasked(random_transcript_id(rng)),
-    );
+    let kappa_unmasked_unsupported_types = vec![
+        IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareUnmasked(
+            random_transcript_id(rng),
+        )),
+        IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
+        IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(
+            random_transcript_id(rng),
+            random_transcript_id(rng),
+        )),
+    ];
 
-    let (mut kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda) =
-        transcripts_for_quadruple(common_receivers, rng);
-    assert_ne!(kappa_unmasked.transcript_type, wrong_kappa_unmasked_type);
-    kappa_unmasked.transcript_type = wrong_kappa_unmasked_type;
+    for wrong_kappa_unmasked_type in kappa_unmasked_unsupported_types {
+        let (mut kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda) =
+            transcripts_for_quadruple(common_receivers.clone(), rng);
+        assert_ne!(kappa_unmasked.transcript_type, wrong_kappa_unmasked_type);
+        kappa_unmasked.transcript_type = wrong_kappa_unmasked_type;
 
-    let quadruple = PreSignatureQuadruple::new(
-        kappa_unmasked.clone(),
-        lambda_masked,
-        kappa_times_lambda,
-        key_times_lambda,
-    );
-    assert_matches!(quadruple, Err(PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
-        if error == format!("`kappa_unmasked` transcript expected to have type `Unmasked` with `ReshareMasked` origin, but found transcript of type {:?}",kappa_unmasked.transcript_type)
-    );
+        let quadruple = PreSignatureQuadruple::new(
+            kappa_unmasked.clone(),
+            lambda_masked,
+            kappa_times_lambda,
+            key_times_lambda,
+        );
+        assert_matches!(quadruple, Err(PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
+            if error == format!("`kappa_unmasked` transcript expected to have type `Unmasked` with `ReshareMasked` or `Random` origin, but found transcript of type {:?}",kappa_unmasked.transcript_type)
+        );
+    }
 }
 
 #[test]
