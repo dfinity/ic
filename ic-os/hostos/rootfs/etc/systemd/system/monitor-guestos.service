@@ -7,6 +7,10 @@ After=generate-guestos-config.service
 After=guestos.service
 
 [Service]
+# Disable systemd start and stop logs
+LogLevelMax=1
+SysLogLevel=2
+
 Type=oneshot
 ExecStart=/opt/ic/bin/monitor-guestos.sh
 

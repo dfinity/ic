@@ -4,6 +4,10 @@ Requires=node_exporter.service
 After=node_exporter.service
 
 [Service]
+# Disable systemd start and stop logs
+LogLevelMax=1
+SysLogLevel=2
+
 Type=oneshot
 ExecStart=/opt/ic/bin/monitor-nvme.sh
 
