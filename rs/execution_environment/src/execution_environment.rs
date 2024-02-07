@@ -2324,7 +2324,11 @@ impl ExecutionEnvironment {
                                 format!("InstallChunkedCode Error: Store canister {} was not found on subnet {} of target canister {}", store_canister_id, state.metadata.own_subnet_id, args.target_canister_id()),
                             )
                         })?;
-                validate_controller(store_canister, &origin.origin())?;
+                // If the `store_canister` is different from the caller, we need
+                // to verify that the caller is a controller of the store.
+                if store_canister.canister_id().get() != origin.origin() {
+                    validate_controller(store_canister, &origin.origin())?;
+                }
                 InstallCodeContext::chunked_install(
                     origin,
                     args,
