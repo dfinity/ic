@@ -918,6 +918,7 @@ mod tests {
                     Randomness::from([0; 32]),
                     &derivation_path,
                     AlgorithmId::ThresholdEcdsaSecp256k1,
+                    false,
                     &mut rng,
                 );
                 let crypto = env
@@ -1270,6 +1271,7 @@ mod tests {
                     Randomness::from([0; 32]),
                     &derivation_path,
                     AlgorithmId::ThresholdEcdsaSecp256k1,
+                    false,
                     &mut rng,
                 );
 

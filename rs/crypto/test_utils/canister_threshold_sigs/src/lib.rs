@@ -219,6 +219,7 @@ pub fn generate_presig_quadruple<R: RngCore + CryptoRng>(
     receivers: &IDkgReceivers,
     alg: AlgorithmId,
     key_transcript: &IDkgTranscript,
+    random_unmasked_kappa: bool,
     rng: &mut R,
 ) -> PreSignatureQuadruple {
     let lambda_params = setup_masked_random_params(env, alg, dealers, receivers, rng);
@@ -226,7 +227,11 @@ pub fn generate_presig_quadruple<R: RngCore + CryptoRng>(
         .nodes
         .run_idkg_and_create_and_verify_transcript(&lambda_params, rng);
 
-    let kappa_transcript = {
+    let kappa_transcript = if random_unmasked_kappa {
+        let unmasked_kappa_params = setup_unmasked_random_params(env, alg, dealers, receivers, rng);
+        env.nodes
+            .run_idkg_and_create_and_verify_transcript(&unmasked_kappa_params, rng)
+    } else {
         let masked_kappa_params = setup_masked_random_params(env, alg, dealers, receivers, rng);
 
         let masked_kappa_transcript = env
@@ -1630,7 +1635,27 @@ impl std::fmt::Display for IDkgMode {
 }
 
 /// Returns an `IDkgTranscriptParams` appropriate for creating a random
-/// sharing in this environment.
+/// unmasked sharing in this environment.
+pub fn setup_unmasked_random_params<R: Rng + CryptoRng>(
+    env: &CanisterThresholdSigTestEnvironment,
+    algorithm_id: AlgorithmId,
+    dealers: &IDkgDealers,
+    receivers: &IDkgReceivers,
+    rng: &mut R,
+) -> IDkgTranscriptParams {
+    IDkgTranscriptParams::new(
+        random_transcript_id(rng),
+        dealers.get().clone(),
+        receivers.get().clone(),
+        env.newest_registry_version,
+        algorithm_id,
+        IDkgTranscriptOperation::RandomUnmasked,
+    )
+    .expect("failed to create random IDkgTranscriptParams")
+}
+
+/// Returns an `IDkgTranscriptParams` appropriate for creating a random
+/// masked sharing in this environment.
 pub fn setup_masked_random_params<R: Rng + CryptoRng>(
     env: &CanisterThresholdSigTestEnvironment,
     algorithm_id: AlgorithmId,
@@ -1832,10 +1857,18 @@ pub fn generate_tecdsa_protocol_inputs<R: RngCore + CryptoRng>(
     nonce: Randomness,
     derivation_path: &ExtendedDerivationPath,
     algorithm_id: AlgorithmId,
+    random_unmasked_kappa: bool,
     rng: &mut R,
 ) -> ThresholdEcdsaSigInputs {
-    let quadruple =
-        generate_presig_quadruple(env, dealers, receivers, algorithm_id, key_transcript, rng);
+    let quadruple = generate_presig_quadruple(
+        env,
+        dealers,
+        receivers,
+        algorithm_id,
+        key_transcript,
+        random_unmasked_kappa,
+        rng,
+    );
 
     ThresholdEcdsaSigInputs::new(
         derivation_path,

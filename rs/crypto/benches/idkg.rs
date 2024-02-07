@@ -4,10 +4,10 @@ use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion, Samp
 use ic_crypto_test_utils_canister_threshold_sigs::node::{Node, Nodes};
 use ic_crypto_test_utils_canister_threshold_sigs::{
     build_params_from_previous, create_transcript_or_panic,
-    generate_and_verify_openings_for_complaint, load_previous_transcripts_for_all_dealers,
-    load_transcript_or_panic, random_transcript_id, run_idkg_without_complaint,
-    setup_masked_random_params, CanisterThresholdSigTestEnvironment, IDkgMode, IDkgModeTestContext,
-    IDkgParticipants, IDkgTestContextForComplaint,
+    generate_and_verify_openings_for_complaint, generate_presig_quadruple,
+    load_previous_transcripts_for_all_dealers, load_transcript_or_panic, random_transcript_id,
+    run_idkg_without_complaint, setup_masked_random_params, CanisterThresholdSigTestEnvironment,
+    IDkgMode, IDkgModeTestContext, IDkgParticipants, IDkgTestContextForComplaint,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_interfaces::crypto::IDkgProtocol;
@@ -367,14 +367,17 @@ fn bench_retain_active_transcripts<M: Measurement, R: RngCore + CryptoRng>(
             bench.iter_batched(
                 || {
                     for _ in 0..num_pre_sig_quadruples {
-                        let pre_sig_quadruple = generate_pre_sig_quadruple(
-                            &env,
-                            test_case.alg(),
-                            &dealers,
-                            &receivers,
-                            key_transcript.clone(),
-                            rng,
-                        );
+                        let pre_sig_quadruple = {
+                            generate_presig_quadruple(
+                                &env,
+                                &dealers,
+                                &receivers,
+                                test_case.alg(),
+                                &key_transcript,
+                                false,
+                                rng,
+                            )
+                        };
                         load_pre_signature_quadruple(receiver, &pre_sig_quadruple);
                     }
                 },
@@ -668,62 +671,6 @@ fn generate_key_transcript<R: RngCore + CryptoRng>(
     );
 
     run_idkg_without_complaint(&unmasked_key_params, &env.nodes, rng)
-}
-
-fn generate_pre_sig_quadruple<R: RngCore + CryptoRng>(
-    env: &CanisterThresholdSigTestEnvironment,
-    alg: AlgorithmId,
-    dealers: &IDkgDealers,
-    receivers: &IDkgReceivers,
-    key_transcript: IDkgTranscript,
-    rng: &mut R,
-) -> PreSignatureQuadruple {
-    let lambda_params = setup_masked_random_params(env, alg, dealers, receivers, rng);
-    let lambda_transcript = run_idkg_without_complaint(&lambda_params, &env.nodes, rng);
-
-    let kappa_transcript = {
-        let masked_kappa_params = setup_masked_random_params(env, alg, dealers, receivers, rng);
-        let masked_kappa_transcript =
-            run_idkg_without_complaint(&masked_kappa_params, &env.nodes, rng);
-
-        let unmasked_kappa_params = build_params_from_previous(
-            masked_kappa_params,
-            IDkgTranscriptOperation::ReshareOfMasked(masked_kappa_transcript),
-            rng,
-        );
-        run_idkg_without_complaint(&unmasked_kappa_params, &env.nodes, rng)
-    };
-
-    let kappa_times_lambda_transcript = {
-        let kappa_times_lambda_params = build_params_from_previous(
-            lambda_params.clone(),
-            IDkgTranscriptOperation::UnmaskedTimesMasked(
-                kappa_transcript.clone(),
-                lambda_transcript.clone(),
-            ),
-            rng,
-        );
-
-        run_idkg_without_complaint(&kappa_times_lambda_params, &env.nodes, rng)
-    };
-
-    let key_times_lambda_transcript = {
-        let key_times_lambda_params = build_params_from_previous(
-            lambda_params,
-            IDkgTranscriptOperation::UnmaskedTimesMasked(key_transcript, lambda_transcript.clone()),
-            rng,
-        );
-
-        run_idkg_without_complaint(&key_times_lambda_params, &env.nodes, rng)
-    };
-
-    PreSignatureQuadruple::new(
-        kappa_transcript,
-        lambda_transcript,
-        kappa_times_lambda_transcript,
-        key_times_lambda_transcript,
-    )
-    .unwrap_or_else(|error| panic!("failed to create pre-signature quadruple: {:?}", error))
 }
 
 fn other_receiver_or_same_if_only_one<'a, R: RngCore + CryptoRng>(

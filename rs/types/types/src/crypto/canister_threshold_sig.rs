@@ -121,7 +121,8 @@ impl PreSignatureQuadruple {
     /// * All transcripts use the same algorithm ID (error: `InconsistentAlgorithms`)
     /// * All transcripts have the same receiver set (error: `InconsistentReceivers`)
     /// * The `kappa_unmasked` transcript is of type `Unmasked` with origin
-    ///   `ReshareMasked` (error: `InvalidTranscriptOrigin`)
+    ///   `IDkgUnmaskedTranscriptOrigin::ReshareMasked` or
+    ///   `IDkgUnmaskedTranscriptOrigin::Random` (error: `InvalidTranscriptOrigin`)
     /// * The `lambda_masked` transcript is of type `Masked` with origin
     ///   `Random` (error: `InvalidTranscriptOrigin`)
     /// * The `kappa_times_lambda` transcript is of type `Masked` with origin
@@ -228,9 +229,10 @@ impl PreSignatureQuadruple {
         kappa_unmasked: &IDkgTranscript,
     ) -> Result<(), error::PresignatureQuadrupleCreationError> {
         match &kappa_unmasked.transcript_type {
-            IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(_)) => Ok(()),
+            IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(_)) |
+             IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random) => Ok(()),
             _ => Err(error::PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(
-                format!("`kappa_unmasked` transcript expected to have type `Unmasked` with `ReshareMasked` origin, but found transcript of type {:?}", kappa_unmasked.transcript_type))
+                format!("`kappa_unmasked` transcript expected to have type `Unmasked` with `ReshareMasked` or `Random` origin, but found transcript of type {:?}", kappa_unmasked.transcript_type))
             ),
         }
     }

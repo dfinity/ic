@@ -72,6 +72,7 @@ fn bench_sign_share<M: Measurement, R: RngCore + CryptoRng>(
                     seed,
                     &derivation_path,
                     test_case.alg(),
+                    false,
                     rng,
                 );
                 signer.load_input_transcripts(&inputs);
@@ -118,6 +119,7 @@ fn bench_verify_sig_share<M: Measurement, R: RngCore + CryptoRng>(
                     seed,
                     &derivation_path,
                     test_case.alg(),
+                    false,
                     rng,
                 );
                 let signer = env
@@ -181,6 +183,7 @@ fn bench_combine_sig_shares<M: Measurement, R: RngCore + CryptoRng>(
                     seed,
                     &derivation_path,
                     test_case.alg(),
+                    false,
                     rng,
                 );
                 let sig_shares = sig_share_from_each_receiver(&env, &inputs);
@@ -234,6 +237,7 @@ fn bench_verify_combined_sig<M: Measurement, R: RngCore + CryptoRng>(
                     seed,
                     &derivation_path,
                     test_case.alg(),
+                    false,
                     rng,
                 );
                 let sig_shares = sig_share_from_each_receiver(&env, &inputs);
