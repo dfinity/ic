@@ -47,9 +47,7 @@ use itertools::Itertools;
 use on_wire::FromWire;
 use slog::{debug, info};
 use std::collections::BTreeMap;
-use std::fs::File;
 use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6};
-use std::path::PathBuf;
 use std::{
     convert::{TryFrom, TryInto},
     fmt::Debug,
@@ -76,9 +74,6 @@ pub(crate) const MESSAGE_CANISTER_WASM: &[u8] = include_bytes!("message.wasm");
 
 pub(crate) const CFG_TEMPLATE_BYTES: &[u8] =
     include_bytes!("../../../ic-os/guestos/rootfs/opt/ic/share/ic.json5.template");
-
-pub(crate) const IPV6_PREFIXES_PATH: &str =
-    "./root_env/dependencies/rs/tests/src//ipv6_prefixes.json";
 
 pub fn get_identity() -> ic_agent::identity::BasicIdentity {
     ic_agent::identity::BasicIdentity::from_pem(IDENTITY_PEM.as_bytes())
@@ -1289,29 +1284,20 @@ pub(crate) fn escape_for_wat(id: &Principal) -> String {
 }
 
 pub fn get_config() -> ConfigOptional {
-    let ipv6_prefixes: Vec<String> =
-        serde_json::from_reader(File::open(PathBuf::from(IPV6_PREFIXES_PATH)).unwrap()).unwrap();
-    let ipv6_prefixes = format!(
-        "[{}]",
-        ipv6_prefixes
-            .iter()
-            .map(|s| format!("\"{s}\""))
-            .collect::<Vec<_>>()
-            .join(", "),
-    );
     // Make the string parsable by filling the template placeholders with dummy values
     let cfg = String::from_utf8_lossy(CFG_TEMPLATE_BYTES)
         .to_string()
         .replace("{{ node_index }}", "0")
         .replace("{{ ipv6_address }}", "::")
-        .replace("{{ ipv6_prefixes }}", &ipv6_prefixes)
         .replace("{{ backup_retention_time_secs }}", "0")
         .replace("{{ backup_purging_interval_secs }}", "0")
         .replace("{{ replica_log_debug_overrides }}", "[]")
         .replace("{{ nns_url }}", "http://www.fakeurl.com/")
         .replace("{{ malicious_behavior }}", "null")
         .replace("{{ query_stats_aggregation }}", "\"Disabled\"")
-        .replace("{{ query_stats_epoch_length }}", "1800");
+        .replace("{{ query_stats_epoch_length }}", "1800")
+        // Confirm that config is valid when no prefixes are specified.
+        .replace("{{ ipv6_whitelist }}", "");
 
     json5::from_str::<ConfigOptional>(&cfg).expect("Could not parse json5")
 }

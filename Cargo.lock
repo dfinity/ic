@@ -12833,7 +12833,6 @@ dependencies = [
  "ic-types",
  "reqwest",
  "serde",
- "serde_json",
  "slog",
  "slog-async",
  "slog-term",
