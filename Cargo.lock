@@ -5487,6 +5487,7 @@ dependencies = [
  "ic-embedders",
  "ic-interfaces",
  "ic-logger",
+ "ic-metrics",
  "ic-registry-routing-table",
  "ic-registry-subnet-type",
  "ic-replicated-state",
@@ -5496,16 +5497,24 @@ dependencies = [
  "ic-types",
  "ic-utils 0.9.0",
  "ic-wasm-types",
+ "lazy_static",
  "libc",
  "libflate",
  "memory_tracker",
  "mockall",
  "nix 0.24.3",
+ "once_cell",
+ "prometheus",
  "rayon",
+ "regex",
  "serde_json",
  "slog",
+ "slog-async",
+ "slog-term",
+ "tempfile",
  "threadpool",
  "wat",
+ "which",
 ]
 
 [[package]]
@@ -5526,38 +5535,6 @@ dependencies = [
  "nix 0.24.3",
  "serde",
  "serde_bytes",
-]
-
-[[package]]
-name = "ic-canister-sandbox-replica-controller"
-version = "0.9.0"
-dependencies = [
- "ic-canister-sandbox-backend-lib",
- "ic-canister-sandbox-common",
- "ic-config",
- "ic-embedders",
- "ic-interfaces",
- "ic-logger",
- "ic-metrics",
- "ic-replicated-state",
- "ic-sys",
- "ic-system-api",
- "ic-test-utilities",
- "ic-types",
- "ic-wasm-types",
- "lazy_static",
- "libc",
- "nix 0.24.3",
- "once_cell",
- "prometheus",
- "regex",
- "serde_json",
- "slog",
- "slog-async",
- "slog-term",
- "tempfile",
- "wat",
- "which",
 ]
 
 [[package]]
@@ -7502,7 +7479,7 @@ dependencies = [
  "ic-base-types",
  "ic-btc-interface",
  "ic-btc-test-utils",
- "ic-canister-sandbox-replica-controller",
+ "ic-canister-sandbox-backend-lib",
  "ic-config",
  "ic-constants",
  "ic-crypto-prng",

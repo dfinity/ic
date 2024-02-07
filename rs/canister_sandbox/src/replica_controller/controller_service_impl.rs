@@ -15,8 +15,8 @@ use ic_canister_sandbox_common::protocol;
 use ic_canister_sandbox_common::rpc;
 use ic_logger::{debug, error, info, trace, ReplicaLogger};
 
-use crate::active_execution_state_registry::ActiveExecutionStateRegistry;
-use crate::active_execution_state_registry::CompletionResult;
+use super::active_execution_state_registry::ActiveExecutionStateRegistry;
+use super::active_execution_state_registry::CompletionResult;
 
 use std::sync::Arc;
 

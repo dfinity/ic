@@ -1,4 +1,4 @@
-use ic_canister_sandbox_replica_controller::sandboxed_execution_controller::SandboxedExecutionController;
+use ic_canister_sandbox_backend_lib::replica_controller::sandboxed_execution_controller::SandboxedExecutionController;
 use ic_config::execution_environment::{Config, MAX_COMPILATION_CACHE_SIZE};
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::CyclesAccountManager;
