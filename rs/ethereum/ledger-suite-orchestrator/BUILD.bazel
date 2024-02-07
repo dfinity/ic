@@ -108,7 +108,7 @@ rust_test(
     data = [
         "ledger_suite_orchestrator_canister.wasm",
         "//rs/canister_sandbox",
-        "//rs/canister_sandbox/sandbox_launcher",
+        "//rs/canister_sandbox:sandbox_launcher",
         "//rs/rosetta-api/icrc1/archive:archive_canister_u256.wasm.gz",
         "//rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256.wasm.gz",
         "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm.gz",
@@ -119,7 +119,7 @@ rust_test(
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm.gz)",
         "INDEX_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256.wasm.gz)",
         "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/archive:archive_canister_u256.wasm.gz)",
-        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
         "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     },
     proc_macro_deps = [

@@ -2,9 +2,9 @@
 
 use clap::Parser;
 use ic_canister_sandbox_backend_lib::{
-    canister_sandbox_main, RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_SANDBOX_LAUNCHER_FLAG,
+    canister_sandbox_main, launcher::sandbox_launcher_main, RUN_AS_CANISTER_SANDBOX_FLAG,
+    RUN_AS_SANDBOX_LAUNCHER_FLAG,
 };
-use ic_canister_sandbox_launcher::sandbox_launcher_main;
 use ic_replay::cmd::ReplayToolArgs;
 use ic_replay::replay;
 

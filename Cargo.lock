@@ -5516,17 +5516,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-canister-sandbox-launcher"
-version = "0.9.0"
-dependencies = [
- "cc",
- "ic-canister-sandbox-common",
- "ic-test-utilities",
- "ic-types",
- "nix 0.24.3",
-]
-
-[[package]]
 name = "ic-canister-sandbox-replica-controller"
 version = "0.9.0"
 dependencies = [
@@ -7380,7 +7369,6 @@ dependencies = [
  "clap 3.2.25",
  "hex",
  "ic-canister-sandbox-backend-lib",
- "ic-canister-sandbox-launcher",
  "ic-config",
  "ic-cycles-account-manager",
  "ic-error-types",
@@ -9708,7 +9696,6 @@ dependencies = [
  "ic-artifact-pool",
  "ic-base-types",
  "ic-canister-sandbox-backend-lib",
- "ic-canister-sandbox-launcher",
  "ic-config",
  "ic-crypto-utils-threshold-sig-der",
  "ic-cup-explorer",
@@ -10037,7 +10024,6 @@ dependencies = [
  "ic-artifact-pool",
  "ic-canister-client",
  "ic-canister-sandbox-backend-lib",
- "ic-canister-sandbox-launcher",
  "ic-config",
  "ic-consensus",
  "ic-consensus-utils",

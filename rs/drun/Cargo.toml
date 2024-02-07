@@ -8,7 +8,6 @@ documentation.workspace = true
 
 [dependencies]
 ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
-ic-canister-sandbox-launcher = { path = "../canister_sandbox/sandbox_launcher" }
 ic-config = { path = "../config" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-error-types = { path = "../types/error_types" }

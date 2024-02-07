@@ -56,7 +56,6 @@ rust_binary(
     deps = DEPENDENCIES + [
         ":subnet_splitting",
         "//rs/canister_sandbox:backend_lib",
-        "//rs/canister_sandbox/sandbox_launcher:sandbox_launcher_lib",
     ],
 )
 

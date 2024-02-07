@@ -78,3 +78,11 @@ rust_binary(
         "@crate_index//:libc",
     ],
 )
+
+# `sandbox_launcher` executable name referenced by code and other scripts.
+# Therefore reserve that name for the rust binary.
+rust_binary(
+    name = "sandbox_launcher",
+    srcs = ["bin/sandbox_launcher.rs"],
+    deps = [":backend_lib"],
+)
