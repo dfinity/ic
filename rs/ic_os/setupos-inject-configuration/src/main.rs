@@ -34,6 +34,9 @@ struct Cli {
 
     #[command(flatten)]
     deployment: DeploymentConfig,
+
+    #[arg(long)]
+    default_firewall_whitelist_path: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -118,6 +121,17 @@ async fn main() -> Result<(), Error> {
             .write_file(public_keys.path(), Path::new("/ssh_authorized_keys/admin"))
             .await
             .context("failed to copy public keys")?;
+    }
+
+    // Update default firewall whitelist
+    if let Some(default_firewall_whitelist_path) = cli.default_firewall_whitelist_path {
+        config
+            .write_file(
+                &default_firewall_whitelist_path,
+                Path::new("/default_firewall_whitelist.conf"),
+            )
+            .await
+            .context("failed to copy default firewall config")?;
     }
 
     // Close config partition

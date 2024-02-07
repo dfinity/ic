@@ -115,6 +115,9 @@ function assemble_config_media() {
     if [ -f "/boot/config/node_operator_private_key.pem" ]; then
         cmd+=(--node_operator_private_key "/boot/config/node_operator_private_key.pem")
     fi
+    if [ -f "/boot/config/default_firewall_whitelist.conf" ]; then
+        cmd+=(--default_firewall_whitelist "/boot/config/default_firewall_whitelist.conf")
+    fi
 
     # Run the above command
     "${cmd[@]}"

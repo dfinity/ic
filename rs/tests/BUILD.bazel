@@ -96,7 +96,7 @@ exports_files([
 ])
 
 exports_files([
-    "src/ipv6_prefixes.json",
+    "src/default_firewall_whitelist.conf",
 ])
 
 filegroup(

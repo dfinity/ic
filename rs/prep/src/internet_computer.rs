@@ -388,14 +388,15 @@ impl IcConfig {
         let mut mutations = self.initial_mutations.clone();
 
         if let Some(prefixes) = self.whitelisted_prefixes {
-            let ports = if let Some(ports) = self.whitelisted_ports {
-                ports
+            // Port 8080 is always included.
+            let mut ports = vec![8080];
+
+            if let Some(additional_ports) = self.whitelisted_ports {
+                ports = additional_ports
                     .split(',')
-                    .map(|port| port.parse::<u32>().unwrap())
-                    .chain(std::iter::once(8080))
+                    .map(|port| port.trim().parse::<u32>().unwrap())
+                    .chain(ports)
                     .collect()
-            } else {
-                vec![8080]
             };
 
             mutations.extend(vec![insert(
@@ -403,7 +404,7 @@ impl IcConfig {
                 encode_or_panic(&FirewallRuleSet {
                     entries: vec![FirewallRule {
                         ipv4_prefixes: Vec::new(),
-                        ipv6_prefixes: prefixes.split(',').map(|v| v.to_string()).collect(),
+                        ipv6_prefixes: prefixes.split(',').map(|v| v.trim().to_string()).collect(),
                         ports,
                         action: FirewallAction::Allow as i32,
                         comment: "Globally allow provided prefixes for testing".to_string(),

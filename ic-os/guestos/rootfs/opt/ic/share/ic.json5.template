@@ -267,7 +267,7 @@ table ip6 filter {\n\
         ipv6_user_output_rule_template: "meta skuid <<USER>> ip6 daddr {<<IPv6_PREFIXES>>} ct state { new } tcp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
         default_rules: [{
           ipv4_prefixes: [],
-          ipv6_prefixes: {{ ipv6_prefixes }},
+          ipv6_prefixes: [{{ ipv6_whitelist }}],
           ports: [22, 2497, 4100, 7070, 8080, 9090, 9091, 9100, 19100, 19531],
           action: 1,
           comment: "Default rule from template",

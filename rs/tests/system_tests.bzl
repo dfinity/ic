@@ -154,9 +154,6 @@ def system_test(
         **kwargs
     )
 
-    # Every system test has this dependency
-    runtime_deps = runtime_deps + ["//rs/tests:src/ipv6_prefixes.json"]
-
     # Automatically detect system tests that use guestos dev for back compatibility.
     for _d in runtime_deps:
         if _d == GUESTOS_DEV_VERSION:
