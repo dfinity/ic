@@ -106,35 +106,19 @@ impl Health for ProxyRouter {
 
 #[tokio::test]
 async fn test_middleware_validate_request() -> Result<(), Error> {
-    let root_key = vec![8, 6, 7, 5, 3, 0, 9];
-
-    let proxy_router = Arc::new(ProxyRouter {
-        root_key: root_key.clone(),
-        health: Arc::new(Mutex::new(ReplicaHealthStatus::Healthy)),
-    });
-
-    let (state_rootkey, state_health) = (
-        proxy_router.clone() as Arc<dyn RootKey>,
-        proxy_router.clone() as Arc<dyn Health>,
+    let mut app = Router::new().route(PATH_QUERY, get(|| async {})).layer(
+        ServiceBuilder::new()
+            .layer(middleware::from_fn(validate_request))
+            .set_x_request_id(MakeRequestUuid)
+            .propagate_x_request_id(),
     );
 
-    // NOTE: this router should be aligned with the one in core.rs, otherwise this testing is useless.
-    let mut app = Router::new()
-        .route(
-            PATH_STATUS,
-            get(status).with_state((state_rootkey, state_health)),
-        )
-        .layer(
-            ServiceBuilder::new()
-                .layer(middleware::from_fn(validate_request))
-                .set_x_request_id(MakeRequestUuid)
-                .propagate_x_request_id(),
-        );
+    let url = "http://localhost/api/v2/canister/a/query";
 
     // case 1: no 'x-request-id' header, middleware generates one with a random uuid
     let request = Request::builder()
         .method("GET")
-        .uri("http://localhost/api/v2/status")
+        .uri(url)
         .body(Body::from(""))
         .unwrap();
     let resp = app.call(request).await.unwrap();
@@ -150,7 +134,7 @@ async fn test_middleware_validate_request() -> Result<(), Error> {
     // case 2: 'x-request-id' header contains a valid uuid, this uuid is not overwritten by middleware
     let request = Request::builder()
         .method("GET")
-        .uri("http://localhost/api/v2/status")
+        .uri(url)
         .header(HEADER_X_REQUEST_ID, "40a6d613-149e-4bde-8443-33593fd2fd17")
         .body(Body::from(""))
         .unwrap();
@@ -160,14 +144,16 @@ async fn test_middleware_validate_request() -> Result<(), Error> {
         resp.headers().get(HEADER_X_REQUEST_ID).unwrap(),
         "40a6d613-149e-4bde-8443-33593fd2fd17"
     );
+
     // case 3: 'x-request-id' header contains an invalid uuid
     #[allow(clippy::borrow_interior_mutable_const)]
     let expected_failure = format!(
         "malformed_request: value of '{HEADER_X_REQUEST_ID}' header is not in UUID format\n"
     );
+
     let request = Request::builder()
         .method("GET")
-        .uri("http://localhost/api/v2/status")
+        .uri(url)
         .header(HEADER_X_REQUEST_ID, "1")
         .body(Body::from(""))
         .unwrap();
@@ -176,10 +162,11 @@ async fn test_middleware_validate_request() -> Result<(), Error> {
     let body = hyper::body::to_bytes(resp).await.unwrap().to_vec();
     let body = String::from_utf8_lossy(&body);
     assert_eq!(body, expected_failure);
+
     // case 4: 'x-request-id' header contains an invalid (not hyphenated) uuid
     let request = Request::builder()
         .method("GET")
-        .uri("http://localhost/api/v2/status")
+        .uri(url)
         .header(HEADER_X_REQUEST_ID, "40a6d613149e4bde844333593fd2fd17")
         .body(Body::from(""))
         .unwrap();
@@ -188,10 +175,11 @@ async fn test_middleware_validate_request() -> Result<(), Error> {
     let body = hyper::body::to_bytes(resp).await.unwrap().to_vec();
     let body = String::from_utf8_lossy(&body);
     assert_eq!(body, expected_failure);
+
     // case 5: 'x-request-id' header is empty
     let request = Request::builder()
         .method("GET")
-        .uri("http://localhost/api/v2/status")
+        .uri(url)
         .header(HEADER_X_REQUEST_ID, "")
         .body(Body::from(""))
         .unwrap();
@@ -266,8 +254,7 @@ async fn test_status() -> Result<(), Error> {
         .layer(middleware::from_fn_with_state(
             metric_params,
             metrics_middleware_status,
-        ))
-        .layer(middleware::from_fn(validate_request));
+        ));
 
     // Test healthy
     let request = Request::builder()

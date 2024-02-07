@@ -31,6 +31,38 @@ server {
         try_files /dev/null @raw;
     }
 
+    location = /api/v2/status {
+        # Observability
+        include "includes/request_id.conf";
+
+        include "includes/method_get.conf";
+        return 307 $scheme://$primary_domain$request_uri;
+    }
+
+    location ~ /api/v2/canister/[0-9a-zA-Z\-]+/query {
+        # Observability
+        include "includes/request_id.conf";
+
+        include "includes/method_post.conf";
+        return 307 $scheme://$primary_domain$request_uri;
+    }
+
+    location ~ /api/v2/canister/[0-9a-zA-Z\-]+/call {
+        # Observability
+        include "includes/request_id.conf";
+
+        include "includes/method_post.conf";
+        return 307 $scheme://$primary_domain$request_uri;
+    }
+
+    location ~ /api/v2/canister/[0-9a-zA-Z\-]+/read_state {
+        # Observability
+        include "includes/request_id.conf";
+
+        include "includes/method_post.conf";
+        return 307 $scheme://$primary_domain$request_uri;
+    }
+
     location @raw {
         # Observability
         include "includes/request_id.conf";

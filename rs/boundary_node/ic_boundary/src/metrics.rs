@@ -38,7 +38,7 @@ use crate::{
     cache::{Cache, CacheStatus},
     core::Run,
     retry::RetryResult,
-    routes::{ErrorCause, RequestContext},
+    routes::{ErrorCause, RequestContext, RequestType},
     snapshot::{Node, RegistrySnapshot},
 };
 
@@ -633,6 +633,13 @@ pub async fn metrics_middleware(
         .get::<ConnectInfo<SocketAddr>>()
         .cloned();
 
+    let request_type = &request
+        .extensions()
+        .get::<RequestType>()
+        .cloned()
+        .unwrap_or_default();
+    let request_type: &'static str = request_type.into();
+
     // Perform the request & measure duration
     let start_time = Instant::now();
     let response = next.run(request).await;
@@ -656,7 +663,6 @@ pub async fn metrics_middleware(
         .unwrap_or_default();
 
     // Prepare fields
-    let request_type = ctx.request_type.to_string();
     let status_code = response.status();
     let sender = ctx.sender.map(|x| x.to_string());
     let node_id = node.as_ref().map(|x| x.id.to_string());
@@ -711,7 +717,7 @@ pub async fn metrics_middleware(
 
         // Average cardinality up to 150k
         let labels = &[
-            request_type.as_str(),            // x3
+            request_type,                     // x3
             status_code.as_str(),             // x27 but usually x8
             subnet_id_lbl.as_str(),           // x37 as of now
             error_cause_lbl.as_str(),         // x15 but usually x6
@@ -746,7 +752,7 @@ pub async fn metrics_middleware(
             info!(
                 action,
                 request_id,
-                request_type = ctx.request_type.to_string(),
+                request_type,
                 error_cause,
                 error_details,
                 status = status_code.as_u16(),

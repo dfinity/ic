@@ -30,7 +30,7 @@ use ic_types::{
 use lazy_static::lazy_static;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use strum::Display;
+use strum::{Display, IntoStaticStr};
 use tower_governor::errors::GovernorError;
 use url::Url;
 
@@ -95,24 +95,15 @@ lazy_static! {
 }
 
 // Type of IC request
-#[derive(Default, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Default, Clone, Copy, PartialEq, Eq, Hash, Display, IntoStaticStr)]
+#[strum(serialize_all = "snake_case")]
 pub enum RequestType {
     #[default]
+    Unknown,
     Status,
     Query,
     Call,
     ReadState,
-}
-
-impl fmt::Display for RequestType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Status => write!(f, "status"),
-            Self::Query => write!(f, "query"),
-            Self::Call => write!(f, "call"),
-            Self::ReadState => write!(f, "read_state"),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Display)]
@@ -128,7 +119,9 @@ pub enum RateLimitCause {
 pub enum ErrorCause {
     UnableToReadBody(String),
     PayloadTooLarge(usize),
-    UnableToParseCBOR(String), // TODO just use MalformedRequest?
+    UnableToParseCBOR(String),
+    UnableToParseHTTPArg(String),
+    LoadShed,
     MalformedRequest(String),
     MalformedResponse(String),
     NoRoutingTable,
@@ -151,6 +144,8 @@ impl ErrorCause {
             Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
             Self::UnableToReadBody(_) => StatusCode::REQUEST_TIMEOUT,
             Self::UnableToParseCBOR(_) => StatusCode::BAD_REQUEST,
+            Self::UnableToParseHTTPArg(_) => StatusCode::BAD_REQUEST,
+            Self::LoadShed => StatusCode::TOO_MANY_REQUESTS,
             Self::MalformedRequest(_) => StatusCode::BAD_REQUEST,
             Self::MalformedResponse(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Self::NoRoutingTable => StatusCode::SERVICE_UNAVAILABLE,
@@ -172,6 +167,8 @@ impl ErrorCause {
             Self::PayloadTooLarge(x) => Some(format!("maximum body size is {x} bytes")),
             Self::UnableToReadBody(x) => Some(x.clone()),
             Self::UnableToParseCBOR(x) => Some(x.clone()),
+            Self::UnableToParseHTTPArg(x) => Some(x.clone()),
+            Self::LoadShed => Some("Overloaded".into()),
             Self::MalformedRequest(x) => Some(x.clone()),
             Self::MalformedResponse(x) => Some(x.clone()),
             Self::ReplicaErrorDNS(x) => Some(x.clone()),
@@ -200,6 +197,8 @@ impl fmt::Display for ErrorCause {
             Self::UnableToReadBody(_) => write!(f, "unable_to_read_body"),
             Self::PayloadTooLarge(_) => write!(f, "payload_too_large"),
             Self::UnableToParseCBOR(_) => write!(f, "unable_to_parse_cbor"),
+            Self::UnableToParseHTTPArg(_) => write!(f, "unable_to_parse_http_arg"),
+            Self::LoadShed => write!(f, "load_shed"),
             Self::MalformedRequest(_) => write!(f, "malformed_request"),
             Self::MalformedResponse(_) => write!(f, "malformed_response"),
             Self::NoRoutingTable => write!(f, "no_routing_table"),
@@ -509,9 +508,19 @@ impl From<BoxError> for ApiError {
 }
 
 pub async fn validate_request(
-    request: Request<Body>,
+    matched_path: MatchedPath,
+    mut request: Request<Body>,
     next: Next<Body>,
 ) -> Result<impl IntoResponse, ApiError> {
+    let request_type = match matched_path.as_str() {
+        PATH_QUERY => RequestType::Query,
+        PATH_CALL => RequestType::Call,
+        PATH_READ_STATE => RequestType::ReadState,
+        _ => panic!("unknown path, should never happen"),
+    };
+
+    request.extensions_mut().insert(request_type);
+
     if let Some(id_header) = request.headers().get(HEADER_X_REQUEST_ID) {
         let is_valid_id = id_header
             .to_str()
@@ -531,19 +540,11 @@ pub async fn validate_request(
 
 // Middleware: preprocess the request before handing it over to handlers
 pub async fn preprocess_request(
+    Extension(request_type): Extension<RequestType>,
     canister_id: Path<String>,
-    matched_path: MatchedPath,
     request: Request<Body>,
     next: Next<Body>,
 ) -> Result<impl IntoResponse, ApiError> {
-    // Derive request type, status call never ends up here
-    let request_type = match matched_path.as_str() {
-        PATH_QUERY => RequestType::Query,
-        PATH_CALL => RequestType::Call,
-        PATH_READ_STATE => RequestType::ReadState,
-        _ => panic!("unknown path, should never happen"),
-    };
-
     // Decode canister_id from URL
     let canister_id = CanisterId::from_str(&canister_id).map_err(|err| {
         ErrorCause::MalformedRequest(format!("Unable to decode canister_id from URL: {err}"))
@@ -563,7 +564,7 @@ pub async fn preprocess_request(
         (Some(method), Some(arg)) => {
             if request_type == RequestType::Query && method == METHOD_HTTP {
                 let mut req: HttpRequest = Decode!(&arg.0, HttpRequest).map_err(|err| {
-                    ErrorCause::UnableToParseCBOR(format!(
+                    ErrorCause::UnableToParseHTTPArg(format!(
                         "unable to decode arg as HttpRequest: {err}"
                     ))
                 })?;
