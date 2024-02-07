@@ -66,6 +66,7 @@ use ic_types::{
         extract_effective_canister_id, AnonymousQuery, CanisterCall, CanisterCallOrTask,
         CanisterMessage, CanisterMessageOrTask, CanisterTask, Payload, RejectContext, Request,
         Response, SignedIngressContent, StopCanisterCallId, StopCanisterContext,
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     },
     methods::SystemMethod,
     nominal_cycles::NominalCycles,
@@ -3269,6 +3270,11 @@ pub fn execute_canister(
         },
         None => {
             let message = canister.pop_input().unwrap();
+            if let CanisterMessage::Request(req) = &message {
+                if req.payload_size_bytes() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES {
+                    exec_env.metrics.oversize_intra_subnet_messages.inc();
+                }
+            }
             (CanisterMessageOrTask::Message(message), None)
         }
     };
