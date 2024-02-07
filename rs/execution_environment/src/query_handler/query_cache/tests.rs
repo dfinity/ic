@@ -954,6 +954,7 @@ fn query_cache_composite_queries_return_the_same_result() {
     assert_eq!(1, m.hits_with_ignored_time.get());
     assert_eq!(1, m.hits_with_ignored_canister_balance.get());
     assert_eq!(0, m.invalidated_entries_by_nested_call.get());
+    assert_eq!(0, m.invalidated_entries_by_transient_error.get());
     assert_eq!(res_1, res_2);
 }
 
@@ -982,6 +983,7 @@ fn query_cache_composite_queries_return_different_results_after_expiry_time() {
     assert_eq!(2, m.misses.get());
     assert_eq!(0, m.hits.get());
     assert_eq!(0, m.invalidated_entries_by_nested_call.get());
+    assert_eq!(0, m.invalidated_entries_by_transient_error.get());
     assert_eq!(res_1, res_2);
 }
 
@@ -1013,6 +1015,35 @@ fn query_cache_nested_queries_never_get_cached() {
     assert_eq!(2, m.misses.get());
     assert_eq!(0, m.hits.get());
     assert_eq!(2, m.invalidated_entries_by_nested_call.get());
+    assert_eq!(0, m.invalidated_entries_by_transient_error.get());
+    assert_eq!(res_1, res_2);
+}
+
+#[test]
+fn query_cache_transient_errors_never_get_cached() {
+    let mut test = builder_with_query_caching().build();
+    let a_id = test.universal_canister().unwrap();
+    // The query explicitly traps.
+    let q = wasm().trap().build();
+
+    // Run the query for the first time.
+    let res_1 = test.non_replicated_query(a_id, "query", q.clone());
+    // Assert it's a miss.
+    let m = query_cache_metrics(&test);
+    assert_eq!(1, m.misses.get());
+    assert_eq!(0, m.hits.get());
+    assert!(res_1.is_err());
+
+    // Do not change balance or time.
+
+    // Run the same query for the second time.
+    let res_2 = test.non_replicated_query(a_id, "query", q);
+    // Assert it's a miss again, despite there were no changes.
+    let m = query_cache_metrics(&test);
+    assert_eq!(2, m.misses.get());
+    assert_eq!(0, m.hits.get());
+    assert_eq!(0, m.invalidated_entries_by_nested_call.get());
+    assert_eq!(2, m.invalidated_entries_by_transient_error.get());
     assert_eq!(res_1, res_2);
 }
 
