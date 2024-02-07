@@ -51,6 +51,11 @@ pub(crate) struct ExecutionEnvironmentMetrics {
     pub(crate) invalid_canister_state_error: IntCounter,
     /// Critical error for failed canister creation.
     pub(crate) canister_creation_error: IntCounter,
+    /// Intra-subnet messages that would be oversize if they were between
+    /// different subnets (not including install_code messages). This metric can
+    /// be removed if the limit for intra-subnet messages and inter-subnet
+    /// messages are brought back in sync.
+    pub(crate) oversize_intra_subnet_messages: IntCounter,
 }
 
 impl ExecutionEnvironmentMetrics {
@@ -104,6 +109,10 @@ impl ExecutionEnvironmentMetrics {
                 .error_counter("execution_environment_invalid_canister_state"),
             canister_creation_error: metrics_registry
                 .error_counter("execution_environment_canister_creation_failed"),
+            oversize_intra_subnet_messages: metrics_registry.int_counter(
+                "execution_environment_oversize_intra_subnet_messages_total",
+                "Total number of intra-subnet messages that exceed the 2 MiB limit for inter-subnet messages."
+            ),
         }
     }
 
