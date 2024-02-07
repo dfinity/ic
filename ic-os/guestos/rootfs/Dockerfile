@@ -113,7 +113,8 @@ RUN systemctl disable \
     apt-daily.timer \
     apt-daily-upgrade.service \
     apt-daily-upgrade.timer \
-    motd-news.service
+    motd-news.service \
+    motd-news.timer
 
 # Add user/group entries specified here: /usr/lib/sysusers.d/systemd.conf E.g., systemd-timesync/coredump. 
 ## `systemd-sysusers` does not honor the SOURCE_DATE_EPOCH env var. 

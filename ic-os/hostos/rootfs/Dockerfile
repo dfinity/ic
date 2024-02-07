@@ -91,6 +91,16 @@ RUN systemctl enable \
     systemd-networkd-wait-online \
     systemd-resolved
 
+RUN systemctl disable \
+    apt-daily.service \
+    apt-daily.timer \
+    apt-daily-upgrade.service \
+    apt-daily-upgrade.timer \
+    logrotate.service \
+    logrotate.timer \
+    motd-news.service \
+    motd-news.timer
+
 # Add user/group entries specified here: /usr/lib/sysusers.d/systemd.conf E.g., systemd-timesync/coredump
 RUN systemd-sysusers && \
     # Fix reproducibility issue. Notes in guestos/rootfs/Dockerfile    
