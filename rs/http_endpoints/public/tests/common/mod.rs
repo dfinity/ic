@@ -21,7 +21,7 @@ use ic_interfaces_state_manager::{CertifiedStateSnapshot, Labeled, StateReader};
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_pprof::PprofCollector;
+use ic_pprof::{Pprof, PprofCollector};
 use ic_protobuf::registry::{
     crypto::v1::{AlgorithmId as AlgorithmIdProto, PublicKey as PublicKeyProto},
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
@@ -220,7 +220,7 @@ pub fn default_latest_certified_height() -> Height {
 }
 
 /// Basic state manager with one subnet (nns) at height 1.
-pub fn basic_state_manager_mock() -> MockStateManager {
+fn basic_state_manager_mock() -> MockStateManager {
     let mut mock_state_manager = MockStateManager::new();
 
     mock_state_manager
@@ -247,7 +247,7 @@ pub fn basic_state_manager_mock() -> MockStateManager {
 }
 
 // Basic mock consensus pool cache at height 1.
-pub fn basic_consensus_pool_cache() -> MockConsensusPoolCache {
+fn basic_consensus_pool_cache() -> MockConsensusPoolCache {
     let mut mock_consensus_cache = MockConsensusPoolCache::new();
     mock_consensus_cache
         .expect_finalized_block()
@@ -396,58 +396,109 @@ mock! {
         fn exceeds_threshold(&self) -> bool;
     }
 }
-pub fn start_http_endpoint(
-    rt: tokio::runtime::Handle,
+
+pub struct HttpEndpointBuilder {
+    rt_handle: tokio::runtime::Handle,
     config: Config,
     state_manager: Arc<dyn StateReader<State = ReplicatedState>>,
     consensus_cache: Arc<dyn ConsensusPoolCache>,
     registry_client: Arc<dyn RegistryClient>,
     delegation_from_nns: Option<CertificateDelegation>,
     pprof_collector: Arc<dyn PprofCollector>,
-) -> (
-    IngressFilterHandle,
-    Receiver<UnvalidatedArtifactMutation<IngressArtifact>>,
-    QueryExecutionHandle,
-) {
-    let metrics = MetricsRegistry::new();
-    let (ingress_filter, ingress_filter_handle) = setup_ingress_filter_mock();
-    let (query_exe, query_exe_handler) = setup_query_execution_mock();
-    // Run test on "nns" to avoid fetching root delegation
-    let subnet_id = subnet_test_id(1);
-    let nns_subnet_id = subnet_test_id(1);
-    let node_id = node_test_id(1);
+}
 
-    let tls_handshake = Arc::new(MockTlsHandshake::new());
-    let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(0)));
-    let crypto = Arc::new(CryptoReturningOk::default());
+impl HttpEndpointBuilder {
+    pub fn new(rt_handle: tokio::runtime::Handle, config: Config) -> Self {
+        Self {
+            rt_handle,
+            config,
+            state_manager: Arc::new(basic_state_manager_mock()),
+            consensus_cache: Arc::new(basic_consensus_pool_cache()),
+            registry_client: Arc::new(basic_registry_client()),
+            delegation_from_nns: None,
+            pprof_collector: Arc::new(Pprof),
+        }
+    }
 
-    let (ingress_tx, ingress_rx) = crossbeam::channel::unbounded();
-    let mut ingress_pool_throtller = MockIngressPoolThrottler::new();
-    ingress_pool_throtller
-        .expect_exceeds_threshold()
-        .returning(|| false);
-    start_server(
-        rt,
-        &metrics,
-        config,
-        ingress_filter,
-        query_exe,
-        Arc::new(RwLock::new(ingress_pool_throtller)),
-        ingress_tx,
-        state_manager,
-        crypto as Arc<_>,
-        registry_client,
-        tls_handshake,
-        sig_verifier,
-        node_id,
-        subnet_id,
-        nns_subnet_id,
-        no_op_logger(),
-        consensus_cache,
-        SubnetType::Application,
-        MaliciousFlags::default(),
-        delegation_from_nns,
-        pprof_collector,
-    );
-    (ingress_filter_handle, ingress_rx, query_exe_handler)
+    pub fn with_state_manager(
+        mut self,
+        state_manager: impl StateReader<State = ReplicatedState> + 'static,
+    ) -> Self {
+        self.state_manager = Arc::new(state_manager);
+        self
+    }
+
+    pub fn with_consensus_cache(
+        mut self,
+        consensus_cache: impl ConsensusPoolCache + 'static,
+    ) -> Self {
+        self.consensus_cache = Arc::new(consensus_cache);
+        self
+    }
+
+    pub fn with_registry_client(mut self, registry_client: impl RegistryClient + 'static) -> Self {
+        self.registry_client = Arc::new(registry_client);
+        self
+    }
+
+    pub fn with_delegation_from_nns(mut self, delegation_from_nns: CertificateDelegation) -> Self {
+        self.delegation_from_nns.replace(delegation_from_nns);
+        self
+    }
+
+    pub fn with_pprof_collector(mut self, pprof_collector: impl PprofCollector + 'static) -> Self {
+        self.pprof_collector = Arc::new(pprof_collector);
+        self
+    }
+
+    pub fn run(
+        self,
+    ) -> (
+        IngressFilterHandle,
+        Receiver<UnvalidatedArtifactMutation<IngressArtifact>>,
+        QueryExecutionHandle,
+    ) {
+        let metrics = MetricsRegistry::new();
+        let (ingress_filter, ingress_filter_handle) = setup_ingress_filter_mock();
+        let (query_exe, query_exe_handler) = setup_query_execution_mock();
+        // Run test on "nns" to avoid fetching root delegation
+        let subnet_id = subnet_test_id(1);
+        let nns_subnet_id = subnet_test_id(1);
+        let node_id = node_test_id(1);
+
+        let tls_handshake = Arc::new(MockTlsHandshake::new());
+        let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(0)));
+        let crypto = Arc::new(CryptoReturningOk::default());
+
+        let (ingress_tx, ingress_rx) = crossbeam::channel::unbounded();
+        let mut ingress_pool_throtller = MockIngressPoolThrottler::new();
+        ingress_pool_throtller
+            .expect_exceeds_threshold()
+            .returning(|| false);
+
+        start_server(
+            self.rt_handle,
+            &metrics,
+            self.config,
+            ingress_filter,
+            query_exe,
+            Arc::new(RwLock::new(ingress_pool_throtller)),
+            ingress_tx,
+            self.state_manager,
+            crypto as Arc<_>,
+            self.registry_client,
+            tls_handshake,
+            sig_verifier,
+            node_id,
+            subnet_id,
+            nns_subnet_id,
+            no_op_logger(),
+            self.consensus_cache,
+            SubnetType::Application,
+            MaliciousFlags::default(),
+            self.delegation_from_nns,
+            self.pprof_collector,
+        );
+        (ingress_filter_handle, ingress_rx, query_exe_handler)
+    }
 }

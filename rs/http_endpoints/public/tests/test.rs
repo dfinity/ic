@@ -4,9 +4,8 @@
 pub mod common;
 
 use crate::common::{
-    basic_consensus_pool_cache, basic_registry_client, basic_state_manager_mock,
     create_conn_and_send_request, default_get_latest_state, default_latest_certified_height,
-    get_free_localhost_socket_addr, start_http_endpoint, wait_for_status_healthy,
+    get_free_localhost_socket_addr, wait_for_status_healthy, HttpEndpointBuilder,
 };
 use hyper::{body::to_bytes, Body, Client, Method, Request, StatusCode};
 use ic_agent::{
@@ -36,7 +35,6 @@ use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
 use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_interfaces_state_manager::CertifiedStateSnapshot;
 use ic_interfaces_state_manager_mocks::MockStateManager;
-use ic_pprof::Pprof;
 use ic_protobuf::registry::crypto::v1::{
     AlgorithmId as AlgorithmIdProto, PublicKey as PublicKeyProto,
 };
@@ -90,8 +88,6 @@ fn test_healthy_behind() {
     };
     let certified_state_height = Height::from(1);
     let consensus_height = Height::from(certified_state_height.get() + 25);
-
-    let mock_state_manager = basic_state_manager_mock();
 
     // We use this atomic to make sure that the health transition is from healthy -> certified_state_behind
     let healthy = Arc::new(AtomicBool::new(false));
@@ -151,15 +147,10 @@ fn test_healthy_behind() {
             Ok(Some(v))
         });
 
-    start_http_endpoint(
-        rt.handle().clone(),
-        config,
-        Arc::new(mock_state_manager),
-        Arc::new(mock_consensus_cache),
-        Arc::new(mock_registry_client),
-        None,
-        Arc::new(Pprof),
-    );
+    HttpEndpointBuilder::new(rt.handle().clone(), config)
+        .with_registry_client(mock_registry_client)
+        .with_consensus_cache(mock_consensus_cache)
+        .run();
 
     let agent = Agent::builder()
         .with_transport(ReqwestHttpReplicaV2Transport::create(format!("http://{}", addr)).unwrap())
@@ -191,19 +182,7 @@ fn test_unauthorized_controller() {
         ..Default::default()
     };
 
-    let mock_state_manager = basic_state_manager_mock();
-    let mock_consensus_cache = basic_consensus_pool_cache();
-    let mock_registry_client = basic_registry_client();
-
-    start_http_endpoint(
-        rt.handle().clone(),
-        config,
-        Arc::new(mock_state_manager),
-        Arc::new(mock_consensus_cache),
-        Arc::new(mock_registry_client),
-        None,
-        Arc::new(Pprof),
-    );
+    HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
     let agent = Agent::builder()
         .with_transport(ReqwestHttpReplicaV2Transport::create(format!("http://{}", addr)).unwrap())
@@ -248,19 +227,7 @@ fn test_unauthorized_query() {
         ..Default::default()
     };
 
-    let mock_state_manager = basic_state_manager_mock();
-    let mock_consensus_cache = basic_consensus_pool_cache();
-    let mock_registry_client = basic_registry_client();
-
-    let (_, _, mut query_handler) = start_http_endpoint(
-        rt.handle().clone(),
-        config,
-        Arc::new(mock_state_manager),
-        Arc::new(mock_consensus_cache),
-        Arc::new(mock_registry_client),
-        None,
-        Arc::new(Pprof),
-    );
+    let (_, _, mut query_handler) = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
     let agent = Agent::builder()
         .with_transport(ReqwestHttpReplicaV2Transport::create(format!("http://{}", addr)).unwrap())
@@ -339,19 +306,8 @@ fn test_unauthorized_call() {
         ..Default::default()
     };
 
-    let mock_state_manager = basic_state_manager_mock();
-    let mock_consensus_cache = basic_consensus_pool_cache();
-    let mock_registry_client = basic_registry_client();
-
-    let (mut ingress_filter, _ingress_rx, _) = start_http_endpoint(
-        rt.handle().clone(),
-        config,
-        Arc::new(mock_state_manager),
-        Arc::new(mock_consensus_cache),
-        Arc::new(mock_registry_client),
-        None,
-        Arc::new(Pprof),
-    );
+    let (mut ingress_filter, _ingress_rx, _) =
+        HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
     let agent = Agent::builder()
         .with_identity(AnonymousIdentity)
@@ -440,20 +396,7 @@ async fn test_connection_read_timeout() {
         ..Default::default()
     };
 
-    let mock_state_manager = basic_state_manager_mock();
-    let mock_consensus_cache = basic_consensus_pool_cache();
-    let mock_registry_client = basic_registry_client();
-
-    // Start server
-    start_http_endpoint(
-        rt_handle.clone(),
-        config.clone(),
-        Arc::new(mock_state_manager),
-        Arc::new(mock_consensus_cache),
-        Arc::new(mock_registry_client),
-        None,
-        Arc::new(Pprof),
-    );
+    HttpEndpointBuilder::new(rt_handle.clone(), config.clone()).run();
 
     let (mut request_sender, status_code) = create_conn_and_send_request(addr).await;
     assert!(status_code == StatusCode::OK);
@@ -477,19 +420,7 @@ fn test_request_timeout() {
         ..Default::default()
     };
 
-    let mock_state_manager = basic_state_manager_mock();
-    let mock_consensus_cache = basic_consensus_pool_cache();
-    let mock_registry_client = basic_registry_client();
-
-    let (_, _, mut query_handler) = start_http_endpoint(
-        rt.handle().clone(),
-        config,
-        Arc::new(mock_state_manager),
-        Arc::new(mock_consensus_cache),
-        Arc::new(mock_registry_client),
-        None,
-        Arc::new(Pprof),
-    );
+    let (_, _, mut query_handler) = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
     let agent = Agent::builder()
         .with_transport(ReqwestHttpReplicaV2Transport::create(format!("http://{}", addr)).unwrap())
@@ -549,19 +480,7 @@ fn test_payload_too_large() {
         ..Default::default()
     };
 
-    let mock_state_manager = basic_state_manager_mock();
-    let mock_consensus_cache = basic_consensus_pool_cache();
-    let mock_registry_client = basic_registry_client();
-
-    _ = start_http_endpoint(
-        rt.handle().clone(),
-        config.clone(),
-        Arc::new(mock_state_manager),
-        Arc::new(mock_consensus_cache),
-        Arc::new(mock_registry_client),
-        None,
-        Arc::new(Pprof),
-    );
+    HttpEndpointBuilder::new(rt.handle().clone(), config.clone()).run();
 
     let request = |body: Vec<u8>| {
         rt.block_on(async {
@@ -601,19 +520,7 @@ fn test_request_too_slow() {
         ..Default::default()
     };
 
-    let mock_state_manager = basic_state_manager_mock();
-    let mock_consensus_cache = basic_consensus_pool_cache();
-    let mock_registry_client = basic_registry_client();
-
-    let _ = start_http_endpoint(
-        rt.handle().clone(),
-        config,
-        Arc::new(mock_state_manager),
-        Arc::new(mock_consensus_cache),
-        Arc::new(mock_registry_client),
-        None,
-        Arc::new(Pprof),
-    );
+    HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
     rt.block_on(async {
         let (mut sender, body) = Body::channel();
@@ -649,19 +556,7 @@ fn test_status_code_when_ingress_filter_fails() {
         ..Default::default()
     };
 
-    let mock_state_manager = basic_state_manager_mock();
-    let mock_consensus_cache = basic_consensus_pool_cache();
-    let mock_registry_client = basic_registry_client();
-
-    let (mut ingress_filter, _, _) = start_http_endpoint(
-        rt.handle().clone(),
-        config,
-        Arc::new(mock_state_manager),
-        Arc::new(mock_consensus_cache),
-        Arc::new(mock_registry_client),
-        None,
-        Arc::new(Pprof),
-    );
+    let (mut ingress_filter, _, _) = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
     let agent = Agent::builder()
         .with_transport(ReqwestHttpReplicaV2Transport::create(format!("http://{}", addr)).unwrap())
@@ -708,20 +603,7 @@ fn test_graceful_shutdown_of_the_endpoint() {
         ..Default::default()
     };
 
-    let mock_state_manager: ic_interfaces_state_manager_mocks::MockStateManager =
-        basic_state_manager_mock();
-    let mock_consensus_cache = basic_consensus_pool_cache();
-    let mock_registry_client = basic_registry_client();
-
-    let _ = start_http_endpoint(
-        rt.handle().clone(),
-        config,
-        Arc::new(mock_state_manager),
-        Arc::new(mock_consensus_cache),
-        Arc::new(mock_registry_client),
-        None,
-        Arc::new(Pprof),
-    );
+    HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
     let agent = Agent::builder()
         .with_transport(ReqwestHttpReplicaV2Transport::create(format!("http://{}", addr)).unwrap())
@@ -761,19 +643,7 @@ fn test_too_long_paths_are_rejected() {
         ..Default::default()
     };
 
-    let mock_state_manager = basic_state_manager_mock();
-    let mock_consensus_cache = basic_consensus_pool_cache();
-    let mock_registry_client = basic_registry_client();
-
-    let _ = start_http_endpoint(
-        rt.handle().clone(),
-        config,
-        Arc::new(mock_state_manager),
-        Arc::new(mock_consensus_cache),
-        Arc::new(mock_registry_client),
-        None,
-        Arc::new(Pprof),
-    );
+    HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
     let canister = Principal::from_text("223xb-saaaa-aaaaf-arlqa-cai").unwrap();
 
@@ -812,19 +682,7 @@ fn test_query_endpoint_returns_service_unavailable_on_missing_state() {
         ..Default::default()
     };
 
-    let mock_state_manager = basic_state_manager_mock();
-    let mock_consensus_cache = basic_consensus_pool_cache();
-    let mock_registry_client = basic_registry_client();
-
-    let (_, _, mut query_handler) = start_http_endpoint(
-        rt.handle().clone(),
-        config,
-        Arc::new(mock_state_manager),
-        Arc::new(mock_consensus_cache),
-        Arc::new(mock_registry_client),
-        None,
-        Arc::new(Pprof),
-    );
+    let (_, _, mut query_handler) = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
     let agent = Agent::builder()
         .with_transport(ReqwestHttpReplicaV2Transport::create(format!("http://{}", addr)).unwrap())
@@ -985,23 +843,18 @@ fn can_retrieve_subnet_metrics() {
             )))
         });
 
-    let mock_consensus_cache = basic_consensus_pool_cache();
-    let mock_registry_client = basic_registry_client();
-
-    _ = start_http_endpoint(
-        rt.handle().clone(),
-        config.clone(),
-        Arc::new(mock_state_manager),
-        Arc::new(mock_consensus_cache),
-        Arc::new(mock_registry_client),
-        cloned_certificate
-            .delegation()
-            .map(|d| CertificateDelegation {
-                subnet_id: d.subnet_id,
-                certificate: d.certificate,
-            }),
-        Arc::new(Pprof),
-    );
+    HttpEndpointBuilder::new(rt.handle().clone(), config)
+        .with_state_manager(mock_state_manager)
+        .with_delegation_from_nns(
+            cloned_certificate
+                .delegation()
+                .map(|d| CertificateDelegation {
+                    subnet_id: d.subnet_id,
+                    certificate: d.certificate,
+                })
+                .expect("Delegation should be present."),
+        )
+        .run();
 
     let subnet_id = subnet_test_id(1);
 
@@ -1064,19 +917,7 @@ fn subnet_metrics_not_supported_via_canister_read_state() {
         .build()
         .unwrap();
 
-    let mock_state_manager = basic_state_manager_mock();
-    let mock_consensus_cache = basic_consensus_pool_cache();
-    let mock_registry_client = basic_registry_client();
-
-    _ = start_http_endpoint(
-        rt.handle().clone(),
-        config.clone(),
-        Arc::new(mock_state_manager),
-        Arc::new(mock_consensus_cache),
-        Arc::new(mock_registry_client),
-        None,
-        Arc::new(Pprof),
-    );
+    HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
     let subnet_id = subnet_test_id(1);
 
