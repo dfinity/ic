@@ -1900,6 +1900,71 @@ fn install_chunked_fails_from_noncontroller_of_store() {
     }
 }
 
+/// A canister should be able to use itself as the `store_canister` in
+/// `install_chunked_code` even if it isn't its own controller.
+#[test]
+fn install_chunked_succeeds_from_store_canister() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
+
+    let target_canister = test.create_canister(CYCLES);
+    // Install universal canister to canister which will also be the store and
+    // make it a controller of the target.
+    let store_canister = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .unwrap();
+    test.set_controller(target_canister, store_canister.into())
+        .unwrap();
+
+    // Upload universal canister chunk to store.
+    let uc_wasm = UNIVERSAL_CANISTER_WASM;
+    let hash = UploadChunkReply::decode(&get_reply(
+        test.subnet_message(
+            "upload_chunk",
+            UploadChunkArgs {
+                canister_id: store_canister.into(),
+                chunk: uc_wasm.to_vec(),
+            }
+            .encode(),
+        ),
+    ))
+    .unwrap()
+    .hash;
+
+    // Install UC wasm on target canister from store canister should succeed
+    // even though the store canister isn't its own controller.
+    assert!(!test
+        .canister_state(store_canister)
+        .system_state
+        .controllers
+        .contains(&store_canister.get()));
+
+    let install = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::InstallChunkedCode,
+            call_args()
+                .other_side(
+                    InstallChunkedCodeArgs::new(
+                        CanisterInstallModeV2::Install,
+                        target_canister,
+                        Some(store_canister),
+                        vec![hash.clone()],
+                        hash,
+                        vec![],
+                    )
+                    .encode(),
+                )
+                .on_reject(wasm().reject_message().reject()),
+            Cycles::new(CYCLES.get() / 2),
+        )
+        .build();
+    get_reply(test.ingress(store_canister, "update", install));
+}
+
 #[test]
 fn install_with_dts_correctly_updates_system_state() {
     let mut test = ExecutionTestBuilder::new()
