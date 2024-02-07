@@ -1129,6 +1129,73 @@ mod tests {
         });
     }
 
+    // Tests that no signature shares for incomplete contexts are created
+    #[test]
+    fn test_ecdsa_send_signature_shares_incomplete_contexts() {
+        let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
+        let height = Height::from(100);
+        let (id_1, id_2, id_3) = (
+            create_request_id(&mut uid_generator, height),
+            create_request_id(&mut uid_generator, height),
+            create_request_id(&mut uid_generator, height),
+        );
+
+        // Set up the signature requests
+        // The block contains quadruples for requests 1, 2, 3
+        let block_reader = TestEcdsaBlockReader::for_signer_test(
+            height,
+            vec![
+                (id_1.clone(), create_sig_inputs(1)),
+                (id_2.clone(), create_sig_inputs(2)),
+                (id_3.clone(), create_sig_inputs(3)),
+            ],
+        );
+        let transcript_loader: TestEcdsaTranscriptLoader = Default::default();
+
+        let key_id = id_1.quadruple_id.1.clone().unwrap();
+        let state = fake_state_with_ecdsa_contexts(
+            height,
+            [
+                // One context without matched quadruple
+                fake_sign_with_ecdsa_context_with_quadruple(
+                    id_1.quadruple_id.0 as u8,
+                    key_id.clone(),
+                    None,
+                ),
+                // One context without nonce
+                fake_sign_with_ecdsa_context_with_quadruple(
+                    id_2.quadruple_id.0 as u8,
+                    key_id.clone(),
+                    Some(id_2.quadruple_id.clone()),
+                ),
+                // One completed context
+                fake_sign_with_ecdsa_context_from_request_id(&id_3),
+            ],
+        );
+
+        // Test using CryptoReturningOK
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (ecdsa_pool, signer) =
+                    create_signer_dependencies_with_state(pool_config, logger, state);
+
+                // We should issue shares only for completed request 3
+                let change_set = signer.send_signature_shares_improved_latency(
+                    &ecdsa_pool,
+                    &transcript_loader,
+                    &block_reader,
+                );
+
+                assert_eq!(change_set.len(), 1);
+                assert!(is_signature_share_added_to_validated(
+                    &change_set,
+                    &id_3,
+                    block_reader.tip_height()
+                ));
+            })
+        });
+    }
+
     #[test]
     fn test_ecdsa_send_signature_shares_when_failure() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
@@ -1386,6 +1453,101 @@ mod tests {
                 assert_eq!(change_set.len(), 3);
                 assert!(is_handle_invalid(&change_set, &msg_id_2));
                 assert!(is_handle_invalid(&change_set, &msg_id_3));
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
+            })
+        });
+    }
+
+    // Tests that signature shares for incomplete contexts are not validated
+    #[test]
+    fn test_ecdsa_validate_signature_shares_incomplete_contexts() {
+        let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
+        let height = Height::from(100);
+        let (id_1, id_2, id_3) = (
+            create_request_id(&mut uid_generator, height),
+            create_request_id(&mut uid_generator, height),
+            create_request_id(&mut uid_generator, height),
+        );
+
+        // Set up the signature requests
+        // The block contains quadruples for requests 1, 2, 3
+        let block_reader = TestEcdsaBlockReader::for_signer_test(
+            height,
+            vec![
+                (id_1.clone(), create_sig_inputs(1)),
+                (id_2.clone(), create_sig_inputs(2)),
+                (id_3.clone(), create_sig_inputs(3)),
+            ],
+        );
+        let key_id = id_1.quadruple_id.1.clone().unwrap();
+        let state = fake_state_with_ecdsa_contexts(
+            height,
+            [
+                // One context without matched quadruple
+                fake_sign_with_ecdsa_context_with_quadruple(
+                    id_1.quadruple_id.0 as u8,
+                    key_id.clone(),
+                    None,
+                ),
+                // One context without nonce
+                fake_sign_with_ecdsa_context_with_quadruple(
+                    id_2.quadruple_id.0 as u8,
+                    key_id.clone(),
+                    Some(id_2.quadruple_id.clone()),
+                ),
+                // One completed context
+                fake_sign_with_ecdsa_context_from_request_id(&id_3),
+            ],
+        );
+
+        // Set up the ECDSA pool
+        let mut artifacts = Vec::new();
+        // A share for the first incomplete context (deferred)
+        let share = create_signature_share(NODE_2, id_1);
+        artifacts.push(UnvalidatedArtifact {
+            message: EcdsaMessage::EcdsaSigShare(share),
+            peer_id: NODE_2,
+            timestamp: UNIX_EPOCH,
+        });
+
+        // A share for the second incomplete context (deferred)
+        let share = create_signature_share(NODE_2, id_2.clone());
+        artifacts.push(UnvalidatedArtifact {
+            message: EcdsaMessage::EcdsaSigShare(share),
+            peer_id: NODE_2,
+            timestamp: UNIX_EPOCH,
+        });
+
+        // A share for a the completed context (accepted)
+        let share = create_signature_share(NODE_2, id_3.clone());
+        let msg_id_3 = share.message_id();
+        artifacts.push(UnvalidatedArtifact {
+            message: EcdsaMessage::EcdsaSigShare(share),
+            peer_id: NODE_2,
+            timestamp: UNIX_EPOCH,
+        });
+
+        // A share for a the completed context, but specifying wrong quadruple (dropped)
+        let mut wrong_id_3 = id_3.clone();
+        wrong_id_3.quadruple_id = id_2.quadruple_id.clone();
+        let share = create_signature_share(NODE_2, wrong_id_3);
+        let msg_id_4 = share.message_id();
+        artifacts.push(UnvalidatedArtifact {
+            message: EcdsaMessage::EcdsaSigShare(share),
+            peer_id: NODE_2,
+            timestamp: UNIX_EPOCH,
+        });
+
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut ecdsa_pool, signer) =
+                    create_signer_dependencies_with_state(pool_config, logger, state.clone());
+                artifacts.iter().for_each(|a| ecdsa_pool.insert(a.clone()));
+
+                let change_set =
+                    signer.validate_signature_shares_improved_latency(&ecdsa_pool, &block_reader);
+                assert_eq!(change_set.len(), 2);
+                assert!(is_moved_to_validated(&change_set, &msg_id_3));
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
             })
         });
