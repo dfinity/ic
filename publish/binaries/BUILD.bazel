@@ -55,7 +55,7 @@ BINARIES = {
     "metrics-proxy": "@crate_index//:metrics-proxy__metrics-proxy",
     "nfplot": "//rs/nervous_system/neurons_fund/nfplot",
     "orchestrator": "//rs/orchestrator",
-    "sandbox_launcher": "//rs/canister_sandbox/sandbox_launcher",
+    "sandbox_launcher": "//rs/canister_sandbox:sandbox_launcher",
     "setupos_tool": "//rs/ic_os/setupos_tool:setupos_tool",
     "snptool": "//rs/ic_os/snptool:snptool",
     "sns": "//rs/sns/cli:sns",

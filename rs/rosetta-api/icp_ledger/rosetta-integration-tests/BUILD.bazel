@@ -37,7 +37,7 @@ rust_test_suite(
     srcs = ["tests/tests.rs"],
     data = [
         "//rs/canister_sandbox",
-        "//rs/canister_sandbox/sandbox_launcher",
+        "//rs/canister_sandbox:sandbox_launcher",
         "//rs/replica",
         "//rs/rosetta-api:ic-rosetta-api",
         "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
@@ -47,7 +47,7 @@ rust_test_suite(
         "CANISTER_LAUNCHER": "$(rootpath //rs/canister_sandbox)",
         "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
         "REPLICA_BIN": "$(rootpath //rs/replica)",
-        "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+        "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
         "STARTER_BIN": "$(rootpath //rs/starter:ic-starter)",
         "ROSETTA_PATH": "$(rootpath //rs/rosetta-api:ic-rosetta-api)",
     },

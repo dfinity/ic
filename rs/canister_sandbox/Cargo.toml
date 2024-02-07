@@ -50,3 +50,7 @@ sigsegv_handler_checksum = ["memory_tracker/sigsegv_handler_checksum"]
 [[bin]]
 name = "canister_sandbox"
 path = "src/main.rs"
+
+[[bin]]
+name = "sandbox_launcher"
+path = "bin/sandbox_launcher.rs"

@@ -160,12 +160,12 @@ def sha256sum2url(name, src, tags = [], **kwargs):
 # Binaries needed for testing with canister_sandbox
 _SANDBOX_DATA = [
     "//rs/canister_sandbox",
-    "//rs/canister_sandbox/sandbox_launcher",
+    "//rs/canister_sandbox:sandbox_launcher",
 ]
 
 # Env needed for testing with canister_sandbox
 _SANDBOX_ENV = {
-    "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+    "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
     "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
 }
 
