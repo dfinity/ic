@@ -6396,7 +6396,6 @@ dependencies = [
  "hex",
  "ic-certification 0.9.0",
  "ic-certification-test-utils",
- "ic-crypto",
  "ic-crypto-internal-basic-sig-der-utils",
  "ic-crypto-internal-basic-sig-iccsa-test-utils",
  "ic-crypto-internal-test-vectors",

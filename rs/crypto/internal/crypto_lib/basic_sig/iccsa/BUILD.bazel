@@ -23,7 +23,6 @@ MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
     "//rs/certification/test-utils",
-    "//rs/crypto",
     "//rs/crypto/internal/crypto_lib/basic_sig/iccsa/test_utils",
     "//rs/crypto/test_utils",
     "//rs/crypto/test_utils/reproducible_rng",
