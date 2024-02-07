@@ -1295,9 +1295,7 @@ pub fn get_config() -> ConfigOptional {
         .replace("{{ nns_url }}", "http://www.fakeurl.com/")
         .replace("{{ malicious_behavior }}", "null")
         .replace("{{ query_stats_aggregation }}", "\"Disabled\"")
-        .replace("{{ query_stats_epoch_length }}", "1800")
-        // Confirm that config is valid when no prefixes are specified.
-        .replace("{{ ipv6_whitelist }}", "");
+        .replace("{{ query_stats_epoch_length }}", "1800");
 
     json5::from_str::<ConfigOptional>(&cfg).expect("Could not parse json5")
 }

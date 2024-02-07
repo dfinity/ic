@@ -48,11 +48,6 @@ function clone_config() {
         log_and_reboot_on_error "${?}" "Unable to copy 'node_operator_private_key.pem' configuration file."
     fi
 
-    if [ -f "${CONFIG_DIR}/default_firewall_whitelist.conf" ]; then
-        cp ${CONFIG_DIR}/default_firewall_whitelist.conf ${CONFIG_TMP}/default_firewall_whitelist.conf
-        log_and_reboot_on_error "${?}" "Unable to copy 'default_firewall_whitelist.conf' configuration file."
-    fi
-
     if [ -d "${SSH_AUTHORIZED_KEYS}" ]; then
         cp -r "${SSH_AUTHORIZED_KEYS}" "${CONFIG_TMP}"
         log_and_reboot_on_error "${?}" "Unable to copy 'ssh_authorized_keys' directory."
