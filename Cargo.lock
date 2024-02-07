@@ -5999,6 +5999,7 @@ dependencies = [
  "bytes",
  "crossbeam-channel",
  "futures",
+ "ic-base-types",
  "ic-interfaces",
  "ic-logger",
  "ic-metrics",

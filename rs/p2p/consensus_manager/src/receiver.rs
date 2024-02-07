@@ -1,9 +1,15 @@
+use std::{
+    collections::{hash_map::Entry, HashMap, HashSet},
+    sync::{Arc, RwLock},
+    time::Duration,
+};
+
 use crate::{
     metrics::{
         ConsensusManagerMetrics, DOWNLOAD_TASK_RESULT_ALL_PEERS_DELETED,
         DOWNLOAD_TASK_RESULT_COMPLETED, DOWNLOAD_TASK_RESULT_DROP,
     },
-    uri_prefix, AdvertUpdate, CommitId, SlotNumber, Update,
+    uri_prefix, CommitId, SlotNumber, SlotUpdate, Update,
 };
 use axum::{
     extract::State,
@@ -14,18 +20,13 @@ use axum::{
 use backoff::{backoff::Backoff, ExponentialBackoffBuilder};
 use bytes::Bytes;
 use crossbeam_channel::Sender as CrossbeamSender;
+use ic_base_types::NodeId;
 use ic_interfaces::p2p::consensus::{PriorityFnAndFilterProducer, ValidatedPoolReader};
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
 use ic_quic_transport::{ConnId, SubnetTopology, Transport};
 use ic_types::artifact::{ArtifactKind, Priority, PriorityFn, UnvalidatedArtifactMutation};
-use ic_types::NodeId;
 use rand::{rngs::SmallRng, seq::IteratorRandom, SeedableRng};
-use std::{
-    collections::{hash_map::Entry, HashMap, HashSet},
-    sync::{Arc, RwLock},
-    time::Duration,
-};
 use tokio::{
     runtime::Handle,
     select,
@@ -42,13 +43,13 @@ const MAX_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(120);
 const PRIORITY_FUNCTION_UPDATE_INTERVAL: Duration = Duration::from_secs(3);
 
 type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + Sync>>;
-type ReceivedAdvertSender<A> = Sender<(AdvertUpdate<A>, NodeId, ConnId)>;
+type ReceivedAdvertSender<A> = Sender<(SlotUpdate<A>, NodeId, ConnId)>;
 
 #[allow(unused)]
 pub fn build_axum_router<Artifact: ArtifactKind>(
     log: ReplicaLogger,
     pool: ValidatedPoolReaderRef<Artifact>,
-) -> (Router, Receiver<(AdvertUpdate<Artifact>, NodeId, ConnId)>) {
+) -> (Router, Receiver<(SlotUpdate<Artifact>, NodeId, ConnId)>) {
     let (update_tx, update_rx) = tokio::sync::mpsc::channel(100);
     let router = Router::new()
         .route(
@@ -90,8 +91,8 @@ async fn update_handler<Artifact: ArtifactKind>(
     Extension(conn_id): Extension<ConnId>,
     payload: Bytes,
 ) -> Result<(), StatusCode> {
-    let update: AdvertUpdate<Artifact> =
-        pb::AdvertUpdate::proxy_decode(&payload).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let update: SlotUpdate<Artifact> =
+        pb::SlotUpdate::proxy_decode(&payload).map_err(|_| StatusCode::BAD_REQUEST)?;
 
     if sender.send((update, peer, conn_id)).await.is_err() {
         error!(
@@ -182,7 +183,7 @@ pub(crate) struct ConsensusManagerReceiver<Artifact: ArtifactKind, Pool, Receive
 
 #[allow(unused)]
 impl<Artifact, Pool>
-    ConsensusManagerReceiver<Artifact, Pool, (AdvertUpdate<Artifact>, NodeId, ConnId)>
+    ConsensusManagerReceiver<Artifact, Pool, (SlotUpdate<Artifact>, NodeId, ConnId)>
 where
     Pool: 'static + Send + Sync + ValidatedPoolReader<Artifact>,
     Artifact: ArtifactKind,
@@ -191,7 +192,7 @@ where
         log: ReplicaLogger,
         metrics: ConsensusManagerMetrics,
         rt_handle: Handle,
-        adverts_received: Receiver<(AdvertUpdate<Artifact>, NodeId, ConnId)>,
+        adverts_received: Receiver<(SlotUpdate<Artifact>, NodeId, ConnId)>,
         raw_pool: Arc<RwLock<Pool>>,
         priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
         sender: CrossbeamSender<UnvalidatedArtifactMutation<Artifact>>,
@@ -326,12 +327,12 @@ where
 
     pub(crate) fn handle_advert_receive(
         &mut self,
-        advert_update: AdvertUpdate<Artifact>,
+        advert_update: SlotUpdate<Artifact>,
         peer_id: NodeId,
         connection_id: ConnId,
     ) {
         self.metrics.slot_table_updates_total.inc();
-        let AdvertUpdate {
+        let SlotUpdate {
             slot_number,
             commit_id,
             update,
@@ -733,7 +734,7 @@ mod tests {
         rt_handle: Handle,
 
         // Adverts received from peers
-        adverts_received: Receiver<(AdvertUpdate<U64Artifact>, NodeId, ConnId)>,
+        adverts_received: Receiver<(SlotUpdate<U64Artifact>, NodeId, ConnId)>,
         raw_pool: Arc<RwLock<MockValidatedPoolReader>>,
         priority_fn_producer: Arc<
             dyn PriorityFnAndFilterProducer<U64Artifact, MockValidatedPoolReader>,
@@ -744,7 +745,7 @@ mod tests {
     ) -> ConsensusManagerReceiver<
         U64Artifact,
         MockValidatedPoolReader,
-        (AdvertUpdate<U64Artifact>, NodeId, ConnId),
+        (SlotUpdate<U64Artifact>, NodeId, ConnId),
     > {
         let priority_fn = priority_fn_producer.get_priority_function(&raw_pool.read().unwrap());
         let (current_priority_fn, _) = watch::channel(priority_fn);
@@ -799,7 +800,7 @@ mod tests {
                 pfn_rx,
             );
             mgr.handle_advert_receive(
-                AdvertUpdate {
+                SlotUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(1),
                     update: Update::Advert((0, ())),
@@ -825,7 +826,7 @@ mod tests {
             assert_eq!(mgr.artifact_processor_tasks.len(), 1);
             // Send stale advert with lower commit id.
             mgr.handle_advert_receive(
-                AdvertUpdate {
+                SlotUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(0),
                     update: Update::Advert((0, ())),
@@ -848,7 +849,7 @@ mod tests {
             );
             // Send stale advert with lower conn id
             mgr.handle_advert_receive(
-                AdvertUpdate {
+                SlotUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(0),
                     update: Update::Advert((0, ())),
@@ -871,7 +872,7 @@ mod tests {
             );
             // Send stale advert with lower conn id but higher commit id
             mgr.handle_advert_receive(
-                AdvertUpdate {
+                SlotUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(10),
                     update: Update::Advert((0, ())),
@@ -894,7 +895,7 @@ mod tests {
             );
             // Send stale advert with lower conn id and lower commit id
             mgr.handle_advert_receive(
-                AdvertUpdate {
+                SlotUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(0),
                     update: Update::Advert((0, ())),
@@ -956,7 +957,7 @@ mod tests {
             );
 
             mgr.handle_advert_receive(
-                AdvertUpdate {
+                SlotUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(1),
                     update: Update::Advert((0, ())),
@@ -983,7 +984,7 @@ mod tests {
             assert_eq!(mgr.artifact_processor_tasks.len(), 1);
             // Send advert with higher conn id.
             mgr.handle_advert_receive(
-                AdvertUpdate {
+                SlotUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(0),
                     update: Update::Advert((1, ())),
@@ -1052,7 +1053,7 @@ mod tests {
             );
 
             mgr.handle_advert_receive(
-                AdvertUpdate {
+                SlotUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(1),
                     update: Update::Advert((0, ())),
@@ -1062,7 +1063,7 @@ mod tests {
             );
             // Second advert for advert 0.
             mgr.handle_advert_receive(
-                AdvertUpdate {
+                SlotUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(1),
                     update: Update::Advert((0, ())),
@@ -1112,7 +1113,7 @@ mod tests {
             );
 
             mgr.handle_advert_receive(
-                AdvertUpdate {
+                SlotUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(1),
                     update: Update::Advert((0, ())),
@@ -1122,7 +1123,7 @@ mod tests {
             );
             // Overwrite advert to close the download task.
             mgr.handle_advert_receive(
-                AdvertUpdate {
+                SlotUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(2),
                     update: Update::Advert((1, ())),
@@ -1137,7 +1138,7 @@ mod tests {
                 .unwrap();
             // Simulate that a new peer was added for this advert while closing.
             mgr.handle_advert_receive(
-                AdvertUpdate {
+                SlotUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(3),
                     update: Update::Advert((0, ())),
@@ -1193,7 +1194,7 @@ mod tests {
                 pfn_rx,
             );
             mgr.handle_advert_receive(
-                AdvertUpdate {
+                SlotUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(1),
                     update: Update::Advert((0, ())),
@@ -1209,7 +1210,7 @@ mod tests {
             mgr.handle_pfn_timer_tick();
             // Overwrite existing advert to finish download task.
             mgr.handle_advert_receive(
-                AdvertUpdate {
+                SlotUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(2),
                     update: Update::Advert((1, ())),
@@ -1276,7 +1277,7 @@ mod tests {
             );
 
             mgr.handle_advert_receive(
-                AdvertUpdate {
+                SlotUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(1),
                     update: Update::Advert((0, ())),
@@ -1331,7 +1332,7 @@ mod tests {
                 pfn_rx,
             );
             mgr.handle_advert_receive(
-                AdvertUpdate {
+                SlotUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(1),
                     update: Update::Advert((0, ())),
@@ -1340,7 +1341,7 @@ mod tests {
                 ConnId::from(1),
             );
             mgr.handle_advert_receive(
-                AdvertUpdate {
+                SlotUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(1),
                     update: Update::Advert((0, ())),
@@ -1421,7 +1422,7 @@ mod tests {
                 pfn_rx,
             );
             mgr.handle_advert_receive(
-                AdvertUpdate {
+                SlotUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(1),
                     update: Update::Advert((0, ())),
@@ -1484,7 +1485,7 @@ mod tests {
             );
             // Add id 0 on slot 1.
             mgr.handle_advert_receive(
-                AdvertUpdate {
+                SlotUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(1),
                     update: Update::Advert((0, ())),
@@ -1494,7 +1495,7 @@ mod tests {
             );
             // Add id 0 on slot 2.
             mgr.handle_advert_receive(
-                AdvertUpdate {
+                SlotUpdate {
                     slot_number: SlotNumber::from(2),
                     commit_id: CommitId::from(2),
                     update: Update::Advert((0, ())),
@@ -1504,7 +1505,7 @@ mod tests {
             );
             // Overwrite id 0 on slot 1.
             mgr.handle_advert_receive(
-                AdvertUpdate {
+                SlotUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(3),
                     update: Update::Advert((1, ())),
@@ -1525,7 +1526,7 @@ mod tests {
             assert_eq!(mgr.artifact_processor_tasks.len(), 2);
             // Overwrite remaining id 0 at slot 2.
             mgr.handle_advert_receive(
-                AdvertUpdate {
+                SlotUpdate {
                     slot_number: SlotNumber::from(2),
                     commit_id: CommitId::from(4),
                     update: Update::Advert((1, ())),
@@ -1582,7 +1583,7 @@ mod tests {
                 pfn_rx,
             );
             mgr.handle_advert_receive(
-                AdvertUpdate {
+                SlotUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(1),
                     update: Update::Advert((0, ())),
@@ -1591,7 +1592,7 @@ mod tests {
                 ConnId::from(1),
             );
             mgr.handle_advert_receive(
-                AdvertUpdate {
+                SlotUpdate {
                     slot_number: SlotNumber::from(2),
                     commit_id: CommitId::from(2),
                     update: Update::Advert((1, ())),
@@ -1611,7 +1612,7 @@ mod tests {
             });
             // Overwrite id 1 with id 0.
             mgr.handle_advert_receive(
-                AdvertUpdate {
+                SlotUpdate {
                     slot_number: SlotNumber::from(2),
                     commit_id: CommitId::from(3),
                     update: Update::Advert((0, ())),
@@ -1666,7 +1667,7 @@ mod tests {
                 pfn_rx,
             );
             mgr.handle_advert_receive(
-                AdvertUpdate {
+                SlotUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(1),
                     update: Update::Advert((0, ())),
@@ -1688,7 +1689,7 @@ mod tests {
             );
             // Advertise id 0 again on same slot.
             mgr.handle_advert_receive(
-                AdvertUpdate {
+                SlotUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(2),
                     update: Update::Advert((0, ())),
@@ -1728,7 +1729,7 @@ mod tests {
 
             // Overwrite id 0.
             mgr.handle_advert_receive(
-                AdvertUpdate {
+                SlotUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(3),
                     update: Update::Advert((2, ())),
@@ -1802,7 +1803,7 @@ mod tests {
                 pfn_rx,
             );
             mgr.handle_advert_receive(
-                AdvertUpdate {
+                SlotUpdate {
                     slot_number: SlotNumber::from(1),
                     commit_id: CommitId::from(1),
                     update: Update::Advert((0, ())),
@@ -1871,7 +1872,7 @@ mod tests {
                 ConsensusManagerReceiver::<
                     U64Artifact,
                     MockValidatedPoolReader,
-                    (AdvertUpdate<U64Artifact>, NodeId, ConnId),
+                    (SlotUpdate<U64Artifact>, NodeId, ConnId),
                 >::download_artifact(
                     no_op_logger(),
                     &0,

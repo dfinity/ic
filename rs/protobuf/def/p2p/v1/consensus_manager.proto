@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package p2p.v1;
 
-message AdvertUpdate {
+message SlotUpdate {
   uint64 commit_id = 1;
   uint64 slot_id = 2;
   oneof update {

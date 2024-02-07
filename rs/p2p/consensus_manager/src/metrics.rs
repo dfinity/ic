@@ -43,9 +43,9 @@ pub(crate) struct ConsensusManagerMetrics {
     pub send_view_send_to_peer_delivered_total: IntCounter,
     pub send_view_resend_reconnect_total: IntCounter,
 
-    // Slot manager
-    pub slot_manager_used_slots: IntGauge,
-    pub slot_manager_maximum_slots_total: IntCounter,
+    // Available slot set
+    pub slot_set_in_use_slots: IntGauge,
+    pub slot_set_allocated_slots_total: IntCounter,
 }
 
 impl ConsensusManagerMetrics {
@@ -250,17 +250,17 @@ impl ConsensusManagerMetrics {
                 .unwrap(),
             ),
 
-            slot_manager_used_slots: metrics_registry.register(
+            slot_set_in_use_slots: metrics_registry.register(
                 IntGauge::with_opts(opts!(
-                    "ic_consensus_manager_slot_manager_used_slots",
+                    "ic_consensus_manager_slot_set_in_use_slots",
                     "Active slots in use.",
                     const_labels.clone(),
                 ))
                 .unwrap(),
             ),
-            slot_manager_maximum_slots_total: metrics_registry.register(
+            slot_set_allocated_slots_total: metrics_registry.register(
                 IntCounter::with_opts(opts!(
-                    "ic_consensus_manager_slot_manager_maximum_slots_total",
+                    "ic_consensus_manager_slot_set_allocated_slots_total",
                     "Maximum of slots simultaneously used.",
                     const_labels.clone(),
                 ))

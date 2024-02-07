@@ -11,11 +11,12 @@ backoff = { workspace = true }
 bytes = { workspace = true }
 crossbeam-channel = { workspace = true }
 futures = { workspace = true }
+ic-base-types = { path = "../../types/base_types" }
 ic-interfaces = { path = "../../interfaces" }
 ic-logger = { path = "../../monitoring/logger" }
-ic-protobuf = { path = "../../protobuf" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-quic-transport = { path = "../quic_transport" }
+ic-protobuf = { path = "../../protobuf" }
 ic-types = { path = "../../types/types" }
 phantom_newtype = { path = "../../phantom_newtype" }
 prometheus = { workspace = true }
