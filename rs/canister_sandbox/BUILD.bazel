@@ -1,5 +1,6 @@
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -12,6 +13,7 @@ DEPENDENCIES = [
     "//rs/interfaces",
     "//rs/memory_tracker",
     "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
     "//rs/replicated_state",
     "//rs/sys",
     "//rs/system_api",
@@ -19,13 +21,18 @@ DEPENDENCIES = [
     "//rs/types/types",
     "//rs/types/wasm_types",
     "//rs/utils",
+    "@crate_index//:lazy_static",
     "@crate_index//:libc",
     "@crate_index//:libflate",
     "@crate_index//:nix",
+    "@crate_index//:once_cell",
+    "@crate_index//:prometheus",
     "@crate_index//:rayon",
+    "@crate_index//:regex",
     "@crate_index//:serde_json",
     "@crate_index//:slog",
     "@crate_index//:threadpool",
+    "@crate_index//:which",
 ]
 
 DEV_DEPENDENCIES = [
@@ -33,6 +40,9 @@ DEV_DEPENDENCIES = [
     "//rs/registry/subnet_type",
     "//rs/test_utilities",
     "@crate_index//:mockall",
+    "@crate_index//:slog-async",
+    "@crate_index//:slog-term",
+    "@crate_index//:tempfile",
     "@crate_index//:wat",
 ]
 
@@ -50,7 +60,7 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
-rust_test(
+rust_ic_test(
     name = "backend_lib_test",
     aliases = ALIASES,
     crate = ":backend_lib",

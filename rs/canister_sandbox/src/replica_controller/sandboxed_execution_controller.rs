@@ -41,13 +41,13 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::active_execution_state_registry::{ActiveExecutionStateRegistry, CompletionResult};
-use crate::controller_service_impl::ControllerServiceImpl;
-use crate::launch_as_process::{create_sandbox_process, spawn_launcher_process};
-use crate::process_exe_and_args::{create_launcher_argv, create_sandbox_argv};
+use super::active_execution_state_registry::{ActiveExecutionStateRegistry, CompletionResult};
+use super::controller_service_impl::ControllerServiceImpl;
+use super::launch_as_process::{create_sandbox_process, spawn_launcher_process};
+use super::process_exe_and_args::{create_launcher_argv, create_sandbox_argv};
 #[cfg(target_os = "linux")]
-use crate::process_os_metrics;
-use crate::sandbox_process_eviction::{self, EvictionCandidate};
+use super::process_os_metrics;
+use super::sandbox_process_eviction::{self, EvictionCandidate};
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 
 const SANDBOX_PROCESS_UPDATE_INTERVAL: Duration = Duration::from_secs(10);

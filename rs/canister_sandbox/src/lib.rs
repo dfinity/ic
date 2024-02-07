@@ -1,6 +1,7 @@
 mod dts;
 pub mod launcher;
 pub mod logging;
+pub mod replica_controller;
 pub mod sandbox_manager;
 pub mod sandbox_server;
 
