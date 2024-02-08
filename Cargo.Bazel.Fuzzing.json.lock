@@ -1,5 +1,5 @@
 {
-  "checksum": "a2bb9258739ff9e78486a371d431567ae3a30588d169242208ae82f86715fb6c",
+  "checksum": "2d2b144e33fa98172a87979afea72561cb019cbb52cc0a557a795820c0440766",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -5085,6 +5085,112 @@
         },
         "edition": "2018",
         "version": "0.5.1"
+      },
+      "license": "MIT"
+    },
+    "axum-server 0.6.0": {
+      "name": "axum-server",
+      "version": "0.6.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/axum-server/0.6.0/download",
+          "sha256": "c1ad46c3ec4e12f4a4b6835e173ba21c25e484c9d02b49770bf006ce5367c036"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "axum_server",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "axum_server",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "arc-swap",
+            "default",
+            "rustls",
+            "rustls-pemfile",
+            "tls-rustls",
+            "tokio-rustls"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "arc-swap 1.6.0",
+              "target": "arc_swap"
+            },
+            {
+              "id": "bytes 1.5.0",
+              "target": "bytes"
+            },
+            {
+              "id": "futures-util 0.3.30",
+              "target": "futures_util"
+            },
+            {
+              "id": "http 1.0.0",
+              "target": "http"
+            },
+            {
+              "id": "http-body 1.0.0",
+              "target": "http_body"
+            },
+            {
+              "id": "http-body-util 0.1.0",
+              "target": "http_body_util"
+            },
+            {
+              "id": "hyper 1.1.0",
+              "target": "hyper"
+            },
+            {
+              "id": "hyper-util 0.1.2",
+              "target": "hyper_util"
+            },
+            {
+              "id": "pin-project-lite 0.2.13",
+              "target": "pin_project_lite"
+            },
+            {
+              "id": "rustls 0.21.7",
+              "target": "rustls"
+            },
+            {
+              "id": "rustls-pemfile 2.0.0",
+              "target": "rustls_pemfile"
+            },
+            {
+              "id": "tokio 1.35.1",
+              "target": "tokio"
+            },
+            {
+              "id": "tokio-rustls 0.24.1",
+              "target": "tokio_rustls"
+            },
+            {
+              "id": "tower 0.4.13",
+              "target": "tower"
+            },
+            {
+              "id": "tower-service 0.3.2",
+              "target": "tower_service"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.6.0"
       },
       "license": "MIT"
     },
@@ -15122,6 +15228,11 @@
             {
               "id": "axum-server 0.5.1",
               "target": "axum_server"
+            },
+            {
+              "id": "axum-server 0.6.0",
+              "target": "axum_server",
+              "alias": "axum_server_0_6_0"
             },
             {
               "id": "backoff 0.4.0",
@@ -47449,6 +47560,94 @@
         "version": "1.0.3"
       },
       "license": "Apache-2.0 OR ISC OR MIT"
+    },
+    "rustls-pemfile 2.0.0": {
+      "name": "rustls-pemfile",
+      "version": "2.0.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/rustls-pemfile/2.0.0/download",
+          "sha256": "35e4980fa29e4c4b212ffb3db068a564cbf560e51d3944b7c88bd8bf5bec64f4"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rustls_pemfile",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "rustls_pemfile",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "base64 0.21.4",
+              "target": "base64"
+            },
+            {
+              "id": "rustls-pki-types 1.1.0",
+              "target": "rustls_pki_types",
+              "alias": "pki_types"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "2.0.0"
+      },
+      "license": "Apache-2.0 OR ISC OR MIT"
+    },
+    "rustls-pki-types 1.1.0": {
+      "name": "rustls-pki-types",
+      "version": "1.1.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/rustls-pki-types/1.1.0/download",
+          "sha256": "9e9d979b3ce68192e42760c7810125eb6cf2ea10efae545a156063e61f314e2a"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rustls_pki_types",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "rustls_pki_types",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "default"
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "1.1.0"
+      },
+      "license": "MIT OR Apache-2.0"
     },
     "rustls-webpki 0.100.3": {
       "name": "rustls-webpki",
