@@ -160,6 +160,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 package = "axum",
                 version = "^0.7.0",
             ),
+            "axum-server_0_6_0": crate.spec(
+                package = "axum-server",
+                version = "^0.6.0",
+                features = [
+                    "tls-rustls",
+                ],
+            ),
             "axum-extra": crate.spec(
                 version = "^0.9.0",
                 features = ["typed-header"],
