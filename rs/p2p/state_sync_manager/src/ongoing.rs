@@ -42,11 +42,6 @@ use tokio_util::sync::CancellationToken;
 const PARALLEL_CHUNK_DOWNLOADS: usize = 10;
 const ONGOING_STATE_SYNC_CHANNEL_SIZE: usize = 200;
 const CHUNK_DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(10);
-/// Same reasoning as old state sync mechanism:
-/// Maximum timeout for fetching state sync. 10_000s.
-/// Reasoning: Block rate can be as low as 0.1 and we want to allow state sync
-/// to last for 1000 blocks (two checkpoint intervals) -> 1000b/0.1b/s = 10000s
-const STATE_SYNC_TIMEOUT: Duration = Duration::from_secs(10000);
 
 struct OngoingStateSync<T: Send> {
     log: ReplicaLogger,
@@ -75,6 +70,7 @@ pub(crate) struct OngoingStateSyncHandle {
     pub sender: Sender<NodeId>,
     pub artifact_id: StateSyncArtifactId,
     pub jh: JoinHandle<()>,
+    pub cancellation: CancellationToken,
 }
 
 pub(crate) struct DownloadResult<T> {
@@ -99,7 +95,7 @@ pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
         artifact_id: artifact_id.clone(),
         metrics,
         transport,
-        cancellation,
+        cancellation: cancellation.clone(),
         new_peers_rx,
         active_downloads: HashMap::new(),
         allowed_downloads: 0,
@@ -116,22 +112,17 @@ pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
         sender: new_peers_tx,
         artifact_id,
         jh,
+        cancellation,
     }
 }
 
 impl<T: 'static + Send> OngoingStateSync<T> {
     pub async fn run(mut self) {
-        let state_sync_timeout = tokio::time::sleep(STATE_SYNC_TIMEOUT);
-        tokio::pin!(state_sync_timeout);
         loop {
             select! {
                 () = self.cancellation.cancelled() => {
                     break
                 },
-                _ = &mut state_sync_timeout => {
-                    info!(self.log, "State sync for height {} timed out.", self.artifact_id.height);
-                    break;
-                }
                 Some(new_peer) = self.new_peers_rx.recv() => {
                     if let Entry::Vacant(e) = self.active_downloads.entry(new_peer) {
                         info!(self.log, "Adding peer {} to ongoing state sync of height {}.", new_peer, self.artifact_id.height);

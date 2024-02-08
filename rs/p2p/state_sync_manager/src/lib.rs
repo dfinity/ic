@@ -159,14 +159,15 @@ impl<T: 'static + Send> StateSyncManager<T> {
             if ongoing.jh.is_finished() {
                 info!(self.log, "Cleaning up state sync {}", artifact_id.height);
                 self.ongoing_state_sync = None;
+            } else {
+                if self.state_sync.should_cancel(&ongoing.artifact_id) {
+                    ongoing.cancellation.cancel();
+                }
+                return;
             }
         }
-
         // `start_state_sync` should not be called if we have ongoing state sync!
-        if self.ongoing_state_sync.is_some() {
-            return;
-        }
-
+        debug_assert!(self.ongoing_state_sync.is_none());
         if let Some(chunkable) = self.state_sync.start_state_sync(&artifact_id) {
             info!(
                 self.log,
@@ -174,9 +175,9 @@ impl<T: 'static + Send> StateSyncManager<T> {
             );
             self.metrics.state_syncs_total.inc();
 
-            // This will spawn a task that downloads the chunk according to the tracker.
-            // If it is done/timeout it will finish and drop the tracker. Until the state is dropped
-            // the priority function guarantees to never return FETCH again.
+            // This spawns an event loop that downloads chunks for the specified Id.
+            // When the state sync is done or cancelled it will drop the Chunkable object.
+            // Until the Chunkable object is dropped 'start_state_sync' will always return None.
             let ongoing = start_ongoing_state_sync(
                 self.log.clone(),
                 &self.rt,
