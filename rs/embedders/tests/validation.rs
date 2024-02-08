@@ -904,18 +904,24 @@ fn can_validate_module_cycles_related_imports() {
 }
 
 #[test]
-fn can_validate_valid_export_section_with_invalid_function_index() {
-    let wasm = BinaryEncodedWasm::new(
-        include_bytes!("instrumentation-test-data/export_section_invalid_function_index.wasm")
-            .to_vec(),
-    );
-    assert_matches!(
-        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Err(WasmValidationError::InvalidFunctionIndex {
-            index: 0,
-            import_count: 1
-        })
-    );
+fn can_validate_export_section_exporting_import() {
+    let wasm = wat2wasm(
+        r#"
+        (module
+            (type (;0;) (func))
+            (import "env" "memory" (memory (;0;) 529))
+            (import "env" "table" (table (;0;) 33 33 funcref))
+            (import "ic0" "msg_reply" (func (;0;) (type 0)))
+            (func (;1;) (type 0))
+            (func (;2;) (type 0))
+            (func (;3;) (type 0))
+            (export "canister_heartbeat" (func 1))
+            (export "canister_pre_upgrade" (func 2))
+            (export "canister_post_upgrade" (func 0)))
+        "#,
+    )
+    .unwrap();
+    validate_wasm_binary(&wasm, &EmbeddersConfig::default()).unwrap();
 }
 
 #[test]
