@@ -1,5 +1,6 @@
-use ic_canister_sandbox_common::*;
-use ic_canister_sandbox_common::{protocol::sbxsvc, transport::SocketReaderConfig};
+use ic_canister_sandbox_backend_lib::{
+    protocol, protocol::sbxsvc, rpc, sandbox_service, transport, transport::SocketReaderConfig,
+};
 use ic_embedders::{
     wasm_utils::{Segments, WasmImportsDetails},
     CompilationResult, SerializedModule, SerializedModuleBytes,

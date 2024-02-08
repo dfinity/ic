@@ -3,7 +3,7 @@ use std::{os::unix::io::AsRawFd, process::Child};
 use ic_types::CanisterId;
 use std::sync::Arc;
 
-use ic_canister_sandbox_common::{
+use crate::{
     launcher_client_stub::LauncherClientStub,
     launcher_service::LauncherService,
     process::spawn_socketed_process,

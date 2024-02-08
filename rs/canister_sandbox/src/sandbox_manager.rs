@@ -18,14 +18,14 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use ic_canister_sandbox_common::protocol::id::{ExecId, MemoryId, WasmId};
-use ic_canister_sandbox_common::protocol::sbxsvc::{
+use crate::protocol::id::{ExecId, MemoryId, WasmId};
+use crate::protocol::sbxsvc::{
     CreateExecutionStateSerializedSuccessReply, CreateExecutionStateSuccessReply, OpenMemoryRequest,
 };
-use ic_canister_sandbox_common::protocol::structs::{
+use crate::protocol::structs::{
     MemoryModifications, SandboxExecInput, SandboxExecOutput, StateModifications,
 };
-use ic_canister_sandbox_common::{controller_service::ControllerService, protocol};
+use crate::{controller_service::ControllerService, protocol};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
     wasm_executor::WasmStateChanges,

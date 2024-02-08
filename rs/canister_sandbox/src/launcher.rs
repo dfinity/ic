@@ -5,7 +5,7 @@ use std::{
     thread,
 };
 
-use ic_canister_sandbox_common::{
+use crate::{
     child_process_initialization,
     controller_launcher_client_stub::{self, ControllerLauncherClientStub},
     controller_launcher_service::ControllerLauncherService,

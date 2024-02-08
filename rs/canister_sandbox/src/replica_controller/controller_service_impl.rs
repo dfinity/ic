@@ -10,9 +10,9 @@
 /// on a specific sandbox process by their IDs, and the associated
 /// target points provided by upper layers (system state access and
 /// completion closure).
-use ic_canister_sandbox_common::controller_service::ControllerService;
-use ic_canister_sandbox_common::protocol;
-use ic_canister_sandbox_common::rpc;
+use crate::controller_service::ControllerService;
+use crate::protocol;
+use crate::rpc;
 use ic_logger::{debug, error, info, trace, ReplicaLogger};
 
 use super::active_execution_state_registry::ActiveExecutionStateRegistry;

@@ -1,5 +1,5 @@
-use ic_canister_sandbox_common::protocol::id::ExecId;
-use ic_canister_sandbox_common::protocol::structs::SandboxExecOutput;
+use crate::protocol::id::ExecId;
+use crate::protocol::structs::SandboxExecOutput;
 use ic_embedders::wasm_executor::SliceExecutionOutput;
 /// Execution state registry for sandbox processes.
 ///
