@@ -3,6 +3,8 @@ use assert_matches::assert_matches;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto::CryptoComponent;
 use ic_crypto_interfaces_sig_verification::BasicSigVerifierByPublicKey;
+use ic_crypto_internal_csp::Csp;
+use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_test_vectors::test_data;
 use ic_crypto_standalone_sig_verifier::{
     ecdsa_p256_signature_from_der_bytes, ed25519_public_key_to_der, user_public_key_from_bytes,
@@ -14,14 +16,12 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoError, UserPublicKey};
 use ic_types::crypto::{SignableMock, DOMAIN_IC_REQUEST};
 use ic_types::messages::MessageId;
-use ic_types_test_utils::ids::node_test_id;
 use rand::{CryptoRng, Rng};
 use std::sync::Arc;
 
 use ic_crypto_sha2::Sha256;
 use ic_crypto_test_utils::ed25519_utils::ed25519_signature_and_public_key;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_interfaces::time_source::SysTimeSource;
 
 #[test]
 fn should_verify_request_id_ed25519_signature() {
@@ -408,12 +408,9 @@ fn ecdsa_secp256k1_signature_and_public_key<R: Rng + CryptoRng>(
 
 fn crypto_component(config: &CryptoConfig) -> CryptoComponent {
     let dummy_registry = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
-    CryptoComponent::new_with_fake_node_id(
-        config,
-        None,
-        Arc::new(dummy_registry),
-        node_test_id(42),
-        no_op_logger(),
-        Arc::new(SysTimeSource::new()),
-    )
+
+    let csp = Csp::new(config, None, None, Arc::new(CryptoMetrics::none()));
+    ic_crypto_node_key_generation::generate_node_signing_keys(&csp);
+
+    CryptoComponent::new(config, None, Arc::new(dummy_registry), no_op_logger(), None)
 }
