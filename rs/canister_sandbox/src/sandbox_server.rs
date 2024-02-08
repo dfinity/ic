@@ -5,7 +5,7 @@ use std::sync::Arc;
 /// actual "logic" in this module, just bridging the interfaces.
 use crate::sandbox_manager::SandboxManager;
 
-use ic_canister_sandbox_common::{protocol::sbxsvc::*, rpc, sandbox_service::SandboxService};
+use crate::{protocol::sbxsvc::*, rpc, sandbox_service::SandboxService};
 
 /// This is the implementation of the RPC interface exposed by the
 /// sandbox process and "binds everything together": All RPCs pass
@@ -136,8 +136,7 @@ impl SandboxService for SandboxServer {
 mod tests {
 
     use super::*;
-    use ic_base_types::{NumSeconds, PrincipalId};
-    use ic_canister_sandbox_common::{
+    use crate::{
         controller_service::ControllerService,
         fdenum::EnumerateInnerFileDescriptors,
         protocol::{
@@ -146,6 +145,7 @@ mod tests {
             structs::SandboxExecInput,
         },
     };
+    use ic_base_types::{NumSeconds, PrincipalId};
     use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
     use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
     use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;

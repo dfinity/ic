@@ -5,7 +5,6 @@ load("//bazel:defs.bzl", "rust_ic_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "//rs/canister_sandbox/common",
     "//rs/config",
     "//rs/constants",
     "//rs/cycles_account_manager",
@@ -14,6 +13,7 @@ DEPENDENCIES = [
     "//rs/memory_tracker",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
+    "//rs/registry/subnet_type",
     "//rs/replicated_state",
     "//rs/sys",
     "//rs/system_api",
@@ -21,6 +21,8 @@ DEPENDENCIES = [
     "//rs/types/types",
     "//rs/types/wasm_types",
     "//rs/utils",
+    "@crate_index//:bincode",
+    "@crate_index//:bytes",
     "@crate_index//:lazy_static",
     "@crate_index//:libc",
     "@crate_index//:libflate",
@@ -29,6 +31,8 @@ DEPENDENCIES = [
     "@crate_index//:prometheus",
     "@crate_index//:rayon",
     "@crate_index//:regex",
+    "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
     "@crate_index//:serde_json",
     "@crate_index//:slog",
     "@crate_index//:threadpool",
@@ -37,7 +41,6 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     "//rs/registry/routing_table",
-    "//rs/registry/subnet_type",
     "//rs/test_utilities",
     "@crate_index//:mockall",
     "@crate_index//:slog-async",
@@ -77,7 +80,7 @@ cargo_build_script(
 
 rust_binary(
     name = "canister_sandbox",
-    srcs = ["src/main.rs"],
+    srcs = ["bin/canister_sandbox.rs"],
     aliases = ALIASES,
     crate_name = "canister_sandbox",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -95,4 +98,20 @@ rust_binary(
     name = "sandbox_launcher",
     srcs = ["bin/sandbox_launcher.rs"],
     deps = [":backend_lib"],
+)
+
+rust_binary(
+    name = "test_controller",
+    srcs = ["bin/test_controller.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":backend_lib"],
+)
+
+rust_binary(
+    name = "test_sandbox",
+    srcs = ["bin/test_sandbox.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":backend_lib"],
 )

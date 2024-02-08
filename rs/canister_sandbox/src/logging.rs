@@ -1,6 +1,4 @@
-use ic_canister_sandbox_common::{
-    controller_service::ControllerService, protocol::logging::LogRequest,
-};
+use crate::{controller_service::ControllerService, protocol::logging::LogRequest};
 
 #[inline(always)]
 #[allow(dead_code)]

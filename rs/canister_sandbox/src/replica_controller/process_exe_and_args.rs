@@ -10,7 +10,7 @@ use std::{
 
 use once_cell::sync::OnceCell;
 
-use ic_canister_sandbox_common::{RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_SANDBOX_LAUNCHER_FLAG};
+use crate::{RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_SANDBOX_LAUNCHER_FLAG};
 use ic_config::embedders::Config as EmbeddersConfig;
 
 const SANDBOX_EXECUTABLE_NAME: &str = "canister_sandbox";

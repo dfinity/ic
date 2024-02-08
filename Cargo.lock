@@ -5502,9 +5502,10 @@ dependencies = [
 name = "ic-canister-sandbox-backend-lib"
 version = "0.9.0"
 dependencies = [
+ "bincode",
+ "bytes",
  "cc",
  "ic-base-types",
- "ic-canister-sandbox-common",
  "ic-config",
  "ic-constants",
  "ic-cycles-account-manager",
@@ -5531,6 +5532,8 @@ dependencies = [
  "prometheus",
  "rayon",
  "regex",
+ "serde",
+ "serde_bytes",
  "serde_json",
  "slog",
  "slog-async",
@@ -5539,26 +5542,6 @@ dependencies = [
  "threadpool",
  "wat",
  "which",
-]
-
-[[package]]
-name = "ic-canister-sandbox-common"
-version = "0.9.0"
-dependencies = [
- "bincode",
- "bytes",
- "ic-embedders",
- "ic-interfaces",
- "ic-registry-subnet-type",
- "ic-replicated-state",
- "ic-sys",
- "ic-system-api",
- "ic-types",
- "ic-utils 0.9.0",
- "libc",
- "nix 0.24.3",
- "serde",
- "serde_bytes",
 ]
 
 [[package]]

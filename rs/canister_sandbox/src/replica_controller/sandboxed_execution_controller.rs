@@ -1,10 +1,10 @@
-use ic_canister_sandbox_common::controller_launcher_service::ControllerLauncherService;
-use ic_canister_sandbox_common::launcher_service::LauncherService;
-use ic_canister_sandbox_common::protocol::id::{ExecId, MemoryId, WasmId};
-use ic_canister_sandbox_common::protocol::sbxsvc::MemorySerialization;
-use ic_canister_sandbox_common::protocol::structs::{SandboxExecInput, SandboxExecOutput};
-use ic_canister_sandbox_common::sandbox_service::SandboxService;
-use ic_canister_sandbox_common::{protocol, rpc};
+use crate::controller_launcher_service::ControllerLauncherService;
+use crate::launcher_service::LauncherService;
+use crate::protocol::id::{ExecId, MemoryId, WasmId};
+use crate::protocol::sbxsvc::MemorySerialization;
+use crate::protocol::structs::{SandboxExecInput, SandboxExecOutput};
+use crate::sandbox_service::SandboxService;
+use crate::{protocol, rpc};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_executor::{
@@ -1705,7 +1705,7 @@ impl ControllerLauncherService for ExitWatcher {
     fn sandbox_exited(
         &self,
         req: protocol::ctllaunchersvc::SandboxExitedRequest,
-    ) -> ic_canister_sandbox_common::rpc::Call<protocol::ctllaunchersvc::SandboxExitedReply> {
+    ) -> crate::rpc::Call<protocol::ctllaunchersvc::SandboxExitedReply> {
         let guard = self.backends.lock().unwrap();
         let sandbox_process = match guard.get(&req.canister_id).unwrap_or_else(|| {
             panic!(
