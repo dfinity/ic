@@ -1,5 +1,5 @@
 {
-  "checksum": "9d64bb9afa3518492fe7c0450e94915444d8cafd2a2363a80a476acf7db7cfbe",
+  "checksum": "501a4624509aa3883bf55f508e9a5c09817e9de0317b08f466416a1cd96d50d9",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -186,7 +186,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -194,7 +194,7 @@
               "target": "tokio_util"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             }
           ],
@@ -357,7 +357,7 @@
               "target": "smallvec"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -365,7 +365,7 @@
               "target": "tokio_util"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             },
             {
@@ -483,7 +483,7 @@
               "target": "serde"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             }
           ],
@@ -534,7 +534,7 @@
               "target": "futures_core"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             }
           ],
@@ -620,11 +620,11 @@
               "target": "socket2"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             }
           ],
@@ -1465,7 +1465,7 @@
               "target": "tower_service"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             }
           ],
@@ -3061,7 +3061,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -3380,7 +3380,7 @@
               "target": "slab"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             }
           ],
@@ -3581,7 +3581,7 @@
               "target": "pin_project"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             }
           ],
@@ -3624,7 +3624,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             }
           ],
@@ -4318,7 +4318,7 @@
               "target": "sync_wrapper"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -4497,7 +4497,7 @@
               "target": "sync_wrapper"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -4513,7 +4513,7 @@
               "target": "tower_service"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             }
           ],
@@ -4737,7 +4737,7 @@
               "target": "tower_service"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             }
           ],
@@ -5083,7 +5083,7 @@
               "target": "rustls_pemfile"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -5185,7 +5185,7 @@
               "target": "rustls_pemfile"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -5301,7 +5301,7 @@
               "target": "pin_project"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             }
           ],
@@ -7084,7 +7084,7 @@
               "target": "piper"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             }
           ],
@@ -12411,7 +12411,7 @@
               "target": "tinytemplate"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -14226,7 +14226,7 @@
               "target": "retain_mut"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             }
           ],
@@ -16118,7 +16118,7 @@
               "target": "tiny_http"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -16187,11 +16187,11 @@
               "target": "tower_governor"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             },
             {
-              "id": "tracing-appender 0.2.2",
+              "id": "tracing-appender 0.2.3",
               "target": "tracing_appender"
             },
             {
@@ -16199,7 +16199,7 @@
               "target": "tracing_slog"
             },
             {
-              "id": "tracing-subscriber 0.3.17",
+              "id": "tracing-subscriber 0.3.18",
               "target": "tracing_subscriber"
             },
             {
@@ -21808,7 +21808,7 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -21816,7 +21816,7 @@
               "target": "tokio_util"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             }
           ],
@@ -21887,7 +21887,7 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -21895,7 +21895,7 @@
               "target": "tokio_util"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             }
           ],
@@ -23633,7 +23633,7 @@
               "target": "serde_urlencoded"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             }
           ],
@@ -23848,7 +23848,7 @@
               "target": "socket2"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -23856,7 +23856,7 @@
               "target": "tower_service"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             },
             {
@@ -23950,7 +23950,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -24120,7 +24120,7 @@
               "target": "rustls_native_certs"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -24209,7 +24209,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             }
           ],
@@ -24256,7 +24256,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -24344,7 +24344,7 @@
               "target": "socket2"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -24356,7 +24356,7 @@
               "target": "tower_service"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             }
           ],
@@ -24419,7 +24419,7 @@
               "target": "pin_project"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             }
           ],
@@ -24731,7 +24731,7 @@
                 "target": "webpki"
               },
               {
-                "id": "tokio 1.35.1",
+                "id": "tokio 1.36.0",
                 "target": "tokio"
               }
             ]
@@ -29111,7 +29111,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -29131,7 +29131,7 @@
               "target": "tower_http"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             }
           ],
@@ -29362,7 +29362,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -29370,7 +29370,7 @@
               "target": "tokio_util"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             }
           ],
@@ -31377,7 +31377,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -32834,7 +32834,7 @@
               "target": "simple_logger"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -33671,7 +33671,7 @@
               "target": "similar"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             }
           ],
@@ -37201,7 +37201,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -39953,7 +39953,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             }
           ],
@@ -42815,11 +42815,11 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             }
           ],
@@ -42905,7 +42905,7 @@
               "target": "tinyvec"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             }
           ],
@@ -42962,7 +42962,7 @@
               "target": "socket2"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             }
           ],
@@ -45366,7 +45366,7 @@
                 "target": "rustls_pemfile"
               },
               {
-                "id": "tokio 1.35.1",
+                "id": "tokio 1.36.0",
                 "target": "tokio"
               },
               {
@@ -52941,7 +52941,7 @@
               "target": "rand"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             }
           ],
@@ -53912,7 +53912,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -53924,7 +53924,7 @@
               "target": "tokio_util"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             },
             {
@@ -55206,13 +55206,13 @@
       },
       "license": "MIT OR Apache-2.0 OR Zlib"
     },
-    "tokio 1.35.1": {
+    "tokio 1.36.0": {
       "name": "tokio",
-      "version": "1.35.1",
+      "version": "1.36.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tokio/1.35.1/download",
-          "sha256": "c89b4efa943be685f629b149f53829423f8f5531ea21249408e8e2f8671ec104"
+          "url": "https://crates.io/api/v1/crates/tokio/1.36.0/download",
+          "sha256": "61285f6515fa018fb2d1e46eb21223fff441ee8db5d0f1435e8ab4f5cdb80931"
         }
       },
       "targets": [
@@ -55332,7 +55332,7 @@
           ],
           "selects": {}
         },
-        "version": "1.35.1"
+        "version": "1.36.0"
       },
       "license": "MIT"
     },
@@ -55368,7 +55368,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             }
           ],
@@ -55470,7 +55470,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -55526,7 +55526,7 @@
               "target": "rustls"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             }
           ],
@@ -55661,7 +55661,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             }
           ],
@@ -55715,7 +55715,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             }
           ],
@@ -55766,7 +55766,7 @@
               "target": "futures_core"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -55826,7 +55826,7 @@
               "target": "log"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -55907,11 +55907,11 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             }
           ],
@@ -56143,7 +56143,7 @@
               "target": "prost"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -56163,7 +56163,7 @@
               "target": "tower_service"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             }
           ],
@@ -56343,7 +56343,7 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -56359,7 +56359,7 @@
               "target": "tower_service"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             }
           ],
@@ -56467,7 +56467,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -56487,7 +56487,7 @@
               "target": "tower_service"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             },
             {
@@ -56584,7 +56584,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -56604,7 +56604,7 @@
               "target": "tower_service"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             },
             {
@@ -56766,7 +56766,7 @@
               "target": "pin_project"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -56849,7 +56849,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -56861,7 +56861,7 @@
               "target": "tower_layer"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             }
           ],
@@ -56872,13 +56872,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "tracing 0.1.37": {
+    "tracing 0.1.40": {
       "name": "tracing",
-      "version": "0.1.37",
+      "version": "0.1.40",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tracing/0.1.37/download",
-          "sha256": "8ce8c33a8d48bd45d624a6e523445fd21ec13d3653cd51f681abf67418f54eb8"
+          "url": "https://crates.io/api/v1/crates/tracing/0.1.40/download",
+          "sha256": "c3523ab5a71916ccf420eebdf5521fcef02141234bbc0b8a49f2fdc4544364ef"
         }
       },
       "targets": [
@@ -56910,10 +56910,6 @@
         "deps": {
           "common": [
             {
-              "id": "cfg-if 1.0.0",
-              "target": "cfg_if"
-            },
-            {
               "id": "log 0.4.20",
               "target": "log"
             },
@@ -56922,7 +56918,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tracing-core 0.1.31",
+              "id": "tracing-core 0.1.32",
               "target": "tracing_core"
             }
           ],
@@ -56932,23 +56928,23 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "tracing-attributes 0.1.26",
+              "id": "tracing-attributes 0.1.27",
               "target": "tracing_attributes"
             }
           ],
           "selects": {}
         },
-        "version": "0.1.37"
+        "version": "0.1.40"
       },
       "license": "MIT"
     },
-    "tracing-appender 0.2.2": {
+    "tracing-appender 0.2.3": {
       "name": "tracing-appender",
-      "version": "0.2.2",
+      "version": "0.2.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tracing-appender/0.2.2/download",
-          "sha256": "09d48f71a791638519505cefafe162606f706c25592e4bde4d97600c0195312e"
+          "url": "https://crates.io/api/v1/crates/tracing-appender/0.2.3/download",
+          "sha256": "3566e8ce28cc0a3fe42519fc80e6b4c943cc4c8cef275620eb8dac2d3d4e06cf"
         }
       },
       "targets": [
@@ -56974,28 +56970,32 @@
               "target": "crossbeam_channel"
             },
             {
+              "id": "thiserror 1.0.56",
+              "target": "thiserror"
+            },
+            {
               "id": "time 0.3.31",
               "target": "time"
             },
             {
-              "id": "tracing-subscriber 0.3.17",
+              "id": "tracing-subscriber 0.3.18",
               "target": "tracing_subscriber"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.2.2"
+        "version": "0.2.3"
       },
       "license": "MIT"
     },
-    "tracing-attributes 0.1.26": {
+    "tracing-attributes 0.1.27": {
       "name": "tracing-attributes",
-      "version": "0.1.26",
+      "version": "0.1.27",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tracing-attributes/0.1.26/download",
-          "sha256": "5f4f31f56159e98206da9efd823404b79b6ef3143b4a7ab76e67b1751b25a4ab"
+          "url": "https://crates.io/api/v1/crates/tracing-attributes/0.1.27/download",
+          "sha256": "34704c8d6ebcbc939824180af020566b01a7c01f80641264eba0999f6c2b6be7"
         }
       },
       "targets": [
@@ -57032,17 +57032,17 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.1.26"
+        "version": "0.1.27"
       },
       "license": "MIT"
     },
-    "tracing-core 0.1.31": {
+    "tracing-core 0.1.32": {
       "name": "tracing-core",
-      "version": "0.1.31",
+      "version": "0.1.32",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tracing-core/0.1.31/download",
-          "sha256": "0955b8137a1df6f1a2e9a37d8a6656291ff0297c1a97c24e0d8425fe2312f79a"
+          "url": "https://crates.io/api/v1/crates/tracing-core/0.1.32/download",
+          "sha256": "c06d3da6113f116aaee68e4d601191614c9053067f9ab7f6edbcb161237daa54"
         }
       },
       "targets": [
@@ -57086,17 +57086,17 @@
           }
         },
         "edition": "2018",
-        "version": "0.1.31"
+        "version": "0.1.32"
       },
       "license": "MIT"
     },
-    "tracing-log 0.1.3": {
+    "tracing-log 0.2.0": {
       "name": "tracing-log",
-      "version": "0.1.3",
+      "version": "0.2.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tracing-log/0.1.3/download",
-          "sha256": "78ddad33d2d10b1ed7eb9d1f518a5674713876e97e5bb9b7345a7984fbb4f922"
+          "url": "https://crates.io/api/v1/crates/tracing-log/0.2.0/download",
+          "sha256": "ee855f1f400bd0e5c02d150ae5de3840039a3f54b025156404e34c23c03f47c3"
         }
       },
       "targets": [
@@ -57125,22 +57125,22 @@
         "deps": {
           "common": [
             {
-              "id": "lazy_static 1.4.0",
-              "target": "lazy_static"
-            },
-            {
               "id": "log 0.4.20",
               "target": "log"
             },
             {
-              "id": "tracing-core 0.1.31",
+              "id": "once_cell 1.19.0",
+              "target": "once_cell"
+            },
+            {
+              "id": "tracing-core 0.1.32",
               "target": "tracing_core"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.1.3"
+        "version": "0.2.0"
       },
       "license": "MIT"
     },
@@ -57180,15 +57180,15 @@
               "target": "opentelemetry"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             },
             {
-              "id": "tracing-core 0.1.31",
+              "id": "tracing-core 0.1.32",
               "target": "tracing_core"
             },
             {
-              "id": "tracing-subscriber 0.3.17",
+              "id": "tracing-subscriber 0.3.18",
               "target": "tracing_subscriber"
             }
           ],
@@ -57231,7 +57231,7 @@
               "target": "serde"
             },
             {
-              "id": "tracing-core 0.1.31",
+              "id": "tracing-core 0.1.32",
               "target": "tracing_core"
             }
           ],
@@ -57285,7 +57285,7 @@
               "target": "slog"
             },
             {
-              "id": "tracing-core 0.1.31",
+              "id": "tracing-core 0.1.32",
               "target": "tracing_core"
             }
           ],
@@ -57296,13 +57296,13 @@
       },
       "license": "MIT"
     },
-    "tracing-subscriber 0.3.17": {
+    "tracing-subscriber 0.3.18": {
       "name": "tracing-subscriber",
-      "version": "0.3.17",
+      "version": "0.3.18",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tracing-subscriber/0.3.17/download",
-          "sha256": "30a651bc37f915e81f087d86e62a18eec5f79550c7faff886f7090b4ea757c77"
+          "url": "https://crates.io/api/v1/crates/tracing-subscriber/0.3.18/download",
+          "sha256": "ad0f048c97dbd9faa9b7df56362b8ebcaa52adb06b498c050d2f4e32f90a7a8b"
         }
       },
       "targets": [
@@ -57385,15 +57385,15 @@
               "target": "thread_local"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             },
             {
-              "id": "tracing-core 0.1.31",
+              "id": "tracing-core 0.1.32",
               "target": "tracing_core"
             },
             {
-              "id": "tracing-log 0.1.3",
+              "id": "tracing-log 0.2.0",
               "target": "tracing_log"
             },
             {
@@ -57404,7 +57404,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.17"
+        "version": "0.3.18"
       },
       "license": "MIT"
     },
@@ -57613,11 +57613,11 @@
               "target": "tinyvec"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             },
             {
@@ -57716,11 +57716,11 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             },
             {
@@ -57920,7 +57920,7 @@
               "target": "scoped_tls"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -57936,11 +57936,11 @@
               "target": "tokio_util"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             },
             {
-              "id": "tracing-subscriber 0.3.17",
+              "id": "tracing-subscriber 0.3.18",
               "target": "tracing_subscriber"
             }
           ],
@@ -59758,7 +59758,7 @@
               "target": "serde_urlencoded"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
@@ -59782,7 +59782,7 @@
               "target": "tower_service"
             },
             {
-              "id": "tracing 0.1.37",
+              "id": "tracing 0.1.40",
               "target": "tracing"
             }
           ],
@@ -64276,7 +64276,7 @@
               "target": "serde_json"
             },
             {
-              "id": "tokio 1.35.1",
+              "id": "tokio 1.36.0",
               "target": "tokio"
             }
           ],

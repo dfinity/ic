@@ -28,9 +28,9 @@ hex = "0.4.2"
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 clap = { workspace = true }
 time = "^0.3.20"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tracing-appender = "^0.2.2"
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-appender = { workspace = true }
 tower-http = { version = "^0.5.1", features = ["trace", "request-id", "util"] }
 tempfile = "*"
 base64 = { workspace = true }

@@ -45,8 +45,8 @@ lazy_static = "1.4.0"
 http = "0.2.9"
 tower-http = { version = "0.4.0", features = ["trace"] }
 tower-request-id = "0.2.1"
-tracing = "0.1.37"
-tracing-subscriber = { version = "0.3.16", features = ["json"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 indicatif = "0.17.3"
 ic-rosetta-api = { path = "../../" }
 rosetta-core = {path = "../../rosetta_core"}

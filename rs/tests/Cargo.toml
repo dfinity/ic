@@ -165,12 +165,8 @@ time = "^0.3.20"
 walkdir = "2.3.1"
 tokio = { workspace = true }
 tokio-util = { workspace = true }
-tracing = "0.1.37"
-tracing-subscriber = { version = "0.3.17", features = [
-    "std",
-    "fmt",
-    "env-filter",
-] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 tree-deserializer = { path = "../tree_deserializer" }
 url = "2.1.1"
 utils = { path = "../utils", package = "ic-utils" }
