@@ -263,6 +263,7 @@ pub fn populate_canister_ids(
     ledger_canister_id: CanisterId,
     swap_canister_id: CanisterId,
     index_canister_id: CanisterId,
+    archive_canister_ids: Vec<CanisterId>,
     sns_canister_init_payloads: &mut SnsCanisterInitPayloads,
 ) {
     let root_canister_id = PrincipalId::from(root_canister_id);
@@ -270,6 +271,10 @@ pub fn populate_canister_ids(
     let ledger_canister_id = PrincipalId::from(ledger_canister_id);
     let swap_canister_id = Some(PrincipalId::from(swap_canister_id));
     let index_canister_id = Some(PrincipalId::from(index_canister_id));
+    let archive_canister_ids = archive_canister_ids
+        .into_iter()
+        .map(|c_id| c_id.get())
+        .collect();
 
     // Root.
     {
@@ -285,6 +290,9 @@ pub fn populate_canister_ids(
         }
         if root.index_canister_id.is_none() {
             root.index_canister_id = index_canister_id;
+        }
+        if root.archive_canister_ids.is_empty() {
+            root.archive_canister_ids = archive_canister_ids;
         }
     }
 
@@ -379,6 +387,7 @@ impl SnsCanisters<'_> {
             ledger_canister_id,
             swap_canister_id,
             index_canister_id,
+            vec![],
             &mut init_payloads,
         );
 
