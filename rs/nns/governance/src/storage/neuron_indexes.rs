@@ -695,11 +695,6 @@ where
         self.known_neuron.validate();
         self.account_id.validate();
     }
-
-    // TODO(NNS1-2813): remove after upgrade.
-    pub fn remove_deprecated_topic(&mut self, topic: Topic) {
-        self.following.remove_deprecated_category(topic);
-    }
 }
 
 // To update neuron indexes we need to ensure that the neurons involved have id and valid
