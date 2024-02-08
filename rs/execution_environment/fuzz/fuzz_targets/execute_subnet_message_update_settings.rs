@@ -12,6 +12,7 @@ use libfuzzer_sys::{fuzz_target, Corpus};
 
 fuzz_target!(|args: UpdateSettingsArgs| -> Corpus {
     let mut test = ExecutionTestBuilder::new()
+        .with_deterministic_time_slicing_disabled()
         .with_canister_sandboxing_disabled()
         .build();
 
