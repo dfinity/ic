@@ -321,3 +321,9 @@ pub struct ConstructionSubmitResponse {
     pub transaction_identifier: TransactionIdentifier,
     pub metadata: Option<ObjectMap>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConstructionHashResponse {
+    pub transaction_identifier: TransactionIdentifier,
+    pub metadata: ObjectMap,
+}

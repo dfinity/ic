@@ -18,12 +18,6 @@ use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
 use std::str::FromStr;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ConstructionHashResponse {
-    pub transaction_identifier: TransactionIdentifier,
-    pub metadata: ObjectMap,
-}
-
 /// An AccountBalanceRequest is utilized to make a balance request on the
 /// /account/balance endpoint. If the block_identifier is populated, a
 /// historical balance query should be performed.
@@ -231,38 +225,6 @@ fn test_construction_derive_request_metadata() {
 
     assert_eq!(s, r#"{"account_type":"neuron","neuron_index":1}"#);
     assert_eq!(r0, r1);
-}
-
-/// ConstructionHashRequest is the input to the `/construction/hash` endpoint.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct ConstructionHashRequest {
-    #[serde(rename = "network_identifier")]
-    pub network_identifier: NetworkIdentifier,
-
-    #[serde(rename = "signed_transaction")]
-    pub signed_transaction: String,
-}
-
-impl ConstructionHashRequest {
-    pub fn new(
-        network_identifier: NetworkIdentifier,
-        signed_transaction: String,
-    ) -> ConstructionHashRequest {
-        ConstructionHashRequest {
-            network_identifier,
-            signed_transaction,
-        }
-    }
-
-    pub fn signed_transaction(&self) -> Result<SignedTransaction, ApiError> {
-        serde_cbor::from_slice(&from_hex(&self.signed_transaction)?).map_err(|e| {
-            ApiError::invalid_request(format!(
-                "Cannot deserialize the hash request in CBOR format because of: {}",
-                e
-            ))
-        })
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
