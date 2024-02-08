@@ -109,10 +109,16 @@ unlicensed = "allow"
 allow = [
     "Apache-2.0",
     "Apache-2.0 WITH LLVM-exception",
+    "BlueOak-1.0.0",
     "BSD-2-Clause",
     "BSD-3-Clause",
+    "CC0-1.0",
+    "CDDL-1.0",
+    "ISC",
     "MIT",
     "MPL-2.0",
+    "Unicode-DFS-2016",
+    "Zlib",
 ]
 # List of explicitly disallowed licenses
 # See https://spdx.org/licenses/ for list of possible licenses
@@ -121,7 +127,7 @@ deny = [
     #"Nokia",
 ]
 # Lint level for licenses considered copyleft
-copyleft = "warn"
+copyleft = "deny"
 # Blanket approval or denial for OSI-approved or FSF Free/Libre licenses
 # * both - The license will be approved if it is both OSI-approved *AND* FSF
 # * either - The license will be approved if it is either OSI-approved *OR* FSF
