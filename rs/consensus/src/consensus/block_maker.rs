@@ -23,8 +23,8 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::{BatchPayload, ValidationContext},
     consensus::{
-        block_maker::SubnetRecords, dkg, hashed, Block, BlockProposal, HasRank, Payload,
-        RandomBeacon, Rank,
+        block_maker::SubnetRecords, dkg, hashed, Block, BlockPayload, BlockProposal, DataPayload,
+        HasRank, Payload, RandomBeacon, Rank, SummaryPayload,
     },
     crypto::CryptoHashOf,
     replica_config::ReplicaConfig,
@@ -337,7 +337,11 @@ impl BlockMaker {
                     .map_err(|err| warn!(self.log, "Payload construction has failed: {:?}", err))
                     .ok()
                     .flatten();
-                    (summary, ecdsa_summary).into()
+
+                    BlockPayload::Summary(SummaryPayload {
+                        dkg: summary,
+                        ecdsa: ecdsa_summary,
+                    })
                 }
                 dkg::Payload::Dealings(dealings) => {
                     let (batch_payload, dealings, ecdsa_data) = match status::get_status(
@@ -393,7 +397,12 @@ impl BlockMaker {
                         batch_payload.xnet.size_bytes(),
                         batch_payload.ingress.count_bytes(),
                     );
-                    (batch_payload, dealings, ecdsa_data).into()
+
+                    BlockPayload::Data(DataPayload {
+                        batch: batch_payload,
+                        dealings,
+                        ecdsa: ecdsa_data,
+                    })
                 }
             },
         );

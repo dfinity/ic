@@ -778,8 +778,8 @@ mod tests {
         batch::ValidationContext,
         consensus::{
             ecdsa::{self, EcdsaKeyTranscript, EcdsaUIDGenerator, TranscriptAttributes},
-            Block, CatchUpContent, HashedBlock, HashedRandomBeacon, Payload, RandomBeacon,
-            RandomBeaconContent, Rank,
+            Block, BlockPayload, CatchUpContent, HashedBlock, HashedRandomBeacon, Payload,
+            RandomBeacon, RandomBeaconContent, Rank, SummaryPayload,
         },
         crypto::{
             canister_threshold_sig::idkg::IDkgTranscript, AlgorithmId, CryptoHash, CryptoHashOf,
@@ -827,7 +827,10 @@ mod tests {
             CryptoHashOf::from(CryptoHash(Vec::new())),
             Payload::new(
                 ic_types::crypto::crypto_hash,
-                (ic_types::consensus::dkg::Summary::fake(), Some(ecdsa)).into(),
+                BlockPayload::Summary(SummaryPayload {
+                    dkg: ic_types::consensus::dkg::Summary::fake(),
+                    ecdsa: Some(ecdsa),
+                }),
             ),
             h,
             Rank(46),

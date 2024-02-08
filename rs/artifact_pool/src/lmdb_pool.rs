@@ -13,7 +13,7 @@ use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::types::v1 as pb;
 use ic_types::consensus::certification::CertificationMessageHash;
-use ic_types::consensus::HasHash;
+use ic_types::consensus::{DataPayload, HasHash, SummaryPayload};
 use ic_types::{
     artifact::{CertificationMessageId, ConsensusMessageId, EcdsaMessageId},
     batch::BatchPayload,
@@ -944,13 +944,15 @@ impl PoolArtifact for ConsensusMessage {
                 // used to determine the payload type. So it's important that the
                 // dummy has the SAME payload type as the real payload.
                 Box::new(move || match payload_type {
-                    PayloadType::Summary => (dkg::Summary::default(), None).into(),
-                    PayloadType::Data => (
-                        BatchPayload::default(),
-                        dkg::Dealings::new_empty(start_height),
-                        None,
-                    )
-                        .into(),
+                    PayloadType::Summary => BlockPayload::Summary(SummaryPayload {
+                        dkg: dkg::Summary::default(),
+                        ecdsa: None,
+                    }),
+                    PayloadType::Data => BlockPayload::Data(DataPayload {
+                        batch: BatchPayload::default(),
+                        dealings: dkg::Dealings::new_empty(start_height),
+                        ecdsa: None,
+                    }),
                 }),
             );
             value.msg = proposal.into_message();

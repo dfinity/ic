@@ -284,7 +284,7 @@ mod tests {
     };
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_types::{
-        consensus::{ecdsa::QuadrupleId, Payload},
+        consensus::{ecdsa::QuadrupleId, BlockPayload, Payload, SummaryPayload},
         crypto::CryptoHash,
         CryptoHashOfState, Height, RegistryVersion,
     };
@@ -455,7 +455,13 @@ mod tests {
             add_available_quadruple_to_payload(&mut ecdsa, quadruple_id3, RegistryVersion::from(2));
 
             let dkg = block.payload.as_ref().as_summary().dkg.clone();
-            block.payload = Payload::new(ic_types::crypto::crypto_hash, (dkg, Some(ecdsa)).into());
+            block.payload = Payload::new(
+                ic_types::crypto::crypto_hash,
+                BlockPayload::Summary(SummaryPayload {
+                    dkg,
+                    ecdsa: Some(ecdsa),
+                }),
+            );
             proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
 
             pool.advance_round_with_block(&proposal);

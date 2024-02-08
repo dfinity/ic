@@ -49,6 +49,7 @@ use ic_types::{
     batch::{BatchPayload, ValidationContext},
     consensus::{
         certification::{Certification, CertificationContent},
+        BlockPayload, DataPayload,
         {dkg::Dealings, Block, Payload, Rank},
     },
     crypto::{
@@ -107,12 +108,11 @@ fn test_healthy_behind() {
                 CryptoHashOf::from(CryptoHash(Vec::new())),
                 Payload::new(
                     ic_types::crypto::crypto_hash,
-                    (
-                        BatchPayload::default(),
-                        Dealings::new_empty(Height::from(1)),
-                        None,
-                    )
-                        .into(),
+                    BlockPayload::Data(DataPayload {
+                        batch: BatchPayload::default(),
+                        dealings: Dealings::new_empty(Height::from(1)),
+                        ecdsa: None,
+                    }),
                 ),
                 Height::from(224),
                 Rank(456),

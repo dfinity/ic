@@ -13,7 +13,7 @@ use ic_interfaces::consensus_pool::{
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_protobuf::types::v1 as pb;
 use ic_types::consensus::certification::CertificationMessageHash;
-use ic_types::consensus::HasHash;
+use ic_types::consensus::{BlockPayload, DataPayload, HasHash};
 use ic_types::{
     artifact::{CertificationMessageId, ConsensusMessageId},
     batch::BatchPayload,
@@ -428,12 +428,11 @@ impl MutablePoolSection<ValidatedConsensusArtifact>
                                 block.payload.get_hash().clone(),
                                 block.payload.payload_type(),
                                 Box::new(move || {
-                                    (
-                                        BatchPayload::default(),
-                                        Dealings::new_empty(start_height),
-                                        None,
-                                    )
-                                        .into()
+                                    BlockPayload::Data(DataPayload {
+                                        batch: BatchPayload::default(),
+                                        dealings: Dealings::new_empty(start_height),
+                                        ecdsa: None,
+                                    })
                                 }),
                             );
                             artifact.msg = proposal.into_message();
