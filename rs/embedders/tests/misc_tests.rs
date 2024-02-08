@@ -5,9 +5,16 @@ use ic_embedders::{
     wasm_utils::{decoding::decode_wasm, validate_and_instrument_for_testing},
     WasmtimeEmbedder,
 };
+use ic_interfaces::execution_environment::HypervisorError;
 use ic_logger::replica_logger::no_op_logger;
+use ic_test_utilities::wasmtime_instance::WasmtimeInstanceBuilder;
+use ic_test_utilities_time::mock_time;
+use ic_types::{
+    methods::{FuncRef, WasmMethod},
+    Cycles, PrincipalId,
+};
 use ic_wasm_transform::Module;
-use ic_wasm_types::BinaryEncodedWasm;
+use ic_wasm_types::{BinaryEncodedWasm, WasmValidationError};
 use std::sync::Arc;
 use wasmparser::ExternalKind;
 
@@ -151,4 +158,92 @@ fn test_decode_large_compressed_module_with_tweaked_size() {
     let n = contents.len();
     contents[n - 4..n].copy_from_slice(&100u32.to_le_bytes());
     decode_wasm(Arc::new(contents)).unwrap();
+}
+
+fn run_go_export(wat: &str) -> Result<(), HypervisorError> {
+    const LARGE_INSTRUCTION_LIMIT: u64 = 1_000_000_000_000;
+
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_wat(wat)
+        .with_api_type(ic_system_api::ApiType::update(
+            mock_time(),
+            vec![],
+            Cycles::from(0_u128),
+            PrincipalId::new_user_test_id(0),
+            0.into(),
+        ))
+        .with_num_instructions(LARGE_INSTRUCTION_LIMIT.into())
+        .try_build()
+        .map_err(|(err, _)| err)?;
+
+    instance
+        .run(FuncRef::Method(WasmMethod::Update("go".to_string())))
+        .unwrap();
+    Ok(())
+}
+
+/// Test that we can handle a module that exports one of its imports.
+#[test]
+fn direct_export_of_import() {
+    run_go_export(
+        r#"
+		(module
+			(func $reply (export "canister_update go") (import "ic0" "msg_reply"))
+		)
+	"#,
+    )
+    .unwrap();
+}
+
+/// Test that we can handle a module that exports one of its imports when there
+/// are other imports.
+#[test]
+fn direct_export_of_one_import_from_many() {
+    run_go_export(
+        r#"
+		(module
+            (import "ic0" "call_cycles_add" (func $ic0_call_cycles_add (param $amount i64)))
+            (import "ic0" "canister_cycle_balance" (func $ic0_canister_cycle_balance (result i64)))
+			(func $reply (export "canister_update go") (import "ic0" "msg_reply"))
+            (import "ic0" "msg_cycles_accept" (func $ic0_msg_cycles_accept (param $amount i64) (result i64)))
+		)
+	"#,
+    ).unwrap();
+}
+
+#[test]
+fn direct_export_of_import_fails_with_wrong_type() {
+    let err = run_go_export(
+        r#"
+		(module
+            (import "ic0" "call_cycles_add" (func $ic0_call_cycles_add (param $amount i64)))
+            (import "ic0" "msg_reply" (func $reply))
+			(func (export "canister_update go") (import "ic0" "canister_cycle_balance") (result i64))
+            (import "ic0" "msg_cycles_accept" (func $ic0_msg_cycles_accept (param $amount i64) (result i64)))
+            (func $other (call $reply))
+		)
+	"#,
+    ).unwrap_err();
+    assert_eq!(
+        err,
+        HypervisorError::InvalidWasm(WasmValidationError::InvalidFunctionSignature(
+            "Expected return type [] for 'canister_update go', got [I64].".to_string()
+        ))
+    );
+}
+
+/// A module should be allowed to export a direct import which doesn't have type
+/// () -> () as long as it doesn't have a `canister_` prefix in the export name.
+#[test]
+fn direct_export_of_import_without_unit_type() {
+    run_go_export(
+        r#"
+		(module
+            (import "ic0" "call_cycles_add" (func $ic0_call_cycles_add (param $amount i64)))
+			(func (export "foo") (import "ic0" "canister_cycle_balance") (result i64))
+            (import "ic0" "msg_cycles_accept" (func $ic0_msg_cycles_accept (param $amount i64) (result i64)))
+            (func (export "canister_update go"))
+		)
+	"#,
+    ).unwrap();
 }
