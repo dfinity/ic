@@ -43,8 +43,8 @@ rustls-pemfile = "1"
 tokio-util = { workspace = true }
 tower = { workspace = true }
 tower-http = { version = "0.3", features = ["trace"] }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["json"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 tokio = { workspace = true }
 ic-response-verification = { workspace = true }
 ic-http-certification = { workspace = true }

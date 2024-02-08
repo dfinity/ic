@@ -30,5 +30,5 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = "3.3.0"
 tokio = { workspace = true }
-tracing = "0.1.34"
-tracing-subscriber = { version = "0.3.11", features = ["json"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

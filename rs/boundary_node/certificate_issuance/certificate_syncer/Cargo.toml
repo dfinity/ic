@@ -25,6 +25,6 @@ serde_json = { workspace = true }
 tempfile = "3.3.0"
 thiserror = "1.0.37"
 tokio = { workspace = true }
-tracing = "0.1.37"
-tracing-subscriber = { version = "0.3.16", features = ["json"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 x509-parser = "0.15.1"

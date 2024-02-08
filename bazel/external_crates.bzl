@@ -1202,7 +1202,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.31",
             ),
             "tokio": crate.spec(
-                version = "^1.35.1",
+                version = "^1.36.0",
                 features = [
                     "full",
                     "io-util",
@@ -1250,10 +1250,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.9",
             ),
             "tonic": crate.spec(
-                version = "^0.10",
+                version = "^0.10.2",
             ),
             "tonic-build": crate.spec(
-                version = "^0.10",
+                version = "^0.10.2",
             ),
             "tower": crate.spec(
                 version = "^0.4.13",
@@ -1288,17 +1288,19 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.4.0",
             ),
             "tracing": crate.spec(
-                version = "^0.1.34",
+                version = "^0.1.40",
             ),
             "tracing-appender": crate.spec(
-                version = "^0.2.2",
+                version = "^0.2.3",
             ),
             "tracing-slog": crate.spec(
                 version = "^0.2",
             ),
             "tracing-subscriber": crate.spec(
-                version = "^0.3.11",
+                version = "^0.3.18",
                 features = [
+                    "env-filter",
+                    "fmt",
                     "json",
                 ],
             ),

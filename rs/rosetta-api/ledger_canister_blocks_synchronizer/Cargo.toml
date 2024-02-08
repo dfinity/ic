@@ -22,7 +22,7 @@ on_wire = {path = "../../rust_canisters/on_wire"}
 rusqlite = { version = "~0.28.0", features = ["bundled"] }
 serde = { workspace = true }
 tokio = { workspace = true }
-tracing = "0.1.37"
+tracing = { workspace = true }
 url = "2.2.1"
 
 [dev-dependencies]

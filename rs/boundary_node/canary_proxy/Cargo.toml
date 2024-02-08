@@ -18,8 +18,8 @@ once_cell = "1.18.0"
 pin-project-lite = "0.2.13"
 regex = "1.10.2"
 tokio = { workspace = true }
-tracing = "0.1.35"
-tracing-subscriber = { version = "0.3.11", features = ["json"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
 tokio-test = "0.4"
