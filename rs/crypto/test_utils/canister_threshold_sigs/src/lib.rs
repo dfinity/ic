@@ -1438,6 +1438,7 @@ pub fn random_crypto_component_not_in_receivers<R: RngCore + CryptoRng>(
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, EnumIter)]
 pub enum IDkgMode {
+    RandomUnmasked,
     Random,
     ReshareOfMasked,
     ReshareOfUnmasked,
@@ -1473,13 +1474,20 @@ impl IDkgMode {
             // commitment polynomial is of degree zero, i.e., it is not random and
             // thus the commitment remains the same after resharing.
             Self::ReshareOfUnmasked => 4,
-            Self::Random | Self::ReshareOfMasked | Self::UnmaskedTimesMasked => 2,
+            Self::RandomUnmasked
+            | Self::Random
+            | Self::ReshareOfMasked
+            | Self::UnmaskedTimesMasked => 2,
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum IDkgModeTestContext {
+    RandomUnmasked {
+        dealers: IDkgDealers,
+        receivers: IDkgReceivers,
+    },
     Random {
         dealers: IDkgDealers,
         receivers: IDkgReceivers,
@@ -1506,6 +1514,11 @@ impl IDkgModeTestContext {
         rng: &mut R,
     ) -> Self {
         match mode {
+            IDkgMode::RandomUnmasked => {
+                let (dealers, receivers) =
+                    env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
+                Self::RandomUnmasked { dealers, receivers }
+            }
             IDkgMode::Random => {
                 let (dealers, receivers) =
                     env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
@@ -1568,6 +1581,9 @@ impl IDkgModeTestContext {
         rng: &mut R,
     ) -> IDkgTranscriptParams {
         match self {
+            IDkgModeTestContext::RandomUnmasked { dealers, receivers } => {
+                setup_unmasked_random_params(env, alg, dealers, receivers, rng)
+            }
             IDkgModeTestContext::Random { dealers, receivers } => {
                 setup_masked_random_params(env, alg, dealers, receivers, rng)
             }
@@ -1611,7 +1627,8 @@ impl IDkgModeTestContext {
 
     fn receivers(&self) -> &IDkgReceivers {
         match self {
-            IDkgModeTestContext::Random { receivers, .. }
+            IDkgModeTestContext::RandomUnmasked { receivers, .. }
+            | IDkgModeTestContext::Random { receivers, .. }
             | IDkgModeTestContext::ReshareOfMasked { receivers, .. }
             | IDkgModeTestContext::ReshareOfUnmasked { receivers, .. }
             | IDkgModeTestContext::UnmaskedTimesMasked { receivers, .. } => receivers,
@@ -1625,6 +1642,7 @@ impl std::fmt::Display for IDkgMode {
             f,
             "{}",
             match self {
+                Self::RandomUnmasked => "random_unmasked",
                 Self::Random => "random",
                 Self::ReshareOfMasked => "reshare_of_masked",
                 Self::ReshareOfUnmasked => "reshare_of_unmasked",
