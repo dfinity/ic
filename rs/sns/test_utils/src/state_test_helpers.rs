@@ -23,11 +23,13 @@ use ic_sns_governance::pb::v1::{
     governance::Version, ListNeurons, ListNeuronsResponse, NervousSystemParameters,
 };
 use ic_sns_init::SnsCanisterInitPayloads;
-use ic_sns_root::pb::v1::{
-    RegisterDappCanisterRequest, RegisterDappCanisterResponse, RegisterDappCanistersRequest,
-    RegisterDappCanistersResponse,
+use ic_sns_root::{
+    pb::v1::{
+        RegisterDappCanisterRequest, RegisterDappCanisterResponse, RegisterDappCanistersRequest,
+        RegisterDappCanistersResponse,
+    },
+    GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
 };
-use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use ic_sns_swap::pb::v1::{
     self as swap_pb, ErrorRefundIcpResponse, FinalizeSwapResponse, GetBuyerStateResponse,
     GetBuyersTotalResponse, GetLifecycleResponse, GetOpenTicketResponse, GetSaleParametersResponse,
@@ -105,6 +107,7 @@ pub fn setup_sns_canisters(
         ledger_canister_id,
         swap_canister_id,
         index_canister_id,
+        vec![],
         &mut payloads,
     );
 
@@ -518,6 +521,7 @@ impl Scenario {
             ledger_canister_id,
             swap_canister_id,
             index_canister_id,
+            vec![],
             &mut configuration,
         );
 

@@ -10724,6 +10724,7 @@ dependencies = [
  "ic-sns-swap",
  "ic-test-utilities-compare-dirs",
  "icrc-ledger-types",
+ "lazy_static",
  "maplit",
  "prost",
  "serde",
