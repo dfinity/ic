@@ -298,3 +298,12 @@ impl ConstructionSubmitRequest {
         }
     }
 }
+
+/// ConstructionHashRequest is the input to the `/construction/hash` endpoint.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct ConstructionHashRequest {
+    pub network_identifier: NetworkIdentifier,
+
+    pub signed_transaction: String,
+}
