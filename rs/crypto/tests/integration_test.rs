@@ -8,6 +8,7 @@ use ic_crypto_internal_csp_test_utils::remote_csp_vault::{
     get_temp_file_path, start_new_remote_csp_vault_server_for_test,
 };
 use ic_crypto_internal_tls::generate_tls_key_pair_der;
+use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_crypto_temp_crypto::{EcdsaSubnetConfig, NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_test_utils::files::temp_dir;
 use ic_crypto_test_utils_keygen::TestKeygenCrypto;
@@ -49,14 +50,14 @@ const TWO_WEEKS: Duration = Duration::from_secs(2 * 7 * 24 * 60 * 60);
 #[test]
 fn should_successfully_construct_crypto_component_with_default_config() {
     CryptoConfig::run_with_temp_config(|config| {
+        generate_node_keys_once(&config, None).expect("error generating node public keys");
         let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
-        CryptoComponent::new_with_fake_node_id(
+        CryptoComponent::new(
             &config,
             None,
             Arc::new(registry_client),
-            node_test_id(42),
             no_op_logger(),
-            Arc::new(CurrentSystemTimeSource::new(no_op_logger())),
+            None,
         );
     })
 }
@@ -68,14 +69,15 @@ fn should_successfully_construct_crypto_component_with_remote_csp_vault() {
     let temp_dir = temp_dir(); // temp dir with correct permissions
     let crypto_root = temp_dir.path().to_path_buf();
     let config = CryptoConfig::new_with_unix_socket_vault(crypto_root, socket_path, None);
+    generate_node_keys_once(&config, Some(tokio_rt.handle().clone()))
+        .expect("error generating node public keys");
     let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
-    CryptoComponent::new_with_fake_node_id(
+    CryptoComponent::new(
         &config,
         Some(tokio_rt.handle().clone()),
         Arc::new(registry_client),
-        node_test_id(42),
         no_op_logger(),
-        Arc::new(CurrentSystemTimeSource::new(no_op_logger())),
+        None,
     );
 }
 
@@ -88,13 +90,12 @@ fn should_not_construct_crypto_component_if_remote_csp_vault_is_missing() {
     let config = CryptoConfig::new_with_unix_socket_vault(crypto_root, socket_path, None);
     let tokio_rt = new_tokio_runtime();
     let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
-    CryptoComponent::new_with_fake_node_id(
+    CryptoComponent::new(
         &config,
         Some(tokio_rt.handle().clone()),
         Arc::new(registry_client),
-        node_test_id(42),
         no_op_logger(),
-        FastForwardTimeSource::new(),
+        None,
     );
 }
 
