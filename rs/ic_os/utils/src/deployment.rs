@@ -11,7 +11,6 @@ pub struct DeploymentJson {
     pub deployment: Deployment,
     pub logging: Logging,
     pub nns: Nns,
-    pub dns: Dns,
     pub resources: Resources,
 }
 
@@ -28,11 +27,6 @@ pub struct Logging {
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct Nns {
     pub url: Url,
-}
-
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
-pub struct Dns {
-    pub name_servers: String,
 }
 
 #[serde_as]
@@ -64,9 +58,6 @@ mod test {
   "nns": {
     "url": "https://dfinity.org/"
   },
-  "dns": {
-    "name_servers": "2606:4700:4700::1111 2606:4700:4700::1001 2001:4860:4860::8888 2001:4860:4860::8844"
-  },
   "resources": {
     "memory": "490"
   }
@@ -77,7 +68,6 @@ mod test {
             deployment: Deployment { name: "mainnet".to_string() },
             logging: Logging { hosts: "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443".to_string() },
             nns: Nns { url: Url::parse("https://dfinity.org").unwrap() },
-            dns: Dns { name_servers: "2606:4700:4700::1111 2606:4700:4700::1001 2001:4860:4860::8888 2001:4860:4860::8844".to_string()},
             resources: Resources { memory: 490, cpu: None },
         }
     });
@@ -92,9 +82,6 @@ mod test {
   "nns": {
     "url": "https://dfinity.org/"
   },
-  "dns": {
-    "name_servers": "2606:4700:4700::1111 2606:4700:4700::1001 2001:4860:4860::8888 2001:4860:4860::8844"
-  },
   "resources": {
     "memory": "490",
     "cpu": "qemu"
@@ -106,7 +93,6 @@ mod test {
             deployment: Deployment { name: "mainnet".to_string() },
             logging: Logging { hosts: "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443".to_string() },
             nns: Nns { url: Url::parse("https://dfinity.org").unwrap() },
-            dns: Dns { name_servers: "2606:4700:4700::1111 2606:4700:4700::1001 2001:4860:4860::8888 2001:4860:4860::8844".to_string()},
             resources: Resources { memory: 490, cpu: Some("qemu".to_string()) },
         }
     });
