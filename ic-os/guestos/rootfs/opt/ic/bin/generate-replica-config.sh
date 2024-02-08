@@ -75,7 +75,6 @@ function read_network_variables() {
             "hostname") hostname="${value}" ;;
             "ipv6_address") ipv6_address="${value}" ;;
             "ipv6_gateway") ipv6_gateway="${value}" ;;
-            "name_servers") name_servers="${value}" ;;
             "ipv4_address") ipv4_address="${value}" ;;
             "ipv4_gateway") ipv4_gateway="${value}" ;;
             "domain") domain="${value}" ;;

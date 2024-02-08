@@ -65,21 +65,17 @@ pub fn main() -> Result<()> {
             eprintln!("Network info config: {:?}", &network_info);
 
             let deployment = read_deployment_file(Path::new(&opts.deployment_file));
-            let (dns_nameservers, deployment_name) = match &deployment {
-                Ok(deployment) => (
-                    Some(deployment.dns.name_servers.as_str()),
-                    Some(deployment.deployment.name.as_str()),
-                ),
+            let deployment_name: Option<&str> = match &deployment {
+                Ok(deployment) => Some(deployment.deployment.name.as_str()),
                 Err(e) => {
                     eprintln!("Error retrieving deployment file: {e}. Continuing without it");
-                    (None, None)
+                    None
                 }
             };
 
             generate_network_config(
                 &network_info,
                 deployment_name,
-                dns_nameservers,
                 NodeType::HostOS,
                 Path::new(&output_directory),
             )
