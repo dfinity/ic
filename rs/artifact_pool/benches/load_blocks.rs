@@ -13,6 +13,7 @@ use ic_test_utilities::{
     types::ids::{node_test_id, subnet_test_id},
     types::messages::SignedIngressBuilder,
 };
+use ic_types::consensus::{BlockPayload, DataPayload};
 use ic_types::{
     batch::{BatchPayload, IngressPayload},
     consensus::{dkg, Block, BlockProposal, ConsensusMessageHashable, HasHeight, Payload, Rank},
@@ -57,15 +58,16 @@ fn prepare(pool: &mut ConsensusPoolImpl, num: usize) {
             .build()]);
         block.payload = Payload::new(
             ic_types::crypto::crypto_hash,
-            (
-                BatchPayload {
+            BlockPayload::Data(DataPayload {
+                batch: BatchPayload {
                     ingress,
                     ..BatchPayload::default()
                 },
-                dkg::Dealings::new_empty(parent.payload.as_ref().dkg_interval_start_height()),
-                None,
-            )
-                .into(),
+                dealings: dkg::Dealings::new_empty(
+                    parent.payload.as_ref().dkg_interval_start_height(),
+                ),
+                ecdsa: None,
+            }),
         );
         let proposal = BlockProposal::fake(block, node_test_id(i as u64));
         changeset.push(ChangeAction::AddToValidated(ValidatedConsensusArtifact {

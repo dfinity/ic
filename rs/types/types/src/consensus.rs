@@ -1462,6 +1462,7 @@ impl TryFrom<pb::Block> for Block {
                     .map(|ecdsa| ecdsa.try_into())
                     .transpose()
                     .map_err(|e: ProxyDecodeError| e.to_string())?;
+
                 BlockPayload::Summary(SummaryPayload {
                     dkg: summary,
                     ecdsa,
@@ -1474,7 +1475,12 @@ impl TryFrom<pb::Block> for Block {
                     .map(|ecdsa| ecdsa.try_into())
                     .transpose()
                     .map_err(|e: ProxyDecodeError| e.to_string())?;
-                (batch, dealings, ecdsa).into()
+
+                BlockPayload::Data(DataPayload {
+                    batch,
+                    dealings,
+                    ecdsa,
+                })
             }
         };
         Ok(Block {

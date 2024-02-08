@@ -48,7 +48,7 @@ use ic_types::{
     consensus::{
         certification::{Certification, CertificationContent},
         dkg::Dealings,
-        Block, Payload, Rank,
+        Block, BlockPayload, DataPayload, Payload, Rank,
     },
     crypto::{
         threshold_sig::{
@@ -256,12 +256,11 @@ fn basic_consensus_pool_cache() -> MockConsensusPoolCache {
                 CryptoHashOf::from(CryptoHash(Vec::new())),
                 Payload::new(
                     ic_types::crypto::crypto_hash,
-                    (
-                        BatchPayload::default(),
-                        Dealings::new_empty(Height::from(1)),
-                        None,
-                    )
-                        .into(),
+                    BlockPayload::Data(DataPayload {
+                        batch: BatchPayload::default(),
+                        dealings: Dealings::new_empty(Height::from(1)),
+                        ecdsa: None,
+                    }),
                 ),
                 Height::from(1),
                 Rank(456),

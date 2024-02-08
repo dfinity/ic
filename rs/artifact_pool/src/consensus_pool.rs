@@ -1195,7 +1195,7 @@ mod tests {
                     CryptoHashOf::from(CryptoHash(vec![])),
                     Payload::new(
                         ic_types::crypto::crypto_hash,
-                        (ic_types::consensus::dkg::Summary::fake(), None).into(),
+                        BlockPayload::Summary(SummaryPayload::fake()),
                     ),
                     Height::from(height),
                     Rank(0),
@@ -1375,7 +1375,7 @@ mod tests {
                     CryptoHashOf::from(CryptoHash(vec![])),
                     Payload::new(
                         ic_types::crypto::crypto_hash,
-                        (ic_types::consensus::dkg::Summary::fake(), None).into(),
+                        BlockPayload::Summary(SummaryPayload::fake()),
                     ),
                     Height::from(height),
                     Rank(rank),
@@ -1550,7 +1550,7 @@ mod tests {
                 CryptoHashOf::from(CryptoHash(Vec::new())),
                 Payload::new(
                     ic_types::crypto::crypto_hash,
-                    (ic_types::consensus::dkg::Summary::fake(), None).into(),
+                    BlockPayload::Summary(SummaryPayload::fake()),
                 ),
                 Height::from(3),
                 Rank(46),
@@ -1567,7 +1567,7 @@ mod tests {
                 CryptoHashOf::from(CryptoHash(Vec::new())),
                 Payload::new(
                     ic_types::crypto::crypto_hash,
-                    (ic_types::consensus::dkg::Summary::fake(), None).into(),
+                    BlockPayload::Summary(SummaryPayload::fake()),
                 ),
                 Height::from(3),
                 Rank(46),
@@ -1587,7 +1587,7 @@ mod tests {
                 ic_types::crypto::crypto_hash(&block),
                 Payload::new(
                     ic_types::crypto::crypto_hash,
-                    (ic_types::consensus::dkg::Summary::fake(), None).into(),
+                    BlockPayload::Summary(SummaryPayload::fake()),
                 ),
                 Height::from(4),
                 Rank(456),
@@ -1608,7 +1608,7 @@ mod tests {
                 CryptoHashOf::from(CryptoHash(Vec::new())),
                 Payload::new(
                     ic_types::crypto::crypto_hash,
-                    (ic_types::consensus::dkg::Summary::fake(), None).into(),
+                    BlockPayload::Summary(SummaryPayload::fake()),
                 ),
                 Height::from(4),
                 Rank(46),
@@ -1914,7 +1914,7 @@ mod tests {
                 CryptoHashOf::from(CryptoHash(Vec::new())),
                 Payload::new(
                     ic_types::crypto::crypto_hash,
-                    (ic_types::consensus::dkg::Summary::fake(), None).into(),
+                    BlockPayload::Summary(SummaryPayload::fake()),
                 ),
                 Height::from(4),
                 Rank(456),

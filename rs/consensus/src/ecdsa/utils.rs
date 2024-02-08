@@ -533,7 +533,7 @@ mod tests {
         batch::ValidationContext,
         consensus::{
             ecdsa::{EcdsaPayload, UnmaskedTranscript},
-            Payload,
+            BlockPayload, Payload, SummaryPayload,
         },
         crypto::{AlgorithmId, CryptoHashOf},
         subnet_id_into_protobuf,
@@ -785,7 +785,10 @@ mod tests {
             CryptoHashOf::from(ic_types::crypto::CryptoHash(Vec::new())),
             Payload::new(
                 ic_types::crypto::crypto_hash,
-                (ic_types::consensus::dkg::Summary::fake(), ecdsa_payload).into(),
+                BlockPayload::Summary(SummaryPayload {
+                    dkg: ic_types::consensus::dkg::Summary::fake(),
+                    ecdsa: ecdsa_payload,
+                }),
             ),
             Height::from(123),
             ic_types::consensus::Rank(456),

@@ -267,15 +267,16 @@ fn add_past_blocks(
         let ingress = prepare_ingress_payload(now, message_count, i as u8);
         block.payload = Payload::new(
             ic_types::crypto::crypto_hash,
-            (
-                BatchPayload {
+            BlockPayload::Data(DataPayload {
+                batch: BatchPayload {
                     ingress,
                     ..BatchPayload::default()
                 },
-                dkg::Dealings::new_empty(block.payload.as_ref().dkg_interval_start_height()),
-                None,
-            )
-                .into(),
+                dealings: dkg::Dealings::new_empty(
+                    block.payload.as_ref().dkg_interval_start_height(),
+                ),
+                ecdsa: None,
+            }),
         );
 
         parent = block.clone();
@@ -343,15 +344,16 @@ fn validate_payload_benchmark(criterion: &mut Criterion) {
                 let ingress = prepare_ingress_payload(now, message_count, seed as u8);
                 let payload = Payload::new(
                     ic_types::crypto::crypto_hash,
-                    (
-                        BatchPayload {
+                    BlockPayload::Data(DataPayload {
+                        batch: BatchPayload {
                             ingress,
                             ..BatchPayload::default()
                         },
-                        dkg::Dealings::new_empty(tip.payload.as_ref().dkg_interval_start_height()),
-                        None,
-                    )
-                        .into(),
+                        dealings: dkg::Dealings::new_empty(
+                            tip.payload.as_ref().dkg_interval_start_height(),
+                        ),
+                        ecdsa: None,
+                    }),
                 );
 
                 let name = format!("validate_payload_{}", message_count);

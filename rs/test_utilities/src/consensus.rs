@@ -10,7 +10,6 @@ use ic_interfaces::{
 use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_types::crypto::crypto_hash;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
@@ -24,6 +23,10 @@ use ic_types::{
     signature::ThresholdSignature,
     time::UNIX_EPOCH,
     Height, SubnetId, Time,
+};
+use ic_types::{
+    consensus::{BlockPayload, SummaryPayload},
+    crypto::crypto_hash,
 };
 use phantom_newtype::Id;
 use std::sync::{Arc, RwLock};
@@ -169,7 +172,13 @@ pub fn make_genesis(summary: dkg::Summary) -> CatchUpPackage {
     let high_dkg_id = summary.current_transcript(&NiDkgTag::HighThreshold).dkg_id;
     let block = Block::new(
         Id::from(CryptoHash(Vec::new())),
-        Payload::new(crypto_hash, (summary, None).into()),
+        Payload::new(
+            crypto_hash,
+            BlockPayload::Summary(SummaryPayload {
+                dkg: summary,
+                ecdsa: None,
+            }),
+        ),
         height,
         Rank(0),
         ValidationContext {
