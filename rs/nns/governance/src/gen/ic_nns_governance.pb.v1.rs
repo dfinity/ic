@@ -2327,8 +2327,6 @@ pub struct Governance {
     /// This is the inverse of what is stored in a Neuron (its followees).
     #[prost(map = "int32, message", tag = "22")]
     pub topic_followee_index: ::std::collections::HashMap<i32, governance::FollowersMap>,
-    #[prost(message, optional, tag = "24")]
-    pub genesis_neuron_accounts: ::core::option::Option<governance::GenesisNeuronAccounts>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -2605,49 +2603,6 @@ pub mod governance {
             /// These values will be non-repeating, and order does not matter.
             #[prost(message, repeated, tag = "1")]
             pub followers: ::prost::alloc::vec::Vec<::ic_nns_common::pb::v1::NeuronId>,
-        }
-    }
-    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Message)]
-    pub struct GenesisNeuronAccounts {
-        #[prost(message, repeated, tag = "1")]
-        pub genesis_neuron_accounts:
-            ::prost::alloc::vec::Vec<genesis_neuron_accounts::GenesisNeuronAccount>,
-    }
-    /// Nested message and enum types in `GenesisNeuronAccounts`.
-    pub mod genesis_neuron_accounts {
-        #[derive(
-            candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable,
-        )]
-        #[allow(clippy::derive_partial_eq_without_eq)]
-        #[derive(Clone, PartialEq, ::prost::Message)]
-        pub struct GenesisNeuronAccount {
-            /// The set of AccountIds on the ICP ledger that back the Neurons associated with this GenesisNeuronAccount,
-            #[prost(string, repeated, tag = "1")]
-            pub account_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-            /// The timestamp in seconds of when this GenesisNeuronAccount began tagging all of its Neurons. If set to None,
-            /// this account has yet to be processed. If set to Some, this account has began or finished processing.
-            #[prost(uint64, optional, tag = "2")]
-            pub tag_start_timestamp_seconds: ::core::option::Option<u64>,
-            /// The timestamp in seconds of when this GenesisNeuronAccount finished tagging all of its Neurons. If set to None,
-            /// this account has yet to be processed, or has started processing. If set to Some, this account has
-            /// finished processing.
-            #[prost(uint64, optional, tag = "3")]
-            pub tag_end_timestamp_seconds: ::core::option::Option<u64>,
-            /// The count of errors encountered when processing this GenesisNeuronAccount. This is used when considering whether
-            /// this GenesisNeuronAccount is eligible for tagging. If the error_count is too high, the tagging process will ignore
-            /// it and continue on to the next GenesisNeuronAccount.
-            #[prost(uint64, tag = "4")]
-            pub error_count: u64,
-            #[prost(enumeration = "super::super::NeuronType", tag = "5")]
-            pub neuron_type: i32,
-            /// The expected amount of ICP in E8s that should be available in the Neurons backed by `account_ids`.
-            #[prost(uint64, tag = "6")]
-            pub amount_icp_e8s: u64,
-            /// The ID of the group for logging purposes.
-            #[prost(uint64, tag = "7")]
-            pub id: u64,
         }
     }
 }

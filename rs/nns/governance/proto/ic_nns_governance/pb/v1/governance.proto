@@ -2174,45 +2174,16 @@ message Governance {
   // This is the inverse of what is stored in a Neuron (its followees).
   map<int32, FollowersMap> topic_followee_index = 22;
 
-  message GenesisNeuronAccounts {
-    message GenesisNeuronAccount {
-      // The set of AccountIds on the ICP ledger that back the Neurons associated with this GenesisNeuronAccount,
-      repeated string account_ids = 1;
-
-      // The timestamp in seconds of when this GenesisNeuronAccount began tagging all of its Neurons. If set to None,
-      // this account has yet to be processed. If set to Some, this account has began or finished processing.
-      optional uint64 tag_start_timestamp_seconds = 2;
-
-      // The timestamp in seconds of when this GenesisNeuronAccount finished tagging all of its Neurons. If set to None,
-      // this account has yet to be processed, or has started processing. If set to Some, this account has
-      // finished processing.
-      optional uint64 tag_end_timestamp_seconds = 3;
-
-      // The count of errors encountered when processing this GenesisNeuronAccount. This is used when considering whether
-      // this GenesisNeuronAccount is eligible for tagging. If the error_count is too high, the tagging process will ignore
-      // it and continue on to the next GenesisNeuronAccount.
-      uint64 error_count = 4;
-
-      NeuronType neuron_type = 5;
-
-      // The expected amount of ICP in E8s that should be available in the Neurons backed by `account_ids`.
-      uint64 amount_icp_e8s = 6;
-
-      // The ID of the group for logging purposes.
-      uint64 id = 7;
-    }
-
-    repeated GenesisNeuronAccount genesis_neuron_accounts = 1;
-  }
-
-  optional GenesisNeuronAccounts genesis_neuron_accounts = 24;
-
   reserved 6;
   reserved "authz";
 
   // Reserved id for deprecated `seed_accounts`
   reserved 23;
   reserved "seed_accounts";
+
+  // Reserved id for deprecated `genesis_neuron_accounts`
+  reserved 24;
+  reserved "genesis_neuron_accounts";
 }
 
 // Proposals with restricted voting are not included unless the caller

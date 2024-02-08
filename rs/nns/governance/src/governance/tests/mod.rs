@@ -1297,7 +1297,6 @@ fn test_pre_and_post_upgrade_first_time() {
         Box::<MockEnvironment>::default(),
         Box::new(StubIcpLedger {}),
         Box::new(StubCMC {}),
-        None,
     );
 
     // It should not rebuild during post_upgrade so it should still be mis-matched with neurons.

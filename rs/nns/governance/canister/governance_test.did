@@ -151,18 +151,6 @@ type Follow = record { topic : int32; followees : vec NeuronId };
 type Followees = record { followees : vec NeuronId };
 type Followers = record { followers : vec NeuronId };
 type FollowersMap = record { followers_map : vec record { nat64; Followers } };
-type GenesisNeuronAccount = record {
-  id : nat64;
-  error_count : nat64;
-  neuron_type : int32;
-  account_ids : vec text;
-  tag_end_timestamp_seconds : opt nat64;
-  amount_icp_e8s : nat64;
-  tag_start_timestamp_seconds : opt nat64;
-};
-type GenesisNeuronAccounts = record {
-  genesis_neuron_accounts : vec GenesisNeuronAccount;
-};
 type GetNeuronsFundAuditInfoRequest = record { nns_proposal_id : opt NeuronId };
 type GetNeuronsFundAuditInfoResponse = record { result : opt Result_6 };
 type GlobalTimeOfDay = record { seconds_after_utc_midnight : opt nat64 };
@@ -171,7 +159,6 @@ type Governance = record {
   making_sns_proposal : opt MakingSnsProposal;
   most_recent_monthly_node_provider_rewards : opt MostRecentMonthlyNodeProviderRewards;
   maturity_modulation_last_updated_at_timestamp_seconds : opt nat64;
-  genesis_neuron_accounts : opt GenesisNeuronAccounts;
   wait_for_quiet_threshold_seconds : nat64;
   metrics : opt GovernanceCachedMetrics;
   neuron_management_voting_period_seconds : opt nat64;
