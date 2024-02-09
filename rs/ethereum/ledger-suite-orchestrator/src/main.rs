@@ -2,14 +2,14 @@ use ic_cdk_macros::{init, post_upgrade, query};
 use ic_ledger_suite_orchestrator::candid::Erc20Contract as CandidErc20Contract;
 use ic_ledger_suite_orchestrator::candid::{ManagedCanisterIds, OrchestratorArg};
 use ic_ledger_suite_orchestrator::lifecycle;
-use ic_ledger_suite_orchestrator::scheduler::Erc20Contract;
+use ic_ledger_suite_orchestrator::scheduler::Erc20Token;
 use ic_ledger_suite_orchestrator::state::read_state;
 
 mod dashboard;
 
 #[query]
 async fn canister_ids(contract: CandidErc20Contract) -> Option<ManagedCanisterIds> {
-    let contract = Erc20Contract::try_from(contract)
+    let contract = Erc20Token::try_from(contract)
         .unwrap_or_else(|e| ic_cdk::trap(&format!("Invalid ERC-20 contract: {:?}", e)));
     read_state(|s| s.managed_canisters(&contract).cloned()).map(ManagedCanisterIds::from)
 }

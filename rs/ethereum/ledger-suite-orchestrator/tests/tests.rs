@@ -8,7 +8,8 @@ use ic_ledger_suite_orchestrator::candid::{
 };
 use ic_ledger_suite_orchestrator::state::{Wasm, WasmHash};
 use ic_state_machine_tests::{
-    CanisterStatusResultV2, Cycles, ErrorCode, StateMachine, StateMachineBuilder, WasmResult,
+    CanisterStatusResultV2, Cycles, ErrorCode, StateMachine, StateMachineBuilder, UserError,
+    WasmResult,
 };
 use ic_test_utilities_load_wasm::load_wasm;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
@@ -112,6 +113,23 @@ fn should_spawn_ledger_with_correct_init_args() {
 }
 
 #[test]
+fn should_reject_adding_an_already_managed_erc20_token() {
+    let orchestrator = LedgerSuiteOrchestrator::new();
+    let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
+    let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
+    let usdc = usdc(embedded_ledger_wasm_hash, embedded_index_wasm_hash);
+    let orchestrator = orchestrator
+        .add_erc20_token(usdc.clone())
+        .expect_new_ledger_and_index_canisters()
+        .setup;
+
+    let result =
+        orchestrator.upgrade_ledger_suite_orchestrator(&OrchestratorArg::AddErc20Arg(usdc));
+
+    assert_matches!(result, Err(e) if e.code() == ErrorCode::CanisterCalledTrap && e.description().contains("Erc20ContractAlreadyManaged"));
+}
+
+#[test]
 fn should_reject_update_calls_to_http_request() {
     let orchestrator = LedgerSuiteOrchestrator::new();
     let request = HttpRequest {
@@ -165,21 +183,28 @@ impl LedgerSuiteOrchestrator {
         }
     }
 
-    fn upgrade_ledger_suite_orchestrator(self, upgrade_arg: &OrchestratorArg) -> Self {
-        self.env.tick(); //tick before upgrade to finish current timers which are reset afterwards
-        self.env
-            .upgrade_canister(
-                self.ledger_suite_orchestrator_id,
-                ledger_suite_orchestrator_wasm(),
-                Encode!(upgrade_arg).unwrap(),
-            )
+    fn upgrade_ledger_suite_orchestrator_expecting_ok(self, upgrade_arg: &OrchestratorArg) -> Self {
+        self.upgrade_ledger_suite_orchestrator(upgrade_arg)
             .expect("Failed to upgrade ledger suite orchestrator");
         self
     }
 
+    fn upgrade_ledger_suite_orchestrator(
+        &self,
+        upgrade_arg: &OrchestratorArg,
+    ) -> Result<(), UserError> {
+        self.env.tick(); //tick before upgrade to finish current timers which are reset afterwards
+        self.env.upgrade_canister(
+            self.ledger_suite_orchestrator_id,
+            ledger_suite_orchestrator_wasm(),
+            Encode!(upgrade_arg).unwrap(),
+        )
+    }
+
     pub fn add_erc20_token(self, params: AddErc20Arg) -> AddErc20TokenFlow {
-        let setup =
-            self.upgrade_ledger_suite_orchestrator(&OrchestratorArg::AddErc20Arg(params.clone()));
+        let setup = self.upgrade_ledger_suite_orchestrator_expecting_ok(
+            &OrchestratorArg::AddErc20Arg(params.clone()),
+        );
         AddErc20TokenFlow { setup, params }
     }
 

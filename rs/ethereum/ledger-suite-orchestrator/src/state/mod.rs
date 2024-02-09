@@ -2,7 +2,7 @@
 mod tests;
 
 use crate::candid::InitArg;
-use crate::scheduler::{Erc20Contract, Task, Tasks};
+use crate::scheduler::{Erc20Token, Task, Tasks};
 use candid::Principal;
 use ic_cdk::trap;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
@@ -126,17 +126,32 @@ impl From<&[u8]> for Wasm {
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, Default)]
 pub struct ManagedCanisters {
-    canisters: BTreeMap<Erc20Contract, Canisters>,
+    canisters: BTreeMap<Erc20Token, Canisters>,
 }
 
-#[derive(Default, Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct Canisters {
     pub ledger: Option<LedgerCanister>,
     pub index: Option<IndexCanister>,
     pub archives: Vec<Principal>,
+    pub metadata: CanistersMetadata,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+pub struct CanistersMetadata {
+    pub ckerc20_token_symbol: String,
 }
 
 impl Canisters {
+    pub fn new(metadata: CanistersMetadata) -> Self {
+        Self {
+            ledger: None,
+            index: None,
+            archives: vec![],
+            metadata,
+        }
+    }
+
     pub fn ledger_canister_id(&self) -> Option<&Principal> {
         self.ledger.as_ref().map(LedgerCanister::canister_id)
     }
@@ -321,15 +336,15 @@ impl State {
         true
     }
 
-    pub fn managed_canisters_iter(&self) -> impl Iterator<Item = (&Erc20Contract, &Canisters)> {
+    pub fn managed_canisters_iter(&self) -> impl Iterator<Item = (&Erc20Token, &Canisters)> {
         self.managed_canisters.canisters.iter()
     }
 
-    pub fn managed_canisters(&self, contract: &Erc20Contract) -> Option<&Canisters> {
+    pub fn managed_canisters(&self, contract: &Erc20Token) -> Option<&Canisters> {
         self.managed_canisters.canisters.get(contract)
     }
 
-    fn managed_canisters_mut(&mut self, contract: &Erc20Contract) -> Option<&mut Canisters> {
+    fn managed_canisters_mut(&mut self, contract: &Erc20Token) -> Option<&mut Canisters> {
         self.managed_canisters.canisters.get_mut(contract)
     }
 
@@ -339,7 +354,7 @@ impl State {
 
     pub fn managed_status<'a, T: 'a>(
         &'a self,
-        contract: &Erc20Contract,
+        contract: &Erc20Token,
     ) -> Option<&'a ManagedCanisterStatus>
     where
         Canisters: ManageSingleCanister<T>,
@@ -348,21 +363,31 @@ impl State {
             .and_then(|c| c.get().map(|c| &c.status))
     }
 
+    pub fn record_new_erc20_token(&mut self, contract: Erc20Token, metadata: CanistersMetadata) {
+        assert_eq!(
+            self.managed_canisters(&contract),
+            None,
+            "BUG: ERC-20 token {:?} is already managed",
+            contract
+        );
+        assert_eq!(
+            self.managed_canisters
+                .canisters
+                .insert(contract, Canisters::new(metadata)),
+            None
+        );
+    }
+
     pub fn record_created_canister<T: Debug>(
         &mut self,
-        contract: &Erc20Contract,
+        contract: &Erc20Token,
         canister_id: Principal,
     ) where
         Canisters: ManageSingleCanister<T>,
     {
-        if self.managed_canisters(contract).is_none() {
-            self.managed_canisters
-                .canisters
-                .insert(contract.clone(), Canisters::default());
-        }
         let canisters = self
             .managed_canisters_mut(contract)
-            .expect("BUG: no managed canisters");
+            .unwrap_or_else(|| panic!("BUG: token {:?} is not managed", contract));
         canisters
             .try_insert(Canister::<T>::new(ManagedCanisterStatus::Created {
                 canister_id,
@@ -376,7 +401,7 @@ impl State {
             });
     }
 
-    pub fn record_installed_canister<T>(&mut self, contract: &Erc20Contract, wasm_hash: WasmHash)
+    pub fn record_installed_canister<T>(&mut self, contract: &Erc20Token, wasm_hash: WasmHash)
     where
         Canisters: ManageSingleCanister<T>,
     {

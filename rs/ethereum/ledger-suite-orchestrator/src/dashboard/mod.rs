@@ -2,14 +2,29 @@
 mod tests;
 
 pub use askama::Template;
-use ic_ledger_suite_orchestrator::scheduler::Erc20Contract;
+use ic_ledger_suite_orchestrator::scheduler::Erc20Token;
 use ic_ledger_suite_orchestrator::state::{Canisters, IndexCanister, LedgerCanister, State};
 use std::collections::BTreeMap;
 
 #[derive(Template)]
 #[template(path = "dashboard.html")]
 pub struct DashboardTemplate {
-    managed_canisters: BTreeMap<Erc20Contract, Vec<CanisterDashboardData>>,
+    managed_canisters: BTreeMap<Erc20Token, CanistersDashboardData>,
+}
+
+#[derive(Default, Debug, PartialEq, Clone)]
+pub struct CanistersDashboardData {
+    pub canisters: Vec<CanisterDashboardData>,
+    pub ckerc20_token_symbol: String,
+}
+
+impl<'a> IntoIterator for &'a CanistersDashboardData {
+    type Item = &'a CanisterDashboardData;
+    type IntoIter = std::slice::Iter<'a, CanisterDashboardData>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.canisters.iter()
+    }
 }
 
 #[derive(Default, Debug, PartialEq, Clone)]
@@ -64,7 +79,15 @@ impl DashboardTemplate {
         Self {
             managed_canisters: state
                 .managed_canisters_iter()
-                .map(|(k, v)| (k.clone(), CanisterDashboardData::from_canisters(v)))
+                .map(|(k, v)| {
+                    (
+                        k.clone(),
+                        CanistersDashboardData {
+                            ckerc20_token_symbol: v.metadata.ckerc20_token_symbol.clone(),
+                            canisters: CanisterDashboardData::from_canisters(v),
+                        },
+                    )
+                })
                 .collect(),
         }
     }
