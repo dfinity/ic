@@ -49,7 +49,7 @@ Arguments:
        --cert-issuer-creds              specify a credentials file for certificate-issuer
        --cert-issuer-identity           specify an identity file for certificate-issuer
        --cert-issuer-enc-key            specify an encryption key for certificate-issuer
-       --cert-syncer-raw-domains-file   specify a path to a file containing a list of custom domains
+       --ic-boundary-config             specify a path to the ic-boundary config file
        --pre-isolation-canisters        specify a set of pre-domain-isolation canisters
        --ip-hash-salt                   specify a salt for hashing ip values
        --logging-url                    specify an endpoint for our logging backend
@@ -121,8 +121,8 @@ for argument in "${@}"; do
         --cert-issuer-enc-key=*)
             CERTIFICATE_ISSUER_ENCRYPTION_KEY="${argument#*=}"
             ;;
-        --cert-syncer-raw-domains-file=*)
-            CERTIFICATE_SYNCER_RAW_DOMAINS_FILE="${argument#*=}"
+        --ic-boundary-config=*)
+            IC_BOUNDARY_CONFIG="${argument#*=}"
             ;;
         --pre-isolation-canisters=*)
             PRE_ISOLATION_CANISTERS="${argument#*=}"
@@ -158,7 +158,6 @@ OUTPUT="${OUTPUT:=${BASE_DIR}/build-out}"
 SSH="${SSH:=${BASE_DIR}/../../testnet/config/ssh_authorized_keys}"
 CERT_DIR="${CERT_DIR:-}"
 CERTIFICATE_ISSUER_CREDENTIALS="${CERTIFICATE_ISSUER_CREDENTIALS:-}"
-CERTIFICATE_SYNCER_RAW_DOMAINS_FILE="${CERTIFICATE_SYNCER_RAW_DOMAINS_FILE:-}"
 if [ -z ${NNS_PUBLIC_KEY+x} ]; then
     err "--nns_public_key not set"
     exit 1
@@ -534,6 +533,27 @@ EOF
     done
 }
 
+function copy_ic_boundary_config() {
+    if [[ -z "${IC_BOUNDARY_CONFIG:-}" ]]; then
+        err "pre-domain-isolation canisters have not been provided, proceeding without copying them"
+        return
+    fi
+
+    for n in $NODES; do
+        declare -n NODE=$n
+        if [[ "${NODE["type"]}" != "boundary" ]]; then
+            continue
+        fi
+
+        local SUBNET_IDX="${NODE["subnet_idx"]}"
+        local NODE_IDX="${NODE["node_idx"]}"
+        local NODE_PREFIX="${DEPLOYMENT}.${SUBNET_IDX}.${NODE_IDX}"
+
+        mkdir -p "${CONFIG_DIR}/${NODE_PREFIX}"
+        cp "${IC_BOUNDARY_CONFIG}" "${CONFIG_DIR}/${NODE_PREFIX}/ic_boundary.conf"
+    done
+}
+
 function copy_pre_isolation_canisters() {
     if [[ -z "${PRE_ISOLATION_CANISTERS:-}" ]]; then
         err "pre-domain-isolation canisters have not been provided, proceeding without copying them"
@@ -668,6 +688,7 @@ function main() {
     copy_certs
     copy_deny_list
     copy_geolite2_dbs
+    copy_ic_boundary_config
     generate_certificate_issuer_config
     copy_pre_isolation_canisters
     copy_ip_hash_salt

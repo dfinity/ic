@@ -66,6 +66,7 @@ function process_bootstrap() {
         certificate_issuer.conf
         certificate_syncer.conf
         denylist.map
+        ic_boundary.conf
         network.conf
         nns_public_key.pem
         nns.conf
