@@ -1,7 +1,8 @@
 use crate::candid::{InitArg, LedgerInitArg};
 use crate::management::{CallError, Reason};
+use crate::scheduler::test_fixtures::usdc_metadata;
 use crate::scheduler::tests::mock::MockCanisterRuntime;
-use crate::scheduler::{Erc20Contract, InstallLedgerSuiteArgs, Task, TaskError, Tasks};
+use crate::scheduler::{Erc20Token, InstallLedgerSuiteArgs, Task, TaskError, Tasks};
 use crate::state::{
     read_state, Canisters, IndexCanister, LedgerCanister, ManagedCanisterStatus, State, WasmHash,
 };
@@ -42,6 +43,7 @@ async fn should_install_ledger_suite() {
                 installed_wasm_hash: read_index_wasm_hash(),
             })),
             archives: vec![],
+            metadata: usdc_metadata(),
         })
     );
 }
@@ -79,6 +81,7 @@ async fn should_not_retry_successful_operation_after_failing_one() {
             })),
             index: None,
             archives: vec![],
+            metadata: usdc_metadata(),
         })
     );
 
@@ -107,6 +110,7 @@ async fn should_not_retry_successful_operation_after_failing_one() {
             })),
             index: None,
             archives: vec![],
+            metadata: usdc_metadata(),
         })
     );
 
@@ -140,6 +144,7 @@ async fn should_not_retry_successful_operation_after_failing_one() {
                 canister_id: INDEX_PRINCIPAL
             })),
             archives: vec![],
+            metadata: usdc_metadata(),
         })
     );
 
@@ -162,6 +167,7 @@ async fn should_not_retry_successful_operation_after_failing_one() {
                 installed_wasm_hash: read_index_wasm_hash(),
             })),
             archives: vec![],
+            metadata: usdc_metadata(),
         })
     );
 }
@@ -198,6 +204,7 @@ async fn should_discard_add_erc20_task_when_ledger_wasm_not_found() {
             })),
             index: None,
             archives: vec![],
+            metadata: usdc_metadata(),
         })
     );
 }
@@ -241,6 +248,7 @@ async fn should_discard_add_erc20_task_when_index_wasm_not_found() {
                 canister_id: INDEX_PRINCIPAL
             })),
             archives: vec![],
+            metadata: usdc_metadata(),
         })
     );
 }
@@ -258,7 +266,7 @@ fn usdc_install_args() -> InstallLedgerSuiteArgs {
     }
 }
 
-fn usdc() -> Erc20Contract {
+fn usdc() -> Erc20Token {
     crate::candid::Erc20Contract {
         chain_id: 1_u8.into(),
         address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".to_string(),
@@ -279,8 +287,8 @@ fn ledger_init_arg() -> LedgerInitArg {
         initial_balances: vec![],
         transfer_fee: 10_000_u32.into(),
         decimals: None,
-        token_name: "Test Token".to_string(),
-        token_symbol: "XTK".to_string(),
+        token_name: "Chain Key USDC".to_string(),
+        token_symbol: "ckUSDC".to_string(),
         token_logo: "".to_string(),
         max_memo_length: None,
         feature_flags: None,
@@ -348,10 +356,9 @@ mod mock {
 
 mod install_ledger_suite_args {
     use crate::candid::{AddErc20Arg, InitArg, LedgerInitArg};
-    use crate::scheduler::{
-        ChainId, Erc20Contract, InstallLedgerSuiteArgs, InvalidAddErc20ArgError,
-    };
-    use crate::state::{Ledger, State, Wasm, WasmHash};
+    use crate::scheduler::tests::usdc_metadata;
+    use crate::scheduler::{ChainId, Erc20Token, InstallLedgerSuiteArgs, InvalidAddErc20ArgError};
+    use crate::state::{State, Wasm, WasmHash};
     use assert_matches::assert_matches;
     use candid::{Nat, Principal};
     use proptest::array::uniform32;
@@ -364,8 +371,8 @@ mod install_ledger_suite_args {
     fn should_error_if_contract_is_already_managed() {
         let mut state = initial_state();
         let arg = valid_add_erc20_arg(&state);
-        let contract = arg.contract.clone().try_into().unwrap();
-        state.record_created_canister::<Ledger>(&contract, Principal::anonymous());
+        let contract: Erc20Token = arg.contract.clone().try_into().unwrap();
+        state.record_new_erc20_token(contract.clone(), usdc_metadata());
 
         assert_eq!(
             InstallLedgerSuiteArgs::validate_add_erc20(&state, arg),
@@ -461,7 +468,7 @@ mod install_ledger_suite_args {
         assert_eq!(
             result,
             InstallLedgerSuiteArgs {
-                contract: Erc20Contract(ChainId(1), ERC20_CONTRACT_ADDRESS.parse().unwrap()),
+                contract: Erc20Token(ChainId(1), ERC20_CONTRACT_ADDRESS.parse().unwrap()),
                 ledger_init_arg,
                 ledger_compressed_wasm_hash: Wasm::from(crate::state::LEDGER_BYTECODE)
                     .hash()

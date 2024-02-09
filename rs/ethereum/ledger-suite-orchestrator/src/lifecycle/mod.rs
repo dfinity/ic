@@ -31,12 +31,10 @@ pub fn add_erc20(token: AddErc20Arg) {
             ic_cdk_timers::set_timer(Duration::from_secs(0), || ic_cdk::spawn(execute_tasks()));
         }
         Err(e) => {
-            log!(
-                INFO,
+            ic_cdk::trap(&format!(
                 "[add_erc20]: ERROR: invalid arguments to add erc20 token {:?}: {:?}",
-                token,
-                e
-            );
+                token, e
+            ));
         }
     }
     setup_timers()

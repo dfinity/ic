@@ -7,7 +7,7 @@ use crate::candid::{AddErc20Arg, LedgerInitArg};
 use crate::logs::INFO;
 use crate::management::{CallError, CanisterRuntime};
 use crate::state::{
-    mutate_state, read_state, Canisters, Index, Ledger, ManageSingleCanister,
+    mutate_state, read_state, Canisters, CanistersMetadata, Index, Ledger, ManageSingleCanister,
     ManagedCanisterStatus, RetrieveCanisterWasm, State, WasmHash,
 };
 use candid::{CandidType, Encode, Principal};
@@ -71,7 +71,7 @@ pub enum Task {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct InstallLedgerSuiteArgs {
-    contract: Erc20Contract,
+    contract: Erc20Token,
     ledger_init_arg: LedgerInitArg,
     ledger_compressed_wasm_hash: WasmHash,
     index_compressed_wasm_hash: WasmHash,
@@ -81,7 +81,7 @@ pub struct InstallLedgerSuiteArgs {
 pub enum InvalidAddErc20ArgError {
     InvalidErc20Contract(String),
     InvalidWasmHash(String),
-    Erc20ContractAlreadyManaged(Erc20Contract),
+    Erc20ContractAlreadyManaged(Erc20Token),
     WasmHashNotFound(WasmHash),
 }
 
@@ -90,7 +90,7 @@ impl InstallLedgerSuiteArgs {
         state: &State,
         args: AddErc20Arg,
     ) -> Result<InstallLedgerSuiteArgs, InvalidAddErc20ArgError> {
-        let contract = Erc20Contract::try_from(args.contract.clone())
+        let contract = Erc20Token::try_from(args.contract.clone())
             .map_err(|e| InvalidAddErc20ArgError::InvalidErc20Contract(e.to_string()))?;
         if let Some(_canisters) = state.managed_canisters(&contract) {
             return Err(InvalidAddErc20ArgError::Erc20ContractAlreadyManaged(
@@ -171,6 +171,12 @@ async fn install_ledger_suite<R: CanisterRuntime>(
     args: &InstallLedgerSuiteArgs,
     runtime: &R,
 ) -> Result<(), TaskError> {
+    record_new_erc20_token_once(
+        args.contract.clone(),
+        CanistersMetadata {
+            ckerc20_token_symbol: args.ledger_init_arg.token_symbol.clone(),
+        },
+    );
     let ledger_canister_id = create_canister_once::<Ledger, _>(&args.contract, runtime).await?;
     install_canister_once::<Ledger, _, _>(
         &args.contract,
@@ -195,6 +201,15 @@ async fn install_ledger_suite<R: CanisterRuntime>(
     )
     .await?;
     Ok(())
+}
+
+fn record_new_erc20_token_once(contract: Erc20Token, metadata: CanistersMetadata) {
+    mutate_state(|s| {
+        if s.managed_canisters(&contract).is_some() {
+            return;
+        }
+        s.record_new_erc20_token(contract, metadata);
+    });
 }
 
 fn icrc1_ledger_init_arg(
@@ -237,7 +252,7 @@ fn icrc1_archive_options(archive_controller_id: PrincipalId) -> ArchiveOptions {
 }
 
 async fn create_canister_once<C, R>(
-    contract: &Erc20Contract,
+    contract: &Erc20Token,
     runtime: &R,
 ) -> Result<Principal, TaskError>
 where
@@ -279,7 +294,7 @@ where
 }
 
 async fn install_canister_once<C, R, I>(
-    contract: &Erc20Contract,
+    contract: &Erc20Token,
     wasm_hash: &WasmHash,
     init_args: &I,
     runtime: &R,
@@ -351,9 +366,9 @@ where
 }
 
 #[derive(Debug, PartialEq, Clone, Ord, PartialOrd, Eq, Serialize, Deserialize)]
-pub struct Erc20Contract(ChainId, Address);
+pub struct Erc20Token(ChainId, Address);
 
-impl Erc20Contract {
+impl Erc20Token {
     pub fn chain_id(&self) -> &ChainId {
         &self.0
     }
@@ -373,7 +388,7 @@ impl AsRef<u64> for ChainId {
     }
 }
 
-impl TryFrom<crate::candid::Erc20Contract> for Erc20Contract {
+impl TryFrom<crate::candid::Erc20Contract> for Erc20Token {
     type Error = String;
 
     fn try_from(contract: crate::candid::Erc20Contract) -> Result<Self, Self::Error> {
