@@ -158,7 +158,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "axum_0_7_0": crate.spec(
                 package = "axum",
-                version = "^0.7.0",
+                version = "^0.7.4",
             ),
             "axum-server_0_6_0": crate.spec(
                 package = "axum-server",
@@ -723,7 +723,16 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "metrics-proxy": crate.spec(
                 git = "https://github.com/dfinity/metrics-proxy.git",
-                rev = "14915111a42b9990747a020edffe9b875a81c814",
+                rev = "b6933ed79ac07baee7f3fbc0793bed95e614d27c",
+                # When updating this, please make sure that the built
+                # binary exports metrics http_cache_* after one
+                # successful request to the proxy.  The OpenTelemetry
+                # package version pinned by this software must equal
+                # the OpenTelemetry version pinned by the
+                # axum-otel-metrics version pinned by this software,
+                # due to technical idiosyncrasies of the OpenTelemetry
+                # crate.  When these do not match, custom metrics are
+                # not exported.
                 default_features = False,
                 features = [
                     "rustls-tls-webpki-roots",

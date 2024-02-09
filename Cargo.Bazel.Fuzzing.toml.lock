@@ -291,7 +291,7 @@ version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "98d2c16bfa7d1755d5a6a20a6decdb7303843c6fee13f4cff039c568291b5872"
 dependencies = [
- "axum 0.7.3",
+ "axum 0.7.4",
  "bytes",
  "cfg-if 1.0.0",
  "derive_more 0.99.17",
@@ -884,12 +884,12 @@ dependencies = [
 
 [[package]]
 name = "axum"
-version = "0.7.3"
+version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d09dbe0e490df5da9d69b36dca48a76635288a82f92eca90024883a56202026d"
+checksum = "1236b4b292f6c4d6dc34604bb5120d85c3fe1d1aa596bd5cc52ca054d13e7b9e"
 dependencies = [
  "async-trait",
- "axum-core 0.4.2",
+ "axum-core 0.4.3",
  "axum-macros",
  "bytes",
  "futures-util",
@@ -936,9 +936,9 @@ dependencies = [
 
 [[package]]
 name = "axum-core"
-version = "0.4.2"
+version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e87c8503f93e6d144ee5690907ba22db7ba79ab001a932ab99034f0fe836b3df"
+checksum = "a15c63fd72d41492dc4f497196f5da1fb04fb7529e631d73630d1b491e47a2e3"
 dependencies = [
  "async-trait",
  "bytes",
@@ -961,8 +961,8 @@ version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "881348a37b079994894b6e5e46edcc4b8a60e1c0333669a65b810abeed780598"
 dependencies = [
- "axum 0.7.3",
- "axum-core 0.4.2",
+ "axum 0.7.4",
+ "axum-core 0.4.3",
  "bytes",
  "futures-util",
  "headers 0.4.0",
@@ -979,9 +979,9 @@ dependencies = [
 
 [[package]]
 name = "axum-macros"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a2edad600410b905404c594e2523549f1bcd4bded1e252c8f74524ccce0b867"
+checksum = "00c055ee2d014ae5981ce1016374e8213682aa14d9bf40e48ab48b5f3ef20eaa"
 dependencies = [
  "heck 0.4.1",
  "proc-macro2 1.0.76",
@@ -992,9 +992,9 @@ dependencies = [
 [[package]]
 name = "axum-otel-metrics"
 version = "0.8.0"
-source = "git+https://github.com/ttys3/axum-otel-metrics.git?rev=4cecbb286ac262f7c59c4345ea091530e5d9c29a#4cecbb286ac262f7c59c4345ea091530e5d9c29a"
+source = "git+https://github.com/ttys3/axum-otel-metrics.git?rev=8f58e36e44cfbea4221dfc215c8e84c810d7d563#8f58e36e44cfbea4221dfc215c8e84c810d7d563"
 dependencies = [
- "axum 0.7.3",
+ "axum 0.7.4",
  "futures-util",
  "http 1.0.0",
  "http-body 1.0.0",
@@ -2988,7 +2988,7 @@ dependencies = [
  "async-stream",
  "async-trait",
  "axum 0.6.20",
- "axum 0.7.3",
+ "axum 0.7.4",
  "axum-extra",
  "axum-server 0.5.1",
  "axum-server 0.6.0",
@@ -6467,9 +6467,9 @@ checksum = "8452105ba047068f40ff7093dd1d9da90898e63dd61736462e9cdda6a90ad3c3"
 [[package]]
 name = "metrics-proxy"
 version = "0.1.0"
-source = "git+https://github.com/dfinity/metrics-proxy.git?rev=14915111a42b9990747a020edffe9b875a81c814#14915111a42b9990747a020edffe9b875a81c814"
+source = "git+https://github.com/dfinity/metrics-proxy.git?rev=b6933ed79ac07baee7f3fbc0793bed95e614d27c#b6933ed79ac07baee7f3fbc0793bed95e614d27c"
 dependencies = [
- "axum 0.7.3",
+ "axum 0.7.4",
  "axum-otel-metrics",
  "clap 4.4.6",
  "duration-string",
@@ -6484,7 +6484,7 @@ dependencies = [
  "itertools 0.11.0",
  "lazy_static",
  "log",
- "opentelemetry 0.20.0",
+ "opentelemetry 0.21.0",
  "pin-project-lite",
  "pretty_assertions",
  "prometheus",

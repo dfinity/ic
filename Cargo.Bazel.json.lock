@@ -1,5 +1,5 @@
 {
-  "checksum": "501a4624509aa3883bf55f508e9a5c09817e9de0317b08f466416a1cd96d50d9",
+  "checksum": "18fe6acb1c436dd3dbfadec6e026de2f6948e78ccf62ffc6aedea1473453e41b",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1421,7 +1421,7 @@
         "deps": {
           "common": [
             {
-              "id": "axum 0.7.3",
+              "id": "axum 0.7.4",
               "target": "axum"
             },
             {
@@ -4364,13 +4364,13 @@
       },
       "license": "MIT"
     },
-    "axum 0.7.3": {
+    "axum 0.7.4": {
       "name": "axum",
-      "version": "0.7.3",
+      "version": "0.7.4",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/axum/0.7.3/download",
-          "sha256": "d09dbe0e490df5da9d69b36dca48a76635288a82f92eca90024883a56202026d"
+          "url": "https://crates.io/api/v1/crates/axum/0.7.4/download",
+          "sha256": "1236b4b292f6c4d6dc34604bb5120d85c3fe1d1aa596bd5cc52ca054d13e7b9e"
         }
       },
       "targets": [
@@ -4417,11 +4417,11 @@
         "deps": {
           "common": [
             {
-              "id": "axum 0.7.3",
+              "id": "axum 0.7.4",
               "target": "build_script_build"
             },
             {
-              "id": "axum-core 0.4.2",
+              "id": "axum-core 0.4.3",
               "target": "axum_core"
             },
             {
@@ -4527,13 +4527,13 @@
               "target": "async_trait"
             },
             {
-              "id": "axum-macros 0.4.0",
+              "id": "axum-macros 0.4.1",
               "target": "axum_macros"
             }
           ],
           "selects": {}
         },
-        "version": "0.7.3"
+        "version": "0.7.4"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -4650,13 +4650,13 @@
       },
       "license": "MIT"
     },
-    "axum-core 0.4.2": {
+    "axum-core 0.4.3": {
       "name": "axum-core",
-      "version": "0.4.2",
+      "version": "0.4.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/axum-core/0.4.2/download",
-          "sha256": "e87c8503f93e6d144ee5690907ba22db7ba79ab001a932ab99034f0fe836b3df"
+          "url": "https://crates.io/api/v1/crates/axum-core/0.4.3/download",
+          "sha256": "a15c63fd72d41492dc4f497196f5da1fb04fb7529e631d73630d1b491e47a2e3"
         }
       },
       "targets": [
@@ -4693,7 +4693,7 @@
         "deps": {
           "common": [
             {
-              "id": "axum-core 0.4.2",
+              "id": "axum-core 0.4.3",
               "target": "build_script_build"
             },
             {
@@ -4753,7 +4753,7 @@
           ],
           "selects": {}
         },
-        "version": "0.4.2"
+        "version": "0.4.3"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -4806,11 +4806,11 @@
         "deps": {
           "common": [
             {
-              "id": "axum 0.7.3",
+              "id": "axum 0.7.4",
               "target": "axum"
             },
             {
-              "id": "axum-core 0.4.2",
+              "id": "axum-core 0.4.3",
               "target": "axum_core"
             },
             {
@@ -4869,13 +4869,13 @@
       },
       "license": "MIT"
     },
-    "axum-macros 0.4.0": {
+    "axum-macros 0.4.1": {
       "name": "axum-macros",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/axum-macros/0.4.0/download",
-          "sha256": "5a2edad600410b905404c594e2523549f1bcd4bded1e252c8f74524ccce0b867"
+          "url": "https://crates.io/api/v1/crates/axum-macros/0.4.1/download",
+          "sha256": "00c055ee2d014ae5981ce1016374e8213682aa14d9bf40e48ab48b5f3ef20eaa"
         }
       },
       "targets": [
@@ -4922,7 +4922,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.4.0"
+        "version": "0.4.1"
       },
       "license": "MIT"
     },
@@ -4933,7 +4933,7 @@
         "Git": {
           "remote": "https://github.com/ttys3/axum-otel-metrics.git",
           "commitish": {
-            "Rev": "4cecbb286ac262f7c59c4345ea091530e5d9c29a"
+            "Rev": "8f58e36e44cfbea4221dfc215c8e84c810d7d563"
           }
         }
       },
@@ -4956,7 +4956,7 @@
         "deps": {
           "common": [
             {
-              "id": "axum 0.7.3",
+              "id": "axum 0.7.4",
               "target": "axum"
             },
             {
@@ -15086,7 +15086,7 @@
               "target": "axum"
             },
             {
-              "id": "axum 0.7.3",
+              "id": "axum 0.7.4",
               "target": "axum",
               "alias": "axum_0_7_0"
             },
@@ -32684,7 +32684,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/metrics-proxy.git",
           "commitish": {
-            "Rev": "14915111a42b9990747a020edffe9b875a81c814"
+            "Rev": "b6933ed79ac07baee7f3fbc0793bed95e614d27c"
           }
         }
       },
@@ -32722,7 +32722,7 @@
         "deps": {
           "common": [
             {
-              "id": "axum 0.7.3",
+              "id": "axum 0.7.4",
               "target": "axum"
             },
             {
@@ -32782,7 +32782,7 @@
               "target": "log"
             },
             {
-              "id": "opentelemetry 0.20.0",
+              "id": "opentelemetry 0.21.0",
               "target": "opentelemetry"
             },
             {
