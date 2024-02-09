@@ -476,6 +476,12 @@ impl ExecutionTest {
             .get_canister_id()
     }
 
+    /// Deletes the specified canister.
+    pub fn delete_canister(&mut self, canister_id: CanisterId) -> Result<WasmResult, UserError> {
+        let payload = CanisterIdRecord::from(canister_id).encode();
+        self.subnet_message(Method::DeleteCanister, payload)
+    }
+
     pub fn create_canister_with_allocation(
         &mut self,
         cycles: Cycles,

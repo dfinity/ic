@@ -29,7 +29,7 @@ pub(crate) struct QueryCacheMetrics {
     pub invalidated_entries_by_canister_version: IntCounter,
     pub invalidated_entries_by_canister_balance: IntCounter,
     pub invalidated_entries_by_nested_call: IntCounter,
-    pub invalidated_entries_by_transient_error: IntCounter,
+    pub invalidated_entries_by_error: IntCounter,
     pub invalidated_entries_duration: Histogram,
     pub count_bytes: IntGauge,
     pub len: IntGauge,
@@ -91,9 +91,9 @@ impl QueryCacheMetrics {
                 "execution_query_cache_invalidated_entries_by_nested_call_total",
                 "The total number of invalidated entries due to a nested call",
             ),
-            invalidated_entries_by_transient_error: metrics_registry.int_counter(
-                "execution_query_cache_invalidated_entries_by_transient_error_total",
-                "The total number of invalidated entries due to a transient error",
+            invalidated_entries_by_error: metrics_registry.int_counter(
+                "execution_query_cache_invalidated_entries_by_error_total",
+                "The total number of invalidated entries due to an error",
             ),
             invalidated_entries_duration: duration_histogram(
                 "execution_query_cache_invalidated_entries_duration_seconds",
@@ -388,22 +388,23 @@ impl QueryCache {
         // Push is always a cache miss.
         self.metrics.misses.inc();
 
+        // The result should not be saved if the result is an error.
+        // In the future we might distinguish between the transient and
+        // permanent errors, but for now we just avoid caching any errors.
+        if result.is_err() {
+            // Because of the error, the cache entry is immediately invalidated.
+            self.metrics.invalidated_entries.inc();
+            self.metrics.invalidated_entries_duration.observe(0_f64);
+            self.metrics.invalidated_entries_by_error.inc();
+            return;
+        }
+
         // The result should not be saved if the query calls a nested query.
         if system_api_call_counters.call_perform != 0 {
             // Because of the nested calls the entry is immediately invalidated.
             self.metrics.invalidated_entries.inc();
             self.metrics.invalidated_entries_duration.observe(0_f64);
             self.metrics.invalidated_entries_by_nested_call.inc();
-            return;
-        }
-
-        // The result should not be saved if the result is a transient error.
-        // TODO: RUN-908: For now, we treat all the errors as transient.
-        if result.is_err() {
-            // Because of the nested calls the entry is immediately invalidated.
-            self.metrics.invalidated_entries.inc();
-            self.metrics.invalidated_entries_duration.observe(0_f64);
-            self.metrics.invalidated_entries_by_transient_error.inc();
             return;
         }
 
