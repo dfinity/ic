@@ -1,3 +1,4 @@
+use ic_icrc_rosetta::common::types::Error;
 use ic_icrc_rosetta::construction_api::types::ConstructionMetadataRequestOptions;
 use reqwest::{Client, Url};
 use rosetta_core::identifiers::*;
@@ -44,7 +45,7 @@ impl RosettaClient {
         &self,
         path: &str,
         arg: &T,
-    ) -> reqwest::Result<R> {
+    ) -> Result<R, Error> {
         let response = self
             .http_client
             .post(self.url(path))
@@ -52,13 +53,15 @@ impl RosettaClient {
             .send()
             .await?;
 
-        match response.error_for_status() {
-            Ok(res) => Ok(res.json().await?),
-            Err(err) => Err(err),
+        let status = response.status();
+        if status.is_client_error() || status.is_server_error() {
+            Err(response.json().await?)
+        } else {
+            Ok(response.json().await?)
         }
     }
 
-    pub async fn network_list(&self) -> reqwest::Result<NetworkListResponse> {
+    pub async fn network_list(&self) -> Result<NetworkListResponse, Error> {
         self.call_endpoint("/network/list", &MetadataRequest { metadata: None })
             .await
     }
@@ -66,7 +69,7 @@ impl RosettaClient {
     pub async fn network_status(
         &self,
         network_identifier: NetworkIdentifier,
-    ) -> reqwest::Result<NetworkStatusResponse> {
+    ) -> Result<NetworkStatusResponse, Error> {
         self.call_endpoint(
             "/network/status",
             &NetworkRequest {
@@ -81,7 +84,7 @@ impl RosettaClient {
         &self,
         network_identifier: NetworkIdentifier,
         block_identifier: PartialBlockIdentifier,
-    ) -> reqwest::Result<BlockResponse> {
+    ) -> Result<BlockResponse, Error> {
         self.call_endpoint(
             "/block",
             &BlockRequest {
@@ -97,7 +100,7 @@ impl RosettaClient {
         network_identifier: NetworkIdentifier,
         block_identifier: BlockIdentifier,
         transaction_identifier: TransactionIdentifier,
-    ) -> reqwest::Result<BlockTransactionResponse> {
+    ) -> Result<BlockTransactionResponse, Error> {
         self.call_endpoint(
             "/block/transaction",
             &BlockTransactionRequest {
@@ -112,7 +115,7 @@ impl RosettaClient {
     pub async fn mempool(
         &self,
         network_identifier: NetworkIdentifier,
-    ) -> reqwest::Result<MempoolResponse> {
+    ) -> Result<MempoolResponse, Error> {
         self.call_endpoint(
             "/mempool",
             &NetworkRequest {
@@ -126,7 +129,7 @@ impl RosettaClient {
     pub async fn mempool_transaction(
         &self,
         mempool_transaction_request: MempoolTransactionRequest,
-    ) -> reqwest::Result<MempoolTransactionResponse> {
+    ) -> Result<MempoolTransactionResponse, Error> {
         self.call_endpoint("/mempool/transaction", &mempool_transaction_request)
             .await
     }
@@ -134,7 +137,7 @@ impl RosettaClient {
     pub async fn construction_derive(
         &self,
         construction_derive_request: ConstructionDeriveRequest,
-    ) -> reqwest::Result<ConstructionDeriveResponse> {
+    ) -> Result<ConstructionDeriveResponse, Error> {
         self.call_endpoint("/construction/derive", &construction_derive_request)
             .await
     }
@@ -143,7 +146,7 @@ impl RosettaClient {
         &self,
         operations: Vec<Operation>,
         network_identifier: NetworkIdentifier,
-    ) -> reqwest::Result<ConstructionPreprocessResponse> {
+    ) -> Result<ConstructionPreprocessResponse, Error> {
         self.call_endpoint(
             "/construction/preprocess",
             &ConstructionPreprocessRequest {
@@ -159,7 +162,7 @@ impl RosettaClient {
         &self,
         construction_metadata_options: ConstructionMetadataRequestOptions,
         network_identifier: NetworkIdentifier,
-    ) -> reqwest::Result<ConstructionMetadataResponse> {
+    ) -> Result<ConstructionMetadataResponse, Error> {
         self.call_endpoint(
             "/construction/metadata",
             &ConstructionMetadataRequest {

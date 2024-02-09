@@ -25,6 +25,7 @@ const ERROR_CODE_MEMPOOL_TRANSACTION_MISSING: u32 = 6;
 const ERROR_CODE_PARSING_ERROR: u32 = 7;
 const ERROR_CODE_UNSUPPORTED_OPERATION: u32 = 8;
 const ERROR_CODE_LEDGER_COMMUNICATION: u32 = 9;
+const ERROR_CODE_REQUEST_PROCESSING_ERROR: u32 = 10;
 
 impl IntoResponse for Error {
     fn into_response(self) -> axum::response::Response {
@@ -45,6 +46,12 @@ impl From<rosetta_core::miscellaneous::Error> for Error {
 impl From<strum::ParseError> for Error {
     fn from(value: strum::ParseError) -> Self {
         Error::parsing_unsuccessful(&value)
+    }
+}
+
+impl From<reqwest::Error> for Error {
+    fn from(value: reqwest::Error) -> Self {
+        Error::request_processing_error(&value)
     }
 }
 
@@ -136,6 +143,16 @@ impl Error {
         Self(rosetta_core::miscellaneous::Error {
             code: ERROR_CODE_LEDGER_COMMUNICATION,
             message: "Failed to communicate with the icrc1 ledger.".to_owned(),
+            description: Some(format!("{:?}", description)),
+            retriable: false,
+            details: None,
+        })
+    }
+
+    pub fn request_processing_error<T: std::fmt::Debug>(description: &T) -> Self {
+        Self(rosetta_core::miscellaneous::Error {
+            code: ERROR_CODE_REQUEST_PROCESSING_ERROR,
+            message: "Error while processing the request.".to_owned(),
             description: Some(format!("{:?}", description)),
             retriable: false,
             details: None,

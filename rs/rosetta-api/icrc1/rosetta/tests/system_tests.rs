@@ -1,7 +1,6 @@
 use crate::common::local_replica;
 use crate::common::local_replica::test_identity;
 use crate::common::utils::get_rosetta_blocks_from_icrc1_ledger;
-use axum::http::StatusCode;
 use candid::Principal;
 use common::local_replica::get_custom_agent;
 use ic_agent::identity::BasicIdentity;
@@ -14,6 +13,7 @@ use ic_icrc1_test_utils::{
     minter_identity, valid_transactions_strategy, ArgWithCaller, LedgerEndpointArg,
     DEFAULT_TRANSFER_FEE,
 };
+use ic_icrc_rosetta::common::types::Error;
 use ic_icrc_rosetta::common::utils::utils::icrc1_rosetta_block_to_rosetta_core_block;
 use ic_icrc_rosetta::common::utils::utils::icrc1_rosetta_block_to_rosetta_core_transaction;
 use ic_icrc_rosetta::construction_api::types::ConstructionMetadataRequestOptions;
@@ -464,10 +464,8 @@ async fn test_mempool() {
         .rosetta_client
         .mempool_transaction(mempool_transaction_request)
         .await;
-    assert_eq!(
-        response.expect_err("expected an error").status().unwrap(),
-        StatusCode::INTERNAL_SERVER_ERROR
-    );
+    let err = response.expect_err("expected an error");
+    assert_eq!(err, Error::mempool_transaction_missing());
 }
 
 #[tokio::test]

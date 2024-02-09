@@ -54,6 +54,7 @@ strum_macros = { workspace = true }
 strum = { workspace = true }
 num-bigint = "0.4.4"
 ic-ledger-hash-of = { path = "../../../../packages/ic-ledger-hash-of" }
+reqwest = { workspace = true }
 
 [lib]
 path = "src/lib.rs"
@@ -69,7 +70,6 @@ ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 url = "2.3.1"
 once_cell = "1.8.0"
 ring = { version = "0.16.11", features = ["std"] }
-reqwest = { workspace = true }
 futures = { workspace = true }
 ic-icrc-rosetta-client = { path = "client" }
 ic-icrc-rosetta-runner = { path = "runner" }

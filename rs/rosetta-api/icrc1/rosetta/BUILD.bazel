@@ -32,6 +32,7 @@ DEPENDENCIES = [
     "@crate_index//:strum",
     "@crate_index//:tracing-subscriber",
     "@crate_index//:num-bigint",
+    "@crate_index//:reqwest",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
     "//rs/rosetta-api",
@@ -61,7 +62,6 @@ DEV_DEPENDENCIES = [
     "@crate_index//:futures",
     "@crate_index//:ring",
     "@crate_index//:once_cell",
-    "@crate_index//:reqwest",
 ]
 
 MACRO_DEPENDENCIES = [
