@@ -1,5 +1,5 @@
 use super::*;
-use crate::message_routing::CRITICAL_ERROR_BATCH_TIME_REGRESSION;
+use crate::message_routing::CRITICAL_ERROR_NON_INCREASING_BATCH_TIME;
 use crate::{
     routing::demux::MockDemux, routing::stream_builder::MockStreamBuilder,
     state_machine::StateMachineImpl,
@@ -236,15 +236,53 @@ fn test_delivered_batch_interface() {
 
 #[test]
 fn test_batch_time_regression() {
-    // Batch with a batch_time of 1.
+    test_batch_time_impl(
+        Time::from_nanos_since_unix_epoch(2),
+        Time::from_nanos_since_unix_epoch(1),
+        Time::from_nanos_since_unix_epoch(2),
+        1,
+    );
+}
+
+#[test]
+fn test_batch_time_same() {
+    test_batch_time_impl(
+        Time::from_nanos_since_unix_epoch(2),
+        Time::from_nanos_since_unix_epoch(2),
+        Time::from_nanos_since_unix_epoch(2),
+        1,
+    );
+}
+
+#[test]
+fn test_batch_time_advance() {
+    test_batch_time_impl(
+        Time::from_nanos_since_unix_epoch(2),
+        Time::from_nanos_since_unix_epoch(3),
+        Time::from_nanos_since_unix_epoch(3),
+        0,
+    );
+}
+
+/// Executes a batch with the given `batch_time` on a state with the given
+/// `state_batch_time`. Tests the resulting state's `batch_time` against
+/// `expected_batch_time`, as well as the `mr_non_increasing_batch_time`
+/// critical error counter.
+fn test_batch_time_impl(
+    state_batch_time: Time,
+    batch_time: Time,
+    expected_batch_time: Time,
+    expected_regression_count: u64,
+) {
+    // Batch with the provided `batch_time`.
     let provided_batch = BatchBuilder::new()
         .batch_number(Height::new(1))
-        .time(Time::from_nanos_since_unix_epoch(1))
+        .time(batch_time)
         .build();
 
-    // Fixture wrapping a state with a batch_time 2 (ahead of the batch).
+    // Fixture wrapping a state with the given `state_time` as `batch_time`.
     let mut fixture = test_fixture(&provided_batch);
-    fixture.initial_state.metadata.batch_time = Time::from_nanos_since_unix_epoch(2);
+    fixture.initial_state.metadata.batch_time = state_batch_time;
 
     with_test_replica_logger(|log| {
         let _ = &fixture;
@@ -259,12 +297,9 @@ fn test_batch_time_regression() {
 
         assert_eq!(
             Some(0),
-            fetch_critical_error_batch_time_regression_count(&fixture.metrics_registry)
+            fetch_critical_error_non_increasing_batch_time_count(&fixture.metrics_registry)
         );
-        assert_eq!(
-            Time::from_nanos_since_unix_epoch(2),
-            fixture.initial_state.metadata.batch_time,
-        );
+        assert_eq!(state_batch_time, fixture.initial_state.metadata.batch_time,);
 
         let state = state_machine.execute_round(
             fixture.initial_state,
@@ -277,20 +312,17 @@ fn test_batch_time_regression() {
         );
 
         assert_eq!(
-            Some(1),
-            fetch_critical_error_batch_time_regression_count(&fixture.metrics_registry)
+            Some(expected_regression_count),
+            fetch_critical_error_non_increasing_batch_time_count(&fixture.metrics_registry)
         );
-        assert_eq!(
-            Time::from_nanos_since_unix_epoch(2),
-            state.metadata.batch_time,
-        );
+        assert_eq!(expected_batch_time, state.metadata.batch_time,);
     });
 }
 
-fn fetch_critical_error_batch_time_regression_count(
+fn fetch_critical_error_non_increasing_batch_time_count(
     metrics_registry: &MetricsRegistry,
 ) -> Option<u64> {
     fetch_int_counter_vec(metrics_registry, "critical_errors")
-        .get(&btreemap! { "error".to_string() => CRITICAL_ERROR_BATCH_TIME_REGRESSION.to_string() })
+        .get(&btreemap! { "error".to_string() => CRITICAL_ERROR_NON_INCREASING_BATCH_TIME.to_string() })
         .cloned()
 }

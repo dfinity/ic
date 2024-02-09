@@ -102,7 +102,7 @@ const CRITICAL_ERROR_MISSING_OR_INVALID_API_BOUNDARY_NODES: &str =
     "mr_missing_or_invalid_api_boundary_nodes";
 const CRITICAL_ERROR_NO_CANISTER_ALLOCATION_RANGE: &str = "mr_empty_canister_allocation_range";
 const CRITICAL_ERROR_FAILED_TO_READ_REGISTRY: &str = "mr_failed_to_read_registry_error";
-pub const CRITICAL_ERROR_BATCH_TIME_REGRESSION: &str = "mr_batch_time_regression";
+pub const CRITICAL_ERROR_NON_INCREASING_BATCH_TIME: &str = "mr_non_increasing_batch_time";
 
 /// Records the timestamp when all messages before the given index (down to the
 /// previous `MessageTime`) were first added to / learned about in a stream.
@@ -309,9 +309,9 @@ pub(crate) struct MessageRoutingMetrics {
     critical_error_no_canister_allocation_range: IntCounter,
     /// Critical error: reading from the registry failed during processing a batch.
     critical_error_failed_to_read_registry: IntCounter,
-    /// Critical error: the batch times of successive batches regressed (when they
-    /// are supposed to be monotonically increasing).
-    critical_error_batch_time_regression: IntCounter,
+    /// Critical error: the batch times of successive batches were not strictly
+    /// monotonically increasing.
+    critical_error_non_increasing_batch_time: IntCounter,
 
     /// Metrics for query stats aggregator
     pub query_stats_metrics: QueryStatsAggregatorMetrics,
@@ -396,8 +396,8 @@ impl MessageRoutingMetrics {
                 .error_counter(CRITICAL_ERROR_NO_CANISTER_ALLOCATION_RANGE),
             critical_error_failed_to_read_registry: metrics_registry
                 .error_counter(CRITICAL_ERROR_FAILED_TO_READ_REGISTRY),
-            critical_error_batch_time_regression: metrics_registry
-                .error_counter(CRITICAL_ERROR_BATCH_TIME_REGRESSION),
+            critical_error_non_increasing_batch_time: metrics_registry
+                .error_counter(CRITICAL_ERROR_NON_INCREASING_BATCH_TIME),
 
             query_stats_metrics: QueryStatsAggregatorMetrics::new(metrics_registry),
         }
@@ -413,18 +413,18 @@ impl MessageRoutingMetrics {
         );
     }
 
-    pub fn observe_batch_time_regression(
+    pub fn observe_non_increasing_batch_time(
         &self,
         log: &ReplicaLogger,
         state_time: Time,
         batch_time: Time,
         batch_height: Height,
     ) {
-        self.critical_error_batch_time_regression.inc();
+        self.critical_error_non_increasing_batch_time.inc();
         warn!(
             log,
-            "{}: Batch time regressed at height {}: state_time = {}, batch_time = {}.",
-            CRITICAL_ERROR_BATCH_TIME_REGRESSION,
+            "{}: Non-increasing batch time at height {}: state_time = {}, batch_time = {}.",
+            CRITICAL_ERROR_NON_INCREASING_BATCH_TIME,
             batch_height,
             state_time,
             batch_time
