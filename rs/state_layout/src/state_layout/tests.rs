@@ -194,6 +194,24 @@ fn test_encode_decode_non_empty_history() {
 }
 
 #[test]
+fn test_canister_snapshots_decode() {
+    let canister_snapshot_bits = CanisterSnapshotBits {
+        snapshot_id: SnapshotId::new(5),
+        canister_id: canister_test_id(7),
+        taken_at_timestamp: mock_time(),
+        canister_version: 3,
+        binary_hash: Some(WasmHash::from(&CanisterModule::new(vec![2, 3, 4]))),
+        certified_data: vec![3, 4, 7],
+        wasm_chunk_store_metadata: WasmChunkStoreMetadata::default(),
+    };
+
+    let pb_bits = pb_canister_snapshot_bits::CanisterSnapshotBits::from(&canister_snapshot_bits);
+    let new_canister_snapshot_bits = CanisterSnapshotBits::try_from(pb_bits).unwrap();
+
+    assert_eq!(canister_snapshot_bits, new_canister_snapshot_bits);
+}
+
+#[test]
 fn test_encode_decode_task_queue() {
     let ingress = Arc::new(IngressBuilder::new().method_name("test_ingress").build());
     let request = Arc::new(RequestBuilder::new().method_name("test_request").build());
