@@ -18,7 +18,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Instances can be created from existing NNS state.
 
 ### Changed
-- Canisters are created with 100T cycles by default when using the provisional management canister API.
 - Breaking: The create_instance endpoint accepts an ExtendedSubnetConfigSet, which allows more options. 
 
 ### Fixed
