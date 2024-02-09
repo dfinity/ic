@@ -76,6 +76,8 @@ impl PocketIc {
                 .map(|y| SubnetId::new(PrincipalId(y.into())))
         });
 
+        let ii_subnet_split = subnet_configs.ii.is_some();
+
         let mut subnet_counter = 0_u64;
         let mut apply_subnet_counter = move || -> u64 {
             let current_subnet_counter = subnet_counter;
@@ -107,7 +109,7 @@ impl PocketIc {
             let RangeConfig {
                 canister_id_ranges: ranges,
                 canister_allocation_range: alloc_range,
-            } = get_range_config(subnet_kind, &mut range_gen);
+            } = get_range_config(subnet_kind, &mut range_gen, ii_subnet_split);
 
             // Insert ranges and allocation range into routing table
             for range in &ranges {
@@ -335,7 +337,11 @@ fn from_range(range: &CanisterIdRange) -> rest::CanisterIdRange {
     rest::CanisterIdRange { start, end }
 }
 
-fn get_range_config(subnet_kind: rest::SubnetKind, range_gen: &mut RangeGen) -> RangeConfig {
+fn get_range_config(
+    subnet_kind: rest::SubnetKind,
+    range_gen: &mut RangeGen,
+    ii_subnet_split: bool,
+) -> RangeConfig {
     use rest::SubnetKind::*;
     match subnet_kind {
         Application | System => {
@@ -372,10 +378,18 @@ fn get_range_config(subnet_kind: rest::SubnetKind, range_gen: &mut RangeGen) -> 
         }
         NNS => {
             let canister_allocation_range = range_gen.next_range();
-            let range1 = gen_range("rwlgt-iiaaa-aaaaa-aaaaa-cai", "renrk-eyaaa-aaaaa-aaada-cai");
-            let range2 = gen_range("qoctq-giaaa-aaaaa-aaaea-cai", "n5n4y-3aaaa-aaaaa-p777q-cai");
+            let canister_id_ranges = if ii_subnet_split {
+                let range1 =
+                    gen_range("rwlgt-iiaaa-aaaaa-aaaaa-cai", "renrk-eyaaa-aaaaa-aaada-cai");
+                let range2 =
+                    gen_range("qoctq-giaaa-aaaaa-aaaea-cai", "n5n4y-3aaaa-aaaaa-p777q-cai");
+                vec![range1, range2]
+            } else {
+                let range = gen_range("rwlgt-iiaaa-aaaaa-aaaaa-cai", "n5n4y-3aaaa-aaaaa-p777q-cai");
+                vec![range]
+            };
             RangeConfig {
-                canister_id_ranges: vec![range1, range2],
+                canister_id_ranges,
                 canister_allocation_range: Some(canister_allocation_range),
             }
         }
