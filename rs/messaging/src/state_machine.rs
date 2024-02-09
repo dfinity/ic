@@ -93,11 +93,11 @@ impl StateMachine for StateMachineImpl {
             );
         }
 
-        if batch.time >= state.metadata.batch_time {
+        if batch.time > state.metadata.batch_time {
             state.metadata.batch_time = batch.time;
         } else {
-            // Batch time regressed. This is a bug. (Implicitly) retain the old batch time.
-            self.metrics.observe_batch_time_regression(
+            // Batch time did not advance. This is a bug. (Implicitly) retain the old batch time.
+            self.metrics.observe_non_increasing_batch_time(
                 &self.log,
                 state.metadata.batch_time,
                 batch.time,
