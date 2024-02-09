@@ -44,7 +44,9 @@ use candid::{
     CandidType, Nat, Principal,
 };
 use ic_cdk::api::management_canister::{
-    main::{CanisterInstallMode, InstallCodeArgument, UpdateSettingsArgument},
+    main::{
+        CanisterInstallMode, CanisterStatusResponse, InstallCodeArgument, UpdateSettingsArgument,
+    },
     provisional::{CanisterId, CanisterIdRecord, CanisterSettings},
 };
 use reqwest::Url;
@@ -449,6 +451,24 @@ impl PocketIc {
             method,
             payload,
         )
+    }
+
+    /// Request a canister's status.
+    #[instrument(skip(self), fields(instance_id=self.instance_id, sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub fn canister_status(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+    ) -> Result<CanisterStatusResponse, CallError> {
+        call_candid_as::<(CanisterIdRecord,), (CanisterStatusResponse,)>(
+            self,
+            Principal::management_canister(),
+            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+            sender.unwrap_or(Principal::anonymous()),
+            "canister_status",
+            (CanisterIdRecord { canister_id },),
+        )
+        .map(|responses| responses.0)
     }
 
     /// Create a canister with default settings as the anonymous principal.
