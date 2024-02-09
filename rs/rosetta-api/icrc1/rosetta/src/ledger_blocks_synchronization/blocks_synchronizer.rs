@@ -407,10 +407,7 @@ pub mod blocks_verifier {
     use crate::ledger_blocks_synchronization::blocks_synchronizer::RosettaBlock;
     use serde_bytes::ByteBuf;
 
-    pub fn is_valid_blockchain(
-        blockchain: &Vec<RosettaBlock>,
-        leading_block_hash: &ByteBuf,
-    ) -> bool {
+    pub fn is_valid_blockchain(blockchain: &[RosettaBlock], leading_block_hash: &ByteBuf) -> bool {
         if blockchain.is_empty() {
             return true;
         }

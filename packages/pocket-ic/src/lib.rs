@@ -6,7 +6,7 @@
 //!
 //! With PocketIC, testing canisters is as simple as calling rust functions. Here is a minimal example:
 //!
-//! ```rust
+//! ```rust,no_run
 //! use candid;
 //! use pocket_ic;
 //!

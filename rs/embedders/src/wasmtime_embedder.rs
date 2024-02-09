@@ -528,14 +528,16 @@ impl WasmtimeEmbedder {
         created_memories: &mut HashMap<MemoryStart, MemoryPageSize>,
         canister_id: CanisterId,
     ) -> HypervisorResult<()> {
-        match instance
-            .get_memory(&mut store, bytemap_name)
-            .and_then(|bytemap_instance_memory| {
-                let start = MemoryStart(bytemap_instance_memory.data_ptr(&store) as usize);
-                created_memories
-                    .remove(&start)
-                    .map(|s| (bytemap_instance_memory, s))
-            }) {
+        let memory =
+            instance
+                .get_memory(&mut store, bytemap_name)
+                .and_then(|bytemap_instance_memory| {
+                    let start = MemoryStart(bytemap_instance_memory.data_ptr(&store) as usize);
+                    created_memories
+                        .remove(&start)
+                        .map(|s| (bytemap_instance_memory, s))
+                });
+        match memory {
             None => {
                 error!(
                     self.log,

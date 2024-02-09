@@ -1156,7 +1156,7 @@ fn write_pages(file: &mut File, data: &Vec<&[u8]>) -> std::io::Result<()> {
 /// Write an overlay file to `path`.
 fn write_overlay(
     pages: &Vec<&[u8]>,
-    indices: &Vec<PageIndex>,
+    indices: &[PageIndex],
     path: &Path,
     metrics: &StorageMetrics,
     op_label: &str, // `LABEL_OP_FLUSH` or `LABEL_OP_MERGE`

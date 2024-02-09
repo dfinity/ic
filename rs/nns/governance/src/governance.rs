@@ -5653,10 +5653,11 @@ impl Governance {
             ));
         }
 
-        match self.with_neuron_mut(&nid, |neuron| {
+        let result = self.with_neuron_mut(&nid, |neuron| {
             // Adjust the stake.
             neuron.update_stake_adjust_age(balance.get_e8s(), now);
-        }) {
+        });
+        match result {
             Ok(_) => Ok(nid),
             Err(err) => {
                 // This should not be possible, but let's be defensive and provide a
@@ -6298,7 +6299,7 @@ impl Governance {
                     for (voter, ballot) in proposal.ballots.iter() {
                         let voting_rights = (ballot.voting_power as f64) * reward_weight;
                         total_voting_rights += voting_rights;
-                        #[allow(clippy::blocks_in_if_conditions)]
+                        #[allow(clippy::blocks_in_conditions)]
                         if Vote::try_from(ballot.vote)
                             .unwrap_or_else(|_| {
                                 println!(
@@ -6338,7 +6339,7 @@ impl Governance {
             );
         } else {
             for (neuron_id, used_voting_rights) in voters_to_used_voting_right {
-                match self.with_neuron_mut(&neuron_id, |neuron| {
+                let maybe_reward = self.with_neuron_mut(&neuron_id, |neuron| {
                     // Note that " as u64" rounds toward zero; this is the desired
                     // behavior here. Also note that `total_voting_rights` has
                     // to be positive because (1) voters_to_used_voting_right
@@ -6356,7 +6357,8 @@ impl Governance {
                         neuron.maturity_e8s_equivalent += reward;
                     }
                     reward
-                }) {
+                });
+                match maybe_reward {
                     Ok(reward) => {
                         actually_distributed_e8s_equivalent += reward;
                     }
@@ -7532,7 +7534,7 @@ pub fn validate_proposal_title(title: &Option<String>) -> Result<(), String> {
 
 /// Returns whether the following requirements are met:
 ///   1. summary len (bytes, not characters) is below the max.
-pub fn validate_proposal_summary(summary: &String) -> Result<(), String> {
+pub fn validate_proposal_summary(summary: &str) -> Result<(), String> {
     if summary.len() > PROPOSAL_SUMMARY_BYTES_MAX {
         return Err(format!(
             "The maximum proposal summary size is {} bytes, this proposal is: {} bytes",
@@ -7547,7 +7549,7 @@ pub fn validate_proposal_summary(summary: &String) -> Result<(), String> {
 /// Returns whether the following requirements are met:
 ///   1. If a url is provided, it is between the max and min
 ///   2. If a url is specified, it must be from the list of allowed domains.
-pub fn validate_proposal_url(url: &String) -> Result<(), String> {
+pub fn validate_proposal_url(url: &str) -> Result<(), String> {
     // An empty string will fail validation as it is not a valid url,
     // but it's fine for us.
     if !url.is_empty() {

@@ -586,7 +586,7 @@ impl MergeCandidateAndMetrics {
 /// further increase the amount of data written in order to enforce the storage overhead.
 fn merge(
     tip_handler: &mut TipHandler,
-    pagemaptypes_with_num_pages: &Vec<(PageMapType, usize)>,
+    pagemaptypes_with_num_pages: &[(PageMapType, usize)],
     height: Height,
     thread_pool: &mut scoped_threadpool::Pool,
     log: &ReplicaLogger,

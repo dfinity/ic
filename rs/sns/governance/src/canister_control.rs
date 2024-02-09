@@ -148,7 +148,7 @@ async fn stop_canister(
     let serialized_canister_id = candid::Encode!(&CanisterIdRecord::from(canister_id))
         .expect("Unable to encode stop_canister args.");
 
-    match env
+    let result = env
         .call_canister(
             CanisterId::ic_00(),
             "stop_canister",
@@ -162,7 +162,9 @@ async fn stop_canister(
             );
             log!(ERROR, "{}{:?}", log_prefix(), err);
             err
-        }) {
+        });
+
+    match result {
         Ok(_) => Ok(()),
         Err(err) => {
             log!(

@@ -805,15 +805,15 @@ mod verify_written_blocks {
                 length: 1u8.into(),
             };
 
-            let wasm_result_bytes = match {
-                self.env
-                    .query(
-                        self.ledger_id,
-                        "get_transactions",
-                        Encode!(&request).unwrap(),
-                    )
-                    .expect("failed to query get_transactions on the ledger")
-            } {
+            let wasm_result_bytes = match self
+                .env
+                .query(
+                    self.ledger_id,
+                    "get_transactions",
+                    Encode!(&request).unwrap(),
+                )
+                .expect("failed to query get_transactions on the ledger")
+            {
                 WasmResult::Reply(bytes) => bytes,
                 WasmResult::Reject(reject) => {
                     panic!("Expected a successful reply, got a reject: {}", reject)

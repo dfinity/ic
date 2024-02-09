@@ -4882,7 +4882,7 @@ impl Governance {
         for proposal_id in &considered_proposals {
             if let Some(proposal) = self.get_proposal_data(*proposal_id) {
                 for (voter, ballot) in &proposal.ballots {
-                    #[allow(clippy::blocks_in_if_conditions)]
+                    #[allow(clippy::blocks_in_conditions)]
                     if !Vote::try_from(ballot.vote)
                         .unwrap_or_else(|_| {
                             println!(
