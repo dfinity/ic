@@ -115,8 +115,8 @@ pub const ONE_MONTH_SECONDS: u64 = ONE_YEAR_SECONDS / 12;
 const PROPOSAL_TITLE_BYTES_MIN: usize = 5;
 const PROPOSAL_TITLE_BYTES_MAX: usize = 256;
 // Proposal validation
-// 15000 B
-const PROPOSAL_SUMMARY_BYTES_MAX: usize = 15000;
+// 30000 B
+const PROPOSAL_SUMMARY_BYTES_MAX: usize = 30000;
 // 2048 characters
 const PROPOSAL_URL_CHAR_MAX: usize = 2048;
 // 10 characters
