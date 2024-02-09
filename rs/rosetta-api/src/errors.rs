@@ -269,11 +269,12 @@ pub fn convert_to_api_error(err: Error, token_name: &str) -> ApiError {
             retriable,
             details,
             ..
-        }) => match ICError::try_from(details).map(|mut e| {
-            e.retriable = retriable;
-            ApiError::ICError(e)
-        }) {
-            Err(e) | Ok(e) => e,
+        }) => match ICError::try_from(details) {
+            Ok(mut e) => {
+                e.retriable = retriable;
+                ApiError::ICError(e)
+            }
+            Err(e) => e,
         },
         Error(rosetta_core::miscellaneous::Error {
             code: 750,

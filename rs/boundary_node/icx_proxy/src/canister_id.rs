@@ -10,7 +10,6 @@ use tracing::error;
 
 use crate::{
     canister_alias::CanisterAlias, config::dns_canister_config::DnsCanisterConfig, proxy::AppState,
-    InspectErr,
 };
 
 pub struct ResolverState {
