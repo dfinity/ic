@@ -21,7 +21,7 @@ edition.workspace = true
 
 [dependencies]
 candid = "^0.10.2"
-reqwest = { version = "^0.11.22", features = [
+reqwest = { version = "^0.11.22", default-features = false, features = [
     "blocking",
     "json",
     "multipart",
