@@ -80,6 +80,7 @@ alias(
             "//rs/rust_canisters/canister_log",
             "//rs/rust_canisters/http_types",
             "@crate_index//:candid",
+            "@crate_index//:ic-btc-interface",
             "@crate_index//:ic-cdk",
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:serde_json",
