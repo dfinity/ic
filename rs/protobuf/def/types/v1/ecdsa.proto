@@ -110,6 +110,10 @@ message RandomTranscriptParams {
   IDkgTranscriptParamsRef transcript_ref = 1;
 }
 
+message RandomUnmaskedTranscriptParams {
+  IDkgTranscriptParamsRef transcript_ref = 1;
+}
+
 message ReshareOfMaskedParams {
   IDkgTranscriptParamsRef transcript_ref = 1;
 }
@@ -129,6 +133,7 @@ message QuadrupleInCreation {
   RandomTranscriptParams lambda_config = 3;
   MaskedTranscript lambda_masked = 4;
 
+  RandomUnmaskedTranscriptParams kappa_unmasked_config = 11;
   ReshareOfMaskedParams unmask_kappa_config = 5;
   UnmaskedTranscript kappa_unmasked = 6;
 
