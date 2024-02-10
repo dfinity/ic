@@ -875,6 +875,27 @@ impl CkBtcSetup {
         .unwrap()
     }
 
+    pub fn get_known_utxos(&self, account: impl Into<Account>) -> Vec<Utxo> {
+        let account = account.into();
+        Decode!(
+            &assert_reply(
+                self.env
+                    .query(
+                        self.minter_id,
+                        "get_known_utxos",
+                        Encode!(&UpdateBalanceArgs {
+                            owner: Some(account.owner),
+                            subaccount: account.subaccount,
+                        })
+                        .unwrap()
+                    )
+                    .expect("failed to query balance on the ledger")
+            ),
+            Vec<Utxo>
+        )
+        .unwrap()
+    }
+
     pub fn balance_of(&self, account: impl Into<Account>) -> Nat {
         Decode!(
             &assert_reply(
@@ -1241,9 +1262,11 @@ fn test_transaction_finalization() {
 
     let user = Principal::from(ckbtc.caller);
 
-    ckbtc.deposit_utxo(user, utxo);
+    ckbtc.deposit_utxo(user, utxo.clone());
 
     assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - KYT_FEE));
+
+    assert_eq!(ckbtc.get_known_utxos(user), vec![utxo]);
 
     // Step 2: request a withdrawal
 
@@ -1284,6 +1307,8 @@ fn test_transaction_finalization() {
 
     ckbtc.finalize_transaction(tx);
     assert_eq!(ckbtc.await_finalization(block_index, 10), txid);
+
+    assert_eq!(ckbtc.get_known_utxos(user), vec![]);
 }
 
 #[test]

@@ -383,6 +383,12 @@ service : (minter_arg : MinterArg) -> {
     // If the owner is not set, it defaults to the caller's principal.
     get_btc_address : (record { owner: opt principal; subaccount : opt blob }) -> (text);
 
+    // Returns UTXOs of the given account known by the minter (with no
+    // guarantee in the ordering of the returned values).
+    //
+    // If the owner is not set, it defaults to the caller's principal.
+    get_known_utxos: (record { owner: opt principal; subaccount : opt blob }) -> (vec Utxo) query;
+
     // Mints ckBTC for newly deposited UTXOs.
     //
     // If the owner is not set, it defaults to the caller's principal.
