@@ -1131,7 +1131,7 @@ pub fn denylist_test(env: TestEnv) {
         info!(&logger, "created canister={canister_id}");
 
         // Update the denylist and reload nginx
-        let denylist_command = format!(r#"printf "\"~^{} .*$\" \"1\";\n" | sudo tee /var/opt/nginx/denylist/denylist.map && sudo service nginx reload"#, canister_id);
+        let denylist_command = format!(r#"printf "\"{}\" \"1\";\n" | sudo tee /var/opt/nginx/denylist/denylist.map && sudo service nginx reload"#, canister_id);
         let cmd_output = boundary_node.block_on_bash_script(&denylist_command).unwrap();
         info!(
             logger,
@@ -1250,7 +1250,7 @@ pub fn canister_allowlist_test(env: TestEnv) {
         // Update denylist with canister ID
         let cmd_output = boundary_node.block_on_bash_script(
             &format!(
-                r#"printf "\"~^{} .*$\" 1;\n" | sudo tee /var/opt/nginx/denylist/denylist.map"#,
+                r#"printf "\"{}\" 1;\n" | sudo tee /var/opt/nginx/denylist/denylist.map"#,
                 canister_id
             ),
         )

@@ -5,83 +5,68 @@ import DOMAIN_CANISTER_MAPPINGS from "/var/opt/nginx/domain_canister_mappings.js
 
 const CANISTER_ID_LENGTH = 27;
 
-const SYSTEM_SUBNET_TABLE = {
-  "canister_range_starts": [
-    "00000000000000000101",
-    "00000000000000070101",
-    "00000000000000080101",
-    "0000000001a000000101",
-    "00000000021000000101",
-  ],
-  "canister_range_ends": [
-    "00000000000000060101",
-    "00000000000000070101",
-    "00000000000fffff0101",
-    "0000000001afffff0101",
-    "00000000021fffff0101",
-  ],
-};
+const SYSTEM_SUBNET_LEN = 5;
+const SYSTEM_SUBNETS_START = [
+  "00000000000000000101",
+  "00000000000000070101",
+  "00000000000000080101",
+  "0000000001a000000101",
+  "00000000021000000101",
+];
+const SYSTEM_SUBNETS_END = [
+  "00000000000000060101",
+  "00000000000000070101",
+  "00000000000fffff0101",
+  "0000000001afffff0101",
+  "00000000021fffff0101",
+];
 
-function leftpad(s, len, pad) {
-  return (
-    len + 1 >= s.length && (s = new Array(len + 1 - s.length).join(pad) + s), s
-  );
-}
+const RFC4648 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+
+const RE_URI = /^\/api\/v2\/canister\/([0-9a-z\-]+)\//;
+const RE_HOST = /^([0-9a-zA-Z\-]+)\./;
+const RE_URI_HOSTNAME = /^https?\:\/\/([^:\/?#]*)/;
 
 function decodeCanisterId(canister_id) {
-  canister_id = canister_id.replace(/-/g, "");
-  const RFC4628 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-  let hex = "";
-  let bits = "";
-  for (let i = 0; i < canister_id.length; i++) {
-    let val = RFC4628.indexOf(canister_id.charAt(i).toUpperCase());
-    bits += leftpad(val.toString(2), 5, "0");
-  }
-  for (let i = 32; i + 4 <= bits.length; i += 4) {
-    let chunk = bits.substr(i, 4);
-    hex += parseInt(chunk, 2).toString(16);
-  }
-  return hex;
-}
+  canister_id = canister_id.replaceAll("-", "").toUpperCase();
+  let len = canister_id.length;
 
-// Find the first row before the given canister_id.
-function findSubnet(canisterId, table) {
-  let start = 0;
-  let end = table.canister_range_starts.length - 1;
-  while (start <= end) {
-    let mid = Math.floor((start + end) / 2);
-    let mid_value = table.canister_range_starts[mid];
+  let bits = 0
+  let value = 0
+  let index = 0
+  let bytes = new Uint8Array((len * 5 / 8) | 0)
 
-    if (mid_value >= canisterId) {
-      end = mid - 1;
-    } else {
-      start = mid + 1;
+  for (let i = 0; i < len; i++) {
+    value = (value << 5) | RFC4648.indexOf(canister_id[i]);
+    bits += 5
+
+    if (bits >= 8) {
+      bytes[index++] = (value >>> (bits - 8)) & 255
+      bits -= 8
     }
   }
 
-  return start > 0 && canisterId < table.canister_range_starts[start]
-    ? start - 1
-    : Math.min(start, table.canister_range_starts.length - 1);
+  return Array.from(bytes.slice(4)).map(x => x.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 function resolveCanisterIdFromUri(uri) {
-  const re = /^\/api\/v2\/canister\/([0-9a-z\-]+)\//;
-  const m = re.exec(uri);
+  const m = RE_URI.exec(uri);
   if (!m) {
     return "";
   }
+
   let with_prefix = m[1].split("--");
   const canister_id = with_prefix[with_prefix.length - 1];
   if (canister_id.length != CANISTER_ID_LENGTH) {
-    // not a canister id
     return "";
   }
+
   return canister_id;
 }
 
 function extractCanisterIdFromHost(host) {
-  const re = /^([0-9a-zA-Z\-]+)\./;
-  const m = re.exec(host);
+  const m = RE_HOST.exec(host);
   if (!m) {
     return "";
   }
@@ -101,11 +86,11 @@ function extractCanisterIdFromHost(host) {
 }
 
 function getHostnameFromUri(uri) {
-  const re = /^https?\:\/\/([^:\/?#]*)/;
-  const m = re.exec(uri);
+  const m = RE_URI_HOSTNAME.exec(uri);
   if (!m) {
     return "";
   }
+
   return m[1];
 }
 
@@ -172,24 +157,20 @@ function inferCanisterId(r) {
 }
 
 function isSystemSubnet(r) {
-  // Canister ID
-  let canisterId = inferCanisterId(r);
+  let canisterId = r.variables.inferred_canister_id;
   if (!canisterId) {
     return "0";
   }
 
   canisterId = decodeCanisterId(canisterId);
 
-  // Determine subnet
-  const subnetIdx = findSubnet(canisterId, SYSTEM_SUBNET_TABLE);
-  if (
-    canisterId < SYSTEM_SUBNET_TABLE.canister_range_starts[subnetIdx] ||
-    canisterId > SYSTEM_SUBNET_TABLE.canister_range_ends[subnetIdx]
-  ) {
-    return "0";
+  for (let i = 0; i <= SYSTEM_SUBNET_LEN; i++) {
+    if (canisterId >= SYSTEM_SUBNETS_START[i] && canisterId <= SYSTEM_SUBNETS_END[i]) {
+      return "1";
+    }
   }
 
-  return "1";
+  return "0";
 }
 
 export default {
