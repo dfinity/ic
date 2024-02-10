@@ -16,10 +16,6 @@ Usage: $0  <SNS_W_VERSION_INDEX_TO_START> <DIFF> (<DIFF>...)
     where the keys are the canister types with '_wasm_hash' and the values are the existing WASM hashes of the wasm to upgrade to.
     See prepare-insert-upgrade-path-proposal-text.sh for more details on what this looks like.
 
-  NOTE: Both NNS_URL and NEURON_ID must be set as environment variables.
-    Using \"source \$YOUR_WORKING_DIRECTORY/output_vars_nns_state_deployment.sh\" will give you the needed
-    variables in your shell.
-
   This script will add the mentioned SNS canister types at the versions.
   "
     exit 1
@@ -30,6 +26,8 @@ if [ $# -lt 2 ]; then
 fi
 VERSION_INDEX=$1
 shift 1
+
+set_testnet_env_variables
 
 ensure_variable_set IDL2JSON
 ensure_variable_set SNS_QUILL
