@@ -425,6 +425,55 @@ impl TryFrom<&pb::RandomTranscriptParams> for RandomTranscriptParams {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct RandomUnmaskedTranscriptParams(IDkgTranscriptParamsRef);
+impl RandomUnmaskedTranscriptParams {
+    pub fn new(
+        transcript_id: IDkgTranscriptId,
+        dealers: BTreeSet<NodeId>,
+        receivers: BTreeSet<NodeId>,
+        registry_version: RegistryVersion,
+        algorithm_id: AlgorithmId,
+    ) -> Self {
+        Self(IDkgTranscriptParamsRef::new(
+            transcript_id,
+            dealers,
+            receivers,
+            registry_version,
+            algorithm_id,
+            IDkgTranscriptOperationRef::RandomUnmasked,
+        ))
+    }
+}
+
+impl AsRef<IDkgTranscriptParamsRef> for RandomUnmaskedTranscriptParams {
+    fn as_ref(&self) -> &IDkgTranscriptParamsRef {
+        &self.0
+    }
+}
+impl AsMut<IDkgTranscriptParamsRef> for RandomUnmaskedTranscriptParams {
+    fn as_mut(&mut self) -> &mut IDkgTranscriptParamsRef {
+        &mut self.0
+    }
+}
+impl From<&RandomUnmaskedTranscriptParams> for pb::RandomUnmaskedTranscriptParams {
+    fn from(transcript: &RandomUnmaskedTranscriptParams) -> Self {
+        Self {
+            transcript_ref: Some(transcript.as_ref().into()),
+        }
+    }
+}
+impl TryFrom<&pb::RandomUnmaskedTranscriptParams> for RandomUnmaskedTranscriptParams {
+    type Error = ProxyDecodeError;
+    fn try_from(transcript: &pb::RandomUnmaskedTranscriptParams) -> Result<Self, Self::Error> {
+        Ok(Self(try_from_option_field(
+            transcript.transcript_ref.as_ref(),
+            "RandomUnmaskedTranscriptParams::transcript_ref",
+        )?))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ReshareOfMaskedParams(IDkgTranscriptParamsRef);
 impl ReshareOfMaskedParams {
     pub fn new(
@@ -609,7 +658,7 @@ impl TryFrom<&pb::UnmaskedTimesMaskedParams> for UnmaskedTimesMaskedParams {
 }
 
 /// ECDSA Quadruple in creation.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct QuadrupleInCreation {
     pub kappa_config: RandomTranscriptParams,
@@ -618,6 +667,7 @@ pub struct QuadrupleInCreation {
     pub lambda_config: RandomTranscriptParams,
     pub lambda_masked: Option<MaskedTranscript>,
 
+    pub kappa_unmasked_config: Option<RandomUnmaskedTranscriptParams>,
     pub unmask_kappa_config: Option<ReshareOfMaskedParams>,
     pub kappa_unmasked: Option<UnmaskedTranscript>,
 
@@ -626,6 +676,24 @@ pub struct QuadrupleInCreation {
 
     pub kappa_times_lambda_config: Option<UnmaskedTimesMaskedParams>,
     pub kappa_times_lambda: Option<MaskedTranscript>,
+}
+
+impl Hash for QuadrupleInCreation {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.kappa_config.hash(state);
+        self.kappa_masked.hash(state);
+        self.lambda_config.hash(state);
+        self.lambda_masked.hash(state);
+        if let Some(config) = &self.kappa_unmasked_config {
+            config.hash(state);
+        }
+        self.unmask_kappa_config.hash(state);
+        self.kappa_unmasked.hash(state);
+        self.key_times_lambda_config.hash(state);
+        self.key_times_lambda.hash(state);
+        self.kappa_times_lambda_config.hash(state);
+        self.kappa_times_lambda.hash(state);
+    }
 }
 
 impl QuadrupleInCreation {
@@ -639,6 +707,7 @@ impl QuadrupleInCreation {
             kappa_masked: None,
             lambda_config,
             lambda_masked: None,
+            kappa_unmasked_config: None,
             unmask_kappa_config: None,
             kappa_unmasked: None,
             key_times_lambda_config: None,
@@ -664,6 +733,8 @@ impl QuadrupleInCreation {
         }
         if let (Some(config), None) = (&self.unmask_kappa_config, &self.kappa_unmasked) {
             params.push(config.as_ref())
+        } else if let (Some(config), None) = (&self.kappa_unmasked_config, &self.kappa_unmasked) {
+            params.push(config.as_ref())
         }
         if let (Some(config), None) = (&self.key_times_lambda_config, &self.key_times_lambda) {
             params.push(config.as_ref())
@@ -688,6 +759,8 @@ impl QuadrupleInCreation {
         }
 
         if let Some(config) = &self.unmask_kappa_config {
+            ret.append(&mut config.as_ref().get_refs());
+        } else if let Some(config) = &self.kappa_unmasked_config {
             ret.append(&mut config.as_ref().get_refs());
         }
         if let Some(r) = &self.kappa_unmasked {
@@ -725,6 +798,8 @@ impl QuadrupleInCreation {
 
         if let Some(config) = &mut self.unmask_kappa_config {
             config.as_mut().update(height);
+        } else if let Some(config) = &mut self.kappa_unmasked_config {
+            config.as_mut().update(height);
         }
         if let Some(r) = &mut self.kappa_unmasked {
             r.as_mut().update(height);
@@ -759,6 +834,8 @@ impl QuadrupleInCreation {
         }
 
         if let Some(config) = &mut self.unmask_kappa_config {
+            ret.append(&mut config.as_mut().get_refs_and_update(height));
+        } else if let Some(config) = &mut self.kappa_unmasked_config {
             ret.append(&mut config.as_mut().get_refs_and_update(height));
         }
         if let Some(r) = &mut self.kappa_unmasked {
@@ -798,6 +875,10 @@ impl From<&QuadrupleInCreation> for pb::QuadrupleInCreation {
                 .as_ref()
                 .map(|transcript| transcript.into()),
 
+            kappa_unmasked_config: quadruple
+                .kappa_unmasked_config
+                .as_ref()
+                .map(|params| params.into()),
             unmask_kappa_config: quadruple
                 .unmask_kappa_config
                 .as_ref()
@@ -844,7 +925,7 @@ impl TryFrom<&pb::QuadrupleInCreation> for QuadrupleInCreation {
 
         let lambda_config: RandomTranscriptParams = try_from_option_field(
             quadruple.lambda_config.as_ref(),
-            "QuadrupleInCreation::lamdba_config",
+            "QuadrupleInCreation::lambda_config",
         )?;
 
         let lambda_masked: Option<MaskedTranscript> = quadruple
@@ -853,18 +934,26 @@ impl TryFrom<&pb::QuadrupleInCreation> for QuadrupleInCreation {
             .map(|transcript| transcript.try_into())
             .transpose()?;
 
-        let (unmask_kappa_config, kappa_unmasked) =
-            if let Some(config_proto) = &quadruple.unmask_kappa_config {
-                let config: ReshareOfMaskedParams = config_proto.try_into()?;
-                let transcript: Option<UnmaskedTranscript> = quadruple
-                    .kappa_unmasked
-                    .as_ref()
-                    .map(|transcript| transcript.try_into())
-                    .transpose()?;
-                (Some(config), transcript)
-            } else {
-                (None, None)
-            };
+        let kappa_unmasked_config = quadruple
+            .kappa_unmasked_config
+            .as_ref()
+            .map(|config_proto| config_proto.try_into())
+            .transpose()?;
+
+        let unmask_kappa_config = quadruple
+            .unmask_kappa_config
+            .as_ref()
+            .map(|config_proto| config_proto.try_into())
+            .transpose()?;
+
+        let kappa_unmasked = match (&unmask_kappa_config, &kappa_unmasked_config) {
+            (None, None) => None,
+            _ => quadruple
+                .kappa_unmasked
+                .as_ref()
+                .map(|transcript| transcript.try_into())
+                .transpose()?,
+        };
 
         let (key_times_lambda_config, key_times_lambda) =
             if let Some(config_proto) = &quadruple.key_times_lambda_config {
@@ -897,6 +986,7 @@ impl TryFrom<&pb::QuadrupleInCreation> for QuadrupleInCreation {
             kappa_masked,
             lambda_config,
             lambda_masked,
+            kappa_unmasked_config,
             unmask_kappa_config,
             kappa_unmasked,
             key_times_lambda_config,
