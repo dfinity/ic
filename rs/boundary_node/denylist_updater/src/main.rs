@@ -1,8 +1,11 @@
 use std::{
+    collections::hash_map::DefaultHasher,
     collections::HashMap,
-    io::ErrorKind,
+    fs::{self, File},
+    hash::{Hash, Hasher},
+    io::{ErrorKind, Write},
     net::SocketAddr,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -30,8 +33,7 @@ use rsa::{pkcs8::DecodePrivateKey, RsaPrivateKey};
 use serde::Deserialize;
 use serde_json as json;
 use tokio::{
-    fs::{self, File},
-    io::{self, AsyncBufReadExt, AsyncWriteExt, BufReader},
+    io::{self},
     task,
 };
 use tracing::info;
@@ -117,14 +119,6 @@ async fn main() -> Result<(), Error> {
         MetricParams::new(&meter, SERVICE_NAME, "list_remote"),
     );
 
-    let local_lister = LocalLister::new(cli.local_path.clone());
-    let local_lister = WithRecover(local_lister);
-    let local_lister = WithNormalize(local_lister);
-    let local_lister = WithMetrics(
-        local_lister,
-        MetricParams::new(&meter, SERVICE_NAME, "list_local"),
-    );
-
     let reloader = Reloader::new(cli.pid_path, Signal::SIGHUP);
     let reloader = WithMetrics(reloader, MetricParams::new(&meter, SERVICE_NAME, "reload"));
 
@@ -132,7 +126,7 @@ async fn main() -> Result<(), Error> {
     let updater = WithReload(updater, reloader);
     let updater = WithMetrics(updater, MetricParams::new(&meter, SERVICE_NAME, "update"));
 
-    let runner = Runner::new(remote_lister, local_lister, updater);
+    let runner = Runner::new(remote_lister, updater);
     let runner = WithMetrics(runner, MetricParams::new(&meter, SERVICE_NAME, "run"));
     let runner = WithThrottle(runner, ThrottleParams::new(1 * MINUTE));
     let mut runner = runner;
@@ -186,64 +180,27 @@ async fn metrics_handler(
         .unwrap()
 }
 
-#[derive(Debug, PartialEq, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Deserialize, Clone, Hash)]
 struct Entry {
     id: String,
     localities: Vec<String>,
 }
 
+#[derive(Debug, PartialEq, Deserialize, Clone, Hash)]
+struct Entries(Vec<Entry>);
+
+impl Entries {
+    fn get_hash(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        self.0.hash(&mut hasher);
+        hasher.finish()
+    }
+}
+
 #[automock]
 #[async_trait]
 trait List: Send + Sync {
-    async fn list(&self) -> Result<Vec<Entry>, Error>;
-}
-
-struct LocalLister {
-    local_path: PathBuf,
-}
-
-impl LocalLister {
-    fn new(local_path: PathBuf) -> Self {
-        Self { local_path }
-    }
-}
-
-#[async_trait]
-impl List for LocalLister {
-    async fn list(&self) -> Result<Vec<Entry>, Error> {
-        let f = File::open(self.local_path.clone())
-            .await
-            .context("failed to open file")?;
-
-        let f = BufReader::new(f);
-
-        let mut lines = f.lines();
-        let mut entries = vec![];
-
-        while let Some(line) = lines.next_line().await? {
-            let line = line
-                .trim_start_matches("\"~^")
-                .trim_end_matches("$\" \"1\";");
-            let mut line = line.split_whitespace();
-            if let Some(id) = line.next() {
-                let localities = match line.next() {
-                    Some("1;") => Vec::default(),
-                    Some(".*") => Vec::default(),
-                    Some(locs) => {
-                        let locs = locs.trim_start_matches('(').trim_end_matches(')');
-                        locs.split('|').map(str::to_string).collect()
-                    }
-                    None => anyhow::bail!("Invalid format."),
-                };
-                entries.push(Entry {
-                    id: id.to_string(),
-                    localities,
-                });
-            }
-        }
-
-        Ok(entries)
-    }
+    async fn list(&self) -> Result<Entries, Error>;
 }
 
 struct RemoteLister {
@@ -264,7 +221,7 @@ impl RemoteLister {
 
 #[async_trait]
 impl List for RemoteLister {
-    async fn list(&self) -> Result<Vec<Entry>, Error> {
+    async fn list(&self) -> Result<Entries, Error> {
         let request = self
             .http_client
             .request(reqwest::Method::GET, self.remote_url.clone())
@@ -310,66 +267,84 @@ impl List for RemoteLister {
         let mut entries: Vec<Entry> = entries
             .canisters
             .into_iter()
-            .map(|(id, canister)| Entry {
-                id,
-                localities: canister.localities.unwrap_or_default(),
+            .map(|(id, canister)| {
+                let mut localities = canister.localities.unwrap_or_default();
+                localities.sort();
+                Entry { id, localities }
             })
             .collect();
 
         entries.sort_by(|a, b| a.id.cmp(&b.id));
 
-        Ok(entries)
+        Ok(Entries(entries))
     }
 }
 
 #[automock]
-#[async_trait]
 trait Update: Send + Sync {
-    async fn update(&self, entries: Vec<Entry>) -> Result<(), Error>;
+    fn update(&self, entries: Entries) -> Result<bool, Error>;
 }
 
 struct Updater {
-    local_path: PathBuf,
+    path: PathBuf,
+    path_hash: PathBuf,
 }
 
 impl Updater {
-    fn new(local_path: PathBuf) -> Self {
-        Self { local_path }
+    fn new(path: PathBuf) -> Self {
+        let fname = path.file_name().unwrap().to_string_lossy();
+        let dir = path.parent().unwrap();
+
+        Self {
+            path: path.clone(),
+            path_hash: dir.join(format!("{fname}_hash")),
+        }
     }
-}
 
-#[async_trait]
-impl Update for Updater {
-    async fn update(&self, entries: Vec<Entry>) -> Result<(), Error> {
-        let mut f = File::create(self.local_path.clone())
-            .await
-            .context("failed to create file")?;
-
-        for entry in entries {
-            let line = if entry.localities.is_empty() {
-                format!("\"~^{} .*$\" \"1\";\n", entry.id)
-            } else {
-                format!(
-                    "\"~^{} ({})$\" \"1\";\n",
-                    entry.id,
-                    entry.localities.join("|")
-                )
-            };
-
-            f.write_all(line.as_bytes())
-                .await
-                .context("failed to write entry")?;
+    fn get_hash(&self) -> Result<Option<u64>, Error> {
+        if !Path::new(&self.path_hash).exists() {
+            return Ok(None);
         }
 
-        f.flush().await?;
-
-        Ok(())
+        let x = fs::read_to_string(&self.path_hash).context("unable to read hash")?;
+        x.parse::<u64>()
+            .map(Some)
+            .context("unable to parse hash as u64")
     }
 }
 
-#[async_trait]
+impl Update for Updater {
+    fn update(&self, entries: Entries) -> Result<bool, Error> {
+        let new_hash = entries.get_hash();
+
+        // If the hash exists and matches - do nothing
+        if self.get_hash()? == Some(new_hash) {
+            return Ok(false);
+        }
+
+        let mut f = File::create(&self.path).context("failed to create file")?;
+
+        for entry in entries.0 {
+            if entry.localities.is_empty() {
+                writeln!(&f, "\"{}\" \"1\";", entry.id)?;
+            } else {
+                for loc in entry.localities {
+                    writeln!(&f, "\"{}+{}\" \"1\";", entry.id, loc)?;
+                }
+            };
+        }
+
+        f.flush()?;
+
+        // Write out the new hash
+        fs::write(&self.path_hash, format!("{new_hash}")).context("unable to write hash file")?;
+
+        Ok(true)
+    }
+}
+
 trait Reload: Sync + Send {
-    async fn reload(&self) -> Result<(), Error>;
+    fn reload(&self) -> Result<(), Error>;
 }
 
 struct Reloader {
@@ -383,12 +358,9 @@ impl Reloader {
     }
 }
 
-#[async_trait]
 impl Reload for Reloader {
-    async fn reload(&self) -> Result<(), Error> {
-        let pid = fs::read_to_string(self.pid_path.clone())
-            .await
-            .context("failed to read pid file")?;
+    fn reload(&self) -> Result<(), Error> {
+        let pid = fs::read_to_string(self.pid_path.clone()).context("failed to read pid file")?;
         let pid = pid.trim().parse::<i32>().context("failed to parse pid")?;
         let pid = Pid::from_raw(pid);
 
@@ -400,12 +372,15 @@ impl Reload for Reloader {
 
 struct WithReload<T, R: Reload>(T, R);
 
-#[async_trait]
 impl<T: Update, R: Reload> Update for WithReload<T, R> {
-    async fn update(&self, entries: Vec<Entry>) -> Result<(), Error> {
-        let out = self.0.update(entries).await?;
-        self.1.reload().await?;
-        Ok(out)
+    fn update(&self, entries: Entries) -> Result<bool, Error> {
+        let r = self.0.update(entries)?;
+
+        if r {
+            self.1.reload()?;
+        }
+
+        Ok(r)
     }
 }
 
@@ -414,24 +389,22 @@ trait Run: Send + Sync {
     async fn run(&mut self) -> Result<(), Error>;
 }
 
-struct Runner<RL, LL, U> {
+struct Runner<RL, U> {
     remote_lister: RL,
-    local_lister: LL,
     updater: U,
 }
 
-impl<RL: List, LL: List, U: Update> Runner<RL, LL, U> {
-    fn new(remote_lister: RL, local_lister: LL, updater: U) -> Self {
+impl<RL: List, U: Update> Runner<RL, U> {
+    fn new(remote_lister: RL, updater: U) -> Self {
         Self {
             remote_lister,
-            local_lister,
             updater,
         }
     }
 }
 
 #[async_trait]
-impl<RL: List, LL: List, U: Update> Run for Runner<RL, LL, U> {
+impl<RL: List, U: Update> Run for Runner<RL, U> {
     async fn run(&mut self) -> Result<(), Error> {
         let remote_entries = self
             .remote_lister
@@ -439,18 +412,9 @@ impl<RL: List, LL: List, U: Update> Run for Runner<RL, LL, U> {
             .await
             .context("failed to list remote entries")?;
 
-        let local_entries = self
-            .local_lister
-            .list()
-            .await
-            .context("failed to list local entries")?;
-
-        if remote_entries != local_entries {
-            self.updater
-                .update(remote_entries)
-                .await
-                .context("failed to update entries")?;
-        }
+        self.updater
+            .update(remote_entries)
+            .context("failed to update entries")?;
 
         Ok(())
     }
@@ -491,16 +455,16 @@ struct WithNormalize<T: List>(T);
 
 #[async_trait]
 impl<T: List> List for WithNormalize<T> {
-    async fn list(&self) -> Result<Vec<Entry>, Error> {
+    async fn list(&self) -> Result<Entries, Error> {
         self.0
             .list()
             .await
             .map(|mut entries| {
-                entries.sort_by(|a, b| a.id.cmp(&b.id));
+                entries.0.sort_by(|a, b| a.id.cmp(&b.id));
                 entries
             })
             .map(|mut entries| {
-                entries.dedup_by(|a, b| a.id == b.id);
+                entries.0.dedup_by(|a, b| a.id == b.id);
                 entries
             })
     }
@@ -510,10 +474,10 @@ struct WithRecover<T: List>(T);
 
 #[async_trait]
 impl<T: List> List for WithRecover<T> {
-    async fn list(&self) -> Result<Vec<Entry>, Error> {
+    async fn list(&self) -> Result<Entries, Error> {
         match self.0.list().await {
             Err(err) => match io_error_kind(&err) {
-                Some(ErrorKind::NotFound) => Ok(vec![]),
+                Some(ErrorKind::NotFound) => Ok(Entries(vec![])),
                 _ => Err(err),
             },
             Ok(entries) => Ok(entries),
@@ -534,72 +498,6 @@ fn io_error_kind(err: &Error) -> Option<ErrorKind> {
 mod tests {
     use super::*;
 
-    use mockall::predicate;
-
-    #[tokio::test]
-    async fn it_lists_locally() -> Result<(), Error> {
-        use std::fs::File;
-        use std::io::Write;
-        use tempfile::tempdir;
-
-        // Create route files
-
-        struct TestCase {
-            name: &'static str,
-            denylist_map: &'static str,
-            want: Vec<Entry>,
-        }
-
-        let test_cases = vec![
-            TestCase {
-                name: "legacy",
-                denylist_map: "ID_1 1;\nID_2 1;\n",
-                want: vec![
-                    Entry {
-                        id: "ID_1".to_string(),
-                        localities: Vec::default(),
-                    },
-                    Entry {
-                        id: "ID_2".to_string(),
-                        localities: Vec::default(),
-                    },
-                ],
-            },
-            TestCase {
-                name: "geoblocking",
-                denylist_map: "\"~^ID_1 (CH|US)$\" \"1\";\n\"~^ID_2 .*$\" \"1\";",
-                want: vec![
-                    Entry {
-                        id: "ID_1".to_string(),
-                        localities: vec!["CH".to_string(), "US".to_string()],
-                    },
-                    Entry {
-                        id: "ID_2".to_string(),
-                        localities: Vec::default(),
-                    },
-                ],
-            },
-        ];
-
-        for tc in test_cases {
-            let local_dir = tempdir()?;
-
-            let (name, content) = &("denylist.map", tc.denylist_map);
-
-            let file_path = local_dir.path().join(name);
-            let mut file = File::create(file_path.clone())?;
-            writeln!(file, "{}", content)?;
-
-            // Create local lister
-            let lister = LocalLister::new(file_path.clone());
-
-            let was = lister.list().await?;
-            assert_eq!(was, tc.want, "Test case '{}' failed.\n", tc.name);
-        }
-
-        Ok(())
-    }
-
     #[tokio::test]
     async fn it_lists_remotely() -> Result<(), Error> {
         use httptest::{matchers::*, responders::*, Expectation, Server};
@@ -608,7 +506,7 @@ mod tests {
         struct TestCase {
             name: &'static str,
             denylist_json: json::Value,
-            want: Vec<Entry>,
+            want: Entries,
         }
 
         let test_cases = vec![
@@ -622,7 +520,7 @@ mod tests {
                     "ID_2": {}
                   }
                 }),
-                want: vec![
+                want: Entries(vec![
                     Entry {
                         id: "ID_1".to_string(),
                         localities: Vec::default(),
@@ -631,7 +529,7 @@ mod tests {
                         id: "ID_2".to_string(),
                         localities: Vec::default(),
                     },
-                ],
+                ]),
             },
             TestCase {
                 name: "geo_blocking",
@@ -644,7 +542,7 @@ mod tests {
                     "ID_3": {},
                   }
                 }),
-                want: vec![
+                want: Entries(vec![
                     Entry {
                         id: "ID_1".to_string(),
                         localities: vec!["CH".to_string(), "US".to_string()],
@@ -657,7 +555,7 @@ mod tests {
                         id: "ID_3".to_string(),
                         localities: Vec::default(),
                     },
-                ],
+                ]),
             },
         ];
 
@@ -688,144 +586,54 @@ mod tests {
 
         struct TestCase {
             name: &'static str,
-            entries: Vec<Entry>,
+            entries: Entries,
             want: &'static str,
         }
 
         let test_cases = vec![
             TestCase {
                 name: "US",
-                entries: vec![Entry {
+                entries: Entries(vec![Entry {
                     id: "ID_1".to_string(),
                     localities: vec!["US".to_string()],
-                }],
-                want: "\"~^ID_1 (US)$\" \"1\";\n",
+                }]),
+                want: "\"ID_1+US\" \"1\";\n",
             },
             TestCase {
                 name: "CH US",
-                entries: vec![Entry {
+                entries: Entries(vec![Entry {
                     id: "ID_1".to_string(),
                     localities: vec!["CH".to_string(), "US".to_string()],
-                }],
-                want: "\"~^ID_1 (CH|US)$\" \"1\";\n",
+                }]),
+                want: "\"ID_1+CH\" \"1\";\n\"ID_1+US\" \"1\";\n",
             },
             TestCase {
                 name: "global",
-                entries: vec![Entry {
-                    id: "ID_1".to_string(),
-                    localities: Vec::default(),
-                }],
-                want: "\"~^ID_1 .*$\" \"1\";\n",
+                entries: Entries(vec![
+                    Entry {
+                        id: "ID_1".to_string(),
+                        localities: Vec::default(),
+                    },
+                    Entry {
+                        id: "ID_2".to_string(),
+                        localities: Vec::default(),
+                    },
+                ]),
+                want: "\"ID_1\" \"1\";\n\"ID_2\" \"1\";\n",
             },
         ];
+
         for tc in test_cases {
             let local_dir = tempdir()?;
             let file_path = local_dir.path().join("denylist.map");
 
             // Create local lister
             let updater = Updater::new(file_path.clone());
-            updater.update(tc.entries).await?;
+            updater.update(tc.entries)?;
 
-            let was = fs::read_to_string(file_path).await?;
-
+            let was = fs::read_to_string(file_path)?;
             assert_eq!(was, tc.want, "Test case '{}' failed.\n", tc.name);
         }
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn it_runs_eq() -> Result<(), Error> {
-        struct TestCase {
-            local: Vec<Entry>,
-            remote: Vec<Entry>,
-        }
-
-        let test_cases = vec![
-            TestCase {
-                local: vec![],
-                remote: vec![],
-            },
-            TestCase {
-                local: vec![Entry {
-                    id: "ID_1".to_string(),
-                    localities: Vec::from(["CH".to_string(), "US".to_string()]),
-                }],
-                remote: vec![Entry {
-                    id: "ID_1".to_string(),
-                    localities: Vec::from(["CH".to_string(), "US".to_string()]),
-                }],
-            },
-        ];
-
-        for tc in test_cases {
-            let mut remote_lister = MockList::new();
-            remote_lister
-                .expect_list()
-                .times(1)
-                .returning(move || Ok(tc.local.clone()));
-
-            let mut local_lister = MockList::new();
-            local_lister
-                .expect_list()
-                .times(1)
-                .returning(move || Ok(tc.remote.clone()));
-
-            let mut updater = MockUpdate::new();
-            updater.expect_update().times(0);
-
-            let mut runner = Runner::new(remote_lister, local_lister, updater);
-            let was = runner.run().await;
-            was?
-        }
-
-        Ok(())
-    }
-
-    fn eq(a: &[Entry], b: &[Entry]) -> bool {
-        if a.len() != b.len() {
-            return false;
-        }
-
-        let (mut a, mut b) = (a.iter(), b.iter());
-        while let (Some(a), Some(b)) = (a.next(), b.next()) {
-            if a.id != b.id {
-                return false;
-            }
-        }
-
-        true
-    }
-
-    #[tokio::test]
-    async fn it_runs_neq() -> Result<(), Error> {
-        let mut remote_lister = MockList::new();
-        remote_lister.expect_list().times(1).returning(|| {
-            Ok(vec![Entry {
-                id: "ID_1".to_string(),
-                localities: Vec::from(["CODE_1".to_string()]),
-            }])
-        });
-
-        let mut local_lister = MockList::new();
-        local_lister.expect_list().times(1).returning(|| Ok(vec![]));
-
-        let mut updater = MockUpdate::new();
-        updater
-            .expect_update()
-            .times(1)
-            .with(predicate::function(|entries: &Vec<Entry>| {
-                eq(
-                    entries,
-                    &[Entry {
-                        id: "ID_1".to_string(),
-                        localities: Vec::from(["CODE_1".to_string()]),
-                    }],
-                )
-            }))
-            .returning(|_| Ok(()));
-
-        let mut runner = Runner::new(remote_lister, local_lister, updater);
-        runner.run().await?;
 
         Ok(())
     }
