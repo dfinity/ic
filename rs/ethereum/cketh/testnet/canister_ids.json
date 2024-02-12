@@ -10,5 +10,8 @@
   },
   "minter": {
     "ic": "jzenf-aiaaa-aaaar-qaa7q-cai"
+  },
+  "orchestrator": {
+    "ic": "2s5qh-7aaaa-aaaar-qadya-cai"
   }
 }
