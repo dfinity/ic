@@ -14,7 +14,7 @@ def image_deps(mode, _malicious = False):
     Define all HostOS inputs.
 
     Args:
-      mode: Variant to be built, dev, dev-sev or prod.
+      mode: Variant to be built, dev or prod.
       _malicious: Unused, but currently needed to fit generic build structure.
     Returns:
       A dict containing inputs to build this image.
@@ -56,9 +56,6 @@ def image_deps(mode, _malicious = False):
     extra_deps = {
         "dev": {
             "build_container_filesystem_config_file": "//ic-os/hostos/envs/dev:build_container_filesystem_config.txt",
-        },
-        "dev-sev": {
-            "build_container_filesystem_config_file": "//ic-os/hostos/envs/dev-sev:build_container_filesystem_config.txt",
         },
         "prod": {
             "build_container_filesystem_config_file": "//ic-os/hostos/envs/prod:build_container_filesystem_config.txt",

@@ -5,8 +5,6 @@
 # - `docker push/pull dfinity/guestos-base:<tag>`
 # - `docker build -t dfinity/guestos-base-dev:<tag> --build-arg PACKAGE_FILES="packages.common packages.dev" -f Dockerfile.base .`
 # - `docker push/pull dfinity/guestos-base-dev:<tag>`
-# - `docker build -t dfinity/guestos-base-dev-sev:<tag> --build-arg PACKAGE_FILES="packages.common packages.dev" --build-arg CPU_SUPPORT="sev" -f Dockerfile.base .`
-# - `docker push/pull dfinity/guestos-base-dev-sev:<tag>`
 #
 # NOTE! If you edit this file, you will need to perform the following
 # operations to get your changes deployed.
@@ -15,10 +13,6 @@
 # 2. On the next hourly master pipeline, click the "deploy-guest-os-baseimg" job
 # 3. Note the sha256 and update the sha256 reference in the neighboring Dockerfiles.
 #
-
-# The default will be a non_sev build
-# For a SEV-SNP build, set CPU_SUPPORT build arg to "sev"
-ARG CPU_SUPPORT=non_sev
 
 #
 # First build stage:
@@ -47,17 +41,6 @@ RUN cd /tmp/ && \
     echo "68f3802c2dd3980667e4ba65ea2e1fb03f4a4ba026cca375f15a0390ff850949  node_exporter-1.3.1.linux-amd64.tar.gz" > node_exporter.sha256 && \
     shasum -c node_exporter.sha256
 
-# Download and verify SEV-SNP binaries
-RUN cd /tmp/ && \
-    curl -L -O https://github.com/dfinity/AMDSEV/releases/download/snp-release-2023-05-24/snp-release-2023-05-24.tar.gz && \
-    echo "94d3fc86498261767cdaef7261232bf1315a7b06a981b14cb628487aa3d793e8  snp-release-2023-05-24.tar.gz" > snp-release.sha256 && \
-    shasum -c snp-release.sha256
-
-# Download and verify SEV-guest binaries
-RUN cd /tmp/ && \
-    curl -L -O https://github.com/dfinity/sev-guest/releases/download/sev-guest-2023-08-15/sev-guest.tar.gz && \
-    echo "db0c996be7c0132d30fe446b76bd3ab8d3b4a0eb058205aaae7225ea98361c6f  sev-guest.tar.gz" > sev-guest.sha256 && \
-    shasum -c sev-guest.sha256
 
 #
 # Second build stage:
@@ -69,7 +52,6 @@ FROM ubuntu:20.04
 
 USER root:root
 
-ARG CPU_SUPPORT
 ENV SOURCE_DATE_EPOCH=0
 ENV TZ=UTC
 
@@ -99,31 +81,3 @@ RUN cd /tmp/ && \
     mkdir -p /etc/node_exporter && \
     tar --strip-components=1 -C /usr/local/bin/ -zvxf node_exporter-1.3.1.linux-amd64.tar.gz node_exporter-1.3.1.linux-amd64/node_exporter && \
     rm /tmp/node_exporter-1.3.1.linux-amd64.tar.gz
-
-# If CPU_SUPPORT is "sev", install the guest kernel
-# TODO: Generate SEV build conditionally
-COPY --from=download /tmp/snp-release-2023-05-24.tar.gz /tmp/snp-release-2023-05-24.tar.gz
-COPY --from=download /tmp/sev-guest.tar.gz /tmp/sev-guest.tar.gz
-ARG sev_snp_guest_kernel_version=6.1.0-rc4-snp-guest-93fa8c5918a4
-RUN \
-    echo "CPU_SUPPORT: ${CPU_SUPPORT}" && \
-    if [ "${CPU_SUPPORT}" = "sev" ] ; then \
-        cd /tmp/ && \
-        tar xf snp-release-2023-05-24.tar.gz && \
-        cd snp-release-2023-05-24 && \
-        dpkg -i linux/guest/linux-image-*.deb && \
-        ln -sf vmlinuz-${sev_snp_guest_kernel_version} /boot/vmlinuz && \
-        ln -sf initrd.img-${sev_snp_guest_kernel_version} /boot/initrd.img && \
-        find /boot -name "*.old" | xargs -L 1 unlink && \
-        find /boot -name "*generic" | xargs rm && \
-        find /usr/lib/modules -maxdepth 1 -type d -name "*generic" | xargs rm -rf && \
-
-        # Install sev-guest tools
-        mkdir -p /var/lib/sev-guest && \
-        tar --strip-components=1 -C /var/lib/sev-guest -zvxf /tmp/sev-guest.tar.gz && \
-	rm -rf /tmp/snp-release-2023-05-24 ; \
-    fi
-
-# Cleanup
-RUN rm /tmp/snp-release-2023-05-24.tar.gz
-RUN rm /tmp/sev-guest.tar.gz
