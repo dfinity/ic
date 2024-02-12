@@ -1,5 +1,5 @@
 {
-  "checksum": "f254d53298e7736011fd1f00f53c5be17ff25747bf1fd2bac9d3d1d324eddd04",
+  "checksum": "6ce58a71cd09b051de4912fb658fd437cbb9e5f5e1f17fa0b0a1fd087d415793",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -8936,7 +8936,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.12",
+              "id": "serde_bytes 0.11.14",
               "target": "serde_bytes"
             },
             {
@@ -15504,7 +15504,7 @@
               "target": "hyperlocal"
             },
             {
-              "id": "ic-agent 0.32.0",
+              "id": "ic-agent 0.33.0",
               "target": "ic_agent"
             },
             {
@@ -15564,7 +15564,7 @@
               "target": "ic_test_state_machine_client"
             },
             {
-              "id": "ic-utils 0.32.0",
+              "id": "ic-utils 0.33.0",
               "target": "ic_utils"
             },
             {
@@ -16020,7 +16020,7 @@
               "target": "serde_bytes_repr"
             },
             {
-              "id": "serde_bytes 0.11.12",
+              "id": "serde_bytes 0.11.14",
               "target": "serde_bytes"
             },
             {
@@ -24473,13 +24473,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "ic-agent 0.32.0": {
+    "ic-agent 0.33.0": {
       "name": "ic-agent",
-      "version": "0.32.0",
+      "version": "0.33.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-agent/0.32.0/download",
-          "sha256": "410a8c1bdd647dfc43978497e8f794378a18eeb3ec7c768b92c3885c999e1d1b"
+          "url": "https://crates.io/api/v1/crates/ic-agent/0.33.0/download",
+          "sha256": "f32c4711ca94eee9b7966116698b69ca99e7e24cba68c1f3dd86f2ed70218a7e"
         }
       },
       "targets": [
@@ -24550,7 +24550,7 @@
               "target": "ic_certification"
             },
             {
-              "id": "ic-transport-types 0.32.0",
+              "id": "ic-transport-types 0.33.0",
               "target": "ic_transport_types"
             },
             {
@@ -24564,6 +24564,10 @@
             {
               "id": "leb128 0.2.5",
               "target": "leb128"
+            },
+            {
+              "id": "p256 0.13.2",
+              "target": "p256"
             },
             {
               "id": "pem 2.0.1",
@@ -24598,7 +24602,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.12",
+              "id": "serde_bytes 0.11.14",
               "target": "serde_bytes"
             },
             {
@@ -24653,7 +24657,7 @@
           ],
           "selects": {}
         },
-        "version": "0.32.0"
+        "version": "0.33.0"
       },
       "license": "Apache-2.0"
     },
@@ -24696,7 +24700,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.12",
+              "id": "serde_bytes 0.11.14",
               "target": "serde_bytes"
             }
           ],
@@ -24925,7 +24929,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.12",
+              "id": "serde_bytes 0.11.14",
               "target": "serde_bytes"
             }
           ],
@@ -25048,7 +25052,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.12",
+              "id": "serde_bytes 0.11.14",
               "target": "serde_bytes"
             },
             {
@@ -25186,7 +25190,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.12",
+              "id": "serde_bytes 0.11.14",
               "target": "serde_bytes"
             },
             {
@@ -25233,7 +25237,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.12",
+              "id": "serde_bytes 0.11.14",
               "target": "serde_bytes"
             },
             {
@@ -25562,7 +25566,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.12",
+              "id": "serde_bytes 0.11.14",
               "target": "serde_bytes"
             }
           ],
@@ -25573,13 +25577,13 @@
       },
       "license": "Apache-2.0"
     },
-    "ic-transport-types 0.32.0": {
+    "ic-transport-types 0.33.0": {
       "name": "ic-transport-types",
-      "version": "0.32.0",
+      "version": "0.33.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-transport-types/0.32.0/download",
-          "sha256": "2cb030f03ef8332fbf8eda6bb25e80d8354d2bef88b27e671b3c167d9ee8e7a7"
+          "url": "https://crates.io/api/v1/crates/ic-transport-types/0.33.0/download",
+          "sha256": "d595b9f72e5952bcb22e5cda37ae1c8d6579a24aaa224b63b8d245f386bdcbb2"
         }
       },
       "targets": [
@@ -25621,7 +25625,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.12",
+              "id": "serde_bytes 0.11.14",
               "target": "serde_bytes"
             },
             {
@@ -25645,17 +25649,17 @@
           ],
           "selects": {}
         },
-        "version": "0.32.0"
+        "version": "0.33.0"
       },
       "license": "Apache-2.0"
     },
-    "ic-utils 0.32.0": {
+    "ic-utils 0.33.0": {
       "name": "ic-utils",
-      "version": "0.32.0",
+      "version": "0.33.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-utils/0.32.0/download",
-          "sha256": "2921308283f89a431872ba63f5ece9ffe6eadf7bc4cc5d12239eae146c7db8f0"
+          "url": "https://crates.io/api/v1/crates/ic-utils/0.33.0/download",
+          "sha256": "a8e26bd17f2f188a608deae41b8c269a85e1e98118c9a7aa0803ad252552c0b2"
         }
       },
       "targets": [
@@ -25691,7 +25695,7 @@
               "target": "futures_util"
             },
             {
-              "id": "ic-agent 0.32.0",
+              "id": "ic-agent 0.33.0",
               "target": "ic_agent"
             },
             {
@@ -25707,7 +25711,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.12",
+              "id": "serde_bytes 0.11.14",
               "target": "serde_bytes"
             },
             {
@@ -25743,7 +25747,7 @@
           ],
           "selects": {}
         },
-        "version": "0.32.0"
+        "version": "0.33.0"
       },
       "license": "Apache-2.0"
     },
@@ -37437,14 +37441,17 @@
         ],
         "crate_features": {
           "common": [
+            "alloc",
             "arithmetic",
+            "default",
             "digest",
             "ecdsa",
             "ecdsa-core",
             "pem",
             "pkcs8",
             "sha2",
-            "sha256"
+            "sha256",
+            "std"
           ],
           "selects": {}
         },
@@ -49242,13 +49249,13 @@
       },
       "license": "MIT"
     },
-    "serde_bytes 0.11.12": {
+    "serde_bytes 0.11.14": {
       "name": "serde_bytes",
-      "version": "0.11.12",
+      "version": "0.11.14",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/serde_bytes/0.11.12/download",
-          "sha256": "ab33ec92f677585af6d88c65593ae2375adde54efdbf16d597f2cbc7a6d368ff"
+          "url": "https://crates.io/api/v1/crates/serde_bytes/0.11.14/download",
+          "sha256": "8b8497c313fd43ab992087548117643f6fcd935cbf36f176ffda0aacf9591734"
         }
       },
       "targets": [
@@ -49284,7 +49291,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.11.12"
+        "version": "0.11.14"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -50214,7 +50221,7 @@
               "target": "serde_big_array"
             },
             {
-              "id": "serde_bytes 0.11.12",
+              "id": "serde_bytes 0.11.14",
               "target": "serde_bytes"
             },
             {

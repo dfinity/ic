@@ -445,7 +445,7 @@ futures = "0.3.28"
 hyper-socks2 = { version = "0.8.0", default_features = false, features = [
   "rustls",
 ] }
-ic-agent = { version = "0.32.0", features = ["hyper"] }
+ic-agent = { version = "0.33.0", features = ["hyper"] }
 ic-cdk = "0.12.0"
 ic-cdk-macros = "0.8.3"
 ic-cdk-timers = "0.6.0"
@@ -454,7 +454,7 @@ ic-http-certification = "2.3.0"
 ic-certification = "2.3.0"
 ic-cbor = "2.3.0"
 ic-stable-structures = "0.6.2"
-ic-utils = { version = "0.32.0", features = ["raw"] }
+ic-utils = { version = "0.33.0", features = ["raw"] }
 ic-btc-interface = { git = "https://github.com/dfinity/bitcoin-canister", rev = "9b239d1d67253eb14a35be6061e3967d5ec9db9d" }
 indexmap = "2.1.0"
 itertools = "0.12.0"
