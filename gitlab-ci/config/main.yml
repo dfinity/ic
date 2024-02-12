@@ -197,10 +197,10 @@ bazel-system-test-hotfix:
       when: always
     - if: $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "trigger"
       when: manual
-      allow_failure: true # the pipeline continues running even if the manual job is not run
+      allow_failure: true  # the pipeline continues running even if the manual job is not run
     - if: '$CI_MERGE_REQUEST_TITLE =~ /(\[rc\]|hotfix)/i'
       when: manual
-      allow_failure: true # the pipeline continues running even if the manual job is not run
+      allow_failure: true  # the pipeline continues running even if the manual job is not run
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       when: manual
       allow_failure: true
@@ -551,7 +551,8 @@ build-determinism:
         SETUPOS_FLAG: "true"
   script:
     - |
-      "$CI_PROJECT_DIR"/gitlab-ci/src/bazel-ci/build-determinism.sh
+      set -eExuo pipefail
+      ./gitlab-ci/tools/build-diff.sh "$PATH0" "$PATH1"
 
 build-determinism-release:
   rules:
