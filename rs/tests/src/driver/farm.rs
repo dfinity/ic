@@ -581,7 +581,7 @@ impl TestEnvAttribute for Vec<HostFeature> {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CreateVmRequest {
     #[serde(skip)]
-    name: String,
+    pub name: String,
     #[serde(rename = "type")]
     pub vm_type: VmType,
     #[serde(rename = "vCPUs")]

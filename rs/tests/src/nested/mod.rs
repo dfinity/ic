@@ -52,7 +52,7 @@ pub fn config(env: TestEnv) {
 
     let res_request = get_resource_request_for_nested_nodes(&nodes, &env, &group_name, &farm)
         .expect("Failed to build resource request for nested test.");
-    let res_group = allocate_resources(&farm, &res_request)
+    let res_group = allocate_resources(&farm, &res_request, &env)
         .expect("Failed to allocate resources for nested test.");
 
     for (name, vm) in res_group.vms.iter() {
