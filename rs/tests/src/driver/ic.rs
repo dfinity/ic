@@ -1,12 +1,14 @@
 use crate::driver::{
-    bootstrap::{init_ic, setup_and_start_vms, setup_and_start_vms_k8s},
+    bootstrap::{init_ic, setup_and_start_vms},
     farm::{Farm, HostFeature},
     node_software_version::NodeSoftwareVersion,
-    resource::{allocate_resources, allocate_resources_k8s, get_resource_request, ResourceGroup},
+    resource::{allocate_resources, get_resource_request, ResourceGroup},
     test_env::{TestEnv, TestEnvAttribute},
     test_env_api::{HasRegistryLocalStore, HasTopologySnapshot},
-    test_setup::{GroupSetup, InfraProvider, TNetInfo},
+    test_setup::{GroupSetup, InfraProvider},
 };
+use crate::k8s::tnet::TNet;
+use crate::util::block_on;
 use anyhow::Result;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_prep_lib::{node::NodeSecretKeyStore, subnet_configuration::SubnetRunningState};
@@ -192,80 +194,6 @@ impl InternetComputer {
     }
 
     pub fn setup_and_start(&mut self, env: &TestEnv) -> Result<()> {
-        match InfraProvider::read_attribute(env) {
-            InfraProvider::Farm => {
-                self.setup_and_start_farm(env)?;
-            }
-            InfraProvider::K8s => {
-                self.setup_and_start_k8s(env)?;
-            }
-        }
-        Ok(())
-    }
-
-    pub fn setup_and_start_k8s(&mut self, env: &TestEnv) -> Result<()> {
-        for subnet in self.subnets.iter_mut() {
-            for node in subnet.nodes.iter_mut() {
-                node.required_host_features = node
-                    .required_host_features
-                    .iter()
-                    .chain(self.required_host_features.iter())
-                    .cloned()
-                    .collect();
-                node.vm_resources = node.vm_resources.or(&self.default_vm_resources);
-            }
-        }
-        for node in self.unassigned_nodes.iter_mut() {
-            node.required_host_features = node
-                .required_host_features
-                .iter()
-                .chain(self.required_host_features.iter())
-                .cloned()
-                .collect();
-            node.vm_resources = node.vm_resources.or(&self.default_vm_resources);
-        }
-
-        let tempdir = tempfile::tempdir()?;
-        self.create_secret_key_stores(tempdir.path())?;
-
-        let group_setup = GroupSetup::read_attribute(env);
-        let group_name: String = group_setup.infra_group_name;
-        let res_request = get_resource_request(self, env, &group_name)?;
-
-        let (res_group, tnet) = allocate_resources_k8s(self, &res_request)?;
-        self.propagate_ip_addrs(&res_group);
-        let init_ic = init_ic(
-            self,
-            env,
-            &env.logger(),
-            self.use_specified_ids_allocation_range,
-        )?;
-        TNetInfo::new(tnet.index.unwrap()).write_attribute(env);
-
-        // save initial registry snapshot for this pot
-        let local_store_path = env
-            .registry_local_store_path(&self.name)
-            .expect("corrupted ic-prep directory structure");
-        let reg_snapshot = ic_regedit::load_registry_local_store(local_store_path)?;
-        let reg_snapshot_serialized =
-            serde_json::to_string_pretty(&reg_snapshot).expect("Could not pretty print value.");
-        IcPrepStateDir::new(init_ic.target_dir.to_str().expect("invalid target dir"));
-        std::fs::write(
-            init_ic.target_dir.join("initial_registry_snapshot.json"),
-            reg_snapshot_serialized,
-        )
-        .unwrap();
-        let topology_snapshot = env.topology_snapshot_by_name(&self.name);
-        // Pretty print IC Topology using the Display implementation
-        info!(env.logger(), "{topology_snapshot}");
-        // Emit a json log event, to be consumed by log post-processing tools.
-        topology_snapshot.emit_log_event(&env.logger());
-        setup_and_start_vms_k8s(&init_ic, self, env, &group_name, &tnet)?;
-
-        Ok(())
-    }
-
-    pub fn setup_and_start_farm(&mut self, env: &TestEnv) -> Result<()> {
         // propagate required host features and resource settings to all vms
         let farm = Farm::from_test_env(env, "Internet Computer");
         for subnet in self.subnets.iter_mut() {
@@ -294,7 +222,15 @@ impl InternetComputer {
         let group_setup = GroupSetup::read_attribute(env);
         let group_name: String = group_setup.infra_group_name;
         let res_request = get_resource_request(self, env, &group_name)?;
-        let res_group = allocate_resources(&farm, &res_request)?;
+
+        if InfraProvider::read_attribute(env) == InfraProvider::K8s {
+            let image_url = res_request.primary_image.url.clone();
+            let tnet = TNet::read_attribute(env).image_url(image_url.as_ref());
+            block_on(tnet.deploy_guestos_image()).expect("failed to deploy guestos image");
+            tnet.write_attribute(env);
+        }
+
+        let res_group = allocate_resources(&farm, &res_request, env)?;
         self.propagate_ip_addrs(&res_group);
         let init_ic = init_ic(
             self,

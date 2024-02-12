@@ -33,7 +33,7 @@ impl GroupSetup {
             .duration_since(std::time::UNIX_EPOCH)
             .expect("bad things")
             .as_millis();
-        res.infra_group_name = format!("{}--{:?}", group_base_name, time);
+        res.infra_group_name = format!("{}--{:?}", group_base_name, time).replace('_', "-");
         // GROUP_TTL should be enough for the setup task to allocate the group on InfraProvider
         // Afterwards, the group's TTL should be bumped via a keepalive task
         res.group_timeout = GROUP_TTL;
@@ -44,23 +44,6 @@ impl GroupSetup {
 impl TestEnvAttribute for GroupSetup {
     fn attribute_name() -> String {
         "group_setup".to_string()
-    }
-}
-
-#[derive(Clone, Deserialize, Serialize, Default, Debug)]
-pub struct TNetInfo {
-    pub index: u32,
-}
-
-impl TNetInfo {
-    pub fn new(index: u32) -> Self {
-        Self { index }
-    }
-}
-
-impl TestEnvAttribute for TNetInfo {
-    fn attribute_name() -> String {
-        "tnetinfo".to_string()
     }
 }
 

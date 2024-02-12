@@ -137,13 +137,6 @@ impl PrometheusVm {
     }
 
     pub fn start(&self, env: &TestEnv) -> Result<()> {
-        let infra_provider = InfraProvider::read_attribute(env);
-        let use_k8s = infra_provider == InfraProvider::K8s;
-        if use_k8s {
-            // TODO: k8s
-            return Ok(());
-        }
-
         // Create a config directory containing the prometheus.yml configuration file.
         let vm_name = String::from(PROMETHEUS_VM_NAME);
         let log = env.logger();
@@ -171,6 +164,10 @@ chown -R {SSH_USERNAME}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
             .clone()
             .with_config_dir(config_dir)
             .start(env)?;
+
+        if InfraProvider::read_attribute(env) == InfraProvider::K8s {
+            return Ok(());
+        }
 
         // Log the Prometheus URL so users can browse to it while the test is running.
         let deployed_prometheus_vm = env.get_deployed_universal_vm(&vm_name).unwrap();
