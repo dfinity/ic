@@ -2956,6 +2956,7 @@ impl ExecutionEnvironment {
                             &mut canister.system_state.status,
                             CanisterStatus::Stopped,
                         );
+                        canister.system_state.canister_version += 1;
 
                         // Reply to all pending stop_canister requests.
                         if let CanisterStatus::Stopping { stop_contexts, .. } = stopping_status {
