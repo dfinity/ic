@@ -2444,6 +2444,7 @@ dependency-scan-nightly:
       set -euo pipefail
       pip3 install --ignore-installed -r requirements.txt
       $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
+      $SHELL_WRAPPER cargo install wasm-pack --version "${CARGO_WASMPACK_VERSION}"
       # shellcheck disable=SC1090
       source "${NVM_DIR}/nvm.sh"
       nvm use ${DEFAULT_NODE_VERSION}
@@ -2455,6 +2456,7 @@ dependency-scan-nightly:
       $SHELL_WRAPPER python3 job/bazel_trivy_container_ic_scanner_periodic_job.py
   variables:
     CARGO_AUDIT_VERSION: 0.18.3
+    CARGO_WASMPACK_VERSION: 0.12.1
     DEFAULT_NODE_VERSION: '20'
     PYTHONPATH: "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
     SHELL_WRAPPER: "/usr/bin/time"
