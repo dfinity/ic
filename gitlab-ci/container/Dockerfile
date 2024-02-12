@@ -55,7 +55,7 @@ RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.12.2/
 
 ARG nvm_version=v0.39.1
 ARG dependency_mgmt_nns_dapp_node_version=18.17.1
-ARG dependency_mgmt_default_node_version=19
+ARG dependency_mgmt_default_node_version=20
 ENV NVM_DIR=/opt/nvm
 RUN mkdir $NVM_DIR && \
     curl --fail https://raw.githubusercontent.com/nvm-sh/nvm/${nvm_version}/install.sh -sSf | bash
