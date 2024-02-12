@@ -1116,6 +1116,7 @@ impl CanisterManager {
                 }
             }
         };
+        canister.system_state.canister_version += 1;
         state.put_canister_state(canister);
         result
     }
@@ -1159,6 +1160,7 @@ impl CanisterManager {
             CanisterStatus::Stopped => CanisterStatus::new_running(),
         };
         canister.system_state.status = status;
+        canister.system_state.canister_version += 1;
 
         Ok(stop_contexts)
     }

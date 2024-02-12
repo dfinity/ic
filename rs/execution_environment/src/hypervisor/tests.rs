@@ -1068,20 +1068,37 @@ fn ic0_canister_version_returns_correct_value() {
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
     );
 
-    test.set_controller(canister_id, canister_id.into())
-        .unwrap();
+    // This internally transitioning to stopping and then stopped,
+    // i.e. it adds 2 to canister version.
+    test.stop_canister(canister_id);
+    test.process_stopping_canisters();
+    test.ingress(canister_id, "update", ctr.clone())
+        .expect_err("The update should fail on the stopped canister.");
+    test.start_canister(canister_id)
+        .expect("The start canister should not fail.");
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
-    // Plus 8 for the previous ingress messages.
-    let expected_ctr: u64 = 10 + 8;
+    // Plus 8 for the previous (successful) ingress messages.
+    let expected_ctr: u64 = 12 + 8;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
     );
 
-    test.uninstall_code(canister_id).unwrap_err();
-    let result = test.ingress(canister_id, "update", ctr).unwrap();
+    test.set_controller(canister_id, canister_id.into())
+        .unwrap();
+    let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
     // Plus 9 for the previous ingress messages.
-    let expected_ctr: u64 = 10 + 9;
+    let expected_ctr: u64 = 13 + 9;
+    assert_eq!(
+        result,
+        WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
+    );
+
+    test.uninstall_code(canister_id)
+        .expect_err("Uninstall code should fail as the controller has changed.");
+    let result = test.ingress(canister_id, "update", ctr).unwrap();
+    // Plus 10 for the previous ingress messages.
+    let expected_ctr: u64 = 13 + 10;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
