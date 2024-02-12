@@ -166,7 +166,7 @@ impl Request {
         let mut builder = TransactionBuilder::default();
         for request in requests {
             match request {
-                Request::Transfer(o) => builder.transfer(o, token_name)?,
+                Request::Transfer(o) => builder.transfer(o, token_name),
                 Request::Stake(o) => builder.stake(o),
                 Request::SetDissolveTimestamp(o) => builder.set_dissolve_timestamp(o),
                 Request::ChangeAutoStakeMaturity(o) => builder.change_auto_stake_maturity(o),
@@ -182,7 +182,7 @@ impl Request {
                 Request::NeuronInfo(o) => builder.neuron_info(o),
                 Request::ListNeurons(o) => builder.list_neurons(o),
                 Request::Follow(o) => builder.follow(o),
-            };
+            }?;
         }
         Ok(builder.build())
     }

@@ -124,7 +124,7 @@ pub fn icrc1_rosetta_block_to_rosetta_core_block(
 ) -> anyhow::Result<rosetta_core::objects::Block> {
     Ok(rosetta_core::objects::Block {
         metadata: Some(
-            BlockMetadata::new(rosetta_block.get_icrc1_block()?, currency.clone())?.into(),
+            BlockMetadata::new(rosetta_block.get_icrc1_block()?, currency.clone())?.try_into()?,
         ),
         block_identifier: rosetta_block.get_block_identifier(),
         parent_block_identifier: rosetta_block.get_parent_block_identifier(),
@@ -217,7 +217,9 @@ pub fn icrc1_rosetta_block_to_rosetta_core_transaction(
             rosetta_block,
             currency,
         )?],
-        metadata: (!metadata.is_empty()).then(|| metadata.into()),
+        metadata: (!metadata.is_empty())
+            .then(|| metadata.try_into())
+            .transpose()?,
     })
 }
 
@@ -288,7 +290,7 @@ pub fn icrc1_rosetta_block_to_rosetta_core_operation(
                     spender_account: spender.map(|spender| spender.into()),
                     fee_set_by_user: fee.map(|fee| Amount::new(fee.to_string(), currency)),
                 }
-                .into(),
+                .try_into()?,
             ),
         ),
         ic_icrc1::Operation::Burn {
@@ -309,7 +311,7 @@ pub fn icrc1_rosetta_block_to_rosetta_core_operation(
                     from_account: from.into(),
                     spender_account: spender.map(|spender| spender.into()),
                 }
-                .into(),
+                .try_into()?,
             ),
         ),
         ic_icrc1::Operation::Approve {
@@ -334,7 +336,7 @@ pub fn icrc1_rosetta_block_to_rosetta_core_operation(
                     expires_at,
                     fee_set_by_user: fee.map(|fee| Amount::new(fee.to_string(), currency)),
                 }
-                .into(),
+                .try_into()?,
             ),
         ),
     })

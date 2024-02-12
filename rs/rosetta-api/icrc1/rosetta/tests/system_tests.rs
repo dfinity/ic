@@ -482,7 +482,8 @@ async fn test_construction_preprocess() {
             ConstructionMetadataRequestOptions {
                 suggested_fee: true,
             }
-            .into(),
+            .try_into()
+            .unwrap(),
         ),
         required_public_keys: None,
     };

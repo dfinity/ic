@@ -166,7 +166,11 @@ impl RosettaClient {
         self.call_endpoint(
             "/construction/metadata",
             &ConstructionMetadataRequest {
-                options: Some(construction_metadata_options.into()),
+                options: Some(
+                    construction_metadata_options
+                        .try_into()
+                        .map_err(|err| Error::parsing_unsuccessful(&err))?,
+                ),
                 network_identifier,
                 public_keys: None,
             },

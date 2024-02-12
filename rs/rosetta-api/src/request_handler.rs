@@ -177,21 +177,23 @@ impl RosettaRequestHandler {
                     .proposal_info(get_proposal_info_object.proposal_id)
                     .await?;
                 let proposal_info_response = ProposalInfoResponse::from(proposal_info);
-                Ok(CallResponse::new(ObjectMap::from(proposal_info_response)))
+                Ok(CallResponse::new(ObjectMap::try_from(
+                    proposal_info_response,
+                )?))
             }
             "get_pending_proposals" => {
                 let pending_proposals = self.ledger.pending_proposals().await?;
                 let pending_proposals_response = PendingProposalsResponse::from(pending_proposals);
-                Ok(CallResponse::new(ObjectMap::from(
+                Ok(CallResponse::new(ObjectMap::try_from(
                     pending_proposals_response,
-                )))
+                )?))
             }
             "list_known_neurons" => {
                 let known_neurons = self.ledger.list_known_neurons().await?;
                 let list_known_neurons_response = ListKnownNeuronsResponse { known_neurons };
-                Ok(CallResponse::new(ObjectMap::from(
+                Ok(CallResponse::new(ObjectMap::try_from(
                     list_known_neurons_response,
-                )))
+                )?))
             }
             _ => Err(ApiError::InvalidRequest(
                 false,
