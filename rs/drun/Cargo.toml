@@ -13,7 +13,7 @@ ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-error-types = { path = "../types/error_types" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-http-endpoints-metrics = { path = "../http_endpoints/metrics" }
-ic-ic00-types = { path = "../types/ic00_types" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-messaging = { path = "../messaging" }

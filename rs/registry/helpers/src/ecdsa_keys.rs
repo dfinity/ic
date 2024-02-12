@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
-use ic_ic00_types::EcdsaKeyId;
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
+use ic_management_canister_types::EcdsaKeyId;
 use ic_protobuf::registry::crypto::v1::EcdsaSigningSubnetList;
 use ic_registry_keys::{
     get_ecdsa_key_id_from_signing_subnet_list_key, ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX,

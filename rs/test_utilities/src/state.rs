@@ -5,7 +5,7 @@ use crate::types::{
 };
 use ic_base_types::NumSeconds;
 use ic_btc_types_internal::BitcoinAdapterRequestWrapper;
-use ic_ic00_types::{CanisterStatusType, LogVisibility};
+use ic_management_canister_types::{CanisterStatusType, LogVisibility};
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;

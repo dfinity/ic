@@ -15,12 +15,12 @@ use ic_crypto_tree_hash::{
     flatmap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, WitnessGenerator,
     WitnessGeneratorImpl,
 };
-use ic_ic00_types::{
+use ic_ledger_core::block::BlockType;
+use ic_ledger_core::tokens::CheckedSub;
+use ic_management_canister_types::{
     BoundedVec, CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder,
     CreateCanisterArgs, Method, IC_00,
 };
-use ic_ledger_core::block::BlockType;
-use ic_ledger_core::tokens::CheckedSub;
 use ic_nervous_system_governance::maturity_modulation::{
     MAX_MATURITY_MODULATION_PERMYRIAD, MIN_MATURITY_MODULATION_PERMYRIAD,
 };

@@ -1,8 +1,8 @@
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::{CanisterSettingsArgs, LogVisibility};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
+use ic_management_canister_types::{CanisterSettingsArgs, LogVisibility};
 use ic_types::{
     ComputeAllocation, Cycles, InvalidComputeAllocationError, InvalidMemoryAllocationError,
     MemoryAllocation, PrincipalId,

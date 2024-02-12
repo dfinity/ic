@@ -5,8 +5,8 @@ use ic_config::subnet_config::SchedulerConfig;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::wasm_utils::instrumentation::instruction_to_cost_new;
 use ic_error_types::{ErrorCode, RejectCode};
-use ic_ic00_types::{CanisterChange, CanisterHttpResponsePayload, SkipPreUpgrade};
 use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemory};
+use ic_management_canister_types::{CanisterChange, CanisterHttpResponsePayload, SkipPreUpgrade};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES};
@@ -1621,7 +1621,7 @@ fn ic0_msg_caller_size_works_in_heartbeat() {
         .unwrap();
     assert_eq!(
         WasmResult::Reply(
-            (ic_ic00_types::IC_00.get().to_vec().len() as u32)
+            (ic_management_canister_types::IC_00.get().to_vec().len() as u32)
                 .to_le_bytes()
                 .to_vec()
         ),
@@ -1636,7 +1636,10 @@ fn ic0_msg_caller_copy_works_in_heartbeat() {
     let set_heartbeat = wasm()
         .set_heartbeat(
             wasm()
-                .msg_caller_copy(0, ic_ic00_types::IC_00.get().to_vec().len() as u32)
+                .msg_caller_copy(
+                    0,
+                    ic_management_canister_types::IC_00.get().to_vec().len() as u32,
+                )
                 .set_global_data_from_stack()
                 .build(),
         )
@@ -1653,7 +1656,7 @@ fn ic0_msg_caller_copy_works_in_heartbeat() {
         )
         .unwrap();
     assert_eq!(
-        WasmResult::Reply(ic_ic00_types::IC_00.get().to_vec()),
+        WasmResult::Reply(ic_management_canister_types::IC_00.get().to_vec()),
         result
     );
 }
@@ -1684,7 +1687,7 @@ fn ic0_msg_caller_size_works_in_global_timer() {
         .unwrap();
     assert_eq!(
         WasmResult::Reply(
-            (ic_ic00_types::IC_00.get().to_vec().len() as u32)
+            (ic_management_canister_types::IC_00.get().to_vec().len() as u32)
                 .to_le_bytes()
                 .to_vec()
         ),
@@ -1699,7 +1702,10 @@ fn ic0_msg_caller_copy_works_in_global_timer() {
     let set_timer = wasm()
         .set_global_timer_method(
             wasm()
-                .msg_caller_copy(0, ic_ic00_types::IC_00.get().to_vec().len() as u32)
+                .msg_caller_copy(
+                    0,
+                    ic_management_canister_types::IC_00.get().to_vec().len() as u32,
+                )
                 .set_global_data_from_stack()
                 .build(),
         )
@@ -1716,7 +1722,7 @@ fn ic0_msg_caller_copy_works_in_global_timer() {
         )
         .unwrap();
     assert_eq!(
-        WasmResult::Reply(ic_ic00_types::IC_00.get().to_vec()),
+        WasmResult::Reply(ic_management_canister_types::IC_00.get().to_vec()),
         result
     );
 }

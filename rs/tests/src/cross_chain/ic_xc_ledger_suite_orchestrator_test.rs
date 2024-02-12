@@ -12,13 +12,13 @@ use candid::{Encode, Nat, Principal};
 use canister_test::{Canister, Runtime};
 use dfn_candid::candid_one;
 use ic_base_types::CanisterId;
-use ic_ic00_types::CanisterInstallMode;
 use ic_ledger_suite_orchestrator::{
     candid::{
         AddErc20Arg, Erc20Contract, InitArg, LedgerInitArg, ManagedCanisterIds, OrchestratorArg,
     },
     state::Wasm,
 };
+use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_clients::canister_status::CanisterStatusResult;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;

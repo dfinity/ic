@@ -2,8 +2,8 @@ use crate::itest_helpers::{populate_canister_ids, SnsTestsInitPayloadBuilder};
 use candid::{CandidType, Decode, Encode};
 use canister_test::Project;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_ic00_types::CanisterInstallMode;
 use ic_ledger_core::Tokens;
+use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResultV2,
 };

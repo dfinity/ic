@@ -1,7 +1,7 @@
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
-use ic_ic00_types::{
+use ic_management_canister_types::{
     CanisterInstallMode, CanisterSettingsArgsBuilder, FetchCanisterLogsRequest,
     FetchCanisterLogsResponse, LogVisibility, Payload,
 };

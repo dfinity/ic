@@ -6,11 +6,11 @@ use crate::registry_helper::RegistryHelper;
 use async_trait::async_trait;
 use ic_crypto::get_tecdsa_master_public_key;
 use ic_http_utils::file_downloader::FileDownloader;
-use ic_ic00_types::EcdsaKeyId;
 use ic_image_upgrader::error::{UpgradeError, UpgradeResult};
 use ic_image_upgrader::ImageUpgrader;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_management_canister_types::EcdsaKeyId;
 use ic_registry_client_helpers::node::NodeRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_local_store::LocalStoreImpl;
@@ -766,7 +766,7 @@ mod tests {
         generate_key_transcript, CanisterThresholdSigTestEnvironment, IDkgParticipants,
     };
     use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
-    use ic_ic00_types::EcdsaCurve;
+    use ic_management_canister_types::EcdsaCurve;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::{
         consensus::fake::{Fake, FakeContent},

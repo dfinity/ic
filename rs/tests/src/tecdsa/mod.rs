@@ -7,7 +7,7 @@ use canister_test::{Canister, Cycles};
 use ic_agent::AgentError;
 use ic_base_types::{NodeId, SubnetId};
 use ic_canister_client::Sender;
-use ic_ic00_types::{
+use ic_management_canister_types::{
     DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId, Payload,
     SignWithECDSAArgs, SignWithECDSAReply,
 };

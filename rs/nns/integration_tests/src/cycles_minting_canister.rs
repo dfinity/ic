@@ -10,10 +10,10 @@ use cycles_minting_canister::{
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_canister_client_sender::Sender;
-use ic_ic00_types::{
+use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
+use ic_management_canister_types::{
     CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
 };
-use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL,
     TEST_USER3_PRINCIPAL,

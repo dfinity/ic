@@ -16,7 +16,7 @@
 # /rs/artifact_pool
 # ...
 # /rs/replica
-# /rs/types/ic00_types
+# /rs/types/management_canister_types
 # /rs/types/types
 # /rs/types/wasm_types
 # /rs/utils

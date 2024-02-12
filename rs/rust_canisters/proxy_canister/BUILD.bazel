@@ -9,7 +9,7 @@ rust_library(
     crate_name = "proxy_canister",
     version = "0.1.0",
     deps = [
-        "//rs/types/ic00_types",
+        "//rs/types/management_canister_types",
         "@crate_index//:candid",
         "@crate_index//:serde",
     ],
@@ -22,7 +22,7 @@ rust_canister(
     service_file = ":empty.did",
     deps = [
         ":lib",
-        "//rs/types/ic00_types",
+        "//rs/types/management_canister_types",
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
     ],

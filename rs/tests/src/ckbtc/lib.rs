@@ -27,9 +27,9 @@ use ic_config::{
     execution_environment::{BITCOIN_MAINNET_CANISTER_ID, BITCOIN_TESTNET_CANISTER_ID},
     subnet_config::ECDSA_SIGNATURE_FEE,
 };
-use ic_ic00_types::CanisterIdRecord;
-use ic_ic00_types::ProvisionalCreateCanisterWithCyclesArgs;
 use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
+use ic_management_canister_types::CanisterIdRecord;
+use ic_management_canister_types::ProvisionalCreateCanisterWithCyclesArgs;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -228,7 +228,7 @@ pub(crate) async fn create_canister_at_id(
     let canister_id_record: CanisterIdRecord = runtime
         .get_management_canister()
         .update_(
-            ic_ic00_types::Method::ProvisionalCreateCanisterWithCycles.to_string(),
+            ic_management_canister_types::Method::ProvisionalCreateCanisterWithCycles.to_string(),
             candid,
             (ProvisionalCreateCanisterWithCyclesArgs::new(
                 None,

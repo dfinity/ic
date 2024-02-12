@@ -11,11 +11,11 @@ use crate::{as_round_instructions, metrics::CallTreeMetrics, ExecuteMessageResul
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
 use ic_embedders::wasm_executor::{CanisterStateChanges, SliceExecutionOutput};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, SubnetAvailableMemory, WasmExecutionOutput,
 };
 use ic_logger::{error, fatal, warn, ReplicaLogger};
+use ic_management_canister_types::CanisterStatusType;
 use ic_replicated_state::{
     CallContext, CallContextAction, CallOrigin, CanisterState, ExecutionState, NetworkTopology,
     SystemState,

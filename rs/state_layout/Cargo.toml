@@ -10,7 +10,7 @@ documentation.workspace = true
 hex = "0.4.2"
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
-ic-ic00-types = { path = "../types/ic00_types" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }

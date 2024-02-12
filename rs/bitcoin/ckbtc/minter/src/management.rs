@@ -11,7 +11,7 @@ use ic_btc_interface::{
 use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
 use ic_ckbtc_kyt::{DepositRequest, Error as KytError, FetchAlertsResponse, WithdrawalAttempt};
-use ic_ic00_types::{
+use ic_management_canister_types::{
     DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
     SignWithECDSAArgs, SignWithECDSAReply,
 };

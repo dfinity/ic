@@ -6,11 +6,13 @@ use std::path::{Path, PathBuf};
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_executor::CanisterStateChanges;
-use ic_ic00_types::{CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2};
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, SubnetAvailableMemoryError, WasmExecutionOutput,
 };
 use ic_logger::{error, fatal, info, warn};
+use ic_management_canister_types::{
+    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2,
+};
 use ic_replicated_state::canister_state::system_state::ReservationError;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use ic_replicated_state::{CanisterState, ExecutionState};

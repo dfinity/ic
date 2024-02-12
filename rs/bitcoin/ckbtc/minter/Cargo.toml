@@ -28,7 +28,7 @@ ic-ckbtc-kyt = { path = "../kyt" }
 ic-crypto-extended-bip32 = { path = "../../../crypto/extended_bip32" }
 ic-crypto-getrandom-for-wasm = { path = "../../../crypto/getrandom_for_wasm" }
 ic-crypto-sha2 = { path = "../../../crypto/sha2" }
-ic-ic00-types = { path = "../../../types/ic00_types" }
+ic-management-canister-types = { path = "../../../types/management_canister_types" }
 ic-icrc1 = { path = "../../../rosetta-api/icrc1" }
 icrc-ledger-client-cdk = { path = "../../../../packages/icrc-ledger-client-cdk" }
 ic-ledger-core = { path = "../../../rosetta-api/ledger_core" }

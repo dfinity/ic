@@ -6,7 +6,7 @@ use dfn_core::{
     over, over_async, over_init,
 };
 use ic_base_types::{PrincipalId, SubnetId};
-use ic_ic00_types::{
+use ic_management_canister_types::{
     CanisterInstallMode::Install, CanisterSettingsArgsBuilder, CreateCanisterArgs, InstallCodeArgs,
     Method, UpdateSettingsArgs,
 };

@@ -1,5 +1,5 @@
 [package]
-name = "ic00-types-fuzz"
+name = "management-canister-types-fuzz"
 version = "0.0.0"
 edition = "2021"
 
@@ -8,7 +8,7 @@ cargo-fuzz = true
 
 [dependencies]
 candid = { workspace = true }
-ic-ic00-types = {path = ".."}
+ic-management-canister-types = {path = ".."}
 libfuzzer-sys = "0.4"
 
 # Prevent this from interfering with workspaces

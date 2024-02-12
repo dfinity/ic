@@ -4,9 +4,9 @@ use crate::{
     routing::demux::MockDemux, routing::stream_builder::MockStreamBuilder,
     state_machine::StateMachineImpl,
 };
-use ic_ic00_types::EcdsaKeyId;
 use ic_interfaces::execution_environment::Scheduler;
 use ic_interfaces_state_manager::StateManager;
+use ic_management_canister_types::EcdsaKeyId;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;

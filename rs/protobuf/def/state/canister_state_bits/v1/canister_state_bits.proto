@@ -5,7 +5,7 @@ import "google/protobuf/wrappers.proto";
 import "state/ingress/v1/ingress.proto";
 import "state/queues/v1/queues.proto";
 import "state/v1/metadata.proto";
-import "types/v1/ic00_types.proto";
+import "types/v1/management_canister_types.proto";
 import "types/v1/types.proto";
 
 message CallContext {

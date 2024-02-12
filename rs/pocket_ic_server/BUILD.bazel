@@ -11,7 +11,7 @@ LIB_DEPENDENCIES = [
     "//rs/state_machine_tests",
     "//packages/pocket-ic:pocket-ic",
     "//rs/types/types",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/crypto/sha2",
     "//rs/utils",
     "//rs/registry/routing_table",

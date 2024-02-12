@@ -51,7 +51,7 @@ DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     "//packages/ic-starter-tests",
     "//rs/test_utilities/load_wasm",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/rosetta-api/icrc1/test_utils",
     "//rs/rosetta-api/icrc1/ledger/sm-tests",
     "//rs/rosetta-api/icrc1/rosetta/client:ic-icrc-rosetta-client",

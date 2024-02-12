@@ -13,7 +13,7 @@ candid = { workspace = true }
 ic-base-types = { path = "../../../../types/base_types" }
 ic-error-types = { path = "../../../../types/error_types" }
 ic-types = { path = "../../../../types/types" }
-ic-ic00-types = { path = "../../../../types/ic00_types" }
+ic-management-canister-types = { path = "../../../../types/management_canister_types" }
 ic-icrc1 = { path = "../.." }
 ic-icrc1-ledger = { path = ".." }
 ic-icrc1-tokens-u64 = { path = "../../tokens_u64" }

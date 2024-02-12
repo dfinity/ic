@@ -5,7 +5,7 @@ use crate::metadata_state::subnet_call_context_manager::{
 use assert_matches::assert_matches;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::{EcdsaCurve, IC_00};
+use ic_management_canister_types::{EcdsaCurve, IC_00};
 use ic_registry_routing_table::CanisterIdRange;
 use ic_test_utilities::types::{
     ids::{

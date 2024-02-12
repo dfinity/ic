@@ -8,7 +8,7 @@ use crate::state::{lazy_call_ecdsa_public_key, read_state};
 use ethnum::u256;
 use ic_crypto_ecdsa_secp256k1::RecoveryId;
 use ic_ethereum_types::Address;
-use ic_ic00_types::DerivationPath;
+use ic_management_canister_types::DerivationPath;
 use minicbor::{Decode, Encode};
 use rlp::RlpStream;
 

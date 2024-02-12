@@ -2,8 +2,8 @@ use ic_cycles_account_manager::{
     CRITICAL_ERROR_EXECUTION_CYCLES_REFUND, CRITICAL_ERROR_RESPONSE_CYCLES_REFUND,
 };
 use ic_error_types::ErrorCode;
-use ic_ic00_types as ic00;
 use ic_logger::{error, ReplicaLogger};
+use ic_management_canister_types as ic00;
 use ic_metrics::buckets::decimal_buckets;
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;

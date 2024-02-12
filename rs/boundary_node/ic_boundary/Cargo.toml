@@ -59,7 +59,7 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 ic-types = { path = "../../types/types" }
-ic-ic00-types = { path = "../../types/ic00_types" }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
 instant-acme = "0.3.2"
 jemallocator = "0.3"
 jemalloc-ctl = "0.3"

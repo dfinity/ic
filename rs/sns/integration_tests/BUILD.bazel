@@ -23,7 +23,7 @@ BASE_DEPENDENCIES = [
     "//rs/sns/root",
     "//rs/test_utilities/load_wasm",
     "//rs/types/base_types",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/universal_canister/lib",
     "@crate_index//:candid",

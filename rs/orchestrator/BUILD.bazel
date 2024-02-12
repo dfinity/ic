@@ -41,7 +41,7 @@ rust_library(
         "//rs/registry/local_store",
         "//rs/registry/proto_data_provider",
         "//rs/sys",
-        "//rs/types/ic00_types",
+        "//rs/types/management_canister_types",
         "//rs/types/types",
         "@crate_index//:candid",
         "@crate_index//:clap",

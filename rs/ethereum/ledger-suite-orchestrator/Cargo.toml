@@ -21,7 +21,7 @@ ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-ethereum-types = { path = "../types"}
-ic-ic00-types = { path = "../../types/ic00_types" }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 ic-icrc1-index-ng = { path = "../../rosetta-api/icrc1/index-ng" }
 ic-icrc1-ledger = { path = "../../rosetta-api/icrc1/ledger" }

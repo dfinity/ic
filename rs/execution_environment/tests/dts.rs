@@ -8,7 +8,7 @@ use ic_config::{
     flag_status::FlagStatus,
     subnet_config::{SchedulerConfig, SubnetConfig},
 };
-use ic_ic00_types::{
+use ic_management_canister_types::{
     CanisterIdRecord, CanisterSettingsArgsBuilder, EmptyBlob, InstallCodeArgs, Method, Payload,
     IC_00,
 };

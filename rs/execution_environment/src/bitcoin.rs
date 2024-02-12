@@ -1,5 +1,5 @@
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::{
+use ic_management_canister_types::{
     BitcoinGetSuccessorsArgs, BitcoinGetSuccessorsResponse, BitcoinSendTransactionInternalArgs,
     Payload,
 };
@@ -111,7 +111,9 @@ pub fn send_transaction_internal(
 
 #[cfg(test)]
 mod tests {
-    use ic_ic00_types::{BitcoinGetSuccessorsArgs, Method, Payload as Ic00Payload, IC_00};
+    use ic_management_canister_types::{
+        BitcoinGetSuccessorsArgs, Method, Payload as Ic00Payload, IC_00,
+    };
     use ic_test_utilities::types::ids::canister_test_id;
     use ic_test_utilities::universal_canister::{call_args, wasm};
     use ic_test_utilities_execution_environment::ExecutionTestBuilder;

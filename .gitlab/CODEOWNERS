@@ -24,7 +24,7 @@
 .bazelversion             @dfinity-lab/teams/idx
 
 # [Rust Lang]
-rust-toolchain.toml       @dfinity-lab/teams/networking-team  
+rust-toolchain.toml       @dfinity-lab/teams/networking-team
 rustfmt.toml              @dfinity-lab/teams/networking-team
 deny.toml                 @dfinity-lab/teams/networking-team
 clippy.toml               @dfinity-lab/teams/interface-owners
@@ -282,7 +282,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/tree_deserializer/                                  @dfinity-lab/teams/message-routing-owners
 /rs/types/                                              @dfinity-lab/teams/interface-owners
 /rs/types/exhaustive_derive/                            @dfinity-lab/teams/consensus-owners
-/rs/types/ic00_types/                                   @dfinity-lab/teams/execution-owners
+/rs/types/management_canister_types/                    @dfinity-lab/teams/execution-owners
 /rs/types/types/src/batch.rs                            @dfinity-lab/teams/consensus-owners
 /rs/types/types/src/batch/                              @dfinity-lab/teams/consensus-owners
 /rs/types/types/src/canister_http.rs                    @dfinity-lab/teams/execution-team @dfinity-lab/teams/consensus-owners

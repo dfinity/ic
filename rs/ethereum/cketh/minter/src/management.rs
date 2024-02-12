@@ -1,6 +1,6 @@
 use candid::{CandidType, Principal};
 use ic_cdk::api::call::RejectionCode;
-use ic_ic00_types::{
+use ic_management_canister_types::{
     DerivationPath, EcdsaCurve, EcdsaKeyId, SignWithECDSAArgs, SignWithECDSAReply,
 };
 use serde::de::DeserializeOwned;

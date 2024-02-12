@@ -1,6 +1,6 @@
 use ic_btc_types_internal::{GetSuccessorsRequestInitial, SendTransactionRequest};
-use ic_ic00_types::EcdsaKeyId;
 use ic_logger::{info, ReplicaLogger};
+use ic_management_canister_types::EcdsaKeyId;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::system_metadata::v1 as pb_metadata,

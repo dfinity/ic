@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use ic_error_types::RejectCode;
-use ic_ic00_types::{EcdsaKeyId, Payload, SignWithECDSAReply};
 use ic_logger::{debug, ReplicaLogger};
+use ic_management_canister_types::{EcdsaKeyId, Payload, SignWithECDSAReply};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
 use ic_types::{
     consensus::ecdsa,
@@ -268,8 +268,8 @@ mod tests {
     use std::collections::BTreeSet;
 
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-    use ic_ic00_types::EcdsaKeyId;
     use ic_logger::replica_logger::no_op_logger;
+    use ic_management_canister_types::EcdsaKeyId;
     use ic_test_utilities::types::ids::subnet_test_id;
     use ic_types::{consensus::ecdsa::EcdsaPayload, Height};
 

@@ -27,7 +27,7 @@ use canister_test::Canister;
 use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, NumBytes};
 use ic_cdk::api::call::RejectionCode;
-use ic_ic00_types::{
+use ic_management_canister_types::{
     BoundedHttpHeaders, CanisterHttpRequestArgs, HttpHeader, HttpMethod, TransformContext,
     TransformFunc,
 };

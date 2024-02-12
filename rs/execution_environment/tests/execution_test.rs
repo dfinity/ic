@@ -4,7 +4,7 @@ use ic_config::{
     execution_environment::Config as HypervisorConfig,
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
-use ic_ic00_types::{
+use ic_management_canister_types::{
     CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
     CreateCanisterArgs, EmptyBlob, Method, Payload, UpdateSettingsArgs, IC_00,
 };

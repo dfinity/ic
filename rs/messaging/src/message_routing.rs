@@ -5,7 +5,6 @@ use crate::{
 use ic_config::execution_environment::{BitcoinConfig, Config as HypervisorConfig};
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_ic00_types::EcdsaKeyId;
 use ic_interfaces::crypto::ErrorReproducibility;
 use ic_interfaces::{
     execution_environment::{IngressHistoryWriter, RegistryExecutionSettings, Scheduler},
@@ -15,6 +14,7 @@ use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateManager, StateManagerError};
 use ic_logger::{debug, fatal, info, warn, ReplicaLogger};
+use ic_management_canister_types::EcdsaKeyId;
 use ic_metrics::buckets::{add_bucket, decimal_buckets, decimal_buckets_with_zero};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::proxy::ProxyDecodeError;

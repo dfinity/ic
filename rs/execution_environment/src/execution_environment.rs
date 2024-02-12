@@ -29,7 +29,11 @@ use ic_cycles_account_manager::{
     ResourceSaturation,
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_ic00_types::{
+use ic_interfaces::execution_environment::{
+    ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings, SubnetAvailableMemory,
+};
+use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_management_canister_types::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
     CanisterInfoResponse, CanisterSettingsArgs, CanisterStatusType, ClearChunkStoreArgs,
     ComputeInitialEcdsaDealingsArgs, CreateCanisterArgs, ECDSAPublicKeyArgs,
@@ -39,10 +43,6 @@ use ic_ic00_types::{
     SignWithECDSAArgs, StoredChunksArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs,
     IC_00,
 };
-use ic_interfaces::execution_environment::{
-    ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings, SubnetAvailableMemory,
-};
-use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;

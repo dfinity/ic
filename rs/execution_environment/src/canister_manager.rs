@@ -15,15 +15,15 @@ use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_ic00_types::{
-    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterStatusResultV2,
-    CanisterStatusType, InstallChunkedCodeArgs, InstallCodeArgsV2, Method as Ic00Method,
-    StoredChunksReply, UploadChunkReply,
-};
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, IngressHistoryWriter, SubnetAvailableMemory,
 };
 use ic_logger::{error, fatal, info, ReplicaLogger};
+use ic_management_canister_types::{
+    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterStatusResultV2,
+    CanisterStatusType, InstallChunkedCodeArgs, InstallCodeArgsV2, Method as Ic00Method,
+    StoredChunksReply, UploadChunkReply,
+};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::ReservationError;

@@ -2,7 +2,7 @@ use canister_test::Project;
 use dfn_candid::{candid, candid_one};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_client_sender::Sender;
-use ic_ic00_types::CanisterInstallMode;
+use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType},
@@ -351,7 +351,7 @@ fn test_lifeline_canister_restarts_root_on_stop_canister_timeout() {
         LIFELINE_CANISTER_ID,
         "canister_status",
         candid_one,
-        ic_ic00_types::CanisterIdRecord::from(ROOT_CANISTER_ID),
+        ic_management_canister_types::CanisterIdRecord::from(ROOT_CANISTER_ID),
         PrincipalId::new_anonymous(),
     )
     .unwrap();
@@ -366,7 +366,7 @@ fn test_lifeline_canister_restarts_root_on_stop_canister_timeout() {
         LIFELINE_CANISTER_ID,
         "canister_status",
         candid_one,
-        ic_ic00_types::CanisterIdRecord::from(ROOT_CANISTER_ID),
+        ic_management_canister_types::CanisterIdRecord::from(ROOT_CANISTER_ID),
         PrincipalId::new_anonymous(),
     )
     .unwrap();
@@ -383,7 +383,7 @@ fn test_lifeline_canister_restarts_root_on_stop_canister_timeout() {
         LIFELINE_CANISTER_ID,
         "canister_status",
         candid_one,
-        ic_ic00_types::CanisterIdRecord::from(ROOT_CANISTER_ID),
+        ic_management_canister_types::CanisterIdRecord::from(ROOT_CANISTER_ID),
         PrincipalId::new_anonymous(),
     )
     .unwrap();

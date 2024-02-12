@@ -6,12 +6,12 @@ use ic_config::{
 use ic_crypto_tree_hash::{
     flatmap, sparse_labeled_tree_from_paths, Label, LabeledTree, MixedHashTree, Path as LabelPath,
 };
-use ic_ic00_types::{CanisterChangeDetails, CanisterChangeOrigin};
 use ic_interfaces::certification::Verifier;
 use ic_interfaces::p2p::state_sync::{ChunkId, StateSyncArtifactId, StateSyncClient};
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_state_manager::*;
 use ic_logger::replica_logger::no_op_logger;
+use ic_management_canister_types::{CanisterChangeDetails, CanisterChangeOrigin};
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;

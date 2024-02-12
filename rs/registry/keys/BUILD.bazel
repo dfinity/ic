@@ -9,7 +9,7 @@ rust_library(
     version = "0.9.0",
     deps = [
         "//rs/types/base_types",
-        "//rs/types/ic00_types",
+        "//rs/types/management_canister_types",
         "//rs/types/types",
         "@crate_index//:candid",
         "@crate_index//:serde",

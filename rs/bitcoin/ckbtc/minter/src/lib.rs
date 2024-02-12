@@ -7,7 +7,7 @@ use crate::tasks::schedule_after;
 use candid::{CandidType, Deserialize};
 use ic_btc_interface::{MillisatoshiPerByte, Network, OutPoint, Satoshi, Txid, Utxo};
 use ic_canister_log::log;
-use ic_ic00_types::DerivationPath;
+use ic_management_canister_types::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferError};
 use num_traits::ToPrimitive;

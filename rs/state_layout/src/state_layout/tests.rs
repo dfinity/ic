@@ -1,6 +1,6 @@
 use super::*;
 
-use ic_ic00_types::{
+use ic_management_canister_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode,
     LogVisibility, IC_00,
 };

@@ -77,10 +77,10 @@ use dfn_core::api::{spawn, CanisterId};
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_canister_profiler::SpanStats;
-use ic_ic00_types::{
+use ic_ledger_core::Tokens;
+use ic_management_canister_types::{
     CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode, IC_00,
 };
-use ic_ledger_core::Tokens;
 use ic_nervous_system_clients::update_settings::{CanisterSettings, UpdateSettings};
 use ic_nervous_system_collections_union_multi_map::UnionMultiMap;
 use ic_nervous_system_common::{
@@ -7244,8 +7244,8 @@ mod tests {
                 env.require_call_canister_invocation(
                     CanisterId::ic_00(),
                     "install_code",
-                    Encode!(&ic_ic00_types::InstallCodeArgs {
-                        mode: ic_ic00_types::CanisterInstallMode::Upgrade,
+                    Encode!(&ic_management_canister_types::InstallCodeArgs {
+                        mode: ic_management_canister_types::CanisterInstallMode::Upgrade,
                         canister_id: canister_id.get(),
                         wasm_module: vec![9, 8, 7, 6, 5, 4, 3, 2],
                         arg: Encode!().unwrap(),

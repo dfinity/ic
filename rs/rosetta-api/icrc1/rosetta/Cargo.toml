@@ -64,7 +64,7 @@ ic-icrc1-ledger-sm-tests = { path = "../ledger/sm-tests" }
 ic-icrc1-test-utils = { path = "../test_utils" }
 ic-base-types = { path = "../../../types/base_types" }
 ic-ledger-canister-core = { path = "../../ledger_canister_core" }
-ic-ic00-types = { path = "../../../types/ic00_types" }
+ic-management-canister-types = { path = "../../../types/management_canister_types" }
 ic-starter-tests = { path = "../../../../packages/ic-starter-tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 url = "2.3.1"

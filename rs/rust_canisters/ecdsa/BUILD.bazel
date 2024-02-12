@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/rust_canisters/dfn_core",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "@crate_index//:candid",
     "@crate_index//:ic-cdk",
     "@crate_index//:serde",

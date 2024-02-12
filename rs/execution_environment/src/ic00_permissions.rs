@@ -1,5 +1,5 @@
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::Method as Ic00Method;
+use ic_management_canister_types::Method as Ic00Method;
 use ic_replicated_state::ReplicatedState;
 use ic_types::messages::CanisterCall;
 use ic_types::{CanisterId, SubnetId};

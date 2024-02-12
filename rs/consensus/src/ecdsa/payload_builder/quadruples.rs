@@ -307,7 +307,7 @@ pub(super) mod test_utils {
 
     use std::collections::BTreeMap;
 
-    use ic_ic00_types::EcdsaKeyId;
+    use ic_management_canister_types::EcdsaKeyId;
     use ic_types::{
         consensus::ecdsa::{self, EcdsaPayload, QuadrupleId, UnmaskedTranscript},
         NodeId, RegistryVersion,

@@ -68,7 +68,7 @@ fn swap_remove_if<T>(v: &mut Vec<T>, predicate: impl Fn(&T) -> bool) {
 }
 
 // Defined in Rust instead of PB, because we want CanisterStatusResultV2
-// (defined in ic00_types) to be in the response, but CSRV2 doesn't have a
+// (defined in management_canister_types) to be in the response, but CSRV2 doesn't have a
 // corresponding PB definition.
 #[derive(Default, PartialEq, Eq, Debug, candid::CandidType, candid::Deserialize)]
 pub struct GetSnsCanistersSummaryRequest {

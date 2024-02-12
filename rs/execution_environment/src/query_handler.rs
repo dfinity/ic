@@ -53,7 +53,7 @@ use tokio::sync::oneshot;
 use tower::{util::BoxCloneService, Service};
 
 pub(crate) use self::query_scheduler::{QueryScheduler, QuerySchedulerFlag};
-use ic_ic00_types::{
+use ic_management_canister_types::{
     BitcoinGetBalanceArgs, BitcoinGetUtxosArgs, FetchCanisterLogsRequest,
     FetchCanisterLogsResponse, LogVisibility, Payload, QueryMethod,
 };

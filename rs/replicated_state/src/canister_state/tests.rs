@@ -13,8 +13,8 @@ use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use crate::CallOrigin;
 use crate::Memory;
 use ic_base_types::NumSeconds;
-use ic_ic00_types::{CanisterChange, CanisterChangeDetails, CanisterChangeOrigin};
 use ic_logger::replica_logger::no_op_logger;
+use ic_management_canister_types::{CanisterChange, CanisterChangeDetails, CanisterChangeOrigin};
 use ic_metrics::MetricsRegistry;
 use ic_test_utilities::types::{
     ids::canister_test_id,

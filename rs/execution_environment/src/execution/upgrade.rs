@@ -17,9 +17,9 @@ use crate::execution::install_code::{
 use crate::execution_environment::{RoundContext, RoundLimits};
 use ic_base_types::PrincipalId;
 use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
-use ic_ic00_types::{CanisterInstallModeV2, SkipPreUpgrade};
 use ic_interfaces::execution_environment::{HypervisorError, WasmExecutionOutput};
 use ic_logger::{info, warn, ReplicaLogger};
+use ic_management_canister_types::{CanisterInstallModeV2, SkipPreUpgrade};
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::InstallCodeCallId, CanisterState, SystemState,

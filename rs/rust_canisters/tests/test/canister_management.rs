@@ -2,7 +2,7 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use canister_test::{local_test_e, Canister, Runtime, Wasm};
 use ic_error_types::ErrorCode;
-use ic_ic00_types::{self as ic00, CanisterIdRecord, CanisterStatusResult, IC_00};
+use ic_management_canister_types::{self as ic00, CanisterIdRecord, CanisterStatusResult, IC_00};
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use ic_test_utilities::universal_canister::{
     wasm as universal_canister_argument_builder, CallArgs,

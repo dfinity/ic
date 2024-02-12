@@ -19,7 +19,7 @@ ic-crypto-internal-basic-sig-ed25519 = { path = "../crypto/internal/crypto_lib/b
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-test-utils-keys = { path = "../crypto/test_utils/keys" }
 ic-error-types = { path = "../types/error_types" }
-ic-ic00-types = { path = "../types/ic00_types" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
