@@ -10,7 +10,7 @@ documentation.workspace = true
 ic-interfaces = { path = "../interfaces" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-types = { path = "../types/types" }
-crossbeam-channel = "0.5.5"
+crossbeam-channel = { workspace = true }
 prometheus = { workspace = true }
 
 [dev-dependencies]

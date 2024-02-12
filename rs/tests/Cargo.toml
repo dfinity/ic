@@ -26,8 +26,7 @@ certificate_orchestrator_interface = { path = "../boundary_node/certificate_issu
 chrono = { workspace = true }
 cidr = "0.2.2"
 clap = { workspace = true }
-crossbeam-channel = "0.5.5"
-crossbeam-utils = "0.8.11"
+crossbeam-channel = { workspace = true }
 cycles-minting-canister = { path = "../nns/cmc" }
 dfn_candid = { path = "../rust_canisters/dfn_candid" }
 dfn_json = { path = "../rust_canisters/dfn_json" }

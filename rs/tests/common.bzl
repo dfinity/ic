@@ -112,7 +112,6 @@ DEPENDENCIES = [
     "@crate_index//:cidr",
     "@crate_index//:clap",
     "@crate_index//:crossbeam-channel",
-    "@crate_index//:crossbeam-utils",
     "@crate_index//:flate2",
     "@crate_index//:futures",
     "@crate_index//:hex",

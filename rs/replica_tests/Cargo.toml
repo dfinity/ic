@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-crossbeam-channel = "0.5.5"
+crossbeam-channel = { workspace = true }
 ic-async-utils = { path = "../async_utils" }
 ic-btc-service = { path = "../bitcoin/service" }
 ic-btc-interface = { workspace = true }
