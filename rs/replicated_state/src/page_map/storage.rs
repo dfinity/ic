@@ -3,22 +3,21 @@
 
 use std::{
     fs::{File, OpenOptions},
-    io::{Read, Seek, SeekFrom, Write},
+    io::Write,
     ops::Range,
-    os::fd::{AsRawFd, FromRawFd},
     path::{Path, PathBuf},
     sync::Arc,
 };
 
 use crate::page_map::{
     checkpoint::{Checkpoint, Mapping, ZEROED_PAGE},
-    CheckpointSerialization, FileDescriptor, FileOffset, MappingSerialization, MemoryInstruction,
-    MemoryInstructions, MemoryMapOrData, PageDelta, PersistDestination, PersistenceError,
-    StorageMetrics, LABEL_OP_FLUSH, LABEL_OP_MERGE, LABEL_TYPE_INDEX, LABEL_TYPE_PAGE_DATA,
+    CheckpointSerialization, MappingSerialization, MemoryInstruction, MemoryInstructions,
+    MemoryMapOrData, PageDelta, PersistDestination, PersistenceError, StorageMetrics,
+    LABEL_OP_FLUSH, LABEL_OP_MERGE, LABEL_TYPE_INDEX, LABEL_TYPE_PAGE_DATA,
 };
 
 use bit_vec::BitVec;
-use ic_sys::{mmap::ScopedMmap, PageBytes, PageIndex, PAGE_SIZE};
+use ic_sys::{PageBytes, PageIndex, PAGE_SIZE};
 use ic_types::Height;
 use itertools::Itertools;
 use phantom_newtype::Id;
@@ -219,18 +218,14 @@ impl Storage {
 /// A single overlay file describing a not necessarily exhaustive set of pages.
 #[derive(Clone)]
 pub(crate) struct OverlayFile {
-    /// Mapping containing the data section of the overlay file.
+    /// A memory map of the entire file.
+    /// Invariant: `mapping` satisfies `check_correctness(&mapping)`.
     mapping: Arc<Mapping>,
-    /// The index section of the overlay file.
-    index: Arc<OverlayIndices>,
-    /// Version of the format.
-    version: OverlayVersion,
 }
 
 impl OverlayFile {
     fn iter(&self) -> impl Iterator<Item = (PageIndex, &[u8])> {
-        self.index
-            .iter()
+        self.index_iter()
             .flat_map(
                 |PageIndexRange {
                      start_page,
@@ -240,20 +235,24 @@ impl OverlayFile {
                     (start_page.get()..end_page.get()).map(move |index| {
                         (
                             PageIndex::new(index),
-                            PageIndex::new(start_file_index.get() + index - start_page.get()),
+                            FileIndex::new(start_file_index.get() + index - start_page.get()),
                         )
                     })
                 },
             )
-            .map(|(index, offset)| (index, self.mapping.get_page(offset).as_slice()))
+            .map(|(index, offset)| {
+                let page = get_page_in_mapping(&self.mapping, offset);
+                // In a validated mapping, all file_indices from the index are within range.
+                debug_assert!(page.is_some());
+                (index, page.unwrap().as_slice())
+            })
     }
 
     /// Get the page at `page_index`.
     /// Returns `None` for pages not contained in this overlay.
     fn get_page(&self, page_index: PageIndex) -> Option<&PageBytes> {
-        let position = self.index.get_file_index(page_index)?;
-        // For Mapping PageIndex and FileIndex mean the same thing.
-        Some(self.mapping.get_page(PageIndex::from(position.get())))
+        let position = self.get_file_index(page_index)?;
+        get_page_in_mapping(&self.mapping, position)
     }
 
     /// Write a new overlay file to `path` containing all pages from `delta`.
@@ -282,7 +281,7 @@ impl OverlayFile {
     /// Returns an error if disk operations fail or the file does not have the format of an
     /// overlay file.
     pub fn load(path: &Path) -> Result<Self, PersistenceError> {
-        let mut file = OpenOptions::new().read(true).open(path).map_err(|err| {
+        let file = OpenOptions::new().read(true).open(path).map_err(|err| {
             PersistenceError::FileSystemError {
                 path: path.display().to_string(),
                 context: "Failed to open file".to_string(),
@@ -296,108 +295,17 @@ impl OverlayFile {
                 context: "Failed to retrieve file metadata".to_string(),
                 internal_error: err.to_string(),
             })?;
-
-        if metadata.len() < VERSION_NUM_BYTES as u64 {
-            return Err(PersistenceError::InvalidOverlay {
-                path: path.display().to_string(),
-                message: "No version provided in overlay file".to_string(),
-            });
-        }
-        file.seek(SeekFrom::End(-(VERSION_NUM_BYTES as i64)))
-            .map_err(|err| PersistenceError::FileSystemError {
-                path: path.display().to_string(),
-                context: "Failed to seek for version".to_string(),
-                internal_error: err.to_string(),
-            })?;
-        let mut buf: [u8; VERSION_NUM_BYTES] = [0; VERSION_NUM_BYTES];
-        file.read_exact(&mut buf)
-            .map_err(|err| PersistenceError::FileSystemError {
-                path: path.display().to_string(),
-                context: "Failed to read version".to_string(),
-                internal_error: err.to_string(),
-            })?;
-        let raw_version = u32::from_le_bytes(buf);
-
-        let version = match OverlayVersion::try_from(raw_version) {
-            Ok(v) if v <= MAX_SUPPORTED_OVERLAY_VERSION => v,
-            _ => {
-                return Err(PersistenceError::VersionMismatch {
-                    path: path.display().to_string(),
-                    file_version: raw_version,
-                    supported: MAX_SUPPORTED_OVERLAY_VERSION,
-                });
-            }
-        };
-
-        let version_and_size_num_bytes = VERSION_NUM_BYTES + SIZE_NUM_BYTES;
-
-        if metadata.len() < version_and_size_num_bytes as u64 {
-            return Err(PersistenceError::InvalidOverlay {
-                path: path.display().to_string(),
-                message: "No num_pages provided in overlay file".to_string(),
-            });
-        }
-        file.seek(SeekFrom::End(-(version_and_size_num_bytes as i64)))
-            .map_err(|err| PersistenceError::FileSystemError {
-                path: path.display().to_string(),
-                context: "Failed to seek for num_pages".to_string(),
-                internal_error: err.to_string(),
-            })?;
-        let mut buf: [u8; SIZE_NUM_BYTES] = [0; SIZE_NUM_BYTES];
-        file.read_exact(&mut buf)
-            .map_err(|err| PersistenceError::FileSystemError {
-                path: path.display().to_string(),
-                context: "Failed to read num_pages".to_string(),
-                internal_error: err.to_string(),
-            })?;
-        let num_pages = u64::from_le_bytes(buf);
-
-        let data_len = (num_pages as usize).checked_mul(PAGE_SIZE).ok_or_else(|| {
+        let mapping = Mapping::new(file, metadata.len() as usize, Some(path))?.ok_or(
             PersistenceError::InvalidOverlay {
                 path: path.display().to_string(),
-                message: format!("Overflow with number of pages: {}", num_pages),
-            }
-        })?;
-        let data_version_size_num_bytes = data_len
-            .checked_add(version_and_size_num_bytes)
-            .ok_or_else(|| PersistenceError::InvalidOverlay {
-                path: path.display().to_string(),
-                message: format!("Overflow with number of pages: {}", num_pages),
-            })?;
-        if (metadata.len() as usize) <= data_version_size_num_bytes {
-            return Err(PersistenceError::InvalidOverlay {
-                path: path.display().to_string(),
-                message: "No place for index in overlay file".to_string(),
-            });
-        }
-
-        let file_clone = file
-            .try_clone()
-            .map_err(|err| PersistenceError::FileSystemError {
-                path: path.display().to_string(),
-                context: "Failed to clone file for mapping".to_string(),
-                internal_error: err.to_string(),
-            })?;
-        let mapping =
-            Mapping::new(file, data_len, Some(path))?.ok_or(PersistenceError::InvalidOverlay {
-                path: path.display().to_string(),
                 message: "Empty mapping for overlay's page_data; zero num_pages?".to_string(),
-            })?;
+            },
+        )?;
 
-        let index_len = metadata.len() as usize - data_len - version_and_size_num_bytes;
-        let index_offset =
-            i64::try_from(data_len).map_err(|e| PersistenceError::InvalidOverlay {
-                path: path.display().to_string(),
-                message: format!("Overflow with cutoff: {}", e),
-            })?;
-
-        let index = OverlayIndices::new(file_clone, index_len, index_offset, num_pages)?;
-        index.check_correctness(path)?;
+        check_mapping_correctness(&mapping, path)?;
 
         Ok(Self {
             mapping: Arc::new(mapping),
-            index: Arc::new(index),
-            version,
         })
     }
 
@@ -405,8 +313,6 @@ impl OverlayFile {
     pub fn serialize(&self) -> OverlayFileSerialization {
         OverlayFileSerialization {
             mapping: self.mapping.serialize(),
-            index: self.index.serialize(),
-            version: self.version,
         }
     }
 
@@ -422,23 +328,26 @@ impl OverlayFile {
                         .to_string(),
             },
         )?;
-        let index = OverlayIndices::deserialize(serialized_overlay.index)?;
+
         Ok(Self {
             mapping: Arc::new(mapping),
-            index: Arc::new(index),
-            version: serialized_overlay.version,
         })
     }
 
     /// Number of pages in this overlay file containing data.
     fn num_pages(&self) -> usize {
-        self.index.num_pages as usize
+        num_pages(&self.mapping)
+    }
+
+    /// The index as a slice.
+    fn index_slice(&self) -> &[[[u8; 8]; 2]] {
+        index_slice(&self.mapping)
     }
 
     /// The number of logical pages covered by this overlay file, i.e. the largest `PageIndex`
     /// contained + 1.
     fn num_logical_pages(&self) -> usize {
-        let slice = self.index.as_slice();
+        let slice = self.index_slice();
         let last_range = index_range(slice, slice.len() - 1, self.num_pages() as u64);
         last_range.end_page.get() as usize
     }
@@ -462,7 +371,7 @@ impl OverlayFile {
         range: Range<PageIndex>,
         filter: &mut BitVec,
     ) -> MemoryInstructions {
-        let slice = self.index.as_slice();
+        let slice = self.index_slice();
         let binary_search =
             slice.binary_search_by(|probe| IndexEntry::from(probe).start_page.cmp(&range.start));
         // `range.start` cannot be contained in any index range before this index, no need to iterate over them.
@@ -525,10 +434,13 @@ impl OverlayFile {
                         {
                             let file_index = page_index_range.start_file_index.get() + page_index
                                 - page_index_range.start_page.get();
-                            let page = self.mapping.get_page(PageIndex::new(file_index));
+                            let page =
+                                get_page_in_mapping(&self.mapping, FileIndex::new(file_index));
+                            // In a valid overlay file the file index is within range.
+                            debug_assert!(page.is_some());
                             result.push((
                                 PageIndex::new(page_index)..PageIndex::new(page_index + 1),
-                                MemoryMapOrData::Data(page),
+                                MemoryMapOrData::Data(page.unwrap()),
                             ));
                         }
                     }
@@ -546,6 +458,216 @@ impl OverlayFile {
             instructions: result,
         }
     }
+
+    /// The overlay version contained in the file.
+    #[allow(dead_code)]
+    fn version(&self) -> OverlayVersion {
+        let result = try_version(&self.mapping);
+
+        // We verify that this unwrap succeeds while loading the overlay.
+        debug_assert!(result.is_ok());
+
+        result.unwrap()
+    }
+
+    /// If `index` is present in this overlay, returns its `FileIndex`.
+    fn get_file_index(&self, index: PageIndex) -> Option<FileIndex> {
+        let slice = self.index_slice();
+        let result = slice.binary_search_by(|probe| IndexEntry::from(probe).start_page.cmp(&index));
+
+        match result {
+            Ok(loc) => Some(IndexEntry::from(&slice[loc]).start_file_index),
+            Err(0) => None,
+            Err(loc) => {
+                let entry: IndexEntry = (&slice[loc - 1]).into();
+                let next_file_index = if loc < slice.len() {
+                    IndexEntry::from(&slice[loc]).start_file_index
+                } else {
+                    FileIndex::from(self.num_pages() as u64)
+                };
+                let range = PageIndexRange::new(&entry, next_file_index);
+                range.file_index(index)
+            }
+        }
+    }
+
+    /// Iterate over all ranges in the index.
+    fn index_iter(&self) -> impl Iterator<Item = PageIndexRange> + '_ {
+        let slice = self.index_slice();
+        (0..slice.len()).map(|i| index_range(slice, i, self.num_pages() as u64))
+    }
+}
+
+/// The index portion of the file as a slice of pairs of numbers, each describing
+/// a range of pages.
+/// See `OverlayVersion` for an explanation of how the index is structured.
+fn index_slice(mapping: &Mapping) -> &[[[u8; 8]; 2]] {
+    let full_slice = mapping.as_slice();
+    let start = num_pages(mapping) * PAGE_SIZE;
+    let end = full_slice.len() - VERSION_NUM_BYTES - SIZE_NUM_BYTES;
+
+    let (prefix, slice, suffix) = unsafe { full_slice[start..end].align_to::<[[u8; 8]; 2]>() };
+    // Prefix would be non-empty if the address wasn't u64-aligned, but mmap is always page-aligned.
+    assert!(prefix.is_empty());
+    // Suffix would be non-empty if the length (in bytes) isn't a multiple of 8*2, which would be a
+    // bug in the loading step.
+    assert!(suffix.is_empty());
+
+    slice
+}
+
+/// Returns the page at `index`. None if `index` is too large.
+fn get_page_in_mapping(mapping: &Mapping, index: FileIndex) -> Option<&PageBytes> {
+    if index.get() < num_pages(mapping) as u64 {
+        Some(mapping.get_page(PageIndex::new(index.get())))
+    } else {
+        None
+    }
+}
+
+/// The version according to the mapping.
+/// If the number in the file does not correspond with an enum value of `OverlayVersion`,
+/// returns the raw number instead.
+fn try_version(mapping: &Mapping) -> Result<OverlayVersion, u32> {
+    let slice = mapping.as_slice();
+    let le_bytes: [u8; VERSION_NUM_BYTES] = slice[(slice.len() - VERSION_NUM_BYTES)..]
+        .try_into()
+        .unwrap();
+    let raw_version = u32::from_le_bytes(le_bytes);
+    OverlayVersion::try_from(raw_version).map_err(|_| raw_version)
+}
+
+/// Number of pages in this overlay file containing data.
+fn num_pages(mapping: &Mapping) -> usize {
+    let slice = mapping.as_slice();
+
+    // This condition is checked during loading before we first call this function.
+    assert!(slice.len() >= VERSION_NUM_BYTES + SIZE_NUM_BYTES);
+    let le_bytes: [u8; SIZE_NUM_BYTES] = slice
+        [(slice.len() - VERSION_NUM_BYTES - SIZE_NUM_BYTES)..(slice.len() - VERSION_NUM_BYTES)]
+        .try_into()
+        .unwrap();
+    u64::from_le_bytes(le_bytes) as usize
+}
+
+/// Check that the overlay mapping is valid.
+///
+/// 1) The index is present and less than the maximum supported version.
+/// 2) The number of pages is present and consistent with the index.
+/// For the index, check that all the ranges:
+///   1) Have positive length.
+///   2) Are backed by data within the [0; self.num_pages) interval in the overlay file.
+///   3) Don't overlap.
+///   4) Are not back-to-back, e.g. [2..4][4..9].
+///
+/// We should always check correctness before constructing an `OverlayFile`.
+fn check_mapping_correctness(mapping: &Mapping, path: &Path) -> Result<(), PersistenceError> {
+    if mapping.as_slice().len() < VERSION_NUM_BYTES {
+        return Err(PersistenceError::InvalidOverlay {
+            path: path.display().to_string(),
+            message: "No version provided in overlay file".to_string(),
+        });
+    } else if mapping.as_slice().len() < VERSION_NUM_BYTES + SIZE_NUM_BYTES {
+        return Err(PersistenceError::InvalidOverlay {
+            path: path.display().to_string(),
+            message: "No num_pages provided in overlay file".to_string(),
+        });
+    } else if mapping.as_slice().len()
+        <= VERSION_NUM_BYTES + SIZE_NUM_BYTES + num_pages(mapping) * PAGE_SIZE
+    {
+        return Err(PersistenceError::InvalidOverlay {
+            path: path.display().to_string(),
+            message: "No index provided in overlay file".to_string(),
+        });
+    }
+
+    // Safety: Cannot underflow as we would return an error above.
+    let index_length = mapping.as_slice().len()
+        - num_pages(mapping) * PAGE_SIZE
+        - VERSION_NUM_BYTES
+        - SIZE_NUM_BYTES;
+    if index_length % INDEX_ENTRY_NUM_BYTES != 0 {
+        return Err(PersistenceError::InvalidOverlay {
+            path: path.display().to_string(),
+            message: "Invalid index length".to_string(),
+        });
+    }
+
+    match try_version(mapping) {
+        Ok(v) if v <= MAX_SUPPORTED_OVERLAY_VERSION => (),
+        Ok(v) => {
+            return Err(PersistenceError::VersionMismatch {
+                path: path.display().to_string(),
+                file_version: v as u32,
+                supported: MAX_SUPPORTED_OVERLAY_VERSION,
+            });
+        }
+        Err(v) => {
+            return Err(PersistenceError::VersionMismatch {
+                path: path.display().to_string(),
+                file_version: v,
+                supported: MAX_SUPPORTED_OVERLAY_VERSION,
+            });
+        }
+    };
+
+    let slice = index_slice(mapping);
+    // The first range should start at file_index 0
+    if !slice.is_empty() {
+        let entry = IndexEntry::from(&slice[0]);
+        if entry.start_file_index != FileIndex::from(0) {
+            return Err(PersistenceError::InvalidOverlay {
+                path: path.display().to_string(),
+                message: format!(
+                    "Broken overlay file: First IndexEntry ({:?}) does not start at file_index 0",
+                    entry,
+                ),
+            });
+        }
+    }
+    for i in 0..slice.len() {
+        let next_file_index = if i == slice.len() - 1 {
+            FileIndex::from(num_pages(mapping) as u64)
+        } else {
+            IndexEntry::from(&slice[i + 1]).start_file_index
+        };
+        let next_page_index = if i == slice.len() - 1 {
+            None
+        } else {
+            Some(IndexEntry::from(&slice[i + 1]).start_page)
+        };
+        let entry = IndexEntry::from(&slice[i]);
+        let has_error = if entry.start_file_index >= next_file_index {
+            true
+        } else if let Some(next_page_index) = next_page_index {
+            if next_page_index <= entry.start_page {
+                true
+            } else {
+                let file_index_delta = next_file_index.get() - entry.start_file_index.get();
+                let max_page_index_delta = next_page_index.get() - entry.start_page.get();
+                // if file_index_delta == max_page_index_delta we have back to back ranges,
+                // e.g. [0..2], [2..3]
+                file_index_delta >= max_page_index_delta
+            }
+        } else {
+            false
+        };
+        if has_error {
+            return Err(PersistenceError::InvalidOverlay {
+                path: path.display().to_string(),
+                message: format!(
+                    "Broken overlay file: IndexEntry[{}], entry: {:?}, next_file_index: {}, \
+                         next_page_index: {:?}, num_pages: {}",
+                    i,
+                    entry,
+                    next_file_index,
+                    next_page_index,
+                    num_pages(mapping)
+                ),
+            });
+        }
+    }
+    Ok(())
 }
 
 /// Provide information from `StateLayout` about paths of a specific `PageMap`.
@@ -822,154 +944,6 @@ impl MergeCandidate {
     }
 }
 
-/// A struct describing the index section of an overlay file.
-struct OverlayIndices {
-    /// A memory map of the index section of the file.
-    mmap: ScopedMmap,
-    /// The opened file for the index.
-    file: File,
-    /// Where in the file the index starts.
-    offset: i64,
-    /// Total number of pages contained in the index.
-    num_pages: u64,
-}
-
-impl OverlayIndices {
-    /// The index as a slice of pairs of numbers, each describing a range of pages.
-    /// See `OverlayVersion` for an explanation of how the index is structured.
-    fn as_slice(&self) -> &[[[u8; 8]; 2]] {
-        let (prefix, slice, suffix) = unsafe { self.mmap.as_slice().align_to::<[[u8; 8]; 2]>() };
-        // Prefix would be non-empty if the address wasn't u64-aligned, but mmap is always page-aligned.
-        assert!(prefix.is_empty());
-        // Suffix would be non-empty if the length (in bytes) isn't a multiple of 8*3, which would be a
-        // bug in the loading step.
-        assert!(suffix.is_empty());
-
-        slice
-    }
-
-    /// If `index` is present in this overlay, returns its `FileIndex`.
-    fn get_file_index(&self, index: PageIndex) -> Option<FileIndex> {
-        let slice = self.as_slice();
-        let result = slice.binary_search_by(|probe| IndexEntry::from(probe).start_page.cmp(&index));
-
-        match result {
-            Ok(loc) => Some(IndexEntry::from(&slice[loc]).start_file_index),
-            Err(0) => None,
-            Err(loc) => {
-                let entry: IndexEntry = (&slice[loc - 1]).into();
-                let next_file_index = if loc < slice.len() {
-                    IndexEntry::from(&slice[loc]).start_file_index
-                } else {
-                    FileIndex::from(self.num_pages)
-                };
-                let range = PageIndexRange::new(&entry, next_file_index);
-                range.file_index(index)
-            }
-        }
-    }
-
-    /// Iterate over all ranges.
-    fn iter(&self) -> impl Iterator<Item = PageIndexRange> + '_ {
-        let slice = self.as_slice();
-        (0..slice.len()).map(|i| index_range(slice, i, self.num_pages))
-    }
-
-    /// Open the `OverlayIndices` in the given file at the right offset.
-    fn new(file: File, len: usize, offset: i64, num_pages: u64) -> Result<Self, PersistenceError> {
-        assert!(len > 0);
-        let mmap =
-            ScopedMmap::from_readonly_file_with_offset(&file, len, offset).map_err(|err| {
-                let path = format!("/proc/self/fd/{}", file.as_raw_fd());
-                PersistenceError::MmapError {
-                    path,
-                    len,
-                    internal_error: err.to_string(),
-                }
-            })?;
-        Ok(Self {
-            file,
-            mmap,
-            offset,
-            num_pages,
-        })
-    }
-
-    /// Check that all the ranges:
-    ///   1) Have positive length.
-    ///   2) Are backed by data within the [0; self.num_pages) interval in the overlay file.
-    ///   3) Don't overlap.
-    ///   4) Are not back-to-back, e.g. [2..4][4..9].
-    ///
-    ///   We don't check for gaps in the page data, e.g. pages in file that are not covered by any
-    ///   range.
-    fn check_correctness(&self, path: &Path) -> Result<(), PersistenceError> {
-        let slice = self.as_slice();
-        for i in 0..slice.len() {
-            let next_file_index = if i == slice.len() - 1 {
-                FileIndex::from(self.num_pages)
-            } else {
-                IndexEntry::from(&slice[i + 1]).start_file_index
-            };
-            let next_page_index = if i == slice.len() - 1 {
-                None
-            } else {
-                Some(IndexEntry::from(&slice[i + 1]).start_page)
-            };
-            let entry = IndexEntry::from(&slice[i]);
-            let has_error = if entry.start_file_index >= next_file_index {
-                true
-            } else if let Some(next_page_index) = next_page_index {
-                if next_page_index <= entry.start_page {
-                    true
-                } else {
-                    let file_index_delta = next_file_index.get() - entry.start_file_index.get();
-                    let max_page_index_delta = next_page_index.get() - entry.start_page.get();
-                    // if length_in_file == max_length_in_mmap we have back to back ranges,
-                    // e.g. [0..2], [2..3]
-                    file_index_delta >= max_page_index_delta
-                }
-            } else {
-                false
-            };
-            if has_error {
-                return Err(PersistenceError::InvalidOverlay {
-                    path: path.display().to_string(),
-                    message: format!(
-                        "Broken overlay file: IndexEntry[{}], entry: {:?}, next_file_index: {}, \
-                        next_page_index: {:?}",
-                        i, entry, next_file_index, next_page_index
-                    ),
-                });
-            }
-        }
-        Ok(())
-    }
-
-    fn serialize(&self) -> OverlayIndicesSerialization {
-        OverlayIndicesSerialization {
-            file_descriptor: FileDescriptor {
-                fd: self.file.as_raw_fd(),
-            },
-            index_len: self.mmap.len() as FileOffset,
-            offset: self.offset,
-            num_pages: self.num_pages,
-        }
-    }
-
-    fn deserialize(
-        serialized_index: OverlayIndicesSerialization,
-    ) -> Result<Self, PersistenceError> {
-        let file = unsafe { File::from_raw_fd(serialized_index.file_descriptor.fd) };
-        Self::new(
-            file,
-            serialized_index.index_len as usize,
-            serialized_index.offset,
-            serialized_index.num_pages,
-        )
-    }
-}
-
 /// Construct a `PageIndexRange` for the range at `index`.
 /// In the slice the information is stored in a fairly compressed format. An `PageIndexRange` is more convenient
 /// to work with.
@@ -1237,18 +1211,8 @@ pub struct StorageSerialization {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct OverlayIndicesSerialization {
-    pub file_descriptor: FileDescriptor,
-    pub index_len: FileOffset,
-    offset: i64,
-    num_pages: u64,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct OverlayFileSerialization {
     pub mapping: MappingSerialization,
-    pub index: OverlayIndicesSerialization,
-    pub version: OverlayVersion,
 }
 
 #[cfg(test)]

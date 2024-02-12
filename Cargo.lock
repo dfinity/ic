@@ -10275,6 +10275,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-sys",
  "ic-test-utilities",
+ "ic-test-utilities-metrics",
  "ic-test-utilities-time",
  "ic-types",
  "ic-utils 0.9.0",

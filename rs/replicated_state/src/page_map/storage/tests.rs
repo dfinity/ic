@@ -7,8 +7,8 @@ use std::{
 
 use crate::page_map::{
     storage::{
-        Checkpoint, MergeCandidate, OverlayFile, Storage, INDEX_ENTRY_NUM_BYTES, SIZE_NUM_BYTES,
-        VERSION_NUM_BYTES,
+        Checkpoint, MergeCandidate, OverlayFile, Storage, CURRENT_OVERLAY_VERSION,
+        INDEX_ENTRY_NUM_BYTES, SIZE_NUM_BYTES, VERSION_NUM_BYTES,
     },
     FileDescriptor, MemoryInstructions, MemoryMapOrData, PageAllocator, PageDelta, PageMap,
     PersistDestination, PersistenceError, StorageLayout, StorageMetrics, MAX_NUMBER_OF_FILES,
@@ -18,6 +18,7 @@ use bit_vec::BitVec;
 use ic_metrics::MetricsRegistry;
 use ic_sys::{PageIndex, PAGE_SIZE};
 use ic_test_utilities::io::{make_mutable, make_readonly, write_all_at};
+use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_types::Height;
 use tempfile::{tempdir, TempDir};
 
@@ -359,9 +360,13 @@ use Instruction::*;
 /// At the same time, we apply the same instructions to a `PageDelta`, which acts as the reference
 /// implementation. After each operation, we check that all overlay files are as expected and
 /// correspond to the reference.
-fn write_overlays_and_verify_with_tempdir(instructions: Vec<Instruction>, tempdir: &TempDir) {
+fn write_overlays_and_verify_with_tempdir(
+    instructions: Vec<Instruction>,
+    tempdir: &TempDir,
+) -> MetricsRegistry {
     let allocator = PageAllocator::new_for_testing();
-    let metrics = StorageMetrics::new(&MetricsRegistry::new());
+    let metrics_registry = MetricsRegistry::new();
+    let metrics = StorageMetrics::new(&metrics_registry);
 
     let mut combined_delta = PageDelta::default();
 
@@ -458,13 +463,15 @@ fn write_overlays_and_verify_with_tempdir(instructions: Vec<Instruction>, tempdi
             }
         }
     }
+
+    metrics_registry
 }
 
 /// Apply a list of `Instruction` to a new temporary directory and check correctness of the sequence
 /// after every step.
-fn write_overlays_and_verify(instructions: Vec<Instruction>) {
+fn write_overlays_and_verify(instructions: Vec<Instruction>) -> MetricsRegistry {
     let tempdir = tempdir().unwrap();
-    write_overlays_and_verify_with_tempdir(instructions, &tempdir);
+    write_overlays_and_verify_with_tempdir(instructions, &tempdir)
 }
 
 #[test]
@@ -556,6 +563,32 @@ fn can_overwrite_page() {
 #[test]
 fn can_overwrite_part_of_range() {
     write_overlays_and_verify(vec![WriteOverlay(vec![9, 10]), WriteOverlay(vec![10])]);
+}
+
+#[test]
+fn can_write_large_overlay_file() {
+    // The index is specifically chosen to ensure the index is larger than a page, as this used to be
+    // a bug. 1000 ranges of 16 bytes each is roughly 4 pages.
+    let indices = (0..2000).step_by(2).collect();
+    let metrics = write_overlays_and_verify(vec![WriteOverlay(indices)]);
+
+    let metrics_index =
+        maplit::btreemap!("op".into() => "flush".into(), "type".into() => "index".into());
+    let index_size = fetch_int_counter_vec(&metrics, "storage_layer_write_bytes")[&metrics_index];
+
+    assert!(index_size > PAGE_SIZE as u64);
+}
+
+#[test]
+fn can_merge_large_overlay_file() {
+    let mut instructions = Vec::default();
+    for step in 2..10 {
+        instructions.push(WriteOverlay((0..2000).step_by(step).collect()));
+    }
+    instructions.push(Merge {
+        assert_files_merged: Some(8),
+    });
+    write_overlays_and_verify(instructions);
 }
 
 #[test]
@@ -922,6 +955,27 @@ fn can_get_large_memory_regions_from_file() {
 
     // This covers more generic checks with this input.
     write_overlays_and_verify(vec![WriteOverlay(indices)]);
+}
+
+#[test]
+fn overlay_version_is_current() {
+    let indices = [9, 10, 11, 19, 20, 21, 22, 23];
+
+    let tempdir = tempdir().unwrap();
+    let path = &tempdir.path().join("0_vmemory_0.overlay");
+
+    let allocator = PageAllocator::new_for_testing();
+    let metrics = StorageMetrics::new(&MetricsRegistry::new());
+
+    let data = &[42_u8; PAGE_SIZE];
+    let overlay_pages: Vec<_> = indices.iter().map(|i| (PageIndex::new(*i), data)).collect();
+
+    let delta = PageDelta::from(allocator.allocate(&overlay_pages));
+
+    OverlayFile::write(&delta, path, &metrics).unwrap();
+    let overlay = OverlayFile::load(path).unwrap();
+    let version = overlay.version();
+    assert_eq!(version, CURRENT_OVERLAY_VERSION);
 }
 
 mod proptest_tests {

@@ -10,8 +10,7 @@ use ic_interfaces::execution_environment::HypervisorResult;
 use ic_replicated_state::{
     page_map::{
         CheckpointSerialization, MappingSerialization, OverlayFileSerialization,
-        OverlayIndicesSerialization, PageAllocatorSerialization, PageMapSerialization,
-        StorageSerialization,
+        PageAllocatorSerialization, PageMapSerialization, StorageSerialization,
     },
     Global, NumWasmPages,
 };
@@ -141,13 +140,6 @@ impl EnumerateInnerFileDescriptors for StorageSerialization {
 impl EnumerateInnerFileDescriptors for OverlayFileSerialization {
     fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
         self.mapping.enumerate_fds(fds);
-        self.index.enumerate_fds(fds);
-    }
-}
-
-impl EnumerateInnerFileDescriptors for OverlayIndicesSerialization {
-    fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
-        fds.push(&mut self.file_descriptor.fd);
     }
 }
 
