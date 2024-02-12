@@ -1067,8 +1067,16 @@ impl PageMapType {
         result
     }
 
+    fn id(&self) -> CanisterId {
+        match &self {
+            PageMapType::WasmMemory(id) => *id,
+            PageMapType::StableMemory(id) => *id,
+            PageMapType::WasmChunkStore(id) => *id,
+        }
+    }
+
     /// Maps a PageMapType to its location in a checkpoint according to `layout`
-    fn path<Access>(&self, layout: &CheckpointLayout<Access>) -> Result<PathBuf, LayoutError>
+    fn base<Access>(&self, layout: &CheckpointLayout<Access>) -> Result<PathBuf, LayoutError>
     where
         Access: AccessPolicy,
     {
@@ -1076,39 +1084,6 @@ impl PageMapType {
             PageMapType::WasmMemory(id) => Ok(layout.canister(id)?.vmemory_0()),
             PageMapType::StableMemory(id) => Ok(layout.canister(id)?.stable_memory_blob()),
             PageMapType::WasmChunkStore(id) => Ok(layout.canister(id)?.wasm_chunk_store()),
-        }
-    }
-
-    /// The path of an overlay file written during round `height`.
-    fn overlay<Access>(
-        &self,
-        layout: &CheckpointLayout<Access>,
-        height: Height,
-    ) -> Result<PathBuf, LayoutError>
-    where
-        Access: AccessPolicy,
-    {
-        match &self {
-            PageMapType::WasmMemory(id) => Ok(layout.canister(id)?.vmemory_0_overlay(height)),
-            PageMapType::StableMemory(id) => Ok(layout.canister(id)?.stable_memory_overlay(height)),
-            PageMapType::WasmChunkStore(id) => {
-                Ok(layout.canister(id)?.wasm_chunk_store_overlay(height))
-            }
-        }
-    }
-
-    /// List all existing overlay files of a this PageMapType inside `layout`.
-    fn overlays<Access>(
-        &self,
-        layout: &CheckpointLayout<Access>,
-    ) -> Result<Vec<PathBuf>, LayoutError>
-    where
-        Access: AccessPolicy,
-    {
-        match &self {
-            PageMapType::WasmMemory(id) => layout.canister(id)?.vmemory_0_overlays(),
-            PageMapType::StableMemory(id) => layout.canister(id)?.stable_memory_overlays(),
-            PageMapType::WasmChunkStore(id) => layout.canister(id)?.wasm_chunk_store_overlays(),
         }
     }
 

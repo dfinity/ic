@@ -19,6 +19,7 @@ use crate::page_map::{
 
 use bit_vec::BitVec;
 use ic_sys::{mmap::ScopedMmap, PageBytes, PageIndex, PAGE_SIZE};
+use ic_types::Height;
 use itertools::Itertools;
 use phantom_newtype::Id;
 use serde::{Deserialize, Serialize};
@@ -547,6 +548,18 @@ impl OverlayFile {
     }
 }
 
+/// Provide information from `StateLayout` about paths of a specific `PageMap`.
+pub trait StorageLayout {
+    /// Base file path.
+    fn base(&self) -> PathBuf;
+
+    /// Path for overlay of given height.
+    fn overlay(&self, height: Height) -> PathBuf;
+
+    /// All existing overlay files.
+    fn existing_overlays(&self) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>>;
+}
+
 /// `MergeCandidate` shows which files to merge into a single `PageMap`.
 #[derive(Clone, Debug)]
 pub struct MergeCandidate {
@@ -571,28 +584,30 @@ impl MergeCandidate {
     ///     Overlay_1   |xxxxxx|
     ///     Base        |xxxxxxxxxxxxxxxxxxxxxxxxxxxx|
     pub fn new(
-        dst_base: &Path,
-        dst_overlay: &Path,
-        existing_base: &Path,
-        existing_overlays: &[PathBuf],
-    ) -> Result<Option<MergeCandidate>, PersistenceError> {
-        let existing_base = if existing_base.exists() {
-            Some(existing_base.to_path_buf())
+        layout: &dyn StorageLayout,
+        height: Height,
+    ) -> Result<Option<MergeCandidate>, Box<dyn std::error::Error>> {
+        let existing_base = if layout.base().exists() {
+            Some(layout.base().to_path_buf())
         } else {
             None
         };
 
+        let existing_overlays = layout.existing_overlays()?;
         // base if any; then overlays old to new.
         let existing_files = existing_base.iter().chain(existing_overlays.iter());
 
         let file_lengths: Vec<usize> = existing_files
-            .map(|path| Ok(std::fs::metadata(path)?.len() as usize))
-            .collect::<Result<_, std::io::Error>>()
-            .map_err(|err: _| PersistenceError::FileSystemError {
-                path: dst_overlay.display().to_string(),
-                context: format!("Failed get existing file length: {}", dst_overlay.display()),
-                internal_error: err.to_string(),
-            })?;
+            .map(|path| {
+                Ok(std::fs::metadata(path)
+                    .map_err(|err: _| PersistenceError::FileSystemError {
+                        path: path.display().to_string(),
+                        context: format!("Failed get existing file length: {}", path.display()),
+                        internal_error: err.to_string(),
+                    })?
+                    .len() as usize)
+            })
+            .collect::<Result<_, PersistenceError>>()?;
 
         let Some(num_files_to_merge) = Self::num_files_to_merge(&file_lengths) else {
             return Ok(None);
@@ -617,9 +632,9 @@ impl MergeCandidate {
         };
 
         let dst = if merge_all {
-            PersistDestination::BaseFile(dst_base.to_path_buf())
+            PersistDestination::BaseFile(layout.base().to_path_buf())
         } else {
-            PersistDestination::OverlayFile(dst_overlay.to_path_buf())
+            PersistDestination::OverlayFile(layout.overlay(height).to_path_buf())
         };
 
         Ok(Some(MergeCandidate {
@@ -630,22 +645,22 @@ impl MergeCandidate {
     }
 
     pub fn full_merge(
-        dst_base: &Path,
-        existing_base: &Path,
-        existing_overlays: &[PathBuf],
-    ) -> Option<MergeCandidate> {
-        if dst_base == existing_base && existing_overlays.is_empty() {
-            None
+        layout: &dyn StorageLayout,
+    ) -> Result<Option<MergeCandidate>, Box<dyn std::error::Error>> {
+        let existing_overlays = layout.existing_overlays()?;
+        let base_path = layout.base();
+        if existing_overlays.is_empty() {
+            Ok(None)
         } else {
-            Some(MergeCandidate {
+            Ok(Some(MergeCandidate {
                 overlays: existing_overlays.to_vec(),
-                base: if existing_base.exists() {
-                    Some(existing_base.to_path_buf())
+                base: if base_path.exists() {
+                    Some(base_path.clone())
                 } else {
                     None
                 },
-                dst: PersistDestination::BaseFile(dst_base.to_path_buf()),
-            })
+                dst: PersistDestination::BaseFile(base_path),
+            }))
         }
     }
 

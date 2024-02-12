@@ -15,16 +15,17 @@ use ic_protobuf::state::{
     system_metadata::v1::{SplitFrom, SystemMetadata},
 };
 use ic_replicated_state::page_map::{
-    MergeCandidate, PersistDestination, PersistenceError, StorageMetrics, MAX_NUMBER_OF_FILES,
+    MergeCandidate, PersistDestination, StorageMetrics, MAX_NUMBER_OF_FILES,
 };
 #[allow(unused)]
 use ic_replicated_state::{
-    canister_state::execution_state::SandboxMemory, page_map::PAGE_SIZE, CanisterState,
-    NumWasmPages, PageMap, ReplicatedState,
+    canister_state::execution_state::SandboxMemory,
+    page_map::{StorageLayout, PAGE_SIZE},
+    CanisterState, NumWasmPages, PageMap, ReplicatedState,
 };
 use ic_state_layout::{
-    error::LayoutError, CanisterStateBits, CheckpointLayout, ExecutionStateBits, ReadOnly,
-    RwPolicy, StateLayout, TipHandler,
+    error::LayoutError, AccessPolicy, CanisterLayout, CanisterStateBits, CheckpointLayout,
+    ExecutionStateBits, ReadOnly, RwPolicy, StateLayout, TipHandler,
 };
 use ic_sys::fs::defrag_file_partially;
 use ic_types::{malicious_flags::MaliciousFlags, CanisterId, Height};
@@ -128,32 +129,41 @@ fn request_timer(metrics: &StateManagerMetrics, name: &str) -> HistogramTimer {
         .start_timer()
 }
 
-/// Helper struct for some relevant paths. Also see page_map_paths().
-struct PageMapPaths {
-    /// Path of the base file
-    base_file_path: PathBuf,
-    /// All existing overlay files
-    existing_overlays: Vec<PathBuf>,
-    /// If we write a new overlay file, we use this path
-    next_overlay_path: PathBuf,
+struct PageMapLayout<Access>
+where
+    Access: AccessPolicy,
+{
+    page_map_type: PageMapType,
+    layout: CanisterLayout<Access>,
 }
 
-/// Helper function to collect all relevant paths for a PageMap
-fn page_map_paths(
-    tip_handler: &mut TipHandler,
-    height: Height,
-    page_map_type: &PageMapType,
-) -> Result<PageMapPaths, LayoutError> {
-    let layout = &tip_handler.tip(height)?;
-    let base_file_path = page_map_type.path(layout)?;
-    let existing_overlays = page_map_type.overlays(layout)?;
-    let next_overlay_path = page_map_type.overlay(layout, height)?;
+impl<Access> StorageLayout for PageMapLayout<Access>
+where
+    Access: AccessPolicy,
+{
+    fn base(&self) -> PathBuf {
+        match &self.page_map_type {
+            PageMapType::WasmMemory(_) => self.layout.vmemory_0(),
+            PageMapType::StableMemory(_) => self.layout.stable_memory_blob(),
+            PageMapType::WasmChunkStore(_) => self.layout.wasm_chunk_store(),
+        }
+    }
 
-    Ok(PageMapPaths {
-        base_file_path,
-        existing_overlays,
-        next_overlay_path,
-    })
+    fn overlay(&self, height: Height) -> PathBuf {
+        match &self.page_map_type {
+            PageMapType::WasmMemory(_) => self.layout.vmemory_0_overlay(height),
+            PageMapType::StableMemory(_) => self.layout.stable_memory_overlay(height),
+            PageMapType::WasmChunkStore(_) => self.layout.wasm_chunk_store_overlay(height),
+        }
+    }
+
+    fn existing_overlays(&self) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
+        Ok(match &self.page_map_type {
+            PageMapType::WasmMemory(_) => self.layout.vmemory_0_overlays(),
+            PageMapType::StableMemory(_) => self.layout.stable_memory_overlays(),
+            PageMapType::WasmChunkStore(_) => self.layout.wasm_chunk_store_overlays(),
+        }?)
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -258,6 +268,14 @@ pub(crate) fn spawn_tip_thread(
                                 _ => panic!("Unexpected tip state: {:?}", tip_state),
                             }
                             tip_state = TipState::ReadyForPageDeltas(height);
+                            let layout = &tip_handler.tip(height).unwrap_or_else(|err| {
+                                fatal!(
+                                    log,
+                                    "Failed to get tip @{} to serialize to: {}",
+                                    height,
+                                    err
+                                );
+                            });
                             parallel_map(
                                 &mut thread_pool,
                                 pagemaps.into_iter().map(
@@ -266,34 +284,44 @@ pub(crate) fn spawn_tip_thread(
                                          truncate,
                                          page_map,
                                      }| {
+                                        let canister_layout = layout
+                                            .canister(&page_map_type.id())
+                                            .unwrap_or_else(|err| {
+                                                fatal!(
+                                                    log,
+                                                    "Failed to get layout for {:?}: {}",
+                                                    page_map_type,
+                                                    err
+                                                );
+                                            });
                                         (
                                             truncate,
                                             page_map,
-                                            page_map_paths(
-                                                &mut tip_handler,
-                                                height,
-                                                &page_map_type,
-                                            )
-                                            .unwrap_or_else(|err| {
-                                                fatal!(log, "Failed to flush page map: {}", err);
-                                            }),
+                                            PageMapLayout {
+                                                page_map_type,
+                                                layout: canister_layout,
+                                            },
                                         )
                                     },
                                 ),
-                                |(
-                                    truncate,
-                                    page_map,
-                                    PageMapPaths {
-                                        base_file_path,
-                                        existing_overlays,
-                                        next_overlay_path,
-                                    },
-                                )| {
+                                |(truncate, page_map, page_map_layout)| {
+                                    let base_file_path = page_map_layout.base();
+                                    let next_overlay_path = page_map_layout.overlay(height);
                                     if *truncate {
+                                        let existing_overlays = page_map_layout
+                                            .existing_overlays()
+                                            .unwrap_or_else(|err| {
+                                                fatal!(
+                                                    log,
+                                                    "Failed to get existing overlays for {:#?}: {}",
+                                                    page_map_layout.page_map_type,
+                                                    err
+                                                )
+                                            });
                                         delete_pagemap_files(
                                             &log,
-                                            base_file_path,
-                                            existing_overlays,
+                                            &base_file_path,
+                                            &existing_overlays,
                                         );
                                     }
                                     if page_map.is_some()
@@ -382,7 +410,7 @@ pub(crate) fn spawn_tip_thread(
                                 ),
                                 FlagStatus::Disabled => {
                                     if downgrade_state == DowngradeState::Unknown {
-                                        if merge_full(
+                                        if full_merge(
                                             &mut tip_handler,
                                             &pagemaptypes_with_num_pages,
                                             height,
@@ -484,11 +512,13 @@ struct MergeCandidateAndMetrics {
 
 impl MergeCandidateAndMetrics {
     fn new(
-        merge_candidate: Option<MergeCandidate>,
-        base_path: &Path,
-        existing_overlays: &[PathBuf],
+        layout: &dyn StorageLayout,
+        height: Height,
         page_map_num_pages: usize,
-    ) -> Result<Self, PersistenceError> {
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let merge_candidate = MergeCandidate::new(layout, height)?;
+        let base_path = layout.base();
+        let existing_overlays = layout.existing_overlays()?;
         let merge_all = merge_candidate
             .as_ref()
             .map_or(false, |m| m.is_full_merge());
@@ -499,8 +529,8 @@ impl MergeCandidateAndMetrics {
         };
         let existing_files = existing_base.iter().chain(existing_overlays.iter());
         let existing_files_lengths: Vec<u64> = existing_files
-            .map(|f| std::fs::metadata(f).unwrap().len())
-            .collect();
+            .map(|f| std::fs::metadata(f).map(|m| m.len()))
+            .collect::<Result<Vec<_>, _>>()?;
         let num_files_before = existing_files_lengths.len();
 
         let page_map_size_bytes = page_map_num_pages * PAGE_SIZE;
@@ -592,39 +622,34 @@ fn merge(
     log: &ReplicaLogger,
     metrics: &StateManagerMetrics,
 ) {
-    let merges_with_metrics = parallel_map(
+    let layout = &tip_handler.tip(height).unwrap_or_else(|err| {
+        fatal!(log, "Failed to get layout for {}: {}", height, err);
+    });
+    let merges_with_metrics: Vec<_> = parallel_map(
         thread_pool,
         pagemaptypes_with_num_pages
             .iter()
             .map(|(page_map_type, num_pages)| {
+                let canister_layout = layout.canister(&page_map_type.id()).unwrap_or_else(|err| {
+                    fatal!(log, "Failed to get layout for {:?}: {}", page_map_type, err);
+                });
                 (
+                    PageMapLayout {
+                        page_map_type: *page_map_type,
+                        layout: canister_layout,
+                    },
                     *num_pages,
-                    page_map_paths(tip_handler, height, page_map_type).unwrap_or_else(|err| {
-                        fatal!(log, "Failed to get page map paths: {}", err);
-                    }),
                 )
             }),
-        |(
-            num_pages,
-            PageMapPaths {
-                base_file_path,
-                existing_overlays,
-                next_overlay_path,
-            },
-        )| {
-            let m = MergeCandidate::new(
-                base_file_path,
-                next_overlay_path,
-                base_file_path,
-                existing_overlays,
-            )
-            .unwrap_or_else(|err| {
-                fatal!(log, "Failed to get MergeCandidate: {}", err);
-            });
-            MergeCandidateAndMetrics::new(m, base_file_path, existing_overlays, *num_pages)
-                .unwrap_or_else(|err| {
-                    fatal!(log, "Failed to get metrics for MergeCandidate: {}", err);
-                })
+        |(pm_layout, num_pages)| {
+            MergeCandidateAndMetrics::new(pm_layout, height, *num_pages).unwrap_or_else(|err| {
+                fatal!(
+                    log,
+                    "Failed to get MergeCandidateAndMetrics for {:?}: {}",
+                    pm_layout.page_map_type,
+                    err
+                );
+            })
         },
     );
 
@@ -716,7 +741,7 @@ fn merge(
 
 /// Merge all the overlays (if any) into bases.
 /// Return true if any merge was done.
-fn merge_full(
+fn full_merge(
     tip_handler: &mut TipHandler,
     pagemaptypes_with_num_pages: &[(PageMapType, usize)],
     height: Height,
@@ -724,22 +749,25 @@ fn merge_full(
     log: &ReplicaLogger,
     metrics: &StateManagerMetrics,
 ) -> bool {
+    let layout = &tip_handler.tip(height).unwrap_or_else(|err| {
+        fatal!(log, "Failed to get layout for {}: {}", height, err);
+    });
     let rewritten = parallel_map(
         thread_pool,
         pagemaptypes_with_num_pages
             .iter()
             .map(|(page_map_type, _)| {
-                page_map_paths(tip_handler, height, page_map_type).unwrap_or_else(|err| {
-                    fatal!(log, "Failed to merge page map: {}", err);
-                })
+                let canister_layout = layout.canister(&page_map_type.id()).unwrap_or_else(|err| {
+                    fatal!(log, "Failed to get layout for {:?}: {}", page_map_type, err);
+                });
+                PageMapLayout {
+                    page_map_type: *page_map_type,
+                    layout: canister_layout,
+                }
             }),
-        |PageMapPaths {
-             base_file_path,
-             existing_overlays,
-             next_overlay_path: _,
-         }| {
-            let merge_candidate =
-                MergeCandidate::full_merge(base_file_path, base_file_path, existing_overlays);
+        |pm_layout| {
+            let merge_candidate = MergeCandidate::full_merge(pm_layout)
+                .unwrap_or_else(|err| fatal!(log, "Failed to merge page map: {}", err));
             if let Some(m) = merge_candidate.as_ref() {
                 m.apply(&metrics.storage_metrics).unwrap_or_else(|err| {
                     fatal!(log, "Failed to apply MergeCandidate for downgrade: {}", err);
@@ -1010,7 +1038,7 @@ pub fn defrag_tip(
     let path_with_sizes: Vec<(PathBuf, u64)> = page_map_subset
         .iter()
         .filter_map(|entry| {
-            let path = entry.path(tip).ok()?;
+            let path = entry.base(tip).ok()?;
             let size = path.metadata().ok()?.size();
             Some((path, size))
         })
@@ -1266,7 +1294,7 @@ mod test {
 
             let paths: Vec<PathBuf> = page_maps
                 .iter()
-                .map(|page_map_type| page_map_type.path(&tip).unwrap())
+                .map(|page_map_type| page_map_type.base(&tip).unwrap())
                 .collect();
 
             for path in &paths {

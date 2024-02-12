@@ -11,14 +11,33 @@ use crate::page_map::{
         VERSION_NUM_BYTES,
     },
     FileDescriptor, MemoryInstructions, MemoryMapOrData, PageAllocator, PageDelta, PageMap,
-    PersistDestination, PersistenceError, StorageMetrics, MAX_NUMBER_OF_FILES,
+    PersistDestination, PersistenceError, StorageLayout, StorageMetrics, MAX_NUMBER_OF_FILES,
 };
 use assert_matches::assert_matches;
 use bit_vec::BitVec;
 use ic_metrics::MetricsRegistry;
 use ic_sys::{PageIndex, PAGE_SIZE};
 use ic_test_utilities::io::{make_mutable, make_readonly, write_all_at};
+use ic_types::Height;
 use tempfile::{tempdir, TempDir};
+
+struct TestStorageLayout {
+    base: PathBuf,
+    overlay_dst: PathBuf,
+    existing_overlays: Vec<PathBuf>,
+}
+
+impl StorageLayout for TestStorageLayout {
+    fn base(&self) -> PathBuf {
+        self.base.clone()
+    }
+    fn overlay(&self, _height: Height) -> PathBuf {
+        self.overlay_dst.clone()
+    }
+    fn existing_overlays(&self) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
+        Ok(self.existing_overlays.clone())
+    }
+}
 
 /// The expected size of an overlay file.
 ///
@@ -385,9 +404,15 @@ fn write_overlays_and_verify_with_tempdir(instructions: Vec<Instruction>, tempdi
                         .as_slice(),
                 );
 
-                let merge =
-                    MergeCandidate::new(path_base, path_overlay, path_base, &files_before.overlays)
-                        .unwrap();
+                let merge = MergeCandidate::new(
+                    &TestStorageLayout {
+                        base: path_base.to_path_buf(),
+                        overlay_dst: path_overlay.to_path_buf(),
+                        existing_overlays: files_before.overlays.clone(),
+                    },
+                    Height::from(0),
+                )
+                .unwrap();
                 // Open the files before they might get deleted.
                 let merged_overlays: Vec<_> = merge.as_ref().map_or(Vec::new(), |m| {
                     m.overlays
@@ -639,10 +664,12 @@ fn test_num_files_to_merge() {
 fn test_make_merge_candidate_on_empty_dir() {
     let tempdir = tempdir().unwrap();
     let merge_candidate = MergeCandidate::new(
-        &tempdir.path().join("vmemory_0.bin"),
-        &tempdir.path().join("000000_vmemory_0.overlay"),
-        &tempdir.path().join("vmemory_0.bin"),
-        &[],
+        &TestStorageLayout {
+            base: tempdir.path().join("vmemory_0.bin"),
+            overlay_dst: tempdir.path().join("000000_vmemory_0.overlay"),
+            existing_overlays: Vec::new(),
+        },
+        Height::from(0),
     )
     .unwrap();
     assert!(merge_candidate.is_none());
@@ -660,10 +687,12 @@ fn test_make_none_merge_candidate() {
     assert_eq!(storage_files.overlays.len(), 1);
 
     let merge_candidate = MergeCandidate::new(
-        &tempdir.path().join("vmemory_0.bin"),
-        &tempdir.path().join("000000_vmemory_0.overlay"),
-        &tempdir.path().join("vmemory_0.bin"),
-        &storage_files.overlays,
+        &TestStorageLayout {
+            base: tempdir.path().join("vmemory_0.bin"),
+            overlay_dst: tempdir.path().join("000000_vmemory_0.overlay"),
+            existing_overlays: storage_files.overlays.clone(),
+        },
+        Height::from(0),
     )
     .unwrap();
     assert!(merge_candidate.is_none());
@@ -688,10 +717,12 @@ fn test_make_merge_candidate_to_overlay() {
     assert_eq!(storage_files.overlays.len(), 3);
 
     let merge_candidate = MergeCandidate::new(
-        &tempdir.path().join("vmemory_0.bin"),
-        &tempdir.path().join("000003_vmemory_0.overlay"),
-        &tempdir.path().join("vmemory_0.bin"),
-        &storage_files.overlays,
+        &TestStorageLayout {
+            base: tempdir.path().join("vmemory_0.bin"),
+            overlay_dst: tempdir.path().join("000003_vmemory_0.overlay"),
+            existing_overlays: storage_files.overlays.clone(),
+        },
+        Height::from(3),
     )
     .unwrap()
     .unwrap();
@@ -720,10 +751,12 @@ fn test_make_merge_candidate_to_base() {
     assert_eq!(storage_files.overlays.len(), 2);
 
     let merge_candidate = MergeCandidate::new(
-        &tempdir.path().join("vmemory_0.bin"),
-        &tempdir.path().join("000003_vmemory_0.overlay"),
-        &tempdir.path().join("vmemory_0.bin"),
-        &storage_files.overlays,
+        &TestStorageLayout {
+            base: tempdir.path().join("vmemory_0.bin"),
+            overlay_dst: tempdir.path().join("000003_vmemory_0.overlay"),
+            existing_overlays: storage_files.overlays.clone(),
+        },
+        Height::from(3),
     )
     .unwrap()
     .unwrap();
@@ -752,10 +785,12 @@ fn test_two_same_length_files_are_a_pyramid() {
     assert_eq!(storage_files.overlays.len(), 2);
 
     let merge_candidate = MergeCandidate::new(
-        &tempdir.path().join("vmemory_0.bin"),
-        &tempdir.path().join("000003_vmemory_0.overlay"),
-        &tempdir.path().join("vmemory_0.bin"),
-        &storage_files.overlays,
+        &TestStorageLayout {
+            base: tempdir.path().join("vmemory_0.bin"),
+            overlay_dst: tempdir.path().join("000003_vmemory_0.overlay"),
+            existing_overlays: storage_files.overlays.clone(),
+        },
+        Height::from(0),
     )
     .unwrap();
     assert!(merge_candidate.is_none());
