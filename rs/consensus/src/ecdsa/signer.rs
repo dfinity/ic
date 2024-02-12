@@ -753,7 +753,7 @@ impl<'a> EcdsaSignatureBuilder for EcdsaSignatureBuilderImpl<'a> {
             Err(error) => {
                 warn!(
                     self.log,
-                    "get_completed_signature(): translate failed: sig_inputs_ref = {:?}, error = {:?}",
+                    "get_completed_signature_from_context(): translate failed: sig_inputs_ref = {:?}, error = {:?}",
                     sig_inputs_ref,
                     error
                 );
