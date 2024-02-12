@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- a new `canister_status` function to request a canister's status
+
+### Fixed
+- `reqwest` dependency does not use the default features
+
+
 ## 2.1.0 - 2024-02-06
 
 ### Added
