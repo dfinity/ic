@@ -28,6 +28,15 @@
       "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/index-ng/index_ng_canister_u256.wasm",
       "candid": "../../../rosetta-api/icrc1/index-ng/index-ng.did",
       "shrink": false
+    },
+    "orchestrator": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm"
+      ],
+      "wasm": "../../../../bazel-bin/rs/ethereum/ledger-suite-orchestrator/ledger_suite_orchestrator_canister.wasm",
+      "candid": "../../ledger-suite-orchestrator/ledger_suite_orchestrator.did",
+      "shrink": false
     }
   },
   "defaults": {
