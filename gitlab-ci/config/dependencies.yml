@@ -29,7 +29,7 @@ dependency-scan-nightly:
   variables:
     PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
     CARGO_AUDIT_VERSION : "0.18.3"
-    NVM_VERSION : "19"
+    DEFAULT_NODE_VERSION : "20"
     SHELL_WRAPPER: "/usr/bin/time"
   script:
     - |
@@ -38,7 +38,7 @@ dependency-scan-nightly:
       $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
       # shellcheck disable=SC1090
       source "${NVM_DIR}/nvm.sh"
-      nvm use ${NVM_VERSION}
+      nvm use ${DEFAULT_NODE_VERSION}
       node --version
       npm --version
       cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies

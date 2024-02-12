@@ -2446,7 +2446,7 @@ dependency-scan-nightly:
       $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
       # shellcheck disable=SC1090
       source "${NVM_DIR}/nvm.sh"
-      nvm use ${NVM_VERSION}
+      nvm use ${DEFAULT_NODE_VERSION}
       node --version
       npm --version
       cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies
@@ -2455,7 +2455,7 @@ dependency-scan-nightly:
       $SHELL_WRAPPER python3 job/bazel_trivy_container_ic_scanner_periodic_job.py
   variables:
     CARGO_AUDIT_VERSION: 0.18.3
-    NVM_VERSION: '19'
+    DEFAULT_NODE_VERSION: '20'
     PYTHONPATH: "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
     SHELL_WRAPPER: "/usr/bin/time"
 dependency-scan-release-cut:
