@@ -1744,9 +1744,9 @@ build-determinism:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
   script:
-    - |
-      set -eExuo pipefail
-      ./gitlab-ci/tools/build-diff.sh "$PATH0" "$PATH1"
+    - '"$CI_PROJECT_DIR"/gitlab-ci/src/bazel-ci/build-determinism.sh
+
+'
 build-determinism-release:
   needs:
     - job: build-ic-release
