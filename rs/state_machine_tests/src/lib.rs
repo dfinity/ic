@@ -1192,7 +1192,7 @@ impl StateMachine {
                 ecdsa_key,
                 MasterEcdsaPublicKey {
                     algorithm_id: AlgorithmId::EcdsaSecp256k1,
-                    public_key: b"master_ecdsa_public_key".to_vec(),
+                    public_key: ecdsa_secret_key.public_key().serialize_sec1(true),
                 },
             );
         }
