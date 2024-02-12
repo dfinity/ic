@@ -1555,29 +1555,23 @@ build-base-images-ref-update:
   dependencies:
     - build-guestos-base
     - build-guestos-base-dev
-    - build-guestos-base-dev-sev
     - build-boundaryos-base
     - build-boundaryos-base-snp
     - build-hostos-base
     - build-hostos-base-dev
-    - build-hostos-base-dev-sev
     - build-setupos-base
     - build-setupos-base-dev
-    - build-setupos-base-dev-sev
   extends:
     - ".rules-build-base-images"
   needs:
     - build-guestos-base
     - build-guestos-base-dev
-    - build-guestos-base-dev-sev
     - build-boundaryos-base
     - build-boundaryos-base-snp
     - build-hostos-base
     - build-hostos-base-dev
-    - build-hostos-base-dev-sev
     - build-setupos-base
     - build-setupos-base-dev
-    - build-setupos-base-dev-sev
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-push-base-images"
     - allow_failure: true
@@ -1881,54 +1875,6 @@ build-guestos-base-dev:
     CONTEXT: "${CI_PROJECT_DIR}/ic-os/guestos/rootfs"
     IMAGE: guestos-base-dev
     REF_FILE: ic-os/guestos/rootfs/docker-base.dev
-build-guestos-base-dev-sev:
-  artifacts:
-    paths:
-      - digestfile*
-  extends:
-    - ".build-base-image-job"
-  needs: []
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-push-base-images"
-    - allow_failure: true
-      if: $CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
-      when: manual
-    - changes:
-        - gitlab-ci/config/base-images-build.yml
-        - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/packages.common
-        - ic-os/guestos/rootfs/packages.dev
-        - ic-os/hostos/rootfs/Dockerfile.base
-        - ic-os/hostos/rootfs/packages.common
-        - ic-os/hostos/rootfs/packages.dev
-        - ic-os/setupos/rootfs/Dockerfile.base
-        - ic-os/setupos/rootfs/packages.common
-        - ic-os/setupos/rootfs/packages.dev
-      if: $CI_PIPELINE_SOURCE == "merge_request_event"
-  script:
-    - BUILD_ARGS=(--build-arg "PACKAGE_FILES=packages.common packages.dev" --build-arg "CPU_SUPPORT=sev")
-    - |
-      set -euo pipefail
-
-      TAG=$(date '+%Y-%m-%d-%H%M')
-      echo -e "\e[0Ksection_start:$(date +%s):${IMAGE}[collapsed=true]\r\e[0KClick here to see the ${IMAGE} build"
-      pushd "$CONTEXT"
-      podman build "${BUILD_ARGS[@]}" --squash-all --no-cache -t "docker.io/dfinity/${IMAGE}:${TAG}" -f Dockerfile.base .
-      popd
-      echo -e "\e[0Ksection_end:$(date +%s):${IMAGE}\r\e[0K"
-
-      if [ "${CI_COMMIT_REF_NAME:-}" == "master" ]; then
-          podman login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD" docker.io
-          podman push "dfinity/${IMAGE}:${TAG}" --digestfile digestfile
-          echo "dfinity/${IMAGE}@$(cat digestfile)" > "digestfile-${IMAGE}"
-          echo "$REF_FILE" >> "digestfile-${IMAGE}"
-          rm -f digestfile
-      fi
-  variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/guestos/rootfs"
-    IMAGE: guestos-base-dev-sev
-    REF_FILE: ic-os/guestos/rootfs/docker-base.dev-sev
 build-hostos-base:
   artifacts:
     paths:
@@ -2024,54 +1970,6 @@ build-hostos-base-dev:
     CONTEXT: "${CI_PROJECT_DIR}/ic-os/hostos/rootfs"
     IMAGE: hostos-base-dev
     REF_FILE: ic-os/hostos/rootfs/docker-base.dev
-build-hostos-base-dev-sev:
-  artifacts:
-    paths:
-      - digestfile*
-  extends:
-    - ".build-base-image-job"
-  needs: []
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-push-base-images"
-    - allow_failure: true
-      if: $CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
-      when: manual
-    - changes:
-        - gitlab-ci/config/base-images-build.yml
-        - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/packages.common
-        - ic-os/guestos/rootfs/packages.dev
-        - ic-os/hostos/rootfs/Dockerfile.base
-        - ic-os/hostos/rootfs/packages.common
-        - ic-os/hostos/rootfs/packages.dev
-        - ic-os/setupos/rootfs/Dockerfile.base
-        - ic-os/setupos/rootfs/packages.common
-        - ic-os/setupos/rootfs/packages.dev
-      if: $CI_PIPELINE_SOURCE == "merge_request_event"
-  script:
-    - BUILD_ARGS=(--build-arg "PACKAGE_FILES=packages.common packages.dev" --build-arg "CPU_SUPPORT=sev")
-    - |
-      set -euo pipefail
-
-      TAG=$(date '+%Y-%m-%d-%H%M')
-      echo -e "\e[0Ksection_start:$(date +%s):${IMAGE}[collapsed=true]\r\e[0KClick here to see the ${IMAGE} build"
-      pushd "$CONTEXT"
-      podman build "${BUILD_ARGS[@]}" --squash-all --no-cache -t "docker.io/dfinity/${IMAGE}:${TAG}" -f Dockerfile.base .
-      popd
-      echo -e "\e[0Ksection_end:$(date +%s):${IMAGE}\r\e[0K"
-
-      if [ "${CI_COMMIT_REF_NAME:-}" == "master" ]; then
-          podman login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD" docker.io
-          podman push "dfinity/${IMAGE}:${TAG}" --digestfile digestfile
-          echo "dfinity/${IMAGE}@$(cat digestfile)" > "digestfile-${IMAGE}"
-          echo "$REF_FILE" >> "digestfile-${IMAGE}"
-          rm -f digestfile
-      fi
-  variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/hostos/rootfs"
-    IMAGE: hostos-base-dev-sev
-    REF_FILE: ic-os/hostos/rootfs/docker-base.dev-sev
 build-ic:
   artifacts:
     paths:
@@ -2302,54 +2200,6 @@ build-setupos-base-dev:
     CONTEXT: "${CI_PROJECT_DIR}/ic-os/setupos/rootfs"
     IMAGE: setupos-base-dev
     REF_FILE: ic-os/setupos/rootfs/docker-base.dev
-build-setupos-base-dev-sev:
-  artifacts:
-    paths:
-      - digestfile*
-  extends:
-    - ".build-base-image-job"
-  needs: []
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-push-base-images"
-    - allow_failure: true
-      if: $CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
-      when: manual
-    - changes:
-        - gitlab-ci/config/base-images-build.yml
-        - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/packages.common
-        - ic-os/guestos/rootfs/packages.dev
-        - ic-os/hostos/rootfs/Dockerfile.base
-        - ic-os/hostos/rootfs/packages.common
-        - ic-os/hostos/rootfs/packages.dev
-        - ic-os/setupos/rootfs/Dockerfile.base
-        - ic-os/setupos/rootfs/packages.common
-        - ic-os/setupos/rootfs/packages.dev
-      if: $CI_PIPELINE_SOURCE == "merge_request_event"
-  script:
-    - BUILD_ARGS=(--build-arg "PACKAGE_FILES=packages.common packages.dev")
-    - |
-      set -euo pipefail
-
-      TAG=$(date '+%Y-%m-%d-%H%M')
-      echo -e "\e[0Ksection_start:$(date +%s):${IMAGE}[collapsed=true]\r\e[0KClick here to see the ${IMAGE} build"
-      pushd "$CONTEXT"
-      podman build "${BUILD_ARGS[@]}" --squash-all --no-cache -t "docker.io/dfinity/${IMAGE}:${TAG}" -f Dockerfile.base .
-      popd
-      echo -e "\e[0Ksection_end:$(date +%s):${IMAGE}\r\e[0K"
-
-      if [ "${CI_COMMIT_REF_NAME:-}" == "master" ]; then
-          podman login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD" docker.io
-          podman push "dfinity/${IMAGE}:${TAG}" --digestfile digestfile
-          echo "dfinity/${IMAGE}@$(cat digestfile)" > "digestfile-${IMAGE}"
-          echo "$REF_FILE" >> "digestfile-${IMAGE}"
-          rm -f digestfile
-      fi
-  variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/setupos/rootfs"
-    IMAGE: setupos-base-dev-sev
-    REF_FILE: ic-os/setupos/rootfs/docker-base.dev-sev
 cargo-build-release-linux:
   extends:
     - ".rules-master-pipeline-and-merge-request"

@@ -47,9 +47,3 @@ Following the execution of these commands, the system will reboot into the newly
     rootfs/opt/ic/bin/manageboot.sh confirm
 
 For more information on the upgrade commands, see https://github.com/dfinity/ic/blob/master/ic-os/guestos/rootfs/opt/ic/bin/manageboot.sh[rootfs/opt/ic/bin/manageboot.sh]
-
-== SEV-SNP upgrades
-
-In the case of SEV-SNP enabled GuestOS upgrades, a straightforward upgrade involving shutdown and reboot into the upgraded system is not possible due to the lack of a secure method to seal data for the upgraded VM. Instead, for SEV-SNP upgrades, nodes will perform a live handover (of the KEK) between an "Active" and "Upgrade" SEV-SNP protected VM.
-
-This feature is currently under development (IC-430).

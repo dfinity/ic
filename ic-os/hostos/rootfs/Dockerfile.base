@@ -5,8 +5,6 @@
 # - `docker push/pull dfinity/hostos-base:<tag>`
 # - `docker build -t dfinity/hostos-base-dev:<tag> --build-arg PACKAGE_FILES="packages.common packages.dev" -f Dockerfile.base .`
 # - `docker push/pull dfinity/hostos-base-dev:<tag>`
-# - `docker build -t dfinity/hostos-base-dev-sev:<tag> --build-arg PACKAGE_FILES="packages.common packages.dev" --build-arg CPU_SUPPORT="sev" -f Dockerfile.base .`
-# - `docker push/pull dfinity/hostos-base-dev-sev:<tag>`
 #
 # NOTE:
 # If you edit this file, you will need to perform the following operations
@@ -17,10 +15,6 @@
 # 3. Note down the sha256 and update the sha256 reference in the neighboring
 #    Dockerfiles
 #
-
-# The default will be a non_sev build
-# For a SEV-SNP build, set CPU_SUPPORT build arg to "sev"
-ARG CPU_SUPPORT=non_sev
 
 #
 # First build stage:
@@ -49,11 +43,6 @@ RUN cd /tmp/ && \
     echo "68f3802c2dd3980667e4ba65ea2e1fb03f4a4ba026cca375f15a0390ff850949  node_exporter-1.3.1.linux-amd64.tar.gz" > node_exporter.sha256 && \
     shasum -c node_exporter.sha256
 
-# Download and verify SEV-SNP binaries
-RUN cd /tmp/ && \
-    curl -L -O https://github.com/dfinity/AMDSEV/releases/download/snp-release-2023-05-24/snp-release-2023-05-24.tar.gz && \
-    echo "dae30357ee68cbe1347d8bdf84f8b4f883c999be  snp-release-2023-05-24.tar.gz" > snp-release.sha256 && \
-    shasum -c snp-release.sha256
 
 #
 # Second build stage:
@@ -124,34 +113,3 @@ RUN cd /tmp/ && \
     mkdir -p /etc/node_exporter && \
     tar --strip-components=1 -C /usr/local/bin/ -zvxf node_exporter-1.3.1.linux-amd64.tar.gz node_exporter-1.3.1.linux-amd64/node_exporter && \
     rm /tmp/node_exporter-1.3.1.linux-amd64.tar.gz
-
-# If CPU_SUPPORT is "sev", install the patched qemu and the host kernel
-# The file `/opt/ic/share/SEV` is used as a build-time flag to indicate that
-# the SEV path shoud be taken at runtime.
-# QEMU installed previously will be over-written by the patched QEMU (7.2.0)
-# Installing libsnappy package only for "sev" configuration
-# TODO: Generate SEV build conditionally so that QEMU 6.2 is not built unnecessarily
-COPY --from=download /tmp/snp-release-2023-05-24.tar.gz /tmp/snp-release-2023-05-24.tar.gz
-ARG sev_snp_host_kernel_version=6.1.0-rc4-snp-host-93fa8c5918a4
-RUN \
-    echo "CPU_SUPPORT: ${CPU_SUPPORT}" && \
-    if [ "${CPU_SUPPORT}" = "sev" ] ; then \
-        cd /tmp/ && \
-        apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommends install libsnappy-dev && \
-        tar xf snp-release-2023-05-24.tar.gz && \
-        cd snp-release-2023-05-24 && \
-        cp usr/local/bin/qemu-system-x86_64 /usr/local/bin && \
-        cp -r usr/local/share/qemu /usr/local/share && \
-        dpkg -i linux/host/linux-image-*.deb && \
-        cp kvm.conf /etc/modprobe.d/ && \
-        ln -sf vmlinuz-${sev_snp_host_kernel_version} /boot/vmlinuz && \
-        ln -sf initrd.img-${sev_snp_host_kernel_version} /boot/initrd.img && \
-        find /boot -name "*.old" | xargs -L 1 unlink && \
-        find /boot -name "*generic" | xargs rm && \
-        find /usr/lib/modules -maxdepth 1 -type d -name "*generic" | xargs rm -rf && \
-        mkdir -p /opt/ic/share && touch /opt/ic/share/SEV && \
-        rm -rf /tmp/snp-release-2023-05-24 ; \
-    fi
-
-# Cleanup
-RUN rm /tmp/snp-release-2023-05-24.tar.gz

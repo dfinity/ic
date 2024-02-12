@@ -399,8 +399,6 @@ def icos_build(
     upload_suffix = ""
     if mode == "dev":
         upload_suffix = "-dev"
-    elif mode == "dev-sev":
-        upload_suffix = "-dev-sev"
     if malicious:
         upload_suffix += "-malicious"
 
