@@ -13,7 +13,7 @@ use dfn_core::call;
 use ic_base_types::{
     subnet_id_into_protobuf, CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId,
 };
-use ic_ic00_types::{
+use ic_management_canister_types::{
     ComputeInitialEcdsaDealingsArgs, ComputeInitialEcdsaDealingsResponse, EcdsaKeyId,
 };
 use ic_protobuf::registry::{

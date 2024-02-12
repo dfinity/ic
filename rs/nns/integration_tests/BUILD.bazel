@@ -55,7 +55,7 @@ BASE_DEPENDENCIES = [
         "//rs/state_machine_tests",
         "//rs/test_utilities",
         "//rs/types/error_types",
-        "//rs/types/ic00_types",
+        "//rs/types/management_canister_types",
         "//rs/types/types",
         "@crate_index//:crossbeam",
         "@crate_index//:crossbeam-channel",

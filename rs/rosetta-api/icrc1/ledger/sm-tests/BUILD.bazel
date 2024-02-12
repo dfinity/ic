@@ -25,7 +25,7 @@ package(default_visibility = ["//visibility:public"])
             "//rs/state_machine_tests",
             "//rs/types/base_types",
             "//rs/types/error_types",
-            "//rs/types/ic00_types",
+            "//rs/types/management_canister_types",
             "//rs/types/types",
             "//rs/universal_canister/lib",
             "@crate_index//:anyhow",

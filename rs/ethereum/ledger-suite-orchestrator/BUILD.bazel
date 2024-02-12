@@ -36,7 +36,7 @@ rust_library(
         "//rs/rosetta-api/icrc1/index-ng",
         "//rs/rosetta-api/icrc1/ledger",
         "//rs/types/base_types",
-        "//rs/types/ic00_types",
+        "//rs/types/management_canister_types",
         "@crate_index//:candid",
         "@crate_index//:ciborium",
         "@crate_index//:hex",

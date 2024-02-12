@@ -1,13 +1,15 @@
 use candid::{CandidType, Decode, Encode, Int, Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_error_types::UserError;
-use ic_ic00_types::{self as ic00, CanisterInfoRequest, CanisterInfoResponse, Method, Payload};
 use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_icrc1::{endpoints::StandardRecord, hash::Hash, Block, Operation, Transaction};
 use ic_icrc1_ledger::FeatureFlags;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType};
 use ic_ledger_hash_of::HashOf;
+use ic_management_canister_types::{
+    self as ic00, CanisterInfoRequest, CanisterInfoResponse, Method, Payload,
+};
 use ic_state_machine_tests::{CanisterId, ErrorCode, StateMachine, WasmResult};
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};

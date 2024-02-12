@@ -12,12 +12,12 @@ use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::{CanisterStatusType, EcdsaKeyId, Method as Ic00Method};
 use ic_interfaces::execution_environment::{ExecutionRoundType, RegistryExecutionSettings};
 use ic_interfaces::execution_environment::{
     IngressHistoryWriter, Scheduler, SubnetAvailableMemory,
 };
 use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
+use ic_management_canister_types::{CanisterStatusType, EcdsaKeyId, Method as Ic00Method};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
     canister_state::{

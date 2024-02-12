@@ -36,7 +36,7 @@ prost = { workspace = true }
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 canister-test = { path = "../../rust_canisters/canister_test" }
 ic-error-types = { path = "../../types/error_types" }
-ic-ic00-types = { path = "../../types/ic00_types" }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-nervous-system-common-test-keys = { path = "../common/test_keys" }
 ic-nervous-system-root = { path = "../root" }
 ic-nns-constants = { path = "../../nns/constants" }

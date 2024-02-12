@@ -13,7 +13,7 @@ tokio = { workspace = true }
 serde = { workspace = true }
 pocket-ic = { path = "../../packages/pocket-ic" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
-ic-ic00-types = { path = "../types/ic00_types" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-config = { path = "../config" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-types = { path = "../types/types" }

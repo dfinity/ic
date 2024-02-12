@@ -25,7 +25,7 @@ mod tests {
         generate_key_transcript, CanisterThresholdSigTestEnvironment, IDkgParticipants,
     };
     use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
-    use ic_ic00_types::EcdsaKeyId;
+    use ic_management_canister_types::EcdsaKeyId;
     use ic_types::{
         crypto::{canister_threshold_sig::idkg::IDkgTranscript, AlgorithmId},
         Height,

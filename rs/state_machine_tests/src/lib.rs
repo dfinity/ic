@@ -19,12 +19,6 @@ use ic_crypto_tree_hash::{
 use ic_cycles_account_manager::CyclesAccountManager;
 pub use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::{ExecutionServices, IngressHistoryReaderImpl};
-use ic_ic00_types::{self as ic00, CanisterIdRecord, InstallCodeArgs, Method, Payload};
-pub use ic_ic00_types::{
-    CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs, CanisterStatusResultV2,
-    ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId, HttpHeader, HttpMethod, SignWithECDSAReply,
-    UpdateSettingsArgs,
-};
 use ic_ingress_manager::{CustomRandomState, IngressManager};
 use ic_interfaces::ingress_pool::{
     IngressPool, PoolSection, UnvalidatedIngressArtifact, ValidatedIngressArtifact,
@@ -42,6 +36,14 @@ use ic_interfaces_state_manager::{
     CertificationScope, Labeled, StateHashError, StateManager, StateReader,
 };
 use ic_logger::ReplicaLogger;
+use ic_management_canister_types::{
+    self as ic00, CanisterIdRecord, InstallCodeArgs, Method, Payload,
+};
+pub use ic_management_canister_types::{
+    CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs, CanisterStatusResultV2,
+    ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId, HttpHeader, HttpMethod, SignWithECDSAReply,
+    UpdateSettingsArgs,
+};
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;

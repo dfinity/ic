@@ -503,7 +503,7 @@ fn validate_reshare_dealings(
     for (request, config) in prev_payload.ongoing_xnet_reshares.iter() {
         if curr_payload.ongoing_xnet_reshares.get(request).is_none() {
             if let Some(response) = new_reshare_agreement.get(request) {
-                use ic_ic00_types::ComputeInitialEcdsaDealingsResponse;
+                use ic_management_canister_types::ComputeInitialEcdsaDealingsResponse;
                 if let ic_types::messages::Payload::Data(data) = &response.response_payload {
                     let dealings_response = ComputeInitialEcdsaDealingsResponse::decode(data)
                         .map_err(|err| PermanentError::DecodingError(format!("{:?}", err)))?;
@@ -550,7 +550,7 @@ fn validate_new_signature_agreements(
     for (random_id, completed) in curr_payload.signature_agreements.iter() {
         if let ecdsa::CompletedSignature::Unreported(response) = completed {
             if let ic_types::messages::Payload::Data(data) = &response.response_payload {
-                use ic_ic00_types::{Payload, SignWithECDSAReply};
+                use ic_management_canister_types::{Payload, SignWithECDSAReply};
                 let reply = SignWithECDSAReply::decode(data)
                     .map_err(|err| PermanentError::DecodingError(format!("{:?}", err)))?;
                 let signature = ThresholdEcdsaCombinedSignature {
@@ -616,8 +616,8 @@ mod test {
         generate_key_transcript, CanisterThresholdSigTestEnvironment, IDkgParticipants,
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-    use ic_ic00_types::{EcdsaKeyId, Payload, SignWithECDSAReply};
     use ic_logger::replica_logger::no_op_logger;
+    use ic_management_canister_types::{EcdsaKeyId, Payload, SignWithECDSAReply};
     use ic_test_utilities::{crypto::CryptoReturningOk, types::ids::subnet_test_id};
     use ic_types::{
         consensus::ecdsa::{CompletedSignature, TranscriptAttributes},
@@ -749,7 +749,7 @@ mod test {
         _request: &ecdsa::EcdsaReshareRequest,
         initial_dealings: &InitialIDkgDealings,
     ) -> Option<ic_types::messages::Response> {
-        use ic_ic00_types::ComputeInitialEcdsaDealingsResponse;
+        use ic_management_canister_types::ComputeInitialEcdsaDealingsResponse;
         let mut response = empty_response();
         response.response_payload = ic_types::messages::Payload::Data(
             ComputeInitialEcdsaDealingsResponse {

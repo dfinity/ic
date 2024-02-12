@@ -36,8 +36,8 @@ use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
-use ic_ic00_types::CanisterInstallModeError;
 use ic_ledger_core::tokens::{Tokens, TOKEN_SUBDIVIDABLE_BY};
+use ic_management_canister_types::CanisterInstallModeError;
 use ic_nervous_system_common::{validate_proposal_url, NervousSystemError, SECONDS_PER_DAY};
 use ic_nervous_system_proto::pb::v1::{Duration as PbDuration, Percentage};
 use ic_sns_governance_proposal_criticality::{

@@ -15,7 +15,7 @@ LIB_DEPS = [
     "//rs/rosetta-api/ledger_core",
     "//rs/bitcoin/ckbtc/kyt",
     "//rs/types/base_types",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/utils/ensure",
     "@crate_index//:bech32",
     "@crate_index//:ic0",

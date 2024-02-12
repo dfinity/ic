@@ -5,7 +5,6 @@
 use crate::{CustomRandomState, IngressManager};
 use ic_constants::{MAX_INGRESS_TTL, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_cycles_account_manager::IngressInductionCost;
-use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::{
     execution_environment::IngressHistoryReader,
     ingress_manager::{
@@ -17,6 +16,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_state_manager::StateManagerError;
 use ic_logger::warn;
+use ic_management_canister_types::CanisterStatusType;
 use ic_registry_client_helpers::subnet::IngressMessageSettings;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -640,13 +640,13 @@ mod tests {
     use crate::tests::{access_ingress_pool, setup, setup_registry, setup_with_params};
     use assert_matches::assert_matches;
     use ic_artifact_pool::ingress_pool::IngressPoolImpl;
-    use ic_ic00_types::{CanisterIdRecord, Payload, IC_00};
     use ic_interfaces::{
         execution_environment::IngressHistoryError,
         ingress_pool::ChangeAction,
         p2p::consensus::{MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
         time_source::TimeSource,
     };
+    use ic_management_canister_types::{CanisterIdRecord, Payload, IC_00};
     use ic_replicated_state::CanisterState;
     use ic_test_utilities::{
         cycles_account_manager::CyclesAccountManagerBuilder,

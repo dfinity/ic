@@ -2,7 +2,7 @@ use candid::{candid_method, CandidType, Encode};
 use dfn_core::api::{call_bytes, Funds};
 use ic_cdk::api::print;
 use ic_cdk_macros::update;
-use ic_ic00_types::{
+use ic_management_canister_types::{
     DerivationPath, EcdsaCurve, EcdsaKeyId, Method as Ic00Method, SignWithECDSAArgs, IC_00,
 };
 use serde::{Deserialize, Serialize};

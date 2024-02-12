@@ -46,7 +46,7 @@ rust_library(
         "//rs/crypto/sha3",
         "//rs/ethereum/types",
         "//rs/phantom_newtype",
-        "//rs/types/ic00_types",
+        "//rs/types/management_canister_types",
         "//rs/utils/ensure",
         "@crate_index//:candid",
         "@crate_index//:ethnum",

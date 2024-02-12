@@ -12,7 +12,7 @@ DEPENDENCIES = [
     "//rs/sys",
     "//rs/types/base_types",
     "//rs/types/error_types",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/types/wasm_types",
     "@crate_index//:prost",

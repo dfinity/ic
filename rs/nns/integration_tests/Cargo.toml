@@ -74,7 +74,7 @@ ic-config = { path = "../../config" }
 ic-crypto = { path = "../../crypto" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-error-types = { path = "../../types/error_types" }
-ic-ic00-types = { path = "../../types/ic00_types" }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nns-constants = { path = "../constants" }

@@ -2,7 +2,7 @@ use candid::Encode;
 use canister_test::{Canister, Project, Wasm};
 use dfn_candid::candid_one;
 use ic_canister_client_sender::Sender;
-use ic_ic00_types::CanisterInstallMode;
+use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_2_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_PRINCIPAL,
 };

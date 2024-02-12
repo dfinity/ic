@@ -1228,7 +1228,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-ic00-types"
+name = "ic-management-canister-types"
 version = "0.8.0"
 dependencies = [
  "candid",
@@ -1295,7 +1295,7 @@ dependencies = [
  "ic-crypto-sha2",
  "ic-crypto-tree-hash",
  "ic-error-types",
- "ic-ic00-types",
+ "ic-management-canister-types",
  "ic-protobuf",
  "ic-utils",
  "maplit",

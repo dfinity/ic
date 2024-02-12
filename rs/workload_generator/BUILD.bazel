@@ -11,7 +11,7 @@ DEPENDENCIES = [
     "//rs/monitoring/metrics",
     "//rs/http_endpoints/metrics",
     "//rs/test_utilities/identity",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:backoff",
     "@crate_index//:byte-unit",

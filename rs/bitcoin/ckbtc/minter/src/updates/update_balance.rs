@@ -208,7 +208,7 @@ pub async fn update_balance(
     }
 
     let token_name = match btc_network {
-        ic_ic00_types::BitcoinNetwork::Mainnet => "ckBTC",
+        ic_management_canister_types::BitcoinNetwork::Mainnet => "ckBTC",
         _ => "ckTESTBTC",
     };
 

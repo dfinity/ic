@@ -15,9 +15,9 @@
 
 use ic_base_types::NumSeconds;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
-use ic_ic00_types::Method;
 use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
 use ic_logger::{error, info, ReplicaLogger};
+use ic_management_canister_types::Method;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -1151,7 +1151,7 @@ pub enum IngressInductionCostError {
 mod tests {
     use super::*;
     use candid::Encode;
-    use ic_ic00_types::{CanisterSettingsArgsBuilder, UpdateSettingsArgs};
+    use ic_management_canister_types::{CanisterSettingsArgsBuilder, UpdateSettingsArgs};
     use ic_test_utilities::types::ids::subnet_test_id;
 
     fn create_cycles_account_manager(reference_subnet_size: usize) -> CyclesAccountManager {

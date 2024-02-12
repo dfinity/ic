@@ -17,7 +17,7 @@ ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/ca
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-error-types = { path = "../types/error_types" }
 ic-https-outcalls-consensus = { path = "../https_outcalls/consensus" }
-ic-ic00-types = { path = "../types/ic00_types" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }

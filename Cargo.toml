@@ -349,7 +349,7 @@ members = [
   "rs/types/base_types",
   "rs/types/base_types/protobuf_generator",
   "rs/types/error_types",
-  "rs/types/ic00_types",
+  "rs/types/management_canister_types",
   "rs/types/wasm_types",
   "rs/universal_canister/lib",
   "rs/utils",

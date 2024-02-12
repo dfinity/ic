@@ -579,7 +579,7 @@ mod tests {
 
     use super::*;
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
-    use ic_ic00_types::EcdsaKeyId;
+    use ic_management_canister_types::EcdsaKeyId;
     use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
     use ic_test_utilities::{
         state::ReplicatedStateBuilder,

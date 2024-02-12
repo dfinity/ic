@@ -1,13 +1,13 @@
 mod setup;
 
-use ic_ic00_types::{
-    CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, Method as Ic00Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, IC_00,
-};
 use ic_interfaces::{execution_environment::IngressHistoryReader, messaging::MessageRouting};
 use ic_interfaces_state_manager::{
     PermanentStateHashError::*, StateHashError, StateManager, StateReader,
     TransientStateHashError::*,
+};
+use ic_management_canister_types::{
+    CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, Method as Ic00Method, Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, IC_00,
 };
 use ic_messaging::MessageRoutingImpl;
 use ic_state_manager::StateManagerImpl;

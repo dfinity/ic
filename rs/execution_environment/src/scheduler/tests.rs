@@ -14,12 +14,12 @@ use ic_config::{
     subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig},
 };
 use ic_error_types::RejectCode;
-use ic_ic00_types::{
+use ic_interfaces::execution_environment::SubnetAvailableMemory;
+use ic_logger::replica_logger::no_op_logger;
+use ic_management_canister_types::{
     self as ic00, BoundedHttpHeaders, CanisterHttpResponsePayload, CanisterIdRecord,
     CanisterStatusType, DerivationPath, EcdsaCurve, EmptyBlob, Method, Payload as _,
 };
-use ic_interfaces::execution_environment::SubnetAvailableMemory;
-use ic_logger::replica_logger::no_op_logger;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::PausedExecutionId;

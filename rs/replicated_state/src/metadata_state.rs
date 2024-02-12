@@ -10,7 +10,7 @@ use ic_btc_types_internal::BlockBlob;
 use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
 use ic_constants::MAX_INGRESS_TTL;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_ic00_types::{EcdsaKeyId, NodeMetrics, NodeMetricsHistoryResponse};
+use ic_management_canister_types::{EcdsaKeyId, NodeMetrics, NodeMetricsHistoryResponse};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     registry::subnet::v1 as pb_subnet,

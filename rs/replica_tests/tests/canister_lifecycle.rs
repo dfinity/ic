@@ -3,7 +3,7 @@ use candid::Encode;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_config::Config;
 use ic_error_types::{ErrorCode, RejectCode};
-use ic_ic00_types::{
+use ic_management_canister_types::{
     self as ic00, CanisterChange, CanisterIdRecord, CanisterInstallMode,
     CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType, EmptyBlob,
     InstallCodeArgs, LogVisibility, Method, Payload, UpdateSettingsArgs, IC_00,

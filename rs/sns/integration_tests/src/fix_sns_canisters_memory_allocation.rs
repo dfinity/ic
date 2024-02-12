@@ -2,7 +2,7 @@
 
 use candid::Encode;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_ic00_types::{CanisterInstallMode, CanisterSettingsArgsBuilder};
+use ic_management_canister_types::{CanisterInstallMode, CanisterSettingsArgsBuilder};
 use ic_nervous_system_common::ONE_TRILLION;
 use ic_nns_constants::ROOT_CANISTER_ID as NNS_ROOT_CANISTER_ID;
 use ic_nns_test_utils::{

@@ -379,7 +379,7 @@ fn build_types_proto(def: &Path, out: &Path) {
         "#[allow(clippy::large_enum_variant)]",
     );
     let files = [
-        def.join("types/v1/ic00_types.proto"),
+        def.join("types/v1/management_canister_types.proto"),
         def.join("types/v1/types.proto"),
         def.join("types/v1/dkg.proto"),
         def.join("types/v1/consensus.proto"),

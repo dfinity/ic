@@ -94,7 +94,7 @@ DEPENDENCIES = [
     "//rs/tests/test_canisters/message:lib",
     "//rs/tree_deserializer",
     "//rs/types/base_types",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/types/types_test_utils",
     "//rs/types/types",
     "//rs/universal_canister/lib",

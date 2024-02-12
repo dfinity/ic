@@ -3,10 +3,10 @@ use assert_matches::assert_matches;
 use ic_crypto_test_utils_ni_dkg::{
     dummy_transcript_for_tests, dummy_transcript_for_tests_with_params,
 };
-use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
 use ic_interfaces_registry::RegistryValue;
 use ic_interfaces_state_manager::StateReader;
 use ic_interfaces_state_manager_mocks::MockStateManager;
+use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_protobuf::registry::subnet::v1::SubnetRecord as SubnetRecordProto;
 use ic_protobuf::registry::{

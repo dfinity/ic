@@ -2,8 +2,8 @@ use candid::Encode;
 use canister_test::{Canister, Runtime};
 use ic_base_types::{subnet_id_into_protobuf, NodeId, PrincipalId, SubnetId};
 use ic_config::Config;
-use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
 use ic_interfaces_registry::RegistryClient;
+use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
 use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::{
     itest_helpers::{

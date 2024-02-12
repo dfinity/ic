@@ -4,7 +4,9 @@ use candid::Encode;
 use canister_test::{Canister, Runtime};
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
-use ic_ic00_types::{DerivationPath, ECDSAPublicKeyArgs, EcdsaKeyId, Method as Ic00Method};
+use ic_management_canister_types::{
+    DerivationPath, ECDSAPublicKeyArgs, EcdsaKeyId, Method as Ic00Method,
+};
 use ic_nns_test_utils::itest_helpers::{
     set_up_registry_canister, set_up_universal_canister, try_call_via_universal_canister,
 };

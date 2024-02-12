@@ -1,6 +1,6 @@
 use ic_consensus_utils::{get_block_hash_string, pool_reader::PoolReader};
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpBatchStats;
-use ic_ic00_types::EcdsaKeyId;
+use ic_management_canister_types::EcdsaKeyId;
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
     MetricsRegistry,

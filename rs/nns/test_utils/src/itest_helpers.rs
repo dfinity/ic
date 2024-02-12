@@ -20,7 +20,7 @@ use futures::future::join_all;
 use ic_base_types::CanisterId;
 use ic_canister_client_sender::Sender;
 use ic_config::Config;
-use ic_ic00_types::CanisterInstallMode;
+use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType},

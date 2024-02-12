@@ -19,7 +19,7 @@ icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-getrandom-for-wasm = { path = "../../crypto/getrandom_for_wasm" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
-ic-ic00-types = { path = "../../types/ic00_types" }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-metrics-encoder = "1"
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }

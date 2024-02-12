@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use candid::{CandidType, Principal};
 use ic_base_types::PrincipalId;
 use ic_cdk::api::call::RejectionCode;
-use ic_ic00_types::{
+use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgsBuilder, CreateCanisterArgs,
     InstallCodeArgs,
 };

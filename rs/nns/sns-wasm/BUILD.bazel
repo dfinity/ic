@@ -24,7 +24,7 @@ BASE_DEPENDENCIES = [
     "//rs/rust_canisters/dfn_http_metrics",
     "//rs/sns/root",
     "//rs/types/base_types",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:candid",
     "@crate_index//:futures",

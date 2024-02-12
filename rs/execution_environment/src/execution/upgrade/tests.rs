@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use ic_error_types::ErrorCode;
-use ic_ic00_types::{EmptyBlob, Payload, SkipPreUpgrade};
 use ic_logger::replica_logger::LogEntryLogger;
+use ic_management_canister_types::{EmptyBlob, Payload, SkipPreUpgrade};
 use ic_replicated_state::{canister_state::NextExecution, CanisterState};
 use ic_state_machine_tests::{IngressState, WasmResult};
 use ic_test_utilities::types::ids::user_test_id;

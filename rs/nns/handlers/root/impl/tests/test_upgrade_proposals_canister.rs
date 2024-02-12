@@ -1,6 +1,6 @@
 use candid::Encode;
 use dfn_candid::candid;
-use ic_ic00_types::CanisterInstallMode::Upgrade;
+use ic_management_canister_types::CanisterInstallMode::Upgrade;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType::Running},

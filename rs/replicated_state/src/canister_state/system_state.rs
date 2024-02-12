@@ -10,8 +10,10 @@ use crate::page_map::PageAllocatorFileDescriptor;
 use crate::{CanisterQueues, CanisterState, InputQueueType, PageMap, StateError};
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::NumSeconds;
-use ic_ic00_types::{CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, LogVisibility};
 use ic_logger::{error, ReplicaLogger};
+use ic_management_canister_types::{
+    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, LogVisibility,
+};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::canister_state_bits::v1 as pb,

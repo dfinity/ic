@@ -6,7 +6,7 @@
 //! otherwise errors out.
 //!
 use candid::{CandidType, Deserialize};
-use ic_ic00_types::CanisterHttpRequestArgs;
+use ic_management_canister_types::CanisterHttpRequestArgs;
 
 #[derive(CandidType, Deserialize, Debug, Clone)]
 pub struct RemoteHttpRequest {

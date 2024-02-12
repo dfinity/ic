@@ -21,7 +21,7 @@ DEPENDENCIES = [
     "//rs/registry/routing_table",
     "//rs/registry/subnet_type",
     "//rs/registry/transport",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:anyhow",
     "@crate_index//:base64",

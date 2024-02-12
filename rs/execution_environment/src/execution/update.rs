@@ -12,11 +12,11 @@ use crate::metrics::CallTreeMetrics;
 use ic_base_types::CanisterId;
 use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::IC_00;
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
 };
 use ic_logger::{info, ReplicaLogger};
+use ic_management_canister_types::IC_00;
 use ic_replicated_state::{CallOrigin, CanisterState};
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::messages::{

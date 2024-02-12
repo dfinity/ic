@@ -3,7 +3,7 @@ use ic_base_types::{CanisterId, NumSeconds};
 use ic_btc_interface::NetworkInRequest as BitcoinNetwork;
 use ic_config::execution_environment::INSTRUCTION_OVERHEAD_PER_QUERY_CALL;
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::{BitcoinGetBalanceArgs, BitcoinGetUtxosArgs, Payload};
+use ic_management_canister_types::{BitcoinGetBalanceArgs, BitcoinGetUtxosArgs, Payload};
 use ic_registry_subnet_type::SubnetType;
 use ic_test_utilities::{
     types::ids::user_test_id,
