@@ -11,7 +11,7 @@ dependencies-check:
   needs: []  # don't wait on other jobs
   variables:
     PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
-    CARGO_AUDIT_VERSION : "0.16.0"
+    CARGO_AUDIT_VERSION : "0.18.3"
     SHELL_WRAPPER: "/usr/bin/time"
   script:
     - |
@@ -28,7 +28,7 @@ dependency-scan-nightly:
   needs: []  # don't wait on other jobs
   variables:
     PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
-    CARGO_AUDIT_VERSION : "0.16.0"
+    CARGO_AUDIT_VERSION : "0.18.3"
     NVM_VERSION : "19"
     SHELL_WRAPPER: "/usr/bin/time"
   script:
@@ -55,7 +55,7 @@ dependency-scan-release-cut:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
   variables:
     PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
-    CARGO_AUDIT_VERSION : "0.16.0"
+    CARGO_AUDIT_VERSION : "0.18.3"
     SHELL_WRAPPER: "/usr/bin/time"
   script:
     - |

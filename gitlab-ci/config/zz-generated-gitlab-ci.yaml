@@ -2370,7 +2370,7 @@ default:
     expire_in: 3 days
     when: always
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:7e5bb001a404174e7a1fb39f49c132f20eebed4b9e32677c689565ed9961aa20
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:e52dca0c4a9aa4f7b3ade309815b9f19995c78b4042d3578d2f824e10a0fdff1
   interruptible: true
   retry:
     max: 2
@@ -2431,7 +2431,7 @@ dependencies-check:
       cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies/
       $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_merge_job.py
   variables:
-    CARGO_AUDIT_VERSION: 0.16.0
+    CARGO_AUDIT_VERSION: 0.18.3
     PYTHONPATH: "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
     SHELL_WRAPPER: "/usr/bin/time"
 dependency-scan-nightly:
@@ -2454,7 +2454,7 @@ dependency-scan-nightly:
       $SHELL_WRAPPER python3 job/npm_scanner_periodic_job.py
       $SHELL_WRAPPER python3 job/bazel_trivy_container_ic_scanner_periodic_job.py
   variables:
-    CARGO_AUDIT_VERSION: 0.16.0
+    CARGO_AUDIT_VERSION: 0.18.3
     NVM_VERSION: '19'
     PYTHONPATH: "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
     SHELL_WRAPPER: "/usr/bin/time"
@@ -2471,7 +2471,7 @@ dependency-scan-release-cut:
       cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies
       $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_release_job.py
   variables:
-    CARGO_AUDIT_VERSION: 0.16.0
+    CARGO_AUDIT_VERSION: 0.18.3
     PYTHONPATH: "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
     SHELL_WRAPPER: "/usr/bin/time"
 heavy-memory-update-performance-test-nightly:
