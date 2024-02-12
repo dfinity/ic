@@ -24,7 +24,7 @@ pub async fn construction_preprocess(
 ) -> Result<Json<ConstructionPreprocessResponse>> {
     verify_network_id(&request.network_identifier, &state)
         .map_err(|err| Error::invalid_network_id(&err))?;
-    Ok(Json(services::construction_preprocess()))
+    Ok(Json(services::construction_preprocess()?))
 }
 
 pub async fn construction_metadata(

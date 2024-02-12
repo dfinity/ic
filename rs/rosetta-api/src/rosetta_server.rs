@@ -1,14 +1,13 @@
-use actix_rt::time::interval;
-use actix_web::{
-    dev::{Server, ServerHandle},
-    get, post, web, App, HttpResponse, HttpServer,
-};
-
 use crate::{
     errors::{self, ApiError},
     ledger_client::LedgerAccess,
     models::*,
     request_handler::RosettaRequestHandler,
+};
+use actix_rt::time::interval;
+use actix_web::{
+    dev::{Server, ServerHandle},
+    get, post, web, App, HttpResponse, HttpServer,
 };
 
 use prometheus::{

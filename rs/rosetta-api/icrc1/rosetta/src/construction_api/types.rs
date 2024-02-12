@@ -7,11 +7,14 @@ pub struct ConstructionMetadataRequestOptions {
     pub suggested_fee: bool,
 }
 
-impl From<ConstructionMetadataRequestOptions> for ObjectMap {
-    fn from(m: ConstructionMetadataRequestOptions) -> Self {
-        match serde_json::to_value(m) {
-            Ok(serde_json::Value::Object(o)) => o,
-            _ => unreachable!(),
+impl TryFrom<ConstructionMetadataRequestOptions> for ObjectMap {
+    type Error = anyhow::Error;
+    fn try_from(d: ConstructionMetadataRequestOptions) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(v) => match v {
+                serde_json::Value::Object(ob) => Ok(ob),
+                _ => anyhow::bail!("Could not convert ConstructionMetadataRequestOptions to ObjectMap. Expected type Object but received: {:?}",v)
+            },Err(err) => anyhow::bail!("Could not convert ConstructionMetadataRequestOptions to ObjectMap: {:?}",err),
         }
     }
 }

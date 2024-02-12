@@ -193,11 +193,13 @@ pub struct ConstructionDeriveRequestMetadata {
     pub account_type: AccountType,
 }
 
-impl From<ConstructionDeriveRequestMetadata> for ObjectMap {
-    fn from(p: ConstructionDeriveRequestMetadata) -> Self {
-        match serde_json::to_value(p) {
-            Ok(serde_json::Value::Object(o)) => o,
-            _ => unreachable!(),
+impl TryFrom<ConstructionDeriveRequestMetadata> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: ConstructionDeriveRequestMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(serde_json::Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert ConstructionDeriveRequestMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert ConstructionDeriveRequestMetadata to ObjectMap: {:?}",err))),
         }
     }
 }
@@ -232,11 +234,13 @@ pub struct ConstructionMetadataRequestOptions {
     pub request_types: Vec<RequestType>,
 }
 
-impl From<ConstructionMetadataRequestOptions> for ObjectMap {
-    fn from(p: ConstructionMetadataRequestOptions) -> Self {
-        match serde_json::to_value(p) {
-            Ok(serde_json::Value::Object(o)) => o,
-            _ => unreachable!(),
+impl TryFrom<ConstructionMetadataRequestOptions> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: ConstructionMetadataRequestOptions) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(serde_json::Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert ConstructionMetadataRequestOptions to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert ConstructionMetadataRequestOptions to ObjectMap: {:?}",err))),
         }
     }
 }
@@ -318,11 +322,13 @@ pub struct ConstructionPayloadsRequestMetadata {
     pub created_at_time: Option<u64>,
 }
 
-impl From<ConstructionPayloadsRequestMetadata> for ObjectMap {
-    fn from(p: ConstructionPayloadsRequestMetadata) -> Self {
-        match serde_json::to_value(p) {
-            Ok(serde_json::Value::Object(o)) => o,
-            _ => unreachable!(),
+impl TryFrom<ConstructionPayloadsRequestMetadata> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: ConstructionPayloadsRequestMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(serde_json::Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert ConstructionPayloadsRequestMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert ConstructionPayloadsRequestMetadata to ObjectMap: {:?}",err))),
         }
     }
 }

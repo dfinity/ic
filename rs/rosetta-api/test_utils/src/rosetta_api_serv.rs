@@ -223,7 +223,8 @@ impl RosettaApiHandle {
                 ConstructionDeriveRequestMetadata {
                     account_type: AccountType::Neuron { neuron_index: 0 },
                 }
-                .into(),
+                .try_into()
+                .unwrap(),
             ),
         };
         to_rosetta_response(
@@ -292,7 +293,7 @@ impl RosettaApiHandle {
     ) -> Result<Result<ConstructionMetadataResponse, RosettaError>, String> {
         let req = ConstructionMetadataRequest {
             network_identifier: self.network_id(),
-            options: options.map(|op| op.into()),
+            options: options.map(|op| op.try_into().unwrap()),
             public_keys,
         };
         to_rosetta_response(
@@ -331,7 +332,7 @@ impl RosettaApiHandle {
     ) -> Result<Result<ConstructionPayloadsResponse, RosettaError>, String> {
         let req = ConstructionPayloadsRequest {
             network_identifier: self.network_id(),
-            metadata: metadata.map(|m| m.into()),
+            metadata: metadata.map(|m| m.try_into().unwrap()),
             operations,
             public_keys,
         };

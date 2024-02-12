@@ -18,16 +18,17 @@ pub fn construction_derive(public_key: PublicKey) -> Result<ConstructionDeriveRe
     Ok(ConstructionDeriveResponse::new(None, Some(account.into())))
 }
 
-pub fn construction_preprocess() -> ConstructionPreprocessResponse {
-    ConstructionPreprocessResponse {
+pub fn construction_preprocess() -> Result<ConstructionPreprocessResponse, Error> {
+    Ok(ConstructionPreprocessResponse {
         options: Some(
             ConstructionMetadataRequestOptions {
                 suggested_fee: true,
             }
-            .into(),
+            .try_into()
+            .map_err(|err| Error::parsing_unsuccessful(&err))?,
         ),
         required_public_keys: None,
-    }
+    })
 }
 
 pub async fn construction_metadata(

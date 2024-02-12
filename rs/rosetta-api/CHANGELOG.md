@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 ### Fixes
 - Prohibit Rosetta from spamming the ledger in case of errors at the ledger client. 
+- Handle Errors that may occur while deserializing objects using serde_json
 ### Added
 - Add `timestamp` to the `blocks` table
 - Add support for `list_neurons`. Let's a user query a list of all they neurons a user has created.
