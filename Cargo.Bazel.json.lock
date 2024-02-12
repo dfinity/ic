@@ -1,5 +1,5 @@
 {
-  "checksum": "67dfbcf81f021d4ffb4cbc00121524988fa1be71eb6dbd8b75017df81b020f31",
+  "checksum": "7c6838f6e3e1551e1f8598e349cb35f5f9d1be485f54f92d08ecfee18e5246af",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -3706,7 +3706,7 @@
               "target": "async_lock"
             },
             {
-              "id": "crossbeam-utils 0.8.16",
+              "id": "crossbeam-utils 0.8.19",
               "target": "crossbeam_utils"
             },
             {
@@ -11041,7 +11041,7 @@
         "deps": {
           "common": [
             {
-              "id": "crossbeam-utils 0.8.16",
+              "id": "crossbeam-utils 0.8.19",
               "target": "crossbeam_utils"
             }
           ],
@@ -12478,13 +12478,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "crossbeam 0.8.2": {
+    "crossbeam 0.8.4": {
       "name": "crossbeam",
-      "version": "0.8.2",
+      "version": "0.8.4",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/crossbeam/0.8.2/download",
-          "sha256": "2801af0d36612ae591caa9568261fddce32ce6e08a7275ea334a06a4ad021a2c"
+          "url": "https://crates.io/api/v1/crates/crossbeam/0.8.4/download",
+          "sha256": "1137cd7e7fc0fb5d3c5a8678be38ec56e819125d8d7907411fe24ccb943faca8"
         }
       },
       "targets": [
@@ -12518,44 +12518,40 @@
         "deps": {
           "common": [
             {
-              "id": "cfg-if 1.0.0",
-              "target": "cfg_if"
-            },
-            {
-              "id": "crossbeam-channel 0.5.8",
+              "id": "crossbeam-channel 0.5.11",
               "target": "crossbeam_channel"
             },
             {
-              "id": "crossbeam-deque 0.8.3",
+              "id": "crossbeam-deque 0.8.5",
               "target": "crossbeam_deque"
             },
             {
-              "id": "crossbeam-epoch 0.9.15",
+              "id": "crossbeam-epoch 0.9.18",
               "target": "crossbeam_epoch"
             },
             {
-              "id": "crossbeam-queue 0.3.8",
+              "id": "crossbeam-queue 0.3.11",
               "target": "crossbeam_queue"
             },
             {
-              "id": "crossbeam-utils 0.8.16",
+              "id": "crossbeam-utils 0.8.19",
               "target": "crossbeam_utils"
             }
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "0.8.2"
+        "edition": "2021",
+        "version": "0.8.4"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "crossbeam-channel 0.5.8": {
+    "crossbeam-channel 0.5.11": {
       "name": "crossbeam-channel",
-      "version": "0.5.8",
+      "version": "0.5.11",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/crossbeam-channel/0.5.8/download",
-          "sha256": "a33c2bf77f2df06183c3aa30d1e96c0695a313d4f9c453cc3762a6db39f99200"
+          "url": "https://crates.io/api/v1/crates/crossbeam-channel/0.5.11/download",
+          "sha256": "176dc175b78f56c0f321911d9c8eb2b77a78a4860b9c19db83835fea1a46649b"
         }
       },
       "targets": [
@@ -12576,7 +12572,6 @@
         ],
         "crate_features": {
           "common": [
-            "crossbeam-utils",
             "default",
             "std"
           ],
@@ -12585,28 +12580,24 @@
         "deps": {
           "common": [
             {
-              "id": "cfg-if 1.0.0",
-              "target": "cfg_if"
-            },
-            {
-              "id": "crossbeam-utils 0.8.16",
+              "id": "crossbeam-utils 0.8.19",
               "target": "crossbeam_utils"
             }
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "0.5.8"
+        "edition": "2021",
+        "version": "0.5.11"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "crossbeam-deque 0.8.3": {
+    "crossbeam-deque 0.8.5": {
       "name": "crossbeam-deque",
-      "version": "0.8.3",
+      "version": "0.8.5",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/crossbeam-deque/0.8.3/download",
-          "sha256": "ce6fd6f855243022dcecf8702fef0c297d4338e226845fe067f6341ad9fa0cef"
+          "url": "https://crates.io/api/v1/crates/crossbeam-deque/0.8.5/download",
+          "sha256": "613f8cc01fe9cf1a3eb3d7f488fd2fa8388403e97039e2f73692932e291a770d"
         }
       },
       "targets": [
@@ -12627,8 +12618,6 @@
         ],
         "crate_features": {
           "common": [
-            "crossbeam-epoch",
-            "crossbeam-utils",
             "default",
             "std"
           ],
@@ -12637,32 +12626,28 @@
         "deps": {
           "common": [
             {
-              "id": "cfg-if 1.0.0",
-              "target": "cfg_if"
-            },
-            {
-              "id": "crossbeam-epoch 0.9.15",
+              "id": "crossbeam-epoch 0.9.18",
               "target": "crossbeam_epoch"
             },
             {
-              "id": "crossbeam-utils 0.8.16",
+              "id": "crossbeam-utils 0.8.19",
               "target": "crossbeam_utils"
             }
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "0.8.3"
+        "edition": "2021",
+        "version": "0.8.5"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "crossbeam-epoch 0.9.15": {
+    "crossbeam-epoch 0.9.18": {
       "name": "crossbeam-epoch",
-      "version": "0.9.15",
+      "version": "0.9.18",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/crossbeam-epoch/0.9.15/download",
-          "sha256": "ae211234986c545741a7dc064309f67ee1e5ad243d0e48335adc0484d960bcc7"
+          "url": "https://crates.io/api/v1/crates/crossbeam-epoch/0.9.18/download",
+          "sha256": "5b82ac4a3c2ca9c3460964f020e1402edd5753411d7737aa39c3714ad1b5420e"
         }
       },
       "targets": [
@@ -12670,15 +12655,6 @@
           "Library": {
             "crate_name": "crossbeam_epoch",
             "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
             "srcs": [
               "**/*.rs"
             ]
@@ -12701,54 +12677,24 @@
         "deps": {
           "common": [
             {
-              "id": "cfg-if 1.0.0",
-              "target": "cfg_if"
-            },
-            {
-              "id": "crossbeam-epoch 0.9.15",
-              "target": "build_script_build"
-            },
-            {
-              "id": "crossbeam-utils 0.8.16",
+              "id": "crossbeam-utils 0.8.19",
               "target": "crossbeam_utils"
-            },
-            {
-              "id": "memoffset 0.9.0",
-              "target": "memoffset"
-            },
-            {
-              "id": "scopeguard 1.2.0",
-              "target": "scopeguard"
             }
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "0.9.15"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "autocfg 1.1.0",
-              "target": "autocfg"
-            }
-          ],
-          "selects": {}
-        }
+        "edition": "2021",
+        "version": "0.9.18"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "crossbeam-queue 0.3.8": {
+    "crossbeam-queue 0.3.11": {
       "name": "crossbeam-queue",
-      "version": "0.3.8",
+      "version": "0.3.11",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/crossbeam-queue/0.3.8/download",
-          "sha256": "d1cfb3ea8a53f37c40dea2c7bedcbd88bdfae54f5e2175d6ecaff1c988353add"
+          "url": "https://crates.io/api/v1/crates/crossbeam-queue/0.3.11/download",
+          "sha256": "df0346b5d5e76ac2fe4e327c5fd1118d6be7c51dfb18f9b7922923f287471e35"
         }
       },
       "targets": [
@@ -12756,15 +12702,6 @@
           "Library": {
             "crate_name": "crossbeam_queue",
             "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
             "srcs": [
               "**/*.rs"
             ]
@@ -12786,37 +12723,24 @@
         "deps": {
           "common": [
             {
-              "id": "cfg-if 1.0.0",
-              "target": "cfg_if"
-            },
-            {
-              "id": "crossbeam-queue 0.3.8",
-              "target": "build_script_build"
-            },
-            {
-              "id": "crossbeam-utils 0.8.16",
+              "id": "crossbeam-utils 0.8.19",
               "target": "crossbeam_utils"
             }
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "0.3.8"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ]
+        "edition": "2021",
+        "version": "0.3.11"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "crossbeam-utils 0.8.16": {
+    "crossbeam-utils 0.8.19": {
       "name": "crossbeam-utils",
-      "version": "0.8.16",
+      "version": "0.8.19",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/crossbeam-utils/0.8.16/download",
-          "sha256": "5a22b2d63d4d1dc0b7f1b6b2747dd0088008a9be28b6ddf0b1e7d335e3037294"
+          "url": "https://crates.io/api/v1/crates/crossbeam-utils/0.8.19/download",
+          "sha256": "248e3bacc7dc6baa3b21e405ee045c3047101a49145e7e9eca583ab4c2ca5345"
         }
       },
       "targets": [
@@ -12854,18 +12778,14 @@
         "deps": {
           "common": [
             {
-              "id": "cfg-if 1.0.0",
-              "target": "cfg_if"
-            },
-            {
-              "id": "crossbeam-utils 0.8.16",
+              "id": "crossbeam-utils 0.8.19",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "0.8.16"
+        "edition": "2021",
+        "version": "0.8.19"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -15265,16 +15185,12 @@
               "target": "criterion"
             },
             {
-              "id": "crossbeam 0.8.2",
+              "id": "crossbeam 0.8.4",
               "target": "crossbeam"
             },
             {
-              "id": "crossbeam-channel 0.5.8",
+              "id": "crossbeam-channel 0.5.11",
               "target": "crossbeam_channel"
-            },
-            {
-              "id": "crossbeam-utils 0.8.16",
-              "target": "crossbeam_utils"
             },
             {
               "id": "csv 1.2.2",
@@ -15803,10 +15719,6 @@
             {
               "id": "prometheus 0.13.3",
               "target": "prometheus"
-            },
-            {
-              "id": "prometheus-http-query 0.6.6",
-              "target": "prometheus_http_query"
             },
             {
               "id": "prometheus-parse 0.2.4",
@@ -23589,7 +23501,7 @@
               "target": "bytes"
             },
             {
-              "id": "crossbeam-channel 0.5.8",
+              "id": "crossbeam-channel 0.5.11",
               "target": "crossbeam_channel"
             },
             {
@@ -33735,15 +33647,15 @@
               "target": "async_lock"
             },
             {
-              "id": "crossbeam-channel 0.5.8",
+              "id": "crossbeam-channel 0.5.11",
               "target": "crossbeam_channel"
             },
             {
-              "id": "crossbeam-epoch 0.9.15",
+              "id": "crossbeam-epoch 0.9.18",
               "target": "crossbeam_epoch"
             },
             {
-              "id": "crossbeam-utils 0.8.16",
+              "id": "crossbeam-utils 0.8.19",
               "target": "crossbeam_utils"
             },
             {
@@ -36960,7 +36872,7 @@
         "deps": {
           "common": [
             {
-              "id": "crossbeam-channel 0.5.8",
+              "id": "crossbeam-channel 0.5.11",
               "target": "crossbeam_channel"
             },
             {
@@ -37053,7 +36965,7 @@
         "deps": {
           "common": [
             {
-              "id": "crossbeam-channel 0.5.8",
+              "id": "crossbeam-channel 0.5.11",
               "target": "crossbeam_channel"
             },
             {
@@ -37157,7 +37069,7 @@
         "deps": {
           "common": [
             {
-              "id": "crossbeam-channel 0.5.8",
+              "id": "crossbeam-channel 0.5.11",
               "target": "crossbeam_channel"
             },
             {
@@ -41666,67 +41578,6 @@
       },
       "license": "Apache-2.0"
     },
-    "prometheus-http-query 0.6.6": {
-      "name": "prometheus-http-query",
-      "version": "0.6.6",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/prometheus-http-query/0.6.6/download",
-          "sha256": "7970fd6e91b5cb87e9a093657572a896d133879ced7752d2c7635beae29eaba0"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "prometheus_http_query",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "prometheus_http_query",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "rustls-tls-webpki-roots"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "reqwest 0.11.22",
-              "target": "reqwest"
-            },
-            {
-              "id": "serde 1.0.195",
-              "target": "serde"
-            },
-            {
-              "id": "serde_json 1.0.108",
-              "target": "serde_json"
-            },
-            {
-              "id": "time 0.3.31",
-              "target": "time"
-            },
-            {
-              "id": "url 2.4.1",
-              "target": "url"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.6.6"
-      },
-      "license": "MIT"
-    },
     "prometheus-parse 0.2.4": {
       "name": "prometheus-parse",
       "version": "0.2.4",
@@ -42555,7 +42406,7 @@
         "deps": {
           "common": [
             {
-              "id": "crossbeam-utils 0.8.16",
+              "id": "crossbeam-utils 0.8.19",
               "target": "crossbeam_utils"
             },
             {
@@ -44444,15 +44295,15 @@
         "deps": {
           "common": [
             {
-              "id": "crossbeam-channel 0.5.8",
+              "id": "crossbeam-channel 0.5.11",
               "target": "crossbeam_channel"
             },
             {
-              "id": "crossbeam-deque 0.8.3",
+              "id": "crossbeam-deque 0.8.5",
               "target": "crossbeam_deque"
             },
             {
-              "id": "crossbeam-utils 0.8.16",
+              "id": "crossbeam-utils 0.8.19",
               "target": "crossbeam_utils"
             },
             {
@@ -51490,7 +51341,7 @@
         "deps": {
           "common": [
             {
-              "id": "crossbeam-channel 0.5.8",
+              "id": "crossbeam-channel 0.5.11",
               "target": "crossbeam_channel"
             },
             {
@@ -56966,7 +56817,7 @@
         "deps": {
           "common": [
             {
-              "id": "crossbeam-channel 0.5.8",
+              "id": "crossbeam-channel 0.5.11",
               "target": "crossbeam_channel"
             },
             {

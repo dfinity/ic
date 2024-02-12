@@ -57,7 +57,6 @@ BASE_DEPENDENCIES = [
         "//rs/types/error_types",
         "//rs/types/ic00_types",
         "//rs/types/types",
-        "@crate_index//:crossbeam",
         "@crate_index//:crossbeam-channel",
         "@crate_index//:futures-util",
         "@crate_index//:hex",
