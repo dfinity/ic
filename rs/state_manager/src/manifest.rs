@@ -799,7 +799,7 @@ fn dirty_pages_to_dirty_chunks(
                 continue;
             }
 
-            let path = dirty_page.page_type.path(checkpoint);
+            let path = dirty_page.page_type.base(checkpoint);
 
             if let Ok(path) = path {
                 let relative_path = path
