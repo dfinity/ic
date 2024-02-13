@@ -90,7 +90,7 @@ class Args:
     inject_image_ipv4_prefix_length: Optional[str] = None
 
     # If present - decompress `upload_img` and inject this into config.ini
-    inject_image_domain_name: Optional[str] = None
+    inject_image_domain: Optional[str] = None
 
     # Path to the setupos-inject-configuration tool. Necessary if any inject* args are present
     inject_configuration_tool: Optional[str] = None
@@ -127,7 +127,7 @@ class Args:
         ipv4_args = [self.inject_image_ipv4_address,
                      self.inject_image_ipv4_gateway,
                      self.inject_image_ipv4_prefix_length,
-                     self.inject_image_domain_name]
+                     self.inject_image_domain]
         assert all(ipv4_args) or not any(ipv4_args), \
             "All ipv4 flags must be present or none"
         assert self.file_share_ssh_key is None \
@@ -174,7 +174,7 @@ class Ipv4Args:
     address: str
     gateway: str
     prefix_length: str
-    domain_name: str
+    domain: str
 
 
 def parse_from_row(row: List[str], network_image_url: str) -> BMCInfo:
@@ -507,7 +507,7 @@ def inject_config_into_image(setupos_inject_configuration_path: Path,
         ipv4_part = f"--ipv4-address {ipv4_args.address} "
         ipv4_part += f"--ipv4-gateway {ipv4_args.gateway} "
         ipv4_part += f"--ipv4-prefix-length {ipv4_args.prefix_length} "
-        ipv4_part += f"--domain-name {ipv4_args.domain_name} "
+        ipv4_part += f"--domain {ipv4_args.domain} "
 
     invoke.run(f"{setupos_inject_configuration_path} {image_part} {prefix_part} {gateway_part} {ipv4_part}", echo=True)
 
@@ -550,7 +550,7 @@ def main():
         ipv4_args = Ipv4Args(args.inject_image_ipv4_address,
                              args.inject_image_ipv4_gateway,
                              args.inject_image_ipv4_prefix_length,
-                             args.inject_image_domain_name)
+                             args.inject_image_domain)
 
     if args.upload_img or args.inject_image_ipv6_prefix:
         file_share_endpoint = create_file_share_endpoint(args.file_share_url, args.file_share_username)

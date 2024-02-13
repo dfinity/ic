@@ -6,4 +6,4 @@ inject_image_ipv6_gateway: 2a00:fb01:400:200::1
 inject_image_ipv4_address: 212.71.124.178
 inject_image_ipv4_gateway: 212.71.124.177
 inject_image_ipv4_prefix_length: 28
-inject_image_domain_name: bare_metal_deployment.icp5.io
+inject_image_domain: bare-metal-deployment.icp5.io
