@@ -54,7 +54,7 @@ struct NetworkConfig {
     ipv4_prefix_length: Option<u8>,
 
     #[arg(long)]
-    domain_name: Option<String>,
+    domain: Option<String>,
 
     #[arg(long)]
     mgmt_mac: Option<String>,
@@ -184,7 +184,7 @@ async fn write_config(path: &Path, cfg: &NetworkConfig) -> Result<(), Error> {
         ipv4_address,
         ipv4_gateway,
         ipv4_prefix_length,
-        domain_name,
+        domain,
     } = cfg;
 
     if let (Some(ipv6_prefix), Some(ipv6_gateway)) = (ipv6_prefix, ipv6_gateway) {
@@ -194,13 +194,13 @@ async fn write_config(path: &Path, cfg: &NetworkConfig) -> Result<(), Error> {
         writeln!(&mut f, "ipv6_gateway={}", ipv6_gateway)?;
     }
 
-    if let (Some(ipv4_address), Some(ipv4_gateway), Some(ipv4_prefix_length), Some(domain_name)) =
-        (ipv4_address, ipv4_gateway, ipv4_prefix_length, domain_name)
+    if let (Some(ipv4_address), Some(ipv4_gateway), Some(ipv4_prefix_length), Some(domain)) =
+        (ipv4_address, ipv4_gateway, ipv4_prefix_length, domain)
     {
         writeln!(&mut f, "ipv4_address={}", ipv4_address)?;
         writeln!(&mut f, "ipv4_gateway={}", ipv4_gateway)?;
         writeln!(&mut f, "ipv4_prefix_length={}", ipv4_prefix_length)?;
-        writeln!(&mut f, "domain_name={}", domain_name)?;
+        writeln!(&mut f, "domain={}", domain)?;
     }
 
     if let Some(mgmt_mac) = mgmt_mac {
