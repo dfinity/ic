@@ -264,6 +264,9 @@ pub struct Config {
     // TODO(IC-272): remove this flag once the feature is enabled by default.
     /// Indicates whether fetching canister logs API is enabled or not.
     pub fetch_canister_logs: FlagStatus,
+
+    /// Indicates whether dirty page logging is enabled or not.
+    pub dirty_page_logging: FlagStatus,
 }
 
 impl Default for Config {
@@ -335,6 +338,7 @@ impl Default for Config {
             stop_canister_timeout_duration: STOP_CANISTER_TIMEOUT_DURATION,
             canister_snapshots: FlagStatus::Disabled,
             fetch_canister_logs: FlagStatus::Disabled,
+            dirty_page_logging: FlagStatus::Disabled,
         }
     }
 }

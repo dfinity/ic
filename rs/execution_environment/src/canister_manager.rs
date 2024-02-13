@@ -829,6 +829,7 @@ impl CanisterManager {
         round_limits: &mut RoundLimits,
         round_counters: RoundCounters,
         subnet_size: usize,
+        log_dirty_pages: FlagStatus,
     ) -> (
         Result<InstallCodeResult, CanisterManagerError>,
         NumInstructions,
@@ -867,6 +868,7 @@ impl CanisterManager {
             CompilationCostHandling::CountFullAmount,
             round_counters,
             subnet_size,
+            log_dirty_pages,
         );
         match dts_result {
             DtsInstallCodeResult::Finished {
@@ -925,6 +927,7 @@ impl CanisterManager {
         compilation_cost_handling: CompilationCostHandling,
         round_counters: RoundCounters,
         subnet_size: usize,
+        log_dirty_pages: FlagStatus,
     ) -> DtsInstallCodeResult {
         if let Err(err) = validate_controller(&canister, &context.sender()) {
             return DtsInstallCodeResult::Finished {
@@ -980,6 +983,7 @@ impl CanisterManager {
             requested_memory_allocation: context.memory_allocation,
             sender: context.sender(),
             canister_id: canister.canister_id(),
+            log_dirty_pages,
         };
 
         let round = RoundContext {

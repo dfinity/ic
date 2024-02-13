@@ -30,7 +30,7 @@ use crate::{
         CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult, InstallCodeResult,
     },
     canister_settings::{validate_canister_settings, CanisterSettings},
-    execution_environment::RoundContext,
+    execution_environment::{log_dirty_pages, RoundContext},
     CompilationCostHandling, RoundLimits,
 };
 
@@ -415,6 +415,17 @@ impl InstallCodeHelper {
 
         let old_wasm_hash = get_wasm_hash(&clean_canister);
         let new_wasm_hash = get_wasm_hash(&self.canister);
+
+        if original.log_dirty_pages == FlagStatus::Enabled {
+            log_dirty_pages(
+                round.log,
+                &original.canister_id,
+                original.message.method_name(),
+                self.total_heap_delta.get() as usize / PAGE_SIZE,
+                instructions_used,
+            );
+        }
+
         DtsInstallCodeResult::Finished {
             canister: self.canister,
             message: original.message,
@@ -798,6 +809,7 @@ pub(crate) struct OriginalContext {
     pub requested_memory_allocation: Option<MemoryAllocation>,
     pub sender: PrincipalId,
     pub canister_id: CanisterId,
+    pub log_dirty_pages: FlagStatus,
 }
 
 pub(crate) fn validate_controller(

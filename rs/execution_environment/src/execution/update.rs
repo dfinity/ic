@@ -6,10 +6,11 @@ use crate::execution::common::{
     ingress_status_with_processing_state, update_round_limits, validate_message,
 };
 use crate::execution_environment::{
-    ExecuteMessageResult, PausedExecution, RoundContext, RoundLimits,
+    log_dirty_pages, ExecuteMessageResult, PausedExecution, RoundContext, RoundLimits,
 };
 use crate::metrics::CallTreeMetrics;
 use ic_base_types::CanisterId;
+use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
@@ -43,6 +44,7 @@ pub fn execute_update(
     round_limits: &mut RoundLimits,
     subnet_size: usize,
     call_tree_metrics: &dyn CallTreeMetrics,
+    log_dirty_pages: FlagStatus,
 ) -> ExecuteMessageResult {
     let (clean_canister, prepaid_execution_cycles, resuming_aborted) =
         match prepaid_execution_cycles {
@@ -111,6 +113,7 @@ pub fn execute_update(
         request_metadata,
         freezing_threshold,
         canister_id: clean_canister.canister_id(),
+        log_dirty_pages,
     };
 
     let helper = match UpdateHelper::new(&clean_canister, &original) {
@@ -267,6 +270,7 @@ struct OriginalContext {
     request_metadata: RequestMetadata,
     freezing_threshold: Cycles,
     canister_id: CanisterId,
+    log_dirty_pages: FlagStatus,
 }
 
 /// Contains fields of `UpdateHelper` that are necessary for resuming an update
@@ -465,6 +469,17 @@ impl UpdateHelper {
             original.subnet_size,
             round.log,
         );
+
+        if original.log_dirty_pages == FlagStatus::Enabled {
+            log_dirty_pages(
+                round.log,
+                &original.canister_id,
+                &original.method.name(),
+                output.instance_stats.dirty_pages,
+                instructions_used,
+            );
+        }
+
         ExecuteMessageResult::Finished {
             canister: self.canister,
             response,

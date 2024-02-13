@@ -31,9 +31,11 @@ use crate::execution::common::{
     self, action_to_response, apply_canister_state_changes, update_round_limits,
 };
 use crate::execution_environment::{
-    ExecuteMessageResult, ExecutionResponse, PausedExecution, RoundContext, RoundLimits,
+    log_dirty_pages, ExecuteMessageResult, ExecutionResponse, PausedExecution, RoundContext,
+    RoundLimits,
 };
 use crate::metrics::CallTreeMetrics;
+use ic_config::flag_status::FlagStatus;
 
 #[cfg(test)]
 mod tests;
@@ -554,6 +556,16 @@ impl ResponseHelper {
             );
         }
 
+        if original.log_dirty_pages == FlagStatus::Enabled {
+            log_dirty_pages(
+                round.log,
+                &original.canister_id,
+                format!("reponse_to_{}", original.message.originator).as_str(),
+                heap_delta.get() as usize / PAGE_SIZE,
+                instructions_used,
+            );
+        }
+
         ExecuteMessageResult::Finished {
             canister: self.canister,
             response,
@@ -639,6 +651,7 @@ struct OriginalContext {
     canister_id: CanisterId,
     subnet_memory_reservation: NumBytes,
     instructions_executed: NumInstructions,
+    log_dirty_pages: FlagStatus,
 }
 
 /// Struct used to hold necessary information for the
@@ -844,6 +857,7 @@ pub fn execute_response(
     subnet_size: usize,
     subnet_memory_reservation: NumBytes,
     call_tree_metrics: &dyn CallTreeMetrics,
+    log_dirty_pages: FlagStatus,
 ) -> ExecuteMessageResult {
     let (callback, callback_id, call_context, call_context_id) =
         match common::get_call_context_and_callback(
@@ -890,6 +904,7 @@ pub fn execute_response(
         canister_id: clean_canister.canister_id(),
         subnet_memory_reservation,
         instructions_executed: call_context.instructions_executed(),
+        log_dirty_pages,
     };
 
     let mut helper =
