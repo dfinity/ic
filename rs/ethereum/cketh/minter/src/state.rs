@@ -6,6 +6,7 @@ use crate::lifecycle::upgrade::UpgradeArg;
 use crate::lifecycle::EthereumNetwork;
 use crate::logs::DEBUG;
 use crate::numeric::{BlockNumber, LedgerBurnIndex, LedgerMintIndex, TransactionNonce, Wei};
+use crate::tx::TransactionPriceEstimate;
 use candid::Principal;
 use ic_canister_log::log;
 use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
@@ -69,6 +70,8 @@ pub struct State {
     /// Number of HTTP outcalls since the last upgrade.
     /// Used to correlate request and response in logs.
     pub http_request_counter: u64,
+
+    pub last_transaction_price_estimate: Option<(u64, TransactionPriceEstimate)>,
 }
 
 #[derive(Debug, Eq, PartialEq)]

@@ -106,6 +106,8 @@ type Eip1559TransactionPrice = record {
     // Maximum amount of Wei that can be charged for the transaction,
     // computed as `max_fee_per_gas * gas_limit`
     max_transaction_fee : nat;
+
+    timestamp : opt nat64;
 };
 
 type EthTransaction = record { transaction_hash : text };
@@ -265,7 +267,7 @@ service : (MinterArg) -> {
     smart_contract_address : () -> (text) query;
 
     // Estimate the price of a transaction issued by the minter when converting ckETH to ETH.
-    eip_1559_transaction_price : () -> (Eip1559TransactionPrice);
+    eip_1559_transaction_price : () -> (Eip1559TransactionPrice) query;
 
     // Withdraw the specified amount in Wei to the given Ethereum address.
     // IMPORTANT: The current gas limit is set to 21,000 for a transaction so withdrawals to smart contract addresses will likely fail.
@@ -279,7 +281,7 @@ service : (MinterArg) -> {
     // Retrieve the status of the minter canister.
     get_canister_status : () -> (CanisterStatusResponse);
 
-    // Retrive events from the minter's audit log.
+    // Retrieve events from the minter's audit log.
     // The endpoint can return fewer events than requested to bound the response size.
     get_events : (record { start : nat64; length : nat64 }) -> (record { events : vec Event; total_event_count : nat64 }) query;
 }

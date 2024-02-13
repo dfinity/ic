@@ -385,6 +385,22 @@ async fn compute_recovery_id(digest: &Hash, signature: &[u8]) -> RecoveryId {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TransactionPriceEstimate {
+    pub max_fee_per_gas: WeiPerGas,
+    pub max_priority_fee_per_gas: WeiPerGas,
+}
+
+impl TransactionPriceEstimate {
+    pub fn to_price(self, gas_limit: GasAmount) -> TransactionPrice {
+        TransactionPrice {
+            gas_limit,
+            max_fee_per_gas: self.max_fee_per_gas,
+            max_priority_fee_per_gas: self.max_priority_fee_per_gas,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TransactionPrice {
     pub gas_limit: GasAmount,
     pub max_fee_per_gas: WeiPerGas,
@@ -439,12 +455,11 @@ pub enum TransactionPriceEstimationError {
 }
 pub fn estimate_transaction_price(
     fee_history: &FeeHistory,
-) -> Result<TransactionPrice, TransactionPriceEstimationError> {
+) -> Result<TransactionPriceEstimate, TransactionPriceEstimationError> {
     // average value between the `minSuggestedMaxPriorityFeePerGas`
     // used by Metamask, see
     // https://github.com/MetaMask/core/blob/f5a4f52e17f407c6411e4ef9bd6685aab184b91d/packages/gas-fee-controller/src/fetchGasEstimatesViaEthFeeHistory/calculateGasFeeEstimatesForPriorityLevels.ts#L14
     const MIN_MAX_PRIORITY_FEE_PER_GAS: WeiPerGas = WeiPerGas::new(1_500_000_000); //1.5 gwei
-    const TRANSACTION_GAS_LIMIT: GasAmount = GasAmount::new(21_000);
     let base_fee_of_next_finalized_block = *fee_history.base_fee_per_gas.last().ok_or(
         TransactionPriceEstimationError::InvalidFeeHistory(
             "base_fee_per_gas should not be empty to be able to evaluate transaction price"
@@ -465,8 +480,7 @@ pub fn estimate_transaction_price(
         .ok_or(TransactionPriceEstimationError::Overflow(
             "ERROR: overflow during transaction price estimation".to_string(),
         ))?;
-    Ok(TransactionPrice {
-        gas_limit: TRANSACTION_GAS_LIMIT,
+    Ok(TransactionPriceEstimate {
         max_fee_per_gas,
         max_priority_fee_per_gas,
     })

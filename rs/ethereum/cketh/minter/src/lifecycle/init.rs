@@ -89,6 +89,7 @@ impl TryFrom<InitArg> for State {
             skipped_blocks: Default::default(),
             active_tasks: Default::default(),
             http_request_counter: 0,
+            last_transaction_price_estimate: None,
         };
         state.validate_config()?;
         Ok(state)

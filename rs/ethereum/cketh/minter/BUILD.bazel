@@ -190,6 +190,7 @@ rust_ic_test(
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
+        "@crate_index//:assert_matches",
         "@crate_index//:candid",
         "@crate_index//:candid_parser",
         "@crate_index//:ethers-core",
