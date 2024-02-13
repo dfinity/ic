@@ -368,6 +368,7 @@ fn install_code(
         round_limits,
         round_counters,
         SMALL_APP_SUBNET_MAX_SIZE,
+        Config::default().dirty_page_logging,
     );
     let instructions_left = instruction_limit - instructions_used.min(instruction_limit);
     (instructions_left, result, canister)

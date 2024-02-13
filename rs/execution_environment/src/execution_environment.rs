@@ -178,6 +178,21 @@ pub fn as_num_instructions(a: RoundInstructions) -> NumInstructions {
     NumInstructions::from(u64::try_from(a.get()).unwrap_or(0))
 }
 
+/// Helper method for logging dirty pages.
+pub fn log_dirty_pages(
+    log: &ReplicaLogger,
+    canister_id: &CanisterId,
+    method_name: &str,
+    dirty_pages: usize,
+    instructions: NumInstructions,
+) {
+    let output_message = format!(
+        "Executed {canister_id}::{method_name}: dirty_4kb_pages = {dirty_pages}, instructions = {instructions}"
+    );
+    info!(log, "{}", output_message.as_str());
+    eprintln!("{output_message}");
+}
+
 /// Contains limits (or budget) for various resources that affect duration of
 /// a round such as
 /// - executed instructions,
@@ -1400,6 +1415,7 @@ impl ExecutionEnvironment {
                     round_limits,
                     subnet_size,
                     &self.call_tree_metrics,
+                    self.config.dirty_page_logging,
                 )
             }
             WasmMethod::System(_) => {
@@ -1425,7 +1441,6 @@ impl ExecutionEnvironment {
             ExecutionMode::Replicated,
             self.subnet_memory_saturation(&round_limits.subnet_available_memory),
         );
-
         execute_update(
             canister,
             CanisterCallOrTask::Task(task.clone()),
@@ -1437,6 +1452,7 @@ impl ExecutionEnvironment {
             round_limits,
             subnet_size,
             &self.call_tree_metrics,
+            self.config.dirty_page_logging,
         )
     }
 
@@ -1809,6 +1825,7 @@ impl ExecutionEnvironment {
             subnet_size,
             scaled_subnet_memory_reservation,
             &self.call_tree_metrics,
+            self.config.dirty_page_logging,
         )
     }
 
@@ -2480,6 +2497,7 @@ impl ExecutionEnvironment {
             compilation_cost_handling,
             round_counters,
             subnet_size,
+            self.config.dirty_page_logging,
         );
         self.process_install_code_result(state, dts_result, dts_status, since)
     }
