@@ -111,6 +111,7 @@ ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-types = { path = "../types/types" }
 ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }
+ic-wasm-types = { path = "../types/wasm_types" }
 icrc-ledger-agent = { path = "../../packages/icrc-ledger-agent" }
 icrc-ledger-types = { path = "../../packages/icrc-ledger-types" }
 indoc = "1.0.9"

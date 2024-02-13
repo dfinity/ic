@@ -5,8 +5,9 @@ use ic_canisters_http_types::HttpRequest;
 use ic_icrc1_ledger::FeatureFlags as LedgerFeatureFlags;
 use ic_ledger_suite_orchestrator::candid::{
     AddErc20Arg, Erc20Contract, InitArg, LedgerInitArg, ManagedCanisterIds, OrchestratorArg,
+    UpgradeArg,
 };
-use ic_ledger_suite_orchestrator::state::{Wasm, WasmHash};
+use ic_ledger_suite_orchestrator::state::{IndexWasm, LedgerWasm, WasmHash};
 use ic_state_machine_tests::{
     CanisterStatusResultV2, Cycles, ErrorCode, StateMachine, StateMachineBuilder, UserError,
     WasmResult,
@@ -127,6 +128,67 @@ fn should_reject_adding_an_already_managed_erc20_token() {
         orchestrator.upgrade_ledger_suite_orchestrator(&OrchestratorArg::AddErc20Arg(usdc));
 
     assert_matches!(result, Err(e) if e.code() == ErrorCode::CanisterCalledTrap && e.description().contains("Erc20ContractAlreadyManaged"));
+}
+
+#[test]
+fn should_reject_upgrade_with_unknown_wasm_hash() {
+    const UNKNOWN_WASM_HASH: &str =
+        "0000000000000000000000000000000000000000000000000000000000000000";
+    fn test_upgrade_with_wrong_wasm_hash(
+        orchestrator: &LedgerSuiteOrchestrator,
+        upgrade_arg_with_wrong_hash: &OrchestratorArg,
+    ) {
+        let result = orchestrator.upgrade_ledger_suite_orchestrator(upgrade_arg_with_wrong_hash);
+        assert_matches!(result, Err(e) if e.code() == ErrorCode::CanisterCalledTrap && e.description().contains("invalid arguments"));
+    }
+
+    let orchestrator = LedgerSuiteOrchestrator::new();
+    let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
+    let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
+    let usdc = usdc(embedded_ledger_wasm_hash, embedded_index_wasm_hash);
+
+    test_upgrade_with_wrong_wasm_hash(
+        &orchestrator,
+        &OrchestratorArg::AddErc20Arg(AddErc20Arg {
+            ledger_compressed_wasm_hash: UNKNOWN_WASM_HASH.to_string(),
+            ..usdc.clone()
+        }),
+    );
+
+    test_upgrade_with_wrong_wasm_hash(
+        &orchestrator,
+        &OrchestratorArg::AddErc20Arg(AddErc20Arg {
+            index_compressed_wasm_hash: UNKNOWN_WASM_HASH.to_string(),
+            ..usdc.clone()
+        }),
+    );
+
+    test_upgrade_with_wrong_wasm_hash(
+        &orchestrator,
+        &OrchestratorArg::UpgradeArg(UpgradeArg {
+            ledger_compressed_wasm_hash: Some(UNKNOWN_WASM_HASH.to_string()),
+            index_compressed_wasm_hash: None,
+            archive_compressed_wasm_hash: None,
+        }),
+    );
+
+    test_upgrade_with_wrong_wasm_hash(
+        &orchestrator,
+        &OrchestratorArg::UpgradeArg(UpgradeArg {
+            ledger_compressed_wasm_hash: None,
+            index_compressed_wasm_hash: Some(UNKNOWN_WASM_HASH.to_string()),
+            archive_compressed_wasm_hash: None,
+        }),
+    );
+
+    test_upgrade_with_wrong_wasm_hash(
+        &orchestrator,
+        &OrchestratorArg::UpgradeArg(UpgradeArg {
+            ledger_compressed_wasm_hash: None,
+            index_compressed_wasm_hash: None,
+            archive_compressed_wasm_hash: Some(UNKNOWN_WASM_HASH.to_string()),
+        }),
+    );
 }
 
 #[test]
@@ -256,21 +318,22 @@ fn ledger_suite_orchestrator_wasm() -> Vec<u8> {
     )
 }
 
-fn ledger_wasm() -> Wasm {
-    Wasm::from(load_wasm(
+fn ledger_wasm() -> LedgerWasm {
+    LedgerWasm::from(load_wasm(
         std::env::var("CARGO_MANIFEST_DIR").unwrap(),
         "ledger_canister",
         &[],
     ))
 }
 
-fn index_wasm() -> Wasm {
-    Wasm::from(load_wasm(
+fn index_wasm() -> IndexWasm {
+    IndexWasm::from(load_wasm(
         std::env::var("CARGO_MANIFEST_DIR").unwrap(),
         "index_canister",
         &[],
     ))
 }
+
 fn supported_erc20_tokens(
     ledger_compressed_wasm_hash: WasmHash,
     index_compressed_wasm_hash: WasmHash,

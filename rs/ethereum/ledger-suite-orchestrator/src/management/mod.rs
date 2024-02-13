@@ -1,4 +1,3 @@
-use crate::state::Wasm;
 use async_trait::async_trait;
 use candid::{CandidType, Principal};
 use ic_base_types::PrincipalId;
@@ -104,7 +103,7 @@ pub trait CanisterRuntime {
     async fn install_code(
         &self,
         canister_id: Principal,
-        wasm_module: Wasm,
+        wasm_module: Vec<u8>,
         arg: Vec<u8>,
     ) -> Result<(), CallError>;
 }
@@ -175,13 +174,13 @@ impl CanisterRuntime for IcCanisterRuntime {
     async fn install_code(
         &self,
         canister_id: Principal,
-        wasm_module: Wasm,
+        wasm_module: Vec<u8>,
         arg: Vec<u8>,
     ) -> Result<(), CallError> {
         let install_code = InstallCodeArgs {
             mode: CanisterInstallMode::Install,
             canister_id: PrincipalId::from(canister_id),
-            wasm_module: wasm_module.to_bytes(),
+            wasm_module,
             arg,
             compute_allocation: None,
             memory_allocation: None,
