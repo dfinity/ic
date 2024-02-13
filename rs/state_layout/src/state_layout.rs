@@ -4,7 +4,7 @@ use crate::utils::do_copy;
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_config::flag_status::FlagStatus;
 use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_management_canister_types::LogVisibility;
+use ic_management_canister_types::{CanisterLogRecord, LogVisibility};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -164,6 +164,7 @@ pub struct CanisterStateBits {
     pub wasm_chunk_store_metadata: WasmChunkStoreMetadata,
     pub total_query_stats: TotalQueryStats,
     pub log_visibility: LogVisibility,
+    pub canister_log_records: Vec<CanisterLogRecord>,
 }
 
 /// This struct contains bits of the `CanisterSnapshot` that are not already
@@ -1790,6 +1791,11 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             wasm_chunk_store_metadata: Some((&item.wasm_chunk_store_metadata).into()),
             total_query_stats: Some((&item.total_query_stats).into()),
             log_visibility: item.log_visibility.into(),
+            canister_log_records: item
+                .canister_log_records
+                .into_iter()
+                .map(|record| record.into())
+                .collect(),
         }
     }
 }
@@ -1909,7 +1915,12 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 "CanisterStateBits::total_query_stats",
             )
             .unwrap_or_default(),
-            log_visibility: LogVisibility::from(value.log_visibility),
+            log_visibility: value.log_visibility.into(),
+            canister_log_records: value
+                .canister_log_records
+                .into_iter()
+                .map(|record| record.into())
+                .collect(),
         })
     }
 }
