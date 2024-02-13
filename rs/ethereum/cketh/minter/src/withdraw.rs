@@ -8,7 +8,7 @@ use crate::eth_rpc_client::EthRpcClient;
 use crate::eth_rpc_client::MultiCallError;
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
-use crate::numeric::{LedgerBurnIndex, LedgerMintIndex, TransactionCount};
+use crate::numeric::{GasAmount, LedgerBurnIndex, LedgerMintIndex, TransactionCount};
 use crate::state::audit::{process_event, EventType};
 use crate::state::transactions::{
     create_transaction, CreateTransactionError, Reimbursed, ReimbursementRequest,
@@ -27,6 +27,8 @@ use std::iter::zip;
 const WITHDRAWAL_REQUESTS_BATCH_SIZE: usize = 5;
 const TRANSACTIONS_TO_SIGN_BATCH_SIZE: usize = 5;
 const TRANSACTIONS_TO_SEND_BATCH_SIZE: usize = 5;
+
+pub const CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT: GasAmount = GasAmount::new(21_000);
 
 pub async fn process_reimbursement() {
     let _guard = match TimerGuard::new(TaskType::Reimbursement) {
@@ -130,8 +132,15 @@ pub async fn process_retrieve_eth_requests() {
             return;
         }
     };
+    // Transaction price is estimated everytime since the estimate uses the latest fee history
+    // and a block on Ethereum is produced every 12s while making an HTTPs outcall on fiduciary subnet takes around 15s.
     let transaction_price = match estimate_transaction_price(&fee_history) {
-        Ok(transaction_price) => transaction_price,
+        Ok(estimate) => {
+            mutate_state(|s| {
+                s.last_transaction_price_estimate = Some((ic_cdk::api::time(), estimate.clone()));
+            });
+            estimate.to_price(CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT)
+        }
         Err(e) => {
             log!(
                 INFO,

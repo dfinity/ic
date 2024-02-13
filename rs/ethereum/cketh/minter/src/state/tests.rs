@@ -759,6 +759,7 @@ fn state_equivalence() {
         http_request_counter: 100,
         eth_balance: Default::default(),
         skipped_blocks: Default::default(),
+        last_transaction_price_estimate: None,
     };
 
     assert_eq!(

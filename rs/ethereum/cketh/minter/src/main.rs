@@ -19,9 +19,8 @@ use ic_cketh_minter::numeric::{LedgerBurnIndex, Wei};
 use ic_cketh_minter::state::audit::{process_event, Event, EventType};
 use ic_cketh_minter::state::transactions::{EthWithdrawalRequest, Reimbursed};
 use ic_cketh_minter::state::{lazy_call_ecdsa_public_key, mutate_state, read_state, State, STATE};
-use ic_cketh_minter::tx::estimate_transaction_price;
 use ic_cketh_minter::withdraw::{
-    eth_fee_history, process_reimbursement, process_retrieve_eth_requests,
+    process_reimbursement, process_retrieve_eth_requests, CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
 };
 use ic_cketh_minter::{
     state, storage, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_REIMBURSEMENT,
@@ -125,15 +124,18 @@ async fn smart_contract_address() -> String {
 /// Estimate price of EIP-1559 transaction based on the
 /// `base_fee_per_gas` included in the last finalized block.
 /// See https://www.blocknative.com/blog/eip-1559-fees
-#[update]
+#[query]
 async fn eip_1559_transaction_price() -> Eip1559TransactionPrice {
-    let transaction_price = estimate_transaction_price(
-        &eth_fee_history()
-            .await
-            .expect("ERROR: failed to retrieve fee history"),
-    )
-    .expect("ERROR: failed to estimate transaction price");
-    Eip1559TransactionPrice::from(transaction_price)
+    match read_state(|s| s.last_transaction_price_estimate.clone()) {
+        Some((ts, estimate)) => {
+            let mut result = Eip1559TransactionPrice::from(
+                estimate.to_price(CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT),
+            );
+            result.timestamp = Some(ts);
+            result
+        }
+        None => ic_cdk::trap("ERROR: last transaction price estimate is not available"),
+    }
 }
 
 #[update]

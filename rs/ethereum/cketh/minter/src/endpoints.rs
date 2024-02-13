@@ -5,12 +5,13 @@ use icrc_ledger_types::icrc2::transfer_from::TransferFromError;
 use minicbor::{Decode, Encode};
 use std::fmt::{Display, Formatter};
 
-#[derive(CandidType, Deserialize, Clone, Debug)]
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct Eip1559TransactionPrice {
     pub gas_limit: Nat,
     pub max_fee_per_gas: Nat,
     pub max_priority_fee_per_gas: Nat,
     pub max_transaction_fee: Nat,
+    pub timestamp: Option<u64>,
 }
 
 impl From<TransactionPrice> for Eip1559TransactionPrice {
@@ -20,9 +21,11 @@ impl From<TransactionPrice> for Eip1559TransactionPrice {
             max_fee_per_gas: value.max_fee_per_gas.into(),
             max_priority_fee_per_gas: value.max_priority_fee_per_gas.into(),
             max_transaction_fee: value.max_transaction_fee().into(),
+            timestamp: None,
         }
     }
 }
+
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct EthTransaction {
     pub transaction_hash: String,
