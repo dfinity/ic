@@ -91,7 +91,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /testnet/release/                                          @dfinity-lab/teams/DRE
 /testnet/tests/pipeline/                                   @dfinity-lab/teams/ic-testing-verification
 /testnet/tests/scripts/                                    @dfinity-lab/teams/ic-testing-verification
-/testnet/tests/scripts/subnet_update_workload.sh           @dfinity-lab/teams/networking-team
 /testnet/tools/nns-tools/                                  @dfinity-lab/teams/nns-team
 /testnet/mainnet_revisions.json                            @dfinity-lab/teams/ic-testing-verification
 
