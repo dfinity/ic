@@ -3,12 +3,12 @@ load("@rules_python//python:defs.bzl", "py_library")
 
 py_library(
     name = "utils",
-    srcs = ["src/gitlab_config/utils.py"],
+    srcs = ["utils.py"],
 )
 
 py_library(
     name = "dfinity_gitlab_config",
-    srcs = ["src/gitlab_config/dfinity_gitlab_config.py"],
+    srcs = ["dfinity_gitlab_config.py"],
     deps = [
         ":utils",
         requirement("gitpython"),
@@ -19,14 +19,14 @@ py_library(
 
 py_test(
     name = "validate_job_name",
-    srcs = ["src/gitlab_config/main.py"],
+    srcs = ["main.py"],
     args = [
         "--cfg-validate-job-name",
         "--cfg-file",
         "gitlab-ci/config/zz-generated-gitlab-ci.yaml",
     ],
-    data = ["config/zz-generated-gitlab-ci.yaml"],
-    imports = ["src/"],  # this specifies the PYTHONPATH
+    data = ["//gitlab-ci/config:zz_generated"],
+    imports = ["../../src/"],  # this specifies the PYTHONPATH
     main = "main.py",
     deps = [
         ":dfinity_gitlab_config",
@@ -35,14 +35,14 @@ py_test(
 
 py_test(
     name = "bash_linter",
-    srcs = ["src/gitlab_config/main.py"],
+    srcs = ["main.py"],
     args = [
         "--cfg-bash-linter",
         "--cfg-file",
         "gitlab-ci/config/zz-generated-gitlab-ci.yaml",
     ],
-    data = ["config/zz-generated-gitlab-ci.yaml"],
-    imports = ["src/"],
+    data = ["//gitlab-ci/config:zz_generated"],
+    imports = ["../../src/"],
     main = "main.py",
     deps = [
         ":dfinity_gitlab_config",
@@ -51,17 +51,17 @@ py_test(
 
 py_test(
     name = "gitlab_config_linter",
-    srcs = ["src/gitlab_config/main.py"],
+    srcs = ["main.py"],
     args = [
         "--cfg-gitlab-linter",
         "--cfg-file",
         "gitlab-ci/config/zz-generated-gitlab-ci.yaml",
     ],
-    data = ["config/zz-generated-gitlab-ci.yaml"],
+    data = ["//gitlab-ci/config:zz_generated"],
     env_inherit = [
         "HOME",
     ],
-    imports = ["src/"],
+    imports = ["../../src/"],
     main = "main.py",
     tags = [
         "requires-network",

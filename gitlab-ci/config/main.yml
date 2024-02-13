@@ -432,7 +432,7 @@ pre-commit:
         exit 1
       fi
 
-python-gitlab-ci-tests:
+python-ci-tests:
   rules:
     # this job breaks when not run against the default branch
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH'
@@ -451,7 +451,7 @@ python-gitlab-ci-tests:
       set -xeuo pipefail
       pip3 install --ignore-installed -r requirements.txt
       cd gitlab-ci/src
-      pytest -v -o junit_family=xunit1 --junitxml=../../test_report.xml --cov=. --cov-report=term --cov-report=term-missing --cov-report=html --cov-branch
+      pytest --ignore=gitlab_config/ -v -o junit_family=xunit1 --junitxml=../../test_report.xml --cov=. --cov-report=term --cov-report=term-missing --cov-report=html --cov-branch
 
 cargo-clippy-linux:
   needs: [] # don't wait on other jobs

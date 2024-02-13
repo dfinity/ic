@@ -3165,7 +3165,7 @@ pre-commit:
       fi
   variables:
     PRE_COMMIT_HOME: "/cache/pre-commit/$CI_CONCURRENT_ID"
-python-gitlab-ci-tests:
+python-ci-tests:
   artifacts:
     paths:
       - gitlab-ci/src/htmlcov
@@ -3182,7 +3182,7 @@ python-gitlab-ci-tests:
       set -xeuo pipefail
       pip3 install --ignore-installed -r requirements.txt
       cd gitlab-ci/src
-      pytest -v -o junit_family=xunit1 --junitxml=../../test_report.xml --cov=. --cov-report=term --cov-report=term-missing --cov-report=html --cov-branch
+      pytest --ignore=gitlab_config/ -v -o junit_family=xunit1 --junitxml=../../test_report.xml --cov=. --cov-report=term --cov-report=term-missing --cov-report=html --cov-branch
   variables:
     PYTHONPATH: "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
 rosetta-api-docker-image:
