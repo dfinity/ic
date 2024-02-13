@@ -526,6 +526,16 @@ pub struct WasmChunkStoreMetadata {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterLogRecord {
+    #[prost(uint64, tag = "1")]
+    pub idx: u64,
+    #[prost(uint64, tag = "2")]
+    pub timestamp_nanos: u64,
+    #[prost(bytes = "vec", tag = "3")]
+    pub content: ::prost::alloc::vec::Vec<u8>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "2")]
     pub last_full_execution_round: u64,
@@ -606,6 +616,9 @@ pub struct CanisterStateBits {
     /// Log visibility for the canister.
     #[prost(enumeration = "LogVisibility", tag = "42")]
     pub log_visibility: i32,
+    /// Log records of the canister.
+    #[prost(message, repeated, tag = "43")]
+    pub canister_log_records: ::prost::alloc::vec::Vec<CanisterLogRecord>,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }

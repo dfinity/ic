@@ -2323,7 +2323,7 @@ impl FetchCanisterLogsRequest {
 ///     content: blob;
 /// }
 /// ```
-#[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq)]
+#[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq)]
 pub struct CanisterLogRecord {
     pub idx: u64,
     pub timestamp_nanos: u64,
@@ -2332,6 +2332,26 @@ pub struct CanisterLogRecord {
 }
 
 impl Payload<'_> for CanisterLogRecord {}
+
+impl From<pb_canister_state_bits::CanisterLogRecord> for CanisterLogRecord {
+    fn from(item: pb_canister_state_bits::CanisterLogRecord) -> Self {
+        Self {
+            idx: item.idx,
+            timestamp_nanos: item.timestamp_nanos,
+            content: item.content,
+        }
+    }
+}
+
+impl From<CanisterLogRecord> for pb_canister_state_bits::CanisterLogRecord {
+    fn from(item: CanisterLogRecord) -> Self {
+        Self {
+            idx: item.idx,
+            timestamp_nanos: item.timestamp_nanos,
+            content: item.content,
+        }
+    }
+}
 
 /// `CandidType` for `FetchCanisterLogsResponse`
 /// ```text
