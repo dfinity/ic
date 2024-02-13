@@ -9,11 +9,15 @@ use clap::Parser;
 use ic_base_types::PrincipalId;
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
-use ic_nns_governance::pb::v1::{
-    manage_neuron::{self, NeuronIdOrSubaccount},
-    manage_neuron_response::{self, MakeProposalResponse},
-    ManageNeuron, ManageNeuronResponse, Proposal,
+use ic_nns_governance::{
+    pb::v1::{
+        manage_neuron::{self, NeuronIdOrSubaccount},
+        manage_neuron_response::{self, MakeProposalResponse},
+        ManageNeuron, ManageNeuronResponse, Proposal,
+    },
+    proposals::create_service_nervous_system::ExecutedCreateServiceNervousSystemProposal,
 };
 use ic_sns_init::pb::v1::{
     sns_init_payload::InitialTokenDistribution, AirdropDistribution, DeveloperDistribution,
@@ -22,6 +26,7 @@ use ic_sns_init::pb::v1::{
 };
 use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsCanisterType, SnsWasm};
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs};
+use std::sync::Once;
 use std::{
     fmt::{Debug, Display},
     fs::File,
@@ -29,6 +34,7 @@ use std::{
     path::{Path, PathBuf},
     process::{exit, Command, Output},
     str::FromStr,
+    time::{SystemTime, UNIX_EPOCH},
 };
 use tempfile::NamedTempFile;
 
@@ -272,27 +278,8 @@ fn generate_sns_init_payload_v1(
 }
 
 fn generate_sns_init_payload_v2(path: &Path) -> Result<SnsInitPayload, String> {
-    // Read the file.
-    let contents = std::fs::read_to_string(path)
-        .map_err(|err| format!("Unable to read {:?}: {}", path, err))?;
+    let configuration = read_create_service_nervous_system_from_init_yaml(path)?;
 
-    // Parse its contents.
-    let configuration =
-        serde_yaml::from_str::<crate::init_config_file::friendly::SnsConfigurationFile>(&contents)
-            .map_err(|err| format!("Unable to parse contents of {:?}: {}", path, err))?;
-
-    // Convert (to CreateServiceNervousSysytem).
-    let base_path = path.parent().ok_or_else(|| {
-        format!(
-            "Configuration file path ({:?}) has no parent, it seems.",
-            path,
-        )
-    })?;
-    let configuration = configuration
-        .try_convert_to_create_service_nervous_system(base_path)
-        .map_err(|err| format!("Invalid configuration in {:?}: {}", path, err))?;
-
-    // Last step: more conversion (this time, to the desired type: SnsInitPayload).
     SnsInitPayload::try_from(configuration)
         // This shouldn't be possible -> we could just unwrap here, and there
         // should be no danger of panic, but we handle Err anyway, because if
@@ -304,11 +291,81 @@ fn generate_sns_init_payload_v2(path: &Path) -> Result<SnsInitPayload, String> {
         .map_err(|err| format!("Invalid configuration in {:?}: {}", path, err))
 }
 
+fn read_create_service_nervous_system_from_init_yaml(
+    path: &Path,
+) -> Result<ic_nns_governance::pb::v1::CreateServiceNervousSystem, String> {
+    let contents = std::fs::read_to_string(path)
+        .map_err(|err| format!("Unable to read {:?}: {}", path, err))?;
+    let configuration =
+        serde_yaml::from_str::<crate::init_config_file::friendly::SnsConfigurationFile>(&contents)
+            .map_err(|err| format!("Unable to parse contents of {:?}: {}", path, err))?;
+    let base_path = path.parent().ok_or_else(|| {
+        format!(
+            "Configuration file path ({:?}) has no parent, it seems.",
+            path,
+        )
+    })?;
+    let configuration = configuration
+        .try_convert_to_create_service_nervous_system(base_path)
+        .map_err(|err| format!("Invalid configuration in {:?}: {}", path, err))?;
+    Ok(configuration)
+}
+
 impl DeployTestflightArgs {
     pub fn generate_sns_init_payload(&self) -> Result<SnsInitPayload, String> {
         match &self.init_config_file {
-            Some(init_config_file) => generate_sns_init_payload(init_config_file),
+            Some(init_config_file) => {
+                let mut create_service_nervous_system =
+                    read_create_service_nervous_system_from_init_yaml(init_config_file)?;
+
+                // disable neurons_fund_participation, if it's enabled
+                if create_service_nervous_system
+                    .swap_parameters
+                    .as_ref()
+                    .unwrap()
+                    .neurons_fund_participation()
+                {
+                    println!("Neuron's fund participation was enabled in {}, but is not supported by SNS testflight. Proceeding as if it was disabled.", init_config_file.display());
+                    create_service_nervous_system
+                        .swap_parameters
+                        .as_mut()
+                        .unwrap()
+                        .neurons_fund_participation = Some(false);
+                }
+
+                // convert to ExecutedCreateServiceNervousSystemProposal
+                let executed_create_service_nervous_system =
+                    ExecutedCreateServiceNervousSystemProposal {
+                        current_timestamp_seconds: SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs(),
+                        create_service_nervous_system,
+                        neurons_fund_participants: vec![],
+                        random_swap_start_time: GlobalTimeOfDay {
+                            seconds_after_utc_midnight: Some(0),
+                        },
+                        neurons_fund_participation_constraints: None,
+                        // `proposal_id` only exists to be exposed to the user for audit purposes, which don't apply here.
+                        // But it's required, so we can just use any arbitrary value.
+                        proposal_id: 10,
+                    };
+
+                // Last step: more conversion (this time, to the desired type: SnsInitPayload).
+                SnsInitPayload::try_from(executed_create_service_nervous_system)
+                    // This shouldn't be possible -> we could just unwrap here, and there
+                    // should be no danger of panic, but we handle Err anyway, because if
+                    // err is returned, it still makes sense to just return that.
+                    //
+                    // The reason Err should be impossible is
+                    // try_convert_to_create_service_nervous_system itself call
+                    // SnsInitPayload::try_from as part of its validation.
+                    .map_err(|err| {
+                        format!("Invalid configuration in {:?}: {}", init_config_file, err)
+                    })
+            }
             None => {
+                println!("Warning! No init_config_file provided. Using default SnsInitPayload for testflight deployment, but this is not supported and might not work.");
                 let developer_identity = get_identity("get-principal", &self.network);
                 let developer_neuron = NeuronDistribution {
                     controller: Some(developer_identity),
@@ -914,10 +971,28 @@ fn run_command<'a>(command: &'a [&'a str]) -> Result<(String, String), RunComman
     Ok((stdout, stderr))
 }
 
+static DFX_INIT: Once = Once::new();
+
 /// Calls `dfx` with the given args
 #[must_use]
 fn call_dfx(args: &[&str]) -> Output {
-    let output = Command::new("dfx")
+    let dfx_cmd = if Path::new("./dfx").exists() {
+        "./dfx"
+    } else {
+        "dfx"
+    };
+    DFX_INIT.call_once(|| {
+        let version_output = Command::new(dfx_cmd)
+            .args(["--version"])
+            .output()
+            .expect("Failed to execute dfx command");
+        println!(
+            "Invoking dfx with `{dfx_cmd}`. dfx version: {}",
+            String::from_utf8_lossy(&version_output.stdout).trim()
+        );
+    });
+
+    let output = Command::new(dfx_cmd)
         .args(args)
         .output()
         .unwrap_or_else(|e| panic!("dfx failed when called with args: {:?}: {}", args, e));
