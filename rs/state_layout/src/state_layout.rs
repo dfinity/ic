@@ -1915,7 +1915,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 "CanisterStateBits::total_query_stats",
             )
             .unwrap_or_default(),
-            log_visibility: value.log_visibility.into(),
+            log_visibility: value.log_visibility.try_into()?,
             canister_log_records: value
                 .canister_log_records
                 .into_iter()

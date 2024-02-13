@@ -670,7 +670,7 @@ impl Payload<'_> for UninstallCodeArgs {}
 ///    public;
 /// }
 /// ```
-#[derive(Default, Clone, Copy, CandidType, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Default, Clone, Copy, CandidType, Deserialize, Debug, PartialEq, Eq, EnumIter)]
 pub enum LogVisibility {
     #[default]
     #[serde(rename = "controllers")]
@@ -688,13 +688,37 @@ impl From<LogVisibility> for i32 {
     }
 }
 
-impl From<i32> for LogVisibility {
-    fn from(item: i32) -> Self {
+impl TryFrom<i32> for LogVisibility {
+    type Error = ProxyDecodeError;
+
+    fn try_from(item: i32) -> Result<Self, Self::Error> {
         match item {
-            0 => Self::default(),
-            1 => Self::Controllers,
-            2 => Self::Public,
-            _ => panic!("Unsupported value"),
+            0 => Ok(Self::default()),
+            1 => Ok(Self::Controllers),
+            2 => Ok(Self::Public),
+            _ => Err(ProxyDecodeError::ValueOutOfRange {
+                typ: "LogVisibility",
+                err: format!("Unable to convert {:?} to LogVisibility", item),
+            }),
+        }
+    }
+}
+
+impl From<LogVisibility> for pb_canister_state_bits::LogVisibility {
+    fn from(item: LogVisibility) -> Self {
+        match item {
+            LogVisibility::Controllers => pb_canister_state_bits::LogVisibility::Controllers,
+            LogVisibility::Public => pb_canister_state_bits::LogVisibility::Public,
+        }
+    }
+}
+
+impl From<pb_canister_state_bits::LogVisibility> for LogVisibility {
+    fn from(item: pb_canister_state_bits::LogVisibility) -> Self {
+        match item {
+            pb_canister_state_bits::LogVisibility::Unspecified => Self::default(),
+            pb_canister_state_bits::LogVisibility::Controllers => Self::Controllers,
+            pb_canister_state_bits::LogVisibility::Public => Self::Public,
         }
     }
 }

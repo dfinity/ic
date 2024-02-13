@@ -14,7 +14,9 @@ use crate::CallOrigin;
 use crate::Memory;
 use ic_base_types::NumSeconds;
 use ic_logger::replica_logger::no_op_logger;
-use ic_management_canister_types::{CanisterChange, CanisterChangeDetails, CanisterChangeOrigin};
+use ic_management_canister_types::{
+    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterLogRecord, LogVisibility,
+};
 use ic_metrics::MetricsRegistry;
 use ic_test_utilities::types::{
     ids::canister_test_id,
@@ -35,6 +37,7 @@ use ic_types::{
 };
 use ic_wasm_types::CanisterModule;
 use prometheus::IntCounter;
+use strum::IntoEnumIterator;
 
 const CANISTER_ID: CanisterId = CanisterId::from_u64(42);
 const OTHER_CANISTER_ID: CanisterId = CanisterId::from_u64(13);
@@ -573,6 +576,52 @@ fn canister_state_callback_round_trip() {
     let round_trip = Callback::try_from(pb_callback).unwrap();
 
     assert_eq!(callback, round_trip);
+}
+
+#[test]
+fn canister_state_log_visibility_i32_round_trip() {
+    for initial in LogVisibility::iter() {
+        let encoded = i32::from(initial);
+        let round_trip = LogVisibility::try_from(encoded).unwrap();
+
+        assert_eq!(initial, round_trip);
+    }
+}
+
+#[test]
+fn canister_state_log_visibility_i32_default() {
+    const UNSPECIFIED: i32 = 0;
+    assert_eq!(
+        LogVisibility::try_from(UNSPECIFIED).unwrap(),
+        LogVisibility::default()
+    );
+}
+
+#[test]
+fn canister_state_log_visibility_round_trip() {
+    use ic_protobuf::state::canister_state_bits::v1 as pb;
+
+    for initial in LogVisibility::iter() {
+        let encoded = pb::LogVisibility::from(initial);
+        let round_trip = LogVisibility::from(encoded);
+
+        assert_eq!(initial, round_trip);
+    }
+}
+
+#[test]
+fn canister_state_canister_log_record_round_trip() {
+    use ic_protobuf::state::canister_state_bits::v1 as pb;
+
+    let initial = CanisterLogRecord {
+        idx: 42,
+        timestamp_nanos: 27,
+        content: vec![1, 2, 3],
+    };
+    let encoded = pb::CanisterLogRecord::from(initial.clone());
+    let round_trip = CanisterLogRecord::from(encoded);
+
+    assert_eq!(initial, round_trip);
 }
 
 #[test]
