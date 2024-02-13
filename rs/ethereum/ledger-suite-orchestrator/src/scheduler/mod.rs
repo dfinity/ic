@@ -3,12 +3,16 @@ pub mod test_fixtures;
 #[cfg(test)]
 mod tests;
 
-use crate::candid::{AddErc20Arg, LedgerInitArg};
+use crate::candid::{AddErc20Arg, LedgerInitArg, UpgradeArg};
 use crate::logs::INFO;
 use crate::management::{CallError, CanisterRuntime};
 use crate::state::{
     mutate_state, read_state, Canisters, CanistersMetadata, Index, Ledger, ManageSingleCanister,
-    ManagedCanisterStatus, RetrieveCanisterWasm, State, WasmHash,
+    ManagedCanisterStatus, State, WasmHash,
+};
+use crate::storage::{
+    read_wasm_store, validate_wasm_hashes, wasm_store_try_get, StorableWasm, WasmHashError,
+    WasmStore, WasmStoreError,
 };
 use candid::{CandidType, Encode, Principal};
 use ic_base_types::PrincipalId;
@@ -70,6 +74,39 @@ pub enum Task {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+pub struct UpgradeOrchestratorArgs {
+    ledger_compressed_wasm_hash: Option<WasmHash>,
+    index_compressed_wasm_hash: Option<WasmHash>,
+    archive_compressed_wasm_hash: Option<WasmHash>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum InvalidUpgradeArgError {
+    WasmHashError(WasmHashError),
+}
+
+impl UpgradeOrchestratorArgs {
+    pub fn validate_upgrade_arg(
+        wasm_store: &WasmStore,
+        arg: UpgradeArg,
+    ) -> Result<UpgradeOrchestratorArgs, InvalidUpgradeArgError> {
+        let [ledger_compressed_wasm_hash, index_compressed_wasm_hash, archive_compressed_wasm_hash] =
+            validate_wasm_hashes(
+                wasm_store,
+                arg.ledger_compressed_wasm_hash.as_deref(),
+                arg.index_compressed_wasm_hash.as_deref(),
+                arg.archive_compressed_wasm_hash.as_deref(),
+            )
+            .map_err(InvalidUpgradeArgError::WasmHashError)?;
+        Ok(UpgradeOrchestratorArgs {
+            ledger_compressed_wasm_hash,
+            index_compressed_wasm_hash,
+            archive_compressed_wasm_hash,
+        })
+    }
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct InstallLedgerSuiteArgs {
     contract: Erc20Token,
     ledger_init_arg: LedgerInitArg,
@@ -80,14 +117,14 @@ pub struct InstallLedgerSuiteArgs {
 #[derive(Debug, PartialEq, Clone)]
 pub enum InvalidAddErc20ArgError {
     InvalidErc20Contract(String),
-    InvalidWasmHash(String),
     Erc20ContractAlreadyManaged(Erc20Token),
-    WasmHashNotFound(WasmHash),
+    WasmHashError(WasmHashError),
 }
 
 impl InstallLedgerSuiteArgs {
     pub fn validate_add_erc20(
         state: &State,
+        wasm_store: &WasmStore,
         args: AddErc20Arg,
     ) -> Result<InstallLedgerSuiteArgs, InvalidAddErc20ArgError> {
         let contract = Erc20Token::try_from(args.contract.clone())
@@ -97,45 +134,20 @@ impl InstallLedgerSuiteArgs {
                 contract,
             ));
         }
-        let ledger_compressed_wasm_hash = WasmHash::from_str(&args.ledger_compressed_wasm_hash)
-            .map_err(|e| {
-                InvalidAddErc20ArgError::InvalidWasmHash(format!(
-                    "Invalid ledger compressed wasm hash: {}",
-                    e
-                ))
-            })?;
-        let index_compressed_wasm_hash = WasmHash::from_str(&args.index_compressed_wasm_hash)
-            .map_err(|e| {
-                InvalidAddErc20ArgError::InvalidWasmHash(format!(
-                    "Invalid index compressed wasm hash: {}",
-                    e
-                ))
-            })?;
-        if ledger_compressed_wasm_hash == index_compressed_wasm_hash {
-            return Err(InvalidAddErc20ArgError::InvalidWasmHash(format!(
-                "ledger and index compressed wasm hash have the same value: {}",
-                ledger_compressed_wasm_hash
-            )));
-        }
-        if RetrieveCanisterWasm::<Ledger>::retrieve_wasm(state, &ledger_compressed_wasm_hash)
-            .is_none()
-        {
-            return Err(InvalidAddErc20ArgError::WasmHashNotFound(
-                ledger_compressed_wasm_hash,
-            ));
-        }
-        if RetrieveCanisterWasm::<Index>::retrieve_wasm(state, &index_compressed_wasm_hash)
-            .is_none()
-        {
-            return Err(InvalidAddErc20ArgError::WasmHashNotFound(
-                index_compressed_wasm_hash,
-            ));
-        }
+        let [ledger_compressed_wasm_hash, index_compressed_wasm_hash, _archive_compressed_wasm_hash] =
+            validate_wasm_hashes(
+                wasm_store,
+                Some(&args.ledger_compressed_wasm_hash),
+                Some(&args.index_compressed_wasm_hash),
+                None,
+            )
+            .map_err(InvalidAddErc20ArgError::WasmHashError)?;
+
         Ok(Self {
             contract,
             ledger_init_arg: args.ledger_init_arg,
-            ledger_compressed_wasm_hash,
-            index_compressed_wasm_hash,
+            ledger_compressed_wasm_hash: ledger_compressed_wasm_hash.unwrap(),
+            index_compressed_wasm_hash: index_compressed_wasm_hash.unwrap(),
         })
     }
 }
@@ -145,6 +157,7 @@ pub enum TaskError {
     CanisterCreationError(CallError),
     InstallCodeError(CallError),
     WasmHashNotFound(WasmHash),
+    WasmStoreError(WasmStoreError),
 }
 
 impl TaskError {
@@ -155,6 +168,7 @@ impl TaskError {
             TaskError::CanisterCreationError(_) => true,
             TaskError::InstallCodeError(_) => true,
             TaskError::WasmHashNotFound(_) => false,
+            TaskError::WasmStoreError(_) => false,
         }
     }
 }
@@ -300,9 +314,8 @@ async fn install_canister_once<C, R, I>(
     runtime: &R,
 ) -> Result<(), TaskError>
 where
-    C: Debug,
+    C: Debug + StorableWasm + Send,
     Canisters: ManageSingleCanister<C>,
-    State: RetrieveCanisterWasm<C>,
     R: CanisterRuntime,
     I: Debug + CandidType,
 {
@@ -317,21 +330,36 @@ where
         Some(ManagedCanisterStatus::Installed { .. }) => return Ok(()),
     };
 
-    let wasm = read_state(|s| s.retrieve_wasm(wasm_hash).cloned()).ok_or_else(|| {
-        log!(
-            INFO,
-            "ERROR: failed to install {} canister for {:?} at '{}': wasm hash not found",
-            Canisters::display_name(),
-            contract,
-            canister_id
-        );
-        TaskError::WasmHashNotFound(wasm_hash.clone())
-    })?;
+    let wasm = match read_wasm_store(|s| wasm_store_try_get::<C>(s, wasm_hash)) {
+        Ok(Some(wasm)) => Ok(wasm),
+        Ok(None) => {
+            log!(
+                INFO,
+                "ERROR: failed to install {} canister for {:?} at '{}': wasm hash {} not found",
+                Canisters::display_name(),
+                contract,
+                canister_id,
+                wasm_hash
+            );
+            Err(TaskError::WasmHashNotFound(wasm_hash.clone()))
+        }
+        Err(e) => {
+            log!(
+                INFO,
+                "ERROR: failed to install {} canister for {:?} at '{}': {:?}",
+                Canisters::display_name(),
+                contract,
+                canister_id,
+                e
+            );
+            Err(TaskError::WasmStoreError(e))
+        }
+    }?;
 
     match runtime
         .install_code(
             canister_id,
-            wasm,
+            wasm.to_bytes(),
             Encode!(init_args).expect("BUG: failed to encode init arg"),
         )
         .await

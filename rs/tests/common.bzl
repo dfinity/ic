@@ -97,6 +97,7 @@ DEPENDENCIES = [
     "//rs/types/management_canister_types",
     "//rs/types/types_test_utils",
     "//rs/types/types",
+    "//rs/types/wasm_types",
     "//rs/universal_canister/lib",
     "//rs/utils",
     "@crate_index//:anyhow",

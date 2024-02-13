@@ -17855,6 +17855,7 @@ dependencies = [
  "ic-universal-canister",
  "ic-utils 0.33.0",
  "ic-utils 0.9.0",
+ "ic-wasm-types",
  "icp-ledger",
  "icrc-ledger-agent",
  "icrc-ledger-types",

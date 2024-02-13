@@ -16,7 +16,19 @@ pub enum OrchestratorArg {
 pub struct InitArg {}
 
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct UpgradeArg {}
+pub struct UpgradeArg {
+    pub ledger_compressed_wasm_hash: Option<String>,
+    pub index_compressed_wasm_hash: Option<String>,
+    pub archive_compressed_wasm_hash: Option<String>,
+}
+
+impl UpgradeArg {
+    pub fn upgrade_icrc1_ledger_suite(&self) -> bool {
+        self.ledger_compressed_wasm_hash.is_some()
+            || self.index_compressed_wasm_hash.is_some()
+            || self.archive_compressed_wasm_hash.is_some()
+    }
+}
 
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct AddErc20Arg {

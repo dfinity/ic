@@ -3,45 +3,46 @@ mod tests;
 
 use crate::candid::InitArg;
 use crate::scheduler::{Erc20Token, Task, Tasks};
+use crate::storage::memory::{state_memory, StableMemory};
 use candid::Principal;
 use ic_cdk::trap;
-use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
-use ic_stable_structures::{storable::Bound, Cell, DefaultMemoryImpl, Storable};
+use ic_stable_structures::{storable::Bound, Cell, Storable};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_bytes::ByteBuf;
 use std::borrow::Cow;
 use std::cell::RefCell;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
 use std::str::FromStr;
 
 pub(crate) const LEDGER_BYTECODE: &[u8] = include_bytes!(env!("LEDGER_CANISTER_WASM_PATH"));
 pub(crate) const INDEX_BYTECODE: &[u8] = include_bytes!(env!("INDEX_CANISTER_WASM_PATH"));
-const ARCHIVE_NODE_BYTECODE: &[u8] = include_bytes!(env!("LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH"));
+pub(crate) const ARCHIVE_NODE_BYTECODE: &[u8] =
+    include_bytes!(env!("LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH"));
 
-const STATE_MEMORY_ID: MemoryId = MemoryId::new(0);
 const WASM_HASH_LENGTH: usize = 32;
 
 thread_local! {
-     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(
-        MemoryManager::init(DefaultMemoryImpl::default())
-    );
-
-    //TODO: more refined stable memory structure, right now we just dump everything into a single Cell
-    pub static STATE: RefCell<Cell<ConfigState, VirtualMemory<DefaultMemoryImpl>>> = RefCell::new(Cell::init(
-    MEMORY_MANAGER.with(|m| m.borrow().get(STATE_MEMORY_ID)), ConfigState::default())
+    pub static STATE: RefCell<Cell<ConfigState, StableMemory>> = RefCell::new(Cell::init(
+   state_memory(), ConfigState::default())
     .expect("failed to initialize stable cell for state"));
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
-pub struct Wasm {
-    #[serde(with = "serde_bytes")]
+/// `Wasm<Canister>` is a wrapper around a wasm binary and its memoized hash.
+/// It provides a type-safe way to handle wasm binaries for different canisters.
+#[derive(Debug)]
+pub struct Wasm<T> {
     binary: Vec<u8>,
     hash: WasmHash,
+    marker: PhantomData<T>,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+pub type LedgerWasm = Wasm<Ledger>;
+pub type IndexWasm = Wasm<Index>;
+pub type ArchiveWasm = Wasm<Archive>;
+
+#[derive(Debug, PartialEq, Ord, PartialOrd, Eq, Serialize, Deserialize, Clone)]
 #[serde(try_from = "serde_bytes::ByteBuf", into = "serde_bytes::ByteBuf")]
 pub struct WasmHash([u8; WASM_HASH_LENGTH]);
 
@@ -97,10 +98,71 @@ impl Display for WasmHash {
     }
 }
 
-impl Wasm {
+impl Storable for WasmHash {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        Cow::from(self.as_ref())
+    }
+
+    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
+        assert_eq!(
+            bytes.len(),
+            WASM_HASH_LENGTH,
+            "WasmHash representation is 32-bytes long"
+        );
+        let mut be_bytes = [0u8; WASM_HASH_LENGTH];
+        be_bytes.copy_from_slice(bytes.as_ref());
+        Self(be_bytes)
+    }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: WASM_HASH_LENGTH as u32,
+        is_fixed_size: true,
+    };
+}
+
+impl WasmHash {
+    /// Creates an array of wasm hashes from an array of their respective string representations.
+    /// This method preserves the order of the input strings:
+    /// element with index i in the input, will have index i in the output.
+    /// The input strings are expected to be distinct and valid wasm hashes.
+    ///
+    /// # Errors
+    /// * If any of the strings is not a valid wasm hash.
+    /// * If there are any duplicates.
+    pub fn from_distinct_opt_str<const N: usize>(
+        hashes: [Option<&str>; N],
+    ) -> Result<[Option<WasmHash>; N], String> {
+        let mut duplicates = BTreeSet::new();
+        let mut result = Vec::with_capacity(N);
+        for maybe_hash in hashes {
+            match maybe_hash {
+                None => {
+                    result.push(None);
+                }
+                Some(hash) => {
+                    let hash = WasmHash::from_str(hash)?;
+                    if !duplicates.insert(hash.clone()) {
+                        return Err(format!("Duplicate hash: {}", hash));
+                    }
+                    result.push(Some(hash));
+                }
+            }
+        }
+        Ok(result
+            .try_into()
+            .map_err(|_err| "failed to convert to fixed size array")
+            .expect("BUG: failed to convert to fixed size array"))
+    }
+}
+
+impl<T> Wasm<T> {
     pub fn new(binary: Vec<u8>) -> Self {
         let hash = WasmHash::from(ic_crypto_sha2::Sha256::hash(binary.as_slice()));
-        Self { binary, hash }
+        Self {
+            binary,
+            hash,
+            marker: PhantomData,
+        }
     }
 
     pub fn to_bytes(self) -> Vec<u8> {
@@ -112,13 +174,25 @@ impl Wasm {
     }
 }
 
-impl From<Vec<u8>> for Wasm {
+impl<T> Clone for Wasm<T> {
+    fn clone(&self) -> Self {
+        Self::new(self.binary.clone())
+    }
+}
+
+impl<T> PartialEq for Wasm<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.binary.eq(&other.binary)
+    }
+}
+
+impl<T> From<Vec<u8>> for Wasm<T> {
     fn from(v: Vec<u8>) -> Self {
         Self::new(v)
     }
 }
 
-impl From<&[u8]> for Wasm {
+impl<T> From<&[u8]> for Wasm<T> {
     fn from(value: &[u8]) -> Self {
         Self::new(value.to_vec())
     }
@@ -214,11 +288,16 @@ impl<'de, T> Deserialize<'de> for Canister<T> {
 
 #[derive(Debug)]
 pub enum Ledger {}
+
 pub type LedgerCanister = Canister<Ledger>;
 
 #[derive(Debug)]
 pub enum Index {}
+
 pub type IndexCanister = Canister<Index>;
+
+#[derive(Debug)]
+pub enum Archive {}
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub enum ManagedCanisterStatus {
@@ -242,6 +321,7 @@ impl ManagedCanisterStatus {
             | ManagedCanisterStatus::Installed { canister_id, .. } => canister_id,
         }
     }
+
     fn installed_wasm_hash(&self) -> Option<&WasmHash> {
         match self {
             ManagedCanisterStatus::Created { .. } => None,
@@ -299,9 +379,6 @@ impl Storable for ConfigState {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct State {
-    ledger_wasm: Wasm,
-    index_wasm: Wasm,
-    archive_wasm: Wasm,
     managed_canisters: ManagedCanisters,
     tasks: Tasks,
     processing_tasks_guard: bool,
@@ -310,14 +387,6 @@ pub struct State {
 impl State {
     pub fn tasks(&self) -> &Tasks {
         &self.tasks
-    }
-
-    pub fn ledger_wasm(&self) -> &Wasm {
-        &self.ledger_wasm
-    }
-
-    pub fn index_wasm(&self) -> &Wasm {
-        &self.index_wasm
     }
 
     pub fn add_task(&mut self, task: Task) {
@@ -492,35 +561,9 @@ impl ManageSingleCanister<Index> for Canisters {
     }
 }
 
-pub trait RetrieveCanisterWasm<T> {
-    /// Returns the compressed wasm module for the given canister type and hash.
-    fn retrieve_wasm(&self, compressed_wasm_hash: &WasmHash) -> Option<&Wasm>;
-}
-
-impl RetrieveCanisterWasm<Ledger> for State {
-    fn retrieve_wasm(&self, compressed_wasm_hash: &WasmHash) -> Option<&Wasm> {
-        if self.ledger_wasm.hash() == compressed_wasm_hash {
-            return Some(&self.ledger_wasm);
-        }
-        None
-    }
-}
-
-impl RetrieveCanisterWasm<Index> for State {
-    fn retrieve_wasm(&self, compressed_wasm_hash: &WasmHash) -> Option<&Wasm> {
-        if self.index_wasm.hash() == compressed_wasm_hash {
-            return Some(&self.index_wasm);
-        }
-        None
-    }
-}
-
 impl From<InitArg> for State {
     fn from(InitArg {}: InitArg) -> Self {
         Self {
-            ledger_wasm: Wasm::from(LEDGER_BYTECODE),
-            index_wasm: Wasm::from(INDEX_BYTECODE),
-            archive_wasm: Wasm::from(ARCHIVE_NODE_BYTECODE),
             managed_canisters: Default::default(),
             tasks: Default::default(),
             processing_tasks_guard: false,
