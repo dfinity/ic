@@ -437,7 +437,7 @@ impl CanisterManager {
         provisional_whitelist: &ProvisionalWhitelist,
         ingress: &SignedIngressContent,
         effective_canister_id: Option<CanisterId>,
-        fetch_canister_logs: FlagStatus,
+        canister_logging: FlagStatus,
     ) -> Result<(), UserError> {
         let method_name = ingress.method_name();
         let sender = ingress.sender();
@@ -533,7 +533,7 @@ impl CanisterManager {
             },
 
             Ok(Ic00Method::FetchCanisterLogs) => {
-                match fetch_canister_logs {
+                match canister_logging {
                     FlagStatus::Enabled => Err(UserError::new(
                         ErrorCode::CanisterRejectedMessage,
                         format!(

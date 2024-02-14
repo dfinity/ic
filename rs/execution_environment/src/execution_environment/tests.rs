@@ -3274,7 +3274,7 @@ fn test_fetch_canister_logs_should_accept_ingress_message_disabled() {
     // - disable the fetch_canister_logs API
     // - set the log visibility to public so any user can read the logs
     let mut test = ExecutionTestBuilder::new()
-        .with_fetch_canister_logs(FlagStatus::Disabled)
+        .with_canister_logging(FlagStatus::Disabled)
         .build();
     let canister_id = test.universal_canister().unwrap();
     let not_a_controller = user_test_id(42);
@@ -3307,7 +3307,7 @@ fn test_fetch_canister_logs_should_accept_ingress_message_enabled() {
     // - enable the fetch_canister_logs API
     // - set the log visibility to public so any user can read the logs
     let mut test = ExecutionTestBuilder::new()
-        .with_fetch_canister_logs(FlagStatus::Enabled)
+        .with_canister_logging(FlagStatus::Enabled)
         .build();
     let canister_id = test.universal_canister().unwrap();
     let not_a_controller = user_test_id(42);

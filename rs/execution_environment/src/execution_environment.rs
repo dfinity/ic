@@ -1108,7 +1108,7 @@ impl ExecutionEnvironment {
                 Some((res, msg.take_cycles()))
             }
 
-            Ok(Ic00Method::FetchCanisterLogs) => match self.config.fetch_canister_logs {
+            Ok(Ic00Method::FetchCanisterLogs) => match self.config.canister_logging {
                 FlagStatus::Enabled => Some((
                     Err(UserError::new(
                         ErrorCode::CanisterRejectedMessage,
@@ -1895,7 +1895,7 @@ impl ExecutionEnvironment {
                 provisional_whitelist,
                 ingress,
                 effective_canister_id,
-                self.config.fetch_canister_logs,
+                self.config.canister_logging,
             );
         }
 

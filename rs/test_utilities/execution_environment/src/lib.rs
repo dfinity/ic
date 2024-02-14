@@ -1933,8 +1933,8 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_fetch_canister_logs(mut self, status: FlagStatus) -> Self {
-        self.execution_config.fetch_canister_logs = status;
+    pub fn with_canister_logging(mut self, status: FlagStatus) -> Self {
+        self.execution_config.canister_logging = status;
         self
     }
 

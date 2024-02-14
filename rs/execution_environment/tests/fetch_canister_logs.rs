@@ -14,12 +14,12 @@ use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use ic_test_utilities_execution_environment::get_reply;
 use ic_types::{CanisterId, Cycles};
 
-fn setup(fetch_canister_logs: FlagStatus) -> (StateMachine, CanisterId) {
+fn setup(canister_logging: FlagStatus) -> (StateMachine, CanisterId) {
     let subnet_type = SubnetType::Application;
     let config = StateMachineConfig::new(
         SubnetConfig::new(subnet_type),
         ExecutionConfig {
-            fetch_canister_logs,
+            canister_logging,
             ..ExecutionConfig::default()
         },
     );
