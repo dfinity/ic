@@ -26,3 +26,7 @@ icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 candid = { workspace = true }
 anyhow = { version = "1.0", default-features = false }
 serde_bytes = { workspace = true }
+ic-agent = { workspace = true }
+
+[dev-dependencies]
+proptest = "1.0"
