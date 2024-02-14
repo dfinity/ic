@@ -267,19 +267,25 @@ pub(crate) fn build_signature_inputs(
 mod tests {
     use std::collections::BTreeSet;
 
+    use assert_matches::assert_matches;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_ic00_types::EcdsaKeyId;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::types::ids::subnet_test_id;
-    use ic_types::{consensus::ecdsa::EcdsaPayload, Height};
+    use ic_types::{
+        consensus::ecdsa::{EcdsaPayload, RequestId},
+        crypto::canister_threshold_sig::ThresholdEcdsaCombinedSignature,
+        Height,
+    };
 
     use crate::ecdsa::{
         payload_builder::{
             get_signing_requests, quadruples::test_utils::create_available_quadruple,
         },
         test_utils::{
-            empty_response, fake_sign_with_ecdsa_context, set_up_ecdsa_payload,
-            TestEcdsaSignatureBuilder,
+            empty_ecdsa_payload, empty_response, fake_completed_sign_with_ecdsa_context,
+            fake_sign_with_ecdsa_context, fake_sign_with_ecdsa_context_with_quadruple,
+            set_up_ecdsa_payload, TestEcdsaSignatureBuilder,
         },
     };
 
@@ -489,6 +495,119 @@ mod tests {
                 old_pseudo_random_id,
                 ecdsa::CompletedSignature::ReportedToExecution
             )])
+        );
+    }
+
+    #[test]
+    fn test_update_signature_agreements_reporting_improved_latency() {
+        let delivered_pseudo_random_id = pseudo_random_id(0);
+        let old_pseudo_random_id = pseudo_random_id(1);
+        let new_pseudo_random_id = pseudo_random_id(2);
+        let (mut ecdsa_payload, contexts) = set_up(
+            /*should_create_key_transcript=*/ true,
+            vec![old_pseudo_random_id, new_pseudo_random_id],
+        );
+        ecdsa_payload.signature_agreements.insert(
+            delivered_pseudo_random_id,
+            ecdsa::CompletedSignature::Unreported(empty_response()),
+        );
+        ecdsa_payload.signature_agreements.insert(
+            old_pseudo_random_id,
+            ecdsa::CompletedSignature::Unreported(empty_response()),
+        );
+        let key_id = ecdsa_payload.key_transcript.key_id.clone();
+
+        // old signature in the agreement AND in state is replaced by `ReportedToExecution`
+        // old signature in the agreement but NOT in state is removed.
+        update_signature_agreements_improved_latency(
+            &contexts,
+            &TestEcdsaSignatureBuilder::new(),
+            None,
+            &mut ecdsa_payload,
+            &BTreeSet::from([key_id]),
+            None,
+        );
+
+        assert_eq!(ecdsa_payload.signature_agreements.len(), 1);
+        assert_eq!(
+            ecdsa_payload.signature_agreements,
+            BTreeMap::from([(
+                old_pseudo_random_id,
+                ecdsa::CompletedSignature::ReportedToExecution
+            )])
+        );
+    }
+
+    #[test]
+    fn test_ecdsa_update_signature_agreements_success() {
+        let subnet_id = subnet_test_id(0);
+        let mut ecdsa_payload = empty_ecdsa_payload(subnet_id);
+        let key_id = ecdsa_payload.key_transcript.key_id.clone();
+        let valid_keys = BTreeSet::from_iter([key_id.clone()]);
+        let quadruple_ids = (0..4)
+            .map(|i| create_available_quadruple(&mut ecdsa_payload, key_id.clone(), i as u8))
+            .collect::<Vec<_>>();
+
+        let contexts = BTreeMap::from([
+            // insert request without completed signature
+            fake_completed_sign_with_ecdsa_context(0, quadruple_ids[0].clone()),
+            // insert request to be completed
+            fake_completed_sign_with_ecdsa_context(1, quadruple_ids[1].clone()),
+            // insert request that was already completed
+            fake_completed_sign_with_ecdsa_context(2, quadruple_ids[2].clone()),
+            // insert request without a matched quadruple
+            fake_sign_with_ecdsa_context_with_quadruple(3, key_id.clone(), None),
+        ]);
+
+        // insert agreement for completed request
+        ecdsa_payload.signature_agreements.insert(
+            [2; 32],
+            ecdsa::CompletedSignature::Unreported(empty_response()),
+        );
+
+        let mut signature_builder = TestEcdsaSignatureBuilder::new();
+        for (i, id) in quadruple_ids.iter().enumerate().skip(1) {
+            signature_builder.signatures.insert(
+                RequestId {
+                    quadruple_id: id.clone(),
+                    pseudo_random_id: [i as u8; 32],
+                    height: Height::from(1),
+                },
+                ThresholdEcdsaCombinedSignature {
+                    signature: vec![i as u8; 32],
+                },
+            );
+        }
+
+        // Only the uncompleted request with available quadruple should be completed
+        update_signature_agreements_improved_latency(
+            &contexts,
+            &signature_builder,
+            None,
+            &mut ecdsa_payload,
+            &valid_keys,
+            None,
+        );
+
+        // Only the quadruple for the completed request should be removed
+        assert_eq!(ecdsa_payload.available_quadruples.len(), 3);
+        assert!(!ecdsa_payload
+            .available_quadruples
+            .contains_key(&quadruple_ids[1]));
+
+        assert_eq!(ecdsa_payload.signature_agreements.len(), 2);
+        let Some(ecdsa::CompletedSignature::Unreported(response_1)) =
+            ecdsa_payload.signature_agreements.get(&[1; 32])
+        else {
+            panic!("Request 1 should have a response");
+        };
+        assert_matches!(
+            &response_1.response_payload,
+            ic_types::messages::Payload::Data(_)
+        );
+        assert_matches!(
+            ecdsa_payload.signature_agreements.get(&[2; 32]),
+            Some(ecdsa::CompletedSignature::ReportedToExecution)
         );
     }
 }
