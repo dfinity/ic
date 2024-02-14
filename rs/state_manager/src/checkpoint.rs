@@ -7,6 +7,7 @@ use ic_base_types::{subnet_id_try_from_protobuf, CanisterId};
 use ic_config::flag_status::FlagStatus;
 use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_snapshots::CanisterSnapshots;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
     canister_state::execution_state::WasmBinary, page_map::PageMap, CanisterMetrics, CanisterState,
@@ -258,8 +259,15 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
         canister_states
     };
 
-    let state =
-        ReplicatedState::new_from_checkpoint(canister_states, metadata, subnet_queues, query_stats);
+    // TODO(EXC-1539): Load canister snapshots from checkpoint.
+    let canister_snapshots = CanisterSnapshots::default();
+    let state = ReplicatedState::new_from_checkpoint(
+        canister_states,
+        metadata,
+        subnet_queues,
+        query_stats,
+        canister_snapshots,
+    );
 
     Ok(state)
 }

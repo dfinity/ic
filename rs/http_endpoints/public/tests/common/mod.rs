@@ -34,7 +34,10 @@ use ic_registry_keys::{
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{CanisterQueues, NetworkTopology, ReplicatedState, SystemMetadata};
+use ic_replicated_state::{
+    canister_snapshots::CanisterSnapshots, CanisterQueues, NetworkTopology, ReplicatedState,
+    SystemMetadata,
+};
 use ic_test_utilities::{
     crypto::{temp_crypto_component_with_fake_registry, CryptoReturningOk},
     state::ReplicatedStateBuilder,
@@ -211,6 +214,7 @@ pub fn default_get_latest_state() -> Labeled<Arc<ReplicatedState>> {
             metadata,
             CanisterQueues::default(),
             RawQueryStats::default(),
+            CanisterSnapshots::default(),
         )),
     )
 }
