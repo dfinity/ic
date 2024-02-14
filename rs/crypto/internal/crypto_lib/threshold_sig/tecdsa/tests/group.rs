@@ -1,6 +1,6 @@
 use ic_crypto_internal_threshold_sig_ecdsa::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use rand::Rng;
+use rand::{Rng, RngCore};
 
 #[test]
 fn not_affected_by_point_serialization_bug() -> ThresholdEcdsaResult<()> {
@@ -154,6 +154,77 @@ fn p256_wide_reduce_scalar_expected_value() -> ThresholdEcdsaResult<()> {
     );
 
     Ok(())
+}
+
+#[test]
+fn scalar_deserializaion_errors_if_byte_length_invalid() {
+    let rng = &mut reproducible_rng();
+    for curve in EccCurveType::all() {
+        let max_bytes: usize = curve.scalar_bytes() * 100;
+        for num_bytes in 0..=max_bytes {
+            if num_bytes == curve.scalar_bytes() {
+                continue;
+            }
+            let mut bytes = vec![0u8; num_bytes];
+            rng.fill_bytes(&mut bytes[..]);
+            assert_eq!(
+                EccScalar::deserialize(curve, &bytes[..]),
+                Err(ThresholdEcdsaSerializationError(
+                    "Unexpected length".to_string()
+                ))
+            );
+        }
+    }
+}
+
+#[test]
+fn scalar_deserializaion_errors_is_over_the_order() {
+    for curve in EccCurveType::all() {
+        let bytes = vec![0xFFu8; curve.scalar_bytes()];
+        assert_eq!(
+            EccScalar::deserialize(curve, &bytes[..]),
+            Err(ThresholdEcdsaSerializationError(
+                "Invalid point encoding".to_string()
+            ))
+        );
+    }
+}
+
+#[test]
+fn scalar_from_bytes_wide_errors_if_byte_length_invalid() {
+    let rng = &mut reproducible_rng();
+    for curve in EccCurveType::all() {
+        let valid_num_bytes = curve.scalar_bytes() * 2;
+        let min_bytes = valid_num_bytes + 1;
+        let max_bytes: usize = curve.scalar_bytes() * 100;
+        for num_bytes in min_bytes..=max_bytes {
+            let mut bytes = vec![0u8; num_bytes];
+            rng.fill_bytes(&mut bytes[..]);
+            assert_eq!(
+                EccScalar::from_bytes_wide(curve, &bytes[..]),
+                Err(ThresholdEcdsaError::InvalidScalar)
+            );
+        }
+    }
+}
+
+#[test]
+fn point_deserialization_errors_if_byte_length_invalid() {
+    let rng = &mut reproducible_rng();
+    for curve in EccCurveType::all() {
+        let max_bytes: usize = curve.point_bytes() * 100;
+        for num_bytes in 0..=max_bytes {
+            if num_bytes == curve.point_bytes() {
+                continue;
+            }
+            let mut bytes = vec![0u8; num_bytes];
+            rng.fill_bytes(&mut bytes[..]);
+            assert_eq!(
+                EccPoint::deserialize(curve, &bytes[..]),
+                Err(ThresholdEcdsaError::InvalidPoint)
+            );
+        }
+    }
 }
 
 #[test]
