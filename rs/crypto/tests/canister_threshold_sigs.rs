@@ -949,7 +949,7 @@ mod verify_complaint {
             let subnet_size = mode.subnet_size_for_complaint(6, rng);
             let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
             for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-                let context = IDkgModeTestContext::new_for_complaint(mode, &env, rng);
+                let context = IDkgModeTestContext::new_for_testing_complaint(mode, &env, rng);
                 let IDkgTestContextForComplaint {
                     transcript,
                     complaint,

@@ -484,7 +484,7 @@ fn bench_verify_complaint<M: Measurement, R: RngCore + CryptoRng>(
             || {
                 let (env, context) = bench_context.get_or_init(|| {
                     let env = test_case.new_test_environment(vault_type, rng);
-                    let context = IDkgModeTestContext::new_for_complaint(mode, &env, rng);
+                    let context = IDkgModeTestContext::new(mode, &env, rng);
                     (env, context)
                 });
                 context.setup_outputs_for_complaint(env, test_case.alg, rng)
@@ -519,7 +519,7 @@ fn bench_open_transcript<M: Measurement, R: RngCore + CryptoRng>(
             || {
                 let (env, context) = bench_context.get_or_init(|| {
                     let env = test_case.new_test_environment(vault_type, rng);
-                    let context = IDkgModeTestContext::new_for_complaint(mode, &env, rng);
+                    let context = IDkgModeTestContext::new(mode, &env, rng);
                     (env, context)
                 });
                 let complaint_context =
@@ -563,7 +563,7 @@ fn bench_verify_opening<M: Measurement, R: RngCore + CryptoRng>(
             || {
                 let (env, context) = bench_context.get_or_init(|| {
                     let env = test_case.new_test_environment(vault_type, rng);
-                    let context = IDkgModeTestContext::new_for_complaint(mode, &env, rng);
+                    let context = IDkgModeTestContext::new(mode, &env, rng);
                     (env, context)
                 });
                 let complaint_context =
@@ -608,7 +608,7 @@ fn bench_load_transcript_with_openings<M: Measurement, R: RngCore + CryptoRng>(
             || {
                 let (env, context) = bench_context.get_or_init(|| {
                     let env = test_case.new_test_environment(vault_type, rng);
-                    let context = IDkgModeTestContext::new_for_complaint(mode, &env, rng);
+                    let context = IDkgModeTestContext::new(mode, &env, rng);
                     (env, context)
                 });
                 let complaint_context =
