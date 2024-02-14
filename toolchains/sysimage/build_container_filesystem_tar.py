@@ -3,9 +3,11 @@
 # Build a container image and extract the single flattened filesystem into a tar file.
 from __future__ import annotations
 
+import atexit
 import os
 import pathlib
 import sys
+import tempfile
 import time
 import uuid
 from typing import Callable, List, TypeVar
@@ -13,7 +15,20 @@ from typing import Callable, List, TypeVar
 import configargparse
 import invoke
 
-CONTAINER_COMMAND = "podman"
+
+# We have yet to see the heisenbug with rootless builds, but build in a
+# unique directory just in case.
+TMP_ROOT = tempfile.mkdtemp()
+TMP_RUNROOT = tempfile.mkdtemp()
+atexit.register(lambda: cleanup())
+
+# storage-opt is required when using `--root` as all other values from config are cleared
+CONTAINER_COMMAND = f"podman --root {TMP_ROOT} --storage-opt=overlay.mount_program=/usr/bin/fuse-overlayfs --runroot {TMP_RUNROOT} "
+
+def cleanup():
+    # Use podman to cleanup first to avoid permission issues on the temp folders
+    invoke.run(f"{CONTAINER_COMMAND} system reset -f")
+    invoke.run(f"rm -rf {TMP_ROOT} {TMP_RUNROOT}")
 
 ReturnType = TypeVar('ReturnType') # https://docs.python.org/3/library/typing.html#generics
 def retry(func: Callable[[], ReturnType], num_retries: int = 3 ) -> ReturnType:
