@@ -528,6 +528,15 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "The age of the oldest incomplete ETH withdrawal request in seconds.",
                 )?;
 
+                w.encode_gauge(
+                    "cketh_minter_last_max_fee_per_gas",
+                    s.last_transaction_price_estimate
+                        .clone()
+                        .map(|(_, fee)| fee.max_fee_per_gas.as_f64())
+                        .unwrap_or_default(),
+                    "Last max fee per gas",
+                )?;
+
                 ic_cketh_minter::eth_rpc::encode_metrics(w)?;
 
                 Ok(())
