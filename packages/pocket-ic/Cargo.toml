@@ -1,9 +1,9 @@
 [package]
 name = "pocket-ic"
-version = "2.1.0"
+version = "2.2.0"
 license = "Apache-2.0"
 description = "PocketIC: A Canister Smart Contract Testing Platform"
-repository = "https://github.com/dfinity/ic/packages/pocket-ic"
+repository = "https://github.com/dfinity/ic/tree/master/packages/pocket-ic"
 documentation = "https://docs.rs/pocket-ic/latest/pocket_ic/"
 readme = "README.md"
 categories = ["emulators", "development-tools::testing", "wasm"]
