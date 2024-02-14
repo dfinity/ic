@@ -5,9 +5,9 @@ use ic_registry_common_proto::pb::local_store::v1::{
     CertifiedTime as PbCertifiedTime, ChangelogEntry as PbChangelogEntry, Delta as PbDelta,
     KeyMutation as PbKeyMutation, MutationType,
 };
+use ic_sys::fs::write_protobuf_using_tmp_file;
 use ic_types::registry::RegistryDataProviderError;
 use ic_types::RegistryVersion;
-use ic_utils::fs::write_protobuf_using_tmp_file;
 use prost::Message;
 use std::{
     io::{self},

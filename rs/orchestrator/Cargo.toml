@@ -22,7 +22,7 @@ ic-crypto-node-key-generation = { path = "../crypto/node_key_generation" }
 ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-dashboard = { path = "./dashboard" }
 ic-http-utils = { path = "../http_utils" }
-ic-ic00-types = { path = "../types/ic00_types" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-icos-sev = { path = "../ic_os/sev" }
 ic-image-upgrader = { path = "./image_upgrader" }
 ic-interfaces = { path = "../interfaces" }
@@ -39,7 +39,6 @@ ic-registry-keys = { path = "../registry/keys" }
 ic-registry-replicator = { path = "./registry_replicator" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
-ic-utils = { path = "../utils" }
 nix = { workspace = true }
 prometheus = { workspace = true }
 rand = "0.8"

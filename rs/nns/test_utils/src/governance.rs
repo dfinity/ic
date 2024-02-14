@@ -9,7 +9,7 @@ use canister_test::{Canister, Wasm};
 use dfn_candid::{candid, candid_one};
 use ic_btc_interface::SetConfigRequest;
 use ic_canister_client_sender::Sender;
-use ic_ic00_types::CanisterInstallMode;
+use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType},

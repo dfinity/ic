@@ -109,6 +109,7 @@ impl Mapping {
         Mapping::new(file, serialized_mapping.file_len as usize, None)
     }
 
+    /// Returns the `PageBytes` read from bytes `[PAGE_SIZE * page_index..PAGE_SIZE * (page_index + 1))`
     pub(crate) fn get_page(&self, page_index: PageIndex) -> &PageBytes {
         let num_pages = self.mmap.len() / PAGE_SIZE;
         if page_index.get() < num_pages as u64 {
@@ -122,6 +123,11 @@ impl Mapping {
         }
     }
 
+    /// The entire mmap as a slice of bytes.
+    pub(crate) fn as_slice(&self) -> &[u8] {
+        self.mmap.as_slice()
+    }
+
     /// See the comments of `PageMap::get_checkpoint_memory_instructions()`.
     pub fn get_memory_instructions(&self) -> MemoryInstructions {
         let num_pages = (self.mmap.len() / PAGE_SIZE) as u64;
@@ -133,10 +139,6 @@ impl Mapping {
                 MemoryMapOrData::MemoryMap(self.file_descriptor.clone(), 0),
             )],
         }
-    }
-
-    pub fn num_pages(&self) -> usize {
-        self.mmap.len() / PAGE_SIZE
     }
 
     pub(crate) fn file_descriptor(&self) -> &FileDescriptor {
@@ -202,7 +204,7 @@ impl Checkpoint {
     /// checkpoint.
     pub fn num_pages(&self) -> usize {
         match self.mapping {
-            Some(ref mapping) => mapping.num_pages(),
+            Some(ref mapping) => mapping.as_slice().len() / PAGE_SIZE,
             None => 0,
         }
     }

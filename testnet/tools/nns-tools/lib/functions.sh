@@ -182,7 +182,7 @@ set_sns_wasms_allowed_subnets() {
     #  Remove all from current list
     #  and add new one
 
-    CURRENT_SUBNETS=$(__dfx canister --network "$NNS_URL" call qaa6y-5yaaa-aaaaa-aaafa-cai get_sns_subnet_ids '(record {})' \
+    CURRENT_SUBNETS=$(__dfx canister --network "$NNS_URL" call ${SNS_W} get_sns_subnet_ids '(record {})' \
         | grep principal \
         | sed 's/.*"\(.*\)";/\1/')
 
@@ -368,7 +368,7 @@ sns_w_list_upgrade_steps() {
 
     __dfx -q canister --network "$NNS_URL" \
         call --candid "$SNS_W_DID" \
-        qaa6y-5yaaa-aaaaa-aaafa-cai list_upgrade_steps "(record {limit = 0: nat32; sns_governance_canister_id = $SNS_GOVERNANCE_CANISTER_ID})"
+        ${SNS_W} list_upgrade_steps "(record {limit = 0: nat32; sns_governance_canister_id = $SNS_GOVERNANCE_CANISTER_ID})"
 }
 
 ##: list_deployed_snses
@@ -382,7 +382,7 @@ list_deployed_snses() {
 
     __dfx -q canister --network $NNS_URL \
         call --candid "$SNS_W_DID" \
-        qaa6y-5yaaa-aaaaa-aaafa-cai list_deployed_snses '(record {})'
+        ${SNS_W} list_deployed_snses '(record {})'
 }
 
 sns_w_latest_version() {
@@ -393,7 +393,7 @@ sns_w_latest_version() {
 
     __dfx -q canister --network $NNS_URL \
         call --candid "$SNS_W_DID" \
-        qaa6y-5yaaa-aaaaa-aaafa-cai get_latest_sns_version_pretty '(null)'
+        ${SNS_W} get_latest_sns_version_pretty '(null)'
 }
 
 ##: sns_list_my_neurons
@@ -446,7 +446,7 @@ sns_w_get_next_sns_version() {
 
     __dfx -q canister --network $NNS_URL call \
         --candid $SNS_W_DID \
-        qaa6y-5yaaa-aaaaa-aaafa-cai get_next_sns_version \
+        ${SNS_W} get_next_sns_version \
         "(record {
                     governance_canister_id =  $SNS_GOVERNANCE_CANISTER_ID;
                     current_version = opt $CURRENT_VERSION_CANDID
@@ -577,9 +577,11 @@ wait_for_proposal_to_execute() {
             return 0
         fi
         # Early exit if we know it failed, what are we waiting around for again?
-        FAILED=$(nns_proposal_info "$NNS_URL" "$PROPOSAL_ID" | $IDL2JSON | jq -r '.[0].failed_timestamp_seconds')
+        INFO=$(nns_proposal_info "$NNS_URL" "$PROPOSAL_ID" | $IDL2JSON)
+        FAILED=$(echo ${INFO} | jq -r '.[0].failed_timestamp_seconds')
         if [[ "${FAILED}" != 0 ]]; then
             print_red "NNS proposal ${PROPOSAL_ID} failed to execute"
+            print_red "Proposal info: $(echo $gamINFO | jq -r $(.[].failure_reason[].error_message))"
             return 1
         fi
         sleep 10
@@ -610,4 +612,43 @@ wait_for_sns_governance_to_be_in_normal_mode() {
 
     print_red "SNS Governance ${SNS_GOVERNANCE_CANISTER_ID} never reached normal mode"
     return 1
+}
+
+set_testnet_env_variables() {
+    TEST_TMPDIR=${TEST_TMPDIR:-"-/ic/test_tmpdir/_tmp"}
+
+    # Check if the target directory exists
+    if [ ! -d "${TEST_TMPDIR}" ]; then
+        echo >&2 "The directory ${TEST_TMPDIR} does not exist. Check that you're running from within './gitlab-ci/container/container-run.sh', and that you created it by following the instructions in README.md."
+        exit 1
+    fi
+
+    # Count the number of directories in the target directory
+    DIR_COUNT=$(find "${TEST_TMPDIR}" -mindepth 1 -maxdepth 1 -type d | wc -l)
+
+    # Check for NNS_URL and NEURON_ID environment variables
+    if [ ! -z "${NNS_URL:-}" ] || [ ! -z "${NEURON_ID:-}" ]; then
+        if [ -z "${NNS_URL:-}" ] || [ -z "${NEURON_ID:-}" ]; then
+            echo >&2 "It seems like you set one of NNS_URL and NEURON_ID, but not both. Both variables should be set to use custom values, or neither should be set to default to the values in ${TEST_TMPDIR}. Setting only one creates ambiguity, so the script will exit to avoid misconfiguration."
+            exit 1
+        fi
+    fi
+
+    # Proceed based on the count of directories found
+    if [ "${DIR_COUNT}" -eq 1 ]; then
+        if [ -z "${NNS_URL:-}" ] && [ -z "${NEURON_ID:-}" ]; then
+            # If both are unset, proceed with sourcing
+            # Get the directory name
+            DIR_NAME=$(find "${TEST_TMPDIR}" -mindepth 1 -maxdepth 1 -type d -print | head -n 1 | sed 's|.*/||')
+            # Source the script without changing the user's directory
+            source "${TEST_TMPDIR}/${DIR_NAME}/setup/set_testnet_env_variables.sh"
+            echo "Sourced ${TEST_TMPDIR}/${DIR_NAME}/setup/set_testnet_env_variables.sh"
+        else
+            echo "Using provided NNS_URL and NEURON_ID environment variables."
+        fi
+    else
+        # Print an error and exit if not exactly one directory
+        echo >&2 "Error: There must be exactly one folder in ${TEST_TMPDIR}."
+        exit 1
+    fi
 }

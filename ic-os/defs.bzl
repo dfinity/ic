@@ -399,8 +399,6 @@ def icos_build(
     upload_suffix = ""
     if mode == "dev":
         upload_suffix = "-dev"
-    elif mode == "dev-sev":
-        upload_suffix = "-dev-sev"
     if malicious:
         upload_suffix += "-malicious"
 
@@ -482,6 +480,7 @@ def icos_build(
             ":disk-img.tar.zst.cas-url",
             ":disk-img.tar.zst.sha256",
             "//ic-os:scripts/build-bootstrap-config-image.sh",
+            "//rs/tests:src/default_firewall_whitelist.conf",
             ":version.txt",
         ],
         outs = ["launch_remote_vm_script"],
@@ -491,11 +490,12 @@ def icos_build(
         URL="$$(cat $(location :disk-img.tar.zst.cas-url))"
         SHA="$$(cat $(location :disk-img.tar.zst.sha256))"
         SCRIPT="$(location //ic-os:scripts/build-bootstrap-config-image.sh)"
+        DEFAULT_FIREWALL_WHITELIST="$(location //rs/tests:src/default_firewall_whitelist.conf)"
         cat <<EOF > $@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "\\$$BUILD_WORKSPACE_DIRECTORY"
-$$BIN --version "$$VERSION" --url "$$URL" --sha256 "$$SHA" --build-bootstrap-script "$$SCRIPT"
+$$BIN --version "$$VERSION" --url "$$URL" --sha256 "$$SHA" --build-bootstrap-script "$$SCRIPT" --default-firewall-whitelist "$$DEFAULT_FIREWALL_WHITELIST"
 EOF
         """,
         executable = True,
@@ -519,7 +519,7 @@ CID=\\$$((\\$$RANDOM + 3))
 cp $$IMAGE \\$$TEMP
 cd \\$$TEMP
 tar xf disk-img.tar
-qemu-system-x86_64 -machine type=q35,accel=kvm -enable-kvm -nographic -m 4G -bios /usr/share/OVMF/OVMF_CODE.fd -device vhost-vsock-pci,guest-cid=\\$$CID -drive file=disk.img,format=raw,if=virtio
+qemu-system-x86_64 -machine type=q35,accel=kvm -enable-kvm -nographic -m 4G -bios /usr/share/OVMF/OVMF_CODE.fd -device vhost-vsock-pci,guest-cid=\\$$CID -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
 EOF
         """,
         executable = True,
@@ -545,7 +545,7 @@ CID=\\$$((\\$$RANDOM + 3))
 cp $$IMAGE \\$$TEMP
 cd \\$$TEMP
 tar xf disk-img.tar
-qemu-system-x86_64 -machine type=q35 -nographic -m 4G -bios /usr/share/OVMF/OVMF_CODE.fd -drive file=disk.img,format=raw,if=virtio
+qemu-system-x86_64 -machine type=q35 -nographic -m 4G -bios /usr/share/OVMF/OVMF_CODE.fd -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
 EOF
         """,
         executable = True,

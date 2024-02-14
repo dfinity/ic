@@ -6,7 +6,7 @@
 // In order to store these parent/child/sibling/cousin relationships under
 // the same struct it's necessary to use unsafe operation as the borrow checker
 // won't allow it.
-use crate::lmdb_pool::{HeightKey, IdKey};
+use crate::lmdb_pool::{EcdsaIdKey, HeightKey};
 use ic_logger::{error, ReplicaLogger};
 use lmdb::{Cursor, Database, Environment, Iter, RoCursor, RoTransaction, Transaction};
 use std::sync::Arc;
@@ -111,7 +111,7 @@ impl<'a, F> LMDBEcdsaIterator<'a, F> {
         db_env: Arc<Environment>,
         db: Database,
         deserialize: F,
-        start_pos: Option<IdKey>,
+        start_pos: Option<EcdsaIdKey>,
         log: ReplicaLogger,
     ) -> Self {
         let tx: RoTransaction<'_> = unsafe { std::mem::transmute(db_env.begin_ro_txn().unwrap()) };

@@ -26,16 +26,16 @@ pub struct StateSyncChunkResponse {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct AdvertUpdate {
+pub struct SlotUpdate {
     #[prost(uint64, tag = "1")]
     pub commit_id: u64,
     #[prost(uint64, tag = "2")]
     pub slot_id: u64,
-    #[prost(oneof = "advert_update::Update", tags = "3, 4")]
-    pub update: ::core::option::Option<advert_update::Update>,
+    #[prost(oneof = "slot_update::Update", tags = "3, 4")]
+    pub update: ::core::option::Option<slot_update::Update>,
 }
-/// Nested message and enum types in `AdvertUpdate`.
-pub mod advert_update {
+/// Nested message and enum types in `SlotUpdate`.
+pub mod slot_update {
     #[derive(serde::Serialize, serde::Deserialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]

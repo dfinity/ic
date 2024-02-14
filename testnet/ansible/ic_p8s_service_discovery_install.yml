@@ -48,6 +48,7 @@
         validate_certs: no
         headers:
           Content-Type: "application/json"
+        status_code: 200, 201
       loop:
         - denylist_updater
         - ic_registry_replicator

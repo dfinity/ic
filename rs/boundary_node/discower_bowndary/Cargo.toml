@@ -5,14 +5,9 @@ edition = "2021"
 
 [dependencies]
 async-trait = "0.1.73"
-ic-agent = { workspace = true }
 prost = { workspace = true }
 tokio = { workspace = true }
 url = "2.4.0"
-serde = { workspace = true }
-serde_json = { workspace = true }
-futures-util = "0.3.28"
-reqwest = { workspace = true }
 thiserror = "1.0.50"
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-client = { path = "../../registry/client" }

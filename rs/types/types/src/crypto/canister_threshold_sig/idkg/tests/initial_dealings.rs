@@ -10,7 +10,7 @@ use crate::crypto::{BasicSig, BasicSigOf};
 use crate::signature::BasicSignature;
 use crate::NodeId;
 use assert_matches::assert_matches;
-use ic_crypto_test_utils_canister_threshold_sigs::{node_id, set_of_nodes};
+use ic_crypto_test_utils_canister_threshold_sigs::{ordered_node_id, set_of_nodes};
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use std::collections::BTreeSet;
 
@@ -291,7 +291,7 @@ fn should_not_create_initial_dealings_with_wrong_dealers() {
     );
 
     // Node 100 is not part of the dealers
-    assert!(dealers.get(&node_id(100)).is_none());
+    assert!(dealers.get(&ordered_node_id(100)).is_none());
 
     let sufficient_dealers = set_of_nodes(&[1, 2, 3, 4, 100]);
     let sufficient_len = sufficient_dealers.len();
@@ -309,7 +309,7 @@ fn should_not_create_initial_dealings_with_wrong_dealers() {
     assert_eq!(
         initial_dealings.unwrap_err(),
         InitialIDkgDealingsValidationError::DealerNotAllowed {
-            node_id: node_id(100)
+            node_id: ordered_node_id(100)
         }
     );
 }

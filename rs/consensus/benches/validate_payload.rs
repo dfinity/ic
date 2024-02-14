@@ -18,7 +18,6 @@ use ic_consensus_utils::pool_reader::PoolReader;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
-use ic_ic00_types::IC_00;
 use ic_ingress_manager::{CustomRandomState, IngressManager};
 use ic_interfaces::{
     batch_payload::ProposalContext,
@@ -32,6 +31,7 @@ use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
 use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_logger::replica_logger::no_op_logger;
+use ic_management_canister_types::IC_00;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_subnet_type::SubnetType;
@@ -267,15 +267,16 @@ fn add_past_blocks(
         let ingress = prepare_ingress_payload(now, message_count, i as u8);
         block.payload = Payload::new(
             ic_types::crypto::crypto_hash,
-            (
-                BatchPayload {
+            BlockPayload::Data(DataPayload {
+                batch: BatchPayload {
                     ingress,
                     ..BatchPayload::default()
                 },
-                dkg::Dealings::new_empty(block.payload.as_ref().dkg_interval_start_height()),
-                None,
-            )
-                .into(),
+                dealings: dkg::Dealings::new_empty(
+                    block.payload.as_ref().dkg_interval_start_height(),
+                ),
+                ecdsa: None,
+            }),
         );
 
         parent = block.clone();
@@ -343,15 +344,16 @@ fn validate_payload_benchmark(criterion: &mut Criterion) {
                 let ingress = prepare_ingress_payload(now, message_count, seed as u8);
                 let payload = Payload::new(
                     ic_types::crypto::crypto_hash,
-                    (
-                        BatchPayload {
+                    BlockPayload::Data(DataPayload {
+                        batch: BatchPayload {
                             ingress,
                             ..BatchPayload::default()
                         },
-                        dkg::Dealings::new_empty(tip.payload.as_ref().dkg_interval_start_height()),
-                        None,
-                    )
-                        .into(),
+                        dealings: dkg::Dealings::new_empty(
+                            tip.payload.as_ref().dkg_interval_start_height(),
+                        ),
+                        ecdsa: None,
+                    }),
                 );
 
                 let name = format!("validate_payload_{}", message_count);

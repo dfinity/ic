@@ -10,9 +10,7 @@ documentation.workspace = true
 anyhow = "1.0"
 base64 = { workspace = true }
 clap = { workspace = true }
-chrono = { workspace = true }
 fs_extra = "1.2.0"
-hex = "0.4"
 ic-nns-common = { path = "../nns/common" }
 ic-crypto-node-key-generation = { path = "../crypto/node_key_generation" }
 ic-crypto-node-key-validation = { path = "../crypto/node_key_validation" }
@@ -20,10 +18,8 @@ ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
-ic-ic00-types = { path = "../types/ic00_types" }
-ic-http-utils = { path = "../http_utils" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
-ic-logger = { path = "../monitoring/logger" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-keys = { path = "../registry/keys" }

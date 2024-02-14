@@ -1,6 +1,6 @@
 use candid::Nat;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub, Zero};
-use ic_stable_structures::storable::{BoundedStorable, Storable};
+use ic_stable_structures::storable::{Bound, Storable};
 use num_traits::{Bounded, ToPrimitive};
 use serde::{de::Deserializer, Deserialize, Serialize};
 use std::borrow::Cow;
@@ -65,11 +65,8 @@ impl Storable for U64 {
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         Self(u64::from_bytes(bytes))
     }
-}
 
-impl BoundedStorable for U64 {
-    const IS_FIXED_SIZE: bool = <u64 as BoundedStorable>::IS_FIXED_SIZE;
-    const MAX_SIZE: u32 = <u64 as BoundedStorable>::MAX_SIZE;
+    const BOUND: Bound = <u64 as Storable>::BOUND;
 }
 
 impl Bounded for U64 {

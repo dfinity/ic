@@ -139,6 +139,7 @@ pub fn test(env: TestEnv) {
                 node_max_memory_size_bytes: Some(1024 * 1024 * 1024),
                 max_message_size_bytes: Some(128 * 1024),
                 controller_id: agent.ledger_canister_id.into(),
+                more_controller_ids: None,
                 cycles_for_archive_creation: Some(10_000_000_000_000),
                 max_transactions_per_response: None,
             })

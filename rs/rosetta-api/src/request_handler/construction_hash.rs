@@ -1,8 +1,9 @@
 use crate::errors::ApiError;
-use crate::models::{ConstructionHashRequest, ConstructionHashResponse};
+use crate::models::{ConstructionHashRequest, ConstructionHashResponse, SignedTransaction};
 use crate::request_handler::{verify_network_id, RosettaRequestHandler};
 use crate::transaction_id::{self, TransactionIdentifier};
 use serde_json::map::Map;
+use std::str::FromStr;
 
 impl RosettaRequestHandler {
     /// Get the Hash of a Signed Transaction.
@@ -12,7 +13,8 @@ impl RosettaRequestHandler {
         msg: ConstructionHashRequest,
     ) -> Result<ConstructionHashResponse, ApiError> {
         verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
-        let signed_transaction = msg.signed_transaction()?;
+        let signed_transaction = SignedTransaction::from_str(&msg.signed_transaction)
+            .map_err(|err| ApiError::invalid_transaction(format!("{:?}", err)))?;
         let transaction_identifier = if let Some((request_type, envelope_pairs)) =
             signed_transaction
                 .requests

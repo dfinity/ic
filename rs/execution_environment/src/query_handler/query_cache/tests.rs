@@ -1,5 +1,6 @@
 use super::{EntryEnv, EntryValue, QueryCache, QueryCacheMetrics};
 use crate::{metrics, query_handler::query_cache::EntryKey, InternalHttpQueryHandler};
+use ic_base_types::CanisterId;
 use ic_interfaces::execution_environment::{SystemApiCallCounters, SystemApiCallId};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
@@ -16,6 +17,8 @@ use std::{sync::Arc, time::Duration};
 
 const MAX_EXPIRY_TIME: Duration = Duration::from_secs(10);
 const MORE_THAN_MAX_EXPIRY_TIME: Duration = Duration::from_secs(11);
+const DATA_CERTIFICATE_EXPIRY_TIME: Duration = Duration::from_secs(2);
+const MORE_THAN_DATA_CERTIFICATE_EXPIRY_TIME: Duration = Duration::from_secs(3);
 const ITERATIONS: usize = 5;
 const REPLY_SIZE: usize = 10_000;
 const BIG_REPLY_SIZE: usize = 1_000_000;
@@ -87,9 +90,11 @@ fn builder_with_query_cache_capacity(capacity: usize) -> ExecutionTestBuilder {
     builder_with_query_caching().with_query_cache_capacity(capacity as u64)
 }
 
-/// Return `ExecutionTestBuilder` with query cache max expiry time.
-fn builder_with_query_cache_max_expiry_time() -> ExecutionTestBuilder {
-    builder_with_query_caching().with_query_cache_max_expiry_time(MAX_EXPIRY_TIME)
+/// Return `ExecutionTestBuilder` with query cache expiry times.
+fn builder_with_query_cache_expiry_times() -> ExecutionTestBuilder {
+    builder_with_query_caching()
+        .with_query_cache_max_expiry_time(MAX_EXPIRY_TIME)
+        .with_query_cache_data_certificate_expiry_time(DATA_CERTIFICATE_EXPIRY_TIME)
 }
 
 #[test]
@@ -380,6 +385,10 @@ fn query_cache_different_batch_times_return_different_results() {
     assert_eq!(1, m.invalidated_entries.get());
     assert_eq!(1, m.invalidated_entries_by_time.get());
     assert_eq!(0, m.invalidated_entries_by_max_expiry_time.get());
+    assert_eq!(
+        0,
+        m.invalidated_entries_by_data_certificate_expiry_time.get()
+    );
     assert_eq!(0, m.invalidated_entries_by_canister_version.get());
     assert_eq!(0, m.invalidated_entries_by_canister_balance.get());
     assert_eq!(1, m.invalidated_entries_duration.get_sample_sum() as u64);
@@ -417,7 +426,7 @@ fn query_cache_different_batch_times_return_the_same_idempotent_result() {
 
 #[test]
 fn query_cache_different_batch_times_return_different_idempotent_results_after_expiry_time() {
-    let mut test = builder_with_query_cache_max_expiry_time().build();
+    let mut test = builder_with_query_cache_expiry_times().build();
     let id = test.universal_canister().unwrap();
     // The query does not depend on time.
     let q = wasm().reply_data(&[42]).build();
@@ -444,7 +453,7 @@ fn query_cache_different_batch_times_return_different_idempotent_results_after_e
 
 #[test]
 fn query_cache_always_returns_different_idempotent_results_after_expiry_time() {
-    let mut test = builder_with_query_cache_max_expiry_time().build();
+    let mut test = builder_with_query_cache_expiry_times().build();
     let id = test.universal_canister().unwrap();
     let q = wasm().reply_data(&[42]).build();
 
@@ -462,10 +471,47 @@ fn query_cache_always_returns_different_idempotent_results_after_expiry_time() {
     assert_eq!(1, m.invalidated_entries.get());
     assert_eq!(0, m.invalidated_entries_by_time.get());
     assert_eq!(1, m.invalidated_entries_by_max_expiry_time.get());
+    assert_eq!(
+        0,
+        m.invalidated_entries_by_data_certificate_expiry_time.get()
+    );
     assert_eq!(0, m.invalidated_entries_by_canister_version.get());
     assert_eq!(0, m.invalidated_entries_by_canister_balance.get());
     assert_eq!(
         MORE_THAN_MAX_EXPIRY_TIME.as_secs(),
+        m.invalidated_entries_duration.get_sample_sum() as u64
+    );
+    assert_eq!(1, m.invalidated_entries_duration.get_sample_count());
+}
+
+#[test]
+fn query_cache_always_returns_different_results_after_data_certificate_expiry_time() {
+    let mut test = builder_with_query_cache_expiry_times().build();
+    let id = test.universal_canister().unwrap();
+    let q = wasm().data_certificate().reply().build();
+
+    let res_1 = test.non_replicated_query(id, "query", q.clone());
+    assert_eq!(query_cache_metrics(&test).misses.get(), 1);
+    assert_eq!(res_1, Ok(WasmResult::Reply(vec![])));
+
+    // Change the batch time more than the max expiry time.
+    test.state_mut().metadata.batch_time += MORE_THAN_DATA_CERTIFICATE_EXPIRY_TIME;
+
+    let res_2 = test.non_replicated_query(id, "query", q);
+    let m = query_cache_metrics(&test);
+    assert_eq!(2, m.misses.get());
+    assert_eq!(res_1, res_2);
+    assert_eq!(1, m.invalidated_entries.get());
+    assert_eq!(0, m.invalidated_entries_by_time.get());
+    assert_eq!(0, m.invalidated_entries_by_max_expiry_time.get());
+    assert_eq!(
+        1,
+        m.invalidated_entries_by_data_certificate_expiry_time.get()
+    );
+    assert_eq!(0, m.invalidated_entries_by_canister_version.get());
+    assert_eq!(0, m.invalidated_entries_by_canister_balance.get());
+    assert_eq!(
+        MORE_THAN_DATA_CERTIFICATE_EXPIRY_TIME.as_secs(),
         m.invalidated_entries_duration.get_sample_sum() as u64
     );
     assert_eq!(1, m.invalidated_entries_duration.get_sample_count());
@@ -491,6 +537,10 @@ fn query_cache_invalidated_entries_work_with_negative_durations() {
     assert_eq!(res_1, res_2);
     assert_eq!(1, m.invalidated_entries_by_time.get());
     assert_eq!(0, m.invalidated_entries_by_max_expiry_time.get());
+    assert_eq!(
+        0,
+        m.invalidated_entries_by_data_certificate_expiry_time.get()
+    );
     // Negative durations should give just 0.
     assert_eq!(0, m.invalidated_entries_duration.get_sample_sum() as usize);
     assert_eq!(1, m.invalidated_entries_duration.get_sample_count());
@@ -516,6 +566,10 @@ fn query_cache_different_canister_versions_return_different_results() {
     assert_eq!(1, m.invalidated_entries.get());
     assert_eq!(0, m.invalidated_entries_by_time.get());
     assert_eq!(0, m.invalidated_entries_by_max_expiry_time.get());
+    assert_eq!(
+        0,
+        m.invalidated_entries_by_data_certificate_expiry_time.get()
+    );
     assert_eq!(1, m.invalidated_entries_by_canister_version.get());
     assert_eq!(0, m.invalidated_entries_by_canister_balance.get());
     assert_eq!(0, m.invalidated_entries_duration.get_sample_sum() as usize);
@@ -604,6 +658,10 @@ fn query_cache_different_canister_balance128s_return_different_results() {
     assert_eq!(1, m.invalidated_entries.get());
     assert_eq!(0, m.invalidated_entries_by_time.get());
     assert_eq!(0, m.invalidated_entries_by_max_expiry_time.get());
+    assert_eq!(
+        0,
+        m.invalidated_entries_by_data_certificate_expiry_time.get()
+    );
     assert_eq!(0, m.invalidated_entries_by_canister_version.get());
     assert_eq!(1, m.invalidated_entries_by_canister_balance.get());
     assert_eq!(0, m.invalidated_entries_duration.get_sample_sum() as usize);
@@ -612,10 +670,15 @@ fn query_cache_different_canister_balance128s_return_different_results() {
 
 #[test]
 fn query_cache_combined_invalidation_works() {
-    let mut test = builder_with_query_cache_max_expiry_time().build();
+    let mut test = builder_with_query_cache_expiry_times().build();
     let id = test.universal_canister().unwrap();
     // The query must get the time and balance, otherwise the entry won't be invalidated.
-    let q = wasm().time().cycles_balance().reply_data(&[42]).build();
+    let q = wasm()
+        .time()
+        .cycles_balance()
+        .data_certificate()
+        .reply()
+        .build();
 
     let res_1 = test.non_replicated_query(id, "query", q.clone());
 
@@ -633,6 +696,10 @@ fn query_cache_combined_invalidation_works() {
     assert_eq!(1, m.invalidated_entries.get());
     assert_eq!(1, m.invalidated_entries_by_time.get());
     assert_eq!(1, m.invalidated_entries_by_max_expiry_time.get());
+    assert_eq!(
+        1,
+        m.invalidated_entries_by_data_certificate_expiry_time.get()
+    );
     assert_eq!(1, m.invalidated_entries_by_canister_version.get());
     assert_eq!(1, m.invalidated_entries_by_canister_balance.get());
 }
@@ -752,6 +819,9 @@ fn query_cache_metrics_system_api_calls_work_on_composite_query() {
 
     let a = wasm()
         // Fist group of System API calls.
+        .data_certificate()
+        .data_certificate()
+        .data_certificate()
         .cycles_balance()
         .cycles_balance128()
         .time()
@@ -782,6 +852,10 @@ fn query_cache_metrics_system_api_calls_work_on_composite_query() {
             ),
         )
         // Second group of System API calls.
+        .data_certificate()
+        .data_certificate()
+        .data_certificate()
+        .data_certificate()
         .cycles_balance()
         .cycles_balance128()
         .time()
@@ -816,6 +890,13 @@ fn query_cache_metrics_system_api_calls_work_on_composite_query() {
         6,
         m.query_system_api_calls
             .with_label_values(&[metrics::SYSTEM_API_TIME])
+            .get()
+    );
+    // Seven `ic0.data_certificate_copy()` calls.
+    assert_eq!(
+        7,
+        m.query_system_api_calls
+            .with_label_values(&[metrics::SYSTEM_API_DATA_CERTIFICATE_COPY])
             .get()
     );
 }
@@ -874,12 +955,13 @@ fn query_cache_composite_queries_return_the_same_result() {
     assert_eq!(1, m.hits_with_ignored_time.get());
     assert_eq!(1, m.hits_with_ignored_canister_balance.get());
     assert_eq!(0, m.invalidated_entries_by_nested_call.get());
+    assert_eq!(0, m.invalidated_entries_by_error.get());
     assert_eq!(res_1, res_2);
 }
 
 #[test]
 fn query_cache_composite_queries_return_different_results_after_expiry_time() {
-    let mut test = builder_with_query_cache_max_expiry_time().build();
+    let mut test = builder_with_query_cache_expiry_times().build();
     let id = test.universal_canister().unwrap();
     // The query has no time or balance dependencies.
     let q = wasm().reply_data(&[42]).build();
@@ -902,6 +984,7 @@ fn query_cache_composite_queries_return_different_results_after_expiry_time() {
     assert_eq!(2, m.misses.get());
     assert_eq!(0, m.hits.get());
     assert_eq!(0, m.invalidated_entries_by_nested_call.get());
+    assert_eq!(0, m.invalidated_entries_by_error.get());
     assert_eq!(res_1, res_2);
 }
 
@@ -933,7 +1016,189 @@ fn query_cache_nested_queries_never_get_cached() {
     assert_eq!(2, m.misses.get());
     assert_eq!(0, m.hits.get());
     assert_eq!(2, m.invalidated_entries_by_nested_call.get());
+    assert_eq!(0, m.invalidated_entries_by_error.get());
     assert_eq!(res_1, res_2);
+}
+
+#[test]
+fn query_cache_transient_errors_never_get_cached() {
+    let mut test = builder_with_query_caching().build();
+    let a_id = test.universal_canister().unwrap();
+    // The query explicitly traps.
+    let q = wasm().trap().build();
+
+    // Run the query for the first time.
+    let res_1 = test.non_replicated_query(a_id, "query", q.clone());
+    // Assert it's a miss.
+    let m = query_cache_metrics(&test);
+    assert_eq!(1, m.misses.get());
+    assert_eq!(0, m.hits.get());
+    assert!(res_1.is_err());
+
+    // Do not change balance or time.
+
+    // Run the same query for the second time.
+    let res_2 = test.non_replicated_query(a_id, "query", q);
+    // Assert it's a miss again, despite there were no changes.
+    let m = query_cache_metrics(&test);
+    assert_eq!(2, m.misses.get());
+    assert_eq!(0, m.hits.get());
+    assert_eq!(0, m.invalidated_entries_by_nested_call.get());
+    assert_eq!(2, m.invalidated_entries_by_error.get());
+    assert_eq!(res_1, res_2);
+}
+
+#[test]
+fn query_cache_returns_different_results_on_canister_stop() {
+    let mut test = builder_with_query_caching().build();
+    let a_id = test.universal_canister().unwrap();
+    let q = wasm().reply_data(&[42]).build();
+
+    // Run the query for the first time.
+    let res_1 = test.non_replicated_query(a_id, "query", q.clone());
+    // Assert it's a miss.
+    let m = query_cache_metrics(&test);
+    assert_eq!(0, m.hits.get());
+    assert_eq!(1, m.misses.get());
+    assert_eq!(0, m.invalidated_entries_by_error.get());
+    assert_eq!(res_1, Ok(WasmResult::Reply(vec![42])));
+
+    // Stop the canister.
+    test.stop_canister(a_id);
+    test.process_stopping_canisters();
+
+    // Run the same query for the second time.
+    test.non_replicated_query(a_id, "query", q.clone())
+        .expect_err("The query should fail as the canister is stopped.");
+    // Assert it's a fail (the query didn't run).
+    let m = query_cache_metrics(&test);
+    assert_eq!(0, m.hits.get());
+    assert_eq!(1, m.misses.get());
+    assert_eq!(0, m.invalidated_entries_by_error.get());
+}
+
+#[test]
+fn query_cache_returns_different_results_on_canister_start() {
+    let mut test = builder_with_query_caching().build();
+    let a_id = test.universal_canister().unwrap();
+    let q = wasm().reply_data(&[42]).build();
+
+    // Stop the canister initially.
+    test.stop_canister(a_id);
+    test.process_stopping_canisters();
+
+    // Run the query for the first time.
+    test.non_replicated_query(a_id, "query", q.clone())
+        .expect_err("The query should fail as the canister is stopped.");
+    // Assert it's a fail (the query didn't run).
+    let m = query_cache_metrics(&test);
+    assert_eq!(0, m.hits.get());
+    assert_eq!(0, m.misses.get());
+    assert_eq!(0, m.invalidated_entries_by_error.get());
+
+    // Start the canister.
+    test.start_canister(a_id)
+        .expect("The canister should successfully start.");
+
+    // Run the same query for the second time.
+    let res_2 = test.non_replicated_query(a_id, "query", q.clone());
+    // Assert it's a miss now.
+    let m = query_cache_metrics(&test);
+    assert_eq!(0, m.hits.get());
+    assert_eq!(1, m.misses.get());
+    assert_eq!(0, m.invalidated_entries_by_error.get());
+    assert_eq!(res_2, Ok(WasmResult::Reply(vec![42])));
+}
+
+#[test]
+fn query_cache_returns_different_results_on_canister_stop_start() {
+    let mut test = builder_with_query_caching().build();
+    let a_id = test.universal_canister().unwrap();
+    let q = wasm().reply_data(&[42]).build();
+
+    // Run the query for the first time.
+    let res_1 = test.non_replicated_query(a_id, "query", q.clone());
+    // Assert it's a miss.
+    let m = query_cache_metrics(&test);
+    assert_eq!(1, m.misses.get());
+    assert_eq!(0, m.invalidated_entries_by_error.get());
+    assert_eq!(res_1, Ok(WasmResult::Reply(vec![42])));
+
+    // Stop/start the canister.
+    test.stop_canister(a_id);
+    test.process_stopping_canisters();
+    test.start_canister(a_id)
+        .expect("The canister should successfully start.");
+
+    // Run the same query for the second time.
+    let res_2 = test.non_replicated_query(a_id, "query", q.clone());
+    // Assert it's a miss again.
+    let m = query_cache_metrics(&test);
+    assert_eq!(2, m.misses.get());
+    assert_eq!(1, m.invalidated_entries_by_canister_version.get());
+    assert_eq!(0, m.invalidated_entries_by_error.get());
+    assert_eq!(res_1, res_2);
+}
+
+#[test]
+fn query_cache_returns_different_results_on_canister_create() {
+    let mut test = builder_with_query_caching().build();
+    let expected_id = CanisterId::from_u64(0);
+    let q = wasm().reply_data(&[42]).build();
+
+    // There is no canister initially.
+
+    // Run the query for the first time.
+    test.non_replicated_query(expected_id, "query", q.clone())
+        .expect_err("The query should fail as the canister is not created yet.");
+    // Assert it's a fail (the query didn't run).
+    let m = query_cache_metrics(&test);
+    assert_eq!(0, m.misses.get());
+    assert_eq!(0, m.hits.get());
+    assert_eq!(0, m.invalidated_entries_by_error.get());
+
+    // Create a canister with expected ID.
+    let a_id = test.universal_canister().unwrap();
+    assert_eq!(expected_id, a_id);
+
+    // Run the same query for the second time.
+    let res_2 = test.non_replicated_query(a_id, "query", q.clone());
+    // Assert it's a miss now.
+    let m = query_cache_metrics(&test);
+    assert_eq!(1, m.misses.get());
+    assert_eq!(0, m.invalidated_entries_by_error.get());
+    assert_eq!(res_2, Ok(WasmResult::Reply(vec![42])));
+}
+
+#[test]
+fn query_cache_returns_different_results_on_canister_delete() {
+    let mut test = builder_with_query_caching().build();
+    let a_id = test.universal_canister().unwrap();
+    let q = wasm().reply_data(&[42]).build();
+
+    // Run the query for the first time.
+    let res_1 = test.non_replicated_query(a_id, "query", q.clone());
+    // Assert it's a miss.
+    let m = query_cache_metrics(&test);
+    assert_eq!(1, m.misses.get());
+    assert_eq!(0, m.invalidated_entries_by_error.get());
+    assert_eq!(res_1, Ok(WasmResult::Reply(vec![42])));
+
+    // Delete the canister.
+    test.stop_canister(a_id);
+    test.process_stopping_canisters();
+    test.delete_canister(a_id)
+        .expect("The deletion should succeed");
+
+    // Run the same query for the second time.
+    test.non_replicated_query(a_id, "query", q.clone())
+        .expect_err("The query should fail as there is no more canister.");
+
+    // Assert it's a fail (the query didn't run).
+    let m = query_cache_metrics(&test);
+    assert_eq!(0, m.hits.get());
+    assert_eq!(1, m.misses.get());
+    assert_eq!(0, m.invalidated_entries_by_error.get());
 }
 
 #[test]

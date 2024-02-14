@@ -103,7 +103,7 @@ impl StreamBuilderMetrics {
         );
         let routed_payload_sizes = metrics_registry.histogram(
             METRIC_ROUTED_PAYLOAD_SIZES,
-            "Successfully routed XNet messages' total payload size.",
+            "Successfully routed XNet messages' payload sizes.",
             // 10 B - 5 MB
             decimal_buckets(1, 6),
         );

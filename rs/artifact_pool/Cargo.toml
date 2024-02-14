@@ -16,8 +16,8 @@ ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
+ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
-ic-utils = { path = "../utils" }
 prometheus = { workspace = true }
 lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "f62018b2deb79ea0d53914d5502389433fc3e6da" }
 prost = { workspace = true }
@@ -34,7 +34,7 @@ nix = { workspace = true }
 [dev-dependencies]
 criterion = "0.5"
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
-ic-ic00-types = { path = "../types/ic00_types" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-test-artifact-pool = { path = "../test_utilities/artifact_pool" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }

@@ -5,11 +5,9 @@ source '/opt/ic/bin/helpers.shlib'
 source '/opt/ic/bin/exec_condition.shlib'
 
 readonly IDENTITY_PEM="${BOOT_DIR}/certificate_issuer_identity.pem"
-readonly RAW_DOMAINS="${BOOT_DIR}/raw_domains.txt"
 
 readonly RUN_DIR='/run/ic-node/etc/default'
 readonly ENV_FILE="${RUN_DIR}/certificate-syncer"
-readonly CFG_DIR='/run/ic-node/etc/certificate-syncer'
 readonly CONFIG_FILE="${BOOT_DIR}/certificate_syncer.conf"
 
 # Read the config variables. The files must be of the form
@@ -32,20 +30,10 @@ function read_variables() {
     fi
 }
 
-function copy_files() {
-    mkdir -p "${CFG_DIR}"
-
-    if [ -f "${RAW_DOMAINS}" ]; then
-        RAW_FILE_PATH="${CFG_DIR}/raw_domains.txt"
-        cp "${RAW_DOMAINS}" "${RAW_FILE_PATH}"
-    fi
-}
-
 function generate_config() {
     mkdir -p $(dirname "${ENV_FILE}")
 
     cat >"${ENV_FILE}" <<EOF
-RAW_DOMAINS_PATH=${RAW_FILE_PATH:-}
 POLLING_INTERVAL_SEC=${POLLING_INTERVAL_SEC:-}
 EOF
 }
@@ -58,7 +46,6 @@ function main() {
     fi
 
     read_variables
-    copy_files
     generate_config
 }
 

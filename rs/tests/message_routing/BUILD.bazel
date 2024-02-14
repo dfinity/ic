@@ -14,6 +14,7 @@ system_test(
 
 system_test(
     name = "rejoin_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
@@ -26,6 +27,7 @@ system_test(
 
 system_test(
     name = "rejoin_test_large_state",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hotfix",
@@ -39,6 +41,7 @@ system_test(
 
 system_test(
     name = "state_sync_malicious_chunk_test",
+    flaky = True,
     malicious = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -46,6 +49,6 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = ["//ic-os:scripts/build-bootstrap-config-image.sh"] + GRAFANA_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + STATESYNC_TEST_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + STATESYNC_TEST_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )

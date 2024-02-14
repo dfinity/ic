@@ -1,6 +1,7 @@
 use crate::mock::{
     JsonRpcMethod, JsonRpcProvider, MockJsonRpcProviders, MockJsonRpcProvidersBuilder,
 };
+use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use ethers_core::abi::AbiDecode;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -9,10 +10,9 @@ use ic_cketh_minter::endpoints::events::{
     Event, EventPayload, EventSource, GetEventsResult, TransactionReceipt, TransactionStatus,
     UnsignedTransaction,
 };
-use ic_cketh_minter::endpoints::RetrieveEthStatus::Pending;
 use ic_cketh_minter::endpoints::{
-    CandidBlockTag, EthTransaction, RetrieveEthRequest, RetrieveEthStatus, TxFinalizedStatus,
-    WithdrawalArg, WithdrawalError,
+    CandidBlockTag, Eip1559TransactionPrice, EthTransaction, RetrieveEthRequest, RetrieveEthStatus,
+    RetrieveEthStatus::Pending, TxFinalizedStatus, WithdrawalArg, WithdrawalError,
 };
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::lifecycle::{init::InitArg as MinterInitArgs, EthereumNetwork, MinterArg};
@@ -100,7 +100,12 @@ fn should_deposit_and_withdraw() {
         .expect_withdrawal_request_accepted();
 
     let withdrawal_id = cketh.withdrawal_id().clone();
+
     let time = cketh.setup.env.get_time().as_nanos_since_unix_epoch();
+    let max_fee_per_gas = Nat::from(33003708258u64);
+    let gas_limit = Nat::from(21_000_u32);
+    let max_priority_fee_per_gas = Nat::from(1_500_000_000_u32);
+
     let cketh = cketh
         .wait_and_validate_withdrawal(ProcessWithdrawalParams::default())
         .expect_finalized_status(TxFinalizedStatus::Success(EthTransaction {
@@ -124,9 +129,6 @@ fn should_deposit_and_withdraw() {
         });
     assert_eq!(cketh.balance_of(caller), Nat::from(0_u8));
 
-    let max_fee_per_gas = Nat::from(33003708258u64);
-    let gas_limit = Nat::from(21_000_u32);
-
     cketh.assert_has_unique_events_in_order(&vec![
         EventPayload::AcceptedEthWithdrawalRequest {
             withdrawal_amount: withdrawal_amount.clone(),
@@ -141,7 +143,7 @@ fn should_deposit_and_withdraw() {
             transaction: UnsignedTransaction {
                 chain_id: Nat::from(1_u8),
                 nonce: Nat::from(0_u8),
-                max_priority_fee_per_gas: Nat::from(1_500_000_000_u32),
+                max_priority_fee_per_gas,
                 max_fee_per_gas: max_fee_per_gas.clone(),
                 gas_limit: gas_limit.clone(),
                 destination,
@@ -167,6 +169,45 @@ fn should_deposit_and_withdraw() {
             },
         },
     ]);
+}
+
+#[test]
+fn should_retrieve_cache_transaction_price() {
+    let cketh = CkEthSetup::new();
+    let caller: Principal = cketh.caller.into();
+    let withdrawal_amount = Nat::from(EXPECTED_BALANCE - CKETH_TRANSFER_FEE);
+    let destination = DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string();
+
+    let result = cketh.eip_1559_transaction_price();
+    assert_matches!(result, Err(e) if e.code() == ic_state_machine_tests::ErrorCode::CanisterCalledTrap);
+
+    let cketh = cketh
+        .deposit(DepositParams::default())
+        .expect_mint()
+        .call_ledger_approve_minter(caller, EXPECTED_BALANCE, None)
+        .expect_ok(1)
+        .call_minter_withdraw_eth(caller, withdrawal_amount.clone(), destination.clone())
+        .expect_withdrawal_request_accepted()
+        .wait_and_validate_withdrawal(ProcessWithdrawalParams::default())
+        .setup;
+
+    let tx = cketh
+        .get_all_events()
+        .into_iter()
+        .find_map(|event| match event.payload {
+            EventPayload::CreatedTransaction { transaction, .. } => Some(transaction),
+            _ => None,
+        })
+        .expect("missing CreatedTransaction event");
+
+    let price = cketh.eip_1559_transaction_price_expecting_ok();
+    assert_eq!(price.max_priority_fee_per_gas, tx.max_priority_fee_per_gas);
+    assert_eq!(price.max_fee_per_gas, tx.max_fee_per_gas);
+    assert_eq!(price.gas_limit, tx.gas_limit);
+
+    cketh.env.tick();
+    let second_price = cketh.eip_1559_transaction_price_expecting_ok();
+    assert_eq!(price, second_price);
 }
 
 #[test]
@@ -1457,6 +1498,24 @@ impl CkEthSetup {
                     .expect("failed to query balance on the ledger")
             ),
             Nat
+        )
+        .unwrap()
+    }
+
+    pub fn eip_1559_transaction_price(
+        &self,
+    ) -> Result<WasmResult, ic_state_machine_tests::UserError> {
+        self.env.query(
+            self.minter_id,
+            "eip_1559_transaction_price",
+            Encode!().unwrap(),
+        )
+    }
+
+    pub fn eip_1559_transaction_price_expecting_ok(&self) -> Eip1559TransactionPrice {
+        Decode!(
+            &assert_reply(self.eip_1559_transaction_price().unwrap()),
+            Eip1559TransactionPrice
         )
         .unwrap()
     }

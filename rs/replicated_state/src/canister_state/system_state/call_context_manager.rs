@@ -2,8 +2,8 @@
 mod tests;
 
 use crate::StateError;
-use ic_ic00_types::IC_00;
 use ic_interfaces::execution_environment::HypervisorError;
+use ic_management_canister_types::IC_00;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_protobuf::types::v1 as pb_types;
@@ -400,28 +400,19 @@ impl CallContextManager {
     /// or if the response is not valid.
     pub(crate) fn validate_response(&self, response: &Response) -> Result<(), StateError> {
         match self.callback(response.originator_reply_callback) {
-            Some(callback) => {
-                // (EXC-877) Once this is deployed in production,
-                // it's safe to make `respondent` and `originator` non-optional.
-                // Currently optional to ensure backwards compatibility.
-                match (callback.respondent(), callback.originator()) {
-                    (Some(respondent), Some(originator))
-                        if response.respondent != respondent
-                            || response.originator != originator =>
-                    {
-                        Err(StateError::NonMatchingResponse {
-                                err_str: format!(
-                                    "invalid details, expected => [originator => {}, respondent => {}], but got response with",
-                                    originator, respondent,
-                                ),
-                                originator: response.originator,
-                                callback_id: response.originator_reply_callback,
-                                respondent: response.respondent,
-                            })
-                    }
-                    _ => Ok(()),
-                }
+            Some(callback) if response.respondent != callback.respondent
+                    || response.originator != callback.originator => {
+                Err(StateError::NonMatchingResponse {
+                    err_str: format!(
+                        "invalid details, expected => [originator => {}, respondent => {}], but got response with",
+                        callback.originator, callback.respondent,
+                    ),
+                    originator: response.originator,
+                    callback_id: response.originator_reply_callback,
+                    respondent: response.respondent,
+                })
             }
+            Some(_) => Ok(()),
             None => {
                 // Received an unknown callback ID.
                 Err(StateError::NonMatchingResponse {

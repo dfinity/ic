@@ -30,7 +30,7 @@ ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der"
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-error-types = { path = "../types/error_types" }
 ic-execution-environment = { path = "../execution_environment/" }
-ic-ic00-types = { path = "../types/ic00_types" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-ingress-manager = { path = "../ingress_manager" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }

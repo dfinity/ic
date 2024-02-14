@@ -17,15 +17,16 @@ fn test_status() {
 }
 
 #[test]
-fn test_creation_of_instance() {
+fn test_creation_of_instance_extended() {
+    use pocket_ic::common::rest::ExtendedSubnetConfigSet;
     let url = start_server();
     let client = reqwest::blocking::Client::new();
     let response = client
         .post(url.join("instances").unwrap())
-        .json(&SubnetConfigSet {
+        .json(&Into::<ExtendedSubnetConfigSet>::into(SubnetConfigSet {
             application: 1,
             ..Default::default()
-        })
+        }))
         .send()
         .unwrap();
 

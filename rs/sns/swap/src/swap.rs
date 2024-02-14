@@ -45,7 +45,8 @@ use ic_sns_governance::{
         NeuronId, SetMode, SetModeResponse,
     },
 };
-use ic_stable_structures::{storable::Blob, BoundedStorable, GrowFailed, Storable};
+use ic_stable_structures::storable::Bound;
+use ic_stable_structures::{storable::Blob, GrowFailed, Storable};
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use itertools::{Either, Itertools};
@@ -691,7 +692,7 @@ impl Swap {
     // --- state transition functions ------------------------------------------
     //
 
-    /// Tries to transition the Swap Lifecycle to `Lifecycle::Open`.  
+    /// Tries to transition the Swap Lifecycle to `Lifecycle::Open`.
     /// Returns true if a transition was made, and false otherwise.
     pub fn try_open(&mut self, now_seconds: u64) -> bool {
         if !self.can_open(now_seconds) {
@@ -833,7 +834,7 @@ impl Swap {
         r as u64
     }
 
-    /// Tries to transition the Swap Lifecycle to `Lifecycle::Committed`.  
+    /// Tries to transition the Swap Lifecycle to `Lifecycle::Committed`.
     /// Returns true if a transition was made, and false otherwise.
     pub fn try_commit(&mut self, now_seconds: u64) -> bool {
         if !self.can_commit(now_seconds) {
@@ -1058,7 +1059,7 @@ impl Swap {
         sweep_result
     }
 
-    /// Tries to transition the Swap Lifecycle to `Lifecycle::Aborted`.  
+    /// Tries to transition the Swap Lifecycle to `Lifecycle::Aborted`.
     /// Returns true if a transition was made, and false otherwise.
     pub fn try_abort(&mut self, now_seconds: u64) -> bool {
         if !self.can_abort(now_seconds) {
@@ -3628,25 +3629,24 @@ impl Storable for Ticket {
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
         Self::decode(&bytes[..]).expect("Cannot decode ticket")
     }
-}
 
-impl BoundedStorable for Ticket {
-    // [Ticket] is stored protocol-buffer encoded. The length
-    // is variable but when all fields are using the max
-    // number of bytes then the size is the following
-    //
-    //   11 + // 08 + encode_variant(u64::MAX)
-    //   70 + // 12 + 44 +
-    //        //    0a + encode_bytes(principal [32 bytes])
-    //        //    12 + encode_bytes(subaccount [32 bytes])
-    //   11 + // 18 + encode_variant(u64::MAX) +
-    //   11 + // 20 + encode_variant(u64::MAX)
-    //= 103 (*2 to be sure)
-    const MAX_SIZE: u32 = 206;
-
-    // The size is not fixed because of base 128 variants and
-    // different size principals
-    const IS_FIXED_SIZE: bool = false;
+    const BOUND: Bound = Bound::Bounded {
+        // [Ticket] is stored protocol-buffer encoded. The length
+        // is variable but when all fields are using the max
+        // number of bytes then the size is the following
+        //
+        //   11 + // 08 + encode_variant(u64::MAX)
+        //   70 + // 12 + 44 +
+        //        //    0a + encode_bytes(principal [32 bytes])
+        //        //    12 + encode_bytes(subaccount [32 bytes])
+        //   11 + // 18 + encode_variant(u64::MAX) +
+        //   11 + // 20 + encode_variant(u64::MAX)
+        //= 103 (*2 to be sure)
+        max_size: 206,
+        // The size is not fixed because of base 128 variants and
+        // different size principals
+        is_fixed_size: false,
+    };
 }
 
 impl GetOpenTicketResponse {

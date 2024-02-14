@@ -894,7 +894,7 @@ pub trait HalfOpenInterval {
     fn contains(&self, x: u64) -> bool {
         self.from() <= x && x < self.to()
     }
-    fn find(intervals: &Vec<Self>, x: u64) -> Option<&Self>
+    fn find(intervals: &[Self], x: u64) -> Option<&Self>
     where
         Self: Sized,
     {

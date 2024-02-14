@@ -23,3 +23,4 @@ mod configuration;
 mod tls;
 
 pub use crate::core::main;
+pub use crate::routes::{status, Health, RootKey};

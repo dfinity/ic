@@ -6,7 +6,7 @@ use candid::{CandidType, Decode};
 use http::Request;
 use ic_btc_interface::{Network as BitcoinNetwork, NetworkInRequest};
 use ic_config::execution_environment::{BITCOIN_MAINNET_CANISTER_ID, BITCOIN_TESTNET_CANISTER_ID};
-use ic_ic00_types::QueryMethod;
+use ic_management_canister_types::QueryMethod;
 use ic_types::CanisterId;
 use lazy_static::lazy_static;
 use ratelimit::Ratelimiter;

@@ -5,6 +5,8 @@ source '/opt/ic/bin/helpers.shlib'
 
 readonly SERVICE_NAME='ic-boundary'
 
+readonly IC_BOUNDARY_CONFIG="${BOOT_DIR}/ic_boundary.conf"
+
 readonly NNS_CONFIG="${BOOT_DIR}/nns.conf"
 readonly NNS_PEM="${BOOT_DIR}/nns_public_key.pem"
 
@@ -37,6 +39,15 @@ function read_variables() {
         err "missing NNS configuration value(s): $(cat "${NNS_CONFIG}")"
         exit 1
     fi
+
+    if [ -f "${IC_BOUNDARY_CONFIG}" ]; then
+        while IFS="=" read -r key value; do
+            case "${key}" in
+                "max_concurrency") MAX_CONCURRENCY+=("${value}") ;;
+                "shed_ewma_param") SHED_EWMA_PARAM+=("${value}") ;;
+            esac
+        done <"${IC_BOUNDARY_CONFIG}"
+    fi
 }
 
 function generate_config() {
@@ -51,6 +62,8 @@ NNS_URL=${NNS_URL}
 CACHE_SIZE=1073741824
 CACHE_ITEM_MAX_SIZE=131072
 CACHE_TTL=1
+MAX_CONCURRENCY=${MAX_CONCURRENCY:-}
+SHED_EWMA_PARAM=${SHED_EWMA_PARAM:-}
 EOF
 }
 

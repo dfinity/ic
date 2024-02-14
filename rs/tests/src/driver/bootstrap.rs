@@ -2,7 +2,7 @@ use crate::driver::{
     config::NODES_INFO,
     driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
     farm::{Farm, FarmResult, FileId},
-    ic::{InternetComputer, Ipv4Config, Node},
+    ic::{InternetComputer, Node},
     nested::{NestedNode, NestedVms, NESTED_CONFIGURED_IMAGE_PATH},
     node_software_version::NodeSoftwareVersion,
     port_allocator::AddrType,
@@ -14,7 +14,8 @@ use crate::driver::{
     },
     test_setup::InfraProvider,
 };
-use crate::k8s::tnet::TNet;
+use crate::k8s::images::*;
+use crate::k8s::tnet::{TNet, TNode};
 use crate::util::block_on;
 use anyhow::{bail, Result};
 use flate2::{write::GzEncoder, Compression};
@@ -28,6 +29,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::ReplicaVersion;
+use registry_canister::mutations::node_management::do_update_node_ipv4_config_directly::IPv4Config;
 use slog::{info, warn, Logger};
 use std::{
     collections::BTreeMap,
@@ -212,81 +214,31 @@ pub fn init_ic(
         ));
     }
 
+    // Due to a change in how default firewall rules are supplied, they are
+    // not preserved across the transitional upgrade. We temporarily stash
+    // the whitelist in the registry for the time being.
+    // THIS PATH SHOULD BE REMOVED.
+    if ic.with_forced_default_firewall {
+        let default_firewall_whitelist_path =
+            test_env.get_dependency_path("rs/tests/src/default_firewall_whitelist.conf");
+        let default_firewall_whitelist = std::fs::read_to_string(default_firewall_whitelist_path)
+            .expect("Could not read default whitelist");
+        let ipv6_whitelist = default_firewall_whitelist
+            .lines()
+            .find_map(|v| v.strip_prefix("ipv6_whitelist="))
+            .expect("Could not find ipv6_whitelist")
+            .replace('"', "")
+            .to_string();
+
+        ic_config.set_whitelisted_prefixes(Some(ipv6_whitelist));
+        ic_config.set_whitelisted_ports(Some(
+            "22,2497,4100,7070,8080,9090,9091,9100,19100,19531".to_string(),
+        ));
+    }
+
     info!(test_env.logger(), "Initializing via {:?}", &ic_config);
 
     Ok(ic_config.initialize()?)
-}
-
-pub fn setup_and_start_vms_k8s(
-    initialized_ic: &InitializedIc,
-    ic: &InternetComputer,
-    env: &TestEnv,
-    group_name: &str,
-    tnet: &TNet,
-) -> anyhow::Result<()> {
-    let mut nodes = vec![];
-    for subnet in initialized_ic.initialized_topology.values() {
-        for node in subnet.initialized_nodes.values() {
-            nodes.push(node.clone());
-        }
-    }
-    for node in initialized_ic.unassigned_nodes.values() {
-        nodes.push(node.clone());
-    }
-
-    let mut join_handles: Vec<JoinHandle<anyhow::Result<()>>> = vec![];
-    let mut nodes_info = NodesInfo::new();
-    for node in nodes {
-        let group_name = group_name.to_string();
-        // let vm_name = node.node_id.to_string();
-        let t_env = env.clone();
-        let ic_name = ic.name();
-        let malicious_behaviour = ic.get_malicious_behavior_of_node(node.node_id);
-        nodes_info.insert(node.node_id, malicious_behaviour.clone());
-
-        let mut upload_url = "".to_string();
-        let ip = node.node_config.public_api.ip().to_string();
-        for tnet_node in tnet.nns_nodes.iter().chain(tnet.app_nodes.iter()) {
-            if tnet_node.ipv6_addr.unwrap().to_string() == ip {
-                upload_url = tnet_node.config_url.clone().unwrap();
-            }
-        }
-
-        let conf_img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
-        join_handles.push(thread::spawn(move || {
-            create_config_disk_image(
-                &ic_name,
-                &node,
-                malicious_behaviour,
-                None,
-                None,
-                &t_env,
-                &group_name,
-            )?;
-
-            block_on(TNet::upload_url(conf_img_path.as_path(), &upload_url))
-                .expect("Failed to upload config image");
-            std::fs::remove_file(conf_img_path)?;
-            Ok(())
-        }));
-    }
-    // In the tests we may need to identify, which node/s have malicious behavior.
-    // We dump this info into a file.
-    env.write_json_object(NODES_INFO, &nodes_info)?;
-
-    let mut result = Ok(());
-    // Wait for all threads to finish and return an error if any of them fails.
-    for jh in join_handles {
-        if let Err(e) = jh.join().expect("waiting for a thread failed") {
-            result = Err(anyhow::anyhow!(
-                "failed to set up and start a VM pool: {:?}",
-                e
-            ));
-        }
-    }
-    block_on(tnet.deploy_config_drives()).expect("Failed to deploy config drives");
-    block_on(tnet.start()).expect("Failed to start tnet");
-    result
 }
 
 pub fn setup_and_start_vms(
@@ -306,6 +258,11 @@ pub fn setup_and_start_vms(
         nodes.push(node.clone());
     }
 
+    let tnet = match InfraProvider::read_attribute(env) {
+        InfraProvider::K8s => TNet::read_attribute(env),
+        InfraProvider::Farm => TNet::new("dummy")?,
+    };
+
     let mut join_handles: Vec<JoinHandle<anyhow::Result<()>>> = vec![];
     let mut nodes_info = NodesInfo::new();
     for node in nodes {
@@ -315,25 +272,53 @@ pub fn setup_and_start_vms(
         let t_env = env.clone();
         let ic_name = ic.name();
         let malicious_behaviour = ic.get_malicious_behavior_of_node(node.node_id);
+        let query_stats_epoch_length = ic.get_query_stats_epoch_length_of_node(node.node_id);
         let ipv4_config = ic.get_ipv4_config_of_node(node.node_id);
         let domain = ic.get_domain_of_node(node.node_id);
         nodes_info.insert(node.node_id, malicious_behaviour.clone());
+        let tnet_node = match InfraProvider::read_attribute(env) {
+            InfraProvider::K8s => tnet
+                .nodes
+                .iter()
+                .find(|n| n.node_id.clone().expect("node_id missing") == vm_name.clone())
+                .expect("tnet doesn't have this node")
+                .clone(),
+            InfraProvider::Farm => TNode::default(),
+        };
         join_handles.push(thread::spawn(move || {
             create_config_disk_image(
                 &ic_name,
                 &node,
                 malicious_behaviour,
+                query_stats_epoch_length,
                 ipv4_config,
                 domain,
                 &t_env,
                 &group_name,
             )?;
-            let image_id = upload_config_disk_image(&group_name, &node, &t_farm)?;
-            // delete uncompressed file
+
             let conf_img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
+            match InfraProvider::read_attribute(&t_env) {
+                InfraProvider::K8s => {
+                    let url = tnet_node.config_url.clone().expect("missing config_url");
+                    block_on(upload_image(conf_img_path.as_path(), &url))
+                        .expect("Failed to upload config image");
+                    block_on(tnet_node.deploy_config_image())
+                        .expect("deploying config image failed");
+                    block_on(tnet_node.start()).expect("starting vm failed");
+                }
+                InfraProvider::Farm => {
+                    let image_id = upload_config_disk_image(&group_name, &node, &t_farm)?;
+                    t_farm.attach_disk_images(
+                        &group_name,
+                        &vm_name,
+                        "usb-storage",
+                        vec![image_id],
+                    )?;
+                    t_farm.start_vm(&group_name, &vm_name)?;
+                }
+            }
             std::fs::remove_file(conf_img_path)?;
-            t_farm.attach_disk_images(&group_name, &vm_name, "usb-storage", vec![image_id])?;
-            t_farm.start_vm(&group_name, &vm_name)?;
             Ok(())
         }));
     }
@@ -420,11 +405,12 @@ pub fn upload_config_disk_image(
 
 /// side-effectful function that creates the config disk images in the node
 /// directories.
-pub fn create_config_disk_image(
+fn create_config_disk_image(
     ic_name: &str,
     node: &InitializedNode,
     malicious_behavior: Option<MaliciousBehaviour>,
-    ipv4_config: Option<Ipv4Config>,
+    query_stats_epoch_length: Option<u64>,
+    ipv4_config: Option<IPv4Config>,
     domain: Option<String>,
     test_env: &TestEnv,
     group_name: &str,
@@ -436,6 +422,9 @@ pub fn create_config_disk_image(
         .prep_dir(ic_name)
         .expect("no no-name IC")
         .registry_local_store_path();
+    let default_firewall_whitelist_path =
+        test_env.get_dependency_path("rs/tests/src/default_firewall_whitelist.conf");
+
     cmd.arg(img_path.clone())
         .arg("--hostname")
         .arg(node.node_id.to_string())
@@ -444,7 +433,9 @@ pub fn create_config_disk_image(
         .arg("--ic_crypto")
         .arg(node.crypto_path())
         .arg("--elasticsearch_tags")
-        .arg(format!("system_test {}", group_name));
+        .arg(format!("system_test {}", group_name))
+        .arg("--default_firewall_whitelist")
+        .arg(default_firewall_whitelist_path);
 
     // We've seen k8s nodes fail to pick up RA correctly, so we specify their
     // addresses directly. Ideally, all nodes should do this, to match mainnet.
@@ -475,21 +466,27 @@ pub fn create_config_disk_image(
             .arg(serde_json::to_string(&malicious_behavior)?);
     }
 
+    if let Some(query_stats_epoch_length) = query_stats_epoch_length {
+        info!(
+            test_env.logger(),
+            "Node with id={} has query_stats_epoch_length={:?}",
+            node.node_id,
+            query_stats_epoch_length
+        );
+        cmd.arg("--query_stats_epoch_length")
+            .arg(format!("{}", query_stats_epoch_length));
+    }
+
     if let Some(ipv4_config) = ipv4_config {
         info!(
             test_env.logger(),
-            "Node with id={} is IPv4-enabled: IP address {:?}/{:?}, IP gateway {:?}",
-            node.node_id,
-            ipv4_config.ip_addr,
-            ipv4_config.prefix_length,
-            ipv4_config.gateway_ip_addr
+            "Node with id={} is IPv4-enabled: {:?}", node.node_id, ipv4_config
         );
         cmd.arg("--ipv4_address").arg(format!(
-            "{:?}/{:?}",
+            "{}/{:?}",
             ipv4_config.ip_addr, ipv4_config.prefix_length
         ));
-        cmd.arg("--ipv4_gateway")
-            .arg(ipv4_config.gateway_ip_addr.to_string());
+        cmd.arg("--ipv4_gateway").arg(&ipv4_config.gateway_ip_addr);
     }
 
     if let Some(domain) = domain {
@@ -616,6 +613,9 @@ fn configure_setupos_image(
         .map(|v| v.lines().map(|v| v.to_owned()).collect())
         .unwrap_or_default();
 
+    let default_firewall_whitelist =
+        env.get_dependency_path("rs/tests/src/default_firewall_whitelist.conf");
+
     // TODO: We transform the IPv6 to get this information, but it could be
     // passed natively.
     let old_ip = nested_vm.get_vm()?.ipv6;
@@ -663,6 +663,8 @@ fn configure_setupos_image(
         .arg(&uncompressed_image)
         .arg("--mgmt-mac")
         .arg(&mac)
+        .arg("--default-firewall-whitelist-path")
+        .arg(&default_firewall_whitelist)
         .arg("--ipv6-prefix")
         .arg(&prefix)
         .arg("--ipv6-gateway")

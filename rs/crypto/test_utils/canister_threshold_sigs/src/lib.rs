@@ -6,17 +6,17 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
     IDkgComplaintInternal, IDkgDealingInternal, NodeIndex, Seed,
 };
 use ic_crypto_temp_crypto::{TempCryptoComponent, TempCryptoComponentGeneric};
-use ic_interfaces::crypto::IDkgProtocol;
 use ic_interfaces::crypto::{
-    BasicSigner, KeyManager, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
+    BasicSigner, IDkgProtocol, KeyManager, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
 };
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, IDkgComplaint, IDkgDealers, IDkgDealing, IDkgMaskedTranscriptOrigin,
-    IDkgOpening, IDkgReceivers, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation,
-    IDkgTranscriptParams, IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
+    BatchSignedIDkgDealing, BatchSignedIDkgDealings, IDkgComplaint, IDkgDealers, IDkgDealing,
+    IDkgMaskedTranscriptOrigin, IDkgOpening, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
+    IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType,
+    IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::{
     ExtendedDerivationPath, PreSignatureQuadruple, ThresholdEcdsaSigShare,
@@ -32,6 +32,7 @@ use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
+use strum_macros::EnumIter;
 
 pub mod dummy_values;
 
@@ -193,10 +194,10 @@ pub fn generate_key_transcript<R: RngCore + CryptoRng>(
     env: &CanisterThresholdSigTestEnvironment,
     dealers: &IDkgDealers,
     receivers: &IDkgReceivers,
-    algorithm_id: AlgorithmId,
+    alg: AlgorithmId,
     rng: &mut R,
 ) -> IDkgTranscript {
-    let masked_key_params = env.params_for_random_sharing(dealers, receivers, algorithm_id, rng);
+    let masked_key_params = setup_masked_random_params(env, alg, dealers, receivers, rng);
 
     let masked_key_transcript = env
         .nodes
@@ -216,18 +217,22 @@ pub fn generate_presig_quadruple<R: RngCore + CryptoRng>(
     env: &CanisterThresholdSigTestEnvironment,
     dealers: &IDkgDealers,
     receivers: &IDkgReceivers,
-    algorithm_id: AlgorithmId,
+    alg: AlgorithmId,
     key_transcript: &IDkgTranscript,
+    random_unmasked_kappa: bool,
     rng: &mut R,
 ) -> PreSignatureQuadruple {
-    let lambda_params = env.params_for_random_sharing(dealers, receivers, algorithm_id, rng);
+    let lambda_params = setup_masked_random_params(env, alg, dealers, receivers, rng);
     let lambda_transcript = env
         .nodes
         .run_idkg_and_create_and_verify_transcript(&lambda_params, rng);
 
-    let kappa_transcript = {
-        let masked_kappa_params =
-            env.params_for_random_sharing(dealers, receivers, algorithm_id, rng);
+    let kappa_transcript = if random_unmasked_kappa {
+        let unmasked_kappa_params = setup_unmasked_random_params(env, alg, dealers, receivers, rng);
+        env.nodes
+            .run_idkg_and_create_and_verify_transcript(&unmasked_kappa_params, rng)
+    } else {
+        let masked_kappa_params = setup_masked_random_params(env, alg, dealers, receivers, rng);
 
         let masked_kappa_transcript = env
             .nodes
@@ -745,7 +750,7 @@ pub mod node {
             (nodes_true, nodes_false)
         }
 
-        pub fn into_receivers<'a, T: AsRef<IDkgReceivers> + 'a>(
+        pub fn into_filtered_by_receivers<'a, T: AsRef<IDkgReceivers> + 'a>(
             self,
             idkg_receivers: T,
         ) -> impl Iterator<Item = Node> + 'a {
@@ -754,7 +759,7 @@ pub mod node {
                 .filter(move |node| idkg_receivers.as_ref().contains(node.id))
         }
 
-        pub fn receivers<'a, T: AsRef<IDkgReceivers> + 'a>(
+        pub fn filter_by_receivers<'a, T: AsRef<IDkgReceivers> + 'a>(
             &'a self,
             idkg_receivers: T,
         ) -> impl Iterator<Item = &Node> + 'a {
@@ -762,7 +767,7 @@ pub mod node {
                 .filter(move |node| idkg_receivers.as_ref().contains(node.id))
         }
 
-        pub fn dealers<'a, T: AsRef<IDkgDealers> + 'a>(
+        pub fn filter_by_dealers<'a, T: AsRef<IDkgDealers> + 'a>(
             &'a self,
             idkg_dealers: T,
         ) -> impl Iterator<Item = &Node> + 'a {
@@ -785,33 +790,37 @@ pub mod node {
             self.iter().choose_multiple(rng, subset_size).into_iter()
         }
 
-        pub fn into_random_receiver<R: Rng>(
-            self,
-            idkg_receivers: &IDkgReceivers,
-            rng: &mut R,
-        ) -> Node {
-            self.into_receivers(idkg_receivers)
-                .choose(rng)
-                .expect("empty receivers")
+        pub fn random_subset<'a, R: RngCore + CryptoRng>(
+            &'a self,
+            size: usize,
+            rng: &'a mut R,
+        ) -> impl Iterator<Item = &Node> + 'a {
+            assert!(
+                size <= self.len(),
+                "Requested a random subset with {} elements but there are only {} elements",
+                size,
+                self.len()
+            );
+            self.iter().choose_multiple(rng, size).into_iter()
         }
 
-        pub fn random_receiver<'a, T: AsRef<IDkgReceivers> + 'a, R: Rng>(
+        pub fn random_filtered_by_receivers<'a, T: AsRef<IDkgReceivers> + 'a, R: Rng>(
             &'a self,
             idkg_receivers: T,
             rng: &mut R,
         ) -> &Node {
-            self.receivers(idkg_receivers)
+            self.filter_by_receivers(idkg_receivers)
                 .choose(rng)
                 .expect("empty receivers")
         }
 
-        pub fn random_receiver_excluding<'a, R: Rng>(
+        pub fn random_filtered_by_receivers_excluding<'a, T: AsRef<IDkgReceivers> + 'a, R: Rng>(
             &'a self,
             exclusion: &Node,
-            idkg_receivers: &'a IDkgReceivers,
+            idkg_receivers: T,
             rng: &mut R,
         ) -> &Node {
-            self.receivers(idkg_receivers)
+            self.filter_by_receivers(idkg_receivers)
                 .filter(|node| *node != exclusion)
                 .choose(rng)
                 .expect("empty receivers")
@@ -822,7 +831,9 @@ pub mod node {
             params: &'a IDkgTranscriptParams,
             rng: &mut R,
         ) -> &Node {
-            self.dealers(params).choose(rng).expect("empty dealers")
+            self.filter_by_dealers(params)
+                .choose(rng)
+                .expect("empty dealers")
         }
 
         pub fn random_node<R: Rng>(&self, rng: &mut R) -> &Node {
@@ -836,7 +847,7 @@ pub mod node {
         ) -> BatchSignedIDkgDealing {
             let signature = {
                 let mut signatures_map = BTreeMap::new();
-                for signer in self.receivers(&params) {
+                for signer in self.filter_by_receivers(&params) {
                     let signature = signer
                         .sign_basic(&signed_dealing, signer.id(), params.registry_version())
                         .expect("failed to generate basic-signature");
@@ -855,7 +866,7 @@ pub mod node {
             &self,
             params: &IDkgTranscriptParams,
         ) -> BTreeMap<NodeId, SignedIDkgDealing> {
-            self.dealers(params)
+            self.filter_by_dealers(params)
                 .map(|dealer| (dealer.id(), dealer.create_dealing_or_panic(params)))
                 .collect()
         }
@@ -885,7 +896,7 @@ pub mod node {
             &self,
             params: &IDkgTranscriptParams,
         ) -> BTreeMap<NodeId, SignedIDkgDealing> {
-            self.dealers(params)
+            self.filter_by_dealers(params)
                 .map(|dealer| {
                     let dealing = self.create_and_verify_signed_dealing(params, dealer);
                     (dealer.id(), dealing)
@@ -906,7 +917,7 @@ pub mod node {
                 .expect("unexpectedly invalid dealing");
 
             // Verify the dealing is privately valid for all receivers
-            for receiver in self.receivers(&params) {
+            for receiver in self.filter_by_receivers(&params) {
                 receiver
                     .verify_dealing_private(params, &signed_dealing)
                     .expect("unexpectedly invalid dealing (private verification)");
@@ -922,6 +933,7 @@ pub mod node {
         ) -> SignedIDkgDealing {
             match params.operation_type() {
                 IDkgTranscriptOperation::Random => (),
+                IDkgTranscriptOperation::RandomUnmasked => (),
                 IDkgTranscriptOperation::ReshareOfMasked(transcript)
                 | IDkgTranscriptOperation::ReshareOfUnmasked(transcript) => {
                     loader.load_transcript_or_panic(transcript);
@@ -939,7 +951,7 @@ pub mod node {
             &self,
             params: &IDkgTranscriptParams,
         ) -> BTreeMap<NodeId, SignedIDkgDealing> {
-            self.dealers(params)
+            self.filter_by_dealers(params)
                 .map(|dealer| {
                     let signed_dealing =
                         self.load_previous_transcripts_and_create_signed_dealing(params, dealer);
@@ -958,11 +970,11 @@ pub mod node {
         ) -> IDkgTranscript {
             let dealings = self.load_previous_transcripts_and_create_signed_dealings(params);
             let multisigned_dealings = self.support_dealings_from_all_receivers(dealings, params);
-            let transcript_creator = self.receivers(params).next().unwrap();
+            let transcript_creator = self.filter_by_receivers(params).next().unwrap();
             let transcript =
                 transcript_creator.create_transcript_or_panic(params, &multisigned_dealings);
             assert!(self
-                .random_receiver(params.receivers(), rng)
+                .random_filtered_by_receivers(params.receivers(), rng)
                 .verify_transcript(params, &transcript)
                 .is_ok());
             transcript
@@ -1213,26 +1225,6 @@ impl CanisterThresholdSigTestEnvironment {
         env
     }
 
-    /// Returns an `IDkgTranscriptParams` appropriate for creating a random
-    /// sharing in this environment.
-    pub fn params_for_random_sharing<R: RngCore + CryptoRng>(
-        &self,
-        dealers: &IDkgDealers,
-        receivers: &IDkgReceivers,
-        algorithm_id: AlgorithmId,
-        rng: &mut R,
-    ) -> IDkgTranscriptParams {
-        IDkgTranscriptParams::new(
-            random_transcript_id(rng),
-            dealers.get().clone(),
-            receivers.get().clone(),
-            self.newest_registry_version,
-            algorithm_id,
-            IDkgTranscriptOperation::Random,
-        )
-        .expect("failed to create random IDkgTranscriptParams")
-    }
-
     pub fn choose_dealers_and_receivers<R: RngCore + CryptoRng>(
         &self,
         strategy: &IDkgParticipants,
@@ -1314,13 +1306,17 @@ pub fn random_node_ids_excluding<R: RngCore + CryptoRng>(
 }
 
 pub fn node_id(id: u64) -> NodeId {
+    NodeId::from(PrincipalId::new_self_authenticating(&id.to_be_bytes()))
+}
+
+pub fn ordered_node_id(id: u64) -> NodeId {
     NodeId::from(PrincipalId::new_node_test_id(id))
 }
 
 pub fn set_of_nodes(ids: &[u64]) -> BTreeSet<NodeId> {
     let mut nodes = BTreeSet::new();
     for id in ids.iter() {
-        nodes.insert(node_id(*id));
+        nodes.insert(ordered_node_id(*id));
     }
     nodes
 }
@@ -1346,7 +1342,7 @@ pub fn n_random_node_ids<R: RngCore + CryptoRng>(n: usize, rng: &mut R) -> BTree
 }
 
 fn random_node_id<R: RngCore + CryptoRng>(rng: &mut R) -> NodeId {
-    NodeId::from(PrincipalId::new_node_test_id(rng.gen()))
+    node_id(rng.gen())
 }
 
 pub fn random_receiver_id<R: RngCore + CryptoRng>(
@@ -1440,6 +1436,367 @@ pub fn random_crypto_component_not_in_receivers<R: RngCore + CryptoRng>(
         .build()
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, EnumIter)]
+pub enum IDkgMode {
+    RandomUnmasked,
+    Random,
+    ReshareOfMasked,
+    ReshareOfUnmasked,
+    UnmaskedTimesMasked,
+}
+
+impl IDkgMode {
+    /// Generates a random subnet size that can be used to generate a complaint.
+    /// The reason to have this function is that `IDkgMode::ReshareOfUnmasked`
+    /// does not produce transcripts that are loaded into canister secret key
+    /// store for subnets of size <4. Thus, not all subnet sizes can be used to
+    /// benchmark loading transcripts or generating complaints.
+    pub fn subnet_size_for_complaint<R: Rng + CryptoRng>(&self, max: usize, rng: &mut R) -> usize {
+        let min = self.min_subnet_size_for_complaint();
+        assert!(
+            min < max,
+            "min ({min}) should not be larger than max ({max}) subnet size"
+        );
+        rng.gen_range(min..=max)
+    }
+
+    /// Returns the minimum subnet size for `&self` that can be used to generate
+    /// complaint. See [`Self::subnet_size_for_complaint`] for more
+    /// details.
+    pub fn min_subnet_size_for_complaint(&self) -> usize {
+        match *self {
+            // In `IDkgMode::ReshareOfUnmasked` with subnet size <4 it is not
+            // possible to create a complaint. The reason is that the complaint
+            // creation happens on transcript loading, which effectively is skipped
+            // for `IDkgMode::ReshareOfUnmasked` with subnet size <4 because the
+            // secret (commitment opening) is already in the canister secret store.
+            // The reason for the latter is that with a subnet of size <4, the
+            // commitment polynomial is of degree zero, i.e., it is not random and
+            // thus the commitment remains the same after resharing.
+            Self::ReshareOfUnmasked => 4,
+            Self::RandomUnmasked
+            | Self::Random
+            | Self::ReshareOfMasked
+            | Self::UnmaskedTimesMasked => 2,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct IDkgModeTestContext {
+    mode: IDkgMode,
+    dealers: IDkgDealers,
+    receivers: IDkgReceivers,
+}
+
+impl IDkgModeTestContext {
+    /// Generates a new test context, where all nodes are acting as both dealers and receivers.
+    pub fn new<R: RngCore + CryptoRng>(
+        mode: IDkgMode,
+        env: &CanisterThresholdSigTestEnvironment,
+        rng: &mut R,
+    ) -> Self {
+        let (dealers, receivers) =
+            env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
+
+        Self {
+            mode,
+            dealers,
+            receivers,
+        }
+    }
+
+    /// Generates dealers and receivers from `env` for the IDKG mode chosen in
+    /// `mode`. Since `Self::new` can return a setting with only 1 node, this
+    /// function modifies that setting to always return at least two receivers
+    /// s.t. complaints always work.
+    ///
+    /// Note that this function returns random dealers and receivers with some
+    /// constraints, so this method is not very useful for benchmarks.
+    pub fn new_for_testing_complaint<R: RngCore + CryptoRng>(
+        mode: IDkgMode,
+        env: &CanisterThresholdSigTestEnvironment,
+        rng: &mut R,
+    ) -> Self {
+        match mode {
+            IDkgMode::Random => {
+                // If we want to generate and verify a complaint, we need at least 2 receivers.
+                let (dealers, receivers) = env.choose_dealers_and_receivers(
+                    &IDkgParticipants::RandomWithAtLeast {
+                        min_num_dealers: 1,
+                        min_num_receivers: 2,
+                    },
+                    rng,
+                );
+                Self {
+                    mode: IDkgMode::Random,
+                    dealers,
+                    receivers,
+                }
+            }
+            _ => Self::new(mode, env, rng),
+        }
+    }
+
+    /// Generates IDKG input parameters for the chosen IDKG mode.
+    pub fn setup_params<R: RngCore + CryptoRng>(
+        &self,
+        env: &CanisterThresholdSigTestEnvironment,
+        alg: AlgorithmId,
+        rng: &mut R,
+    ) -> IDkgTranscriptParams {
+        let IDkgModeTestContext {
+            mode,
+            dealers,
+            receivers,
+        } = self;
+        match mode {
+            IDkgMode::RandomUnmasked => {
+                setup_unmasked_random_params(env, alg, dealers, receivers, rng)
+            }
+            IDkgMode::Random => setup_masked_random_params(env, alg, dealers, receivers, rng),
+            IDkgMode::ReshareOfMasked => {
+                setup_reshare_of_masked_params(env, alg, dealers, receivers, rng)
+            }
+            IDkgMode::ReshareOfUnmasked => {
+                setup_reshare_of_unmasked_params(env, alg, dealers, receivers, rng)
+            }
+            IDkgMode::UnmaskedTimesMasked => {
+                setup_unmasked_times_masked_params(env, alg, dealers, receivers, rng)
+            }
+        }
+    }
+
+    /// Generates IDKG output parameters for the chosen IDKG mode, corrupts the
+    /// dealing for a random receiver and generates a complaint.
+    pub fn setup_outputs_for_complaint<'a, R: RngCore + CryptoRng>(
+        &self,
+        env: &'a CanisterThresholdSigTestEnvironment,
+        alg: AlgorithmId,
+        rng: &mut R,
+    ) -> IDkgTestContextForComplaint<'a> {
+        let params = self.setup_params(env, alg, rng);
+        let mut transcript = env
+            .nodes
+            .run_idkg_and_create_and_verify_transcript(&params, rng);
+
+        let (complainer, complaint): (&'a Node, _) =
+            corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, env, rng);
+        let verifier: &Node = env
+            .nodes
+            .random_filtered_by_receivers(self.receivers().clone(), rng);
+        IDkgTestContextForComplaint {
+            transcript,
+            complaint,
+            complainer,
+            verifier,
+        }
+    }
+
+    fn receivers(&self) -> &IDkgReceivers {
+        &self.receivers
+    }
+}
+
+impl std::fmt::Display for IDkgMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::RandomUnmasked => "random_unmasked",
+                Self::Random => "random",
+                Self::ReshareOfMasked => "reshare_of_masked",
+                Self::ReshareOfUnmasked => "reshare_of_unmasked",
+                Self::UnmaskedTimesMasked => "product",
+            }
+        )
+    }
+}
+
+/// Returns an `IDkgTranscriptParams` appropriate for creating a random
+/// unmasked sharing in this environment.
+pub fn setup_unmasked_random_params<R: Rng + CryptoRng>(
+    env: &CanisterThresholdSigTestEnvironment,
+    algorithm_id: AlgorithmId,
+    dealers: &IDkgDealers,
+    receivers: &IDkgReceivers,
+    rng: &mut R,
+) -> IDkgTranscriptParams {
+    IDkgTranscriptParams::new(
+        random_transcript_id(rng),
+        dealers.get().clone(),
+        receivers.get().clone(),
+        env.newest_registry_version,
+        algorithm_id,
+        IDkgTranscriptOperation::RandomUnmasked,
+    )
+    .expect("failed to create random IDkgTranscriptParams")
+}
+
+/// Returns an `IDkgTranscriptParams` appropriate for creating a random
+/// masked sharing in this environment.
+pub fn setup_masked_random_params<R: Rng + CryptoRng>(
+    env: &CanisterThresholdSigTestEnvironment,
+    algorithm_id: AlgorithmId,
+    dealers: &IDkgDealers,
+    receivers: &IDkgReceivers,
+    rng: &mut R,
+) -> IDkgTranscriptParams {
+    IDkgTranscriptParams::new(
+        random_transcript_id(rng),
+        dealers.get().clone(),
+        receivers.get().clone(),
+        env.newest_registry_version,
+        algorithm_id,
+        IDkgTranscriptOperation::Random,
+    )
+    .expect("failed to create random IDkgTranscriptParams")
+}
+
+pub fn setup_reshare_of_masked_params<R: Rng + CryptoRng>(
+    env: &CanisterThresholdSigTestEnvironment,
+    alg: AlgorithmId,
+    dealers: &IDkgDealers,
+    receivers: &IDkgReceivers,
+    rng: &mut R,
+) -> IDkgTranscriptParams {
+    let params = setup_masked_random_params(env, alg, dealers, receivers, rng);
+    let masked_transcript = run_idkg_without_complaint(&params, &env.nodes, rng);
+    let reshare_params = build_params_from_previous(
+        params,
+        IDkgTranscriptOperation::ReshareOfMasked(masked_transcript),
+        rng,
+    );
+    load_previous_transcripts_for_all_dealers(&reshare_params, &env.nodes);
+    reshare_params
+}
+
+pub fn setup_reshare_of_unmasked_params<R: Rng + CryptoRng>(
+    env: &CanisterThresholdSigTestEnvironment,
+    alg: AlgorithmId,
+    dealers: &IDkgDealers,
+    receivers: &IDkgReceivers,
+    rng: &mut R,
+) -> IDkgTranscriptParams {
+    let unmasked_params = setup_reshare_of_masked_params(env, alg, dealers, receivers, rng);
+    let unmasked_transcript = run_idkg_without_complaint(&unmasked_params, &env.nodes, rng);
+    let reshare_params = build_params_from_previous(
+        unmasked_params,
+        IDkgTranscriptOperation::ReshareOfUnmasked(unmasked_transcript),
+        rng,
+    );
+    load_previous_transcripts_for_all_dealers(&reshare_params, &env.nodes);
+    reshare_params
+}
+
+pub fn setup_unmasked_times_masked_params<R: Rng + CryptoRng>(
+    env: &CanisterThresholdSigTestEnvironment,
+    alg: AlgorithmId,
+    dealers: &IDkgDealers,
+    receivers: &IDkgReceivers,
+    rng: &mut R,
+) -> IDkgTranscriptParams {
+    let masked_params = setup_masked_random_params(env, alg, dealers, receivers, rng);
+    let masked_random_transcript = run_idkg_without_complaint(&masked_params, &env.nodes, rng);
+
+    let unmasked_params = build_params_from_previous(
+        masked_params,
+        IDkgTranscriptOperation::ReshareOfMasked(masked_random_transcript.clone()),
+        rng,
+    );
+    load_previous_transcripts_for_all_dealers(&unmasked_params, &env.nodes);
+    let unmasked_transcript = run_idkg_without_complaint(&unmasked_params, &env.nodes, rng);
+
+    let product_params = build_params_from_previous(
+        unmasked_params,
+        IDkgTranscriptOperation::UnmaskedTimesMasked(unmasked_transcript, masked_random_transcript),
+        rng,
+    );
+    load_previous_transcripts_for_all_dealers(&product_params, &env.nodes);
+    product_params
+}
+
+pub struct IDkgTestContextForComplaint<'a> {
+    pub transcript: IDkgTranscript,
+    pub complaint: IDkgComplaint,
+    pub complainer: &'a Node,
+    pub verifier: &'a Node,
+}
+
+pub fn load_previous_transcripts_for_all_dealers(params: &IDkgTranscriptParams, nodes: &Nodes) {
+    let mut transcripts_to_load = Vec::with_capacity(2);
+    match params.operation_type() {
+        IDkgTranscriptOperation::Random => {}
+        IDkgTranscriptOperation::RandomUnmasked => {}
+        IDkgTranscriptOperation::ReshareOfMasked(transcript) => {
+            transcripts_to_load.push(transcript)
+        }
+        IDkgTranscriptOperation::ReshareOfUnmasked(transcript) => {
+            transcripts_to_load.push(transcript)
+        }
+        IDkgTranscriptOperation::UnmaskedTimesMasked(transcript1, transcript2) => {
+            transcripts_to_load.push(transcript1);
+            transcripts_to_load.push(transcript2)
+        }
+    }
+
+    nodes.filter_by_dealers(params).for_each(|dealer| {
+        transcripts_to_load.iter().for_each(|transcript| {
+            assert_eq!(
+                load_transcript_or_panic(dealer, transcript),
+                vec![],
+                "did not expect any complaint"
+            )
+        });
+    });
+}
+
+pub fn create_transcript_or_panic(
+    receiver: &Node,
+    params: &IDkgTranscriptParams,
+    dealings: &BatchSignedIDkgDealings,
+) -> IDkgTranscript {
+    receiver
+        .create_transcript(params, dealings)
+        .unwrap_or_else(|error| {
+            panic!(
+                "failed to create IDKG transcript by receiver {:?} with parameters {:?}: {:?}",
+                receiver.id(),
+                params,
+                error
+            )
+        })
+}
+
+pub fn load_transcript_or_panic(
+    receiver: &Node,
+    transcript: &IDkgTranscript,
+) -> Vec<IDkgComplaint> {
+    receiver
+        .load_transcript(transcript)
+        .unwrap_or_else(|error| {
+            panic!(
+                "failed to load IDKG transcript by receiver {:?}: {:?}",
+                receiver.id(),
+                error
+            )
+        })
+}
+
+pub fn run_idkg_without_complaint<R: RngCore + CryptoRng>(
+    params: &IDkgTranscriptParams,
+    nodes: &Nodes,
+    rng: &mut R,
+) -> IDkgTranscript {
+    load_previous_transcripts_for_all_dealers(params, nodes);
+    let receiver = nodes.random_filtered_by_receivers(params.receivers(), rng);
+    let dealings = nodes.create_dealings(params);
+    let dealings_with_receivers_support =
+        nodes.support_dealings_from_all_receivers(dealings, params);
+    create_transcript_or_panic(receiver, params, &dealings_with_receivers_support)
+}
+
 /// Corrupts the dealing for a single randomly picked receiver.
 /// node_id is the self Node Id. The shares for the receivers specified
 /// in excluded_receivers won't be corrupted.
@@ -1480,10 +1837,18 @@ pub fn generate_tecdsa_protocol_inputs<R: RngCore + CryptoRng>(
     nonce: Randomness,
     derivation_path: &ExtendedDerivationPath,
     algorithm_id: AlgorithmId,
+    random_unmasked_kappa: bool,
     rng: &mut R,
 ) -> ThresholdEcdsaSigInputs {
-    let quadruple =
-        generate_presig_quadruple(env, dealers, receivers, algorithm_id, key_transcript, rng);
+    let quadruple = generate_presig_quadruple(
+        env,
+        dealers,
+        receivers,
+        algorithm_id,
+        key_transcript,
+        random_unmasked_kappa,
+        rng,
+    );
 
     ThresholdEcdsaSigInputs::new(
         derivation_path,
@@ -1530,7 +1895,7 @@ pub fn sig_share_from_each_receiver(
 ) -> BTreeMap<NodeId, ThresholdEcdsaSigShare> {
     let sig_shares: BTreeMap<_, _> = env
         .nodes
-        .receivers(&inputs)
+        .filter_by_receivers(&inputs)
         .map(|receiver| {
             receiver.load_input_transcripts(inputs);
             let sig_share = receiver
@@ -2003,7 +2368,7 @@ impl IDkgTranscriptBuilder {
 
     pub fn add_a_new_receiver(mut self) -> Self {
         let mut receivers = self.receivers.get().clone();
-        let extra_receiver = NodeId::from(PrincipalId::new_node_test_id(i64::MAX as u64));
+        let extra_receiver = node_id(i64::MAX as u64);
         receivers.insert(extra_receiver);
         self.receivers = IDkgReceivers::new(receivers).unwrap();
         self
@@ -2012,6 +2377,11 @@ impl IDkgTranscriptBuilder {
     pub fn corrupt_transcript_type(mut self) -> Self {
         self.transcript_type = match self.transcript_type {
             IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random) => {
+                IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareUnmasked(
+                    self.transcript_id,
+                ))
+            }
+            IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random) => {
                 IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareUnmasked(
                     self.transcript_id,
                 ))
@@ -2074,27 +2444,66 @@ pub fn to_corrupt_complaint(
     }
 }
 
-pub fn corrupt_single_dealing_and_generate_complaint<'a, R: RngCore + CryptoRng>(
+pub fn corrupt_single_dealing_and_generate_complaint<R: RngCore + CryptoRng>(
+    params: &IDkgTranscriptParams,
     transcript: &mut IDkgTranscript,
-    params: &'a IDkgTranscriptParams,
+    complainer: &Node,
+    rng: &mut R,
+) -> IDkgComplaint {
+    let (_, complaints) =
+        corrupt_dealings_and_generate_complaints(params, transcript, 1, complainer, rng);
+    complaints
+        .into_iter()
+        .next()
+        .expect("empty complaints result")
+}
+
+pub fn corrupt_random_dealing_and_generate_complaint<'a, R: RngCore + CryptoRng>(
+    transcript: &mut IDkgTranscript,
+    params: &IDkgTranscriptParams,
     env: &'a CanisterThresholdSigTestEnvironment,
     rng: &mut R,
 ) -> (&'a Node, IDkgComplaint) {
     let (complainer, _, mut complaints) =
-        corrupt_dealings_and_generate_complaints(transcript, 1, params, env, rng);
+        corrupt_dealings_and_generate_complaints_for_random_complainer(
+            transcript, 1, params, env, rng,
+        );
     (
         complainer,
         complaints.pop().expect("expected one complaint"),
     )
 }
 
-pub fn corrupt_dealings_and_generate_complaints<'a, R: RngCore + CryptoRng>(
+pub fn corrupt_dealings_and_generate_complaints_for_random_complainer<
+    'a,
+    R: RngCore + CryptoRng,
+>(
     transcript: &mut IDkgTranscript,
     number_of_complaints: usize,
-    params: &'a IDkgTranscriptParams,
+    params: &IDkgTranscriptParams,
     env: &'a CanisterThresholdSigTestEnvironment,
     rng: &mut R,
 ) -> (&'a Node, Vec<NodeIndex>, Vec<IDkgComplaint>) {
+    let complainer = env
+        .nodes
+        .random_filtered_by_receivers(params.receivers().clone(), rng);
+    let (dealing_indices_to_corrupt, complaints) = corrupt_dealings_and_generate_complaints(
+        params,
+        transcript,
+        number_of_complaints,
+        complainer,
+        rng,
+    );
+    (complainer, dealing_indices_to_corrupt, complaints)
+}
+
+pub fn corrupt_dealings_and_generate_complaints<R: RngCore + CryptoRng>(
+    params: &IDkgTranscriptParams,
+    transcript: &mut IDkgTranscript,
+    number_of_complaints: usize,
+    complainer: &Node,
+    rng: &mut R,
+) -> (Vec<NodeIndex>, Vec<IDkgComplaint>) {
     assert!(
         number_of_complaints > 0,
         "should generate at least one complaint"
@@ -2113,7 +2522,6 @@ pub fn corrupt_dealings_and_generate_complaints<'a, R: RngCore + CryptoRng>(
         .choose_multiple(rng, number_of_complaints);
     assert_eq!(dealing_indices_to_corrupt.len(), number_of_complaints);
 
-    let complainer = env.nodes.random_receiver(params.receivers(), rng);
     let complainer_index = params
         .receiver_index(complainer.id())
         .unwrap_or_else(|| panic!("Missing receiver {:?}", complainer));
@@ -2136,7 +2544,7 @@ pub fn corrupt_dealings_and_generate_complaints<'a, R: RngCore + CryptoRng>(
         complaints
     };
 
-    (complainer, dealing_indices_to_corrupt, complaints)
+    (dealing_indices_to_corrupt, complaints)
 }
 
 pub fn generate_and_verify_openings_for_complaint(
@@ -2148,7 +2556,7 @@ pub fn generate_and_verify_openings_for_complaint(
 ) -> BTreeMap<IDkgComplaint, BTreeMap<NodeId, IDkgOpening>> {
     let openers = env
         .nodes
-        .receivers(&transcript)
+        .filter_by_receivers(&transcript)
         .filter(|node| *node != complainer);
     let openings: BTreeMap<_, _> = openers
         .take(number_of_openings)

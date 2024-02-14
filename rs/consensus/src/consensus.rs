@@ -410,7 +410,13 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
     /// moment it is important to call finalizer first, because otherwise
     /// we'll just keep producing notarized blocks indefinitely without
     /// finalizing anything, due to the above decision of having to return
-    /// early. The order of the rest subcomponents decides whom is given
+    /// early.
+    /// Additionally, we call the purger after every function that may increment
+    /// the finalized or CUP height (currently aggregation & validation), as
+    /// these heights determine which artifacts we can purge. This reduces the
+    /// number of excess artifacts, which allows us to maintain a stricter bound
+    /// on the memory consumption of our advertised validated pool.
+    /// The order of the rest subcomponents decides whom is given
     /// a priority, but it should not affect liveness or correctness.
     fn on_state_change(&self, pool: &T) -> ChangeSet {
         let pool_reader = PoolReader::new(pool);
@@ -515,16 +521,17 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
                 self.purger.on_state_change(&pool_reader)
             })
         };
-        let calls: [&'_ dyn Fn() -> ChangeSet; 9] = [
+        let calls: [&'_ dyn Fn() -> ChangeSet; 10] = [
             &finalize,
             &make_catch_up_package,
-            &purge,
             &aggregate,
+            &purge,
             &notarize,
             &make_random_beacon,
             &make_random_tape,
             &make_block,
             &validate,
+            &purge,
         ];
 
         let changeset = self.schedule.call_next(&calls);

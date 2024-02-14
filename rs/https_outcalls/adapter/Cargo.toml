@@ -5,7 +5,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-socks5 = "0.5.1"
 async-stream = "0.3.2"
 byte-unit = "4.0.14"
 clap = { workspace = true }
@@ -13,20 +12,17 @@ futures = { workspace = true }
 http = "0.2"
 hyper = { version = "0.14.18", features = ["full"] }
 hyper-socks2 = { workspace = true }
-hyper-rustls = "0.24.0"
+hyper-rustls = { workspace = true }
 ic-adapter-metrics-server = { path = "../../monitoring/adapter_metrics_server" }
 ic-async-utils = { path = "../../async_utils" }
 ic-config = { path = "../../config" }
 ic-https-outcalls-service = { path = "../service" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
-itertools = { workspace = true }
 prometheus = { workspace = true }
-prost = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
-slog-async = "2.7.0"
 thiserror = "1.0.26"
 tokio = { workspace = true }
 tonic = { workspace = true }

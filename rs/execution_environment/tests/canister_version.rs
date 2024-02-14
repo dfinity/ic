@@ -1,8 +1,8 @@
 use ic00::CanisterSettingsArgsBuilder;
 use ic_config::execution_environment;
 use ic_config::subnet_config::{SchedulerConfig, SubnetConfig};
-use ic_ic00_types::CanisterInstallMode::{Install, Reinstall, Upgrade};
-use ic_ic00_types::{
+use ic_management_canister_types::CanisterInstallMode::{Install, Reinstall, Upgrade};
+use ic_management_canister_types::{
     self as ic00, CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, Method, Payload,
 };
 use ic_registry_subnet_type::SubnetType;
@@ -24,7 +24,7 @@ fn get_canister_version(env: &StateMachine, canister_id: CanisterId) -> u64 {
 }
 
 /// This function implements the functionality of `StateMachine::execute_ingress_as`
-/// and additionally asserts that DTS is used iff the parameter `dts` is true.
+/// and additionally asserts that DTS is used if the parameter `dts` is true.
 fn execute_ingress_with_dts(
     env: &StateMachine,
     sender: PrincipalId,

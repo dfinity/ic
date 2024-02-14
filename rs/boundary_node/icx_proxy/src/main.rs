@@ -7,6 +7,7 @@ use std::{net::SocketAddr, path::PathBuf};
 use anyhow::Context;
 use clap::{builder::ValueParser, Parser};
 use futures::try_join;
+use hyperlocal::Uri as UnixUri;
 use jemallocator::Jemalloc;
 use tracing::{error, Instrument};
 
@@ -26,6 +27,7 @@ use crate::{
     canister_alias::{parse_canister_alias, CanisterAlias},
     domain_addr::{parse_domain_addr, DomainAddr},
     metrics::{MetricParams, WithMetrics},
+    proxy::ListenProto,
     validate::Validator,
 };
 
@@ -52,13 +54,21 @@ impl<R, E> InspectErr for Result<R, E> {
 #[derive(Parser)]
 struct Opts {
     /// The address to bind to.
-    #[clap(long, default_value = "[::]:3000")]
-    address: SocketAddr,
+    #[clap(long)]
+    address: Option<SocketAddr>,
+
+    /// Unix socket to listen on. If address is specified too - it takes precedence
+    #[clap(long)]
+    unix_socket: Option<PathBuf>,
 
     /// A list of replica mappings from domains to socket addresses for replica upstreams.
     /// Format: <URL>[|<IP>:<PORT>]
     #[clap(long, value_parser = ValueParser::new(parse_domain_addr), default_value = "http://localhost:8000/")]
     replica: Vec<DomainAddr>,
+
+    /// Replica's Unix Socket. Overrides `--replica`
+    #[clap(long)]
+    replica_unix_socket: Option<PathBuf>,
 
     /// A list of domains that can be served. These are used for canister resolution.
     #[clap(long, default_value = "localhost")]
@@ -109,7 +119,9 @@ struct Opts {
 fn main() -> Result<(), anyhow::Error> {
     let Opts {
         address,
+        unix_socket,
         replica,
+        replica_unix_socket,
         domain,
         canister_alias,
         ssl_root_certificate,
@@ -122,13 +134,6 @@ fn main() -> Result<(), anyhow::Error> {
     } = Opts::parse();
 
     let _span = logging::setup(log);
-
-    // Setup HTTP Client
-    let client = http_client::setup(http_client::HttpClientOpts {
-        ssl_root_certificate,
-        danger_accept_invalid_ssl,
-        replicas: &replica,
-    })?;
 
     // Setup Metrics
     let (meter, metrics) = metrics::setup(metrics);
@@ -143,24 +148,55 @@ fn main() -> Result<(), anyhow::Error> {
     let validator = Validator::new();
     let validator = WithMetrics(validator, MetricParams::new(&meter, "validator"));
 
-    let proxy = proxy::setup(
-        proxy::SetupArgs {
-            resolver,
-            validator,
-            client,
-            meter: meter.clone(),
-        },
-        proxy::ProxyOpts {
-            address,
-            replicas: replica,
-            debug,
-            fetch_root_key,
-            root_key,
-        },
-    )?;
+    let listen = address
+        .map(ListenProto::Tcp)
+        .or(unix_socket.map(ListenProto::Unix))
+        .expect("must specify either address or unix_socket");
+
+    let proxy = if let Some(v) = replica_unix_socket {
+        let uri = UnixUri::new(v, "/");
+        let client = http_client::setup_unix_socket(uri.into())?;
+
+        proxy::setup_unix_socket(
+            proxy::SetupArgs {
+                resolver,
+                validator,
+                client,
+                meter: meter.clone(),
+            },
+            proxy::ProxyOpts {
+                listen,
+                replicas: vec![],
+                debug,
+                fetch_root_key,
+                root_key,
+            },
+        )?
+    } else {
+        let client = http_client::setup(http_client::HttpClientOpts {
+            ssl_root_certificate,
+            danger_accept_invalid_ssl,
+            replicas: &replica,
+        })?;
+
+        proxy::setup(
+            proxy::SetupArgs {
+                resolver,
+                validator,
+                client,
+                meter: meter.clone(),
+            },
+            proxy::ProxyOpts {
+                listen,
+                replicas: replica,
+                debug,
+                fetch_root_key,
+                root_key,
+            },
+        )?
+    };
 
     let rt = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(10)
         .enable_all()
         .build()?;
 

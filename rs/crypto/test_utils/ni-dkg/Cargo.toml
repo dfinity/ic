@@ -12,7 +12,6 @@ documentation.workspace = true
 hex = "0.4.2"
 ic-crypto-internal-bls12-381-type = { path = "../../internal/crypto_lib/bls12_381/type" }
 ic-crypto-internal-types = { path = "../../internal/crypto_lib/types" }
-ic-crypto-internal-csp = { path = "../../internal/crypto_service_provider" }
 ic-crypto-temp-crypto = { path = "../../temp_crypto" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../test_utils/reproducible_rng" }
 ic-interfaces = { path = "../../../interfaces" }

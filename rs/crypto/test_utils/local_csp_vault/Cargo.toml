@@ -7,14 +7,13 @@ edition.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-crypto-internal-csp = { path = "../../internal/crypto_service_provider"}
+ic-crypto-internal-csp = { path = "../../internal/crypto_service_provider" }
 ic-crypto-internal-seed = { path = "../../internal/crypto_lib/seed" }
 ic-crypto-internal-threshold-sig-bls12381 = { path = "../../internal/crypto_lib/threshold_sig/bls12_381" }
 ic-crypto-internal-threshold-sig-ecdsa = { path = "../../internal/crypto_lib/threshold_sig/tecdsa" }
 ic-crypto-internal-types = { path = "../../internal/crypto_lib/types" }
-ic-crypto-node-key-validation = {path = "../../node_key_validation" }
+ic-crypto-node-key-validation = { path = "../../node_key_validation" }
 ic-crypto-tls-interfaces = { path = "../../tls_interfaces" }
 ic-protobuf = { path = "../../../protobuf" }
 ic-types = { path = "../../../types/types" }
 mockall = { workspace = true }
-serde_bytes = { workspace = true }

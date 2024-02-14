@@ -25,6 +25,8 @@ const ERROR_CODE_MEMPOOL_TRANSACTION_MISSING: u32 = 6;
 const ERROR_CODE_PARSING_ERROR: u32 = 7;
 const ERROR_CODE_UNSUPPORTED_OPERATION: u32 = 8;
 const ERROR_CODE_LEDGER_COMMUNICATION: u32 = 9;
+const ERROR_CODE_REQUEST_PROCESSING_ERROR: u32 = 10;
+const ERROR_CODE_PROCESSING_CONSTRUCTION_FAILED: u32 = 11;
 
 impl IntoResponse for Error {
     fn into_response(self) -> axum::response::Response {
@@ -45,6 +47,12 @@ impl From<rosetta_core::miscellaneous::Error> for Error {
 impl From<strum::ParseError> for Error {
     fn from(value: strum::ParseError) -> Self {
         Error::parsing_unsuccessful(&value)
+    }
+}
+
+impl From<reqwest::Error> for Error {
+    fn from(value: reqwest::Error) -> Self {
+        Error::request_processing_error(&value)
     }
 }
 
@@ -141,6 +149,26 @@ impl Error {
             details: None,
         })
     }
+
+    pub fn request_processing_error<T: std::fmt::Debug>(description: &T) -> Self {
+        Self(rosetta_core::miscellaneous::Error {
+            code: ERROR_CODE_REQUEST_PROCESSING_ERROR,
+            message: "Error while processing the request.".to_owned(),
+            description: Some(format!("{:?}", description)),
+            retriable: false,
+            details: None,
+        })
+    }
+
+    pub fn processing_construction_failed<T: std::fmt::Debug>(description: &T) -> Self {
+        Self(rosetta_core::miscellaneous::Error {
+            code: ERROR_CODE_PROCESSING_CONSTRUCTION_FAILED,
+            message: "Processing of the construction request failed.".to_owned(),
+            description: Some(format!("{:?}", description)),
+            retriable: false,
+            details: None,
+        })
+    }
 }
 
 #[derive(Display, Debug, Clone, PartialEq, Eq, EnumIter, EnumString, EnumVariantNames)]
@@ -166,11 +194,14 @@ pub struct ApproveMetadata {
     pub expires_at: Option<u64>,
 }
 
-impl From<ApproveMetadata> for ObjectMap {
-    fn from(m: ApproveMetadata) -> Self {
-        match serde_json::to_value(m) {
-            Ok(serde_json::Value::Object(o)) => o,
-            _ => unreachable!(),
+impl TryFrom<ApproveMetadata> for ObjectMap {
+    type Error = anyhow::Error;
+    fn try_from(d: ApproveMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(v) => match v {
+                serde_json::Value::Object(ob) => Ok(ob),
+                _ => anyhow::bail!("Could not convert ApproveMetadata to ObjectMap. Expected type Object but received: {:?}",v)
+            },Err(err) => anyhow::bail!("Could not convert ApproveMetadata to ObjectMap: {:?}",err),
         }
     }
 }
@@ -191,11 +222,14 @@ pub struct BurnMetadata {
     pub spender_account: Option<AccountIdentifier>,
 }
 
-impl From<BurnMetadata> for ObjectMap {
-    fn from(m: BurnMetadata) -> Self {
-        match serde_json::to_value(m) {
-            Ok(serde_json::Value::Object(o)) => o,
-            _ => unreachable!(),
+impl TryFrom<BurnMetadata> for ObjectMap {
+    type Error = anyhow::Error;
+    fn try_from(d: BurnMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(v) => match v {
+                serde_json::Value::Object(ob) => Ok(ob),
+                _ => anyhow::bail!("Could not convert BurnMetadata to ObjectMap. Expected type Object but received: {:?}",v)
+            },Err(err) => anyhow::bail!("Could not convert BurnMetadata to ObjectMap: {:?}",err),
         }
     }
 }
@@ -219,11 +253,14 @@ pub struct TransferMetadata {
     pub fee_set_by_user: Option<Amount>,
 }
 
-impl From<TransferMetadata> for ObjectMap {
-    fn from(m: TransferMetadata) -> Self {
-        match serde_json::to_value(m) {
-            Ok(serde_json::Value::Object(o)) => o,
-            _ => unreachable!(),
+impl TryFrom<TransferMetadata> for ObjectMap {
+    type Error = anyhow::Error;
+    fn try_from(d: TransferMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(v) => match v {
+                serde_json::Value::Object(ob) => Ok(ob),
+                _ => anyhow::bail!("Could not convert TransferMetadata to ObjectMap. Expected type Object but received: {:?}",v)
+            },Err(err) => anyhow::bail!("Could not convert TransferMetadata to ObjectMap: {:?}",err),
         }
     }
 }
@@ -251,11 +288,14 @@ impl TransactionMetadata {
     }
 }
 
-impl From<TransactionMetadata> for ObjectMap {
-    fn from(m: TransactionMetadata) -> Self {
-        match serde_json::to_value(m) {
-            Ok(serde_json::Value::Object(o)) => o,
-            _ => unreachable!(),
+impl TryFrom<TransactionMetadata> for ObjectMap {
+    type Error = anyhow::Error;
+    fn try_from(d: TransactionMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(v) => match v {
+                serde_json::Value::Object(ob) => Ok(ob),
+                _ => anyhow::bail!("Could not convert TransactionMetadata to ObjectMap. Expected type Object but received: {:?}",v)
+            },Err(err) => anyhow::bail!("Could not convert TransactionMetadata to ObjectMap: {:?}",err),
         }
     }
 }
@@ -293,11 +333,15 @@ pub struct BlockMetadata {
     pub block_created_at_nano_seconds: u64,
 }
 
-impl From<BlockMetadata> for ObjectMap {
-    fn from(m: BlockMetadata) -> Self {
-        match serde_json::to_value(m) {
-            Ok(serde_json::Value::Object(o)) => o,
-            _ => unreachable!(),
+impl TryFrom<BlockMetadata> for ObjectMap {
+    type Error = anyhow::Error;
+    fn try_from(d: BlockMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(v) => match v {
+                serde_json::Value::Object(ob) => Ok(ob),
+                _ => anyhow::bail!("Could not convert BlockMetadata to ObjectMap. Expected type Object but received: {:?}",v)
+            }
+            Err(err) => anyhow::bail!("Could not convert BlockMetadata to ObjectMap: {:?}",err),
         }
     }
 }

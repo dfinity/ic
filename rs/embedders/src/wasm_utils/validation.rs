@@ -833,11 +833,14 @@ fn validate_export_section(
     max_sum_exported_function_name_lengths: usize,
 ) -> Result<(), WasmValidationError> {
     if !module.exports.is_empty() {
-        let num_imported_functions = module
+        let imported_function_types: Vec<_> = module
             .imports
             .iter()
-            .filter(|i| matches!(i.ty, TypeRef::Func(_)))
-            .count();
+            .filter_map(|i| match i.ty {
+                TypeRef::Func(type_index) => Some(&module.types[type_index as usize]),
+                _ => None,
+            })
+            .collect();
 
         let mut seen_funcs: HashSet<&str> = HashSet::new();
         let valid_exported_functions = get_valid_exported_functions();
@@ -897,23 +900,18 @@ fn validate_export_section(
                     // module, so we need to subtract the number of imported functions to get the
                     // correct index from the general function space.
                     let fn_index = fn_index as usize;
-                    let import_count = num_imported_functions;
-                    if fn_index < import_count {
-                        return Err(WasmValidationError::InvalidFunctionIndex {
-                            index: fn_index,
-                            import_count,
-                        });
-                    }
-                    let actual_fn_index = fn_index - import_count;
-                    let type_index = module.functions[actual_fn_index] as usize;
-                    let func_ty = if let CompositeType::Func(func_ty) =
-                        &module.types[type_index].composite_type
-                    {
-                        func_ty
+                    let import_count = imported_function_types.len();
+                    let composite_type = if fn_index < import_count {
+                        &imported_function_types[fn_index].composite_type
                     } else {
+                        let actual_fn_index = fn_index - import_count;
+                        let type_index = module.functions[actual_fn_index] as usize;
+                        &module.types[type_index].composite_type
+                    };
+                    let CompositeType::Func(func_ty) = composite_type else {
                         return Err(WasmValidationError::InvalidExportSection(format!(
                             "Function export doesn't have a function type. Type found: {:?}",
-                            &module.types[type_index]
+                            composite_type
                         )));
                     };
                     validate_function_signature(valid_signature, export.name, func_ty)?;

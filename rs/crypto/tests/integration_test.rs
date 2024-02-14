@@ -1,6 +1,5 @@
 #![allow(clippy::unwrap_used)]
 
-use crate::keygen_utils::TestKeygenCrypto;
 use assert_matches::assert_matches;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_config::crypto::CryptoConfig;
@@ -9,8 +8,10 @@ use ic_crypto_internal_csp_test_utils::remote_csp_vault::{
     get_temp_file_path, start_new_remote_csp_vault_server_for_test,
 };
 use ic_crypto_internal_tls::generate_tls_key_pair_der;
+use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_crypto_temp_crypto::{EcdsaSubnetConfig, NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_test_utils::files::temp_dir;
+use ic_crypto_test_utils_keygen::TestKeygenCrypto;
 use ic_crypto_test_utils_keygen::{add_public_key_to_registry, add_tls_cert_to_registry};
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_test_utils_tls::x509_certificates::generate_ed25519_cert;
@@ -41,8 +42,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use strum::IntoEnumIterator;
 
-mod keygen_utils;
-
 const REG_V1: RegistryVersion = RegistryVersion::new(1);
 const REG_V2: RegistryVersion = RegistryVersion::new(2);
 const NODE_ID: u64 = 42;
@@ -51,14 +50,14 @@ const TWO_WEEKS: Duration = Duration::from_secs(2 * 7 * 24 * 60 * 60);
 #[test]
 fn should_successfully_construct_crypto_component_with_default_config() {
     CryptoConfig::run_with_temp_config(|config| {
+        generate_node_keys_once(&config, None).expect("error generating node public keys");
         let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
-        CryptoComponent::new_with_fake_node_id(
+        CryptoComponent::new(
             &config,
             None,
             Arc::new(registry_client),
-            node_test_id(42),
             no_op_logger(),
-            Arc::new(CurrentSystemTimeSource::new(no_op_logger())),
+            None,
         );
     })
 }
@@ -70,14 +69,15 @@ fn should_successfully_construct_crypto_component_with_remote_csp_vault() {
     let temp_dir = temp_dir(); // temp dir with correct permissions
     let crypto_root = temp_dir.path().to_path_buf();
     let config = CryptoConfig::new_with_unix_socket_vault(crypto_root, socket_path, None);
+    generate_node_keys_once(&config, Some(tokio_rt.handle().clone()))
+        .expect("error generating node public keys");
     let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
-    CryptoComponent::new_with_fake_node_id(
+    CryptoComponent::new(
         &config,
         Some(tokio_rt.handle().clone()),
         Arc::new(registry_client),
-        node_test_id(42),
         no_op_logger(),
-        Arc::new(CurrentSystemTimeSource::new(no_op_logger())),
+        None,
     );
 }
 
@@ -90,13 +90,12 @@ fn should_not_construct_crypto_component_if_remote_csp_vault_is_missing() {
     let config = CryptoConfig::new_with_unix_socket_vault(crypto_root, socket_path, None);
     let tokio_rt = new_tokio_runtime();
     let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
-    CryptoComponent::new_with_fake_node_id(
+    CryptoComponent::new(
         &config,
         Some(tokio_rt.handle().clone()),
         Arc::new(registry_client),
-        node_test_id(42),
         no_op_logger(),
-        FastForwardTimeSource::new(),
+        None,
     );
 }
 
@@ -745,7 +744,7 @@ fn should_fail_check_keys_with_registry_if_no_idkg_key_in_registry() {
 /// Ensure the structs are consistent and then update the test below.
 #[test]
 fn algorithm_id_should_match_algorithm_id_proto() {
-    let algorithm_id_variants = 18;
+    let algorithm_id_variants = 19;
     assert_eq!(AlgorithmId::iter().count(), algorithm_id_variants);
 
     for i in 0..algorithm_id_variants {
@@ -821,6 +820,10 @@ fn algorithm_id_should_match_algorithm_id_proto() {
     assert_eq!(
         AlgorithmId::ThresholdEcdsaSecp256r1 as i32,
         AlgorithmIdProto::ThresholdEcdsaSecp256r1 as i32
+    );
+    assert_eq!(
+        AlgorithmId::ThresholdSchnorrBip340 as i32,
+        AlgorithmIdProto::ThresholdSchnorrBip340 as i32
     );
 }
 

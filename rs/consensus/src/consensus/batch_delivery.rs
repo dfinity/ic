@@ -13,13 +13,13 @@ use ic_consensus_utils::{
     crypto_hashable_to_seed, get_block_hash_string, membership::Membership, pool_reader::PoolReader,
 };
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
-use ic_ic00_types::SetupInitialDKGResponse;
 use ic_interfaces::{
     batch_payload::IntoMessages,
     messaging::{MessageRouting, MessageRoutingError},
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{debug, error, info, trace, warn, ReplicaLogger};
+use ic_management_canister_types::SetupInitialDKGResponse;
 use ic_protobuf::{
     log::consensus_log_entry::v1::ConsensusLogEntry,
     registry::{crypto::v1::PublicKey as PublicKeyProto, subnet::v1::InitialNiDkgTranscriptRecord},

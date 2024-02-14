@@ -101,10 +101,17 @@ const QUERY_SCHEDULING_TIME_SLICE_PER_CANISTER: Duration = Duration::from_millis
 const QUERY_CACHE_CAPACITY: NumBytes = NumBytes::new(200 * MIB);
 
 /// The upper limit on how long the cache entry stays valid in the query cache.
-const QUERY_CACHE_MAX_EXPIRY_TIME: Duration = Duration::from_secs(300);
+const QUERY_CACHE_MAX_EXPIRY_TIME: Duration = Duration::from_secs(600);
+/// The upper limit on how long the data certificate stays valid in the query cache.
+///
+/// The [HTTP Gateway Protocol Specification](https://internetcomputer.org/docs/current/references/http-gateway-protocol-spec#certificate-validation)
+/// states that the certified timestamp must be recent, e.g. 5 minutes.
+/// So queries using the `ic0.data_certificate_copy()` System API call
+/// should not be cached for more than 5 minutes.
+const QUERY_CACHE_DATA_CERTIFICATE_EXPIRY_TIME: Duration = Duration::from_secs(60);
 
 /// Length of an epoch of query statistics in blocks
-pub const QUERY_STATS_EPOCH_LENGTH: u64 = 2000;
+pub const QUERY_STATS_EPOCH_LENGTH: u64 = 1800;
 
 // The ID of the Bitcoin testnet canister.
 pub const BITCOIN_TESTNET_CANISTER_ID: &str = "g4xu7-jiaaa-aaaan-aaaaq-cai";
@@ -233,6 +240,9 @@ pub struct Config {
     /// The upper limit on how long the cache entry stays valid in the query cache.
     pub query_cache_max_expiry_time: Duration,
 
+    /// The upper limit on how long the data certificate stays valid in the query cache.
+    pub query_cache_data_certificate_expiry_time: Duration,
+
     /// The capacity of the Wasm compilation cache.
     pub max_compilation_cache_size: NumBytes,
 
@@ -250,6 +260,13 @@ pub struct Config {
 
     /// Indicates whether canister backup and restore feature is enabled or not.
     pub canister_snapshots: FlagStatus,
+
+    // TODO(IC-272): remove this flag once the feature is enabled by default.
+    /// Indicates whether canister logging feature is enabled or not.
+    pub canister_logging: FlagStatus,
+
+    /// Indicates whether dirty page logging is enabled or not.
+    pub dirty_page_logging: FlagStatus,
 }
 
 impl Default for Config {
@@ -313,12 +330,15 @@ impl Default for Config {
             query_caching: FlagStatus::Enabled,
             query_cache_capacity: QUERY_CACHE_CAPACITY,
             query_cache_max_expiry_time: QUERY_CACHE_MAX_EXPIRY_TIME,
+            query_cache_data_certificate_expiry_time: QUERY_CACHE_DATA_CERTIFICATE_EXPIRY_TIME,
             max_compilation_cache_size: MAX_COMPILATION_CACHE_SIZE,
             query_stats_aggregation: FlagStatus::Disabled,
             query_stats_epoch_length: QUERY_STATS_EPOCH_LENGTH,
             wasm_chunk_store: FlagStatus::Enabled,
             stop_canister_timeout_duration: STOP_CANISTER_TIMEOUT_DURATION,
             canister_snapshots: FlagStatus::Disabled,
+            canister_logging: FlagStatus::Disabled,
+            dirty_page_logging: FlagStatus::Disabled,
         }
     }
 }

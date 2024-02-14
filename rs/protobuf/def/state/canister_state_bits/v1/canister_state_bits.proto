@@ -5,7 +5,7 @@ import "google/protobuf/wrappers.proto";
 import "state/ingress/v1/ingress.proto";
 import "state/queues/v1/queues.proto";
 import "state/v1/metadata.proto";
-import "types/v1/ic00_types.proto";
+import "types/v1/management_canister_types.proto";
 import "types/v1/types.proto";
 
 message CallContext {
@@ -300,6 +300,12 @@ enum LogVisibility {
   LOG_VISIBILITY_PUBLIC = 2;
 }
 
+message CanisterLogRecord {
+  uint64 idx = 1;
+  uint64 timestamp_nanos = 2;
+  bytes content = 3;
+}
+
 message CanisterStateBits {
   reserved 1;
   reserved "controller";
@@ -370,4 +376,6 @@ message CanisterStateBits {
   TotalQueryStats total_query_stats = 41;
   // Log visibility for the canister.
   LogVisibility log_visibility = 42;
+  // Log records of the canister.
+  repeated CanisterLogRecord canister_log_records = 43;
 }

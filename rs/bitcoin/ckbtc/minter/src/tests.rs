@@ -1120,3 +1120,58 @@ proptest! {
         );
     }
 }
+
+#[test]
+fn can_form_a_batch_conditions() {
+    let mut state = CkBtcMinterState::from(InitArgs {
+        btc_network: Network::Regtest.into(),
+        ecdsa_key_name: "".to_string(),
+        retrieve_btc_min_amount: 0,
+        ledger_id: CanisterId::from_u64(42),
+        max_time_in_queue_nanos: 1000,
+        min_confirmations: None,
+        mode: Mode::GeneralAvailability,
+        kyt_fee: None,
+        kyt_principal: None,
+    });
+    // no request, can't form a batch, fail.
+    assert!(!state.can_form_a_batch(1, 0));
+
+    let req = RetrieveBtcRequest {
+        amount: 1,
+        address: BitcoinAddress::P2wpkhV0([0; 20]),
+        block_index: 0,
+        received_at: 10000,
+        kyt_provider: None,
+        reimbursement_account: None,
+    };
+    state.pending_retrieve_btc_requests.push(req);
+    // One request, >= min_pending, pass.
+    assert!(state.can_form_a_batch(1, 10));
+
+    // One request, <= max_time_in_queue, fail.
+    assert!(!state.can_form_a_batch(10, 10500));
+
+    // One request, > max_time_in_queue, pass.
+    assert!(state.can_form_a_batch(10, state.max_time_in_queue_nanos + 10500));
+
+    state.last_transaction_submission_time_ns = Some(5000);
+    // One request, too long since last_transaction_submission_time, pass.
+    assert!(state.can_form_a_batch(10, 10500));
+
+    state.last_transaction_submission_time_ns = Some(9500);
+    // One request, not long since last_transaction_submission_time, fail.
+    assert!(!state.can_form_a_batch(10, 10500));
+
+    let req = RetrieveBtcRequest {
+        amount: 1,
+        address: BitcoinAddress::P2wpkhV0([0; 20]),
+        block_index: 0,
+        received_at: 10501,
+        kyt_provider: None,
+        reimbursement_account: None,
+    };
+    state.pending_retrieve_btc_requests.push(req);
+    // Two request, long enough since last_transaction_submission_time, pass.
+    assert!(state.can_form_a_batch(10, 10600));
+}

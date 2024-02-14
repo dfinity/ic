@@ -1,6 +1,4 @@
 container-autobuild-protected:
-  extends:
-    - .build-k8s
   rules:
     # Run immediately on Dockerfile changes pushed to a protected branch - such as master.
     - if: '$CI_COMMIT_REF_PROTECTED == "true" && $CI_PIPELINE_SOURCE == "push"'
@@ -33,8 +31,6 @@ container-autobuild-protected:
       fi
 
 container-autobuild:
-  extends:
-    - .build-k8s
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes:

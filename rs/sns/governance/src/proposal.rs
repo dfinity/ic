@@ -8,11 +8,11 @@ use crate::{
         proposal,
         proposal::Action,
         transfer_sns_treasury_funds::TransferFrom,
-        DeregisterDappCanisters, ExecuteGenericNervousSystemFunction, Governance,
-        ManageLedgerParameters, ManageSnsMetadata, MintSnsTokens, Motion, NervousSystemFunction,
-        NervousSystemParameters, Proposal, ProposalData, ProposalDecisionStatus,
-        ProposalRewardStatus, RegisterDappCanisters, Tally, TransferSnsTreasuryFunds,
-        UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
+        DeregisterDappCanisters, ExecuteGenericNervousSystemFunction, Governance, LogVisibility,
+        ManageDappCanisterSettings, ManageLedgerParameters, ManageSnsMetadata, MintSnsTokens,
+        Motion, NervousSystemFunction, NervousSystemParameters, Proposal, ProposalData,
+        ProposalDecisionStatus, ProposalRewardStatus, RegisterDappCanisters, Tally,
+        TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
     },
     sns_upgrade::{get_upgrade_params, UpgradeSnsParams},
     types::{Environment, DEFAULT_TRANSFER_FEE},
@@ -51,9 +51,10 @@ pub const MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS: usize = 700;
 /// The maximum number of GenericNervousSystemFunctions the system allows.
 pub const MAX_NUMBER_OF_GENERIC_NERVOUS_SYSTEM_FUNCTIONS: usize = 200_000;
 
-/// The maximum number of dapps that can be registered in a single
-/// RegisterDappCanisters proposal.
-pub const MAX_NUMBER_OF_DAPPS_TO_REGISTER_PER_PROPOSAL: usize = 1_000;
+/// The maximum number of dapps that can be managed in a single
+/// proposal (RegisterDappCanisters, DeregisterDappCanisters,
+/// or ManageDappCanisterSettings).
+pub const MAX_NUMBER_OF_DAPPS_TO_MANAGE_PER_PROPOSAL: usize = 1_000;
 
 /// What the name says: how long to hang onto TreasurySnsTreasuryTransfer proposals that were
 /// successfully executed. (This is used by can_be_purged, and is generally used when calling
@@ -251,6 +252,9 @@ pub async fn validate_and_render_action(
         }
         proposal::Action::ManageLedgerParameters(manage_ledger_parameters) => {
             validate_and_render_manage_ledger_parameters(manage_ledger_parameters)
+        }
+        proposal::Action::ManageDappCanisterSettings(manage_dapp_canister_settings) => {
+            validate_and_render_manage_dapp_canister_settings(manage_dapp_canister_settings)
         }
     }
 }
@@ -799,8 +803,8 @@ fn validate_and_render_register_dapp_canisters(
     }
 
     let num_canisters_to_register = register_dapp_canisters.canister_ids.len();
-    if num_canisters_to_register > MAX_NUMBER_OF_DAPPS_TO_REGISTER_PER_PROPOSAL {
-        return Err(format!("RegisterDappCanisters cannot specify more than {MAX_NUMBER_OF_DAPPS_TO_REGISTER_PER_PROPOSAL} canister ids"));
+    if num_canisters_to_register > MAX_NUMBER_OF_DAPPS_TO_MANAGE_PER_PROPOSAL {
+        return Err(format!("RegisterDappCanisters cannot specify more than {MAX_NUMBER_OF_DAPPS_TO_MANAGE_PER_PROPOSAL} canister ids"));
     }
 
     let canisters_to_register = register_dapp_canisters
@@ -850,6 +854,10 @@ fn validate_and_render_deregister_dapp_canisters(
 ) -> Result<String, String> {
     if deregister_dapp_canisters.canister_ids.is_empty() {
         return Err("DeregisterDappCanisters must specify at least one canister id".to_string());
+    }
+
+    if deregister_dapp_canisters.canister_ids.len() > MAX_NUMBER_OF_DAPPS_TO_MANAGE_PER_PROPOSAL {
+        return Err(format!("DeregisterDappCanisters cannot specify more than {MAX_NUMBER_OF_DAPPS_TO_MANAGE_PER_PROPOSAL} canister ids"));
     }
 
     if deregister_dapp_canisters.new_controllers.is_empty() {
@@ -959,6 +967,75 @@ fn validate_and_render_manage_ledger_parameters(
     if no_change {
         Err(String::from(
             "ManageLedgerParameters must change at least one value, all values are None",
+        ))
+    } else {
+        Ok(render)
+    }
+}
+
+fn validate_and_render_manage_dapp_canister_settings(
+    manage_dapp_canister_settings: &ManageDappCanisterSettings,
+) -> Result<String, String> {
+    if manage_dapp_canister_settings.canister_ids.is_empty() {
+        return Err("ManageDappCanisterSettings must specify at least one canister".to_string());
+    }
+
+    if manage_dapp_canister_settings.canister_ids.len() > MAX_NUMBER_OF_DAPPS_TO_MANAGE_PER_PROPOSAL
+    {
+        return Err(format!(
+            "ManageDappCanisterSettings cannot specify more than \
+             {MAX_NUMBER_OF_DAPPS_TO_MANAGE_PER_PROPOSAL} canister ids"
+        ));
+    }
+
+    let num_canisters = manage_dapp_canister_settings.canister_ids.len();
+    let canister_list = manage_dapp_canister_settings
+        .canister_ids
+        .iter()
+        .map(|id| format!("  - {id}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let mut render = format!(
+        "# Proposal to manage settings for {num_canisters} dapp canister{plural}: \n\
+        ## Canister ids: \n\
+        {canister_list}\n",
+        plural = if num_canisters > 1 { "s" } else { "" },
+    );
+
+    let mut no_change = true;
+    if let Some(compute_allocation) = &manage_dapp_canister_settings.compute_allocation {
+        render += &format!("# Set compute allocation to: {}%\n", compute_allocation);
+        no_change = false;
+    }
+    if let Some(memory_allocation) = &manage_dapp_canister_settings.memory_allocation {
+        render += &format!("# Set memory allocation to: {} bytes\n", memory_allocation);
+        no_change = false;
+    }
+    if let Some(freezing_threshold) = &manage_dapp_canister_settings.freezing_threshold {
+        render += &format!(
+            "# Set freezing threshold to: {} seconds\n",
+            freezing_threshold
+        );
+        no_change = false;
+    }
+    if let Some(reserved_cycles_limit) = &manage_dapp_canister_settings.reserved_cycles_limit {
+        render += &format!(
+            "# Set reserved cycles limit to: {} \n",
+            reserved_cycles_limit
+        );
+        no_change = false;
+    }
+    if let Some(log_visibility) = &manage_dapp_canister_settings.log_visibility {
+        render += &format!(
+            "# Set log visibility to: {:?} \n",
+            LogVisibility::try_from(*log_visibility).unwrap_or_default()
+        );
+        no_change = false;
+    }
+
+    if no_change {
+        Err(String::from(
+            "ManageDappCanisterSettings must change at least one value, all values are None",
         ))
     } else {
         Ok(render)
@@ -2919,7 +2996,7 @@ Version {
 
     #[test]
     fn validate_and_render_register_dapp_canisters_allows_max_canisters() {
-        let canister_ids = (0..MAX_NUMBER_OF_DAPPS_TO_REGISTER_PER_PROPOSAL)
+        let canister_ids = (0..MAX_NUMBER_OF_DAPPS_TO_MANAGE_PER_PROPOSAL)
             .map(|i| PrincipalId::new_user_test_id(i as u64))
             .collect::<Vec<_>>();
         let disallowed_canister_ids: HashSet<CanisterId> = HashSet::new();
@@ -2935,7 +3012,7 @@ Version {
             assert!(rendered_proposal.contains(&format!("\n- {canister_id}")), "rendered proposal \"{rendered_proposal}\" does not contain canister id \"- {canister_id}\"");
         }
 
-        rendered_proposal.contains(&format!("{MAX_NUMBER_OF_DAPPS_TO_REGISTER_PER_PROPOSAL}"));
+        rendered_proposal.contains(&format!("{MAX_NUMBER_OF_DAPPS_TO_MANAGE_PER_PROPOSAL}"));
 
         for line in rendered_proposal.lines() {
             assert!(!line.starts_with(char::is_whitespace), "rendered proposal \"{rendered_proposal}\" contains a line that starts with whitespace");
@@ -2944,7 +3021,7 @@ Version {
 
     #[test]
     fn validate_and_render_register_dapp_canisters_doesnt_allow_more_than_max_canisters() {
-        let canister_ids = (0..(MAX_NUMBER_OF_DAPPS_TO_REGISTER_PER_PROPOSAL + 1))
+        let canister_ids = (0..(MAX_NUMBER_OF_DAPPS_TO_MANAGE_PER_PROPOSAL + 1))
             .map(|i| PrincipalId::new_user_test_id(i as u64))
             .collect::<Vec<_>>();
         let disallowed_canister_ids: HashSet<CanisterId> = HashSet::new();
@@ -2956,7 +3033,7 @@ Version {
         )
         .unwrap_err();
 
-        rendered_error.contains(&format!("{MAX_NUMBER_OF_DAPPS_TO_REGISTER_PER_PROPOSAL}"));
+        rendered_error.contains(&format!("{MAX_NUMBER_OF_DAPPS_TO_MANAGE_PER_PROPOSAL}"));
     }
 
     #[test]
@@ -3339,6 +3416,87 @@ Version {
         assert_eq!(
             render,
             format!("# Proposal to change ledger parameters:\n# Set token transfer fee: {} token-quantums. \n", new_fee)
+        );
+    }
+
+    #[test]
+    fn validate_and_render_manage_dapp_canister_settings_no_canisters() {
+        let rendered_error = validate_and_render_manage_dapp_canister_settings(
+            &ManageDappCanisterSettings::default(),
+        )
+        .unwrap_err();
+        assert!(rendered_error.contains("must specify at least one canister"));
+    }
+
+    #[test]
+    fn validate_and_render_manage_dapp_canister_settings_max_canisters() {
+        let canister_ids = (0..(MAX_NUMBER_OF_DAPPS_TO_MANAGE_PER_PROPOSAL))
+            .map(|i| PrincipalId::new_user_test_id(i as u64))
+            .collect::<Vec<_>>();
+
+        validate_and_render_manage_dapp_canister_settings(&ManageDappCanisterSettings {
+            canister_ids,
+            compute_allocation: Some(50),
+            memory_allocation: Some(1 << 30),
+            freezing_threshold: Some(1_000),
+            reserved_cycles_limit: Some(1_000_000_000_000),
+            log_visibility: Some(LogVisibility::Public as i32),
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn validate_and_render_manage_dapp_canister_settings_too_many_canisters() {
+        let canister_ids = (0..(MAX_NUMBER_OF_DAPPS_TO_MANAGE_PER_PROPOSAL + 1))
+            .map(|i| PrincipalId::new_user_test_id(i as u64))
+            .collect::<Vec<_>>();
+
+        let rendered_error =
+            validate_and_render_manage_dapp_canister_settings(&ManageDappCanisterSettings {
+                canister_ids,
+                ..ManageDappCanisterSettings::default()
+            })
+            .unwrap_err();
+        assert!(rendered_error.contains("cannot specify more than"));
+    }
+
+    #[test]
+    fn validate_and_render_manage_dapp_canister_settings_no_changes() {
+        let rendered_error =
+            validate_and_render_manage_dapp_canister_settings(&ManageDappCanisterSettings {
+                canister_ids: vec![PrincipalId::new_user_test_id(1)],
+                ..Default::default()
+            })
+            .unwrap_err();
+        assert!(rendered_error.contains("must change at least one value"));
+    }
+
+    #[test]
+    fn validate_and_render_manage_dapp_canister_settings_no_changes_multiple_canisters() {
+        let render =
+            validate_and_render_manage_dapp_canister_settings(&ManageDappCanisterSettings {
+                canister_ids: vec![
+                    PrincipalId::new_user_test_id(1),
+                    PrincipalId::new_user_test_id(2),
+                ],
+                compute_allocation: Some(50),
+                memory_allocation: Some(1 << 30),
+                freezing_threshold: Some(1_000),
+                reserved_cycles_limit: Some(1_000_000_000_000),
+                log_visibility: Some(LogVisibility::Public as i32),
+            })
+            .unwrap();
+        assert_eq!(
+            render,
+            "# Proposal to manage settings for 2 dapp canisters: \n\
+             ## Canister ids: \n  \
+             - 6fyp7-3ibaa-aaaaa-aaaap-4ai\n  \
+             - djduj-3qcaa-aaaaa-aaaap-4ai\n\
+             # Set compute allocation to: 50%\n\
+             # Set memory allocation to: 1073741824 bytes\n\
+             # Set freezing threshold to: 1000 seconds\n\
+             # Set reserved cycles limit to: 1000000000000 \n\
+             # Set log visibility to: Public \n"
         );
     }
 }

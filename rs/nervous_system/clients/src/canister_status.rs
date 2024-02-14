@@ -1,7 +1,7 @@
 use crate::canister_id_record::CanisterIdRecord;
 use candid::{CandidType, Deserialize};
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
-use ic_ic00_types::IC_00;
+use ic_management_canister_types::IC_00;
 use ic_nervous_system_runtime::Runtime;
 use num_traits::cast::ToPrimitive;
 
@@ -151,7 +151,7 @@ where
         .map(|response: (CanisterStatusResultFromManagementCanister,)| response.0)
 }
 
-/// Copy-and-paste of types from ic00_types, without deprecated fields.
+/// Copy-and-paste of types from management_canister_types, without deprecated fields.
 #[derive(CandidType, Debug, Deserialize, Eq, PartialEq, Clone)]
 pub struct CanisterStatusResultV2 {
     pub status: CanisterStatusType,

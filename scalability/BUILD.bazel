@@ -248,6 +248,7 @@ sh_test(
         ":e2e-scalability-tests",
         "//bazel:version_file_path",
         "//ic-os:scripts/build-bootstrap-config-image.sh",
+        "//rs/tests:src/default_firewall_whitelist.conf",
         IC_OS_ENV + ":disk-img.tar.zst.cas-url",
         IC_OS_ENV + ":disk-img.tar.zst.sha256",
         IC_OS_ENV + ":version.txt",

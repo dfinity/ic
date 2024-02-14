@@ -80,10 +80,10 @@ pub const SAMPLE_CONFIG: &str = r#"
         // Listening port used by transport to establish peer connections.
         listening_port: 3000,
     },
-    // ============================================
-    // Configuration of IPv4 networking
-    // ============================================
-    ipv4_config: {
+    // =========================================================
+    // Configuration of IPv4 networking (provided at first boot)
+    // =========================================================
+    initial_ipv4_config: {
         public_address: "",
         public_gateway: "",
     },

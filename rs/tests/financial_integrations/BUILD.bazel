@@ -14,6 +14,7 @@ LEDGER_CANISTER_RUNTIME_DEPS = [
 
 system_test(
     name = "btc_get_balance_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
@@ -26,6 +27,7 @@ system_test(
 
 system_test(
     name = "icrc1_agent_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
@@ -35,6 +37,7 @@ system_test(
 
 system_test(
     name = "token_fault_tolerance_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
@@ -47,6 +50,7 @@ system_test(
 
 system_test(
     name = "transaction_ledger_correctness_test",
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,

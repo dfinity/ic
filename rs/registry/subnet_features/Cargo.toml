@@ -9,5 +9,5 @@ documentation.workspace = true
 [dependencies]
 candid = { workspace = true }
 ic-protobuf = { path = "../../protobuf" }
-ic-ic00-types = { path = "../../types/ic00_types" }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
 serde = { workspace = true }

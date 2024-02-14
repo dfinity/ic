@@ -3,9 +3,9 @@ use proptest::strategy::Strategy;
 
 mod estimate_transaction_price {
     use crate::eth_rpc::FeeHistory;
-    use crate::numeric::{BlockNumber, GasAmount, WeiPerGas};
+    use crate::numeric::{BlockNumber, WeiPerGas};
     use crate::tx::{
-        estimate_transaction_price, TransactionPrice, TransactionPriceEstimationError,
+        estimate_transaction_price, TransactionPriceEstimate, TransactionPriceEstimationError,
     };
     use assert_matches::assert_matches;
     use proptest::collection::vec;
@@ -34,8 +34,7 @@ mod estimate_transaction_price {
 
             prop_assert_eq!(
                 result,
-                Ok(TransactionPrice {
-                    gas_limit: GasAmount::from(21_000_u64),
+                Ok(TransactionPriceEstimate {
                     max_fee_per_gas: WeiPerGas::from(expected_max_fee_per_gas),
                     max_priority_fee_per_gas: WeiPerGas::from(expected_max_priority_fee_per_gas),
                 })

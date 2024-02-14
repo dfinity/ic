@@ -1,4 +1,5 @@
 use std::{
+    convert::Infallible,
     error::Error as StdError,
     net::{Ipv6Addr, SocketAddr},
     sync::Arc,
@@ -10,7 +11,9 @@ use arc_swap::ArcSwapOption;
 use async_scoped::TokioScope;
 use async_trait::async_trait;
 use axum::{
+    error_handling::HandleErrorLayer,
     middleware,
+    response::IntoResponse,
     routing::method_routing::{get, post},
     Router,
 };
@@ -23,13 +26,14 @@ use ic_registry_local_store::{LocalStoreImpl, LocalStoreReader};
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::CanisterId;
 use lazy_static::lazy_static;
+use little_loadshedder::{LoadShedError, LoadShedLayer};
 use prometheus::Registry;
 use regex::Regex;
 use rustls::cipher_suite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384};
 use tokio::sync::RwLock;
-use tower::ServiceBuilder;
+use tower::{limit::ConcurrencyLimitLayer, ServiceBuilder};
 use tower_http::{compression::CompressionLayer, request_id::MakeRequestUuid, ServiceBuilderExt};
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::{
     cache::{cache_middleware, Cache},
@@ -47,10 +51,13 @@ use crate::{
     persist::{Persister, Routes},
     rate_limiting::RateLimit,
     retry::{retry_request, RetryParams},
-    routes::{self, Health, Lookup, Proxy, ProxyRouter, RootKey},
+    routes::{self, ErrorCause, Health, Lookup, Proxy, ProxyRouter, RootKey},
     snapshot::{RegistrySnapshot, SnapshotPersister, Snapshotter},
     tls_verify::TlsVerifier,
 };
+
+#[cfg(not(feature = "tls"))]
+use {hyperlocal::UnixServerExt, std::os::unix::fs::PermissionsExt};
 
 #[cfg(feature = "tls")]
 use {
@@ -117,8 +124,8 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
 
     // HTTP Client
     let http_client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(cli.listen.http_timeout))
-        .connect_timeout(Duration::from_secs(cli.listen.http_timeout_connect))
+        .timeout(Duration::from_millis(cli.listen.http_timeout))
+        .connect_timeout(Duration::from_millis(cli.listen.http_timeout_connect))
         .pool_idle_timeout(Some(Duration::from_secs(cli.listen.http_idle_timeout))) // After this duration the idle connection is closed (default 90s)
         .http2_keep_alive_interval(Some(keepalive)) // Keepalive interval for http2 connections
         .http2_keep_alive_timeout(Duration::from_secs(cli.listen.http_keepalive_timeout)) // Close connection if no reply after timeout
@@ -186,16 +193,38 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     let routers_http = routers_https;
 
     // HTTP
-    let srvs_http = Server::bind(SocketAddr::new(
-        Ipv6Addr::UNSPECIFIED.into(),
-        cli.listen.http_port,
-    ))
-    .acceptor(DefaultAcceptor)
-    .serve(
-        routers_http
-            .clone()
-            .into_make_service_with_connect_info::<SocketAddr>(),
-    );
+    let srvs_http = cli.listen.http_port.map(|x| {
+        Server::bind(SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), x))
+            .acceptor(DefaultAcceptor)
+            .serve(
+                routers_http
+                    .clone()
+                    .into_make_service_with_connect_info::<SocketAddr>(),
+            )
+    });
+
+    // HTTP Unix Socket
+    #[cfg(not(feature = "tls"))]
+    let srvs_http_unix = cli.listen.http_unix_socket.map(|x| {
+        // Remove the socket file if it's there
+        if x.exists() {
+            std::fs::remove_file(&x).expect("unable to remove socket");
+        }
+
+        let srv = hyper::Server::bind_unix(&x)
+            .expect("cannot bind to the socket")
+            .serve(routers_http.clone().into_make_service());
+
+        std::fs::set_permissions(&x, std::fs::Permissions::from_mode(0o666))
+            .expect("unable to set permissions on socket");
+
+        srv
+    });
+
+    #[cfg(not(feature = "tls"))]
+    if srvs_http.is_none() && srvs_http_unix.is_none() {
+        panic!("at least one of --http-port or --http-unix-socket must be specified");
+    }
 
     // HTTPS
     #[cfg(feature = "tls")]
@@ -273,10 +302,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         MetricParamsPersist::new(&metrics_registry),
     );
 
-    let checker = Checker::new(
-        http_client,
-        Duration::from_secs(cli.listen.http_timeout_check),
-    );
+    let checker = Checker::new(http_client, Duration::from_millis(cli.health.check_timeout));
     let checker = WithMetricsCheck(checker, MetricParamsCheck::new(&metrics_registry));
     let checker = WithRetryLimited(checker, cli.health.check_retries, Duration::ZERO);
 
@@ -293,7 +319,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     );
     let check_runner = WithThrottle(
         check_runner,
-        ThrottleParams::new(Duration::from_secs(cli.health.check_interval)),
+        ThrottleParams::new(Duration::from_millis(cli.health.check_interval)),
     );
 
     // Runners
@@ -368,7 +394,14 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         }
 
         // Servers
-        s.spawn(srvs_http.map_err(|err| anyhow!("failed to start http server: {:?}", err)));
+        if let Some(v) = srvs_http {
+            s.spawn(v.map_err(|err| anyhow!("failed to start http server: {:?}", err)));
+        }
+
+        #[cfg(not(feature = "tls"))]
+        if let Some(v) = srvs_http_unix {
+            s.spawn(v.map_err(|err| anyhow!("failed to start http unix socket server: {:?}", err)));
+        }
 
         #[cfg(feature = "tls")]
         s.spawn(srvs_https.map_err(|err| anyhow!("failed to start https server: {:?}", err)));
@@ -384,6 +417,12 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     });
 
     Ok(())
+}
+
+// Load shedding middleware is fallible, so we must handle the errors that it emits and convert them into responses.
+// Error argument will always be LoadShedError::Overload since the inner Axum layers are infallible, so we don't care for it.
+async fn handle_shed_error(_err: LoadShedError<Infallible>) -> impl IntoResponse {
+    ErrorCause::LoadShed
 }
 
 pub fn setup_router(
@@ -458,9 +497,7 @@ pub fn setup_router(
         // Layers under ServiceBuilder are executed top-down (opposite to that under Router)
         // 1st layer wraps 2nd layer and so on
         ServiceBuilder::new()
-            .concurrency_limit(cli.listen.max_concurrency)
             .layer(middleware::from_fn(routes::validate_request))
-            .layer(middleware::from_fn(routes::postprocess_response))
             .set_x_request_id(MakeRequestUuid)
             .layer(option_layer(
                 (!cli.monitoring.disable_request_logging).then_some(
@@ -474,6 +511,31 @@ pub fn setup_router(
                     ),
                 ),
             ))
+            .layer(option_layer(
+                cli.listen.max_concurrency.map(ConcurrencyLimitLayer::new),
+            ))
+            .layer(option_layer(cli.listen.shed_ewma_param.map(|x| {
+                if !(0.0..=1.0).contains(&x) {
+                    panic!("Shed EWMA param must be in range 0.0..1.0");
+                }
+
+                if cli.listen.shed_target_latency == 0 {
+                    panic!("Shed taget latency should be > 0");
+                }
+
+                warn!(
+                    "Load shedding enabled: EWMA param {}, target latency {}ms",
+                    x, cli.listen.shed_target_latency
+                );
+
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(handle_shed_error))
+                    .layer(LoadShedLayer::new(
+                        x,
+                        Duration::from_millis(cli.listen.shed_target_latency),
+                    ))
+            })))
+            .layer(middleware::from_fn(routes::postprocess_response))
             .layer(middleware::from_fn(routes::preprocess_request))
             .layer(middleware::from_fn(management::btc_mw))
             .layer(option_layer(

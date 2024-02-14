@@ -2,6 +2,7 @@ type Account = record { owner : opt principal; subaccount : opt Subaccount };
 type Action = variant {
   ManageNervousSystemParameters : NervousSystemParameters;
   AddGenericNervousSystemFunction : NervousSystemFunction;
+  ManageDappCanisterSettings : ManageDappCanisterSettings;
   RemoveGenericNervousSystemFunction : nat64;
   UpgradeSnsToNextVersion : record {};
   RegisterDappCanisters : RegisterDappCanisters;
@@ -229,6 +230,14 @@ type ListProposals = record {
   include_status : vec int32;
 };
 type ListProposalsResponse = record { proposals : vec ProposalData };
+type ManageDappCanisterSettings = record {
+  freezing_threshold : opt nat64;
+  canister_ids : vec principal;
+  reserved_cycles_limit : opt nat64;
+  log_visibility : opt int32;
+  memory_allocation : opt nat64;
+  compute_allocation : opt nat64;
+};
 type ManageLedgerParameters = record { transfer_fee : opt nat64 };
 type ManageNeuron = record { subaccount : vec nat8; command : opt Command };
 type ManageNeuronResponse = record { command : opt Command_1 };

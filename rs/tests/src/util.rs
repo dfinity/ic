@@ -22,7 +22,7 @@ use ic_agent::{
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
 use ic_config::ConfigOptional;
 use ic_constants::MAX_INGRESS_TTL;
-use ic_ic00_types::{CanisterStatusResult, EmptyBlob, Payload};
+use ic_management_canister_types::{CanisterStatusResult, EmptyBlob, Payload};
 use ic_message::ForwardParams;
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
@@ -1293,7 +1293,11 @@ pub fn get_config() -> ConfigOptional {
         .replace("{{ backup_purging_interval_secs }}", "0")
         .replace("{{ replica_log_debug_overrides }}", "[]")
         .replace("{{ nns_url }}", "http://www.fakeurl.com/")
-        .replace("{{ malicious_behavior }}", "null");
+        .replace("{{ malicious_behavior }}", "null")
+        .replace("{{ query_stats_aggregation }}", "\"Disabled\"")
+        .replace("{{ query_stats_epoch_length }}", "1800")
+        // Confirm that config is valid when no prefixes are specified.
+        .replace("{{ ipv6_whitelist }}", "");
 
     json5::from_str::<ConfigOptional>(&cfg).expect("Could not parse json5")
 }

@@ -55,7 +55,7 @@ RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.12.2/
 
 ARG nvm_version=v0.39.1
 ARG dependency_mgmt_nns_dapp_node_version=18.17.1
-ARG dependency_mgmt_default_node_version=19
+ARG dependency_mgmt_default_node_version=20
 ENV NVM_DIR=/opt/nvm
 RUN mkdir $NVM_DIR && \
     curl --fail https://raw.githubusercontent.com/nvm-sh/nvm/${nvm_version}/install.sh -sSf | bash
@@ -109,7 +109,7 @@ ENV PYTHONPATH=/ic/gitlab-ci/src:/ic/gitlab-ci/src/dependencies:$PYTHONPATH
 RUN cd /tmp/bazel && bazel version
 
 # Add Rust/Cargo support
-ARG RUST_VERSION=1.75.0
+ARG RUST_VERSION=1.76.0
 RUN curl --fail https://sh.rustup.rs -sSf \
     | sh -s -- -y --default-toolchain ${RUST_VERSION}-x86_64-unknown-linux-gnu --no-modify-path && \
     rustup default ${RUST_VERSION}-x86_64-unknown-linux-gnu && \

@@ -33,7 +33,7 @@ impl RosettaRequestHandler {
             }
         };
         Ok(ConstructionMetadataResponse {
-            metadata: ConstructionPayloadsRequestMetadata::default().into(),
+            metadata: ConstructionPayloadsRequestMetadata::default().try_into()?,
             suggested_fee,
         })
     }

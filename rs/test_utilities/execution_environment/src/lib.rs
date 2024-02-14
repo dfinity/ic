@@ -19,18 +19,18 @@ use ic_execution_environment::{
     Hypervisor, IngressFilterMetrics, IngressHistoryWriterImpl, InternalHttpQueryHandler,
     RoundInstructions, RoundLimits,
 };
-use ic_ic00_types::{
-    CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
-    CanisterSettingsArgsBuilder, CanisterStatusType, EcdsaKeyId, EmptyBlob, InstallCodeArgs,
-    InstallCodeArgsV2, LogVisibility, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    SkipPreUpgrade, UpdateSettingsArgs,
-};
 use ic_interfaces::execution_environment::{
     ExecutionMode, IngressHistoryWriter, QueryHandler, RegistryExecutionSettings,
     SubnetAvailableMemory,
 };
 use ic_interfaces_state_manager::Labeled;
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
+use ic_management_canister_types::{
+    CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
+    CanisterSettingsArgsBuilder, CanisterStatusType, EcdsaKeyId, EmptyBlob, InstallCodeArgs,
+    InstallCodeArgsV2, LogVisibility, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs,
+    SkipPreUpgrade, UpdateSettingsArgs,
+};
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{
@@ -474,6 +474,12 @@ impl ExecutionTest {
         CanisterIdRecord::decode(&get_reply(result))
             .unwrap()
             .get_canister_id()
+    }
+
+    /// Deletes the specified canister.
+    pub fn delete_canister(&mut self, canister_id: CanisterId) -> Result<WasmResult, UserError> {
+        let payload = CanisterIdRecord::from(canister_id).encode();
+        self.subnet_message(Method::DeleteCanister, payload)
     }
 
     pub fn create_canister_with_allocation(
@@ -1596,7 +1602,6 @@ impl Default for ExecutionTestBuilder {
         Self {
             execution_config: Config {
                 rate_limiting_of_instructions: FlagStatus::Disabled,
-                deterministic_time_slicing: FlagStatus::Disabled,
                 canister_sandboxing_flag: FlagStatus::Enabled,
                 composite_queries: FlagStatus::Disabled,
                 query_caching: FlagStatus::Disabled,
@@ -1799,8 +1804,8 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_deterministic_time_slicing(mut self) -> Self {
-        self.execution_config.deterministic_time_slicing = FlagStatus::Enabled;
+    pub fn with_deterministic_time_slicing_disabled(mut self) -> Self {
+        self.execution_config.deterministic_time_slicing = FlagStatus::Disabled;
         self
     }
 
@@ -1826,6 +1831,12 @@ impl ExecutionTestBuilder {
 
     pub fn with_query_cache_max_expiry_time(mut self, max_expiry_time: Duration) -> Self {
         self.execution_config.query_cache_max_expiry_time = max_expiry_time;
+        self
+    }
+
+    pub fn with_query_cache_data_certificate_expiry_time(mut self, time: Duration) -> Self {
+        self.execution_config
+            .query_cache_data_certificate_expiry_time = time;
         self
     }
 
@@ -1919,6 +1930,11 @@ impl ExecutionTestBuilder {
 
     pub fn with_snapshots(mut self, status: FlagStatus) -> Self {
         self.execution_config.canister_snapshots = status;
+        self
+    }
+
+    pub fn with_canister_logging(mut self, status: FlagStatus) -> Self {
+        self.execution_config.canister_logging = status;
         self
     }
 

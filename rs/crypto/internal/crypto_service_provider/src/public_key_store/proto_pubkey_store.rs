@@ -64,7 +64,7 @@ impl ProtoPublicKeyStore {
     fn write_node_public_keys_proto_to_disk(&mut self) -> Result<(), io::Error> {
         // Setting the version to CURRENT_PKS_VERSION to unify all stores in production.
         self.keys.version = CURRENT_PKS_VERSION;
-        ic_utils::fs::write_protobuf_using_tmp_file(&self.proto_file, &self.keys)
+        ic_sys::fs::write_protobuf_using_tmp_file(&self.proto_file, &self.keys)
     }
 }
 

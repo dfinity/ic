@@ -1,6 +1,7 @@
 use crate::pb::v1::NeuronId;
 use ic_crypto_sha2::Sha256;
-use ic_stable_structures::{BoundedStorable, Storable};
+use ic_stable_structures::storable::Bound;
+use ic_stable_structures::Storable;
 use num_traits::bounds::{LowerBounded, UpperBounded};
 use std::{borrow::Cow, convert::TryInto};
 
@@ -47,11 +48,11 @@ impl Storable for NeuronId {
             id: u64::from_bytes(bytes),
         }
     }
-}
 
-impl BoundedStorable for NeuronId {
-    const MAX_SIZE: u32 = std::mem::size_of::<u64>() as u32;
-    const IS_FIXED_SIZE: bool = true;
+    const BOUND: Bound = Bound::Bounded {
+        max_size: std::mem::size_of::<u64>() as u32,
+        is_fixed_size: true,
+    };
 }
 
 impl LowerBounded for NeuronId {

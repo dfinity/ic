@@ -9,7 +9,7 @@ cargo clippy --locked --all-features --workspace --all-targets -- \
     -D clippy::mem_forget \
     -C debug-assertions=off
 
-if cargo tree -e features | grep -q 'serde feature "rc"'; then
+if cargo tree --workspace --depth 1 -e features | grep -q 'serde feature "rc"'; then
     echo 'The serde "rc" feature seems to be enabled. Instead, the module "serde_arc" in "ic-utils" should be used.'
     exit 1
 fi

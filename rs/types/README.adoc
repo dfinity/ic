@@ -17,7 +17,7 @@ This package contains definitions of error types that the user of the IC can obs
 
 Avoid adding component-specific error types to this package.
 
-== `ic-ic00-types`
+== `ic-management-canister-types`
 
 This package contains types specified in the https://github.com/dfinity/interface-spec/blob/master/spec/ic.did[ic00 management canister interface].
 

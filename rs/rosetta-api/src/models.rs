@@ -4,7 +4,6 @@ pub mod seconds;
 pub mod timestamp;
 
 use crate::errors::convert_to_error;
-use crate::request::transaction_operation_results::TransactionOperationResults;
 use crate::{convert::from_hex, errors, errors::ApiError, request_types::RequestType};
 pub use ic_canister_client_sender::Ed25519KeyPair as EdKeypair;
 use ic_types::messages::{
@@ -18,27 +17,6 @@ pub use rosetta_core::response_types::*;
 use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
 use std::str::FromStr;
-
-// This file is generated from https://github.com/coinbase/rosetta-specifications using openapi-generator
-// Then heavily tweaked because openapi-generator no longer generates valid rust
-// code
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ConstructionSubmitResponse {
-    /// Transfers produce a real transaction identifier,
-    /// Neuron management requests produce a constant (pseudo) identifier.
-    ///
-    /// This field contains the transaction id of the last transfer operation.
-    /// If a transaction only contains neuron management operations
-    /// the constant identifier will be returned.
-    pub transaction_identifier: TransactionIdentifier,
-    pub metadata: TransactionOperationResults,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ConstructionHashResponse {
-    pub transaction_identifier: TransactionIdentifier,
-    pub metadata: ObjectMap,
-}
 
 /// An AccountBalanceRequest is utilized to make a balance request on the
 /// /account/balance endpoint. If the block_identifier is populated, a
@@ -167,7 +145,11 @@ impl FromStr for SignedTransaction {
         .map_err(|err| format!("{:?}", err))
     }
 }
-
+impl ToString for SignedTransaction {
+    fn to_string(&self) -> String {
+        hex::encode(serde_cbor::to_vec(self).unwrap())
+    }
+}
 /// A vector of update/read-state calls for different ingress windows
 /// of the same call.
 pub type Request = (RequestType, Vec<EnvelopePair>);
@@ -211,11 +193,13 @@ pub struct ConstructionDeriveRequestMetadata {
     pub account_type: AccountType,
 }
 
-impl From<ConstructionDeriveRequestMetadata> for ObjectMap {
-    fn from(p: ConstructionDeriveRequestMetadata) -> Self {
-        match serde_json::to_value(p) {
-            Ok(serde_json::Value::Object(o)) => o,
-            _ => unreachable!(),
+impl TryFrom<ConstructionDeriveRequestMetadata> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: ConstructionDeriveRequestMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(serde_json::Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert ConstructionDeriveRequestMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert ConstructionDeriveRequestMetadata to ObjectMap: {:?}",err))),
         }
     }
 }
@@ -245,48 +229,18 @@ fn test_construction_derive_request_metadata() {
     assert_eq!(r0, r1);
 }
 
-/// ConstructionHashRequest is the input to the `/construction/hash` endpoint.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct ConstructionHashRequest {
-    #[serde(rename = "network_identifier")]
-    pub network_identifier: NetworkIdentifier,
-
-    #[serde(rename = "signed_transaction")]
-    pub signed_transaction: String,
-}
-
-impl ConstructionHashRequest {
-    pub fn new(
-        network_identifier: NetworkIdentifier,
-        signed_transaction: String,
-    ) -> ConstructionHashRequest {
-        ConstructionHashRequest {
-            network_identifier,
-            signed_transaction,
-        }
-    }
-
-    pub fn signed_transaction(&self) -> Result<SignedTransaction, ApiError> {
-        serde_cbor::from_slice(&from_hex(&self.signed_transaction)?).map_err(|e| {
-            ApiError::invalid_request(format!(
-                "Cannot deserialize the hash request in CBOR format because of: {}",
-                e
-            ))
-        })
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConstructionMetadataRequestOptions {
     pub request_types: Vec<RequestType>,
 }
 
-impl From<ConstructionMetadataRequestOptions> for ObjectMap {
-    fn from(p: ConstructionMetadataRequestOptions) -> Self {
-        match serde_json::to_value(p) {
-            Ok(serde_json::Value::Object(o)) => o,
-            _ => unreachable!(),
+impl TryFrom<ConstructionMetadataRequestOptions> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: ConstructionMetadataRequestOptions) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(serde_json::Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert ConstructionMetadataRequestOptions to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert ConstructionMetadataRequestOptions to ObjectMap: {:?}",err))),
         }
     }
 }
@@ -368,11 +322,13 @@ pub struct ConstructionPayloadsRequestMetadata {
     pub created_at_time: Option<u64>,
 }
 
-impl From<ConstructionPayloadsRequestMetadata> for ObjectMap {
-    fn from(p: ConstructionPayloadsRequestMetadata) -> Self {
-        match serde_json::to_value(p) {
-            Ok(serde_json::Value::Object(o)) => o,
-            _ => unreachable!(),
+impl TryFrom<ConstructionPayloadsRequestMetadata> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: ConstructionPayloadsRequestMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(serde_json::Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert ConstructionPayloadsRequestMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert ConstructionPayloadsRequestMetadata to ObjectMap: {:?}",err))),
         }
     }
 }
@@ -410,38 +366,6 @@ impl FromStr for UnsignedTransaction {
                 .as_slice(),
         )
         .map_err(|err| format!("{:?}", err))
-    }
-}
-
-/// The transaction submission request includes a signed transaction.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct ConstructionSubmitRequest {
-    #[serde(rename = "network_identifier")]
-    pub network_identifier: NetworkIdentifier,
-
-    #[serde(rename = "signed_transaction")]
-    pub signed_transaction: String, // = CBOR+hex-encoded 'SignedTransaction'
-}
-
-impl ConstructionSubmitRequest {
-    pub fn new(
-        network_identifier: NetworkIdentifier,
-        signed_transaction: SignedTransaction,
-    ) -> ConstructionSubmitRequest {
-        ConstructionSubmitRequest {
-            network_identifier,
-            signed_transaction: hex::encode(serde_cbor::to_vec(&signed_transaction).unwrap()),
-        }
-    }
-
-    pub fn signed_transaction(&self) -> Result<SignedTransaction, ApiError> {
-        serde_cbor::from_slice(&from_hex(&self.signed_transaction)?).map_err(|e| {
-            ApiError::invalid_request(format!(
-                "Cannot deserialize the submit request in CBOR format because of: {}",
-                e
-            ))
-        })
     }
 }
 

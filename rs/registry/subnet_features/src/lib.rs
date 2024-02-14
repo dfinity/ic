@@ -1,5 +1,5 @@
 use candid::CandidType;
-use ic_ic00_types::EcdsaKeyId;
+use ic_management_canister_types::EcdsaKeyId;
 use ic_protobuf::{proxy::ProxyDecodeError, registry::subnet::v1 as pb};
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, str::FromStr};

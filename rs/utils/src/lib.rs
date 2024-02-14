@@ -4,7 +4,6 @@
 pub mod byte_slice_fmt;
 #[cfg(unix)]
 pub mod deterministic_operations;
-pub mod fs;
 pub mod rle;
 pub mod serde_arc;
 pub mod str;

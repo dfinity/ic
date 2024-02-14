@@ -5,7 +5,7 @@ use crate::metadata_state::subnet_call_context_manager::{
 use assert_matches::assert_matches;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::{EcdsaCurve, IC_00};
+use ic_management_canister_types::{EcdsaCurve, IC_00};
 use ic_registry_routing_table::CanisterIdRange;
 use ic_test_utilities::types::{
     ids::{
@@ -453,6 +453,14 @@ fn roundtrip_encoding() {
         public_key_to_der(PublicKeyBytes::try_from(&valid_node_signing_public_key()).unwrap());
     system_metadata.node_public_keys = btreemap! {
         node_test_id(1) => pk_der,
+    };
+    system_metadata.api_boundary_nodes = btreemap! {
+        node_test_id(1) => ApiBoundaryNodeEntry {
+            domain: "api-example.com".to_string(),
+            ipv4_address: Some("127.0.0.1".to_string()),
+            ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
+            pubkey: None,
+        },
     };
     system_metadata.bitcoin_get_successors_follow_up_responses =
         btreemap! { 10.into() => vec![vec![1], vec![2]] };

@@ -28,7 +28,6 @@ DEPENDENCIES = [
     "@crate_index//:hyper",
     "@crate_index//:prometheus",
     "@crate_index//:rand",
-    "@crate_index//:rand_chacha",
     "@crate_index//:slog",
     "@crate_index//:tokio",
 ]

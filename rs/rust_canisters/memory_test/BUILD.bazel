@@ -17,7 +17,7 @@ DEV_DEPENDENCIES = [
     "//rs/state_machine_tests",
     "//rs/test_utilities",
     "//rs/types/types",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
 ]
 
 rust_library(

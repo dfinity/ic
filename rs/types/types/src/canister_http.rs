@@ -51,7 +51,9 @@ use ic_base_types::{NumBytes, PrincipalId};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_ic00_types::{CanisterHttpRequestArgs, HttpHeader, HttpMethod, TransformContext};
+use ic_management_canister_types::{
+    CanisterHttpRequestArgs, HttpHeader, HttpMethod, TransformContext,
+};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::system_metadata::v1 as pb_metadata,

@@ -45,13 +45,10 @@ pub fn get_subnet_list_record(registry: &Registry) -> SubnetListRecord {
             make_subnet_list_record_key().as_bytes(),
             registry.latest_version(),
         )
-        .map_or(
-            Err(format!(
-                "{}do_remove_nodes: Subnet List not found in the registry, aborting node removal.",
-                LOG_PREFIX
-            )),
-            Ok,
-        )
+        .ok_or(format!(
+            "{}do_remove_nodes: Subnet List not found in the registry, aborting node removal.",
+            LOG_PREFIX
+        ))
         .unwrap();
 
     decode_registry_value::<SubnetListRecord>(subnet_list_record_vec.to_vec())
@@ -205,6 +202,19 @@ pub fn scan_for_nodes_by_ip(registry: &Registry, ip_addr: &str) -> Vec<NodeId> {
             })
         })
         .collect()
+}
+
+/// Checks if there is a node with the provided IPv4 address
+pub fn node_exists_with_ipv4(registry: &Registry, ipv4_addr: &str) -> bool {
+    get_key_family::<NodeRecord>(registry, NODE_RECORD_KEY_PREFIX)
+        .into_iter()
+        .find_map(|(k, v)| {
+            v.public_ipv4_config.and_then(|config| {
+                (config.ip_addr == ipv4_addr)
+                    .then(|| NodeId::from(PrincipalId::from_str(&k).unwrap()))
+            })
+        })
+        .is_some()
 }
 
 /// Similar to `get_key_family` on the `RegistryClient`, return a list of

@@ -87,15 +87,17 @@ DEPENDENCIES = [
     "//rs/sns/init",
     "//rs/sns/root",
     "//rs/sns/swap",
+    "//rs/sys",
     "//rs/test_utilities",
     "//rs/test_utilities/identity",
     "//rs/test_utilities/time",
     "//rs/tests/test_canisters/message:lib",
     "//rs/tree_deserializer",
     "//rs/types/base_types",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/types/types_test_utils",
     "//rs/types/types",
+    "//rs/types/wasm_types",
     "//rs/universal_canister/lib",
     "//rs/utils",
     "@crate_index//:anyhow",
@@ -111,7 +113,6 @@ DEPENDENCIES = [
     "@crate_index//:cidr",
     "@crate_index//:clap",
     "@crate_index//:crossbeam-channel",
-    "@crate_index//:crossbeam-utils",
     "@crate_index//:flate2",
     "@crate_index//:futures",
     "@crate_index//:hex",
@@ -181,6 +182,7 @@ GUESTOS_DEV_VERSION = "//ic-os/guestos/envs/dev:version.txt"
 GUESTOS_RUNTIME_DEPS = [
     GUESTOS_DEV_VERSION,
     "//ic-os:scripts/build-bootstrap-config-image.sh",
+    "//rs/tests:src/default_firewall_whitelist.conf",
 ]
 
 MAINNET_REVISION_RUNTIME_DEPS = ["//testnet:mainnet_nns_revision"]

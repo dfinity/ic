@@ -1,4 +1,7 @@
 {
+  "archive": {
+    "ic": "sa4so-piaaa-aaaar-qacnq-cai"
+  },
   "index": {
     "ic": "sh5u2-cqaaa-aaaar-qacna-cai"
   },
@@ -7,5 +10,8 @@
   },
   "minter": {
     "ic": "jzenf-aiaaa-aaaar-qaa7q-cai"
+  },
+  "orchestrator": {
+    "ic": "2s5qh-7aaaa-aaaar-qadya-cai"
   }
 }

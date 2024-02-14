@@ -10,7 +10,6 @@ DEPENDENCIES = [
     "//rs/http_utils",
     "//rs/interfaces",
     "//rs/interfaces/registry",
-    "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/orchestrator/registry_replicator",
     "//rs/protobuf",
@@ -24,7 +23,7 @@ DEPENDENCIES = [
     "//rs/replay",
     "//rs/state_manager",
     "//rs/types/base_types",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:base64",
     "@crate_index//:clap",
@@ -73,8 +72,7 @@ rust_binary(
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [
         ":recovery",
-        "//rs/canister_sandbox/backend_lib",
-        "//rs/canister_sandbox/sandbox_launcher:sandbox_launcher_lib",
+        "//rs/canister_sandbox:backend_lib",
     ],
 )
 

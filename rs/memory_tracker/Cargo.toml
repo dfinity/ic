@@ -11,10 +11,8 @@ documentation.workspace = true
 [dependencies]
 bit-vec = "0.6.3"
 ic-logger = { path = "../monitoring/logger" }
-ic-config = { path = "../config" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-sys = { path = "../sys" }
-ic-utils = { path = "../utils" }
 libc = "0.2.91"
 nix = { workspace = true }
 slog = { workspace = true }

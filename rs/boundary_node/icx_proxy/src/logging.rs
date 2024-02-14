@@ -4,8 +4,8 @@ use axum::Router;
 use clap::{ArgAction::Count, Args, ValueEnum};
 use tower_http::trace::TraceLayer;
 use tracing::{
-    info, info_span, level_filters::LevelFilter, span::EnteredSpan, subscriber::set_global_default,
-    Span,
+    enabled, info, info_span, level_filters::LevelFilter, span::EnteredSpan,
+    subscriber::set_global_default, Level, Span,
 };
 use tracing_subscriber::{fmt::layer, layer::SubscriberExt, Registry};
 
@@ -54,8 +54,13 @@ pub struct LoggingOpts {
 }
 
 /// A helper to add tracing with nice spans to `Router`s
+/// Add only if the logging level is TRACE to have less CPU load in production
 pub fn add_trace_layer(r: Router) -> Router {
-    r.layer(TraceLayer::new_for_http().make_span_with(Span::current()))
+    if enabled!(Level::TRACE) {
+        r.layer(TraceLayer::new_for_http().make_span_with(Span::current()))
+    } else {
+        r
+    }
 }
 
 pub fn setup(opts: LoggingOpts) -> EnteredSpan {

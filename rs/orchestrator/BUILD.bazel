@@ -41,9 +41,8 @@ rust_library(
         "//rs/registry/local_store",
         "//rs/registry/proto_data_provider",
         "//rs/sys",
-        "//rs/types/ic00_types",
+        "//rs/types/management_canister_types",
         "//rs/types/types",
-        "//rs/utils",
         "@crate_index//:candid",
         "@crate_index//:clap",
         "@crate_index//:exec",
@@ -70,6 +69,7 @@ rust_binary(
     deps = [
         ":lib",
         "//rs/async_utils",
+        "//rs/monitoring/logger",
         "@crate_index//:clap",
         "@crate_index//:tokio",
     ],

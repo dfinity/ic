@@ -812,9 +812,7 @@ impl StreamHandlerImpl {
     /// Computes the subnet's available message memory, as the difference
     /// between the subnet's message memory capacity and its current usage.
     fn subnet_available_memory(&self, state: &ReplicatedState) -> i64 {
-        let memory_taken = state.memory_taken();
-        let message_memory_taken = memory_taken.messages();
-        self.subnet_message_memory_capacity.get() as i64 - message_memory_taken.get() as i64
+        self.subnet_message_memory_capacity.get() as i64 - state.message_memory_taken().get() as i64
     }
 
     /// Observes "time in backlog" (since learning about their existence from

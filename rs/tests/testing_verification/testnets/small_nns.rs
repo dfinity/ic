@@ -37,6 +37,7 @@
 use anyhow::Result;
 
 use ic_registry_subnet_type::SubnetType;
+use ic_tests::driver::boundary_node::BoundaryNodeVm;
 use ic_tests::driver::{
     boundary_node::BoundaryNode,
     group::SystemTestGroup,
@@ -83,6 +84,12 @@ pub fn setup(env: TestEnv) {
         .expect("failed to setup BoundaryNode VM");
     install_ii_and_nns_dapp(&env, BOUNDARY_NODE_NAME, None);
     set_authorized_subnets(&env);
-    env.sync_with_prometheus();
+    let boundary_node = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+    let farm_url = boundary_node.get_playnet().unwrap();
+    env.sync_with_prometheus_by_name("", Some(farm_url));
     await_boundary_node_healthy(&env, BOUNDARY_NODE_NAME);
 }

@@ -13,7 +13,6 @@ DEPENDENCIES = [
     "//rs/protobuf",
     "//rs/types/types",
     "@crate_index//:mockall",
-    "@crate_index//:serde_bytes",
 ]
 
 MACRO_DEPENDENCIES = []

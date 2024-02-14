@@ -7,7 +7,7 @@ edition = "2021"
 async-trait = "0.1.36"
 axum = "0.7.0"
 bytes = { workspace = true }
-crossbeam-channel = "0.5.5"
+crossbeam-channel = { workspace = true }
 either = "1.6.0"
 futures = { workspace = true }
 ic-artifact-manager = { path = "../../artifact_manager" }

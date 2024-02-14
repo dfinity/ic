@@ -563,7 +563,7 @@ impl DownloadPrioritizer for DownloadPrioritizerImpl {
             .ok_or(DownloadPrioritizerError::NotFound)?
             .advert_map
             .remove(integrity_hash)
-            .map_or(Err(DownloadPrioritizerError::NotFound), Ok)?;
+            .ok_or(DownloadPrioritizerError::NotFound)?;
         // remove from peer maps
         let advert_tracker = advert_tracker_ref.read().unwrap();
         self.peer_queues_update(

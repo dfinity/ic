@@ -13,7 +13,7 @@ use dfn_candid::candid_one;
 use dfn_http::types::{HttpRequest, HttpResponse};
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
-use ic_ic00_types::{
+use ic_management_canister_types::{
     CanisterInstallMode, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
     UpdateSettingsArgs,
 };
@@ -980,6 +980,7 @@ pub fn nns_propose_upgrade_nns_canister(
                 Some(nns_governance_pb::manage_neuron_response::Command::MakeProposal(
                     nns_governance_pb::manage_neuron_response::MakeProposalResponse {
                         proposal_id: Some(proposal_id),
+                        ..
                     },
                 )),
         } => proposal_id,

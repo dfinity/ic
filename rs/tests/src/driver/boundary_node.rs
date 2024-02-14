@@ -23,9 +23,11 @@ use crate::{
             HasDependencies, HasPublicApiUrl, HasTestEnv, HasTopologySnapshot, HasVmName,
             IcNodeContainer, RetrieveIpv4Addr, SshSession, RETRY_BACKOFF, SSH_RETRY_TIMEOUT,
         },
-        test_setup::GroupSetup,
+        test_setup::{GroupSetup, InfraProvider},
     },
-    util::{create_agent, create_agent_mapping},
+    k8s::images::upload_image,
+    k8s::tnet::TNet,
+    util::{block_on, create_agent, create_agent_mapping},
 };
 
 use anyhow::{bail, Result};
@@ -37,10 +39,7 @@ use serde::{Deserialize, Serialize};
 use slog::info;
 use ssh2::Session;
 
-use crate::driver::{
-    farm::{FileId, PlaynetCertificate},
-    test_env_api::HasIcDependencies,
-};
+use crate::driver::{farm::PlaynetCertificate, test_env_api::HasIcDependencies};
 
 // The following default values are the same as for replica nodes
 const DEFAULT_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(6);
@@ -287,22 +286,36 @@ impl BoundaryNodeWithVm {
                 .map(|existing_playnet_cert| existing_playnet_cert.playnet.clone()),
         )?;
 
-        let image_id = create_and_upload_config_disk_image(
+        let compressed_img_path = create_config_disk_image(
             self,
             env,
             &pot_setup.infra_group_name,
-            &farm,
             opt_existing_playnet_cert,
         )?;
 
-        farm.attach_disk_images(
-            &pot_setup.infra_group_name,
-            &self.name,
-            "usb-storage",
-            vec![image_id],
-        )?;
-
-        farm.start_vm(&pot_setup.infra_group_name, &self.name)?;
+        if InfraProvider::read_attribute(env) == InfraProvider::Farm {
+            let image_id = farm.upload_file(
+                &pot_setup.infra_group_name,
+                compressed_img_path,
+                &mk_compressed_img_path(),
+            )?;
+            farm.attach_disk_images(
+                &pot_setup.infra_group_name,
+                &self.name,
+                "usb-storage",
+                vec![image_id],
+            )?;
+            farm.start_vm(&pot_setup.infra_group_name, &self.name)?;
+        } else {
+            let tnet = TNet::read_attribute(env);
+            let tnet_node = tnet.nodes.last().expect("no nodes");
+            block_on(upload_image(
+                compressed_img_path,
+                &tnet_node.config_url.clone().expect("missing config url"),
+            ))?;
+            block_on(tnet_node.deploy_config_image()).expect("deploying config image failed");
+            block_on(tnet_node.start()).expect("starting vm failed");
+        }
 
         if self.has_ipv4 {
             // Provision an A record pointing ic{ix}.farm.dfinity.systems
@@ -434,7 +447,15 @@ impl BoundaryNode {
             self.vm_allocation.clone(),
             self.required_host_features.clone(),
         );
-        let allocated_vm = farm.create_vm(&pot_setup.infra_group_name, create_vm_req)?;
+        let allocated_vm = match InfraProvider::read_attribute(env) {
+            InfraProvider::K8s => {
+                let mut tnet = TNet::read_attribute(env);
+                let vm_res = block_on(tnet.vm_create(create_vm_req)).expect("failed to create vm");
+                tnet.write_attribute(env);
+                vm_res
+            }
+            InfraProvider::Farm => farm.create_vm(&pot_setup.infra_group_name, create_vm_req)?,
+        };
 
         Ok(BoundaryNodeWithVm {
             name: self.name,
@@ -467,13 +488,12 @@ impl BoundaryNode {
 
 /// side-effectful function that creates the config disk images
 /// in the boundary node directories.
-fn create_and_upload_config_disk_image(
+fn create_config_disk_image(
     boundary_node: &BoundaryNodeWithVm,
     env: &TestEnv,
     group_name: &str,
-    farm: &Farm,
     opt_playnet_cert: Option<PlaynetCertificate>,
-) -> anyhow::Result<FileId> {
+) -> anyhow::Result<PathBuf> {
     let boundary_node_dir = env
         .base_path()
         .join(BOUNDARY_NODE_VMS_DIR)
@@ -645,10 +665,7 @@ fn create_and_upload_config_disk_image(
     std::io::stdout().write_all(&output.stdout)?;
     std::io::stderr().write_all(&output.stderr)?;
 
-    let image_id = farm.upload_file(group_name, compressed_img_path, &mk_compressed_img_path())?;
-    info!(farm.logger, "Uploaded image: {}", image_id);
-
-    Ok(image_id)
+    Ok(compressed_img_path)
 }
 
 pub trait BoundaryNodeVm {

@@ -1,5 +1,5 @@
 use ic_logger::{warn, ReplicaLogger};
-use ic_utils::fs::copy_file_sparse;
+use ic_sys::fs::copy_file_sparse;
 use std::io::Error;
 use std::path::Path;
 

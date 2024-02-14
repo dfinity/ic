@@ -40,6 +40,6 @@ sha2 = "0.10.6"
 thiserror = "1.0.37"
 tokio = { workspace = true }
 tower = { workspace = true }
-tracing = "0.1.37"
-tracing-subscriber = { version = "0.3.16", features = ["json"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 trust-dns-resolver = "0.22.0"

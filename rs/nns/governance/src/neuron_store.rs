@@ -264,24 +264,10 @@ impl NeuronStore {
     // neuron indexes and inactive neurons) and persisted data are already calculated (e.g.
     // topic_followee_index).
     pub fn new_restored(
-        mut heap_neurons: BTreeMap<u64, Neuron>,
-        mut topic_followee_index: HeapNeuronFollowingIndex<NeuronId, Topic>,
+        heap_neurons: BTreeMap<u64, Neuron>,
+        topic_followee_index: HeapNeuronFollowingIndex<NeuronId, Topic>,
     ) -> Self {
         let clock = Box::new(IcClock::new());
-
-        // TODO(NNS1-2813): remove after upgrade.
-        let deprecated_topic = Topic::SnsDecentralizationSale;
-        // Remove from the primary data.
-        Self::remove_deprecated_topic_following_from_neurons(&mut heap_neurons, deprecated_topic);
-        with_stable_neuron_store_mut(|stable_neuron_store| {
-            stable_neuron_store.remove_deprecated_topic_from_followees(deprecated_topic)
-        });
-        // Remove from the indexes.
-        topic_followee_index.remove_deprecated_category(deprecated_topic);
-        with_stable_neuron_indexes_mut(|stable_neuron_indexes| {
-            stable_neuron_indexes.remove_deprecated_topic(deprecated_topic);
-        });
-
         Self {
             heap_neurons,
             topic_followee_index,
@@ -617,20 +603,7 @@ impl NeuronStore {
             .collect()
     }
 
-    /// List all neuron ids that are in the community fund.
-    pub fn list_community_fund_neuron_ids(&self) -> Vec<NeuronId> {
-        let filter = |n: &Neuron| {
-            n.joined_community_fund_timestamp_seconds
-                .unwrap_or_default()
-                > 0
-        };
-        self.map_heap_neurons_filtered(filter, |n| n.id)
-            .into_iter()
-            .flatten()
-            .collect()
-    }
-
-    /// List all neuron ids that are in the community fund.
+    /// List all neuron ids that are in the Neurons' Fund.
     pub fn list_active_neurons_fund_neurons(&self) -> Vec<NeuronsFundNeuron> {
         let now = self.now();
         let filter = |n: &Neuron| {
@@ -837,16 +810,6 @@ impl NeuronStore {
             known_neuron: indexes.known_neuron().num_entries(),
             account_id: indexes.account_id().num_entries(),
         })
-    }
-
-    // TODO(NNS1-2813): remove after upgrade.
-    fn remove_deprecated_topic_following_from_neurons(
-        heap_neurons: &mut BTreeMap<u64, Neuron>,
-        topic: Topic,
-    ) {
-        for heap_neuron in heap_neurons.values_mut() {
-            heap_neuron.followees.remove(&(topic as i32));
-        }
     }
 }
 

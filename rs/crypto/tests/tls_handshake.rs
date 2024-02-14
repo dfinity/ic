@@ -1,10 +1,10 @@
 #![allow(clippy::unwrap_used)]
-use crate::tls_utils::temp_crypto_component_with_tls_keys;
-use crate::tls_utils::test_client::{Client, ClientBuilder};
-use crate::tls_utils::test_server::{Server, ServerBuilder};
 use assert_matches::assert_matches;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_test_utils_tls::registry::TlsRegistry;
+use ic_crypto_test_utils_tls::temp_crypto_component_with_tls_keys;
+use ic_crypto_test_utils_tls::test_client::{Client, ClientBuilder};
+use ic_crypto_test_utils_tls::test_server::{Server, ServerBuilder};
 use ic_crypto_test_utils_tls::CipherSuite;
 use ic_crypto_test_utils_tls::TlsVersion;
 use ic_crypto_tls_interfaces::{
@@ -16,8 +16,6 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::NodeId;
 use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5};
 use std::sync::Arc;
-
-mod tls_utils;
 
 const SERVER_ID_1: NodeId = NODE_1;
 const SERVER_ID_2: NodeId = NODE_2;
@@ -737,7 +735,6 @@ mod server {
 
 mod server_without_client_auth {
     use super::*;
-    use crate::tls_utils::test_server::Server;
     use crate::{matching_server_and_client, CLIENT_ID_1, SERVER_ID_1};
     use ic_crypto_test_utils_tls::custom_client::CustomClient;
 

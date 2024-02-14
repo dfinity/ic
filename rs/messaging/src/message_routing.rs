@@ -5,7 +5,6 @@ use crate::{
 use ic_config::execution_environment::{BitcoinConfig, Config as HypervisorConfig};
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_ic00_types::EcdsaKeyId;
 use ic_interfaces::crypto::ErrorReproducibility;
 use ic_interfaces::{
     execution_environment::{IngressHistoryWriter, RegistryExecutionSettings, Scheduler},
@@ -15,6 +14,7 @@ use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateManager, StateManagerError};
 use ic_logger::{debug, fatal, info, warn, ReplicaLogger};
+use ic_management_canister_types::EcdsaKeyId;
 use ic_metrics::buckets::{add_bucket, decimal_buckets, decimal_buckets_with_zero};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::proxy::ProxyDecodeError;
@@ -102,7 +102,7 @@ const CRITICAL_ERROR_MISSING_OR_INVALID_API_BOUNDARY_NODES: &str =
     "mr_missing_or_invalid_api_boundary_nodes";
 const CRITICAL_ERROR_NO_CANISTER_ALLOCATION_RANGE: &str = "mr_empty_canister_allocation_range";
 const CRITICAL_ERROR_FAILED_TO_READ_REGISTRY: &str = "mr_failed_to_read_registry_error";
-pub const CRITICAL_ERROR_BATCH_TIME_REGRESSION: &str = "mr_batch_time_regression";
+pub const CRITICAL_ERROR_NON_INCREASING_BATCH_TIME: &str = "mr_non_increasing_batch_time";
 
 /// Records the timestamp when all messages before the given index (down to the
 /// previous `MessageTime`) were first added to / learned about in a stream.
@@ -309,9 +309,9 @@ pub(crate) struct MessageRoutingMetrics {
     critical_error_no_canister_allocation_range: IntCounter,
     /// Critical error: reading from the registry failed during processing a batch.
     critical_error_failed_to_read_registry: IntCounter,
-    /// Critical error: the batch times of successive batches regressed (when they
-    /// are supposed to be monotonically increasing).
-    critical_error_batch_time_regression: IntCounter,
+    /// Critical error: the batch times of successive batches were not strictly
+    /// monotonically increasing.
+    critical_error_non_increasing_batch_time: IntCounter,
 
     /// Metrics for query stats aggregator
     pub query_stats_metrics: QueryStatsAggregatorMetrics,
@@ -396,8 +396,8 @@ impl MessageRoutingMetrics {
                 .error_counter(CRITICAL_ERROR_NO_CANISTER_ALLOCATION_RANGE),
             critical_error_failed_to_read_registry: metrics_registry
                 .error_counter(CRITICAL_ERROR_FAILED_TO_READ_REGISTRY),
-            critical_error_batch_time_regression: metrics_registry
-                .error_counter(CRITICAL_ERROR_BATCH_TIME_REGRESSION),
+            critical_error_non_increasing_batch_time: metrics_registry
+                .error_counter(CRITICAL_ERROR_NON_INCREASING_BATCH_TIME),
 
             query_stats_metrics: QueryStatsAggregatorMetrics::new(metrics_registry),
         }
@@ -413,18 +413,18 @@ impl MessageRoutingMetrics {
         );
     }
 
-    pub fn observe_batch_time_regression(
+    pub fn observe_non_increasing_batch_time(
         &self,
         log: &ReplicaLogger,
         state_time: Time,
         batch_time: Time,
         batch_height: Height,
     ) {
-        self.critical_error_batch_time_regression.inc();
+        self.critical_error_non_increasing_batch_time.inc();
         warn!(
             log,
-            "{}: Batch time regressed at height {}: state_time = {}, batch_time = {}.",
-            CRITICAL_ERROR_BATCH_TIME_REGRESSION,
+            "{}: Non-increasing batch time at height {}: state_time = {}, batch_time = {}.",
+            CRITICAL_ERROR_NON_INCREASING_BATCH_TIME,
             batch_height,
             state_time,
             batch_time
@@ -1003,24 +1003,26 @@ impl BatchProcessorImpl {
                 continue;
             };
 
-            let Ok(ipv6_address) = http.ip_addr.parse::<Ipv6Addr>() else {
+            let ipv6_address = http.ip_addr;
+            if ipv6_address.parse::<Ipv6Addr>().is_err() {
                 raise_critical_error_for_api_boundary_nodes(&format!(
                     "failed to parse ipv6 field in NodeRecord for node_id {api_bn_id}",
                 ));
                 continue;
-            };
+            }
 
             // ipv4 is not mandatory for the node record. No critical errors need to be raised if it is `None`.
-            let Ok(ipv4_address) = node_record
+            let ipv4_address = node_record
                 .public_ipv4_config
-                .map(|public_ipv4_config| public_ipv4_config.ip_addr.parse::<Ipv4Addr>())
-                .transpose()
-            else {
-                raise_critical_error_for_api_boundary_nodes(&format!(
-                    "failed to parse ipv4 address of node {api_bn_id}",
-                ));
-                continue;
-            };
+                .map(|ipv4_config| ipv4_config.ip_addr);
+            if let Some(ref ipv4) = ipv4_address {
+                if ipv4.parse::<Ipv4Addr>().is_err() {
+                    raise_critical_error_for_api_boundary_nodes(&format!(
+                        "failed to parse ipv4 address of node {api_bn_id}",
+                    ));
+                    continue;
+                }
+            }
 
             api_boundary_nodes.insert(
                 api_bn_id,
@@ -1095,7 +1097,7 @@ impl BatchProcessor for BatchProcessorImpl {
             subnet_features,
             registry_execution_settings,
             node_public_keys,
-            _api_boundary_nodes,
+            api_boundary_nodes,
         ) = self.read_registry(registry_version, state.metadata.own_subnet_id);
 
         self.metrics.blocks_proposed_total.inc();
@@ -1114,6 +1116,7 @@ impl BatchProcessor for BatchProcessorImpl {
             subnet_features,
             &registry_execution_settings,
             node_public_keys,
+            api_boundary_nodes,
         );
         // Garbage collect empty canister queue pairs before checkpointing.
         if certification_scope == CertificationScope::Full {

@@ -34,7 +34,7 @@ pub trait Logger<T>: Clone {
 ///
 /// Methods of this trait should not be used directly, instead use the macros
 /// found in macros.rs
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ContextLogger<C, L>
 where
     C: Clone + Default,

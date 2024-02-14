@@ -4,8 +4,6 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/crypto/internal/crypto_service_provider",
-    "//rs/crypto/internal/logmon",
-    "//rs/monitoring/logger",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
 ]

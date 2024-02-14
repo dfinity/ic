@@ -9,7 +9,6 @@ documentation.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ic-crypto-getrandom-for-wasm = { path = "../getrandom_for_wasm" }
 lazy_static = "1.4"
 num-bigint = "0.4"
 p256 = { workspace = true }

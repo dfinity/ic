@@ -6,7 +6,6 @@ use crate::{
 use ic_interfaces::consensus_pool::{
     HeightIndexedPool, HeightRange, OnlyError, PoolSection, PurgeableArtifactType,
 };
-use ic_logger::{warn, ReplicaLogger};
 use ic_types::{
     artifact::ConsensusMessageId,
     consensus::*,
@@ -18,15 +17,13 @@ use std::collections::BTreeMap;
 pub struct InMemoryPoolSection<T: IntoInner<ConsensusMessage>> {
     indexes: Indexes,
     artifacts: BTreeMap<CryptoHash, T>,
-    log: ReplicaLogger,
 }
 
 impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<T> {
-    pub fn new(log: ReplicaLogger) -> InMemoryPoolSection<T> {
+    pub fn new() -> InMemoryPoolSection<T> {
         InMemoryPoolSection {
             artifacts: BTreeMap::new(),
             indexes: Indexes::new(),
-            log,
         }
     }
 
@@ -279,9 +276,7 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> MutablePoolSection<T
             match op {
                 PoolSectionOp::Insert(artifact) => self.insert(artifact),
                 PoolSectionOp::Remove(msg_id) => {
-                    if self.remove(&msg_id).is_none() {
-                        warn!(self.log, "Error removing artifact {:?}", &msg_id)
-                    } else {
+                    if self.remove(&msg_id).is_some() {
                         purged.push(msg_id)
                     }
                 }
@@ -334,7 +329,7 @@ pub mod test {
         assert!(ic_test_utilities_time::with_timeout(
             std::time::Duration::new(12, 0),
             || {
-                let mut pool = InMemoryPoolSection::new(ic_logger::replica_logger::no_op_logger());
+                let mut pool = InMemoryPoolSection::new();
                 let min = Height::from(1);
                 let max = Height::from(std::u64::MAX);
                 pool.insert(make_artifact(fake_random_beacon(min)));
@@ -358,7 +353,7 @@ pub mod test {
                     .collect::<Vec<_>>();
                 let ids = beacons.iter().map(|b| b.get_id()).collect::<HashSet<_>>();
 
-                let mut pool = InMemoryPoolSection::new(ic_logger::replica_logger::no_op_logger());
+                let mut pool = InMemoryPoolSection::new();
                 beacons
                     .into_iter()
                     .for_each(|b| pool.insert(make_artifact(b)));

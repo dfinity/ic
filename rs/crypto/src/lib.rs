@@ -213,36 +213,6 @@ impl CryptoComponentImpl<Csp> {
         crypto_component
     }
 
-    /// Creates a crypto component using a fake `node_id`.
-    ///
-    /// # Panics
-    /// Panics if the `config`'s vault type is `UnixSocket` and
-    /// `tokio_runtime_handle` is `None`.
-    pub fn new_with_fake_node_id(
-        config: &CryptoConfig,
-        tokio_runtime_handle: Option<tokio::runtime::Handle>,
-        registry_client: Arc<dyn RegistryClient>,
-        node_id: NodeId,
-        logger: ReplicaLogger,
-        time_source: Arc<dyn TimeSource>,
-    ) -> Self {
-        let metrics = Arc::new(CryptoMetrics::none());
-        CryptoComponentImpl {
-            lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
-            csp: Csp::new(
-                config,
-                tokio_runtime_handle,
-                Some(logger.clone()),
-                Arc::clone(&metrics),
-            ),
-            registry_client,
-            node_id,
-            logger,
-            metrics,
-            time_source,
-        }
-    }
-
     /// Returns the `NodeId` of this crypto component.
     pub fn get_node_id(&self) -> NodeId {
         self.node_id

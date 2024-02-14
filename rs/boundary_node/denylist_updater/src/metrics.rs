@@ -8,7 +8,7 @@ use opentelemetry::{
 };
 use tracing::info;
 
-use crate::{Entry, List, Reload, Run, Update};
+use crate::{Entries, List, Reload, Run, Update};
 
 pub struct MetricParams {
     pub action: String,
@@ -36,7 +36,7 @@ pub struct WithMetrics<T>(pub T, pub MetricParams);
 
 #[async_trait]
 impl<T: List> List for WithMetrics<T> {
-    async fn list(&self) -> Result<Vec<Entry>, Error> {
+    async fn list(&self) -> Result<Entries, Error> {
         let start_time = Instant::now();
 
         let out = self.0.list().await;
@@ -63,10 +63,10 @@ impl<T: List> List for WithMetrics<T> {
 
 #[async_trait]
 impl<T: Update> Update for WithMetrics<T> {
-    async fn update(&self, entries: Vec<Entry>) -> Result<(), Error> {
+    fn update(&self, entries: Entries) -> Result<bool, Error> {
         let start_time = Instant::now();
 
-        let out = self.0.update(entries).await;
+        let out = self.0.update(entries);
 
         let status = if out.is_ok() { "ok" } else { "fail" };
         let duration = start_time.elapsed().as_secs_f64();
@@ -88,12 +88,11 @@ impl<T: Update> Update for WithMetrics<T> {
     }
 }
 
-#[async_trait]
 impl<T: Reload> Reload for WithMetrics<T> {
-    async fn reload(&self) -> Result<(), Error> {
+    fn reload(&self) -> Result<(), Error> {
         let start_time = Instant::now();
 
-        let out = self.0.reload().await;
+        let out = self.0.reload();
 
         let status = if out.is_ok() { "ok" } else { "fail" };
         let duration = start_time.elapsed().as_secs_f64();

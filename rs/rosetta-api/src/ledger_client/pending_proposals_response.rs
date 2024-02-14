@@ -7,14 +7,18 @@ use serde_json::Value;
 pub struct PendingProposalsResponse {
     pub pending_proposals: Vec<ProposalInfo>,
 }
-impl From<PendingProposalsResponse> for ObjectMap {
-    fn from(r: PendingProposalsResponse) -> Self {
-        match serde_json::to_value(r) {
-            Ok(Value::Object(o)) => o,
-            _ => ObjectMap::default(),
+
+impl TryFrom<PendingProposalsResponse> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: PendingProposalsResponse) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert PendingProposalsResponse to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert PendingProposalsResponse to ObjectMap: {:?}",err))),
         }
     }
 }
+
 impl From<Vec<ProposalInfo>> for PendingProposalsResponse {
     fn from(pinf: Vec<ProposalInfo>) -> Self {
         PendingProposalsResponse {

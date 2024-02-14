@@ -177,7 +177,7 @@ async fn main() {
             Arg::new("updates")
                 .short('u')
                 .conflicts_with("method")
-                .help("Issue counter update calls (alias for --method QueryCounter)"),
+                .help("Issue counter update calls (alias for --method UpdateCounter)"),
         )
         .arg(
             Arg::new("no-status-check")

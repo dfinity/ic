@@ -7,7 +7,6 @@ exports_files([
     "volumes.csv",
     "grub.cfg",
     "rootfs/docker-base.dev",
-    "rootfs/docker-base.dev-sev",
     "rootfs/extra_boot_args",
     "rootfs/docker-base.prod",
 ])
@@ -30,6 +29,5 @@ ext4_image(
 #
 # bazel run   //ic-os/hostos/envs/prod:upload_disk-img           [--s3_endpoint=<internal endpoint address>]
 # bazel build //ic-os/hostos/envs/dev/...
-# bazel build //ic-os/hostos/envs/dev-sev/...
 #
 # check //ic-os/defs.bzl for the full list of targets.

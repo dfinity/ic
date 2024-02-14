@@ -36,7 +36,7 @@ use crate::util::*;
 use candid::{Decode, Encode};
 use futures::future::join_all;
 use ic_agent::{agent::RejectCode, export::Principal, identity::Identity, AgentError};
-use ic_ic00_types::{
+use ic_management_canister_types::{
     CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2, CreateCanisterArgs,
     EmptyBlob, Payload,
 };

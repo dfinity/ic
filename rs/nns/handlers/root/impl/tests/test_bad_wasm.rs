@@ -3,7 +3,7 @@
 use candid::Encode;
 use canister_test::Runtime;
 use dfn_candid::candid;
-use ic_ic00_types::CanisterInstallMode::{self, Reinstall, Upgrade};
+use ic_management_canister_types::CanisterInstallMode::{self, Reinstall, Upgrade};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType},

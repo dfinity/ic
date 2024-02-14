@@ -3,6 +3,7 @@ use super::{
     metadata_state::{IngressHistoryState, Stream, Streams, SystemMetadata},
 };
 use crate::{
+    canister_snapshots::CanisterSnapshots,
     canister_state::queues::CanisterQueuesLoopDetector,
     canister_state::system_state::{push_input, CanisterOutputQueuesIterator},
     metadata_state::{subnet_call_context_manager::SignWithEcdsaContext, StreamMap},
@@ -406,6 +407,9 @@ pub struct ReplicatedState {
     /// Temporary query stats received during the current epoch.
     /// Reset during the start of each epoch.
     pub epoch_query_stats: RawQueryStats,
+
+    /// Manages the canister snapshots.
+    pub canister_snapshots: CanisterSnapshots,
 }
 
 impl ReplicatedState {
@@ -417,6 +421,7 @@ impl ReplicatedState {
             subnet_queues: CanisterQueues::default(),
             consensus_queue: Vec::new(),
             epoch_query_stats: RawQueryStats::default(),
+            canister_snapshots: CanisterSnapshots::default(),
         }
     }
 
@@ -426,6 +431,7 @@ impl ReplicatedState {
         metadata: SystemMetadata,
         subnet_queues: CanisterQueues,
         epoch_query_stats: RawQueryStats,
+        canister_snapshots: CanisterSnapshots,
     ) -> Self {
         let mut res = Self {
             canister_states,
@@ -433,6 +439,7 @@ impl ReplicatedState {
             subnet_queues,
             consensus_queue: Vec::new(),
             epoch_query_stats,
+            canister_snapshots,
         };
         res.update_stream_responses_size_bytes();
         res
@@ -588,7 +595,7 @@ impl ReplicatedState {
             .sum()
     }
 
-    /// Returns the memory taken by different types of memory resources.
+    /// Computes the memory taken by different types of memory resources.
     pub fn memory_taken(&self) -> MemoryTaken {
         let (
             raw_memory_taken,
@@ -631,6 +638,20 @@ impl ReplicatedState {
             wasm_custom_sections: wasm_custom_sections_memory_taken,
             canister_history: canister_history_memory_taken,
         }
+    }
+
+    /// Computes the memory taken by messages.
+    ///
+    /// This is a more efficient alternative to `memory_taken()` for cases when only
+    /// the message memory usage is necessary.
+    pub fn message_memory_taken(&self) -> NumBytes {
+        let canisters_memory_usage: NumBytes = self
+            .canisters_iter()
+            .map(|canister| canister.system_state.message_memory_usage())
+            .sum();
+        let subnet_memory_usage = (self.subnet_queues.memory_usage() as u64).into();
+
+        canisters_memory_usage + subnet_memory_usage
     }
 
     /// Returns the total memory taken by the ingress history in bytes.
@@ -909,6 +930,7 @@ impl ReplicatedState {
             mut subnet_queues,
             consensus_queue,
             epoch_query_stats: _,
+            canister_snapshots,
         } = self;
 
         // Consensus queue is always empty at the end of the round.
@@ -944,6 +966,7 @@ impl ReplicatedState {
             subnet_queues,
             consensus_queue,
             epoch_query_stats: RawQueryStats::default(), // Don't preserve query stats during subnet splitting.
+            canister_snapshots,
         })
     }
 
@@ -966,6 +989,7 @@ impl ReplicatedState {
             ref mut subnet_queues,
             consensus_queue: _,
             epoch_query_stats: _,
+            canister_snapshots: _,
         } = self;
 
         // Reset query stats after subnet split
@@ -1126,6 +1150,8 @@ pub mod testing {
             subnet_queues: Default::default(),
             consensus_queue: Default::default(),
             epoch_query_stats: Default::default(),
+            // TODO(EXC-1527): Handle canister snapshots during a subnet split.
+            canister_snapshots: CanisterSnapshots::default(),
         };
     }
 }

@@ -131,12 +131,10 @@ CONFIG="$(cat ${INPUT})"
 # Read all the top-level values out in one swoop
 VALUES=$(echo ${CONFIG} | jq -r -c '[
     .deployment,
-    (.name_servers | join(" ")),
-    (.ipv4_name_servers | join(" ")),
     (.elasticsearch_hosts | join(" ")),
     (.elasticsearch_tags | join(" "))
 ] | join("\u0001")')
-IFS=$'\1' read -r DEPLOYMENT NAME_SERVERS IPV4_NAME_SERVERS ELASTICSEARCH_HOSTS ELASTICSEARCH_TAGS < <(echo $VALUES)
+IFS=$'\1' read -r DEPLOYMENT ELASTICSEARCH_HOSTS ELASTICSEARCH_TAGS < <(echo $VALUES)
 
 # Read all the node info out in one swoop
 NODES=0
@@ -324,10 +322,9 @@ function build_bootstrap_images() {
             ${use_crypto:+"--ic_crypto"} ${use_crypto:+"${IC_PREP_DIR}/node-${node_idx}/crypto/"} \
             "--nns_url" "${NNS_URL}" \
             "--nns_public_key" "${IC_PREP_DIR}/nns_public_key.pem" \
-            "--ipv6_name_servers" "${NAME_SERVERS}" \
-            "--ipv4_name_servers" "${IPV4_NAME_SERVERS}" \
             "--hostname" "${hostname}" \
             "--accounts_ssh_authorized_keys" "${SSH}" \
+            "--default_firewall_whitelist" "${REPO_ROOT}/rs/tests/src/default_firewall_whitelist.conf" \
             ${ELASTICSEARCH_HOSTS:+"--elasticsearch_hosts"} ${ELASTICSEARCH_HOSTS:+"${ELASTICSEARCH_HOSTS}"} \
             ${ELASTICSEARCH_TAGS:+"--elasticsearch_tags"} ${ELASTICSEARCH_TAGS:+"${ELASTICSEARCH_TAGS}"} \
             ${NODE_OPERATOR_PRIVATE_KEY:+"--node_operator_private_key"} ${NODE_OPERATOR_PRIVATE_KEY:+"${NODE_OPERATOR_PRIVATE_KEY}"} \

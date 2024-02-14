@@ -121,9 +121,6 @@ mod list_node_providers;
 mod network_economics;
 
 #[cfg(test)]
-mod sns_token_swap_proposal;
-
-#[cfg(test)]
 mod sns_wasm_allowed_principals;
 
 #[cfg(test)]

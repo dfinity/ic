@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -17,6 +17,7 @@ DEPENDENCIES = [
     "@crate_index//:serde_json",
     "@crate_index//:serde_with",
     "@crate_index//:candid",
+    "@crate_index//:ic-agent",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -24,6 +25,16 @@ MACRO_DEPENDENCIES = [
 
 ALIASES = {
 }
+
+DEV_DEPENDENCIES = [
+    "@crate_index//:proptest",
+]
+
+rust_test(
+    name = "rosetta_core_unit_tests",
+    crate = ":rosetta-core",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
 
 rust_library(
     name = "rosetta-core",

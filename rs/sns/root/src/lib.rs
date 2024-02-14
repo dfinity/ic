@@ -2,24 +2,32 @@ use crate::{
     logs::{ERROR, INFO},
     pb::v1::{
         set_dapp_controllers_response, CanisterCallError, ListSnsCanistersResponse,
+        ManageDappCanisterSettingsRequest, ManageDappCanisterSettingsResponse,
         RegisterDappCanistersRequest, RegisterDappCanistersResponse, SetDappControllersRequest,
         SetDappControllersResponse, SnsRootCanister,
     },
     types::Environment,
 };
 use async_trait::async_trait;
-use candid::{Decode, Encode};
+use candid::{Decode, Encode, Nat};
 use futures::{future::join_all, join};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
+use ic_cdk::println;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::CanisterStatusResultV2,
     management_canister_client::ManagementCanisterClient,
-    update_settings::{CanisterSettings, UpdateSettings},
+    update_settings::{CanisterSettings, LogVisibility, UpdateSettings},
 };
+use ic_nervous_system_runtime::{CdkRuntime, Runtime};
 use ic_sns_swap::pb::v1::GetCanisterStatusRequest;
-use std::{cell::RefCell, collections::BTreeSet, fmt::Write, thread::LocalKey};
+use std::{
+    cell::RefCell,
+    collections::{BTreeSet, HashSet},
+    fmt::Write,
+    thread::LocalKey,
+};
 
 pub use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 pub mod logs;
@@ -60,7 +68,7 @@ fn swap_remove_if<T>(v: &mut Vec<T>, predicate: impl Fn(&T) -> bool) {
 }
 
 // Defined in Rust instead of PB, because we want CanisterStatusResultV2
-// (defined in ic00_types) to be in the response, but CSRV2 doesn't have a
+// (defined in management_canister_types) to be in the response, but CSRV2 doesn't have a
 // corresponding PB definition.
 #[derive(Default, PartialEq, Eq, Debug, candid::CandidType, candid::Deserialize)]
 pub struct GetSnsCanistersSummaryRequest {
@@ -132,6 +140,74 @@ impl CanisterSummary {
 
     pub fn status(&self) -> &CanisterStatusResultV2 {
         self.status.as_ref().unwrap()
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct ValidatedManageDappCanisterSettingsRequest {
+    canister_ids: Vec<PrincipalId>,
+    settings: CanisterSettings,
+}
+
+impl ValidatedManageDappCanisterSettingsRequest {
+    fn try_from(
+        request: ManageDappCanisterSettingsRequest,
+        dapp_canister_id_set: HashSet<PrincipalId>,
+    ) -> Result<Self, String> {
+        let settings = CanisterSettings {
+            controllers: None,
+            compute_allocation: request.compute_allocation.map(Nat::from),
+            memory_allocation: request.memory_allocation.map(Nat::from),
+            freezing_threshold: request.freezing_threshold.map(Nat::from),
+            reserved_cycles_limit: request.reserved_cycles_limit.map(Nat::from),
+            log_visibility: LogVisibility::try_from(request.log_visibility()).ok(),
+        };
+        let invalid_dapp_canister_ids = request
+            .canister_ids
+            .iter()
+            .filter(|canister_id| !dapp_canister_id_set.contains(canister_id))
+            .cloned()
+            .collect::<Vec<_>>();
+        if !invalid_dapp_canister_ids.is_empty() {
+            return Err(format!(
+                "The following canister IDs are not registered dapp canisters: {invalid_dapp_canister_ids:?}"
+            ));
+        }
+
+        Ok(ValidatedManageDappCanisterSettingsRequest {
+            canister_ids: request.canister_ids,
+            settings,
+        })
+    }
+}
+
+async fn call_management_canister_for_update_dapp_canister_settings(
+    request: ValidatedManageDappCanisterSettingsRequest,
+    management_canister_client: impl ManagementCanisterClient,
+) {
+    let ValidatedManageDappCanisterSettingsRequest {
+        canister_ids,
+        settings,
+    } = request;
+    for canister_id in canister_ids {
+        if let Err(error) = management_canister_client
+            .update_settings(UpdateSettings {
+                canister_id,
+                settings: settings.clone(),
+                sender_canister_version: management_canister_client.canister_version(),
+            })
+            .await
+        {
+            log!(
+                ERROR,
+                "Failed to manage settings for canister {canister_id}: {error:?}"
+            );
+        } else {
+            log!(
+                INFO,
+                "Successfully changed settings for canister {canister_id}"
+            );
+        }
     }
 }
 
@@ -599,10 +675,40 @@ impl SnsRootCanister {
         SetDappControllersResponse { failed_updates }
     }
 
+    /// Updates a limited subset of canister settings, for dapp canisters only.
+    /// * Does NOT update controllers. Managing controllers should be done through the registration API.
+    /// * Does NOT update SNS canisters because those cannot be dapp canisters.
+    pub fn manage_dapp_canister_settings(
+        &self,
+        request: ManageDappCanisterSettingsRequest,
+        manage_canister_client: impl ManagementCanisterClient + 'static,
+    ) -> ManageDappCanisterSettingsResponse {
+        let request = match ValidatedManageDappCanisterSettingsRequest::try_from(
+            request,
+            self.dapp_canister_ids.iter().cloned().collect(),
+        ) {
+            Ok(validated_request) => validated_request,
+            Err(failure_reason) => {
+                return ManageDappCanisterSettingsResponse {
+                    failure_reason: Some(failure_reason),
+                }
+            }
+        };
+
+        CdkRuntime::spawn_future(call_management_canister_for_update_dapp_canister_settings(
+            request,
+            manage_canister_client,
+        ));
+        ManageDappCanisterSettingsResponse {
+            failure_reason: None,
+        }
+    }
+
     /// Runs periodic tasks that are not directly triggered by user input.
     pub async fn heartbeat(
         self_ref: &'static LocalKey<RefCell<Self>>,
         ledger_client: &impl LedgerCanisterClient,
+        management_canister_client: &impl ManagementCanisterClient,
         current_timestamp_seconds: u64,
     ) {
         let should_poll_archives = self_ref.with(|state| {
@@ -620,6 +726,88 @@ impl SnsRootCanister {
                 current_timestamp_seconds,
             )
             .await;
+        }
+
+        // TODO(NNS1-2835): Remove this call after changes published.
+        Self::set_sns_canisters_memory_allocations(self_ref, management_canister_client).await;
+    }
+
+    // TODO(NNS1-2835): Remove this method after changes published.
+    async fn set_sns_canisters_memory_allocations(
+        self_ref: &'static LocalKey<RefCell<Self>>,
+        management_canister_client: &impl ManagementCanisterClient,
+    ) {
+        // Check if this hotfix has been applied before; return if that's the case.
+        let already_tried_executing_hotfix = ATTEMPTED_FIXING_MEMORY_ALLOCATIONS.with(
+            |attempted_doubling_user_index_canister_memory_allocation| {
+                *attempted_doubling_user_index_canister_memory_allocation.borrow()
+            },
+        );
+
+        if already_tried_executing_hotfix {
+            return;
+        }
+
+        // Acquire the lock.
+        ATTEMPTED_FIXING_MEMORY_ALLOCATIONS.with(
+            |attempted_doubling_user_index_canister_memory_allocation| {
+                let mut cell =
+                    attempted_doubling_user_index_canister_memory_allocation.borrow_mut();
+                *cell = true;
+            },
+        );
+
+        // Get SNS Canister IDs
+        // We cannot set swap, and we cannot set root from here.  Root's fix is handled in Governance
+        let sns_canister_ids_to_set_memory_allocation = {
+            self_ref.with(|self_ref| {
+                let self_ref = self_ref.borrow();
+                let mut sns_canister_ids = vec![
+                    self_ref.governance_canister_id(),
+                    self_ref.ledger_canister_id(),
+                    self_ref.index_canister_id(),
+                ];
+                sns_canister_ids.extend(self_ref.archive_canister_ids.iter().cloned());
+
+                sns_canister_ids
+            })
+        };
+
+        for canister_id in sns_canister_ids_to_set_memory_allocation {
+            for i in 0..10 {
+                let response = management_canister_client
+                    .update_settings(UpdateSettings {
+                        canister_id,
+                        settings: CanisterSettings {
+                            memory_allocation: Some(Nat::from(0_u8)),
+                            ..Default::default()
+                        },
+                        sender_canister_version: management_canister_client.canister_version(),
+                    })
+                    .await;
+
+                match &response {
+                    Ok(_) => {
+                        log!(
+                            INFO,
+                            "Updating SNS canister {:?} to unbounded memory allocation succeeded!",
+                            canister_id
+                        );
+                        break;
+                    }
+                    Err(err) => {
+                        if i < 9 {
+                            log!(
+                                ERROR,
+                                "Updating SNS canister {:?} to unbounded memory allocation failed!: {:?}",
+                                canister_id, err
+                            );
+                        } else {
+                            log!(ERROR, "Updating SNS canister {:?} to unbounded memory allocation failed after 10 attempts!: {:?}", canister_id, err);
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -796,6 +984,11 @@ async fn get_owned_canister_summary(
     }
 }
 
+// TODO(NNS1-2835): Remove this const after changes published.
+thread_local! {
+    static ATTEMPTED_FIXING_MEMORY_ALLOCATIONS: RefCell<bool> = RefCell::new(false);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -807,6 +1000,7 @@ mod tests {
             MockManagementCanisterClientReply,
         },
     };
+    use maplit::hashset;
     use std::{
         collections::VecDeque,
         sync::{Arc, Mutex},
@@ -2114,6 +2308,73 @@ mod tests {
     }
 
     #[test]
+    fn test_validate_manage_dapp_canister_settings_valid() {
+        let request = ManageDappCanisterSettingsRequest {
+            canister_ids: vec![
+                PrincipalId::new_user_test_id(1),
+                PrincipalId::new_user_test_id(2),
+            ],
+            compute_allocation: Some(50),
+            memory_allocation: Some(1 << 30),
+            freezing_threshold: Some(100_000),
+            reserved_cycles_limit: Some(1_000_000_000_000),
+            log_visibility: Some(crate::pb::v1::LogVisibility::Controllers as i32),
+        };
+        let validated_request = ValidatedManageDappCanisterSettingsRequest::try_from(
+            request,
+            hashset! {
+                PrincipalId::new_user_test_id(1),
+                PrincipalId::new_user_test_id(2),
+                PrincipalId::new_user_test_id(3),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            validated_request,
+            ValidatedManageDappCanisterSettingsRequest {
+                canister_ids: vec![
+                    PrincipalId::new_user_test_id(1),
+                    PrincipalId::new_user_test_id(2),
+                ],
+                settings: CanisterSettings {
+                    controllers: None,
+                    compute_allocation: Some(Nat::from(50u64)),
+                    memory_allocation: Some(Nat::from(1u64 << 30)),
+                    freezing_threshold: Some(Nat::from(100_000u64)),
+                    reserved_cycles_limit: Some(Nat::from(1_000_000_000_000u64)),
+                    log_visibility: Some(LogVisibility::Controllers),
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn test_validate_manage_dapp_canister_settings_invalid() {
+        let request = ManageDappCanisterSettingsRequest {
+            canister_ids: vec![
+                PrincipalId::new_user_test_id(1),
+                PrincipalId::new_user_test_id(2),
+                PrincipalId::new_user_test_id(4),
+            ],
+            compute_allocation: Some(50),
+            memory_allocation: Some(1 << 30),
+            freezing_threshold: Some(100_000),
+            reserved_cycles_limit: Some(1_000_000_000_000),
+            log_visibility: Some(crate::pb::v1::LogVisibility::Controllers as i32),
+        };
+        let failure_reason = ValidatedManageDappCanisterSettingsRequest::try_from(
+            request,
+            hashset! {
+                PrincipalId::new_user_test_id(1),
+                PrincipalId::new_user_test_id(2),
+                PrincipalId::new_user_test_id(3),
+            },
+        )
+        .unwrap_err();
+        assert!(failure_reason.contains(&PrincipalId::new_user_test_id(4).to_string()));
+    }
+
+    #[test]
     fn test_list_sns_canisters() {
         let state = SnsRootCanister {
             governance_canister_id: Some(PrincipalId::new_user_test_id(1)),
@@ -2533,8 +2794,21 @@ mod tests {
             },
         ]);
 
+        let management_canister_client = MockManagementCanisterClient::new(vec![
+            MockManagementCanisterClientReply::UpdateSettings(Ok(())),
+            MockManagementCanisterClientReply::UpdateSettings(Ok(())),
+            MockManagementCanisterClientReply::UpdateSettings(Ok(())),
+            MockManagementCanisterClientReply::UpdateSettings(Ok(())),
+        ]);
+
         // Step 2: Call the code under test.
-        SnsRootCanister::heartbeat(&SNS_ROOT_CANISTER, &ledger_canister_client, NOW).await;
+        SnsRootCanister::heartbeat(
+            &SNS_ROOT_CANISTER,
+            &ledger_canister_client,
+            &management_canister_client,
+            NOW,
+        )
+        .await;
 
         // Step 3: Inspect results.
         assert_archive_poll_state_change(
@@ -2545,7 +2819,13 @@ mod tests {
 
         // Running periodic tasks one second in the future should
         // result in no change to state.
-        SnsRootCanister::heartbeat(&SNS_ROOT_CANISTER, &ledger_canister_client, NOW + 1).await;
+        SnsRootCanister::heartbeat(
+            &SNS_ROOT_CANISTER,
+            &ledger_canister_client,
+            &management_canister_client,
+            NOW + 1,
+        )
+        .await;
 
         assert_archive_poll_state_change(
             &SNS_ROOT_CANISTER,
@@ -2558,6 +2838,7 @@ mod tests {
         SnsRootCanister::heartbeat(
             &SNS_ROOT_CANISTER,
             &ledger_canister_client,
+            &management_canister_client,
             NOW + ONE_DAY_SECONDS,
         )
         .await;
@@ -2592,6 +2873,11 @@ mod tests {
             });
 
         let management_canister_client = MockManagementCanisterClient::new(vec![
+            // TODO(NNS1-2835): Remove this when we no longer calls update_settings during heartbeat.
+            MockManagementCanisterClientReply::UpdateSettings(Ok(())),
+            MockManagementCanisterClientReply::UpdateSettings(Ok(())),
+            MockManagementCanisterClientReply::UpdateSettings(Ok(())),
+            MockManagementCanisterClientReply::UpdateSettings(Ok(())),
             // First set of calls
             MockManagementCanisterClientReply::CanisterStatus(Ok(
                 CanisterStatusResultFromManagementCanister::dummy_with_controllers(vec![
@@ -2703,7 +2989,13 @@ mod tests {
             };
 
         // Step 2: Call the code under test.
-        SnsRootCanister::heartbeat(&SNS_ROOT_CANISTER, &ledger_canister_client, NOW).await;
+        SnsRootCanister::heartbeat(
+            &SNS_ROOT_CANISTER,
+            &ledger_canister_client,
+            &management_canister_client,
+            NOW,
+        )
+        .await;
 
         // We should now have a single Archive canister registered.
         assert_archive_poll_state_change(
@@ -2760,6 +3052,39 @@ mod tests {
 
         let actual_management_canister_calls = management_canister_client.get_calls_snapshot();
         let expected_management_canister_calls = vec![
+            // TODO(NNS1-2835): Remove this when we no longer calls update_settings during heartbeat.
+            MockManagementCanisterClientCall::UpdateSettings(UpdateSettings {
+                canister_id: governance_canister_id,
+                settings: CanisterSettings {
+                    memory_allocation: Some(Nat::from(0_u8)),
+                    ..Default::default()
+                },
+                sender_canister_version: None,
+            }),
+            MockManagementCanisterClientCall::UpdateSettings(UpdateSettings {
+                canister_id: ledger_canister_id,
+                settings: CanisterSettings {
+                    memory_allocation: Some(Nat::from(0_u8)),
+                    ..Default::default()
+                },
+                sender_canister_version: None,
+            }),
+            MockManagementCanisterClientCall::UpdateSettings(UpdateSettings {
+                canister_id: index_canister_id,
+                settings: CanisterSettings {
+                    memory_allocation: Some(Nat::from(0_u8)),
+                    ..Default::default()
+                },
+                sender_canister_version: None,
+            }),
+            MockManagementCanisterClientCall::UpdateSettings(UpdateSettings {
+                canister_id: expected_archive_canister_ids[0].get(),
+                settings: CanisterSettings {
+                    memory_allocation: Some(Nat::from(0_u8)),
+                    ..Default::default()
+                },
+                sender_canister_version: None,
+            }),
             MockManagementCanisterClientCall::CanisterStatus(CanisterIdRecord {
                 canister_id: root_canister_id,
             }),

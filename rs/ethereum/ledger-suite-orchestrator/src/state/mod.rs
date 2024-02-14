@@ -1,43 +1,74 @@
 #[cfg(test)]
+pub mod test_fixtures;
+#[cfg(test)]
 mod tests;
 
 use crate::candid::InitArg;
-use crate::scheduler::{Erc20Contract, Task, Tasks};
+use crate::scheduler::{Erc20Token, Task, Tasks};
+use crate::storage::memory::{state_memory, StableMemory};
 use candid::Principal;
 use ic_cdk::trap;
-use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
-use ic_stable_structures::{Cell, DefaultMemoryImpl, Storable};
-use minicbor::{Decode, Encode};
+use ic_stable_structures::{storable::Bound, Cell, Storable};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_bytes::ByteBuf;
 use std::borrow::Cow;
 use std::cell::RefCell;
-use std::collections::BTreeMap;
-use std::fmt::Debug;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
+use std::str::FromStr;
 
-const STATE_MEMORY_ID: MemoryId = MemoryId::new(0);
+pub(crate) const LEDGER_BYTECODE: &[u8] = include_bytes!(env!("LEDGER_CANISTER_WASM_PATH"));
+pub(crate) const INDEX_BYTECODE: &[u8] = include_bytes!(env!("INDEX_CANISTER_WASM_PATH"));
+pub(crate) const ARCHIVE_NODE_BYTECODE: &[u8] =
+    include_bytes!(env!("LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH"));
+
 const WASM_HASH_LENGTH: usize = 32;
 
 thread_local! {
-     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(
-        MemoryManager::init(DefaultMemoryImpl::default())
-    );
-
-    //TODO: more refined stable memory structure, right now we just dump everything into a single Cell
-    pub static STATE: RefCell<Cell<ConfigState, VirtualMemory<DefaultMemoryImpl>>> = RefCell::new(Cell::init(
-    MEMORY_MANAGER.with(|m| m.borrow().get(STATE_MEMORY_ID)), ConfigState::default())
+    pub static STATE: RefCell<Cell<ConfigState, StableMemory>> = RefCell::new(Cell::init(
+   state_memory(), ConfigState::default())
     .expect("failed to initialize stable cell for state"));
 }
 
-#[derive(Debug, PartialEq, Encode, Decode, Clone)]
-pub struct Wasm {
-    #[cbor(n(0), with = "minicbor::bytes")]
+/// `Wasm<Canister>` is a wrapper around a wasm binary and its memoized hash.
+/// It provides a type-safe way to handle wasm binaries for different canisters.
+#[derive(Debug)]
+pub struct Wasm<T> {
     binary: Vec<u8>,
-    #[n(1)]
     hash: WasmHash,
+    marker: PhantomData<T>,
 }
 
-#[derive(Debug, PartialEq, Encode, Decode, Clone)]
-pub struct WasmHash(#[cbor(n(0), with = "minicbor::bytes")] [u8; WASM_HASH_LENGTH]);
+pub type LedgerWasm = Wasm<Ledger>;
+pub type IndexWasm = Wasm<Index>;
+pub type ArchiveWasm = Wasm<Archive>;
+
+#[derive(Debug, PartialEq, Ord, PartialOrd, Eq, Serialize, Deserialize, Clone)]
+#[serde(try_from = "serde_bytes::ByteBuf", into = "serde_bytes::ByteBuf")]
+pub struct WasmHash([u8; WASM_HASH_LENGTH]);
+
+impl TryFrom<ByteBuf> for WasmHash {
+    type Error = String;
+
+    fn try_from(value: ByteBuf) -> Result<Self, Self::Error> {
+        Ok(WasmHash(value.to_vec().try_into().map_err(
+            |e: Vec<u8>| format!("expected {} bytes, but got {}", WASM_HASH_LENGTH, e.len()),
+        )?))
+    }
+}
+
+impl From<WasmHash> for ByteBuf {
+    fn from(value: WasmHash) -> Self {
+        ByteBuf::from(value.0.to_vec())
+    }
+}
+
+impl AsRef<[u8]> for WasmHash {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
 
 impl From<[u8; WASM_HASH_LENGTH]> for WasmHash {
     fn from(value: [u8; WASM_HASH_LENGTH]) -> Self {
@@ -45,10 +76,95 @@ impl From<[u8; WASM_HASH_LENGTH]> for WasmHash {
     }
 }
 
-impl Wasm {
+impl FromStr for WasmHash {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let expected_num_hex_chars = WASM_HASH_LENGTH * 2;
+        if s.len() != expected_num_hex_chars {
+            return Err(format!(
+                "Invalid wasm hash: expected {} characters, got {}",
+                expected_num_hex_chars,
+                s.len()
+            ));
+        }
+        let mut bytes = [0u8; WASM_HASH_LENGTH];
+        hex::decode_to_slice(s, &mut bytes).map_err(|e| format!("Invalid hex string: {}", e))?;
+        Ok(Self(bytes))
+    }
+}
+
+impl Display for WasmHash {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", hex::encode(self.0))
+    }
+}
+
+impl Storable for WasmHash {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        Cow::from(self.as_ref())
+    }
+
+    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
+        assert_eq!(
+            bytes.len(),
+            WASM_HASH_LENGTH,
+            "WasmHash representation is 32-bytes long"
+        );
+        let mut be_bytes = [0u8; WASM_HASH_LENGTH];
+        be_bytes.copy_from_slice(bytes.as_ref());
+        Self(be_bytes)
+    }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: WASM_HASH_LENGTH as u32,
+        is_fixed_size: true,
+    };
+}
+
+impl WasmHash {
+    /// Creates an array of wasm hashes from an array of their respective string representations.
+    /// This method preserves the order of the input strings:
+    /// element with index i in the input, will have index i in the output.
+    /// The input strings are expected to be distinct and valid wasm hashes.
+    ///
+    /// # Errors
+    /// * If any of the strings is not a valid wasm hash.
+    /// * If there are any duplicates.
+    pub fn from_distinct_opt_str<const N: usize>(
+        hashes: [Option<&str>; N],
+    ) -> Result<[Option<WasmHash>; N], String> {
+        let mut duplicates = BTreeSet::new();
+        let mut result = Vec::with_capacity(N);
+        for maybe_hash in hashes {
+            match maybe_hash {
+                None => {
+                    result.push(None);
+                }
+                Some(hash) => {
+                    let hash = WasmHash::from_str(hash)?;
+                    if !duplicates.insert(hash.clone()) {
+                        return Err(format!("Duplicate hash: {}", hash));
+                    }
+                    result.push(Some(hash));
+                }
+            }
+        }
+        Ok(result
+            .try_into()
+            .map_err(|_err| "failed to convert to fixed size array")
+            .expect("BUG: failed to convert to fixed size array"))
+    }
+}
+
+impl<T> Wasm<T> {
     pub fn new(binary: Vec<u8>) -> Self {
         let hash = WasmHash::from(ic_crypto_sha2::Sha256::hash(binary.as_slice()));
-        Self { binary, hash }
+        Self {
+            binary,
+            hash,
+            marker: PhantomData,
+        }
     }
 
     pub fn to_bytes(self) -> Vec<u8> {
@@ -60,29 +176,58 @@ impl Wasm {
     }
 }
 
-impl From<Vec<u8>> for Wasm {
+impl<T> Clone for Wasm<T> {
+    fn clone(&self) -> Self {
+        Self::new(self.binary.clone())
+    }
+}
+
+impl<T> PartialEq for Wasm<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.binary.eq(&other.binary)
+    }
+}
+
+impl<T> From<Vec<u8>> for Wasm<T> {
     fn from(v: Vec<u8>) -> Self {
         Self::new(v)
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Encode, Decode, Default)]
-pub struct ManagedCanisters {
-    #[n(0)]
-    canisters: BTreeMap<Erc20Contract, Canisters>,
+impl<T> From<&[u8]> for Wasm<T> {
+    fn from(value: &[u8]) -> Self {
+        Self::new(value.to_vec())
+    }
 }
 
-#[derive(Default, Debug, PartialEq, Encode, Decode, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, Default)]
+pub struct ManagedCanisters {
+    canisters: BTreeMap<Erc20Token, Canisters>,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct Canisters {
-    #[n(0)]
     pub ledger: Option<LedgerCanister>,
-    #[n(1)]
     pub index: Option<IndexCanister>,
-    #[cbor(n(2), with = "crate::cbor::principal::vec")]
     pub archives: Vec<Principal>,
+    pub metadata: CanistersMetadata,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+pub struct CanistersMetadata {
+    pub ckerc20_token_symbol: String,
 }
 
 impl Canisters {
+    pub fn new(metadata: CanistersMetadata) -> Self {
+        Self {
+            ledger: None,
+            index: None,
+            archives: vec![],
+            metadata,
+        }
+    }
+
     pub fn ledger_canister_id(&self) -> Option<&Principal> {
         self.ledger.as_ref().map(LedgerCanister::canister_id)
     }
@@ -114,22 +259,6 @@ impl<T> PartialEq for Canister<T> {
     }
 }
 
-impl<C, T> minicbor::Encode<C> for Canister<T> {
-    fn encode<W: minicbor::encode::Write>(
-        &self,
-        e: &mut minicbor::Encoder<W>,
-        ctx: &mut C,
-    ) -> Result<(), minicbor::encode::Error<W::Error>> {
-        ManagedCanisterStatus::encode(&self.status, e, ctx)
-    }
-}
-
-impl<'b, C, T> minicbor::Decode<'b, C> for Canister<T> {
-    fn decode(d: &mut minicbor::Decoder<'b>, ctx: &mut C) -> Result<Self, minicbor::decode::Error> {
-        ManagedCanisterStatus::decode(d, ctx).map(Self::new)
-    }
-}
-
 impl<T> Canister<T> {
     pub fn new(status: ManagedCanisterStatus) -> Self {
         Self {
@@ -141,34 +270,48 @@ impl<T> Canister<T> {
     pub fn canister_id(&self) -> &Principal {
         self.status.canister_id()
     }
+
+    pub fn installed_wasm_hash(&self) -> Option<&WasmHash> {
+        self.status.installed_wasm_hash()
+    }
+}
+
+impl<T> Serialize for Canister<T> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.status.serialize(serializer)
+    }
+}
+
+impl<'de, T> Deserialize<'de> for Canister<T> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        ManagedCanisterStatus::deserialize(deserializer).map(Self::new)
+    }
 }
 
 #[derive(Debug)]
 pub enum Ledger {}
+
 pub type LedgerCanister = Canister<Ledger>;
 
 #[derive(Debug)]
 pub enum Index {}
+
 pub type IndexCanister = Canister<Index>;
 
-#[derive(Debug, PartialEq, Encode, Decode, Clone)]
+#[derive(Debug)]
+pub enum Archive {}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub enum ManagedCanisterStatus {
     /// Canister created with the given principal
     /// but wasm module is not yet installed.
-    #[n(1)]
-    Created {
-        #[cbor(n(0), with = "crate::cbor::principal")]
-        canister_id: Principal,
-    },
+    Created { canister_id: Principal },
 
     /// Canister created and wasm module installed.
     /// The wasm_hash reflects the installed wasm module by the orchestrator
     /// but *may differ* from the one being currently deployed (if another controller did an upgrade)
-    #[n(2)]
     Installed {
-        #[cbor(n(0), with = "crate::cbor::principal")]
         canister_id: Principal,
-        #[n(1)]
         installed_wasm_hash: WasmHash,
     },
 }
@@ -180,13 +323,24 @@ impl ManagedCanisterStatus {
             | ManagedCanisterStatus::Installed { canister_id, .. } => canister_id,
         }
     }
+
+    fn installed_wasm_hash(&self) -> Option<&WasmHash> {
+        match self {
+            ManagedCanisterStatus::Created { .. } => None,
+            ManagedCanisterStatus::Installed {
+                installed_wasm_hash,
+                ..
+            } => Some(installed_wasm_hash),
+        }
+    }
 }
 
 /// Configuration state of the ledger orchestrator.
 #[derive(Debug, PartialEq, Clone, Default)]
 enum ConfigState {
     #[default]
-    Uninitialized, // This state is only used between wasm module initialization and init().
+    Uninitialized,
+    // This state is only used between wasm module initialization and init().
     Initialized(State),
 }
 
@@ -205,7 +359,8 @@ impl Storable for ConfigState {
             ConfigState::Uninitialized => Cow::Borrowed(&[]),
             ConfigState::Initialized(config) => {
                 let mut buf = vec![];
-                minicbor::encode(config, &mut buf).expect("state encoding should always succeed");
+                ciborium::ser::into_writer(config, &mut buf)
+                    .expect("failed to encode a minter event");
                 Cow::Owned(buf)
             }
         }
@@ -216,27 +371,21 @@ impl Storable for ConfigState {
             return ConfigState::Uninitialized;
         }
         ConfigState::Initialized(
-            minicbor::decode(bytes.as_ref()).unwrap_or_else(|e| {
+            ciborium::de::from_reader(bytes.as_ref()).unwrap_or_else(|e| {
                 panic!("failed to decode state bytes {}: {e}", hex::encode(bytes))
             }),
         )
     }
+
+    const BOUND: Bound = Bound::Unbounded;
 }
 
-#[derive(Debug, PartialEq, Encode, Decode, Clone)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct State {
-    #[n(0)]
-    ledger_wasm: Wasm,
-    #[n(1)]
-    index_wasm: Wasm,
-    #[n(2)]
-    archive_wasm: Wasm,
-    #[n(3)]
     managed_canisters: ManagedCanisters,
-    #[n(4)]
     tasks: Tasks,
-    #[n(5)]
     processing_tasks_guard: bool,
+    more_controller_ids: Vec<Principal>,
 }
 
 impl State {
@@ -244,12 +393,8 @@ impl State {
         &self.tasks
     }
 
-    pub fn ledger_wasm(&self) -> &Wasm {
-        &self.ledger_wasm
-    }
-
-    pub fn index_wasm(&self) -> &Wasm {
-        &self.index_wasm
+    pub fn more_controller_ids(&self) -> &[Principal] {
+        &self.more_controller_ids
     }
 
     pub fn add_task(&mut self, task: Task) {
@@ -268,11 +413,15 @@ impl State {
         true
     }
 
-    pub fn managed_canisters(&self, contract: &Erc20Contract) -> Option<&Canisters> {
+    pub fn managed_canisters_iter(&self) -> impl Iterator<Item = (&Erc20Token, &Canisters)> {
+        self.managed_canisters.canisters.iter()
+    }
+
+    pub fn managed_canisters(&self, contract: &Erc20Token) -> Option<&Canisters> {
         self.managed_canisters.canisters.get(contract)
     }
 
-    fn managed_canisters_mut(&mut self, contract: &Erc20Contract) -> Option<&mut Canisters> {
+    fn managed_canisters_mut(&mut self, contract: &Erc20Token) -> Option<&mut Canisters> {
         self.managed_canisters.canisters.get_mut(contract)
     }
 
@@ -282,7 +431,7 @@ impl State {
 
     pub fn managed_status<'a, T: 'a>(
         &'a self,
-        contract: &Erc20Contract,
+        contract: &Erc20Token,
     ) -> Option<&'a ManagedCanisterStatus>
     where
         Canisters: ManageSingleCanister<T>,
@@ -291,21 +440,31 @@ impl State {
             .and_then(|c| c.get().map(|c| &c.status))
     }
 
+    pub fn record_new_erc20_token(&mut self, contract: Erc20Token, metadata: CanistersMetadata) {
+        assert_eq!(
+            self.managed_canisters(&contract),
+            None,
+            "BUG: ERC-20 token {:?} is already managed",
+            contract
+        );
+        assert_eq!(
+            self.managed_canisters
+                .canisters
+                .insert(contract, Canisters::new(metadata)),
+            None
+        );
+    }
+
     pub fn record_created_canister<T: Debug>(
         &mut self,
-        contract: &Erc20Contract,
+        contract: &Erc20Token,
         canister_id: Principal,
     ) where
         Canisters: ManageSingleCanister<T>,
     {
-        if self.managed_canisters(contract).is_none() {
-            self.managed_canisters
-                .canisters
-                .insert(contract.clone(), Canisters::default());
-        }
         let canisters = self
             .managed_canisters_mut(contract)
-            .expect("BUG: no managed canisters");
+            .unwrap_or_else(|| panic!("BUG: token {:?} is not managed", contract));
         canisters
             .try_insert(Canister::<T>::new(ManagedCanisterStatus::Created {
                 canister_id,
@@ -319,7 +478,7 @@ impl State {
             });
     }
 
-    pub fn record_installed_canister<T>(&mut self, contract: &Erc20Contract, wasm_hash: WasmHash)
+    pub fn record_installed_canister<T>(&mut self, contract: &Erc20Token, wasm_hash: WasmHash)
     where
         Canisters: ManageSingleCanister<T>,
     {
@@ -338,6 +497,17 @@ impl State {
             canister_id,
             installed_wasm_hash: wasm_hash,
         };
+    }
+
+    pub fn validate_config(&self) -> Result<(), InvalidStateError> {
+        const MAX_ADDITIONAL_CONTROLLERS: usize = 9;
+        if self.more_controller_ids.len() > MAX_ADDITIONAL_CONTROLLERS {
+            return Err(InvalidStateError::TooManyAdditionalControllers {
+                max: MAX_ADDITIONAL_CONTROLLERS,
+                actual: self.more_controller_ids.len(),
+            });
+        }
+        Ok(())
     }
 }
 
@@ -410,38 +580,26 @@ impl ManageSingleCanister<Index> for Canisters {
     }
 }
 
-pub trait RetrieveCanisterWasm<T> {
-    fn retrieve_wasm(&self) -> &Wasm;
+#[derive(Debug, Eq, PartialEq)]
+pub enum InvalidStateError {
+    TooManyAdditionalControllers { max: usize, actual: usize },
 }
 
-impl RetrieveCanisterWasm<Ledger> for State {
-    fn retrieve_wasm(&self) -> &Wasm {
-        self.ledger_wasm()
-    }
-}
-
-impl RetrieveCanisterWasm<Index> for State {
-    fn retrieve_wasm(&self) -> &Wasm {
-        self.index_wasm()
-    }
-}
-
-impl From<InitArg> for State {
-    fn from(
+impl TryFrom<InitArg> for State {
+    type Error = InvalidStateError;
+    fn try_from(
         InitArg {
-            ledger_wasm,
-            index_wasm,
-            archive_wasm,
+            more_controller_ids,
         }: InitArg,
-    ) -> Self {
-        Self {
-            ledger_wasm: Wasm::from(ledger_wasm),
-            index_wasm: Wasm::from(index_wasm),
-            archive_wasm: Wasm::from(archive_wasm),
+    ) -> Result<Self, Self::Error> {
+        let state = Self {
             managed_canisters: Default::default(),
             tasks: Default::default(),
             processing_tasks_guard: false,
-        }
+            more_controller_ids,
+        };
+        state.validate_config()?;
+        Ok(state)
     }
 }
 

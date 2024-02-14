@@ -28,7 +28,7 @@ use crate::{
 use ic_crypto_sha2::Sha256;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_ic00_types::EcdsaKeyId;
+use ic_management_canister_types::EcdsaKeyId;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     registry::crypto::v1 as crypto_pb,
@@ -1925,7 +1925,7 @@ mod tests {
 
     fn fake_ecdsa_key_id(name: &str) -> EcdsaKeyId {
         EcdsaKeyId {
-            curve: ic_ic00_types::EcdsaCurve::Secp256k1,
+            curve: ic_management_canister_types::EcdsaCurve::Secp256k1,
             name: name.to_string(),
         }
     }

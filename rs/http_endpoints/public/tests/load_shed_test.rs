@@ -1,10 +1,9 @@
 pub mod common;
 
 use crate::common::{
-    basic_consensus_pool_cache, basic_registry_client, basic_state_manager_mock,
     default_certified_state_reader, default_get_latest_state, default_latest_certified_height,
-    default_read_certified_state, get_free_localhost_socket_addr, start_http_endpoint,
-    wait_for_status_healthy,
+    default_read_certified_state, get_free_localhost_socket_addr, wait_for_status_healthy,
+    HttpEndpointBuilder,
 };
 use async_trait::async_trait;
 use hyper::{Body, Client, Method, Request, StatusCode};
@@ -17,7 +16,7 @@ use ic_agent::{
 };
 use ic_config::http_handler::Config;
 use ic_interfaces_state_manager_mocks::MockStateManager;
-use ic_pprof::{Error, Pprof, PprofCollector};
+use ic_pprof::{Error, PprofCollector};
 use ic_types::{
     messages::{Blob, HttpQueryResponse, HttpQueryResponseReply},
     time::current_time,
@@ -44,21 +43,9 @@ fn test_load_shedding_query() {
         ..Default::default()
     };
 
-    let mock_state_manager = basic_state_manager_mock();
-    let mock_consensus_cache = basic_consensus_pool_cache();
-    let mock_registry_client = basic_registry_client();
-
     let canister = Principal::from_text("223xb-saaaa-aaaaf-arlqa-cai").unwrap();
 
-    let (_, _, mut query_handler) = start_http_endpoint(
-        rt.handle().clone(),
-        config,
-        Arc::new(mock_state_manager),
-        Arc::new(mock_consensus_cache),
-        Arc::new(mock_registry_client),
-        None,
-        Arc::new(Pprof),
-    );
+    let (_, _, mut query_handler) = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
     let query_exec_running = Arc::new(Notify::new());
     let load_shedder_returned = Arc::new(Notify::new());
@@ -203,20 +190,11 @@ fn test_load_shedding_read_state() {
             default_certified_state_reader()
         });
 
-    let mock_consensus_cache = basic_consensus_pool_cache();
-    let mock_registry_client = basic_registry_client();
+    let _ = HttpEndpointBuilder::new(rt.handle().clone(), config)
+        .with_state_manager(mock_state_manager)
+        .run();
 
     let canister = Principal::from_text("223xb-saaaa-aaaaf-arlqa-cai").unwrap();
-
-    let _ = start_http_endpoint(
-        rt.handle().clone(),
-        config,
-        Arc::new(mock_state_manager),
-        Arc::new(mock_consensus_cache),
-        Arc::new(mock_registry_client),
-        None,
-        Arc::new(Pprof),
-    );
 
     let ok_agent = Agent::builder()
         .with_transport(ReqwestHttpReplicaV2Transport::create(format!("http://{}", addr)).unwrap())
@@ -322,19 +300,9 @@ fn test_load_shedding_pprof() {
         load_shedded_responses_finished.clone(),
     );
 
-    let mock_state_manager = basic_state_manager_mock();
-    let mock_consensus_cache = basic_consensus_pool_cache();
-    let mock_registry_client = basic_registry_client();
-
-    let _ = start_http_endpoint(
-        rt.handle().clone(),
-        config,
-        Arc::new(mock_state_manager),
-        Arc::new(mock_consensus_cache),
-        Arc::new(mock_registry_client),
-        None,
-        Arc::new(mock_pprof),
-    );
+    let _ = HttpEndpointBuilder::new(rt.handle().clone(), config)
+        .with_pprof_collector(mock_pprof)
+        .run();
 
     let flame_graph_req = move || {
         Request::builder()
@@ -407,21 +375,10 @@ fn test_load_shedding_update_call() {
         ..Default::default()
     };
 
-    let mock_state_manager = basic_state_manager_mock();
-    let mock_consensus_cache = basic_consensus_pool_cache();
-    let mock_registry_client = basic_registry_client();
-
     let canister = Principal::from_text("223xb-saaaa-aaaaf-arlqa-cai").unwrap();
 
-    let (mut ingress_filter, _ingress_rx, _) = start_http_endpoint(
-        rt.handle().clone(),
-        config,
-        Arc::new(mock_state_manager),
-        Arc::new(mock_consensus_cache),
-        Arc::new(mock_registry_client),
-        None,
-        Arc::new(Pprof),
-    );
+    let (mut ingress_filter, _ingress_rx, _) =
+        HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
     let ingress_filter_running = Arc::new(Notify::new());
     let load_shedder_returned = Arc::new(Notify::new());

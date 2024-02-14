@@ -4,11 +4,9 @@ load("//bazel:defs.bzl", "rust_bench")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "//rs/config",
     "//rs/monitoring/logger",
     "//rs/replicated_state",
     "//rs/sys",
-    "//rs/utils",
     "@crate_index//:bit-vec",
     "@crate_index//:lazy_static",
     "@crate_index//:libc",

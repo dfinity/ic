@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
-ic-ic00-types = { path = "../types/ic00_types" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
 ic-nns-constants = { path = "../nns/constants" }

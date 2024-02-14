@@ -1,26 +1,36 @@
 #[cfg(test)]
+pub mod test_fixtures;
+#[cfg(test)]
 mod tests;
 
+use crate::candid::{AddErc20Arg, LedgerInitArg, UpgradeArg};
 use crate::logs::INFO;
 use crate::management::{CallError, CanisterRuntime};
 use crate::state::{
-    mutate_state, read_state, Canisters, Index, Ledger, ManageSingleCanister,
-    ManagedCanisterStatus, RetrieveCanisterWasm, State,
+    mutate_state, read_state, Canisters, CanistersMetadata, Index, Ledger, ManageSingleCanister,
+    ManagedCanisterStatus, State, WasmHash,
+};
+use crate::storage::{
+    read_wasm_store, validate_wasm_hashes, wasm_store_try_get, StorableWasm, WasmHashError,
+    WasmStore, WasmStoreError,
 };
 use candid::{CandidType, Encode, Principal};
+use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use ic_icrc1_index_ng::{IndexArg, InitArg as IndexInitArg};
 use ic_icrc1_ledger::{ArchiveOptions, InitArgs as LedgerInitArgs, LedgerArgument};
-use icrc_ledger_types::icrc1::account::Account;
-use minicbor::{Decode, Encode as CborEncode};
+use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::str::FromStr;
 
+const HUNDRED_TRILLIONS: u64 = 100_000_000_000_000;
+const THREE_GIGA_BYTES: u64 = 3_221_225_472;
+
 /// A list of *independent* tasks to be executed in order.
-#[derive(Debug, PartialEq, CborEncode, Decode, Clone, Default)]
-pub struct Tasks(#[n(0)] VecDeque<Task>);
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, Default)]
+pub struct Tasks(VecDeque<Task>);
 
 impl Tasks {
     pub fn new() -> Self {
@@ -44,8 +54,12 @@ impl Tasks {
                     log!(INFO, "task {:?} accomplished", task);
                 }
                 Err(e) => {
-                    log!(INFO, "task {:?} failed: {:?}", task, e);
-                    self.0.push_front(task);
+                    if e.is_recoverable() {
+                        log!(INFO, "task {:?} failed: {:?}. Will retry later.", task, e);
+                        self.0.push_front(task);
+                    } else {
+                        log!(INFO, "ERROR: task {:?} failed with unrecoverable error: {:?}. Task is discarded.", task, e);
+                    }
                     return Err(e);
                 }
             }
@@ -54,73 +68,205 @@ impl Tasks {
     }
 }
 
-#[derive(Debug, PartialEq, CborEncode, Decode, Clone)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub enum Task {
-    #[n(0)]
-    InstallLedgerSuite(#[n(0)] Erc20Contract),
+    InstallLedgerSuite(InstallLedgerSuiteArgs),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+pub struct UpgradeOrchestratorArgs {
+    ledger_compressed_wasm_hash: Option<WasmHash>,
+    index_compressed_wasm_hash: Option<WasmHash>,
+    archive_compressed_wasm_hash: Option<WasmHash>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum InvalidUpgradeArgError {
+    WasmHashError(WasmHashError),
+}
+
+impl UpgradeOrchestratorArgs {
+    pub fn validate_upgrade_arg(
+        wasm_store: &WasmStore,
+        arg: UpgradeArg,
+    ) -> Result<UpgradeOrchestratorArgs, InvalidUpgradeArgError> {
+        let [ledger_compressed_wasm_hash, index_compressed_wasm_hash, archive_compressed_wasm_hash] =
+            validate_wasm_hashes(
+                wasm_store,
+                arg.ledger_compressed_wasm_hash.as_deref(),
+                arg.index_compressed_wasm_hash.as_deref(),
+                arg.archive_compressed_wasm_hash.as_deref(),
+            )
+            .map_err(InvalidUpgradeArgError::WasmHashError)?;
+        Ok(UpgradeOrchestratorArgs {
+            ledger_compressed_wasm_hash,
+            index_compressed_wasm_hash,
+            archive_compressed_wasm_hash,
+        })
+    }
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+pub struct InstallLedgerSuiteArgs {
+    contract: Erc20Token,
+    ledger_init_arg: LedgerInitArg,
+    ledger_compressed_wasm_hash: WasmHash,
+    index_compressed_wasm_hash: WasmHash,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum InvalidAddErc20ArgError {
+    InvalidErc20Contract(String),
+    Erc20ContractAlreadyManaged(Erc20Token),
+    WasmHashError(WasmHashError),
+}
+
+impl InstallLedgerSuiteArgs {
+    pub fn validate_add_erc20(
+        state: &State,
+        wasm_store: &WasmStore,
+        args: AddErc20Arg,
+    ) -> Result<InstallLedgerSuiteArgs, InvalidAddErc20ArgError> {
+        let contract = Erc20Token::try_from(args.contract.clone())
+            .map_err(|e| InvalidAddErc20ArgError::InvalidErc20Contract(e.to_string()))?;
+        if let Some(_canisters) = state.managed_canisters(&contract) {
+            return Err(InvalidAddErc20ArgError::Erc20ContractAlreadyManaged(
+                contract,
+            ));
+        }
+        let [ledger_compressed_wasm_hash, index_compressed_wasm_hash, _archive_compressed_wasm_hash] =
+            validate_wasm_hashes(
+                wasm_store,
+                Some(&args.ledger_compressed_wasm_hash),
+                Some(&args.index_compressed_wasm_hash),
+                None,
+            )
+            .map_err(InvalidAddErc20ArgError::WasmHashError)?;
+
+        Ok(Self {
+            contract,
+            ledger_init_arg: args.ledger_init_arg,
+            ledger_compressed_wasm_hash: ledger_compressed_wasm_hash.unwrap(),
+            index_compressed_wasm_hash: index_compressed_wasm_hash.unwrap(),
+        })
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum TaskError {
     CanisterCreationError(CallError),
     InstallCodeError(CallError),
+    WasmHashNotFound(WasmHash),
+    WasmStoreError(WasmStoreError),
+}
+
+impl TaskError {
+    /// If the error is recoverable, the task should be retried.
+    /// Otherwise, the task should be discarded.
+    fn is_recoverable(&self) -> bool {
+        match self {
+            TaskError::CanisterCreationError(_) => true,
+            TaskError::InstallCodeError(_) => true,
+            TaskError::WasmHashNotFound(_) => false,
+            TaskError::WasmStoreError(_) => false,
+        }
+    }
 }
 
 impl Task {
     pub async fn execute<R: CanisterRuntime>(&self, runtime: &R) -> Result<(), TaskError> {
         match self {
-            Task::InstallLedgerSuite(contract) => install_ledger_suite(contract, runtime).await,
+            Task::InstallLedgerSuite(args) => install_ledger_suite(args, runtime).await,
         }
     }
 }
 
 async fn install_ledger_suite<R: CanisterRuntime>(
-    contract: &Erc20Contract,
+    args: &InstallLedgerSuiteArgs,
     runtime: &R,
 ) -> Result<(), TaskError> {
-    let ledger_canister_id = create_canister_once::<Ledger, _>(contract, runtime).await?;
-
-    //TODO XC-29: init args should come from `contract` argument
-    let ledger_arg = LedgerInitArgs {
-        minting_account: Account {
-            owner: Principal::anonymous(),
-            subaccount: None,
+    record_new_erc20_token_once(
+        args.contract.clone(),
+        CanistersMetadata {
+            ckerc20_token_symbol: args.ledger_init_arg.token_symbol.clone(),
         },
-        fee_collector_account: None,
-        initial_balances: vec![],
-        transfer_fee: 10_000_u32.into(),
-        decimals: None,
-        token_name: "Test Token".to_string(),
-        token_symbol: "XTK".to_string(),
-        metadata: vec![],
-        archive_options: ArchiveOptions {
-            trigger_threshold: 1000,
-            num_blocks_to_archive: 1000,
-            node_max_memory_size_bytes: None,
-            max_message_size_bytes: None,
-            //TODO: orchestrator must control the archive to be able to upgrade it. We should validate the given config
-            controller_id: runtime.id().into(),
-            cycles_for_archive_creation: None,
-            max_transactions_per_response: None,
-        },
-        max_memo_length: None,
-        feature_flags: None,
-        maximum_number_of_accounts: None,
-        accounts_overflow_trim_quantity: None,
-    };
-    install_canister_once::<Ledger, _, _>(contract, &LedgerArgument::Init(ledger_arg), runtime)
-        .await?;
+    );
+    let ledger_canister_id = create_canister_once::<Ledger, _>(&args.contract, runtime).await?;
+    install_canister_once::<Ledger, _, _>(
+        &args.contract,
+        &args.ledger_compressed_wasm_hash,
+        &LedgerArgument::Init(icrc1_ledger_init_arg(
+            args.ledger_init_arg.clone(),
+            runtime.id().into(),
+        )),
+        runtime,
+    )
+    .await?;
 
-    let _index_principal = create_canister_once::<Index, _>(contract, runtime).await?;
+    let _index_principal = create_canister_once::<Index, _>(&args.contract, runtime).await?;
     let index_arg = Some(IndexArg::Init(IndexInitArg {
         ledger_id: ledger_canister_id,
     }));
-    install_canister_once::<Index, _, _>(contract, &index_arg, runtime).await?;
+    install_canister_once::<Index, _, _>(
+        &args.contract,
+        &args.index_compressed_wasm_hash,
+        &index_arg,
+        runtime,
+    )
+    .await?;
     Ok(())
 }
 
+fn record_new_erc20_token_once(contract: Erc20Token, metadata: CanistersMetadata) {
+    mutate_state(|s| {
+        if s.managed_canisters(&contract).is_some() {
+            return;
+        }
+        s.record_new_erc20_token(contract, metadata);
+    });
+}
+
+fn icrc1_ledger_init_arg(
+    ledger_init_arg: LedgerInitArg,
+    archive_controller_id: PrincipalId,
+) -> LedgerInitArgs {
+    use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
+
+    LedgerInitArgs {
+        minting_account: ledger_init_arg.minting_account,
+        fee_collector_account: ledger_init_arg.fee_collector_account,
+        initial_balances: ledger_init_arg.initial_balances,
+        transfer_fee: ledger_init_arg.transfer_fee,
+        decimals: ledger_init_arg.decimals,
+        token_name: ledger_init_arg.token_name,
+        token_symbol: ledger_init_arg.token_symbol,
+        metadata: vec![(
+            "icrc1:logo".to_string(),
+            LedgerMetadataValue::from(ledger_init_arg.token_logo),
+        )],
+        archive_options: icrc1_archive_options(archive_controller_id),
+        max_memo_length: ledger_init_arg.max_memo_length,
+        feature_flags: ledger_init_arg.feature_flags,
+        maximum_number_of_accounts: ledger_init_arg.maximum_number_of_accounts,
+        accounts_overflow_trim_quantity: ledger_init_arg.accounts_overflow_trim_quantity,
+    }
+}
+
+fn icrc1_archive_options(archive_controller_id: PrincipalId) -> ArchiveOptions {
+    ArchiveOptions {
+        trigger_threshold: 2_000,
+        num_blocks_to_archive: 1_000,
+        node_max_memory_size_bytes: Some(THREE_GIGA_BYTES),
+        max_message_size_bytes: None,
+        controller_id: archive_controller_id,
+        more_controller_ids: None,
+        cycles_for_archive_creation: Some(HUNDRED_TRILLIONS),
+        max_transactions_per_response: None,
+    }
+}
+
 async fn create_canister_once<C, R>(
-    contract: &Erc20Contract,
+    contract: &Erc20Token,
     runtime: &R,
 ) -> Result<Principal, TaskError>
 where
@@ -135,7 +281,10 @@ where
     }) {
         return Ok(canister_id);
     }
-    let canister_id = match runtime.create_canister(100_000_000_000).await {
+    let canister_id = match runtime
+        .create_canister(controllers_of_children_canisters(runtime), 100_000_000_000)
+        .await
+    {
         Ok(id) => {
             log!(
                 INFO,
@@ -161,15 +310,23 @@ where
     Ok(canister_id)
 }
 
+fn controllers_of_children_canisters<R: CanisterRuntime>(runtime: &R) -> Vec<Principal> {
+    let more_controllers = read_state(|s| s.more_controller_ids().to_vec());
+    vec![runtime.id()]
+        .into_iter()
+        .chain(more_controllers)
+        .collect()
+}
+
 async fn install_canister_once<C, R, I>(
-    contract: &Erc20Contract,
+    contract: &Erc20Token,
+    wasm_hash: &WasmHash,
     init_args: &I,
     runtime: &R,
 ) -> Result<(), TaskError>
 where
-    C: Debug,
+    C: Debug + StorableWasm + Send,
     Canisters: ManageSingleCanister<C>,
-    State: RetrieveCanisterWasm<C>,
     R: CanisterRuntime,
     I: Debug + CandidType,
 {
@@ -184,13 +341,36 @@ where
         Some(ManagedCanisterStatus::Installed { .. }) => return Ok(()),
     };
 
-    let wasm = read_state(|s| s.retrieve_wasm().clone());
-    let wasm_hash = wasm.hash().clone();
+    let wasm = match read_wasm_store(|s| wasm_store_try_get::<C>(s, wasm_hash)) {
+        Ok(Some(wasm)) => Ok(wasm),
+        Ok(None) => {
+            log!(
+                INFO,
+                "ERROR: failed to install {} canister for {:?} at '{}': wasm hash {} not found",
+                Canisters::display_name(),
+                contract,
+                canister_id,
+                wasm_hash
+            );
+            Err(TaskError::WasmHashNotFound(wasm_hash.clone()))
+        }
+        Err(e) => {
+            log!(
+                INFO,
+                "ERROR: failed to install {} canister for {:?} at '{}': {:?}",
+                Canisters::display_name(),
+                contract,
+                canister_id,
+                e
+            );
+            Err(TaskError::WasmStoreError(e))
+        }
+    }?;
 
     match runtime
         .install_code(
             canister_id,
-            wasm,
+            wasm.to_bytes(),
             Encode!(init_args).expect("BUG: failed to encode init arg"),
         )
         .await
@@ -219,19 +399,35 @@ where
         }
     };
 
-    mutate_state(|s| s.record_installed_canister::<C>(contract, wasm_hash));
+    mutate_state(|s| s.record_installed_canister::<C>(contract, wasm_hash.clone()));
 
     Ok(())
 }
 
-#[derive(Debug, PartialEq, Clone, Ord, PartialOrd, Eq, CborEncode, Decode)]
-pub struct Erc20Contract(#[n(0)] ChainId, #[n(1)] Address);
+#[derive(Debug, PartialEq, Clone, Ord, PartialOrd, Eq, Serialize, Deserialize)]
+pub struct Erc20Token(ChainId, Address);
 
-#[derive(Debug, PartialEq, Clone, Eq, Ord, PartialOrd, CborEncode, Decode)]
-#[cbor(transparent)]
-pub struct ChainId(#[n(0)] u64);
+impl Erc20Token {
+    pub fn chain_id(&self) -> &ChainId {
+        &self.0
+    }
 
-impl TryFrom<crate::candid::Erc20Contract> for Erc20Contract {
+    pub fn address(&self) -> &Address {
+        &self.1
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Eq, Ord, PartialOrd, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ChainId(u64);
+
+impl AsRef<u64> for ChainId {
+    fn as_ref(&self) -> &u64 {
+        &self.0
+    }
+}
+
+impl TryFrom<crate::candid::Erc20Contract> for Erc20Token {
     type Error = String;
 
     fn try_from(contract: crate::candid::Erc20Contract) -> Result<Self, Self::Error> {

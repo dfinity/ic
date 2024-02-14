@@ -1,6 +1,5 @@
 mod client;
-mod get_protocol_version;
-use crate::protocol::{Command, Request, Response, VsockProtocol};
+use crate::protocol::{Command, Request, Response};
 
 /// Send a command to the host vsock server
 pub fn send_command(command: Command, port: u32) -> Response {
@@ -8,7 +7,5 @@ pub fn send_command(command: Command, port: u32) -> Response {
 
     let request = Request { guest_cid, command };
 
-    let protocol_version: VsockProtocol = get_protocol_version::get_protocol_version(&port)?;
-
-    client::send_request_to_host_and_parse_response(&request, &port, &protocol_version)
+    client::send_request_to_host_and_parse_response(&request, &port)
 }

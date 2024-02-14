@@ -619,17 +619,18 @@ impl ProposalNeuronBehavior {
                 })
             }
         };
-        let pid = tokio_test::block_on(gov.make_proposal(
-            &NeuronId { id: self.proposer },
-            &principal(self.proposer),
-            &Proposal {
-                title: Some("A Reasonable Title".to_string()),
-                summary,
-                action: Some(action),
-                ..Default::default()
-            },
-        ))
-        .unwrap();
+        let pid = gov
+            .make_proposal(
+                &NeuronId { id: self.proposer },
+                &principal(self.proposer),
+                &Proposal {
+                    title: Some("A Reasonable Title".to_string()),
+                    summary,
+                    action: Some(action),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
         // Vote
         for (voter, vote) in &self.votes {
             register_vote_assert_success(

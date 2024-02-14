@@ -108,19 +108,11 @@ You can properly dispose of the testnet by killing the `ict` process.
 ### Interacting Afterwards
 
 To interact with the testnet using the shell scripts in this directory, you'll need to run
-`set_testnet_env_variables.sh` deep within `test_tmpdir`. This script can be sourced in your current
-shell. Just look for a log line similar to the following:
-
-```
-...ic_mainnet_nns_recovery/src/lib.rs... source "/ic/test_tmpdir/_tmp/c689987f6ae05176e3097f73827ab180/setup/set_testnet_env_variables.sh"
-```
-
-Then go into another container again and source that script:
+`set_testnet_env_variables.sh` deep within `test_tmpdir`. There is a helper function to do this for you:
 
 ```
 ./gitlab-ci/container/container-run.sh
-
-source "/ic/test_tmpdir/_tmp/c689987f6ae05176e3097f73827ab180/setup/set_testnet_env_variables.sh"
+. ./testnet/tools/nns-tools/cmd.sh set_testnet_env_variables
 ```
 
 Once you have those definitions, the following commands become possible:
@@ -256,7 +248,7 @@ For more information on what's going on here, see [this Slack thread][revert-nee
 [revert-needed-slack-thread]: https://dfinity.slack.com/archives/C039M7YS6F6/p1695970993659729?thread_ts=1695938621.025989&cid=C039M7YS6F6
 
 <a name="upgrade-testing"></a>
-## NNS Canister Upgrade Testing Process
+## NNS/SNS Canister Upgrade Testing Process
 
 This is usually done as one of the steps in the [NNS release process][1].
 
@@ -268,7 +260,15 @@ If you have a working testnet, start by [sourcing variables into your local shel
 
 Next, we test the upgrade
 ```bash
+# NNS:
 ./testnet/tools/nns-tools/test-canister-upgrade.sh <CANISTER_NAME> <TARGET_VERSION>
+
+# SNS:
+# Test upgrading the specified SNS canisters from mainnet version to the
+# specified version in every possible order
+./testnet/tools/nns-tools/test-sns-canister-upgrades.sh <TARGET_VERSION> <CANISTER_NAME> (<CANISTER_NAME>...)
+# Test deploying a new SNS with the specified canister versions
+./testnet/tools/nns-tools/test-sns-canister-deployment.sh <TARGET_VERSION> <CANISTER_NAME> (<CANISTER_NAME>...)
 ```
 
 * `<CANISTER_NAME>` is the key of the canister in `rs/nns/canister_ids.json`.
@@ -290,7 +290,7 @@ WASM as well as the un-gzipped WASM, as they will report different hashes in the
 
 This is essential to ensuring that not only can we upgrade _to_ a particular version, but also _beyond_ that version.
 
-## NNS Canister Upgrade Proposal Process
+## NNS/SNS Canister Upgrade Proposal Process
 
 This is usually done as one of the steps in the [NNS release process][1].
 
@@ -309,10 +309,17 @@ At a high level, there are two sub-step here:
 Generate a mostly pre-populated proposal text file:
 
 ```bash
+# NNS:
 ./testnet/tools/nns-tools/prepare-nns-upgrade-proposal-text.sh \
     <CANISTER_NAME> \
     <TARGET_VERSION> \
     > <OUTPUT_PROPOSAL_FILE>
+
+# SNS:
+./testnet/tools/nns-tools/prepare-publish-sns-wasm-proposal-text.sh \
+    <CANISTER_NAME> \
+    <TARGET_VERSION> \
+    <OUTPUT_PROPOSAL_FILE> # no `>`
 ```
 
 For example:
@@ -343,7 +350,13 @@ pkcs11-tool --list-slots
 Finally, run
 
 ```bash
+# NNS:
 ./testnet/tools/nns-tools/submit-mainnet-nns-upgrade-proposal.sh \
+    <PROPOSAL_FILE> \
+    <YOUR_NEURON_ID>
+
+# SNS:
+./testnet/tools/nns-tools/submit-mainnet-publish-sns-wasm-proposal.sh \
     <PROPOSAL_FILE> \
     <YOUR_NEURON_ID>
 ```

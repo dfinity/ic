@@ -2,8 +2,9 @@ use crate::args::OrchestratorArgs;
 use crate::boundary_node::BoundaryNodeManager;
 use crate::catch_up_package_provider::CatchUpPackageProvider;
 use crate::dashboard::{Dashboard, OrchestratorDashboard};
-use crate::firewall::Firewall;
+use crate::firewall::{ICAwareFirewall, StartupFirewall};
 use crate::hostos_upgrade::HostosUpgrader;
+use crate::ipv4_network::Ipv4Configurator;
 use crate::metrics::OrchestratorMetrics;
 use crate::process_manager::ProcessManager;
 use crate::registration::NodeRegistration;
@@ -40,7 +41,7 @@ pub struct Orchestrator {
     upgrade: Option<Upgrade>,
     hostos_upgrade: Option<HostosUpgrader>,
     boundary_node_manager: Option<BoundaryNodeManager>,
-    firewall: Option<Firewall>,
+    firewall: Option<ICAwareFirewall>,
     ssh_access_manager: Option<SshAccessManager>,
     orchestrator_dashboard: Option<OrchestratorDashboard>,
     registration: Option<NodeRegistration>,
@@ -51,6 +52,7 @@ pub struct Orchestrator {
     subnet_id: Arc<RwLock<Option<SubnetId>>>,
     // Handles of async tasks used to wait for their completion
     task_handles: Vec<JoinHandle<()>>,
+    ipv4_configurator: Option<Ipv4Configurator>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -79,7 +81,10 @@ fn load_version_from_file(logger: &ReplicaLogger, path: &Path) -> Result<Replica
 }
 
 impl Orchestrator {
-    pub async fn new(args: OrchestratorArgs) -> Result<Self, OrchestratorInstantiationError> {
+    pub async fn new(
+        args: OrchestratorArgs,
+        startup_firewall: StartupFirewall,
+    ) -> Result<Self, OrchestratorInstantiationError> {
         args.create_dirs();
         let metrics_addr = args.get_metrics_addr();
         let config = args.get_ic_config();
@@ -257,16 +262,21 @@ impl Orchestrator {
             Arc::clone(&metrics),
             replica_version.clone(),
             node_id,
-            ic_binary_directory,
+            ic_binary_directory.clone(),
             logger.clone(),
         );
 
-        let firewall = Firewall::new(
+        let firewall = startup_firewall.into_ic_aware_firewall(
             node_id,
             Arc::clone(&registry),
             Arc::clone(&metrics),
-            config.firewall.clone(),
             cup_provider.clone(),
+        );
+
+        let ipv4_configurator = Ipv4Configurator::new(
+            Arc::clone(&registry),
+            Arc::clone(&metrics),
+            ic_binary_directory,
             logger.clone(),
         );
 
@@ -280,6 +290,7 @@ impl Orchestrator {
             node_id,
             ssh_access_manager.get_last_applied_parameters(),
             firewall.get_last_applied_version(),
+            ipv4_configurator.get_last_applied_version(),
             replica_process,
             Arc::clone(&subnet_id),
             replica_version,
@@ -305,6 +316,7 @@ impl Orchestrator {
             exit_signal,
             subnet_id,
             task_handles: Default::default(),
+            ipv4_configurator: Some(ipv4_configurator),
         })
     }
 
@@ -416,26 +428,42 @@ impl Orchestrator {
             info!(log, "Shut down the tECDSA key rotation loop");
         }
 
-        async fn ssh_key_and_firewall_rules_checks(
+        async fn ssh_key_and_firewall_rules_and_ipv4_config_checks(
             maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
-            mut ssh_access_manager: SshAccessManager,
-            mut firewall: Firewall,
+            mut ssh_access_manager: Option<SshAccessManager>,
+            mut firewall: Option<ICAwareFirewall>,
+            mut ipv4_configurator: Option<Ipv4Configurator>,
             mut exit_signal: Receiver<bool>,
             log: ReplicaLogger,
         ) {
             while !*exit_signal.borrow() {
-                // Check if new SSH keys need to be deployed
-                ssh_access_manager
-                    .check_for_keyset_changes(*maybe_subnet_id.read().await)
-                    .await;
-                // Check and update the firewall rules
-                firewall.check_and_update().await;
+                if let Some(ssh_access_manager) = ssh_access_manager.as_mut() {
+                    // Check if new SSH keys need to be deployed
+                    ssh_access_manager
+                        .check_for_keyset_changes(*maybe_subnet_id.read().await)
+                        .await;
+                }
+                if let Some(firewall) = firewall.as_mut() {
+                    // Check and update the firewall rules
+                    if let Err(e) = firewall.check_and_update().await {
+                        error!(log, "Failed to check for and update firewall config: {}", e)
+                    };
+                }
+                if let Some(ipv4_configurator) = ipv4_configurator.as_mut() {
+                    // Check and update the network configuration
+                    if let Err(e) = ipv4_configurator.check_and_update().await {
+                        error!(log, "Failed to check for and update firewall config: {}", e)
+                    }
+                }
                 tokio::select! {
                     _ = tokio::time::sleep(CHECK_INTERVAL_SECS) => {}
                     _ = exit_signal.changed() => {}
                 }
             }
-            info!(log, "Shut down the ssh keys & firewall monitoring loop");
+            info!(
+                log,
+                "Shut down the ssh keys, firewall, and IPv4 config monitoring loop"
+            );
         }
 
         async fn serve_dashboard(
@@ -475,20 +503,24 @@ impl Orchestrator {
             )));
         }
 
-        if let (Some(ssh), Some(firewall)) = (self.ssh_access_manager.take(), self.firewall.take())
+        if self.ssh_access_manager.is_some()
+            || self.firewall.is_some()
+            || self.ipv4_configurator.is_some()
         {
             info!(
                 self.logger,
                 "Spawning the ssh-key and firewall rules check loop"
             );
-            self.task_handles
-                .push(tokio::spawn(ssh_key_and_firewall_rules_checks(
+            self.task_handles.push(tokio::spawn(
+                ssh_key_and_firewall_rules_and_ipv4_config_checks(
                     Arc::clone(&self.subnet_id),
-                    ssh,
-                    firewall,
+                    self.ssh_access_manager.take().or(None),
+                    self.firewall.take().or(None),
+                    self.ipv4_configurator.take().or(None),
                     self.exit_signal.clone(),
                     self.logger.clone(),
-                )));
+                ),
+            ));
         }
         if let Some(dashboard) = self.orchestrator_dashboard.take() {
             info!(self.logger, "Spawning the orchestrator dashboard");

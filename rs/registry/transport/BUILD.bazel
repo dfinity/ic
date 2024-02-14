@@ -11,7 +11,6 @@ filegroup(
 DEPENDENCIES = [
     "//rs/protobuf",
     "//rs/types/base_types",
-    "@crate_index//:bytes",
     "@crate_index//:candid",
     "@crate_index//:prost",
     "@crate_index//:serde",

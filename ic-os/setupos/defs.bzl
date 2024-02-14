@@ -51,9 +51,6 @@ def image_deps(mode, _malicious = False):
         "dev": {
             "build_container_filesystem_config_file": "//ic-os/setupos/envs/dev:build_container_filesystem_config.txt",
         },
-        "dev-sev": {
-            "build_container_filesystem_config_file": "//ic-os/setupos/envs/dev-sev:build_container_filesystem_config.txt",
-        },
         "prod": {
             "build_container_filesystem_config_file": "//ic-os/setupos/envs/prod:build_container_filesystem_config.txt",
         },
@@ -63,16 +60,12 @@ def image_deps(mode, _malicious = False):
 
     return deps
 
-# Inject a step building a data partition that contains either dev, dev-sev or prod
+# Inject a step building a data partition that contains either dev or prod
 # child images, depending on this build variant.
 def _custom_partitions(mode):
     if mode == "dev":
         guest_image = Label("//ic-os/guestos/envs/dev:disk-img.tar.zst")
         host_image = Label("//ic-os/hostos/envs/dev:disk-img.tar.zst")
-        nns_url = "https://dfinity.org"
-    elif mode == "dev-sev":
-        guest_image = Label("//ic-os/guestos/envs/dev-sev:disk-img.tar.zst")
-        host_image = Label("//ic-os/hostos/envs/dev-sev:disk-img.tar.zst")
         nns_url = "https://dfinity.org"
     else:
         guest_image = Label("//ic-os/guestos/envs/prod:disk-img.tar.zst")
@@ -98,7 +91,7 @@ def _custom_partitions(mode):
         Label("//ic-os/setupos:config/ssh_authorized_keys/admin"): "ssh_authorized_keys/admin",
     }
 
-    if mode == "dev" or mode == "dev-sev":
+    if mode == "dev":
         config_dict[Label("//ic-os/setupos:config/node_operator_private_key.pem")] = "node_operator_private_key.pem"
 
     pkg_tar(

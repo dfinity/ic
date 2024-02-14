@@ -12,7 +12,7 @@ async-trait = "0.1.68"
 bytes = { workspace = true }
 byte-unit = "4.0.14"
 cfg-if = "1.0.0"
-crossbeam = "0.8.2"
+crossbeam = "0.8.4"
 hex = "0.4.2"
 http = "0.2.5"
 futures = { workspace = true }
@@ -38,7 +38,6 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-types = { path = "../../types/types" }
 ic-validator = { path = "../../validator" }
-phantom_newtype = { path = "../../phantom_newtype" }
 prometheus = { workspace = true }
 prost = { workspace = true }
 rand = "0.8.3"

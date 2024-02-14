@@ -12,16 +12,13 @@ use ic_crypto_internal_threshold_sig_bls12381::api::{
 };
 use ic_crypto_internal_threshold_sig_bls12381::types::SecretKeyBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
-use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, LabeledTree::SubTree};
+use ic_crypto_tree_hash::{
+    flatmap, sparse_labeled_tree_from_paths, Label, LabeledTree, LabeledTree::SubTree,
+    Path as LabeledTreePath,
+};
 use ic_cycles_account_manager::CyclesAccountManager;
 pub use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::{ExecutionServices, IngressHistoryReaderImpl};
-use ic_ic00_types::{self as ic00, CanisterIdRecord, InstallCodeArgs, Method, Payload};
-pub use ic_ic00_types::{
-    CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs, CanisterStatusResultV2,
-    ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId, HttpHeader, HttpMethod, SignWithECDSAReply,
-    UpdateSettingsArgs,
-};
 use ic_ingress_manager::{CustomRandomState, IngressManager};
 use ic_interfaces::ingress_pool::{
     IngressPool, PoolSection, UnvalidatedIngressArtifact, ValidatedIngressArtifact,
@@ -39,6 +36,14 @@ use ic_interfaces_state_manager::{
     CertificationScope, Labeled, StateHashError, StateManager, StateReader,
 };
 use ic_logger::ReplicaLogger;
+use ic_management_canister_types::{
+    self as ic00, CanisterIdRecord, InstallCodeArgs, Method, Payload,
+};
+pub use ic_management_canister_types::{
+    CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs, CanisterStatusResultV2,
+    ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId, HttpHeader, HttpMethod, SignWithECDSAReply,
+    UpdateSettingsArgs,
+};
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
@@ -80,8 +85,8 @@ use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_int_counter, fetch_int_gauge, fetch_int_gauge_vec, Labels,
 };
 use ic_test_utilities_registry::{
-    add_single_subnet_record, add_subnet_list_record, insert_initial_dkg_transcript,
-    SubnetRecordBuilder,
+    add_single_subnet_record, add_subnet_key_record, add_subnet_list_record,
+    insert_initial_dkg_transcript, SubnetRecordBuilder,
 };
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_types::artifact::IngressMessageId;
@@ -97,7 +102,8 @@ use ic_types::crypto::{
 };
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::messages::{
-    CallbackId, Certificate, RejectContext, Response, EXPECTED_MESSAGE_ID_LENGTH,
+    CallbackId, Certificate, CertificateDelegation, RejectContext, Response,
+    EXPECTED_MESSAGE_ID_LENGTH,
 };
 use ic_types::signature::ThresholdSignature;
 use ic_types::time::GENESIS;
@@ -221,6 +227,7 @@ fn make_nodes_registry(
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     nodes: &Vec<StateMachineNode>,
     is_root_subnet: bool,
+    public_key: ThresholdSigPublicKey,
 ) -> Arc<FakeRegistryClient> {
     // ECDSA subnet_id must be different from nns_subnet_id, otherwise
     // `sign_with_ecdsa` won't be charged.
@@ -320,6 +327,12 @@ fn make_nodes_registry(
         registry_version.get(),
         subnet_id,
         record,
+    );
+    add_subnet_key_record(
+        &registry_data_provider,
+        registry_version.get(),
+        subnet_id,
+        public_key,
     );
 
     let registry_client = Arc::new(FakeRegistryClient::new(
@@ -1085,6 +1098,7 @@ impl StateMachine {
             registry_data_provider.clone(),
             &nodes,
             is_root_subnet,
+            public_key,
         );
 
         let mut sm_config = ic_config::state_manager::Config::new(state_dir.path().to_path_buf());
@@ -1178,7 +1192,7 @@ impl StateMachine {
                 ecdsa_key,
                 MasterEcdsaPublicKey {
                     algorithm_id: AlgorithmId::EcdsaSecp256k1,
-                    public_key: b"master_ecdsa_public_key".to_vec(),
+                    public_key: ecdsa_secret_key.public_key().serialize_sec1(true),
                 },
             );
         }
@@ -1297,6 +1311,21 @@ impl StateMachine {
             .build()
     }
 
+    /// Same as [restart_node], but allows overwriting the LSMT flag.
+    pub fn restart_node_with_lsmt_override(self, lsmt_override: Option<FlagStatus>) -> Self {
+        // We must drop self before setup_form_dir so that we don't have two StateManagers pointing
+        // to the same root.
+        let (state_dir, nonce, time, checkpoints_enabled) = self.into_components();
+
+        StateMachineBuilder::new()
+            .with_state_dir(state_dir)
+            .with_nonce(nonce)
+            .with_time(time)
+            .with_checkpoints_enabled(checkpoints_enabled)
+            .with_lsmt_override(lsmt_override)
+            .build()
+    }
+
     /// Same as [restart_node], but the subnet will have the specified `config`
     /// after the restart.
     pub fn restart_node_with_config(self, config: StateMachineConfig) -> Self {
@@ -1311,6 +1340,49 @@ impl StateMachine {
             .with_config(Some(config))
             .with_checkpoints_enabled(checkpoints_enabled)
             .build()
+    }
+
+    pub fn get_delegation_for_subnet(
+        &self,
+        subnet_id: SubnetId,
+    ) -> Result<CertificateDelegation, String> {
+        self.certify_latest_state();
+        let certified_state_reader = match self.state_manager.get_certified_state_snapshot() {
+            Some(reader) => reader,
+            None => {
+                return Err("No certified state available.".to_string());
+            }
+        };
+        let paths = vec![
+            LabeledTreePath::new(vec![
+                b"subnet".into(),
+                subnet_id.get().into(),
+                b"public_key".into(),
+            ]),
+            LabeledTreePath::new(vec![
+                b"subnet".into(),
+                subnet_id.get().into(),
+                b"canister_ranges".into(),
+            ]),
+            LabeledTreePath::from(Label::from("time")),
+        ];
+        let labeled_tree = sparse_labeled_tree_from_paths(&paths).unwrap();
+        let (tree, certification) = match certified_state_reader.read_certified_state(&labeled_tree)
+        {
+            Some(r) => r,
+            None => {
+                return Err("Certified state could not be read.".to_string());
+            }
+        };
+        let signature = certification.signed.signature.signature.get().0;
+        Ok(CertificateDelegation {
+            subnet_id: Blob(subnet_id.get().to_vec()),
+            certificate: Blob(into_cbor(&Certificate {
+                tree,
+                signature: Blob(signature),
+                delegation: None,
+            })),
+        })
     }
 
     /// If the argument is true, the state machine will create an on-disk
@@ -2106,6 +2178,18 @@ impl StateMachine {
         method: impl ToString,
         method_payload: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
+        self.query_as_with_delegation(sender, receiver, method, method_payload, None)
+    }
+
+    /// Queries the canister with the specified ID and with an optional subnet delegation from the NNS.
+    pub fn query_as_with_delegation(
+        &self,
+        sender: PrincipalId,
+        receiver: CanisterId,
+        method: impl ToString,
+        method_payload: Vec<u8>,
+        delegation: Option<CertificateDelegation>,
+    ) -> Result<WasmResult, UserError> {
         self.certify_latest_state();
         let path = SubTree(flatmap! {
             Label::from("canister") => SubTree(
@@ -2120,7 +2204,7 @@ impl StateMachine {
         let data_certificate = into_cbor(&Certificate {
             tree,
             signature: Blob(certification.signed.signature.signature.get().0),
-            delegation: None,
+            delegation,
         });
         self.query_handler.query(
             UserQuery {

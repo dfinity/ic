@@ -8,9 +8,14 @@ rust_library(
     crate_name = "ic_crypto_test_utils_keygen",
     version = "0.1.0",
     deps = [
+        "//rs/crypto/temp_crypto",
+        "//rs/interfaces",
+        "//rs/interfaces/registry",
         "//rs/protobuf",
+        "//rs/registry/fake",
         "//rs/registry/keys",
         "//rs/registry/proto_data_provider",
         "//rs/types/types",
+        "//rs/types/types_test_utils",
     ],
 )

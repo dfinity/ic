@@ -6,7 +6,7 @@ use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
 use crate::{CanisterState, InputQueueType, NextInputQueue, StateError};
 use ic_base_types::PrincipalId;
 use ic_error_types::RejectCode;
-use ic_ic00_types::IC_00;
+use ic_management_canister_types::IC_00;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::queues::{v1 as pb_queues, v1::canister_queues::NextInputQueue as ProtoNextInputQueue},
@@ -41,7 +41,7 @@ pub const REQUEST_LIFETIME: Duration = Duration::from_secs(300);
 pub struct CanisterQueuesLoopDetector {
     pub local_queue_skip_count: usize,
     pub remote_queue_skip_count: usize,
-    pub skipped_ingress_queue: bool,
+    pub ingress_queue_skip_count: usize,
 }
 
 impl CanisterQueuesLoopDetector {
@@ -53,16 +53,17 @@ impl CanisterQueuesLoopDetector {
         let skipped_all_local =
             self.local_queue_skip_count >= canister_queues.local_subnet_input_schedule.len();
 
-        let ingress_is_empty = canister_queues.peek_ingress().is_none();
+        let skipped_all_ingress =
+            self.ingress_queue_skip_count >= canister_queues.ingress_queue.ingress_schedule_size();
 
         // An empty queue is skipped implicitly by `peek_input()` and `pop_input()`.
         // This means that no new messages can be consumed from an input source if
         // - either it is empty,
         // - or all its queues were explicitly skipped.
-        // Note that `skipped_all_remote` and `skipped_all_local` are trivially
-        // true if the corresponding input source is empty because empty queues
-        // are removed from the source.
-        skipped_all_remote && skipped_all_local && (ingress_is_empty || self.skipped_ingress_queue)
+        // Note that `skipped_all_remote`, `skipped_all_local`, and `skipped_all_ingress`
+        // are trivially true if the corresponding input source is empty because empty
+        // queues are removed from the source.
+        skipped_all_remote && skipped_all_local && skipped_all_ingress
     }
 }
 
@@ -264,7 +265,7 @@ impl CanisterQueues {
     }
 
     /// Peeks the next ingress message from `ingress_queue`.
-    fn peek_ingress(&self) -> Option<&Arc<Ingress>> {
+    fn peek_ingress(&self) -> Option<Arc<Ingress>> {
         self.ingress_queue.peek()
     }
 
@@ -468,10 +469,7 @@ impl CanisterQueues {
         // Try all 3 inputs: Ingress, Local, and Remote subnets
         for _ in 0..3 {
             let next_input = match self.next_input_queue {
-                NextInputQueue::Ingress => self
-                    .peek_ingress()
-                    .map(|ingress| CanisterMessage::Ingress(Arc::clone(ingress))),
-
+                NextInputQueue::Ingress => self.peek_ingress().map(CanisterMessage::Ingress),
                 NextInputQueue::RemoteSubnet => {
                     self.peek_canister_input(InputQueueType::RemoteSubnet)
                 }
@@ -501,7 +499,8 @@ impl CanisterQueues {
         let current_input_queue = self.next_input_queue;
         match current_input_queue {
             NextInputQueue::Ingress => {
-                loop_detector.skipped_ingress_queue = true;
+                self.ingress_queue.skip_ingress_input();
+                loop_detector.ingress_queue_skip_count += 1;
                 self.next_input_queue = NextInputQueue::RemoteSubnet
             }
 

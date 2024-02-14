@@ -8,7 +8,6 @@ documentation.workspace = true
 
 [dependencies]
 ic-crypto-sha2 = { path = "../../../sha2" }
-ic-types = { path = "../../../../types/types" }
 hex = "0.4"
 rand = "0.8"
 rand_chacha = "0.3"

@@ -18,7 +18,6 @@ DEPENDENCIES = [
     "@crate_index//:lazy_static",
     "@crate_index//:p256",
     "@crate_index//:rand",
-    "@crate_index//:rand_chacha",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_cbor",

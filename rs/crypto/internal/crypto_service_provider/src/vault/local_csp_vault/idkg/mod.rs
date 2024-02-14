@@ -158,7 +158,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             })?;
         let internal_transcript = IDkgTranscriptInternal::deserialize(transcript.as_ref())
             .map_err(|e| IDkgLoadTranscriptError::SerializationError {
-                internal_error: e.0,
+                internal_error: format!("failed to deserialize internal transcript: {:?}", e.0),
             })?;
         let result = self.idkg_load_transcript_internal(
             &internal_dealings,

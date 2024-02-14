@@ -22,7 +22,7 @@ rust_test(
     srcs = ["test/tests.rs"],
     data = [
         "//rs/canister_sandbox",
-        "//rs/canister_sandbox/sandbox_launcher",
+        "//rs/canister_sandbox:sandbox_launcher",
         "//rs/replica",
         "//rs/rosetta-api/icrc1/rosetta:ic-icrc-rosetta-bin",
         "//rs/starter:ic-starter",
@@ -31,7 +31,7 @@ rust_test(
         "CANISTER_LAUNCHER": "$(rootpath //rs/canister_sandbox)",
         "REPLICA_BIN": "$(rootpath //rs/replica)",
         "ROSETTA_BIN_PATH": "$(rootpath //rs/rosetta-api/icrc1/rosetta:ic-icrc-rosetta-bin)",
-        "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+        "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
         "STARTER_BIN": "$(rootpath //rs/starter:ic-starter)",
     },
     deps = [

@@ -5,7 +5,6 @@ edition = "2021"
 
 [dependencies]
 ic-config = { path = "../../config" }
-ic-embedders = { path = "../../embedders" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-system-api = { path = "../../system_api" }
 ic-types = { path = "../../types/types" }

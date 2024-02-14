@@ -3,17 +3,11 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "//rs/constants",
     "//rs/interfaces",
-    "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/types/types",
-    "@crate_index//:bincode",
     "@crate_index//:crossbeam-channel",
     "@crate_index//:prometheus",
-    "@crate_index//:serde",
-    "@crate_index//:serde_json",
-    "@crate_index//:slog",
 ]
 
 MACRO_DEPENDENCIES = []

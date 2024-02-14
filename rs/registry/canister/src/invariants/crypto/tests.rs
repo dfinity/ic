@@ -600,7 +600,7 @@ fn run_test_orphaned_crypto_keys(
 mod ecdsa_signing_subnet_lists {
     use super::*;
     use ic_base_types::{subnet_id_into_protobuf, SubnetId};
-    use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
+    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
     use ic_protobuf::registry::crypto::v1::EcdsaSigningSubnetList;
     use ic_protobuf::registry::subnet::v1::{EcdsaConfig, SubnetRecord};
     use ic_registry_transport::pb::v1::RegistryMutation;

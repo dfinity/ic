@@ -5,7 +5,6 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/crypto/tls_interfaces",
-    "//rs/interfaces",
     "//rs/interfaces/certified_stream_store",
     "//rs/interfaces/registry",
     "//rs/monitoring/logger",
@@ -14,7 +13,6 @@ DEPENDENCIES = [
     "//rs/registry/helpers",
     "//rs/types/types",
     "//rs/xnet/hyper",
-    "//rs/xnet/uri",
     "@crate_index//:crossbeam-channel",
     "@crate_index//:hyper",
     "@crate_index//:prometheus",

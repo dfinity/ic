@@ -461,7 +461,7 @@ impl IncompleteState {
                                     let src_offset = chunk.offset as i64;
                                     let dst_offset = chunk.offset as i64;
 
-                                    ic_utils::fs::copy_file_range_all(
+                                    ic_sys::fs::copy_file_range_all(
                                         &src,
                                         src_offset,
                                         &dst,
@@ -688,7 +688,7 @@ impl IncompleteState {
                             let src_offset = src_chunk.offset as i64;
                             let dst_offset = dst_chunk.offset as i64;
 
-                            ic_utils::fs::copy_file_range_all(
+                            ic_sys::fs::copy_file_range_all(
                                 &src,
                                 src_offset,
                                 &dst,

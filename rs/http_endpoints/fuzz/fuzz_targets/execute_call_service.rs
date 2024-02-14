@@ -10,19 +10,16 @@ use ic_agent::{
 };
 use ic_config::http_handler::Config;
 use ic_error_types::{ErrorCode, UserError};
-use ic_http_endpoints_public::call::CallService;
-use ic_http_endpoints_public::metrics::HttpHandlerMetrics;
-use ic_http_endpoints_public::validator_executor::ValidatorExecutor;
+use ic_http_endpoints_public::CallServiceBuilder;
 use ic_interfaces::ingress_pool::IngressPoolThrottler;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::replica_logger::no_op_logger;
-use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_test_utilities::{
     crypto::temp_crypto_component_with_fake_registry,
     types::ids::{node_test_id, subnet_test_id},
 };
-use ic_types::{malicious_flags::MaliciousFlags, messages::SignedIngressContent, PrincipalId};
+use ic_types::{messages::SignedIngressContent, PrincipalId};
 use ic_validator_http_request_arbitrary::AnonymousContent;
 use libfuzzer_sys::fuzz_target;
 use std::{
@@ -34,7 +31,9 @@ use tokio::{
     runtime::Runtime,
     sync::mpsc::{channel, Receiver},
 };
-use tower::{util::BoxCloneService, Service, ServiceExt};
+use tower::{
+    limit::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder, ServiceExt,
+};
 use tower_test::mock::Handle;
 
 #[path = "../../public/tests/common/mod.rs"]
@@ -187,7 +186,6 @@ fn new_call_service(
         ..Default::default()
     };
     let log = no_op_logger();
-    let metrics_registry = MetricsRegistry::new();
     let mock_registry_client: Arc<dyn RegistryClient> = Arc::new(basic_registry_client());
 
     let (ingress_filter, ingress_filter_handle) = setup_ingress_filter_mock();
@@ -202,22 +200,24 @@ fn new_call_service(
 
     let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(1)));
 
-    let call_service = CallService::new_service(
-        config,
-        log.clone(),
-        HttpHandlerMetrics::new(&metrics_registry),
-        node_test_id(1),
-        subnet_test_id(1),
-        Arc::clone(&mock_registry_client),
-        ValidatorExecutor::new(
-            Arc::clone(&mock_registry_client),
-            sig_verifier,
-            &MaliciousFlags::default(),
-            log,
-        ),
-        ingress_filter,
-        ingress_throttler,
-        ingress_tx,
+    let call_service = BoxCloneService::new(
+        ServiceBuilder::new()
+            .layer(GlobalConcurrencyLimitLayer::new(
+                config.max_call_concurrent_requests,
+            ))
+            .service(
+                CallServiceBuilder::builder(
+                    node_test_id(1),
+                    subnet_test_id(1),
+                    Arc::clone(&mock_registry_client),
+                    sig_verifier,
+                    ingress_filter,
+                    ingress_throttler,
+                    ingress_tx,
+                )
+                .with_logger(log.clone())
+                .build(),
+            ),
     );
     (ingress_filter_handle, call_service)
 }

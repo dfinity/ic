@@ -1,9 +1,11 @@
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, SubnetId};
 use ic_config::subnet_config::SchedulerConfig;
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_ic00_types::{CanisterIdRecord, CanisterSettingsArgs, Payload, UpdateSettingsArgs, IC_00};
 use ic_interfaces::execution_environment::SystemApi;
 use ic_logger::replica_logger::no_op_logger;
+use ic_management_canister_types::{
+    CanisterIdRecord, CanisterSettingsArgs, Payload, UpdateSettingsArgs, IC_00,
+};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;

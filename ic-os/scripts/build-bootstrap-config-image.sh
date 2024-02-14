@@ -27,16 +27,9 @@ options may be specified:
   --ipv6_gateway a:b::c
     Default IPv6 gateway.
 
-  --ipv6_name_servers servers
-    ipv6 DNS servers to use. Can be multiple servers separated by space (make
-    sure to quote the argument string so it appears as a single argument to the
-    script, e.g. --ipv6_name_servers "2606:4700:4700::1111
-    2606:4700:4700::1001").
-
-  --ipv4_name_servers servers
-    ipv4 DNS servers to use. Can be multiple servers separated by space (make
-    sure to quote the argument string so it appears as a single argument to the
-    script, e.g. --ipv4_name_servers "1.1.1.1 1.0.0.1").
+  --default_firewall_whitelist path
+    File containing the default whitelist configuration for GuestOS on
+    orchestrator startup.
 
   --ipv4_address a.b.c.d/n
     (optional) The IPv4 address to assign. Must include prefix length (e.g.
@@ -114,6 +107,10 @@ options may be specified:
     The Json-object corresponds to this Rust-structure:
       ic_types::malicious_behaviour::MaliciousBehaviour
 
+  --query_stats_epoch_length length
+    The length of the epoch in seconds. To be used in
+    systems tests only.
+
   --bitcoind_addr address
     The IP address of a running bitcoind instance. To be used in
     systems tests only.
@@ -131,7 +128,7 @@ function build_ic_bootstrap_tar() {
     local OUT_FILE="$1"
     shift
 
-    local IPV6_ADDRESS IPV6_GATEWAY IPV6_NAME_SERVERS IPV4_NAME_SERVERS DOMAIN HOSTNAME
+    local IPV6_ADDRESS IPV6_GATEWAY DOMAIN HOSTNAME
     local IC_CRYPTO IC_REGISTRY_LOCAL_STORE
     local NNS_URL NNS_PUBLIC_KEY NODE_OPERATOR_PRIVATE_KEY
     local BACKUP_RETENTION_TIME_SECS BACKUP_PURGING_INTERVAL_SECS
@@ -139,7 +136,9 @@ function build_ic_bootstrap_tar() {
     local ACCOUNTS_SSH_AUTHORIZED_KEYS
     local REPLICA_LOG_DEBUG_OVERRIDES
     local MALICIOUS_BEHAVIOR
+    local QUERY_STATS_EPOCH_LENGTH
     local BITCOIND_ADDR
+    local DEFAULT_FIREWALL_WHITELIST
 
     while true; do
         if [ $# == 0 ]; then
@@ -153,11 +152,8 @@ function build_ic_bootstrap_tar() {
             --ipv6_gateway)
                 IPV6_GATEWAY="$2"
                 ;;
-            --ipv6_name_servers)
-                IPV6_NAME_SERVERS="$2"
-                ;;
-            --ipv4_name_servers)
-                IPV4_NAME_SERVERS="$2"
+            --default_firewall_whitelist)
+                DEFAULT_FIREWALL_WHITELIST="$2"
                 ;;
             --ipv4_address)
                 IPV4_ADDRESS="$2"
@@ -207,6 +203,9 @@ function build_ic_bootstrap_tar() {
             --malicious_behavior)
                 MALICIOUS_BEHAVIOR="$2"
                 ;;
+            --query_stats_epoch_length)
+                QUERY_STATS_EPOCH_LENGTH="$2"
+                ;;
             --bitcoind_addr)
                 BITCOIND_ADDR="$2"
                 ;;
@@ -233,8 +232,6 @@ function build_ic_bootstrap_tar() {
     cat >"${BOOTSTRAP_TMPDIR}/network.conf" <<EOF
 ${IPV6_ADDRESS:+ipv6_address=$IPV6_ADDRESS}
 ${IPV6_GATEWAY:+ipv6_gateway=$IPV6_GATEWAY}
-name_servers=$IPV6_NAME_SERVERS
-ipv4_name_servers=$IPV4_NAME_SERVERS
 hostname=$HOSTNAME
 ${IPV4_ADDRESS:+ipv4_address=$IPV4_ADDRESS}
 ${IPV4_GATEWAY:+ipv4_gateway=$IPV4_GATEWAY}
@@ -262,6 +259,9 @@ EOF
     if [ "${MALICIOUS_BEHAVIOR}" != "" ]; then
         echo "malicious_behavior=${MALICIOUS_BEHAVIOR}" >"${BOOTSTRAP_TMPDIR}/malicious_behavior.conf"
     fi
+    if [ "${QUERY_STATS_EPOCH_LENGTH}" != "" ]; then
+        echo "query_stats_epoch_length=${QUERY_STATS_EPOCH_LENGTH}" >"${BOOTSTRAP_TMPDIR}/query_stats.conf"
+    fi
     if [ "${BITCOIND_ADDR}" != "" ]; then
         echo "bitcoind_addr=${BITCOIND_ADDR}" >"${BOOTSTRAP_TMPDIR}/bitcoind_addr.conf"
     fi
@@ -279,6 +279,9 @@ EOF
     fi
     if [ "${NODE_OPERATOR_PRIVATE_KEY}" != "" ]; then
         cp "${NODE_OPERATOR_PRIVATE_KEY}" "${BOOTSTRAP_TMPDIR}/node_operator_private_key.pem"
+    fi
+    if [ "${DEFAULT_FIREWALL_WHITELIST}" != "" ]; then
+        cp "${DEFAULT_FIREWALL_WHITELIST}" "${BOOTSTRAP_TMPDIR}/default_firewall_whitelist.conf"
     fi
 
     tar cf "${OUT_FILE}" \

@@ -1,6 +1,7 @@
+use assert_matches::assert_matches;
 use candid::Encode;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_ic00_types::CanisterInstallMode;
+use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_constants::{LIFELINE_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID};
@@ -60,10 +61,11 @@ fn upgrade_canister() {
             .command
             .expect("Making NNS proposal failed");
 
-    assert_eq!(
+    assert_matches!(
         response,
         Command::MakeProposal(MakeProposalResponse {
-            proposal_id: Some(ic_nns_common::pb::v1::ProposalId { id: 1 })
+            proposal_id: Some(ic_nns_common::pb::v1::ProposalId { id: 1 }),
+            ..
         })
     );
 

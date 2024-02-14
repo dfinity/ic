@@ -28,7 +28,7 @@ use ic_base_types::NodeId;
 use ic_btc_types_internal::BitcoinAdapterResponse;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_ic00_types::EcdsaKeyId;
+use ic_management_canister_types::EcdsaKeyId;
 use ic_protobuf::proxy::ProxyDecodeError;
 use serde::{Deserialize, Serialize};
 use std::{

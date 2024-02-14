@@ -108,6 +108,13 @@ RUN systemctl enable \
     systemd-resolved \
     systemd-journal-gatewayd
 
+RUN systemctl disable \
+    apt-daily.service \
+    apt-daily.timer \
+    apt-daily-upgrade.service \
+    apt-daily-upgrade.timer \
+    motd-news.service
+
 # Add user/group entries specified here: /usr/lib/sysusers.d/systemd.conf E.g., systemd-timesync/coredump. 
 ## `systemd-sysusers` does not honor the SOURCE_DATE_EPOCH env var. 
 ## With `podman --timestamp=0` each file gets written with timestamp of the Unix epoch. 
@@ -243,11 +250,6 @@ RUN \
 COPY dev-certs/canister_http_test_ca.cert /usr/local/share/ca-certificates/dev-root-ca.crt
 RUN chmod 0644 /usr/local/share/ca-certificates/dev-root-ca.crt
 RUN update-ca-certificates
-
-# The above steps are also used for dev-sev image
-FROM output_dev as output_dev-sev
-
-RUN echo "UNUSED DOCKERFILE LAYER. This line must exist to not fail."
 
 FROM output_${BUILD_TYPE}
 

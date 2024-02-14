@@ -15,7 +15,6 @@ use axum::{
     Router,
 };
 use axum_server::tls_rustls::RustlsConfig;
-use axum_server::HttpConfig;
 use clap::Parser;
 use serde_json::json;
 use tokio::time::{sleep, Duration};
@@ -248,12 +247,9 @@ async fn main() {
         .fallback(fallback)
         .layer(map_response(add_deterministic_headers));
 
-    let http_config = HttpConfig::new().http1_only(true).http2_only(false).build();
-
     let addr = SocketAddr::from((Ipv6Addr::UNSPECIFIED, args.port));
 
     axum_server::bind_rustls(addr, config)
-        .http_config(http_config)
         .serve(app.into_make_service())
         .await
         .unwrap();

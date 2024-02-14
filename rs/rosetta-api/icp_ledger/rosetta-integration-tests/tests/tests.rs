@@ -2,7 +2,7 @@ use candid::{CandidType, Decode, Deserialize, Encode, Nat, Principal};
 use ic_agent::agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::{Agent, Identity};
-use ic_ic00_types::{CanisterInstallMode, CreateCanisterArgs, InstallCodeArgs};
+use ic_management_canister_types::{CanisterInstallMode, CreateCanisterArgs, InstallCodeArgs};
 use ic_starter_tests::{ReplicaBins, ReplicaContext, ReplicaStarterConfig};
 use icp_ledger::AccountIdentifier;
 use icp_rosetta_integration_tests::start_rosetta;

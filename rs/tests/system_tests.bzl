@@ -100,7 +100,7 @@ def system_test(
         runtime_deps = [],
         tags = [],
         test_timeout = "long",
-        flaky = True,
+        flaky = False,
         malicious = False,
         colocated_test_driver_vm_resources = default_vm_resources,
         colocated_test_driver_vm_required_host_features = [],
@@ -209,7 +209,6 @@ def system_test(
         tags = tags + ["requires-network", "system_test"] +
                (["manual"] if "experimental_system_test_colocation" in tags else []),
         timeout = test_timeout,
-        # TODO: set flaky = False by default when PFOPS-3148 is resolved
         flaky = flaky,
     )
 
@@ -244,7 +243,6 @@ def system_test(
         tags = tags + ["requires-network", "system_test"] +
                ([] if "experimental_system_test_colocation" in tags else ["manual"]),
         timeout = test_timeout,
-        # TODO: set flaky = False by default when PFOPS-3148 is resolved
         flaky = flaky,
     )
 

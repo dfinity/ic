@@ -290,6 +290,10 @@ async fn main() -> Result<()> {
         .await?;
     }
 
+    info!("Starting to update account balances");
+    // Once the entire blockchain has been synched and no gaps remain, the account_balance table can be updated
+    storage.update_account_balances()?;
+
     // If the option of exiting after the synchronization is completed is set we can exit rosetta
     if args.exit_on_sync {
         process::exit(0);
@@ -315,6 +319,7 @@ async fn main() -> Result<()> {
         .route("/construction/derive", post(construction_derive))
         .route("/construction/preprocess", post(construction_preprocess))
         .route("/construction/metadata", post(construction_metadata))
+        .route("/construction/submit", post(construction_submit))
         // This layer creates a span for each http request and attaches
         // the request_id, HTTP Method and path to it.
         .layer(add_request_span())

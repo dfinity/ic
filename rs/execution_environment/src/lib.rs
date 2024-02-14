@@ -172,6 +172,7 @@ impl ExecutionServices {
             Arc::clone(&sync_query_handler) as Arc<_>,
             query_scheduler.clone(),
             Arc::clone(&state_reader),
+            metrics_registry,
         );
         let ingress_filter = IngressFilterServiceImpl::new_service(
             query_scheduler.clone(),

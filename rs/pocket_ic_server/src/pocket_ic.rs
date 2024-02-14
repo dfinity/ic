@@ -6,7 +6,7 @@ use ic_config::execution_environment;
 use ic_config::subnet_config::SubnetConfig;
 use ic_crypto_sha2::Sha256;
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
-use ic_ic00_types::CanisterInstallMode;
+use ic_management_canister_types::CanisterInstallMode;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use ic_registry_subnet_type::SubnetType;
@@ -15,17 +15,17 @@ use ic_state_machine_tests::{
     StateMachineConfig, SubmitIngressError, Time,
 };
 use ic_test_utilities::types::ids::subnet_test_id;
+use ic_types::messages::CertificateDelegation;
 use ic_types::{CanisterId, PrincipalId, SubnetId};
 use itertools::Itertools;
 use pocket_ic::common::rest::{
-    self, BinaryBlob, BlobCompression, RawAddCycles, RawCanisterCall, RawEffectivePrincipal,
-    RawSetStableMemory, SubnetConfigSet, SubnetKind, Topology,
+    self, BinaryBlob, BlobCompression, ExtendedSubnetConfigSet, RawAddCycles, RawCanisterCall,
+    RawEffectivePrincipal, RawSetStableMemory, SubnetKind, SubnetSpec, Topology,
 };
 use rand::rngs::StdRng;
 use rand::Rng;
 use rand::SeedableRng;
 use serde::{Deserialize, Serialize};
-use std::iter::repeat;
 use std::str::FromStr;
 use std::{
     collections::{BTreeMap, HashMap},
@@ -51,11 +51,18 @@ pub struct PocketIc {
 }
 
 impl PocketIc {
-    pub fn new(runtime: Arc<Runtime>, subnet_configs: SubnetConfigSet) -> Self {
+    pub fn new(runtime: Arc<Runtime>, subnet_configs: ExtendedSubnetConfigSet) -> Self {
         let fixed_range_subnets = subnet_configs.get_named();
         let flexible_subnets = {
-            let sys = repeat((SubnetKind::System, None)).take(subnet_configs.system);
-            let app = repeat((SubnetKind::Application, None)).take(subnet_configs.application);
+            // note that for these, the subnet ids are currently ignored.
+            let sys = subnet_configs
+                .system
+                .iter()
+                .map(|spec| (SubnetKind::System, spec.get_path()));
+            let app = subnet_configs
+                .application
+                .iter()
+                .map(|spec| (SubnetKind::Application, spec.get_path()));
             sys.chain(app)
         };
 
@@ -64,9 +71,12 @@ impl PocketIc {
         let mut subnet_ids = vec![];
         let mut routing_table = RoutingTable::new();
 
-        let mut nns_subnet_id: Option<SubnetId> = subnet_configs
-            .nns_subnet_id
-            .map(|raw_nns_subnet_id| SubnetId::new(PrincipalId(raw_nns_subnet_id.into())));
+        let mut nns_subnet_id = subnet_configs.nns.and_then(|x| {
+            x.get_subnet_id()
+                .map(|y| SubnetId::new(PrincipalId(y.into())))
+        });
+
+        let ii_subnet_split = subnet_configs.ii.is_some();
 
         let mut subnet_counter = 0_u64;
         let mut apply_subnet_counter = move || -> u64 {
@@ -99,7 +109,7 @@ impl PocketIc {
             let RangeConfig {
                 canister_id_ranges: ranges,
                 canister_allocation_range: alloc_range,
-            } = get_range_config(subnet_kind, &mut range_gen);
+            } = get_range_config(subnet_kind, &mut range_gen, ii_subnet_split);
 
             // Insert ranges and allocation range into routing table
             for range in &ranges {
@@ -219,6 +229,13 @@ impl PocketIc {
         self.any_subnet()
     }
 
+    fn nns_subnet(&self) -> Option<Arc<StateMachine>> {
+        self.topology.get_nns().map(|nns_subnet_id| {
+            self.get_subnet_with_id(PrincipalId(nns_subnet_id).into())
+                .unwrap()
+        })
+    }
+
     fn get_subnet_with_id(&self, subnet_id: SubnetId) -> Option<Arc<StateMachine>> {
         self.subnets
             .read()
@@ -247,14 +264,28 @@ impl PocketIc {
             None
         }
     }
+
+    fn get_nns_delegation_for_subnet(&self, subnet_id: SubnetId) -> Option<CertificateDelegation> {
+        let nns_subnet = match self.nns_subnet() {
+            Some(nns_subnet) => nns_subnet,
+            None => {
+                return None;
+            }
+        };
+        if nns_subnet.get_subnet_id() == subnet_id {
+            None
+        } else {
+            nns_subnet.get_delegation_for_subnet(subnet_id).ok()
+        }
+    }
 }
 
 impl Default for PocketIc {
     fn default() -> Self {
         Self::new(
             Runtime::new().unwrap().into(),
-            SubnetConfigSet {
-                application: 1,
+            ExtendedSubnetConfigSet {
+                application: vec![SubnetSpec::New],
                 ..Default::default()
             },
         )
@@ -306,7 +337,11 @@ fn from_range(range: &CanisterIdRange) -> rest::CanisterIdRange {
     rest::CanisterIdRange { start, end }
 }
 
-fn get_range_config(subnet_kind: rest::SubnetKind, range_gen: &mut RangeGen) -> RangeConfig {
+fn get_range_config(
+    subnet_kind: rest::SubnetKind,
+    range_gen: &mut RangeGen,
+    ii_subnet_split: bool,
+) -> RangeConfig {
     use rest::SubnetKind::*;
     match subnet_kind {
         Application | System => {
@@ -343,10 +378,18 @@ fn get_range_config(subnet_kind: rest::SubnetKind, range_gen: &mut RangeGen) -> 
         }
         NNS => {
             let canister_allocation_range = range_gen.next_range();
-            let range1 = gen_range("rwlgt-iiaaa-aaaaa-aaaaa-cai", "renrk-eyaaa-aaaaa-aaada-cai");
-            let range2 = gen_range("qoctq-giaaa-aaaaa-aaaea-cai", "n5n4y-3aaaa-aaaaa-p777q-cai");
+            let canister_id_ranges = if ii_subnet_split {
+                let range1 =
+                    gen_range("rwlgt-iiaaa-aaaaa-aaaaa-cai", "renrk-eyaaa-aaaaa-aaada-cai");
+                let range2 =
+                    gen_range("qoctq-giaaa-aaaaa-aaaea-cai", "n5n4y-3aaaa-aaaaa-p777q-cai");
+                vec![range1, range2]
+            } else {
+                let range = gen_range("rwlgt-iiaaa-aaaaa-aaaaa-cai", "n5n4y-3aaaa-aaaaa-p777q-cai");
+                vec![range]
+            };
             RangeConfig {
-                canister_id_ranges: vec![range1, range2],
+                canister_id_ranges,
                 canister_allocation_range: Some(canister_allocation_range),
             }
         }
@@ -572,14 +615,18 @@ impl Operation for Query {
         let canister_call = self.0.clone();
         let subnet = route_call(pic, canister_call);
         match subnet {
-            Ok(subnet) => subnet
-                .query_as(
-                    self.0.sender,
-                    self.0.canister_id,
-                    self.0.method,
-                    self.0.payload,
-                )
-                .into(),
+            Ok(subnet) => {
+                let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
+                subnet
+                    .query_as_with_delegation(
+                        self.0.sender,
+                        self.0.canister_id,
+                        self.0.method,
+                        self.0.payload,
+                        delegation,
+                    )
+                    .into()
+            }
             Err(e) => OpOut::Error(PocketIcError::BadIngressMessage(e)),
         }
     }
@@ -1105,8 +1152,8 @@ mod tests {
     fn new_pic_counter_installed_system_subnet() -> (PocketIc, CanisterId) {
         let mut pic = PocketIc::new(
             Runtime::new().unwrap().into(),
-            SubnetConfigSet {
-                ii: true,
+            ExtendedSubnetConfigSet {
+                ii: Some(SubnetSpec::New),
                 ..Default::default()
             },
         );

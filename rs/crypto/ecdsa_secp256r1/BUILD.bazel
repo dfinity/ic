@@ -3,7 +3,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "//rs/crypto/getrandom_for_wasm",
     "@crate_index//:lazy_static",
     "@crate_index//:num-bigint",
     "@crate_index//:p256",

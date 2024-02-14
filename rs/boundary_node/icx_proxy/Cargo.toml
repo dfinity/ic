@@ -20,19 +20,16 @@ path = "src/main.rs"
 anyhow = "1"
 async-trait = "0.1"
 axum = "0.6.1"
-base64 = { workspace = true }
 bytes = { workspace = true }
 candid = { workspace = true }
 clap = { version = "4", features = ["cargo", "derive"] }
-flate2 = "1"
 form_urlencoded = "1"
 futures = { workspace = true }
-h2 = "0.3.24"
-hex = "0.4"
 http = "0.2.6"
 http-body = "0.4"
 hyper = { version = "0.14.26", features = ["client", "http2", "http1"] }
-hyper-rustls = { version = "0.24.0", features = ["http2"] }
+hyper-rustls = { workspace = true }
+hyperlocal = "0.8.0"
 itertools = { workspace = true }
 ic-agent = { workspace = true }
 ic-utils = { workspace = true, features = ["raw"] }
@@ -40,22 +37,19 @@ jemallocator = "0.3"
 opentelemetry = { version = "0.20", features = ["metrics"] }
 opentelemetry-prometheus = "0.13.0"
 prometheus = { workspace = true }
-rustls = { version = "0.21", features = ["dangerous_configuration"] }
+rustls = { workspace = true }
 rustls-native-certs = "0.6.2"
 rustls-pemfile = "1"
 tokio-util = { workspace = true }
 tower = { workspace = true }
 tower-http = { version = "0.3", features = ["trace"] }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["json"] }
-serde = { workspace = true }
-serde_cbor = { workspace = true }
-serde_json = { workspace = true }
-sha2 = "0.10"
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 tokio = { workspace = true }
 ic-response-verification = { workspace = true }
 ic-http-certification = { workspace = true }
 thiserror = "1.0.40"
+url = { version = "2.4.1", features = ["serde"] }
 
 [features]
 skip_body_verification = []

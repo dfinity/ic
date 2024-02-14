@@ -20,15 +20,15 @@ use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::wasm_utils::instrumentation::instruction_to_cost_new;
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::{
+use ic_interfaces::execution_environment::{ExecutionMode, HypervisorError, SubnetAvailableMemory};
+use ic_logger::replica_logger::no_op_logger;
+use ic_management_canister_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
     CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
     CanisterStatusResultV2, CanisterStatusType, ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob,
     InstallCodeArgsV2, Method, Payload, SkipPreUpgrade, StoredChunksArgs, StoredChunksReply,
     UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
 };
-use ic_interfaces::execution_environment::{ExecutionMode, HypervisorError, SubnetAvailableMemory};
-use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
@@ -368,6 +368,7 @@ fn install_code(
         round_limits,
         round_counters,
         SMALL_APP_SUBNET_MAX_SIZE,
+        Config::default().dirty_page_logging,
     );
     let instructions_left = instruction_limit - instructions_used.min(instruction_limit);
     (instructions_left, result, canister)
@@ -4473,6 +4474,51 @@ fn unfreezing_of_frozen_canister() {
     // Now the canister works again.
     let result = test.ingress(canister_id, "update", wasm().reply().build());
     get_reply(result);
+}
+
+#[test]
+fn frozen_canister_reveal_top_up() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test
+        .universal_canister_with_cycles(Cycles::new(1_000_000_000_000))
+        .unwrap();
+
+    // Set the freezing threshold high to freeze the canister.
+    let payload = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(1_000_000_000_000)
+            .build(),
+        sender_canister_version: None,
+    }
+    .encode();
+    test.subnet_message(Method::UpdateSettings, payload)
+        .unwrap();
+
+    // Sending an ingress message to a frozen canister fails with a verbose error message.
+    let err = test
+        .ingress(canister_id, "update", wasm().reply().build())
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterOutOfCycles, err.code());
+    assert!(err.description().starts_with(&format!(
+        "Canister {} is out of cycles: please top up the canister with at least",
+        canister_id
+    )));
+
+    // Blackhole the canister.
+    test.canister_update_controller(canister_id, vec![])
+        .unwrap();
+
+    // Sending an ingress message to a frozen canister fails without revealing
+    // top up balance to non-controllers.
+    let err = test
+        .ingress(canister_id, "update", wasm().reply().build())
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterOutOfCycles, err.code());
+    assert_eq!(
+        err.description(),
+        format!("Canister {} is out of cycles", canister_id)
+    );
 }
 
 #[test]

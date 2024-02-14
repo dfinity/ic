@@ -36,6 +36,12 @@ string_flag(
     build_setting_default = FAKE_IC_VERSION,
 )
 
+string_flag(
+    name = "timeout_value",
+    build_setting_default = "10m",
+    visibility = ["//visibility:public"],
+)
+
 # Generates version.txt file that contains the value of `--ic_version` flag if set, otherwise <git sha>-<timestamp>.
 # It has to be tagged as `no-cache` as bazel treats version_file as never changing.
 # Visibility of ic_version is limited to package group uploaders and subpackages.

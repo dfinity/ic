@@ -6,8 +6,8 @@ load("@rules_rust//rust:defs.bzl", "rust_binary")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "@crate_index//:axum",
-    "@crate_index//:axum-server",
+    "@crate_index//:axum_0_7_0",
+    "@crate_index//:axum_server_0_6_0",
     "@crate_index//:clap",
     "@crate_index//:rustls",
     "@crate_index//:rustls-pemfile",

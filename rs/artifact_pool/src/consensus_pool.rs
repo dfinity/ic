@@ -272,15 +272,12 @@ impl UncachedConsensusPoolImpl {
                 crate::lmdb_pool::PersistentHeightIndexedPool::new_consensus_pool(
                     lmdb_config,
                     config.persistent_pool_read_only,
-                    log.clone(),
+                    log,
                 ),
             ) as Box<_>,
             #[cfg(feature = "rocksdb_backend")]
             PersistentPoolBackend::RocksDB(config) => Box::new(
-                crate::rocksdb_pool::PersistentHeightIndexedPool::new_consensus_pool(
-                    config,
-                    log.clone(),
-                ),
+                crate::rocksdb_pool::PersistentHeightIndexedPool::new_consensus_pool(config, log),
             ) as Box<_>,
             #[allow(unreachable_patterns)]
             cfg => {
@@ -290,7 +287,7 @@ impl UncachedConsensusPoolImpl {
 
         UncachedConsensusPoolImpl {
             validated,
-            unvalidated: Box::new(InMemoryPoolSection::new(log)),
+            unvalidated: Box::new(InMemoryPoolSection::new()),
         }
     }
 }
@@ -1198,7 +1195,7 @@ mod tests {
                     CryptoHashOf::from(CryptoHash(vec![])),
                     Payload::new(
                         ic_types::crypto::crypto_hash,
-                        (ic_types::consensus::dkg::Summary::fake(), None).into(),
+                        BlockPayload::Summary(SummaryPayload::fake()),
                     ),
                     Height::from(height),
                     Rank(0),
@@ -1378,7 +1375,7 @@ mod tests {
                     CryptoHashOf::from(CryptoHash(vec![])),
                     Payload::new(
                         ic_types::crypto::crypto_hash,
-                        (ic_types::consensus::dkg::Summary::fake(), None).into(),
+                        BlockPayload::Summary(SummaryPayload::fake()),
                     ),
                     Height::from(height),
                     Rank(rank),
@@ -1553,7 +1550,7 @@ mod tests {
                 CryptoHashOf::from(CryptoHash(Vec::new())),
                 Payload::new(
                     ic_types::crypto::crypto_hash,
-                    (ic_types::consensus::dkg::Summary::fake(), None).into(),
+                    BlockPayload::Summary(SummaryPayload::fake()),
                 ),
                 Height::from(3),
                 Rank(46),
@@ -1570,7 +1567,7 @@ mod tests {
                 CryptoHashOf::from(CryptoHash(Vec::new())),
                 Payload::new(
                     ic_types::crypto::crypto_hash,
-                    (ic_types::consensus::dkg::Summary::fake(), None).into(),
+                    BlockPayload::Summary(SummaryPayload::fake()),
                 ),
                 Height::from(3),
                 Rank(46),
@@ -1590,7 +1587,7 @@ mod tests {
                 ic_types::crypto::crypto_hash(&block),
                 Payload::new(
                     ic_types::crypto::crypto_hash,
-                    (ic_types::consensus::dkg::Summary::fake(), None).into(),
+                    BlockPayload::Summary(SummaryPayload::fake()),
                 ),
                 Height::from(4),
                 Rank(456),
@@ -1611,7 +1608,7 @@ mod tests {
                 CryptoHashOf::from(CryptoHash(Vec::new())),
                 Payload::new(
                     ic_types::crypto::crypto_hash,
-                    (ic_types::consensus::dkg::Summary::fake(), None).into(),
+                    BlockPayload::Summary(SummaryPayload::fake()),
                 ),
                 Height::from(4),
                 Rank(46),
@@ -1917,7 +1914,7 @@ mod tests {
                 CryptoHashOf::from(CryptoHash(Vec::new())),
                 Payload::new(
                     ic_types::crypto::crypto_hash,
-                    (ic_types::consensus::dkg::Summary::fake(), None).into(),
+                    BlockPayload::Summary(SummaryPayload::fake()),
                 ),
                 Height::from(4),
                 Rank(456),

@@ -10,7 +10,8 @@ from scanner.dependency_scanner import DependencyScanner
 from scanner.manager.npm_dependency_manager import NPMDependencyManager
 from scanner.scanner_job_type import ScannerJobType
 
-DEFAULT_NODE_VERSION = "19"
+# node version used by default
+DEFAULT_NODE_VERSION = "20"
 
 REPOS_TO_SCAN = [
     Repository(

@@ -444,6 +444,7 @@ impl DirectSnsDeployerForTests {
             &args.network,
             Some(args.initial_cycles_per_canister),
         );
+
         // TODO - add version hash to test upgrade path locally?  Where would we find that?
         // TODO[NNS1-2592]: set neurons_fund_participation_constraints to a non-trivial value.
         let sns_canister_payloads =

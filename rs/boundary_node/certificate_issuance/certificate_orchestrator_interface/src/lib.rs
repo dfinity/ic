@@ -1,7 +1,8 @@
 use std::{borrow::Cow, fmt::Display};
 
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
-use ic_stable_structures::{BoundedStorable, Storable};
+use ic_stable_structures::storable::Bound;
+use ic_stable_structures::Storable;
 
 const BYTE: u32 = 1;
 const KB: u32 = 1024 * BYTE;
@@ -30,11 +31,10 @@ impl Storable for EncryptedPair {
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
         Decode!(&bytes, Self).unwrap()
     }
-}
-
-impl BoundedStorable for EncryptedPair {
-    const MAX_SIZE: u32 = ENCRYPTED_PAIR_LEN;
-    const IS_FIXED_SIZE: bool = false;
+    const BOUND: Bound = Bound::Bounded {
+        max_size: ENCRYPTED_PAIR_LEN,
+        is_fixed_size: false,
+    };
 }
 
 #[derive(CandidType, Debug, Default, Clone, PartialOrd, Ord, PartialEq, Eq, Deserialize)]
@@ -95,11 +95,11 @@ impl<const N: usize> Storable for BoundedString<N> {
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
         String::from_bytes(bytes).into()
     }
-}
 
-impl<const N: usize> BoundedStorable for BoundedString<N> {
-    const MAX_SIZE: u32 = N as u32;
-    const IS_FIXED_SIZE: bool = false;
+    const BOUND: Bound = Bound::Bounded {
+        max_size: N as u32,
+        is_fixed_size: false,
+    };
 }
 
 #[derive(CandidType, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
@@ -161,11 +161,11 @@ impl Storable for Name {
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
         Decode!(&bytes, Self).unwrap()
     }
-}
 
-impl BoundedStorable for Name {
-    const MAX_SIZE: u32 = NAME_MAX_LEN;
-    const IS_FIXED_SIZE: bool = false;
+    const BOUND: Bound = Bound::Bounded {
+        max_size: NAME_MAX_LEN,
+        is_fixed_size: false,
+    };
 }
 
 #[derive(Debug, CandidType, Clone, PartialEq, Deserialize)]
@@ -201,15 +201,15 @@ impl Storable for Registration {
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
         Decode!(&bytes, Self).unwrap()
     }
-}
 
-impl BoundedStorable for Registration {
-    // The MAX_SIZE for Registration was determined by building the biggest possible
-    // registration and calculating it's resulting Candid encoded size.
-    // This can be found below under the `max_registration_size` test.
-    // The final MAX_SIZE we use here provided plenty of padding for future growth
-    const MAX_SIZE: u32 = 1024;
-    const IS_FIXED_SIZE: bool = false;
+    const BOUND: Bound = Bound::Bounded {
+        // The MAX_SIZE for Registration was determined by building the biggest possible
+        // registration and calculating it's resulting Candid encoded size.
+        // This can be found below under the `max_registration_size` test.
+        // The final MAX_SIZE we use here provided plenty of padding for future growth
+        max_size: 1024,
+        is_fixed_size: false,
+    };
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]

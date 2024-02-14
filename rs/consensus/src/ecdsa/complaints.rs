@@ -1744,7 +1744,7 @@ mod tests {
 
                 let crypto = env
                     .nodes
-                    .receivers(&idkg_transcript)
+                    .filter_by_receivers(&idkg_transcript)
                     .next()
                     .unwrap()
                     .crypto();
@@ -1786,7 +1786,12 @@ mod tests {
                 let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
                 let (_, _, transcript) = create_corrupted_transcript(&env, &mut rng);
 
-                let crypto = env.nodes.receivers(&transcript).next().unwrap().crypto();
+                let crypto = env
+                    .nodes
+                    .filter_by_receivers(&transcript)
+                    .next()
+                    .unwrap()
+                    .crypto();
                 let (ecdsa_pool, complaint_handler) =
                     create_complaint_dependencies_with_crypto(pool_config, logger, Some(crypto));
 
@@ -1808,7 +1813,7 @@ mod tests {
                 let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
                 let (complainer, _, t) = create_corrupted_transcript(&env, &mut rng);
 
-                let mut components = env.nodes.receivers(&t);
+                let mut components = env.nodes.filter_by_receivers(&t);
 
                 let complainer_crypto = components.next().unwrap().crypto();
                 let remaining_nodes: Vec<_> = components.collect();

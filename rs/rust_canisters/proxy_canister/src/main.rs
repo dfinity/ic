@@ -8,7 +8,9 @@
 use candid::Principal;
 use ic_cdk::api::call::RejectionCode;
 use ic_cdk_macros::{query, update};
-use ic_ic00_types::{CanisterHttpResponsePayload, HttpHeader, Payload, TransformArgs};
+use ic_management_canister_types::{
+    CanisterHttpResponsePayload, HttpHeader, Payload, TransformArgs,
+};
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -137,7 +139,7 @@ fn main() {}
 #[cfg(test)]
 mod proxy_canister_test {
     use super::*;
-    use ic_ic00_types::HttpHeader;
+    use ic_management_canister_types::HttpHeader;
 
     #[test]
     fn test_transform() {

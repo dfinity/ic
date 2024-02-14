@@ -88,9 +88,7 @@ async fn test_change_canister_controllers_authentication() {
             canister_id: target_canister_id,
             settings: CanisterSettings {
                 controllers: Some(vec![ROOT_CANISTER_ID.get()]),
-                compute_allocation: None,
-                memory_allocation: None,
-                freezing_threshold: None,
+                ..Default::default()
             },
             sender_canister_version: None,
         })
@@ -142,9 +140,7 @@ async fn test_change_canister_controllers_handles_replica_errors() {
             canister_id: target_canister_id,
             settings: CanisterSettings {
                 controllers: Some(vec![ROOT_CANISTER_ID.get()]),
-                compute_allocation: None,
-                memory_allocation: None,
-                freezing_threshold: None,
+                ..Default::default()
             },
             sender_canister_version: None,
         })

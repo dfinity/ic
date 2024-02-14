@@ -95,6 +95,10 @@ exports_files([
     "create-universal-vm-config-image.sh",
 ])
 
+exports_files([
+    "src/default_firewall_whitelist.conf",
+])
+
 filegroup(
     name = "grafana_dashboards",
     srcs = glob(["dashboards/**/*"]),
@@ -129,8 +133,9 @@ symlink_dir(
     targets = {
         "//rs/registry/admin:ic-admin": "ic-admin",
         "//rs/state_tool:state-tool": "state-tool",
-        "//rs/canister_sandbox/sandbox_launcher": "sandbox_launcher",
-        "//rs/canister_sandbox": "canister_sandbox",
+        "//rs/canister_sandbox:sandbox_launcher": "sandbox_launcher",
+        "//rs/canister_sandbox:canister_sandbox": "canister_sandbox",
+        "@crate_index//:ic-wasm__ic-wasm": "ic-wasm",
     },
 )
 
@@ -139,8 +144,8 @@ symlink_dir(
     targets = {
         "//rs/backup:ic-backup": "ic-backup",
         "//rs/replay:ic-replay": "ic-replay",
-        "//rs/canister_sandbox/sandbox_launcher": "sandbox_launcher",
-        "//rs/canister_sandbox": "canister_sandbox",
+        "//rs/canister_sandbox:sandbox_launcher": "sandbox_launcher",
+        "//rs/canister_sandbox:canister_sandbox": "canister_sandbox",
     },
 )
 

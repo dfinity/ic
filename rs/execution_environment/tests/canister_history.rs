@@ -2,8 +2,8 @@ use ic00::CanisterSettingsArgsBuilder;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_crypto_sha2::Sha256;
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::CanisterInstallMode::{Install, Reinstall, Upgrade};
-use ic_ic00_types::{
+use ic_management_canister_types::CanisterInstallMode::{Install, Reinstall, Upgrade};
+use ic_management_canister_types::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
     CanisterInfoRequest, CanisterInfoResponse, CreateCanisterArgs, InstallCodeArgs, Method,
     Payload, UpdateSettingsArgs,

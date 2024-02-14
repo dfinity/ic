@@ -15,6 +15,7 @@ use ic_nns_governance::pb::v1::Neuron;
 use ic_rosetta_api::models::ConstructionPayloadsResponse;
 use ic_rosetta_api::models::SignedTransaction;
 use ic_rosetta_api::request::request_result::RequestResult;
+use ic_rosetta_api::request::transaction_operation_results::TransactionOperationResults;
 use ic_rosetta_api::request::Request;
 use ic_rosetta_api::request_types::{Disburse, Status};
 use ic_rosetta_test_utils::RequestInfo;
@@ -265,7 +266,11 @@ async fn test_disburse_raw(
         submit_res.transaction_identifier
     );
 
-    for op in submit_res.metadata.operations.iter() {
+    for op in TransactionOperationResults::try_from(submit_res.metadata)
+        .unwrap()
+        .operations
+        .iter()
+    {
         assert_eq!(
             op.status.as_ref().expect("Expecting status to be set."),
             "COMPLETED",

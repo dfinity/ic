@@ -12,12 +12,12 @@ use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::{CanisterStatusType, EcdsaKeyId, Method as Ic00Method};
 use ic_interfaces::execution_environment::{ExecutionRoundType, RegistryExecutionSettings};
 use ic_interfaces::execution_environment::{
     IngressHistoryWriter, Scheduler, SubnetAvailableMemory,
 };
 use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
+use ic_management_canister_types::{CanisterStatusType, EcdsaKeyId, Method as Ic00Method};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
     canister_state::{
@@ -593,8 +593,15 @@ impl SchedulerImpl {
                 }
             }
 
-            let global_timer_has_reached_deadline =
-                canister.system_state.global_timer.has_reached_deadline(now);
+            let may_schedule_heartbeat = canister.exports_heartbeat_method();
+            let may_schedule_global_timer = canister.exports_global_timer_method()
+                && canister.system_state.global_timer.has_reached_deadline(now);
+
+            if !may_schedule_heartbeat && !may_schedule_global_timer {
+                // Canister has no heartbeat and no (schedulable) global timer.
+                continue;
+            }
+
             match canister.next_execution() {
                 NextExecution::ContinueLong | NextExecution::ContinueInstallCode => {
                     // Do not add a heartbeat task if a long execution
@@ -605,7 +612,8 @@ impl SchedulerImpl {
                         let method_chosen = is_next_method_chosen(
                             canister,
                             &mut heartbeat_and_timer_canister_ids,
-                            global_timer_has_reached_deadline,
+                            may_schedule_heartbeat,
+                            may_schedule_global_timer,
                         );
 
                         canister.inc_next_scheduled_method();
@@ -1152,10 +1160,7 @@ impl SchedulerImpl {
     /// through message routing.
     pub fn induct_messages_on_same_subnet(&self, state: &mut ReplicatedState) {
         // Compute subnet available memory *before* taking out the canisters.
-        let mut subnet_available_memory = self
-            .exec_env
-            .subnet_available_memory(state)
-            .get_message_memory();
+        let mut subnet_available_memory = self.exec_env.subnet_available_message_memory(state);
 
         let mut canisters = state.take_canister_states();
 
@@ -1606,8 +1611,10 @@ impl Scheduler for SchedulerImpl {
 
         // Subnet queues: execute long running install code call if present.
         {
-            let measurement_scope =
-                MeasurementScope::nested(&self.metrics.round_subnet_queue, &root_measurement_scope);
+            let measurement_scope = MeasurementScope::nested(
+                &self.metrics.round_advance_long_install_code,
+                &root_measurement_scope,
+            );
 
             let mut subnet_round_limits = scheduler_round_limits.subnet_round_limits();
             state = self.advance_long_running_install_code(
@@ -2054,8 +2061,6 @@ fn observe_replicated_state_metrics(
     let mut canisters_not_in_routing_table = 0;
     let mut canisters_with_old_open_call_contexts = 0;
     let mut old_call_contexts_count = 0;
-    let mut callbacks_without_originator = 0;
-    let mut callbacks_without_prepayment = 0;
     let mut num_stop_canister_calls_without_call_id = 0;
 
     let canister_id_ranges = state.routing_table().ranges(own_subnet_id);
@@ -2129,17 +2134,6 @@ fn observe_replicated_state_metrics(
                 old_call_contexts_count += old_call_contexts.len();
                 canisters_with_old_open_call_contexts += 1;
             }
-
-            for callback in manager.callbacks().values() {
-                if callback.originator().is_none() || callback.respondent().is_none() {
-                    callbacks_without_originator += 1;
-                }
-                if callback.prepayment_for_response_execution().is_none()
-                    || callback.prepayment_for_response_transmission().is_none()
-                {
-                    callbacks_without_prepayment += 1;
-                }
-            }
         }
     });
     metrics
@@ -2150,12 +2144,6 @@ fn observe_replicated_state_metrics(
         .canisters_with_old_open_call_contexts
         .with_label_values(&[OLD_CALL_CONTEXT_LABEL_ONE_DAY])
         .set(canisters_with_old_open_call_contexts as i64);
-    metrics
-        .callbacks_without_originator
-        .set(callbacks_without_originator as i64);
-    metrics
-        .callbacks_without_prepayment
-        .set(callbacks_without_prepayment as i64);
     let streams_response_bytes = state
         .metadata
         .streams()
@@ -2359,84 +2347,63 @@ fn get_instructions_limits_for_subnet_message(
     }
 }
 
+/// If the next execution method (`Message`, `Heartbeat` or `GlobalTimer) may be
+/// scheduled, it is added to the front of the canister's task queue, the
+/// canister ID is added to `heartbeat_and_timer_canister_ids` and `true` is
+/// returned. Otherwise, no mutations are made and `false` is returned.
+///
+/// If either `Heartbeat` or `GlobalTimer` is enqueued, then the other one is
+/// also enqueued in the second position, if it may be scheduled.
 fn is_next_method_chosen(
     canister: &mut CanisterState,
     heartbeat_and_timer_canister_ids: &mut BTreeSet<CanisterId>,
-    global_timer_has_reached_deadline: bool,
+    may_schedule_heartbeat: bool,
+    may_schedule_global_timer: bool,
 ) -> bool {
-    let mut tasks_added = false;
-    let method_chosen = match canister.get_next_scheduled_method() {
+    match canister.get_next_scheduled_method() {
         NextScheduledMethod::Message => canister.has_input(),
+
         NextScheduledMethod::Heartbeat => {
-            tasks_added = try_add_tasks(
-                canister,
-                ExecutionTask::Heartbeat,
-                global_timer_has_reached_deadline,
-            );
-            tasks_added
+            if may_schedule_heartbeat {
+                enqueue_tasks(
+                    ExecutionTask::Heartbeat,
+                    may_schedule_global_timer.then_some(ExecutionTask::GlobalTimer),
+                    canister,
+                );
+                heartbeat_and_timer_canister_ids.insert(canister.canister_id());
+            }
+            may_schedule_heartbeat
         }
+
         NextScheduledMethod::GlobalTimer => {
-            tasks_added = try_add_tasks(
-                canister,
-                ExecutionTask::GlobalTimer,
-                global_timer_has_reached_deadline,
-            );
-            tasks_added
+            if may_schedule_global_timer {
+                enqueue_tasks(
+                    ExecutionTask::GlobalTimer,
+                    may_schedule_heartbeat.then_some(ExecutionTask::Heartbeat),
+                    canister,
+                );
+                heartbeat_and_timer_canister_ids.insert(canister.canister_id());
+            }
+            may_schedule_global_timer
         }
-    };
-
-    if tasks_added {
-        heartbeat_and_timer_canister_ids.insert(canister.canister_id());
     }
-
-    method_chosen
 }
 
-fn try_add_tasks(
+/// Enqueues `task` (optionally followed by `other_task`) at the front of
+/// `canister`'s task queue.
+fn enqueue_tasks(
+    task: ExecutionTask,
+    other_task: Option<ExecutionTask>,
     canister: &mut CanisterState,
-    scheduled_task: ExecutionTask,
-    global_timer_has_reached_deadline: bool,
-) -> bool {
-    if should_add_task(canister, &scheduled_task, global_timer_has_reached_deadline) {
-        // If the conditions for the 'other_task' are satisfied, then we are
-        // adding it as well, because we want to execute as many tasks as
-        // possible on the single canister to avoid context switching.
-        // We are first adding the 'other_task' to the front of the queue and after it
-        // 'scheduled_task' so that the 'scheduled_task' is the first executed.
-        let other_task = get_other_task(scheduled_task.clone());
-        if should_add_task(canister, &other_task, global_timer_has_reached_deadline) {
-            canister.system_state.task_queue.push_front(other_task);
-        }
-        canister.system_state.task_queue.push_front(scheduled_task);
-        return true;
+) {
+    // If the conditions for the 'other_task' are satisfied, then we are
+    // adding it as well, because we want to execute as many tasks as
+    // possible on the single canister to avoid context switching.
+    // We first push the 'other_task' to the front of the queue and then
+    // in front of it 'task' so that 'task' is executed first.
+    if let Some(other_task) = other_task {
+        canister.system_state.task_queue.push_front(other_task);
     }
-    false
-}
 
-fn should_add_task(
-    canister: &CanisterState,
-    task: &ExecutionTask,
-    global_timer_has_reached_deadline: bool,
-) -> bool {
-    match task {
-        ExecutionTask::Heartbeat => canister.exports_heartbeat_method(),
-        ExecutionTask::GlobalTimer => {
-            global_timer_has_reached_deadline && canister.exports_global_timer_method()
-        }
-        ExecutionTask::AbortedExecution { .. }
-        | ExecutionTask::AbortedInstallCode { .. }
-        | ExecutionTask::PausedExecution(..)
-        | ExecutionTask::PausedInstallCode(..) => unreachable!("Unexpected ExecutionTask variant."),
-    }
-}
-
-fn get_other_task(task: ExecutionTask) -> ExecutionTask {
-    match task {
-        ExecutionTask::Heartbeat => ExecutionTask::GlobalTimer,
-        ExecutionTask::GlobalTimer => ExecutionTask::Heartbeat,
-        ExecutionTask::AbortedExecution { .. }
-        | ExecutionTask::AbortedInstallCode { .. }
-        | ExecutionTask::PausedExecution(..)
-        | ExecutionTask::PausedInstallCode(..) => unreachable!("Unexpected ExecutionTask variant."),
-    }
+    canister.system_state.task_queue.push_front(task);
 }

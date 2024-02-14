@@ -6,7 +6,6 @@ DEPENDENCIES = [
     "//rs/interfaces/registry",
     "//rs/monitoring/metrics",
     "//rs/registry/helpers",
-    "//rs/registry/keys",
     "//rs/registry/proto",
     "//rs/types/types",
     "//rs/utils",

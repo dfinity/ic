@@ -15,15 +15,15 @@ use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_ic00_types::{
-    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterStatusResultV2,
-    CanisterStatusType, InstallChunkedCodeArgs, InstallCodeArgsV2, LogVisibility,
-    Method as Ic00Method, StoredChunksReply, UploadChunkReply,
-};
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, IngressHistoryWriter, SubnetAvailableMemory,
 };
 use ic_logger::{error, fatal, info, ReplicaLogger};
+use ic_management_canister_types::{
+    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterStatusResultV2,
+    CanisterStatusType, InstallChunkedCodeArgs, InstallCodeArgsV2, Method as Ic00Method,
+    StoredChunksReply, UploadChunkReply,
+};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::ReservationError;
@@ -437,6 +437,7 @@ impl CanisterManager {
         provisional_whitelist: &ProvisionalWhitelist,
         ingress: &SignedIngressContent,
         effective_canister_id: Option<CanisterId>,
+        canister_logging: FlagStatus,
     ) -> Result<(), UserError> {
         let method_name = ingress.method_name();
         let sender = ingress.sender();
@@ -524,7 +525,7 @@ impl CanisterManager {
                             )),
                         }
                     },
-                    None =>  Err(UserError::new(
+                    None => Err(UserError::new(
                         ErrorCode::InvalidManagementPayload,
                         format!("Failed to decode payload for ic00 method: {}", method_name),
                     )),
@@ -532,25 +533,21 @@ impl CanisterManager {
             },
 
             Ok(Ic00Method::FetchCanisterLogs) => {
-                match effective_canister_id {
-                    Some(canister_id) => {
-                        let canister = state.canister_state(&canister_id).ok_or_else(|| UserError::new(
-                            ErrorCode::CanisterNotFound,
-                            format!("Canister {} not found", canister_id),
-                        ))?;
-                        match canister.log_visibility() {
-                            LogVisibility::Public => Ok(()),
-                            LogVisibility::Controllers if canister.controllers().contains(&sender.get()) => Ok(()),
-                            LogVisibility::Controllers => Err(UserError::new(
-                                ErrorCode::CanisterRejectedMessage,
-                                format!("Caller {} is not allowed to call ic00 method {}", sender, method_name),
-                            )),
-                        }
-                    },
-                    None =>  Err(UserError::new(
-                        ErrorCode::InvalidManagementPayload,
-                        format!("Failed to decode payload for ic00 method: {}", method_name),
+                match canister_logging {
+                    FlagStatus::Enabled => Err(UserError::new(
+                        ErrorCode::CanisterRejectedMessage,
+                        format!(
+                            "{} API is only accessible in non-replicated mode",
+                            Ic00Method::FetchCanisterLogs
+                        ),
                     )),
+                    FlagStatus::Disabled => Err(UserError::new(
+                        ErrorCode::CanisterContractViolation,
+                        format!(
+                            "{} API is not enabled on this subnet",
+                            Ic00Method::FetchCanisterLogs
+                        ),
+                    ))
                 }
             },
 
@@ -832,6 +829,7 @@ impl CanisterManager {
         round_limits: &mut RoundLimits,
         round_counters: RoundCounters,
         subnet_size: usize,
+        log_dirty_pages: FlagStatus,
     ) -> (
         Result<InstallCodeResult, CanisterManagerError>,
         NumInstructions,
@@ -870,6 +868,7 @@ impl CanisterManager {
             CompilationCostHandling::CountFullAmount,
             round_counters,
             subnet_size,
+            log_dirty_pages,
         );
         match dts_result {
             DtsInstallCodeResult::Finished {
@@ -928,6 +927,7 @@ impl CanisterManager {
         compilation_cost_handling: CompilationCostHandling,
         round_counters: RoundCounters,
         subnet_size: usize,
+        log_dirty_pages: FlagStatus,
     ) -> DtsInstallCodeResult {
         if let Err(err) = validate_controller(&canister, &context.sender()) {
             return DtsInstallCodeResult::Finished {
@@ -944,6 +944,7 @@ impl CanisterManager {
             None => {
                 let memory_usage = canister.memory_usage();
                 let message_memory_usage = canister.message_memory_usage();
+                let reveal_top_up = canister.controllers().contains(message.sender());
                 match self.cycles_account_manager.prepay_execution_cycles(
                     &mut canister.system_state,
                     memory_usage,
@@ -951,6 +952,7 @@ impl CanisterManager {
                     execution_parameters.compute_allocation,
                     execution_parameters.instruction_limits.message(),
                     subnet_size,
+                    reveal_top_up,
                 ) {
                     Ok(cycles) => cycles,
                     Err(err) => {
@@ -981,6 +983,7 @@ impl CanisterManager {
             requested_memory_allocation: context.memory_allocation,
             sender: context.sender(),
             canister_id: canister.canister_id(),
+            log_dirty_pages,
         };
 
         let round = RoundContext {
@@ -1117,6 +1120,7 @@ impl CanisterManager {
                 }
             }
         };
+        canister.system_state.canister_version += 1;
         state.put_canister_state(canister);
         result
     }
@@ -1160,6 +1164,7 @@ impl CanisterManager {
             CanisterStatus::Stopped => CanisterStatus::new_running(),
         };
         canister.system_state.status = status;
+        canister.system_state.canister_version += 1;
 
         Ok(stop_contexts)
     }
@@ -1616,6 +1621,7 @@ impl CanisterManager {
         let current_memory_usage = canister.memory_usage();
         let message_memory = canister.message_memory_usage();
         let compute_allocation = canister.compute_allocation();
+        let reveal_top_up = canister.controllers().contains(&sender);
         // Charge for the upload.
         let prepaid_cycles = self
             .cycles_account_manager
@@ -1626,6 +1632,7 @@ impl CanisterManager {
                 compute_allocation,
                 instructions,
                 subnet_size,
+                reveal_top_up,
             )
             .map_err(|err| CanisterManagerError::WasmChunkStoreError {
                 message: format!("Error charging for 'upload_chunk': {}", err),

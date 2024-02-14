@@ -1,7 +1,7 @@
 use super::CanisterId;
 
 use hex::decode;
-use ic_ic00_types::{self as ic00, CanisterInstallMode, Payload};
+use ic_management_canister_types::{self as ic00, CanisterInstallMode, Payload};
 use ic_types::{
     messages::{SignedIngress, UserQuery},
     time::expiry_time_from_now,

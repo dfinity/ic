@@ -555,6 +555,11 @@ impl PayloadBuilder {
         self
     }
 
+    pub fn data_certificate(mut self) -> Self {
+        self.0.push(Ops::DataCertificate as u8);
+        self
+    }
+
     /// Loops until the instruction counter is at least the specified amount.
     pub fn instruction_counter_is_at_least(mut self, amount: u64) -> Self {
         self = self.push_int64(amount);

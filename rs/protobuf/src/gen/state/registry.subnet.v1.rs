@@ -371,6 +371,7 @@ pub enum IDkgTranscriptOperation {
     ReshareOfMasked = 2,
     ReshareOfUnmasked = 3,
     UnmaskedTimesMasked = 4,
+    RandomUnmasked = 5,
 }
 impl IDkgTranscriptOperation {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -390,6 +391,7 @@ impl IDkgTranscriptOperation {
             IDkgTranscriptOperation::UnmaskedTimesMasked => {
                 "I_DKG_TRANSCRIPT_OPERATION_UNMASKED_TIMES_MASKED"
             }
+            IDkgTranscriptOperation::RandomUnmasked => "I_DKG_TRANSCRIPT_OPERATION_RANDOM_UNMASKED",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -400,6 +402,7 @@ impl IDkgTranscriptOperation {
             "I_DKG_TRANSCRIPT_OPERATION_RESHARE_OF_MASKED" => Some(Self::ReshareOfMasked),
             "I_DKG_TRANSCRIPT_OPERATION_RESHARE_OF_UNMASKED" => Some(Self::ReshareOfUnmasked),
             "I_DKG_TRANSCRIPT_OPERATION_UNMASKED_TIMES_MASKED" => Some(Self::UnmaskedTimesMasked),
+            "I_DKG_TRANSCRIPT_OPERATION_RANDOM_UNMASKED" => Some(Self::RandomUnmasked),
             _ => None,
         }
     }

@@ -3,7 +3,7 @@ use crate::{
     storage::with_audit_events_log,
 };
 
-use ic_stable_structures::Storable;
+use ic_stable_structures::{storable::Bound, Storable};
 use prost::Message;
 use std::borrow::Cow;
 
@@ -28,6 +28,8 @@ impl Storable for AuditEvent {
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
         Self::decode(&bytes[..]).expect("Cannot decode audit event")
     }
+
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 #[allow(dead_code)]

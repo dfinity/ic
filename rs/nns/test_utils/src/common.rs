@@ -71,6 +71,7 @@ impl NnsInitPayloadsBuilder {
                     // 128kb
                     max_message_size_bytes: Some(128 * 1024),
                     controller_id: ROOT_CANISTER_ID.into(),
+                    more_controller_ids: None,
                     cycles_for_archive_creation: Some(0),
                     max_transactions_per_response: None,
                 })

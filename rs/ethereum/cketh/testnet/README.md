@@ -56,3 +56,18 @@ curl -X POST 'https://ethereum-sepolia.publicnode.com' \
 ```
 dfx deploy --network ic index --argument '(opt variant {Init = record { ledger_id = principal "apia6-jaaaa-aaaar-qabma-cai" }})' --mode reinstall --wallet mf7xa-laaaa-aaaar-qaaaa-cai
 ```
+
+## Deploying the Orchestrator
+
+### Locally
+
+```shell
+dfx canister create orchestrator
+dfx deploy orchestrator --argument '(variant {InitArg = record {}})'
+```
+
+### Mainnet
+
+```shell
+dfx deploy orchestrator --argument '(variant {InitArg = record {}})'
+```

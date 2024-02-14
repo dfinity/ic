@@ -11,7 +11,6 @@ ic-artifact-pool = { path = "../../artifact_pool" }
 ic-config = { path = "../../config" }
 ic-consensus = { path = "../../consensus" }
 ic-consensus-utils = { path = "../../consensus/utils" }
-ic-crypto = { path = "../../crypto" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
@@ -22,4 +21,3 @@ ic-replicated-state = { path = "../../replicated_state" }
 ic-test-utilities = { path = "../" }
 ic-test-utilities-time = { path = "../time" }
 ic-types = { path = "../../types/types" }
-tempfile = "3.1.0"

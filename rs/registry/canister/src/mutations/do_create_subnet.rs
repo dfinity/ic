@@ -13,7 +13,7 @@ use dfn_core::println;
 use serde::Serialize;
 
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
-use ic_ic00_types::{EcdsaKeyId, SetupInitialDKGArgs, SetupInitialDKGResponse};
+use ic_management_canister_types::{EcdsaKeyId, SetupInitialDKGArgs, SetupInitialDKGResponse};
 use ic_protobuf::registry::{
     node::v1::NodeRecord,
     subnet::v1::{
@@ -367,7 +367,7 @@ mod test {
         CreateSubnetPayload, EcdsaInitialConfig, EcdsaKeyRequest,
     };
     use ic_base_types::SubnetId;
-    use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
+    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
     use ic_protobuf::registry::subnet::v1::SubnetRecord;
     use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};

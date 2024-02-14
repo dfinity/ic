@@ -10,7 +10,6 @@ documentation.workspace = true
 
 [dependencies]
 # NO ic-* dependencies are allowed here
-base64 = { workspace = true }
 hex = "0.4.2"
 strum = { workspace = true }
 strum_macros = { workspace = true }

@@ -7,12 +7,12 @@ use ic_cycles_account_manager::{
     CyclesAccountManager, CyclesAccountManagerError, ResourceSaturation,
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_ic00_types::{
+use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
+use ic_logger::{info, ReplicaLogger};
+use ic_management_canister_types::{
     CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2, Method as Ic00Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs, UninstallCodeArgs, UpdateSettingsArgs, IC_00,
 };
-use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
-use ic_logger::{info, ReplicaLogger};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -887,6 +887,7 @@ impl SandboxSafeSystemState {
         canister_current_memory_usage: NumBytes,
         canister_current_message_memory_usage: NumBytes,
         amount: Cycles,
+        reveal_top_up: bool,
     ) -> HypervisorResult<()> {
         let mut new_balance = self.cycles_balance();
         let result = self
@@ -902,6 +903,7 @@ impl SandboxSafeSystemState {
                 amount,
                 self.subnet_size,
                 self.reserved_balance(),
+                reveal_top_up,
             )
             .map_err(HypervisorError::InsufficientCyclesBalance);
         self.update_balance_change(new_balance);
@@ -931,6 +933,10 @@ impl SandboxSafeSystemState {
             prepayment_for_response_transmission,
             self.subnet_size,
             self.reserved_balance(),
+            // if the canister is frozen, the controller should call canister_status
+            // to learn the top up balance instead of getting it from an error
+            // message to a canister method making downstream call
+            false,
         ) {
             Ok(consumed_cycles) => consumed_cycles,
             Err(_) => return Err(msg),

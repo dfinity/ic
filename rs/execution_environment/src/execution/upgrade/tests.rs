@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use ic_error_types::ErrorCode;
-use ic_ic00_types::{EmptyBlob, Payload, SkipPreUpgrade};
 use ic_logger::replica_logger::LogEntryLogger;
+use ic_management_canister_types::{EmptyBlob, Payload, SkipPreUpgrade};
 use ic_replicated_state::{canister_state::NextExecution, CanisterState};
 use ic_state_machine_tests::{IngressState, WasmResult};
 use ic_test_utilities::types::ids::user_test_id;
@@ -84,7 +84,6 @@ fn execution_test_with_max_rounds(max_rounds: u64) -> ExecutionTest {
             )
             .into(),
         )
-        .with_deterministic_time_slicing()
         .with_install_code_slice_instruction_limit(MAX_INSTRUCTIONS_PER_SLICE)
         .with_install_code_instruction_limit(MAX_INSTRUCTIONS_PER_SLICE * max_rounds)
         .with_cost_to_compile_wasm_instruction(0)

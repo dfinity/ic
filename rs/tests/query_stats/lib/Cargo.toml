@@ -1,0 +1,20 @@
+[package]
+name = "ic-query-stats-tests"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
+ic-types = { path = "../../../types/types" }
+ic-agent = { workspace = true }
+ic-universal-canister = { path = "../../universal_canister/lib" }
+ic-utils = { workspace = true }
+itertools = { workspace = true }
+serde = { workspace = true }
+slog = { workspace = true }
+tests = { path = "../../" }
+tokio = { workspace = true }

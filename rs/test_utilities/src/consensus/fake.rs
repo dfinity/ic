@@ -20,6 +20,25 @@ pub trait Fake {
     fn fake() -> Self;
 }
 
+impl Fake for SummaryPayload {
+    fn fake() -> Self {
+        Self {
+            dkg: ic_types::consensus::dkg::Summary::fake(),
+            ecdsa: None,
+        }
+    }
+}
+
+impl Fake for DataPayload {
+    fn fake() -> Self {
+        Self {
+            batch: BatchPayload::default(),
+            dealings: dkg::Dealings::new_empty(Height::from(0)),
+            ecdsa: None,
+        }
+    }
+}
+
 impl Fake for Summary {
     fn fake() -> Self {
         let subnet_id = subnet_test_id(0);
@@ -205,12 +224,11 @@ impl FromParent for Block {
             ic_types::crypto::crypto_hash(parent),
             Payload::new(
                 ic_types::crypto::crypto_hash,
-                (
-                    BatchPayload::default(),
-                    Dealings::new_empty(dkg_start),
-                    None,
-                )
-                    .into(),
+                BlockPayload::Data(DataPayload {
+                    batch: BatchPayload::default(),
+                    dealings: Dealings::new_empty(dkg_start),
+                    ecdsa: None,
+                }),
             ),
             parent.height.increment(),
             Rank(0),
@@ -258,12 +276,11 @@ fn test_fake_block_is_binary_compatible() {
         CryptoHashOf::from(CryptoHash(Vec::new())),
         Payload::new(
             ic_types::crypto::crypto_hash,
-            (
-                batch::BatchPayload::default(),
-                ic_types::consensus::dkg::Dealings::new_empty(Height::from(1)),
-                None,
-            )
-                .into(),
+            BlockPayload::Data(DataPayload {
+                batch: BatchPayload::default(),
+                dealings: ic_types::consensus::dkg::Dealings::new_empty(Height::from(1)),
+                ecdsa: None,
+            }),
         ),
         Height::from(123),
         Rank(456),
@@ -286,12 +303,11 @@ fn test_fake_block() {
         CryptoHashOf::from(CryptoHash(Vec::new())),
         Payload::new(
             ic_types::crypto::crypto_hash,
-            (
-                batch::BatchPayload::default(),
-                ic_types::consensus::dkg::Dealings::new_empty(Height::from(1)),
-                None,
-            )
-                .into(),
+            BlockPayload::Data(DataPayload {
+                batch: BatchPayload::default(),
+                dealings: ic_types::consensus::dkg::Dealings::new_empty(Height::from(1)),
+                ecdsa: None,
+            }),
         ),
         Height::from(123),
         Rank(456),

@@ -4,7 +4,6 @@ use ic_agent::identity::BasicIdentity;
 use ic_agent::Agent;
 use ic_agent::{agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport, Identity};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_ic00_types::{CanisterInstallMode, CreateCanisterArgs, InstallCodeArgs};
 use ic_icrc1_ledger::FeatureFlags;
 use ic_icrc1_ledger::{InitArgs, InitArgsBuilder, LedgerArgument};
 use ic_icrc1_ledger_sm_tests::{
@@ -14,6 +13,7 @@ use ic_icrc1_ledger_sm_tests::{
 };
 use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_canister_core::archive::ArchiveOptions;
+use ic_management_canister_types::{CanisterInstallMode, CreateCanisterArgs, InstallCodeArgs};
 use ic_starter_tests::{ReplicaBins, ReplicaContext, ReplicaStarterConfig};
 
 use std::sync::Arc;
@@ -101,6 +101,7 @@ pub fn icrc_ledger_default_args_builder() -> InitArgsBuilder {
             node_max_memory_size_bytes: None,
             max_message_size_bytes: None,
             controller_id: PrincipalId::new_user_test_id(100),
+            more_controller_ids: None,
             cycles_for_archive_creation: None,
             max_transactions_per_response: None,
         })

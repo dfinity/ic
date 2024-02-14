@@ -50,17 +50,20 @@ pub struct CanisterOutOfCyclesError {
     pub available: Cycles,
     pub requested: Cycles,
     pub threshold: Cycles,
+    pub reveal_top_up: bool,
 }
 
 impl std::error::Error for CanisterOutOfCyclesError {}
 
 impl std::fmt::Display for CanisterOutOfCyclesError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Canister {} is out of cycles: please top up the canister with at least {} additional cycles",
-            self.canister_id, (self.threshold + self.requested) - self.available
-        )
+        let msg = if self.reveal_top_up {
+            format!("Canister {} is out of cycles: please top up the canister with at least {} additional cycles",
+            self.canister_id, (self.threshold + self.requested) - self.available)
+        } else {
+            format!("Canister {} is out of cycles", self.canister_id)
+        };
+        write!(f, "{}", msg)
     }
 }
 

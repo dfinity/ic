@@ -12,7 +12,7 @@ fn call_counters_on_ok_call(wat: &str) -> SystemApiCallCounters {
             user_test_id(0).get(),
             subnet_test_id(1),
             vec![0; 1024],
-            None,
+            Some(vec![]),
             NonReplicatedQueryKind::Stateful {
                 call_context_id: 0.into(),
                 outgoing_request: None,
@@ -40,6 +40,34 @@ fn call_counters_on_err_call(wat: &str) -> SystemApiCallCounters {
         .unwrap_err();
     let system_api = &instance.store_data().system_api().unwrap();
     system_api.call_counters()
+}
+
+// The test `track_data_certificate_copy` is covered by:
+//
+// * `query_cache_metrics_system_api_calls_work_on_composite_query`
+// * `query_cache_metrics_system_api_calls_work_on_query_err`
+//
+// With the `WasmtimeInstanceBuilder`, the certificate is never present.
+//
+#[test]
+fn track_data_certificate_copy() {
+    let wat = r#"(module
+            (import "ic0" "data_certificate_copy"
+                (func $ic0_data_certificate_copy
+                    (param $dst i32)
+                    (param $offset i32)
+                    (param $size i32)
+                )
+            )
+            (memory 1)
+            (func (export "canister_composite_query call_system_api")
+                (call $ic0_data_certificate_copy (i32.const 0) (i32.const 0) (i32.const 0))
+            )
+        )"#;
+    let call_counters = call_counters_on_ok_call(wat);
+    assert_eq!(call_counters.data_certificate_copy, 1);
+    let call_counters = call_counters_on_err_call(wat);
+    assert_eq!(call_counters.data_certificate_copy, 1);
 }
 
 #[test]

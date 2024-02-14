@@ -386,6 +386,7 @@ fn archive_blocks_small_test() {
             node_max_memory_size_bytes: Some(node_max_memory_size_bytes),
             max_message_size_bytes: Some(max_message_size_bytes),
             controller_id: CanisterId::from_u64(876).into(),
+            more_controller_ids: None,
             cycles_for_archive_creation: Some(0),
             max_transactions_per_response: None,
         };
@@ -516,6 +517,7 @@ fn archive_blocks_large_test() {
             node_max_memory_size_bytes: Some(node_max_memory_size_bytes as u64),
             max_message_size_bytes: Some(max_message_size_bytes as u64),
             controller_id: CanisterId::from_u64(876).into(),
+            more_controller_ids: None,
             cycles_for_archive_creation: Some(0),
             max_transactions_per_response: None,
         };
@@ -690,6 +692,7 @@ fn archived_blocks_ranges() {
             node_max_memory_size_bytes: Some(node_max_memory_size_bytes as u64),
             max_message_size_bytes: Some(max_message_size_bytes as u64),
             controller_id: CanisterId::from_u64(876).into(),
+            more_controller_ids: None,
             cycles_for_archive_creation: Some(0),
             max_transactions_per_response: None,
         };
@@ -865,6 +868,7 @@ fn notify_test() {
             node_max_memory_size_bytes: Some(node_max_memory_size_bytes as u64),
             max_message_size_bytes: Some(max_message_size_bytes as u64),
             controller_id: CanisterId::from_u64(876).into(),
+            more_controller_ids: None,
             trigger_threshold: 8,
             num_blocks_to_archive: 3,
             cycles_for_archive_creation: Some(0),
@@ -1076,6 +1080,7 @@ fn notify_disabled_test() {
                     node_max_memory_size_bytes: Some(node_max_memory_size_bytes as u64),
                     max_message_size_bytes: Some(max_message_size_bytes as u64),
                     controller_id: CanisterId::from_u64(876).into(),
+                    more_controller_ids: None,
                     trigger_threshold: 8,
                     num_blocks_to_archive: 3,
                     cycles_for_archive_creation: Some(0),
@@ -1558,6 +1563,7 @@ fn get_block_test() {
             node_max_memory_size_bytes: Some(node_max_memory_size_bytes as u64),
             max_message_size_bytes: Some(max_message_size_bytes as u64),
             controller_id: CanisterId::from_u64(876).into(),
+            more_controller_ids: None,
             cycles_for_archive_creation: Some(0),
             max_transactions_per_response: None,
         };
@@ -1718,6 +1724,7 @@ fn get_multiple_blocks_test() {
             node_max_memory_size_bytes: Some(node_max_memory_size_bytes as u64),
             max_message_size_bytes: Some(max_message_size_bytes as u64),
             controller_id: CanisterId::from_u64(876).into(),
+            more_controller_ids: None,
             cycles_for_archive_creation: Some(0),
             max_transactions_per_response: None,
         };
@@ -1923,6 +1930,7 @@ fn only_ledger_can_append_blocks_to_archive_nodes() {
             node_max_memory_size_bytes: Some(node_max_memory_size_bytes as u64),
             max_message_size_bytes: Some(max_message_size_bytes as u64),
             controller_id: CanisterId::from_u64(876).into(),
+            more_controller_ids: None,
             cycles_for_archive_creation: Some(0),
             max_transactions_per_response: None,
         };
@@ -2054,6 +2062,7 @@ fn test_archives_endpoint() {
                             node_max_memory_size_bytes: None,
                             max_message_size_bytes: None,
                             controller_id: minting_canister_id.into(),
+                            more_controller_ids: None,
                             cycles_for_archive_creation: None,
                             max_transactions_per_response: None,
                         })

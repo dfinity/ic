@@ -12,11 +12,11 @@ use ic_icp_index::{
 use ic_icrc1_index_ng::GetAccountTransactionsArgs;
 use ic_ledger_core::block::{BlockType, EncodedBlock};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
+use ic_stable_structures::StableBTreeMap;
 use ic_stable_structures::{
     cell::Cell as StableCell, log::Log as StableLog, memory_manager::MemoryManager,
-    DefaultMemoryImpl, Storable,
+    storable::Bound, DefaultMemoryImpl, Storable,
 };
-use ic_stable_structures::{BoundedStorable, StableBTreeMap};
 use icp_ledger::{
     AccountIdentifier, ArchivedEncodedBlocksRange, Block, BlockIndex, GetBlocksArgs,
     GetEncodedBlocksResult, Operation, QueryEncodedBlocksResponse, MAX_BLOCKS_PER_REQUEST,
@@ -122,6 +122,8 @@ impl Storable for State {
             ic_cdk::api::trap(&format!("{:?}", err));
         })
     }
+
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -150,11 +152,11 @@ impl Storable for AccountIdentifierDataType {
             ic_cdk::api::trap(&format!("Unknown AccountDataType {}", bytes[0]));
         }
     }
-}
 
-impl BoundedStorable for AccountIdentifierDataType {
-    const MAX_SIZE: u32 = 1;
-    const IS_FIXED_SIZE: bool = true;
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 1,
+        is_fixed_size: true,
+    };
 }
 
 /// A helper function to access the scalar state.

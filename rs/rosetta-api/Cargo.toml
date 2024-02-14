@@ -53,13 +53,13 @@ strum_macros = { workspace = true }
 tokio = { workspace = true }
 url = "2.2.1"
 ecdsa-secp256k1 = { path = "../crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1", package = "ic-crypto-internal-basic-sig-ecdsa-secp256k1" }
-rustls = "0.21.1"
+rustls = { workspace = true }
 rustls-pemfile = "1.0.3"
 rolling-file = "0.2.0"
 rosetta-core = {path ="rosetta_core"}
-tracing = "0.1.37"
-tracing-appender = "^0.2.2"
-tracing-subscriber = { version = "0.3.16", features = ["json"] }
+tracing = { workspace = true }
+tracing-appender = { workspace = true }
+tracing-subscriber = { workspace = true }
 anyhow = { version = "1.0", default-features = false }
 
 [dev-dependencies]

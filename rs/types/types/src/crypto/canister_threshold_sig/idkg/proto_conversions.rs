@@ -241,6 +241,7 @@ impl TryFrom<&IDkgSignedDealingTupleProto> for SignedIDkgDealing {
 fn idkg_transcript_params_proto(params: &IDkgTranscriptParams) -> IDkgTranscriptParamsProto {
     let idkg_transcript_operation_args = match params.operation_type() {
         IDkgTranscriptOperation::Random => vec![],
+        IDkgTranscriptOperation::RandomUnmasked => vec![],
         IDkgTranscriptOperation::ReshareOfMasked(idkg_transcript) => {
             vec![idkg_transcript_proto(idkg_transcript)]
         }
@@ -280,6 +281,7 @@ fn idkg_transcript_operation_type_proto(
 ) -> IDkgTranscriptOperationProto {
     match op_type {
         IDkgTranscriptOperation::Random => IDkgTranscriptOperationProto::Random,
+        IDkgTranscriptOperation::RandomUnmasked => IDkgTranscriptOperationProto::RandomUnmasked,
         IDkgTranscriptOperation::ReshareOfMasked(_) => {
             IDkgTranscriptOperationProto::ReshareOfMasked
         }

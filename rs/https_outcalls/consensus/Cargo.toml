@@ -7,7 +7,6 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-config = { path = "../../config" }
 ic-consensus-utils = { path = "../../consensus/utils" }
 ic-error-types = { path = "../../types/error_types" }
 ic-interfaces = { path = "../../interfaces" }
@@ -21,7 +20,6 @@ ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-types = { path = "../../types/types" }
 prometheus = { workspace = true }
-prost = { workspace = true }
 slog = { workspace = true }
 
 [dev-dependencies]

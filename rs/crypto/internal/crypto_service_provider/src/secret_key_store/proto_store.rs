@@ -175,7 +175,7 @@ impl ProtoSecretKeyStore {
             return Err(cleanup_errors);
         }
 
-        let are_same_file = ic_utils::fs::are_hard_links_to_the_same_inode(
+        let are_same_file = ic_sys::fs::are_hard_links_to_the_same_inode(
             &self.proto_file,
             &self.old_proto_file_to_zeroize,
         )
@@ -187,7 +187,7 @@ impl ProtoSecretKeyStore {
             }]
         })?;
         if are_same_file {
-            ic_utils::fs::remove_file(&self.old_proto_file_to_zeroize).map_err(|err| {
+            ic_sys::fs::remove_file(&self.old_proto_file_to_zeroize).map_err(|err| {
                 vec![CleanupError::OldFileRemoval {
                     old_sks_file: self.old_proto_file_to_zeroize.to_string_lossy().to_string(),
                     source: err,
@@ -246,7 +246,7 @@ impl ProtoSecretKeyStore {
                 if exists {
                     // Create a hard link to the existing keystore, so that we maintain a handle to
                     // it, which can later be used to zeroize and delete the old keystore.
-                    if let Err(err) = ic_utils::fs::create_hard_link_to_existing_file(
+                    if let Err(err) = ic_sys::fs::create_hard_link_to_existing_file(
                         &self.proto_file,
                         &self.old_proto_file_to_zeroize,
                     ) {
@@ -274,7 +274,7 @@ impl ProtoSecretKeyStore {
         secret_keys: &SecretKeys,
     ) -> Result<(), SecretKeyStoreWriteError> {
         let sks_proto = ProtoSecretKeyStore::secret_keys_to_sks_proto(secret_keys)?;
-        match ic_utils::fs::write_protobuf_using_tmp_file(&self.proto_file, &sks_proto) {
+        match ic_sys::fs::write_protobuf_using_tmp_file(&self.proto_file, &sks_proto) {
             Ok(()) => {
                 debug!(
                     self.logger,
@@ -290,7 +290,7 @@ impl ProtoSecretKeyStore {
     }
 
     fn check_proto_file_is_regular_file_or_panic(proto_file: &PathBuf) {
-        if !ic_utils::fs::is_regular_file(&proto_file)
+        if !ic_sys::fs::is_regular_file(&proto_file)
             .expect("error checking if secret key store is a regular file")
         {
             panic!(
@@ -552,7 +552,7 @@ fn overwrite_file_with_zeroes_and_delete_if_it_exists<P: AsRef<Path>>(
     file: P,
 ) -> Result<(), Vec<CleanupError>> {
     let mut old_file_exists = true;
-    let mut result = match ic_utils::fs::open_existing_file_for_write(&file) {
+    let mut result = match ic_sys::fs::open_existing_file_for_write(&file) {
         Ok(mut f) => match f.metadata() {
             Ok(metadata) => {
                 let len = metadata.len() as usize;
@@ -575,7 +575,7 @@ fn overwrite_file_with_zeroes_and_delete_if_it_exists<P: AsRef<Path>>(
     if old_file_exists {
         result = combine_cleanup_results(
             result,
-            ic_utils::fs::remove_file(&file).map_err(|e| {
+            ic_sys::fs::remove_file(&file).map_err(|e| {
                 vec![CleanupError::OldFileRemoval {
                     old_sks_file: file.as_ref().to_string_lossy().to_string(),
                     source: e,

@@ -13,7 +13,6 @@ ic-crypto-node-key-validation = { path = "../node_key_validation"}
 ic-crypto-tls-interfaces = { path = "../tls_interfaces" }
 ic-crypto-utils-basic-sig = { path = "../utils/basic_sig" }
 ic-interfaces = { path = "../../interfaces" }
-ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-protobuf = { path = "../../protobuf" }
 ic-types = { path = "../../types/types" }
 tokio = { workspace = true }

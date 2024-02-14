@@ -17,7 +17,7 @@ ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/ca
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-error-types = { path = "../types/error_types" }
 ic-https-outcalls-consensus = { path = "../https_outcalls/consensus" }
-ic-ic00-types = { path = "../types/ic00_types" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
@@ -48,6 +48,7 @@ ic-consensus-mocks = { path = "./mocks" }
 ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
 ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
+ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-ingress-manager = { path = "../ingress_manager" }
 ic-interfaces-certified-stream-store = { path = "../interfaces/certified_stream_store" }
@@ -60,8 +61,8 @@ ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
 ic-state-manager = { path = "../state_manager" }
+ic-sys = { path = "../sys" }
 ic-test-artifact-pool = { path = "../test_utilities/artifact_pool" }
-ic-utils = { path = "../utils" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }

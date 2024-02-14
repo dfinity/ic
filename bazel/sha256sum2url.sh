@@ -9,6 +9,7 @@ SHASUM="$(cat "${SHASUMFILE}")"
 
 DIRECT_URL="${BASE_URL_DIRECT}/cas/${SHASUM}"
 
+echo "Attempting to download from URL ${DIRECT_URL}"
 while ! curl --head --fail -L "${DIRECT_URL}"; do
     sleep 5
 done

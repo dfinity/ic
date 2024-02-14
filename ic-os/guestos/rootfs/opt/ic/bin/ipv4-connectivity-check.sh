@@ -20,7 +20,7 @@ connectivity_status=0
 
 for endpoint in "${endpoints[@]}"; do
     # Using curl instead of ping as it requires less permissions
-    if curl --connect-timeout 10 "${endpoint}" &>/dev/null; then
+    if curl --ipv4 --connect-timeout 15 "${endpoint}" &>/dev/null; then
         connectivity_status=1
         break
     fi

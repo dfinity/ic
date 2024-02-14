@@ -7,7 +7,7 @@ use crate::tasks::schedule_after;
 use candid::{CandidType, Deserialize};
 use ic_btc_interface::{MillisatoshiPerByte, Network, OutPoint, Satoshi, Txid, Utxo};
 use ic_canister_log::log;
-use ic_ic00_types::DerivationPath;
+use ic_management_canister_types::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferError};
 use num_traits::ToPrimitive;
@@ -376,6 +376,7 @@ async fn submit_pending_requests() {
                         let (requests, used_utxos) = ScopeGuard::into_inner(requests_guard);
 
                         state::mutate_state(|s| {
+                            s.last_transaction_submission_time_ns = Some(ic_cdk::api::time());
                             state::audit::sent_transaction(
                                 s,
                                 state::SubmittedBtcTransaction {

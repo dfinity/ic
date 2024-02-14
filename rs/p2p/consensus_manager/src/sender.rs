@@ -7,6 +7,7 @@ use std::{
 use axum::http::Request;
 use backoff::{backoff::Backoff, ExponentialBackoffBuilder};
 use bytes::Bytes;
+use ic_base_types::NodeId;
 use ic_interfaces::p2p::{
     artifact_manager::ArtifactProcessorEvent, consensus::ValidatedPoolReader,
 };
@@ -14,18 +15,16 @@ use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
 use ic_quic_transport::{ConnId, Transport};
 use ic_types::artifact::{Advert, ArtifactKind};
-use ic_types::NodeId;
-use tokio::task::AbortHandle;
 use tokio::{
     runtime::Handle,
     select,
     sync::mpsc::Receiver,
-    task::{JoinHandle, JoinSet},
+    task::{AbortHandle, JoinHandle, JoinSet},
     time,
 };
 
 use crate::{
-    metrics::ConsensusManagerMetrics, uri_prefix, AdvertUpdate, CommitId, SlotNumber, Update,
+    metrics::ConsensusManagerMetrics, uri_prefix, CommitId, SlotNumber, SlotUpdate, Update,
 };
 
 /// The size threshold for an artifact to be pushed. Artifacts smaller than this constant
@@ -46,7 +45,7 @@ pub(crate) struct ConsensusManagerSender<Artifact: ArtifactKind> {
     pool_reader: Arc<RwLock<dyn ValidatedPoolReader<Artifact> + Send + Sync>>,
     transport: Arc<dyn Transport>,
     adverts_to_send: Receiver<ArtifactProcessorEvent<Artifact>>,
-    slot_manager: SlotManager,
+    slot_manager: AvailableSlotSet,
     current_commit_id: CommitId,
     active_adverts: HashMap<Artifact::Id, (JoinHandle<()>, SlotNumber)>,
 }
@@ -60,7 +59,8 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
         transport: Arc<dyn Transport>,
         adverts_to_send: Receiver<ArtifactProcessorEvent<Artifact>>,
     ) {
-        let slot_manager = SlotManager::new(log.clone(), metrics.clone(), Artifact::TAG.into());
+        let slot_manager =
+            AvailableSlotSet::new(log.clone(), metrics.clone(), Artifact::TAG.into());
 
         let manager = Self {
             log,
@@ -114,7 +114,7 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
         if let Some((send_task, free_slot)) = self.active_adverts.remove(id) {
             self.metrics.send_view_consensus_purge_active_total.inc();
             send_task.abort();
-            self.slot_manager.return_slot(free_slot);
+            self.slot_manager.push(free_slot);
         } else {
             self.metrics.send_view_consensus_dup_purge_total.inc();
         }
@@ -126,7 +126,7 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
         if let Entry::Vacant(entry) = entry {
             self.metrics.send_view_consensus_new_adverts_total.inc();
 
-            let slot = self.slot_manager.slot();
+            let slot = self.slot_manager.pop();
 
             let send_future = Self::send_advert_to_all_peers(
                 self.rt_handle.clone(),
@@ -182,7 +182,7 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
             None
         };
 
-        let advert_update: AdvertUpdate<Artifact> = AdvertUpdate {
+        let advert_update: SlotUpdate<Artifact> = SlotUpdate {
             slot_number,
             commit_id,
             update: match artifact {
@@ -191,7 +191,7 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
             },
         };
 
-        let body = Bytes::from(pb::AdvertUpdate::proxy_encode(advert_update));
+        let body = Bytes::from(pb::SlotUpdate::proxy_encode(advert_update));
 
         let mut in_progress_transmissions = JoinSet::new();
         // Stores the connection ID and the `AbortHandle` of the last successful transmission task to a peer.
@@ -272,7 +272,7 @@ async fn send_advert_to_peer(
     }
 }
 
-struct SlotManager {
+struct AvailableSlotSet {
     next_free_slot: SlotNumber,
     free_slots: Vec<SlotNumber>,
     log: ReplicaLogger,
@@ -280,7 +280,7 @@ struct SlotManager {
     service_name: &'static str,
 }
 
-impl SlotManager {
+impl AvailableSlotSet {
     fn new(
         log: ReplicaLogger,
         metrics: ConsensusManagerMetrics,
@@ -295,13 +295,14 @@ impl SlotManager {
         }
     }
 
-    fn return_slot(&mut self, slot: SlotNumber) {
+    fn push(&mut self, slot: SlotNumber) {
         self.free_slots.push(slot);
-        self.metrics.slot_manager_used_slots.dec();
+        self.metrics.slot_set_in_use_slots.dec();
     }
 
-    fn slot(&mut self) -> SlotNumber {
-        self.metrics.slot_manager_used_slots.inc();
+    /// Returns available slot.
+    fn pop(&mut self) -> SlotNumber {
+        self.metrics.slot_set_in_use_slots.inc();
         match self.free_slots.pop() {
             Some(slot) => slot,
             None => {
@@ -317,7 +318,7 @@ impl SlotManager {
                 let new_slot = self.next_free_slot;
                 self.next_free_slot.inc_assign();
 
-                self.metrics.slot_manager_maximum_slots_total.inc();
+                self.metrics.slot_set_allocated_slots_total.inc();
 
                 new_slot
             }
@@ -596,8 +597,8 @@ mod tests {
                 .expect_push()
                 .times(3)
                 .returning(move |_, r| {
-                    let advert: AdvertUpdate<U64Artifact> =
-                        pb::AdvertUpdate::proxy_decode(&r.into_body()).unwrap();
+                    let advert: SlotUpdate<U64Artifact> =
+                        pb::SlotUpdate::proxy_decode(&r.into_body()).unwrap();
                     commit_id_tx.send(advert.commit_id).unwrap();
                     Ok(())
                 });
@@ -664,8 +665,8 @@ mod tests {
                 .expect_push()
                 .times(2)
                 .returning(move |_, r| {
-                    let advert: AdvertUpdate<U64Artifact> =
-                        pb::AdvertUpdate::proxy_decode(&r.into_body()).unwrap();
+                    let advert: SlotUpdate<U64Artifact> =
+                        pb::SlotUpdate::proxy_decode(&r.into_body()).unwrap();
                     commit_id_tx.send(advert.commit_id).unwrap();
                     Ok(())
                 });
@@ -708,7 +709,7 @@ mod tests {
     /// Test that we can take more slots than SLOT_TABLE_THRESHOLD
     #[test]
     fn slot_manager_unrestricted() {
-        let mut sm = SlotManager::new(
+        let mut sm = AvailableSlotSet::new(
             no_op_logger(),
             ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
             "test",
@@ -716,13 +717,13 @@ mod tests {
 
         // Take more than SLOT_TABLE_THRESHOLD number of slots
         for i in 0..(SLOT_TABLE_THRESHOLD * 5) {
-            assert_eq!(sm.slot().get(), i);
+            assert_eq!(sm.pop().get(), i);
         }
         // Give back all the slots.
         for i in 0..(SLOT_TABLE_THRESHOLD * 5) {
-            sm.return_slot(SlotNumber::from(i));
+            sm.push(SlotNumber::from(i));
         }
         // Check that we get the slot that was returned last
-        assert_eq!(sm.slot().get(), SLOT_TABLE_THRESHOLD * 5 - 1);
+        assert_eq!(sm.pop().get(), SLOT_TABLE_THRESHOLD * 5 - 1);
     }
 }

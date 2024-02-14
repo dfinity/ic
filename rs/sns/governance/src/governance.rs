@@ -15,6 +15,7 @@ use crate::{
     },
     pb::{
         sns_root_types::{
+            ManageDappCanisterSettingsRequest, ManageDappCanisterSettingsResponse,
             RegisterDappCanistersRequest, RegisterDappCanistersResponse, SetDappControllersRequest,
             SetDappControllersResponse,
         },
@@ -49,12 +50,13 @@ use crate::{
             GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
             Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
             ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse,
-            ManageLedgerParameters, ManageNeuron, ManageNeuronResponse, ManageSnsMetadata,
-            MintSnsTokens, NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId,
-            NeuronPermission, NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
-            ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
-            RewardEvent, Tally, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
-            UpgradeSnsToNextVersion, Vote, VotingRewardsParameters, WaitForQuietState,
+            ManageDappCanisterSettings, ManageLedgerParameters, ManageNeuron, ManageNeuronResponse,
+            ManageSnsMetadata, MintSnsTokens, NervousSystemFunction, NervousSystemParameters,
+            Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
+            Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
+            RegisterDappCanisters, RewardEvent, Tally, TransferSnsTreasuryFunds,
+            UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
+            WaitForQuietState,
         },
     },
     proposal::{
@@ -75,10 +77,11 @@ use dfn_core::api::{spawn, CanisterId};
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_canister_profiler::SpanStats;
-use ic_ic00_types::{
-    CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
-};
 use ic_ledger_core::Tokens;
+use ic_management_canister_types::{
+    CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode, IC_00,
+};
+use ic_nervous_system_clients::update_settings::{CanisterSettings, UpdateSettings};
 use ic_nervous_system_collections_union_multi_map::UnionMultiMap;
 use ic_nervous_system_common::{
     cmc::CMC,
@@ -2067,6 +2070,10 @@ impl Governance {
                 self.perform_manage_ledger_parameters(proposal_id, manage_ledger_parameters)
                     .await
             }
+            Action::ManageDappCanisterSettings(manage_dapp_canister_settings) => {
+                self.perform_manage_dapp_canister_settings(manage_dapp_canister_settings)
+                    .await
+            }
             // This should not be possible, because Proposal validation is performed when
             // a proposal is first made.
             Action::Unspecified(_) => Err(GovernanceError::new_with_message(
@@ -2784,6 +2791,49 @@ impl Governance {
                 ));
             }
         }
+    }
+
+    async fn perform_manage_dapp_canister_settings(
+        &self,
+        manage_dapp_canister_settings: ManageDappCanisterSettings,
+    ) -> Result<(), GovernanceError> {
+        let request = ManageDappCanisterSettingsRequest::from(manage_dapp_canister_settings);
+        let payload = candid::Encode!(&request).map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("Could not encode ManageDappCanisterSettings: {err:?}"),
+            )
+        })?;
+        self.env
+            .call_canister(
+                self.proto.root_canister_id_or_panic(),
+                "manage_dapp_canister_settings",
+                payload,
+            )
+            .await
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Canister method call failed: {err:?}"),
+                )
+            })
+            .and_then(
+                |reply| match candid::Decode!(&reply, ManageDappCanisterSettingsResponse) {
+                    Ok(ManageDappCanisterSettingsResponse { failure_reason }) => failure_reason
+                        .map_or(Ok(()), |failure_reason| {
+                            Err(GovernanceError::new_with_message(
+                                ErrorType::InvalidProposal,
+                                format!(
+                                    "Failed to manage dapp canister settings: {failure_reason}"
+                                ),
+                            ))
+                        }),
+                    Err(error) => Err(GovernanceError::new_with_message(
+                        ErrorType::External,
+                        format!("Could not decode ManageDappCanisterSettingsResponse: {error}"),
+                    )),
+                },
+            )
     }
 
     // Returns an option with the NervousSystemParameters
@@ -4535,6 +4585,80 @@ impl Governance {
         self.maybe_move_staked_maturity();
 
         self.maybe_gc();
+
+        // TODO(NNS1-2835): Remove this call after changes published.
+        self.set_sns_canisters_memory_allocations().await;
+    }
+
+    // TODO(NNS1-2835): Remove this method after changes published.
+    async fn set_sns_canisters_memory_allocations(&self) {
+        use candid::Nat;
+
+        // Check if this hotfix has been applied before; return if that's the case.
+        let already_tried_executing_hotfix = ATTEMPTED_FIXING_MEMORY_ALLOCATIONS.with(
+            |attempted_doubling_user_index_canister_memory_allocation| {
+                *attempted_doubling_user_index_canister_memory_allocation.borrow()
+            },
+        );
+
+        if already_tried_executing_hotfix {
+            return;
+        }
+
+        // Acquire the lock.
+        ATTEMPTED_FIXING_MEMORY_ALLOCATIONS.with(
+            |attempted_doubling_user_index_canister_memory_allocation| {
+                let mut cell =
+                    attempted_doubling_user_index_canister_memory_allocation.borrow_mut();
+                *cell = true;
+            },
+        );
+
+        // Get SNS Canister IDs
+        let root_canister_id = self.proto.root_canister_id;
+
+        if let Some(canister_id) = root_canister_id {
+            for i in 0..10 {
+                let response = self
+                    .env
+                    .call_canister(
+                        IC_00,
+                        "update_settings",
+                        Encode!(&UpdateSettings {
+                            canister_id,
+                            settings: CanisterSettings {
+                                memory_allocation: Some(Nat::from(0_u8)),
+                                ..Default::default()
+                            },
+                            sender_canister_version: self.env.canister_version()
+                        })
+                        .unwrap(),
+                    )
+                    .await;
+
+                match &response {
+                    Ok(_) => {
+                        log!(
+                            INFO,
+                            "Updating SNS canister {:?} to unbounded memory allocation succeeded!",
+                            canister_id
+                        );
+                        break;
+                    }
+                    Err(err) => {
+                        if i < 9 {
+                            log!(
+                                ERROR,
+                                "Updating SNS canister {:?} to unbounded memory allocation failed!: {:?}",
+                                canister_id, err
+                            );
+                        } else {
+                            log!(ERROR, "Updating SNS canister {:?} to unbounded memory allocation failed after 10 attempts!: {:?}", canister_id, err);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     fn should_update_maturity_modulation(&self) -> bool {
@@ -4758,7 +4882,7 @@ impl Governance {
         for proposal_id in &considered_proposals {
             if let Some(proposal) = self.get_proposal_data(*proposal_id) {
                 for (voter, ballot) in &proposal.ballots {
-                    #[allow(clippy::blocks_in_if_conditions)]
+                    #[allow(clippy::blocks_in_conditions)]
                     if !Vote::try_from(ballot.vote)
                         .unwrap_or_else(|_| {
                             println!(
@@ -5370,6 +5494,11 @@ impl Governance {
             subaccount: Some(subaccount),
         }
     }
+}
+
+// TODO(NNS1-2835): Remove this const after changes published.
+thread_local! {
+    static ATTEMPTED_FIXING_MEMORY_ALLOCATIONS: RefCell<bool> = RefCell::new(false);
 }
 
 fn err_if_another_upgrade_is_in_progress(
@@ -7115,13 +7244,13 @@ mod tests {
                 env.require_call_canister_invocation(
                     CanisterId::ic_00(),
                     "install_code",
-                    Encode!(&ic_ic00_types::InstallCodeArgs {
-                        mode: ic_ic00_types::CanisterInstallMode::Upgrade,
+                    Encode!(&ic_management_canister_types::InstallCodeArgs {
+                        mode: ic_management_canister_types::CanisterInstallMode::Upgrade,
                         canister_id: canister_id.get(),
                         wasm_module: vec![9, 8, 7, 6, 5, 4, 3, 2],
                         arg: Encode!().unwrap(),
                         compute_allocation: None,
-                        memory_allocation: Some(candid::Nat::from(1_u64 << 30)), // local const in install_code()
+                        memory_allocation: None, // local const in install_code()
                         query_allocation: None,
                         sender_canister_version: None,
                     })

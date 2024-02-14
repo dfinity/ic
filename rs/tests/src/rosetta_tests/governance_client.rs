@@ -73,6 +73,7 @@ impl GovernanceClient {
             command:
                 Some(manage_neuron_response::Command::MakeProposal(MakeProposalResponse {
                     proposal_id,
+                    ..
                 })),
         } = manage_neuron_res
         {

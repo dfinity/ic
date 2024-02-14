@@ -23,7 +23,7 @@ use ic_btc_types_internal::{BitcoinAdapterResponse, BitcoinAdapterResponseWrappe
 use ic_crypto_test_utils_canister_threshold_sigs::random_node_id_excluding;
 use ic_error_types::RejectCode;
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
+use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
 use ic_protobuf::types::v1 as pb;
 use phantom_newtype::{AmountOf, Id};
 use prost::Message;

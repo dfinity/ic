@@ -114,7 +114,7 @@ impl IcpLedger for MockLedger {
 // will be accepted when submitted and executed in the call to process
 // proposals.
 fn make_and_process_proposal(gov: &mut Governance) {
-    tokio_test::block_on(gov.make_proposal(
+    gov.make_proposal(
         &NeuronId { id: 0 },
         // Must match neuron 1's serialized_id.
         &PrincipalId::try_from(b"SID0".to_vec()).unwrap(),
@@ -126,7 +126,7 @@ fn make_and_process_proposal(gov: &mut Governance) {
             })),
             ..Default::default()
         },
-    ))
+    )
     .unwrap();
     gov.run_periodic_tasks().now_or_never();
 }

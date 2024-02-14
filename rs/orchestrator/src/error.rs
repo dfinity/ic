@@ -5,7 +5,7 @@ use ic_types::{registry::RegistryClientError, NodeId, RegistryVersion, ReplicaVe
 use std::error::Error;
 use std::fmt;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 pub type OrchestratorResult<T> = Result<T, OrchestratorError>;
 
@@ -61,13 +61,12 @@ pub enum OrchestratorError {
 
     /// SNP error while registering a SEV-SNP node
     SnpError(String),
+
+    /// Network configuration error
+    NetworkConfigurationError(String),
 }
 
 impl OrchestratorError {
-    pub(crate) fn file_write_error(file_path: &Path, e: io::Error) -> Self {
-        OrchestratorError::IoError(format!("Failed to write to file: {:?}", file_path), e)
-    }
-
     pub(crate) fn invalid_configuration_error(msg: impl ToString) -> Self {
         OrchestratorError::InvalidConfigurationError(msg.to_string())
     }
@@ -139,6 +138,9 @@ impl fmt::Display for OrchestratorError {
             ),
             OrchestratorError::UpgradeError(msg) => write!(f, "Failed to upgrade: {}", msg),
             OrchestratorError::SnpError(msg) => write!(f, "SEV-SNP Error: {}", msg),
+            OrchestratorError::NetworkConfigurationError(msg) => {
+                write!(f, "Failed to apply network configuration: {}", msg)
+            }
         }
     }
 }

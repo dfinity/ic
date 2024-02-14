@@ -1,10 +1,7 @@
 use super::*;
 use ic_test_utilities::types::ids::canister_test_id;
 use ic_test_utilities_time::mock_time;
-use ic_types::{
-    messages::RequestMetadata,
-    methods::{WasmClosure, UNKNOWN_CANISTER_ID},
-};
+use ic_types::{messages::RequestMetadata, methods::WasmClosure};
 
 #[test]
 fn call_context_origin() {
@@ -78,8 +75,8 @@ fn call_context_handling() {
     // First call (CallContext 1) makes two outgoing calls
     let callback_id1 = call_context_manager.register_callback(Callback::new(
         call_context_id1,
-        UNKNOWN_CANISTER_ID,
-        UNKNOWN_CANISTER_ID,
+        canister_test_id(1),
+        canister_test_id(2),
         Cycles::zero(),
         Cycles::new(42),
         Cycles::new(84),
@@ -89,8 +86,8 @@ fn call_context_handling() {
     ));
     let callback_id2 = call_context_manager.register_callback(Callback::new(
         call_context_id1,
-        UNKNOWN_CANISTER_ID,
-        UNKNOWN_CANISTER_ID,
+        canister_test_id(1),
+        canister_test_id(2),
         Cycles::zero(),
         Cycles::new(43),
         Cycles::new(85),
@@ -105,8 +102,8 @@ fn call_context_handling() {
     // Second one (CallContext 2) has one outgoing call
     let callback_id3 = call_context_manager.register_callback(Callback::new(
         call_context_id2,
-        UNKNOWN_CANISTER_ID,
-        UNKNOWN_CANISTER_ID,
+        canister_test_id(1),
+        canister_test_id(2),
         Cycles::zero(),
         Cycles::new(44),
         Cycles::new(86),
@@ -309,8 +306,8 @@ fn test_call_context_instructions_executed_is_updated() {
     // Register a callback, so the call context is not deleted in `on_canister_result()` later.
     let _callback_id = call_context_manager.register_callback(Callback::new(
         call_context_id,
-        UNKNOWN_CANISTER_ID,
-        UNKNOWN_CANISTER_ID,
+        canister_test_id(1),
+        canister_test_id(2),
         Cycles::zero(),
         Cycles::new(42),
         Cycles::new(84),

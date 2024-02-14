@@ -1,7 +1,7 @@
 use crate::PROXIED_CANISTER_CALLS_TRACKER;
 use dfn_core::api::{call, call_bytes, call_with_funds, caller, print, CanisterId, Funds};
 use ic_base_types::PrincipalId;
-use ic_ic00_types::{CanisterInstallMode::Install, InstallCodeArgs};
+use ic_management_canister_types::{CanisterInstallMode::Install, InstallCodeArgs};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     management_canister_client::ManagementCanisterClient,
@@ -218,9 +218,7 @@ pub async fn change_canister_controllers(
         canister_id: change_canister_controllers_request.target_canister_id,
         settings: CanisterSettings {
             controllers: Some(change_canister_controllers_request.new_controllers),
-            compute_allocation: None,
-            memory_allocation: None,
-            freezing_threshold: None,
+            ..Default::default()
         },
         sender_canister_version: management_canister_client.canister_version(),
     };

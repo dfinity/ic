@@ -411,6 +411,7 @@ impl MutablePool<EcdsaArtifact> for EcdsaPoolImpl {
                 EcdsaChangeAction::MoveToValidated(message) => {
                     match &message {
                         EcdsaMessage::EcdsaDealingSupport(_)
+                        | EcdsaMessage::EcdsaSigShare(_)
                         | EcdsaMessage::EcdsaSignedDealing(_) => (),
                         _ => adverts.push(EcdsaArtifact::message_to_advert(&message)),
                     }

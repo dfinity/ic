@@ -7,10 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 2.2.0 - 2024-02-14
+
+### Added
+- a new `canister_status` function to request a canister's status
+
+### Fixed
+- `reqwest` dependency does not use the default features
+
+
+## 2.1.0 - 2024-02-06
+
 ### Added
 - Convenience functions `update_candid` and `update_candid_as`.
 - New `set_controllers` method to set canister's controllers.
+- Added PocketIC builder function `with_nns_state` to provide an NNS state directory. 
 
+### Changed
+- Use ExtendedSubnetConfigSet to be compatible with PocketIC server 3.0.0
 
 
 ## 2.0.1 - 2023-11-23

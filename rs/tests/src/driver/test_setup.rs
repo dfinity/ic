@@ -33,7 +33,7 @@ impl GroupSetup {
             .duration_since(std::time::UNIX_EPOCH)
             .expect("bad things")
             .as_millis();
-        res.infra_group_name = format!("{}--{:?}", group_base_name, time);
+        res.infra_group_name = format!("{}--{:?}", group_base_name, time).replace('_', "-");
         // GROUP_TTL should be enough for the setup task to allocate the group on InfraProvider
         // Afterwards, the group's TTL should be bumped via a keepalive task
         res.group_timeout = GROUP_TTL;

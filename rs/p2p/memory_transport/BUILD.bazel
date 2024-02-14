@@ -9,8 +9,6 @@ DEPENDENCIES = [
     "//rs/p2p/quic_transport",
     "@crate_index//:axum_0_7_0",
     "@crate_index//:bytes",
-    "@crate_index//:futures",
-    "@crate_index//:prost",
     "@crate_index//:tokio",
     "@crate_index//:tower",
 ]

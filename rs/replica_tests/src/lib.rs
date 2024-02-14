@@ -6,14 +6,14 @@ use ic_config::Config;
 use ic_config::{crypto::CryptoConfig, transport::TransportConfig};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::IngressHistoryReaderImpl;
-use ic_ic00_types::CanisterInstallMode;
-use ic_ic00_types::{
-    CanisterIdRecord, InstallCodeArgs, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    IC_00,
-};
 use ic_interfaces::execution_environment::{IngressHistoryReader, QueryHandler};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
+use ic_management_canister_types::CanisterInstallMode;
+use ic_management_canister_types::{
+    CanisterIdRecord, InstallCodeArgs, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs,
+    IC_00,
+};
 use ic_metrics::MetricsRegistry;
 use ic_prep_lib::internet_computer::{IcConfig, TopologyConfig};
 use ic_prep_lib::node::{NodeConfiguration, NodeIndex, NodeSecretKeyStore};

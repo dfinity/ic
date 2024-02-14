@@ -31,9 +31,11 @@ use crate::execution::common::{
     self, action_to_response, apply_canister_state_changes, update_round_limits,
 };
 use crate::execution_environment::{
-    ExecuteMessageResult, ExecutionResponse, PausedExecution, RoundContext, RoundLimits,
+    log_dirty_pages, ExecuteMessageResult, ExecutionResponse, PausedExecution, RoundContext,
+    RoundLimits,
 };
 use crate::metrics::CallTreeMetrics;
+use ic_config::flag_status::FlagStatus;
 
 #[cfg(test)]
 mod tests;
@@ -159,20 +161,13 @@ impl ResponseHelper {
         // possible response when the request is being sent. Now that we
         // have received the response, we can refund the cycles based on
         // the actual size of the response.
-        let prepayment_for_response_transmission =
-            match original.callback.prepayment_for_response_transmission() {
-                Some(cycles) => cycles,
-                None => round
-                    .cycles_account_manager
-                    .prepayment_for_response_transmission(original.subnet_size),
-            };
         let refund_for_response_transmission = round
             .cycles_account_manager
             .refund_for_response_transmission(
                 round.log,
                 round.counters.response_cycles_refund_error,
                 response,
-                prepayment_for_response_transmission,
+                original.callback.prepayment_for_response_transmission,
                 original.subnet_size,
             );
 
@@ -372,11 +367,16 @@ impl ResponseHelper {
             let requested = state_changes.system_state_changes.removed_cycles();
             // Note that we ignore the freezing threshold as required by the spec.
             if old_balance < requested {
+                let reveal_top_up = self
+                    .canister
+                    .controllers()
+                    .contains(&original.call_origin.get_principal());
                 let err = CanisterOutOfCyclesError {
                     canister_id: self.canister.canister_id(),
                     available: old_balance,
                     requested,
                     threshold: original.freezing_threshold,
+                    reveal_top_up,
                 };
                 info!(
                     round.log,
@@ -536,19 +536,11 @@ impl ResponseHelper {
             round.counters.ingress_with_cycles_error,
         );
 
-        let prepayment_for_response_execution =
-            match original.callback.prepayment_for_response_execution() {
-                Some(cycles) => cycles,
-                None => round
-                    .cycles_account_manager
-                    .prepayment_for_response_execution(original.subnet_size),
-            };
-
         round.cycles_account_manager.refund_unused_execution_cycles(
             &mut self.canister.system_state,
             instructions_left,
             original.message_instruction_limit,
-            prepayment_for_response_execution,
+            original.callback.prepayment_for_response_execution,
             round.counters.execution_refund_error,
             original.subnet_size,
             round.log,
@@ -561,6 +553,16 @@ impl ResponseHelper {
                 self.canister.system_state.canister_id,
                 self.refund_for_sent_cycles,
                 self.response_sender,
+            );
+        }
+
+        if original.log_dirty_pages == FlagStatus::Enabled {
+            log_dirty_pages(
+                round.log,
+                &original.canister_id,
+                format!("reponse_to_{}", original.message.originator).as_str(),
+                heap_delta.get() as usize / PAGE_SIZE,
+                instructions_used,
             );
         }
 
@@ -649,6 +651,7 @@ struct OriginalContext {
     canister_id: CanisterId,
     subnet_memory_reservation: NumBytes,
     instructions_executed: NumInstructions,
+    log_dirty_pages: FlagStatus,
 }
 
 /// Struct used to hold necessary information for the
@@ -854,6 +857,7 @@ pub fn execute_response(
     subnet_size: usize,
     subnet_memory_reservation: NumBytes,
     call_tree_metrics: &dyn CallTreeMetrics,
+    log_dirty_pages: FlagStatus,
 ) -> ExecuteMessageResult {
     let (callback, callback_id, call_context, call_context_id) =
         match common::get_call_context_and_callback(
@@ -900,6 +904,7 @@ pub fn execute_response(
         canister_id: clean_canister.canister_id(),
         subnet_memory_reservation,
         instructions_executed: call_context.instructions_executed(),
+        log_dirty_pages,
     };
 
     let mut helper =

@@ -1,9 +1,8 @@
-use crate::state::Wasm;
 use async_trait::async_trait;
 use candid::{CandidType, Principal};
 use ic_base_types::PrincipalId;
 use ic_cdk::api::call::RejectionCode;
-use ic_ic00_types::{
+use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgsBuilder, CreateCanisterArgs,
     InstallCodeArgs,
 };
@@ -97,6 +96,7 @@ pub trait CanisterRuntime {
     /// Creates a new canister with the given cycles.
     async fn create_canister(
         &self,
+        controllers: Vec<Principal>,
         cycles_for_canister_creation: u64,
     ) -> Result<Principal, CallError>;
 
@@ -104,7 +104,7 @@ pub trait CanisterRuntime {
     async fn install_code(
         &self,
         canister_id: Principal,
-        wasm_module: Wasm,
+        wasm_module: Vec<u8>,
         arg: Vec<u8>,
     ) -> Result<(), CallError>;
 }
@@ -151,12 +151,19 @@ impl CanisterRuntime for IcCanisterRuntime {
 
     async fn create_canister(
         &self,
+        controllers: Vec<Principal>,
         cycles_for_canister_creation: u64,
     ) -> Result<Principal, CallError> {
+        // See https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-create_canister
+        assert!(
+            controllers.len() <= 10,
+            "BUG: too many controllers. Expected at most 10, got {}",
+            controllers.len()
+        );
         let create_args = CreateCanisterArgs {
             settings: Some(
                 CanisterSettingsArgsBuilder::new()
-                    .with_controllers(vec![ic_cdk::id().into()])
+                    .with_controllers(controllers.into_iter().map(|p| p.into()).collect())
                     .build(),
             ),
             ..Default::default()
@@ -175,13 +182,13 @@ impl CanisterRuntime for IcCanisterRuntime {
     async fn install_code(
         &self,
         canister_id: Principal,
-        wasm_module: Wasm,
+        wasm_module: Vec<u8>,
         arg: Vec<u8>,
     ) -> Result<(), CallError> {
         let install_code = InstallCodeArgs {
             mode: CanisterInstallMode::Install,
             canister_id: PrincipalId::from(canister_id),
-            wasm_module: wasm_module.to_bytes(),
+            wasm_module,
             arg,
             compute_allocation: None,
             memory_allocation: None,

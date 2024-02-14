@@ -3,6 +3,7 @@ import getpass
 import itertools
 import json
 import os
+import shutil
 import stat
 import subprocess
 import sys
@@ -104,12 +105,14 @@ def write_json_to_file(filepath, obj):
 
 def prepare_prometheus_vm_config_image_file(group_name, ic_node_ipv6s) -> str:
     config_dir = "prometheus_vm/config_dir"
+    shutil.rmtree(config_dir, ignore_errors=True)
     os.makedirs(config_dir, exist_ok=False)
 
     # First generate a SSH key-pair where the public key is stored in the config image
     # and the private key in ./prometheus_vm/ssh_keys. This allows the script to SSH into
     # the prometheus-vm via the "admin" user later on.
     ssh_dir = "prometheus_vm/ssh_keys"
+    shutil.rmtree(ssh_dir, ignore_errors=True)
     os.makedirs(ssh_dir, exist_ok=False)
     gen_key_command = [
         "ssh-keygen",

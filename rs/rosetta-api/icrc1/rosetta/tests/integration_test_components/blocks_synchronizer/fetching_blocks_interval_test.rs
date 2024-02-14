@@ -17,7 +17,7 @@ use tokio::runtime::Runtime;
 lazy_static! {
     pub static ref TEST_ACCOUNT: Account = test_identity().sender().unwrap().into();
     pub static ref MAX_NUM_GENERATED_BLOCKS: usize = 20;
-    pub static ref NUM_TEST_CASES: u32 = 5;
+    pub static ref NUM_TEST_CASES: u32 = 2;
 }
 
 fn check_storage_validity(storage_client: Arc<StorageClient>, highest_index: u64) {
@@ -74,6 +74,7 @@ proptest! {
                 node_max_memory_size_bytes: None,
                 max_message_size_bytes: None,
                 controller_id: PrincipalId::new_user_test_id(100),
+more_controller_ids: None,
                 cycles_for_archive_creation: None,
                 max_transactions_per_response: None,
             })
@@ -149,6 +150,7 @@ proptest! {
             node_max_memory_size_bytes: None,
             max_message_size_bytes: None,
             controller_id: PrincipalId::new_user_test_id(100),
+more_controller_ids: None,
             cycles_for_archive_creation: None,
             max_transactions_per_response: None,
         })

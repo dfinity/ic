@@ -11,6 +11,6 @@ bytes = { workspace = true }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-registry-common-proto = { path = "../proto" }
 ic-registry-transport = { path = "../transport" }
+ic-sys = { path = "../../sys" }
 ic-types = { path = "../../types/types" }
-ic-utils = { path = "../../utils" }
 thiserror = "1.0"

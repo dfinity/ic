@@ -9,7 +9,9 @@ use ic_canister_log::{export, GlobalBuffer, LogBuffer, LogEntry};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use ic_ledger_core::Tokens;
+use lazy_static::lazy_static;
 use maplit::hashmap;
+use num_traits::ops::inv::Inv;
 use priority_queue::priority_queue::PriorityQueue;
 use rust_decimal::Decimal;
 use std::{
@@ -25,6 +27,11 @@ pub mod cmc;
 pub mod dfn_core_stable_mem_utils;
 pub mod ledger;
 pub mod memory_manager_upgrade_storage;
+
+lazy_static! {
+    // 10^-4. There is one ten-thousandth of a unit in one permyriad.
+    pub static ref UNITS_PER_PERMYRIAD: Decimal = Decimal::from(10_000_u64).inv();
+}
 
 // 10^8
 pub const E8: u64 = 100_000_000;

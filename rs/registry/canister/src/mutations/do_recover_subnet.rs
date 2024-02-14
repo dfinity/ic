@@ -15,7 +15,7 @@ use dfn_core::api::{call, CanisterId};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
-use ic_ic00_types::{EcdsaKeyId, SetupInitialDKGArgs, SetupInitialDKGResponse};
+use ic_management_canister_types::{EcdsaKeyId, SetupInitialDKGArgs, SetupInitialDKGResponse};
 use ic_protobuf::registry::subnet::v1::RegistryStoreUri;
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
@@ -288,7 +288,7 @@ mod test {
         registry::Registry,
     };
     use ic_base_types::SubnetId;
-    use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
+    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
     use ic_protobuf::registry::subnet::v1::SubnetRecord;
     use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
     use ic_registry_transport::{delete, upsert};

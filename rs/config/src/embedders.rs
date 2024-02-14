@@ -78,6 +78,9 @@ pub struct FeatureFlags {
     /// Track dirty pages with a write barrier instead of the signal handler.
     pub write_barrier: FlagStatus,
     pub wasm_native_stable_memory: FlagStatus,
+    // TODO(IC-272): remove this flag once the feature is enabled by default.
+    /// Indicates whether canister logging feature is enabled or not.
+    pub canister_logging: FlagStatus,
 }
 
 impl FeatureFlags {
@@ -86,6 +89,7 @@ impl FeatureFlags {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
             write_barrier: FlagStatus::Disabled,
             wasm_native_stable_memory: FlagStatus::Enabled,
+            canister_logging: FlagStatus::Disabled,
         }
     }
 }

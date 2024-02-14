@@ -799,7 +799,7 @@ fn dirty_pages_to_dirty_chunks(
                 continue;
             }
 
-            let path = dirty_page.page_type.path(checkpoint);
+            let path = dirty_page.page_type.base(checkpoint);
 
             if let Ok(path) = path {
                 let relative_path = path
@@ -947,6 +947,10 @@ pub fn compute_manifest(
     metrics
         .chunk_table_length
         .set(manifest.chunk_table.len() as i64);
+
+    metrics
+        .file_table_length
+        .set(manifest.file_table.len() as i64);
 
     let file_chunk_id_range_length = FILE_GROUP_CHUNK_ID_OFFSET as usize - FILE_CHUNK_ID_OFFSET;
     if manifest.chunk_table.len() > file_chunk_id_range_length / 2 {

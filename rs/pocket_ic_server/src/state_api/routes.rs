@@ -13,18 +13,18 @@ use crate::pocket_ic::{
 use crate::{pocket_ic::PocketIc, BindOperation, BlobStore, InstanceId, Operation};
 use aide::axum::routing::{delete, get, post, ApiMethodRouter};
 use aide::axum::ApiRouter;
-use axum::body::HttpBody;
-use axum::routing::MethodRouter;
 use axum::{
     extract::{self, Path, State},
-    headers,
     http::{self, HeaderMap, HeaderName, StatusCode},
     Json,
 };
+use axum_extra::headers;
+use axum_extra::headers::HeaderMapExt;
 use ic_types::CanisterId;
 use pocket_ic::common::rest::{
-    self, ApiResponse, RawAddCycles, RawCanisterCall, RawCanisterId, RawCanisterResult, RawCycles,
-    RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime, RawWasmResult, SubnetConfigSet,
+    self, ApiResponse, ExtendedSubnetConfigSet, RawAddCycles, RawCanisterCall, RawCanisterId,
+    RawCanisterResult, RawCycles, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime,
+    RawWasmResult,
 };
 use pocket_ic::WasmResult;
 use serde::Serialize;
@@ -522,6 +522,26 @@ pub async fn status() -> StatusCode {
     StatusCode::OK
 }
 
+fn contains_unimplemented(config: ExtendedSubnetConfigSet) -> bool {
+    Iterator::any(
+        &mut vec![config.sns, config.ii, config.fiduciary, config.bitcoin]
+            .into_iter()
+            .flatten()
+            .chain(config.system)
+            .chain(config.application),
+        |spec: pocket_ic::common::rest::SubnetSpec| {
+            spec.get_subnet_id().is_some()
+                || matches!(
+                    spec,
+                    pocket_ic::common::rest::SubnetSpec::FromBlobStore(_, _)
+                )
+        },
+    ) || matches!(
+        config.nns,
+        Some(pocket_ic::common::rest::SubnetSpec::FromBlobStore(_, _))
+    )
+}
+
 /// Create a new empty IC instance from a given subnet configuration.
 /// The new InstanceId will be returned.
 pub async fn create_instance(
@@ -531,16 +551,26 @@ pub async fn create_instance(
         runtime,
         blob_store: _,
     }): State<AppState>,
-    extract::Json(subnet_configs): extract::Json<SubnetConfigSet>,
+    extract::Json(subnet_configs): extract::Json<ExtendedSubnetConfigSet>,
 ) -> (StatusCode, Json<rest::CreateInstanceResponse>) {
     if subnet_configs.validate().is_err() {
         return (
             StatusCode::BAD_REQUEST,
             Json(rest::CreateInstanceResponse::Error {
-                message: "Bad config".to_owned(), // TODO: return actual error
+                message: "Bad config".to_owned(),
             }),
         );
     }
+    // TODO: Remove this once the SubnetSpec variants are implemented
+    if contains_unimplemented(subnet_configs.clone()) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(rest::CreateInstanceResponse::Error {
+                message: "SubnetSpec::FromPath is currently only implemented for NNS. SubnetSpec::FromBlobStore is not yet implemented".to_owned(),
+            }),
+        );
+    }
+
     let pocket_ic = tokio::task::spawn_blocking(move || PocketIc::new(runtime, subnet_configs))
         .await
         .expect("Failed to launch PocketIC");
@@ -581,29 +611,20 @@ pub async fn delete_instance(
     StatusCode::OK
 }
 
-pub trait RouterExt<S, B>
+pub trait RouterExt<S>
 where
-    B: HttpBody + Send + 'static,
     S: Clone + Send + Sync + 'static,
 {
-    fn directory_route(self, path: &str, method_router: ApiMethodRouter<S, B>) -> Self;
+    fn directory_route(self, path: &str, method_router: ApiMethodRouter<S>) -> Self;
 }
 
-impl<S, B> RouterExt<S, B> for ApiRouter<S, B>
+impl<S> RouterExt<S> for ApiRouter<S>
 where
-    B: HttpBody + Send + 'static,
     S: Clone + Send + Sync + 'static,
 {
-    fn directory_route(self, path: &str, method_router: ApiMethodRouter<S, B>) -> Self {
-        // Temporary hack because ApiMethodRouter does not implement clone.
-        // TODO: Fix when this is merged:
-        // https://github.com/tamasfe/aide/issues/89#ref-pullrequest-2016439982
-        let cp1 = MethodRouter::from(method_router);
-        let cp2 = cp1.clone();
-        let method_router1 = ApiMethodRouter::from(cp1);
-        let method_router2 = ApiMethodRouter::from(cp2);
-        self.api_route(path, method_router1)
-            .route(&format!("{path}/"), method_router2)
+    fn directory_route(self, path: &str, method_router: ApiMethodRouter<S>) -> Self {
+        self.api_route(path, method_router.clone())
+            .route(&format!("{path}/"), method_router)
     }
 }
 
@@ -645,7 +666,5 @@ impl headers::Header for ProcessingTimeout {
 }
 
 pub fn timeout_or_default(header_map: HeaderMap) -> Option<Duration> {
-    use headers::HeaderMapExt;
-
     header_map.typed_get::<ProcessingTimeout>().map(|x| x.0)
 }

@@ -14,15 +14,28 @@ rust_library(
         "@crate_index//:lazy_static",
         "@crate_index//:libc",
         "@crate_index//:nix",
+        "@crate_index//:prost",
         "@crate_index//:tokio",
         "@crate_index//:wsl",
-    ],
+    ] + select({
+        "@rules_rust//rust/platform:unix": [
+            "@crate_index//:rand",
+        ],
+        "//conditions:default": [],
+    }) + select({
+        "@rules_rust//rust/platform:linux": [
+            "@crate_index//:cvt",
+            "@crate_index//:thiserror",
+        ],
+        "//conditions:default": [],
+    }),
 )
 
 rust_test(
     name = "sys_test",
     crate = ":sys",
     deps = [
+        "@crate_index//:assert_matches",
         "@crate_index//:tempfile",
     ],
 )

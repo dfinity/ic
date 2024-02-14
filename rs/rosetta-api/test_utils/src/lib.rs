@@ -376,7 +376,7 @@ where
     {
         Ok((submit_res, charged_fee)) => {
             let results = convert::from_transaction_operation_results(
-                submit_res.metadata,
+                submit_res.metadata.try_into().unwrap(),
                 DEFAULT_TOKEN_SYMBOL,
             )
             .expect("Couldn't convert metadata to TransactionResults");
@@ -430,7 +430,7 @@ where
     {
         Ok((submit_res, charged_fee)) => Ok((
             submit_res.transaction_identifier.into(),
-            submit_res.metadata,
+            submit_res.metadata.try_into().unwrap(),
             charged_fee,
         )),
         Err(e) => Err(e),

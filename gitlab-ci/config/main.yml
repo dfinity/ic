@@ -1,6 +1,4 @@
 no-interrupt:
-  extends:
-    - .ic-build-image
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
   interruptible: False
@@ -9,7 +7,6 @@ no-interrupt:
 
 after-script-test:
   extends:
-    - .build-k8s
     - .rules-master-pipeline-and-merge-request
   needs: [] # don't wait on other jobs
   script:
@@ -72,8 +69,6 @@ bazel-build-fuzzers-archives:
       ./build-all-fuzzers.sh --zip
 
 .bazel-test-all:
-  extends:
-    - .build-k8s
   needs: []
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"'
@@ -277,8 +272,6 @@ bazel-test-macos:
   timeout: 90 minutes
 
 .build-ic:
-  extends:
-    - .ic-build-image
   needs: []
   artifacts:
     reports:
@@ -354,8 +347,6 @@ build-ic-release:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-reproducibility"
 
 lock-generate:
-  extends:
-    - .build-k8s
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
   needs: []
@@ -413,7 +404,6 @@ pre-commit:
     # more easily.
     PRE_COMMIT_HOME: /cache/pre-commit/$CI_CONCURRENT_ID
   extends:
-    - .ic-build-image
     - .rules-master-pipeline-and-merge-request
   needs: [] # don't wait on other jobs
   script:
@@ -442,9 +432,7 @@ pre-commit:
         exit 1
       fi
 
-python-gitlab-ci-tests:
-  extends:
-    - .build-k8s
+python-ci-tests:
   rules:
     # this job breaks when not run against the default branch
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH'
@@ -463,12 +451,11 @@ python-gitlab-ci-tests:
       set -xeuo pipefail
       pip3 install --ignore-installed -r requirements.txt
       cd gitlab-ci/src
-      pytest -v -o junit_family=xunit1 --junitxml=../../test_report.xml --cov=. --cov-report=term --cov-report=term-missing --cov-report=html --cov-branch
+      pytest --ignore=gitlab_config/ -v -o junit_family=xunit1 --junitxml=../../test_report.xml --cov=. --cov-report=term --cov-report=term-missing --cov-report=html --cov-branch
 
 cargo-clippy-linux:
   needs: [] # don't wait on other jobs
   extends:
-    - .build-k8s
     - .rules-master-pipeline-and-merge-request
   variables:
     CARGO_BUILD_TARGET: "x86_64-unknown-linux-gnu"
@@ -481,7 +468,6 @@ cargo-clippy-linux:
 cargo-build-release-linux:
   needs: [] # don't wait on other jobs
   extends:
-    - .build-k8s
     - .rules-master-pipeline-and-merge-request
   script:
     - |
@@ -544,7 +530,6 @@ benchmarks:
 
 build-determinism:
   extends:
-    - .build-k8s
     - .rules-master-pipeline-no-merge-train
   needs:
     - job: bazel-test-all
@@ -570,8 +555,6 @@ build-determinism:
       ./gitlab-ci/tools/build-diff.sh "$PATH0" "$PATH1"
 
 build-determinism-release:
-  extends:
-    - .build-k8s
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-reproducibility"
   needs:
@@ -606,8 +589,6 @@ build-determinism-release:
         PATH1: "guest-os/update-img"
 
 test-push-branch:
-  extends:
-    - .build-k8s
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
       when: on_success
@@ -625,8 +606,6 @@ test-push-branch:
       git push --force --set-upstream origin post-merge-tests-passed
 
 cut-release-candidate:
-  extends:
-    - .build-k8s
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "release-candidate-cut"'
   dependencies: [] # don't copy artifacts from other jobs
@@ -648,8 +627,6 @@ cut-release-candidate:
 # must be run after `buildevents step` of the common after script.
 
 notify-gitlab-success:
-  extends:
-    - .ic-build-image
   rules:
     # Run on schedule pipelines as several Honeycomb alert rules rely on this.
     # TODO(IDX-2856): Disable when alerts will be send from superset.
@@ -679,8 +656,6 @@ notify-gitlab-success:
       fi
 
 notify-gitlab-failure:
-  extends:
-    - .build-k8s
   rules:
     # Send a slack alert on rc--* pipeline failures.
     # Limit to "push" pipeline source so that GitLab doesn't send spurious alerts for manual or
@@ -705,8 +680,6 @@ notify-gitlab-failure:
 
 commit-lint:
   needs: []
-  extends:
-    - .ic-build-image
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       allow_failure: true
@@ -725,8 +698,6 @@ commit-lint:
 
 zz-generated-gitlab:
   needs: []
-  extends:
-    - .ic-build-image
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes:

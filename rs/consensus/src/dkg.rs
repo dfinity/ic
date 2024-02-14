@@ -25,6 +25,7 @@ use ic_registry_client_helpers::{
     subnet::SubnetRegistry,
 };
 use ic_replicated_state::ReplicatedState;
+use ic_types::consensus::SummaryPayload;
 use ic_types::crypto::{CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash};
 use ic_types::{
     artifact::{Priority, PriorityFn},
@@ -1513,7 +1514,13 @@ pub fn make_registry_cup_from_cup_contents(
     let block = Block {
         version: replica_version.clone(),
         parent: Id::from(CryptoHash(Vec::new())),
-        payload: Payload::new(crypto_hash, (dkg_summary, ecdsa_summary).into()),
+        payload: Payload::new(
+            crypto_hash,
+            BlockPayload::Summary(SummaryPayload {
+                dkg: dkg_summary,
+                ecdsa: ecdsa_summary,
+            }),
+        ),
         height: cup_height,
         rank: Rank(0),
         context: ValidationContext {

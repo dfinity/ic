@@ -1,12 +1,14 @@
 use crate::driver::{
-    bootstrap::{init_ic, setup_and_start_vms, setup_and_start_vms_k8s},
+    bootstrap::{init_ic, setup_and_start_vms},
     farm::{Farm, HostFeature},
     node_software_version::NodeSoftwareVersion,
-    resource::{allocate_resources, allocate_resources_k8s, get_resource_request, ResourceGroup},
+    resource::{allocate_resources, get_resource_request, ResourceGroup},
     test_env::{TestEnv, TestEnvAttribute},
     test_env_api::{HasRegistryLocalStore, HasTopologySnapshot},
     test_setup::{GroupSetup, InfraProvider},
 };
+use crate::k8s::tnet::TNet;
+use crate::util::block_on;
 use anyhow::Result;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_prep_lib::{node::NodeSecretKeyStore, subnet_configuration::SubnetRunningState};
@@ -18,11 +20,12 @@ use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::p2p::build_default_gossip_config;
 use ic_types::{Height, NodeId, PrincipalId};
 use phantom_newtype::AmountOf;
+use registry_canister::mutations::node_management::do_update_node_ipv4_config_directly::IPv4Config;
 use serde::{Deserialize, Serialize};
 use slog::info;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::net::{Ipv6Addr, SocketAddr};
 use std::path::Path;
 use std::time::Duration;
 
@@ -46,6 +49,11 @@ pub struct InternetComputer {
     /// Indicates whether this `InternetComputer` instance should be installed with
     /// GuestOS disk images of the latest-deployed mainnet version.
     pub with_mainnet_config: bool,
+    // Due to a change in how default firewall rules are supplied, they are
+    // not preserved across the transitional upgrade. We temporarily stash
+    // the whitelist in the registry for the time being.
+    // THIS PATH SHOULD BE REMOVED.
+    pub with_forced_default_firewall: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -143,7 +151,7 @@ impl InternetComputer {
     }
 
     /// Add a single unassigned node with the given IPv4 configuration
-    pub fn with_ipv4_enabled_unassigned_node(mut self, ipv4_config: Ipv4Config) -> Self {
+    pub fn with_ipv4_enabled_unassigned_node(mut self, ipv4_config: IPv4Config) -> Self {
         self.unassigned_nodes.push(
             Node::new_with_settings(
                 self.default_vm_resources,
@@ -190,80 +198,16 @@ impl InternetComputer {
         self
     }
 
+    // Due to a change in how default firewall rules are supplied, they are
+    // not preserved across the transitional upgrade. We temporarily stash
+    // the whitelist in the registry for the time being.
+    // THIS PATH SHOULD BE REMOVED.
+    pub fn with_forced_default_firewall(mut self) -> Self {
+        self.with_forced_default_firewall = true;
+        self
+    }
+
     pub fn setup_and_start(&mut self, env: &TestEnv) -> Result<()> {
-        match InfraProvider::read_attribute(env) {
-            InfraProvider::Farm => {
-                self.setup_and_start_farm(env)?;
-            }
-            InfraProvider::K8s => {
-                self.setup_and_start_k8s(env)?;
-            }
-        }
-        Ok(())
-    }
-
-    pub fn setup_and_start_k8s(&mut self, env: &TestEnv) -> Result<()> {
-        for subnet in self.subnets.iter_mut() {
-            for node in subnet.nodes.iter_mut() {
-                node.required_host_features = node
-                    .required_host_features
-                    .iter()
-                    .chain(self.required_host_features.iter())
-                    .cloned()
-                    .collect();
-                node.vm_resources = node.vm_resources.or(&self.default_vm_resources);
-            }
-        }
-        for node in self.unassigned_nodes.iter_mut() {
-            node.required_host_features = node
-                .required_host_features
-                .iter()
-                .chain(self.required_host_features.iter())
-                .cloned()
-                .collect();
-            node.vm_resources = node.vm_resources.or(&self.default_vm_resources);
-        }
-
-        let tempdir = tempfile::tempdir()?;
-        self.create_secret_key_stores(tempdir.path())?;
-
-        let group_setup = GroupSetup::read_attribute(env);
-        let group_name: String = group_setup.infra_group_name;
-        let res_request = get_resource_request(self, env, &group_name)?;
-
-        let (res_group, tnet) = allocate_resources_k8s(self, &res_request)?;
-        self.propagate_ip_addrs(&res_group);
-        let init_ic = init_ic(
-            self,
-            env,
-            &env.logger(),
-            self.use_specified_ids_allocation_range,
-        )?;
-
-        // save initial registry snapshot for this pot
-        let local_store_path = env
-            .registry_local_store_path(&self.name)
-            .expect("corrupted ic-prep directory structure");
-        let reg_snapshot = ic_regedit::load_registry_local_store(local_store_path)?;
-        let reg_snapshot_serialized =
-            serde_json::to_string_pretty(&reg_snapshot).expect("Could not pretty print value.");
-        IcPrepStateDir::new(init_ic.target_dir.to_str().expect("invalid target dir"));
-        std::fs::write(
-            init_ic.target_dir.join("initial_registry_snapshot.json"),
-            reg_snapshot_serialized,
-        )
-        .unwrap();
-        let topology_snapshot = env.topology_snapshot_by_name(&self.name);
-        // Pretty print IC Topology using the Display implementation
-        info!(env.logger(), "{topology_snapshot}");
-        // Emit a json log event, to be consumed by log post-processing tools.
-        topology_snapshot.emit_log_event(&env.logger());
-        setup_and_start_vms_k8s(&init_ic, self, env, &group_name, &tnet)?;
-
-        Ok(())
-    }
-
-    pub fn setup_and_start_farm(&mut self, env: &TestEnv) -> Result<()> {
         // propagate required host features and resource settings to all vms
         let farm = Farm::from_test_env(env, "Internet Computer");
         for subnet in self.subnets.iter_mut() {
@@ -292,7 +236,15 @@ impl InternetComputer {
         let group_setup = GroupSetup::read_attribute(env);
         let group_name: String = group_setup.infra_group_name;
         let res_request = get_resource_request(self, env, &group_name)?;
-        let res_group = allocate_resources(&farm, &res_request)?;
+
+        if InfraProvider::read_attribute(env) == InfraProvider::K8s {
+            let image_url = res_request.primary_image.url.clone();
+            let tnet = TNet::read_attribute(env).image_url(image_url.as_ref());
+            block_on(tnet.deploy_guestos_image()).expect("failed to deploy guestos image");
+            tnet.write_attribute(env);
+        }
+
+        let res_group = allocate_resources(&farm, &res_request, env)?;
         self.propagate_ip_addrs(&res_group);
         let init_ic = init_ic(
             self,
@@ -395,7 +347,19 @@ impl InternetComputer {
         }
     }
 
-    pub fn get_ipv4_config_of_node(&self, node_id: NodeId) -> Option<Ipv4Config> {
+    pub fn get_query_stats_epoch_length_of_node(&self, node_id: NodeId) -> Option<u64> {
+        self.subnets
+            .iter()
+            .find(|subnet| {
+                subnet
+                    .nodes
+                    .iter()
+                    .any(|node| node.secret_key_store.as_ref().unwrap().node_id == node_id)
+            })
+            .and_then(|subnet| subnet.query_stats_epoch_length)
+    }
+
+    pub fn get_ipv4_config_of_node(&self, node_id: NodeId) -> Option<IPv4Config> {
         let node_filter_map = |n: &Node| {
             if n.secret_key_store.as_ref().unwrap().node_id == node_id {
                 Some(n.ipv4.clone())
@@ -404,7 +368,7 @@ impl InternetComputer {
             }
         };
         // extract ipv4-enabled nodes all subnet nodes
-        let mut ipv4_enabled_nodes: Vec<Option<Ipv4Config>> = self
+        let mut ipv4_enabled_nodes: Vec<Option<IPv4Config>> = self
             .subnets
             .iter()
             .flat_map(|s| s.nodes.iter().filter_map(node_filter_map))
@@ -469,6 +433,7 @@ pub struct Subnet {
     pub ssh_backup_access: Vec<String>,
     pub ecdsa_config: Option<EcdsaConfig>,
     pub running_state: SubnetRunningState,
+    pub query_stats_epoch_length: Option<u64>,
 }
 
 impl Subnet {
@@ -496,6 +461,7 @@ impl Subnet {
             ssh_backup_access: vec![],
             ecdsa_config: None,
             running_state: SubnetRunningState::Active,
+            query_stats_epoch_length: None,
         }
     }
 
@@ -639,6 +605,11 @@ impl Subnet {
         self
     }
 
+    pub fn with_query_stats_epoch_length(mut self, length: u64) -> Self {
+        self.query_stats_epoch_length = Some(length);
+        self
+    }
+
     pub fn halted(mut self) -> Self {
         self.running_state = SubnetRunningState::Halted;
         self
@@ -664,7 +635,7 @@ impl Subnet {
         })
     }
 
-    pub fn add_node_with_ipv4(self, ipv4_config: Ipv4Config) -> Self {
+    pub fn add_node_with_ipv4(self, ipv4_config: IPv4Config) -> Self {
         let default_vm_resources = self.default_vm_resources;
         let vm_allocation = self.vm_allocation.clone();
         let required_host_features = self.required_host_features.clone();
@@ -710,6 +681,7 @@ impl Default for Subnet {
             ssh_backup_access: vec![],
             ecdsa_config: None,
             running_state: SubnetRunningState::Active,
+            query_stats_epoch_length: None,
         }
     }
 }
@@ -752,7 +724,7 @@ pub struct Node {
     pub secret_key_store: Option<NodeSecretKeyStore>,
     pub ipv6: Option<Ipv6Addr>,
     pub malicious_behaviour: Option<MaliciousBehaviour>,
-    pub ipv4: Option<Ipv4Config>,
+    pub ipv4: Option<IPv4Config>,
     pub domain: Option<String>,
 }
 
@@ -785,7 +757,7 @@ impl Node {
         self
     }
 
-    pub fn with_ipv4_config(mut self, ipv4_config: Ipv4Config) -> Self {
+    pub fn with_ipv4_config(mut self, ipv4_config: IPv4Config) -> Self {
         self.ipv4 = Some(ipv4_config);
         self
     }
@@ -794,11 +766,4 @@ impl Node {
         self.domain = Some(domain);
         self
     }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Ipv4Config {
-    pub ip_addr: Ipv4Addr,
-    pub gateway_ip_addr: Ipv4Addr,
-    pub prefix_length: u32,
 }

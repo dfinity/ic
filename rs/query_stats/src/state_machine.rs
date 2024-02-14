@@ -20,7 +20,7 @@ use crate::metrics::QueryStatsAggregatorMetrics;
 ///
 /// This function does not check the first property. This has to be done by the caller.
 fn aggregate_query_stats(stats: Vec<&QueryStats>) -> QueryStats {
-    fn get_median<T: Default + Ord + Copy, F>(stats: &Vec<&QueryStats>, f: F) -> T
+    fn get_median<T: Default + Ord + Copy, F>(stats: &[&QueryStats], f: F) -> T
     where
         F: FnMut(&&QueryStats) -> T,
     {

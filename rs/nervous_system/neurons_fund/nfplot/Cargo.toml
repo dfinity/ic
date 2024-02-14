@@ -13,17 +13,12 @@ path = "src/main.rs"
 [dependencies]
 candid = { workspace = true }
 colored = "2.0.0"
-csv = "1.1"
 ic-agent = { workspace = true }
 ic-neurons-fund = { path = "../" }
-ic-nns-common = { path = "../../../nns/common" }
 ic-sns-governance = { path = "../../../sns/governance" }
-ic-nns-governance = { path = "../../../nns/governance" }
 ic-sns-swap = { path = "../../../sns/swap" }
 rgb = "0.8.37"
 rust_decimal = { version = "1.25" }
 serde = { workspace = true }
-serde_json = { workspace = true }
 textplots = { version = "0.8" }
 tokio = { workspace = true }
-ic-nervous-system-common-test-keys = { path = "../../common/test_keys" }

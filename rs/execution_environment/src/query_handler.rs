@@ -13,6 +13,7 @@ use crate::{
     hypervisor::Hypervisor,
     metrics::{MeasurementScope, QueryHandlerMetrics},
 };
+use candid::Encode;
 use ic_btc_interface::NetworkInRequest as BitcoinNetwork;
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
@@ -36,8 +37,9 @@ use ic_types::{
         Blob, Certificate, CertificateDelegation, HttpQueryResponse, HttpQueryResponseReply,
         UserQuery,
     },
-    CanisterId, NumInstructions,
+    CanisterId, NumInstructions, PrincipalId,
 };
+use prometheus::Histogram;
 use serde::Serialize;
 use std::convert::Infallible;
 use std::str::FromStr;
@@ -51,7 +53,10 @@ use tokio::sync::oneshot;
 use tower::{util::BoxCloneService, Service};
 
 pub(crate) use self::query_scheduler::{QueryScheduler, QuerySchedulerFlag};
-use ic_ic00_types::{BitcoinGetBalanceArgs, BitcoinGetUtxosArgs, Payload, QueryMethod};
+use ic_management_canister_types::{
+    BitcoinGetBalanceArgs, BitcoinGetUtxosArgs, FetchCanisterLogsRequest,
+    FetchCanisterLogsResponse, LogVisibility, Payload, QueryMethod,
+};
 use ic_replicated_state::NetworkTopology;
 
 /// Convert an object into CBOR binary.
@@ -110,11 +115,29 @@ pub struct InternalHttpQueryHandler {
 }
 
 #[derive(Clone)]
+struct HttpQueryHandlerMetrics {
+    pub height_diff_during_query_scheduling: Histogram,
+}
+
+impl HttpQueryHandlerMetrics {
+    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+        Self {
+            height_diff_during_query_scheduling: metrics_registry.histogram(
+                "execution_query_height_diff_during_query_scheduling",
+                "The height difference between the latest certified height before query scheduling and state height used for execution",
+                vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 20.0, 50.0, 100.0],
+            ),
+        }
+    }
+}
+
+#[derive(Clone)]
 /// Struct that is responsible for handling queries sent by user.
 pub(crate) struct HttpQueryHandler {
     internal: Arc<dyn QueryHandler<State = ReplicatedState>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     query_scheduler: QueryScheduler,
+    metrics: Arc<HttpQueryHandlerMetrics>,
 }
 
 impl InternalHttpQueryHandler {
@@ -129,7 +152,8 @@ impl InternalHttpQueryHandler {
         local_query_execution_stats: QueryStatsCollector,
     ) -> Self {
         let query_cache_capacity = config.query_cache_capacity;
-        let query_cache_max_expiry_time = config.query_cache_max_expiry_time;
+        let query_max_expiry_time = config.query_cache_max_expiry_time;
+        let query_data_certificate_expiry_time = config.query_cache_data_certificate_expiry_time;
         Self {
             log,
             hypervisor,
@@ -142,7 +166,8 @@ impl InternalHttpQueryHandler {
             query_cache: query_cache::QueryCache::new(
                 metrics_registry,
                 query_cache_capacity,
-                query_cache_max_expiry_time,
+                query_max_expiry_time,
+                query_data_certificate_expiry_time,
             ),
         }
     }
@@ -209,18 +234,32 @@ impl QueryHandler for InternalHttpQueryHandler {
         if query.receiver == CanisterId::ic_00() {
             let network = match QueryMethod::from_str(query.method_name.as_str()) {
                 Ok(QueryMethod::BitcoinGetUtxosQuery) => {
-                    let args = BitcoinGetUtxosArgs::decode(&query.method_payload)?;
-                    args.network
+                    BitcoinGetUtxosArgs::decode(&query.method_payload)?.network
                 }
                 Ok(QueryMethod::BitcoinGetBalanceQuery) => {
-                    let args = BitcoinGetBalanceArgs::decode(&query.method_payload)?;
-                    args.network
+                    BitcoinGetBalanceArgs::decode(&query.method_payload)?.network
+                }
+                Ok(QueryMethod::FetchCanisterLogs) => {
+                    return match self.config.canister_logging {
+                        FlagStatus::Enabled => fetch_canister_logs(
+                            query.source.get(),
+                            state.get_ref(),
+                            FetchCanisterLogsRequest::decode(&query.method_payload)?,
+                        ),
+                        FlagStatus::Disabled => Err(UserError::new(
+                            ErrorCode::CanisterContractViolation,
+                            format!(
+                                "{} API is not enabled on this subnet",
+                                QueryMethod::FetchCanisterLogs
+                            ),
+                        )),
+                    }
                 }
                 Err(_) => {
                     return Err(UserError::new(
                         ErrorCode::CanisterMethodNotFound,
                         format!("Query method {} not found.", query.method_name),
-                    ))
+                    ));
                 }
             };
 
@@ -293,16 +332,50 @@ impl QueryHandler for InternalHttpQueryHandler {
     }
 }
 
+fn fetch_canister_logs(
+    sender: PrincipalId,
+    state: &ReplicatedState,
+    args: FetchCanisterLogsRequest,
+) -> Result<WasmResult, UserError> {
+    let canister_id = args.get_canister_id();
+    let canister = state.canister_state(&canister_id).ok_or_else(|| {
+        UserError::new(
+            ErrorCode::CanisterNotFound,
+            format!("Canister {canister_id} not found"),
+        )
+    })?;
+
+    match canister.log_visibility() {
+        LogVisibility::Public => Ok(()),
+        LogVisibility::Controllers if canister.controllers().contains(&sender) => Ok(()),
+        LogVisibility::Controllers => Err(UserError::new(
+            ErrorCode::CanisterRejectedMessage,
+            format!(
+                "Caller {} is not allowed to query ic00 method {}",
+                sender,
+                QueryMethod::FetchCanisterLogs
+            ),
+        )),
+    }?;
+
+    let response = FetchCanisterLogsResponse {
+        canister_log_records: canister.system_state.canister_log_records.clone(),
+    };
+    Ok(WasmResult::Reply(Encode!(&response).unwrap()))
+}
+
 impl HttpQueryHandler {
     pub(crate) fn new_service(
         internal: Arc<dyn QueryHandler<State = ReplicatedState>>,
         query_scheduler: QueryScheduler,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+        metrics_registry: &MetricsRegistry,
     ) -> QueryExecutionService {
         BoxCloneService::new(Self {
             internal,
             state_reader,
             query_scheduler,
+            metrics: Arc::new(HttpQueryHandlerMetrics::new(metrics_registry)),
         })
     }
 }
@@ -338,6 +411,8 @@ impl Service<(UserQuery, Option<CertificateDelegation>)> for HttpQueryHandler {
         let state_reader = Arc::clone(&self.state_reader);
         let (tx, rx) = oneshot::channel();
         let canister_id = query.receiver;
+        let latest_certified_height_pre_schedule = state_reader.latest_certified_height();
+        let http_query_handler_metrics = Arc::clone(&self.metrics);
         self.query_scheduler.push(canister_id, move || {
             let start = std::time::Instant::now();
             if !tx.is_closed() {
@@ -355,6 +430,15 @@ impl Service<(UserQuery, Option<CertificateDelegation>)> for HttpQueryHandler {
                 ) {
                     Some((state, cert)) => {
                         let time = state.get_ref().metadata.batch_time;
+
+                        let certified_height_used_for_execution = state.height();
+                        let height_diff = certified_height_used_for_execution
+                            .get()
+                            .saturating_sub(latest_certified_height_pre_schedule.get());
+                        http_query_handler_metrics
+                            .height_diff_during_query_scheduling
+                            .observe(height_diff as f64);
+
                         let result = internal.query(query, state, cert);
 
                         let response = match result {

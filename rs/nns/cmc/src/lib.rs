@@ -1,5 +1,5 @@
 use candid::{CandidType, Nat};
-use ic_ic00_types::CanisterSettingsArgs;
+use ic_management_canister_types::CanisterSettingsArgs;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use ic_xrc_types::ExchangeRate;

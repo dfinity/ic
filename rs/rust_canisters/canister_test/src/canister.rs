@@ -3,8 +3,8 @@ use core::future::Future;
 use dfn_candid::{candid, candid_multi_arity};
 use ic_canister_client::{Agent, Sender};
 use ic_config::Config;
-use ic_ic00_types::CanisterStatusType::Stopped;
-pub use ic_ic00_types::{
+use ic_management_canister_types::CanisterStatusType::Stopped;
+pub use ic_management_canister_types::{
     self as ic00, CanisterIdRecord, CanisterInstallMode, CanisterStatusResult, InstallCodeArgs,
     ProvisionalCreateCanisterWithCyclesArgs, IC_00,
 };
@@ -13,7 +13,9 @@ use ic_replica_tests::*;
 pub use ic_types::{ingress::WasmResult, CanisterId, Cycles, PrincipalId};
 use on_wire::{FromWire, IntoWire, NewType};
 
-use ic_ic00_types::{CanisterSettingsArgsBuilder, CanisterStatusResultV2, UpdateSettingsArgs};
+use ic_management_canister_types::{
+    CanisterSettingsArgsBuilder, CanisterStatusResultV2, UpdateSettingsArgs,
+};
 use std::{
     convert::{AsRef, TryFrom},
     env, fmt,

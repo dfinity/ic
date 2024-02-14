@@ -725,7 +725,7 @@ fn test_skip_round_robin() {
     // Skip ingress.
     assert_eq!(queues.peek_input().unwrap(), ingress_input);
     queues.skip_input(&mut loop_detector);
-    assert!(loop_detector.skipped_ingress_queue);
+    assert_eq!(loop_detector.ingress_queue_skip_count, 1);
     assert!(!loop_detector.detected_loop(&queues));
 
     let peeked_input = CanisterMessage::Request(Arc::new(local_requests.get(1).unwrap().clone()));
@@ -736,12 +736,13 @@ fn test_skip_round_robin() {
     assert_eq!(queues.peek_input().unwrap(), ingress_input);
     queues.skip_input(&mut loop_detector);
     assert!(!loop_detector.detected_loop(&queues));
+    assert_eq!(loop_detector.ingress_queue_skip_count, 2);
 
     // Skip local.
     let peeked_input = CanisterMessage::Request(Arc::new(local_requests.get(2).unwrap().clone()));
     assert_eq!(queues.peek_input().unwrap(), peeked_input);
     queues.skip_input(&mut loop_detector);
-    assert!(loop_detector.skipped_ingress_queue);
+    assert_eq!(loop_detector.ingress_queue_skip_count, 2);
     assert!(loop_detector.detected_loop(&queues));
 }
 

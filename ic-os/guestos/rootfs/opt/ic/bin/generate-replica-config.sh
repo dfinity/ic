@@ -6,7 +6,7 @@
 function usage() {
     cat <<EOF
 Usage:
-  generate-replica-config [-n network.conf] [-c nns.conf] [-b backup.conf] [-l log.conf] [-m malicious_behavior.conf] -i ic.json5.template -o ic.json5
+  generate-replica-config [-n network.conf] [-c nns.conf] [-b backup.conf] [-l log.conf] [-m malicious_behavior.conf] [-q query_stats.conf] [-w default_firewall_whitelist.conf] -i ic.json5.template -o ic.json5
 
   Generate replica config from template file.
 
@@ -15,6 +15,8 @@ Usage:
   -b backup.conf: Optional, parameters of the artifact backup
   -l log.conf: Optional, logging parameters of the node software
   -m malicious_behavior.conf: Optional, malicious behavior parameters
+  -q query_stats.conf: Optional, query statistics epoch length configuration
+  -w default_firewall_whitelist.conf: Optional, default firewall whitelist configuration
   -i infile: input ic.json5.template file
   -o outfile: output ic.json5 file
 EOF
@@ -74,8 +76,6 @@ function read_network_variables() {
             "hostname") hostname="${value}" ;;
             "ipv6_address") ipv6_address="${value}" ;;
             "ipv6_gateway") ipv6_gateway="${value}" ;;
-            "name_servers") name_servers="${value}" ;;
-            "ipv4_name_servers") ipv4_name_servers="${value}" ;;
             "ipv4_address") ipv4_address="${value}" ;;
             "ipv4_gateway") ipv4_gateway="${value}" ;;
             "domain") domain="${value}" ;;
@@ -145,7 +145,35 @@ function read_malicious_behavior_variables() {
     done <"$1"
 }
 
-while getopts "l:m:n:c:i:o:b:" OPT; do
+# Read query stats config variables from file. The file contains a single value which is the epoch length in seconds.
+function read_query_stats_variables() {
+    while IFS="=" read -r key value; do
+        case "$key" in
+            "query_stats_epoch_length")
+                query_stats_epoch_length="${value}"
+                query_stats_aggregation="\"Enabled\""
+                ;;
+        esac
+    done <"$1"
+}
+
+# Read default firewall whitelist config variables from file. The file must be of the
+# form "key=value" for each line with a specific set of keys permissible (see
+# code below).
+#
+# Arguments:
+# - $1: Name of the file to be read.
+function read_default_firewall_whitelist_variables() {
+    # Read limited set of keys. Be extra-careful quoting values as it could
+    # otherwise lead to executing arbitrary shell code!
+    while IFS="=" read -r key value; do
+        case "$key" in
+            "ipv6_whitelist") ipv6_whitelist="${value}" ;;
+        esac
+    done <"$1"
+}
+
+while getopts "l:m:q:n:c:i:o:b:w:" OPT; do
     case "${OPT}" in
         n)
             NETWORK_CONFIG_FILE="${OPTARG}"
@@ -161,6 +189,12 @@ while getopts "l:m:n:c:i:o:b:" OPT; do
             ;;
         m)
             MALICIOUS_BEHAVIOR_CONFIG_FILE="${OPTARG}"
+            ;;
+        q)
+            QUERY_STATS_CONFIG_FILE="${OPTARG}"
+            ;;
+        w)
+            DEFAULT_FIREWALL_WHITELIST_CONFIG_FILE="${OPTARG}"
             ;;
         i)
             IN_FILE="${OPTARG}"
@@ -200,6 +234,14 @@ if [ "${MALICIOUS_BEHAVIOR_CONFIG_FILE}" != "" -a -e "${MALICIOUS_BEHAVIOR_CONFI
     read_malicious_behavior_variables "${MALICIOUS_BEHAVIOR_CONFIG_FILE}"
 fi
 
+if [ "${QUERY_STATS_CONFIG_FILE}" != "" -a -e "${QUERY_STATS_CONFIG_FILE}" ]; then
+    read_query_stats_variables "${QUERY_STATS_CONFIG_FILE}"
+fi
+
+if [ "${DEFAULT_FIREWALL_WHITELIST_CONFIG_FILE}" != "" -a -e "${DEFAULT_FIREWALL_WHITELIST_CONFIG_FILE}" ]; then
+    read_default_firewall_whitelist_variables "${DEFAULT_FIREWALL_WHITELIST_CONFIG_FILE}"
+fi
+
 INTERFACE=($(find /sys/class/net -type l -not -lname '*virtual*' -exec basename '{}' ';'))
 IPV6_ADDRESS="${ipv6_address%/*}"
 IPV6_ADDRESS="${IPV6_ADDRESS:-$(get_if_address_retries 6 ${INTERFACE} 12)}"
@@ -216,6 +258,12 @@ BACKUP_PURGING_INTERVAL_SECS="${backup_purging_interval_secs:-3600}"
 REPLICA_LOG_DEBUG_OVERRIDES="${replica_log_debug_overrides:-[]}"
 # Default is null (None)
 MALICIOUS_BEHAVIOR="${malicious_behavior:-null}"
+# Defaults to disabled
+QUERY_STATS_AGGREGATION="${query_stats_aggregation:-\"Disabled\"}"
+# Default is 1800 blocks i.e. around 30min
+QUERY_STATS_EPOCH_LENGTH="${query_stats_epoch_length:-1800}"
+# Default value is none
+IPV6_WHITELIST="${ipv6_whitelist:-}"
 
 if [ "${IPV6_ADDRESS}" == "" ]; then
     echo "Cannot determine an IPv6 address, aborting"
@@ -248,6 +296,9 @@ sed -e "s@{{ ipv6_address }}@${IPV6_ADDRESS}@" \
     -e "s@{{ backup_purging_interval_secs }}@${BACKUP_PURGING_INTERVAL_SECS}@" \
     -e "s@{{ replica_log_debug_overrides }}@${REPLICA_LOG_DEBUG_OVERRIDES}@" \
     -e "s@{{ malicious_behavior }}@${MALICIOUS_BEHAVIOR}@" \
+    -e "s@{{ query_stats_aggregation }}@${QUERY_STATS_AGGREGATION}@" \
+    -e "s@{{ query_stats_epoch_length }}@${QUERY_STATS_EPOCH_LENGTH}@" \
+    -e "s@{{ ipv6_whitelist }}@${IPV6_WHITELIST}@" \
     "${IN_FILE}" >"${OUT_FILE}"
 
 # umask for service is set to be restricted, but this file needs to be

@@ -41,7 +41,7 @@ impl RosettaRequestHandler {
 
         Ok(ConstructionPreprocessResponse {
             required_public_keys: Some(required_public_keys),
-            options: options.map(|op| op.into()),
+            options: options.map(|op| op.try_into()).transpose()?,
         })
     }
 }

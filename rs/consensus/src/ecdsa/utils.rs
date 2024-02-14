@@ -5,15 +5,16 @@ use crate::ecdsa::complaints::{EcdsaTranscriptLoader, TranscriptLoadStatus};
 use ic_artifact_pool::consensus_pool::build_consensus_block_chain;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_crypto::get_tecdsa_master_public_key;
-use ic_ic00_types::EcdsaKeyId;
 use ic_interfaces::consensus_pool::ConsensusBlockChain;
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{warn, ReplicaLogger};
+use ic_management_canister_types::EcdsaKeyId;
 use ic_protobuf::registry::subnet::v1 as pb;
 use ic_registry_client_helpers::ecdsa_keys::EcdsaKeysRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::EcdsaConfig;
+use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
 use ic_types::consensus::ecdsa::{PreSignatureQuadrupleRef, QuadrupleId};
 use ic_types::consensus::Block;
 use ic_types::consensus::{
@@ -26,9 +27,10 @@ use ic_types::consensus::{
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings,
 };
-use ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
+use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterEcdsaPublicKey};
 use ic_types::registry::RegistryClientError;
 use ic_types::{Height, RegistryVersion, SubnetId};
+use phantom_newtype::Id;
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryInto;
 use std::sync::Arc;
@@ -217,6 +219,43 @@ pub(super) fn block_chain_cache(
     }
 }
 
+/// Helper to build the [`RequestId`] if the context is already completed
+pub(super) fn get_context_request_id(context: &SignWithEcdsaContext) -> Option<RequestId> {
+    context
+        .matched_quadruple
+        .clone()
+        .map(|(quadruple_id, height)| RequestId {
+            quadruple_id,
+            pseudo_random_id: context.pseudo_random_id,
+            height,
+        })
+}
+
+/// Helper to build threshold signature inputs from the context and
+/// the pre-signature quadruple
+pub(super) fn build_signature_inputs(
+    context: &SignWithEcdsaContext,
+    block_reader: &dyn EcdsaBlockReader,
+) -> Option<(RequestId, ThresholdEcdsaSigInputsRef)> {
+    let request_id = get_context_request_id(context)?;
+    let extended_derivation_path = ExtendedDerivationPath {
+        caller: context.request.sender.into(),
+        derivation_path: context.derivation_path.clone(),
+    };
+    let quadruple = block_reader
+        .available_quadruple(&request_id.quadruple_id)?
+        .clone();
+    let key_transcript_ref = quadruple.key_unmasked_ref?;
+    let inputs = ThresholdEcdsaSigInputsRef::new(
+        extended_derivation_path,
+        context.message_hash,
+        Id::from(context.nonce?),
+        quadruple,
+        key_transcript_ref,
+    );
+    Some((request_id, inputs))
+}
+
 /// Load the given transcripts
 /// Returns None if all the transcripts could be loaded successfully.
 /// Otherwise, returns the complaint change set to be added to the pool
@@ -251,6 +290,7 @@ pub(super) fn load_transcripts(
 pub(super) fn transcript_op_summary(op: &IDkgTranscriptOperation) -> String {
     match op {
         IDkgTranscriptOperation::Random => "Random".to_string(),
+        IDkgTranscriptOperation::RandomUnmasked => "RandomUnmasked".to_string(),
         IDkgTranscriptOperation::ReshareOfMasked(t) => {
             format!("ReshareOfMasked({:?})", t.transcript_id)
         }
@@ -493,7 +533,7 @@ mod tests {
         batch::ValidationContext,
         consensus::{
             ecdsa::{EcdsaPayload, UnmaskedTranscript},
-            Payload,
+            BlockPayload, Payload, SummaryPayload,
         },
         crypto::{AlgorithmId, CryptoHashOf},
         subnet_id_into_protobuf,
@@ -745,7 +785,10 @@ mod tests {
             CryptoHashOf::from(ic_types::crypto::CryptoHash(Vec::new())),
             Payload::new(
                 ic_types::crypto::crypto_hash,
-                (ic_types::consensus::dkg::Summary::fake(), ecdsa_payload).into(),
+                BlockPayload::Summary(SummaryPayload {
+                    dkg: ic_types::consensus::dkg::Summary::fake(),
+                    ecdsa: ecdsa_payload,
+                }),
             ),
             Height::from(123),
             ic_types::consensus::Rank(456),

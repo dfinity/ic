@@ -3,30 +3,31 @@ use crate::utils::do_copy;
 
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_config::flag_status::FlagStatus;
-use ic_ic00_types::LogVisibility;
 use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_management_canister_types::{CanisterLogRecord, LogVisibility};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::{
+        canister_snapshot_bits::v1 as pb_canister_snapshot_bits,
         canister_state_bits::v1 as pb_canister_state_bits, ingress::v1 as pb_ingress,
         queues::v1 as pb_queues, stats::v1 as pb_stats, system_metadata::v1 as pb_metadata,
     },
 };
 use ic_replicated_state::{
+    canister_snapshots::SnapshotId,
     canister_state::{
         execution_state::{NextScheduledMethod, WasmMetadata},
         system_state::{wasm_chunk_store::WasmChunkStoreMetadata, CanisterHistory, CyclesUseCase},
     },
     CallContextManager, CanisterStatus, ExecutionTask, ExportedFunctions, Global, NumWasmPages,
 };
-use ic_sys::mmap::ScopedMmap;
+use ic_sys::{fs::sync_path, mmap::ScopedMmap};
 use ic_types::{
     batch::TotalQueryStats, nominal_cycles::NominalCycles, AccumulatedPriority, CanisterId,
     ComputeAllocation, Cycles, ExecutionRound, Height, MemoryAllocation, NumInstructions,
-    PrincipalId,
+    PrincipalId, Time,
 };
-use ic_utils::fs::sync_path;
 use ic_utils::thread::parallel_map;
 use ic_wasm_types::{CanisterModule, WasmHash};
 use prometheus::{Histogram, IntCounterVec};
@@ -163,6 +164,27 @@ pub struct CanisterStateBits {
     pub wasm_chunk_store_metadata: WasmChunkStoreMetadata,
     pub total_query_stats: TotalQueryStats,
     pub log_visibility: LogVisibility,
+    pub canister_log_records: Vec<CanisterLogRecord>,
+}
+
+/// This struct contains bits of the `CanisterSnapshot` that are not already
+/// covered somewhere else and are too small to be serialized separately.
+#[derive(Debug, PartialEq, Eq)]
+pub struct CanisterSnapshotBits {
+    /// The ID of the canister snapshot.
+    pub snapshot_id: SnapshotId,
+    /// Identifies the canister to which this snapshot belongs.
+    pub canister_id: CanisterId,
+    /// The timestamp indicating the moment the snapshot was captured.
+    pub taken_at_timestamp: Time,
+    /// The canister version at the time of taking the snapshot.
+    pub canister_version: u64,
+    /// The hash of the canister wasm.
+    pub binary_hash: Option<WasmHash>,
+    /// The certified data blob belonging to the canister.
+    pub certified_data: Vec<u8>,
+    /// The metadata required for a wasm chunk store.
+    pub wasm_chunk_store_metadata: WasmChunkStoreMetadata,
 }
 
 #[derive(Clone)]
@@ -1769,6 +1791,11 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             wasm_chunk_store_metadata: Some((&item.wasm_chunk_store_metadata).into()),
             total_query_stats: Some((&item.total_query_stats).into()),
             log_visibility: item.log_visibility.into(),
+            canister_log_records: item
+                .canister_log_records
+                .into_iter()
+                .map(|record| record.into())
+                .collect(),
         }
     }
 }
@@ -1888,7 +1915,12 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 "CanisterStateBits::total_query_stats",
             )
             .unwrap_or_default(),
-            log_visibility: LogVisibility::from(value.log_visibility),
+            log_visibility: value.log_visibility.try_into()?,
+            canister_log_records: value
+                .canister_log_records
+                .into_iter()
+                .map(|record| record.into())
+                .collect(),
         })
     }
 }
@@ -1953,6 +1985,56 @@ impl TryFrom<pb_canister_state_bits::ExecutionStateBits> for ExecutionStateBits 
                     .into(),
                 None => NextScheduledMethod::default(),
             },
+        })
+    }
+}
+
+impl From<&CanisterSnapshotBits> for pb_canister_snapshot_bits::CanisterSnapshotBits {
+    fn from(item: &CanisterSnapshotBits) -> Self {
+        Self {
+            snapshot_id: item.snapshot_id.get(),
+            canister_id: Some((item.canister_id).into()),
+            taken_at_timestamp: item.taken_at_timestamp.as_nanos_since_unix_epoch(),
+            canister_version: item.canister_version,
+            binary_hash: item.binary_hash.as_ref().map(|h| h.to_vec()),
+            certified_data: item.certified_data.clone(),
+            wasm_chunk_store_metadata: Some((&item.wasm_chunk_store_metadata).into()),
+        }
+    }
+}
+
+impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapshotBits {
+    type Error = ProxyDecodeError;
+    fn try_from(
+        item: pb_canister_snapshot_bits::CanisterSnapshotBits,
+    ) -> Result<Self, Self::Error> {
+        let canister_id: CanisterId =
+            try_from_option_field(item.canister_id, "CanisterSnapshotBits::canister_id")?;
+
+        let binary_hash = match item.binary_hash {
+            Some(hash) => {
+                let hash: [u8; 32] =
+                    hash.try_into()
+                        .map_err(|e| ProxyDecodeError::ValueOutOfRange {
+                            typ: "BinaryHash",
+                            err: format!("Expected a 32-byte long module hash, got {:?}", e),
+                        })?;
+                Some(hash.into())
+            }
+            None => None,
+        };
+        Ok(Self {
+            snapshot_id: SnapshotId::new(item.snapshot_id),
+            canister_id,
+            taken_at_timestamp: Time::from_nanos_since_unix_epoch(item.taken_at_timestamp),
+            canister_version: item.canister_version,
+            binary_hash,
+            certified_data: item.certified_data,
+            wasm_chunk_store_metadata: try_from_option_field(
+                item.wasm_chunk_store_metadata,
+                "CanisterSnapshotBits::wasm_chunk_store_metadata",
+            )
+            .unwrap_or_default(),
         })
     }
 }

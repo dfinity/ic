@@ -13,7 +13,7 @@ use ic_interfaces::consensus_pool::{
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_protobuf::types::v1 as pb;
 use ic_types::consensus::certification::CertificationMessageHash;
-use ic_types::consensus::HasHash;
+use ic_types::consensus::{BlockPayload, DataPayload, HasHash};
 use ic_types::{
     artifact::{CertificationMessageId, ConsensusMessageId},
     batch::BatchPayload,
@@ -428,12 +428,11 @@ impl MutablePoolSection<ValidatedConsensusArtifact>
                                 block.payload.get_hash().clone(),
                                 block.payload.payload_type(),
                                 Box::new(move || {
-                                    (
-                                        BatchPayload::default(),
-                                        Dealings::new_empty(start_height),
-                                        None,
-                                    )
-                                        .into()
+                                    BlockPayload::Data(DataPayload {
+                                        batch: BatchPayload::default(),
+                                        dealings: Dealings::new_empty(start_height),
+                                        ecdsa: None,
+                                    })
                                 }),
                             );
                             artifact.msg = proposal.into_message();
@@ -1312,7 +1311,7 @@ mod tests {
                 let mut pool =
                     PersistentHeightIndexedPool::new_consensus_pool(config.clone(), log.clone());
                 // insert a few things
-                let rb_ops = random_beacon_ops();
+                let rb_ops = random_beacon_ops(/*heights=*/ 3..19);
                 pool.mutate(rb_ops.clone());
                 let iter = pool.random_beacon().get_all();
                 let msgs_from_pool = iter;

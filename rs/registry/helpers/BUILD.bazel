@@ -10,7 +10,7 @@ DEPENDENCIES = [
     "//rs/registry/provisional_whitelist",
     "//rs/registry/routing_table",
     "//rs/registry/subnet_features",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/types/base_types",
     "//rs/types/types",
     "@crate_index//:serde_cbor",

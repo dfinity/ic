@@ -4,7 +4,7 @@ use dfn_core::api::CanisterId;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_crypto_sha2::Sha256;
-use ic_ic00_types::{CanisterInstallMode, InstallCodeArgs, IC_00};
+use ic_management_canister_types::{CanisterInstallMode, InstallCodeArgs, IC_00};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{
@@ -98,8 +98,6 @@ impl ChangeCanisterRequest {
         mode: CanisterInstallMode,
         canister_id: CanisterId,
     ) -> Self {
-        let default_memory_allocation = 1_u64 << 30;
-
         Self {
             stop_before_installing,
             mode,
@@ -107,7 +105,7 @@ impl ChangeCanisterRequest {
             wasm_module: Vec::new(),
             arg: Encode!().unwrap(),
             compute_allocation: None,
-            memory_allocation: Some(candid::Nat::from(default_memory_allocation)),
+            memory_allocation: None,
             query_allocation: None,
         }
     }

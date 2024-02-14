@@ -1628,8 +1628,9 @@ pub mod test {
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_types::{
         consensus::{
-            ecdsa::QuadrupleId, CatchUpPackageShare, Finalization, FinalizationShare, HashedBlock,
-            HashedRandomBeacon, NotarizationShare, Payload, RandomBeaconContent, RandomTapeContent,
+            ecdsa::QuadrupleId, BlockPayload, CatchUpPackageShare, Finalization, FinalizationShare,
+            HashedBlock, HashedRandomBeacon, NotarizationShare, Payload, RandomBeaconContent,
+            RandomTapeContent, SummaryPayload,
         },
         crypto::{CombinedMultiSig, CombinedMultiSigOf, CryptoHash},
         replica_config::ReplicaConfig,
@@ -1928,7 +1929,13 @@ pub mod test {
             add_available_quadruple_to_payload(&mut ecdsa, quadruple_id3, RegistryVersion::from(2));
 
             let dkg = block.payload.as_ref().as_summary().dkg.clone();
-            block.payload = Payload::new(ic_types::crypto::crypto_hash, (dkg, Some(ecdsa)).into());
+            block.payload = Payload::new(
+                ic_types::crypto::crypto_hash,
+                BlockPayload::Summary(SummaryPayload {
+                    dkg,
+                    ecdsa: Some(ecdsa),
+                }),
+            );
             proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
 
             let beacon = pool.make_next_beacon();

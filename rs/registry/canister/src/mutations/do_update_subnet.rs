@@ -10,7 +10,7 @@ use dfn_core::println;
 use serde::Serialize;
 
 use ic_base_types::{subnet_id_into_protobuf, SubnetId};
-use ic_ic00_types::EcdsaKeyId;
+use ic_management_canister_types::EcdsaKeyId;
 use ic_protobuf::registry::subnet::v1::{SubnetFeatures as pbSubnetFeatures, SubnetRecord};
 use ic_registry_keys::{make_ecdsa_signing_subnet_list_key, make_subnet_record_key};
 use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
@@ -394,7 +394,7 @@ mod tests {
         add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
         prepare_registry_with_nodes,
     };
-    use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
+    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
     use ic_protobuf::registry::subnet::v1::{GossipConfig, SubnetRecord};
     use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;

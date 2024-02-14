@@ -6,7 +6,6 @@ exports_files([
     "partitions.csv",
     "rootfs/docker-base.dev",
     "rootfs/docker-base.prod",
-    "rootfs/docker-base.dev-sev",
     "rootfs/allow_console_root",
     "rootfs/extra_boot_args.template",
     "rootfs/dev-certs/canister_http_test_ca.cert",
@@ -39,6 +38,5 @@ sh_test(
 #
 # bazel run   //ic-os/guestos/envs/prod:upload_disk-img           [--s3_endpoint=<internal endpoint address>]
 # bazel build //ic-os/guestos/envs/dev/...
-# bazel build //ic-os/guestos/envs/dev-sev/...
 #
 # check //ic-os/defs.bzl for the full list of targets.

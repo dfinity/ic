@@ -12,13 +12,11 @@ clap = { workspace = true }
 hex = "0.4.2"
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-canister-client = { path = "../canister_client" }
-ic-canister-sandbox-backend-lib = { path = "../canister_sandbox/backend_lib" }
-ic-canister-sandbox-launcher = { path = "../canister_sandbox/sandbox_launcher" }
+ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-consensus-utils = { path = "../consensus/utils" }
 ic-crypto-for-verification-only = { path = "../crypto/for_verification_only" }
-ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-interfaces = { path = "../interfaces" }

@@ -3,10 +3,12 @@ use candid::candid_method;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_cdk::println;
 use ic_cdk_macros::{heartbeat, init, post_upgrade, pre_upgrade, query, update};
-use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
-use ic_nervous_system_clients::canister_status::CanisterStatusResult;
-use ic_nervous_system_clients::management_canister_client::ManagementCanisterClientImpl;
+use ic_nervous_system_clients::{
+    canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
+    management_canister_client::ManagementCanisterClientImpl,
+};
 use ic_nervous_system_common::{
     dfn_core_stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
     serve_logs, serve_logs_v2, serve_metrics, NANO_SECONDS_PER_SECOND,
@@ -17,6 +19,7 @@ use ic_sns_root::{
     logs::{ERROR, INFO},
     pb::v1::{
         CanisterCallError, ListSnsCanistersRequest, ListSnsCanistersResponse,
+        ManageDappCanisterSettingsRequest, ManageDappCanisterSettingsResponse,
         RegisterDappCanisterRequest, RegisterDappCanisterResponse, RegisterDappCanistersRequest,
         RegisterDappCanistersResponse, SetDappControllersRequest, SetDappControllersResponse,
         SnsRootCanister,
@@ -306,6 +309,22 @@ async fn set_dapp_controllers(request: SetDappControllersRequest) -> SetDappCont
     .await
 }
 
+#[candid_method(update)]
+#[update]
+async fn manage_dapp_canister_settings(
+    request: ManageDappCanisterSettingsRequest,
+) -> ManageDappCanisterSettingsResponse {
+    log!(INFO, "manage_dapp_canister_settings");
+    assert_eq_governance_canister_id(PrincipalId(ic_cdk::api::caller()));
+
+    STATE.with_borrow(|state| {
+        state.manage_dapp_canister_settings(
+            request,
+            ManagementCanisterClientImpl::<CanisterRuntime>::new(None),
+        )
+    })
+}
+
 fn assert_state_is_valid(state: &SnsRootCanister) {
     assert!(state.governance_canister_id.is_some());
     assert!(state.ledger_canister_id.is_some());
@@ -328,8 +347,9 @@ async fn heartbeat() {
     // dependencies to run_periodic_tasks.
     let now = CanisterEnvironment {}.now();
     let ledger_client = create_ledger_client();
+    let management_canister_client = ManagementCanisterClientImpl::<CanisterRuntime>::new(None);
 
-    SnsRootCanister::heartbeat(&STATE, &ledger_client, now).await
+    SnsRootCanister::heartbeat(&STATE, &ledger_client, &management_canister_client, now).await
 }
 
 // Resources to serve for a given http_request

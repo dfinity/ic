@@ -70,6 +70,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) round_consensus_queue: ScopedMetrics,
     pub(super) round_postponed_raw_rand_queue: ScopedMetrics,
     pub(super) round_subnet_queue: ScopedMetrics,
+    pub(super) round_advance_long_install_code: ScopedMetrics,
     pub(super) round_scheduling_duration: Histogram,
     pub(super) round_update_sign_with_ecdsa_contexts_duration: Histogram,
     pub(super) round_inner: ScopedMetrics,
@@ -91,8 +92,6 @@ pub(super) struct SchedulerMetrics {
     pub(super) canister_install_code_debits: Histogram,
     pub(super) old_open_call_contexts: IntGaugeVec,
     pub(super) canisters_with_old_open_call_contexts: IntGaugeVec,
-    pub(super) callbacks_without_originator: IntGauge,
-    pub(super) callbacks_without_prepayment: IntGauge,
     pub(super) canister_invariants: IntCounter,
     pub(super) scheduler_compute_allocation_invariant_broken: IntCounter,
     pub(super) scheduler_cores_invariant_broken: IntCounter,
@@ -406,6 +405,32 @@ impl SchedulerMetrics {
                     metrics_registry,
                 ),
             },
+            round_advance_long_install_code: ScopedMetrics {
+                duration: duration_histogram(
+                    "execution_round_advance_long_install_code_duration_seconds",
+                    "The duration of advancing an in progress long install code in \
+                          an execution round",
+                    metrics_registry,
+                ),
+                instructions: instructions_histogram(
+                    "execution_round_advance_long_install_code_instructions",
+                    "The number of instructions executed during advancing \
+                        an in progress install code in an execution round",
+                    metrics_registry,
+                ),
+                slices: slices_histogram(
+                    "execution_round_advance_long_install_code_slices",
+                    "The number of slices executed executed during advancing \
+                        an in progress install code in an execution round",
+                    metrics_registry,
+                ),
+                messages: messages_histogram(
+                    "execution_round_advance_long_install_code_messages",
+                    "The number of messages executed during advancing \
+                        an in progress install code in an execution round",
+                    metrics_registry,
+                ),
+            },
             round_scheduling_duration: duration_histogram(
                 "execution_round_scheduling_duration_seconds",
                 "The duration of execution round scheduling in seconds.",
@@ -593,14 +618,6 @@ impl SchedulerMetrics {
                 "scheduler_canisters_with_old_open_call_contexts",
                 "Number of canisters with call contexts that have been open for more than the given age.",
                 &["age"]
-            ),
-            callbacks_without_originator: metrics_registry.int_gauge(
-                "scheduler_callbacks_without_originator",
-                "Number of callbacks (likely from before February 2022) without originator or respondent recorded."
-            ),
-            callbacks_without_prepayment: metrics_registry.int_gauge(
-                "scheduler_callbacks_without_prepayment",
-                "Number of callbacks (likely from before February 2022) with no response prepayment amounts recorded."
             ),
             canister_invariants: metrics_registry.error_counter(CANISTER_INVARIANT_BROKEN),
             scheduler_compute_allocation_invariant_broken: metrics_registry.error_counter(SCHEDULER_COMPUTE_ALLOCATION_INVARIANT_BROKEN),

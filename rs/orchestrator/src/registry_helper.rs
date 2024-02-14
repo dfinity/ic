@@ -5,6 +5,7 @@ use ic_logger::ReplicaLogger;
 use ic_protobuf::registry::api_boundary_node::v1::ApiBoundaryNodeRecord;
 use ic_protobuf::registry::firewall::v1::FirewallRuleSet;
 use ic_protobuf::registry::hostos_version::v1::HostosVersionRecord;
+use ic_protobuf::registry::node::v1::IPv4InterfaceConfig;
 use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_helpers::api_boundary_node::ApiBoundaryNodeRegistry;
@@ -290,5 +291,20 @@ impl RegistryHelper {
                 })
             })
             .transpose()
+    }
+
+    pub(crate) fn get_node_ipv4_config(
+        &self,
+        version: RegistryVersion,
+    ) -> OrchestratorResult<Option<IPv4InterfaceConfig>> {
+        let node_record_option = self
+            .registry_client
+            .get_node_record(self.node_id, version)
+            .map_err(OrchestratorError::RegistryClientError)?;
+
+        let result = node_record_option
+            .map(|node_record| node_record.public_ipv4_config)
+            .unwrap_or(None);
+        Ok(result)
     }
 }

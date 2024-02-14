@@ -11,7 +11,7 @@ candid = { workspace = true }
 hex = "0.4.2"
 ic-base-types = { path = "../types/base_types" }
 ic-btc-interface = { workspace = true }
-ic-canister-sandbox-replica-controller = { path = "../canister_sandbox/replica_controller" }
+ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
 ic-crypto-prng = { path = "../crypto/prng" }
@@ -21,7 +21,7 @@ ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-embedders = { path = "../embedders" }
 ic-error-types = { path = "../types/error_types" }
-ic-ic00-types = { path = "../types/ic00_types" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-logger = { path = "../monitoring/logger" }
@@ -42,7 +42,6 @@ ic-utils-lru-cache = { path = "../utils/lru_cache" }
 ic-wasm-types = { path = "../types/wasm_types" }
 lazy_static = "1.4.0"
 memory_tracker = { path = "../memory_tracker" }
-nix = { workspace = true }
 num-rational = "0.2.2"
 num-traits = "0.2.12"
 phantom_newtype = { path = "../phantom_newtype" }
@@ -88,7 +87,7 @@ escargot = "0.5"
 [features]
 default = []
 sigsegv_handler_checksum = [
-	"ic-canister-sandbox-replica-controller/sigsegv_handler_checksum",
+	"ic-canister-sandbox-backend-lib/sigsegv_handler_checksum",
 	"memory_tracker/sigsegv_handler_checksum",
 ]
 

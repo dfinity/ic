@@ -10,12 +10,10 @@ futures = { workspace = true }
 hex = "0.4.2"
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-base-types = { path = "../types/base_types/" }
-ic-canister-sandbox-backend-lib = { path = "../canister_sandbox/backend_lib" }
-ic-canister-sandbox-launcher = { path = "../canister_sandbox/sandbox_launcher" }
+ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
 ic-config = { path = "../config" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-cup-explorer = { path = "../cup_explorer" }
-ic-logger = { path = "../monitoring/logger" }
 ic-http-utils = { path = "../http_utils" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
@@ -31,7 +29,7 @@ ic-registry-routing-table = { path = "../registry/routing_table" }
 ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-replay = { path = "../replay" }
 ic-state-manager = { path = "../state_manager" }
-ic-ic00-types = { path = "../types/ic00_types" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-types = { path = "../types/types" }
 prost = { workspace = true }
 reqwest = { workspace = true }

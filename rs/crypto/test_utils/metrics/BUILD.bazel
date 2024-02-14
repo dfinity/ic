@@ -6,13 +6,9 @@ DEPENDENCIES = [
     "//rs/crypto/internal/logmon",
     "//rs/monitoring/metrics",
     "//rs/test_utilities/metrics",
-    "@crate_index//:prometheus",
-    "@crate_index//:strum",
 ]
 
-MACRO_DEPENDENCIES = [
-    "@crate_index//:strum_macros",
-]
+MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = []
 

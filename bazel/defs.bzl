@@ -2,6 +2,7 @@
 Utilities for building IC replica and canisters.
 """
 
+load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test", "rust_test_suite")
 load("//publish:defs.bzl", "release_nostrip_binary")
 
@@ -112,9 +113,10 @@ def _sha256sum2url_impl(ctx):
     Waits for the artifact to be published before returning url.
     """
     out = ctx.actions.declare_file(ctx.label.name)
+    timeout = ctx.attr.timeout_value[BuildSettingInfo].value
     ctx.actions.run(
         executable = "timeout",
-        arguments = ["10m", ctx.executable._sha256sum2url_sh.path],
+        arguments = [timeout, ctx.executable._sha256sum2url_sh.path],
         inputs = [ctx.file.src],
         outputs = [out],
         tools = [ctx.executable._sha256sum2url_sh],
@@ -130,6 +132,7 @@ _sha256sum2url = rule(
     attrs = {
         "src": attr.label(allow_single_file = True),
         "_sha256sum2url_sh": attr.label(executable = True, cfg = "exec", default = "//bazel:sha256sum2url_sh"),
+        "timeout_value": attr.label(default = "//bazel:timeout_value"),
     },
 )
 
@@ -157,12 +160,12 @@ def sha256sum2url(name, src, tags = [], **kwargs):
 # Binaries needed for testing with canister_sandbox
 _SANDBOX_DATA = [
     "//rs/canister_sandbox",
-    "//rs/canister_sandbox/sandbox_launcher",
+    "//rs/canister_sandbox:sandbox_launcher",
 ]
 
 # Env needed for testing with canister_sandbox
 _SANDBOX_ENV = {
-    "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+    "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
     "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
 }
 

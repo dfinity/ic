@@ -77,6 +77,9 @@ fn consensus_produces_expected_batches() {
                 Height::new(0),
                 Arc::new(get_initial_state(0, 0)),
             )));
+        state_manager
+            .expect_get_certified_state_snapshot()
+            .returning(|| None);
         let state_manager = Arc::new(state_manager);
 
         let router = FakeMessageRouting::default();

@@ -8,20 +8,10 @@ documentation.workspace = true
 
 [dependencies]
 ic-crypto-internal-csp-test-utils = { path = "../internal/csp_test_utils" }
-ic-crypto-internal-types = { path = "../internal/crypto_lib/types" }
-ic-crypto-tls-interfaces = { path = "../tls_interfaces" }
-ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-protobuf = { path = "../../protobuf" }
 ic-registry-client-fake = { path = "../../registry/fake" }
-ic-registry-client-helpers = { path = "../../registry/helpers" }
-ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-types = { path = "../../types/types" }
-ic-types-test-utils = { path = "../../types/types_test_utils" }
 ed25519-consensus = "2.0.1"
 rand = "0.8"
 rand_chacha = "0.3"
-serde = { workspace = true }
-strum_macros = { workspace = true }
-tokio = { workspace = true }

@@ -17,7 +17,6 @@ sha2 = "0.10.2"
 serde = { workspace = true }
 simple_asn1 = { workspace = true }
 num-bigint = "~0.4.3"
-ic-crypto-getrandom-for-wasm = { path = "../../../../getrandom_for_wasm" }
 
 [dev-dependencies]
 hex = "0.4.2"

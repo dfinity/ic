@@ -66,7 +66,7 @@ pub(super) fn make_reshare_dealings_response(
                         registry_version: context.registry_version,
                     })
                 {
-                    use ic_ic00_types::ComputeInitialEcdsaDealingsResponse;
+                    use ic_management_canister_types::ComputeInitialEcdsaDealingsResponse;
                     return Some(ic_types::messages::Response {
                         originator: context.request.sender,
                         respondent: ic_types::CanisterId::ic_00(),
@@ -173,7 +173,7 @@ pub(super) fn get_reshare_requests(
 
 #[cfg(test)]
 pub mod test_utils {
-    use ic_ic00_types::EcdsaKeyId;
+    use ic_management_canister_types::EcdsaKeyId;
     use ic_test_utilities::types::ids::node_test_id;
     use ic_types::RegistryVersion;
 
@@ -202,8 +202,8 @@ mod tests {
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_dealings;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-    use ic_ic00_types::EcdsaKeyId;
     use ic_logger::replica_logger::no_op_logger;
+    use ic_management_canister_types::EcdsaKeyId;
     use ic_test_utilities::types::ids::subnet_test_id;
     use ic_types::consensus::ecdsa::EcdsaPayload;
 

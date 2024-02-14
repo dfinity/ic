@@ -26,8 +26,7 @@ certificate_orchestrator_interface = { path = "../boundary_node/certificate_issu
 chrono = { workspace = true }
 cidr = "0.2.2"
 clap = { workspace = true }
-crossbeam-channel = "0.5.5"
-crossbeam-utils = "0.8.11"
+crossbeam-channel = { workspace = true }
 cycles-minting-canister = { path = "../nns/cmc" }
 dfn_candid = { path = "../rust_canisters/dfn_candid" }
 dfn_json = { path = "../rust_canisters/dfn_json" }
@@ -57,7 +56,7 @@ ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der"
 ic-cup-explorer = { path = "../cup_explorer" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-http-utils = { path = "../http_utils" }
-ic-ic00-types = { path = "../types/ic00_types" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-icrc1 = { path = "../rosetta-api/icrc1" }
 ic-icrc1-index-ng = { path = "../rosetta-api/icrc1/index-ng" }
 ic-icrc1-ledger = { path = "../rosetta-api/icrc1/ledger" }
@@ -105,12 +104,14 @@ ic-sns-swap = { path = "../sns/swap" }
 ic-sns-root = { path = "../sns/root" }
 ic-sns-governance = { path = "../sns/governance" }
 ic-sns-wasm = { path = "../nns/sns-wasm" }
+ic-sys = { path = "../sys" }
 ic-test-identity = { path = "../test_utilities/identity" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-types = { path = "../types/types" }
 ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }
+ic-wasm-types = { path = "../types/wasm_types" }
 icrc-ledger-agent = { path = "../../packages/icrc-ledger-agent" }
 icrc-ledger-types = { path = "../../packages/icrc-ledger-types" }
 indoc = "1.0.9"
@@ -119,7 +120,7 @@ k256 = { workspace = true }
 k8s-openapi = { version = "0.20.0", features = ["v1_22"] }
 kube = { version = "0.87.2", features = ["runtime", "derive", "ws"] }
 hyper = "0.14.18"
-hyper-rustls = "0.24.0"
+hyper-rustls = { workspace = true }
 http = "0.2.9"
 lazy_static = "1.4.0"
 icp-ledger = { path = "../rosetta-api/icp_ledger" }
@@ -147,7 +148,7 @@ registry-canister = { path = "../registry/canister" }
 reqwest = { workspace = true }
 ring = { version = "0.16.11", features = ["std"] }
 rsa = { version = "0.9.2", features = ["sha2"] }
-rustls = "0.21.0"
+rustls = { workspace = true }
 rust_decimal = "1.25"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
@@ -164,12 +165,8 @@ time = "^0.3.20"
 walkdir = "2.3.1"
 tokio = { workspace = true }
 tokio-util = { workspace = true }
-tracing = "0.1.37"
-tracing-subscriber = { version = "0.3.17", features = [
-    "std",
-    "fmt",
-    "env-filter",
-] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 tree-deserializer = { path = "../tree_deserializer" }
 url = "2.1.1"
 utils = { path = "../utils", package = "ic-utils" }
@@ -462,6 +459,14 @@ path = "consensus/orchestrator/upgrade_downgrade_app_subnet_test.rs"
 [[bin]]
 name = "ic-systest-upgrade-downgrade-nns-subnet"
 path = "consensus/orchestrator/upgrade_downgrade_nns_subnet_test.rs"
+
+[[bin]]
+name = "ic-systest-upgrade-app-subnet"
+path = "consensus/orchestrator/upgrade_app_subnet_test.rs"
+
+[[bin]]
+name = "ic-systest-downgrade-app-subnet"
+path = "consensus/orchestrator/downgrade_app_subnet_test.rs"
 
 [[bin]]
 name = "ic-systest-backup-manager"

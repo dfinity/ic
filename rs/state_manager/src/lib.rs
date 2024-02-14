@@ -159,6 +159,7 @@ pub struct ManifestMetrics {
     reused_chunk_hash_error_count: IntCounter,
     manifest_size: IntGauge,
     chunk_table_length: IntGauge,
+    file_table_length: IntGauge,
     file_group_chunks: IntGauge,
     sub_manifest_chunks: IntGauge,
     chunk_id_usage_nearing_limits_critical: IntCounter,
@@ -442,6 +443,11 @@ impl ManifestMetrics {
             "Number of chunks in the manifest chunk table.",
         );
 
+        let file_table_length = metrics_registry.int_gauge(
+            "state_manager_manifest_file_table_length",
+            "Number of files in the manifest file table.",
+        );
+
         let file_group_chunks = metrics_registry.int_gauge(
             "state_manager_file_group_chunks",
             "Number of virtual chunks containing the grouped small files.",
@@ -462,6 +468,7 @@ impl ManifestMetrics {
                 .error_counter(CRITICAL_ERROR_REUSED_CHUNK_HASH),
             manifest_size,
             chunk_table_length,
+            file_table_length,
             file_group_chunks,
             sub_manifest_chunks,
             chunk_id_usage_nearing_limits_critical: metrics_registry
@@ -1060,8 +1067,16 @@ impl PageMapType {
         result
     }
 
+    fn id(&self) -> CanisterId {
+        match &self {
+            PageMapType::WasmMemory(id) => *id,
+            PageMapType::StableMemory(id) => *id,
+            PageMapType::WasmChunkStore(id) => *id,
+        }
+    }
+
     /// Maps a PageMapType to its location in a checkpoint according to `layout`
-    fn path<Access>(&self, layout: &CheckpointLayout<Access>) -> Result<PathBuf, LayoutError>
+    fn base<Access>(&self, layout: &CheckpointLayout<Access>) -> Result<PathBuf, LayoutError>
     where
         Access: AccessPolicy,
     {
@@ -1069,39 +1084,6 @@ impl PageMapType {
             PageMapType::WasmMemory(id) => Ok(layout.canister(id)?.vmemory_0()),
             PageMapType::StableMemory(id) => Ok(layout.canister(id)?.stable_memory_blob()),
             PageMapType::WasmChunkStore(id) => Ok(layout.canister(id)?.wasm_chunk_store()),
-        }
-    }
-
-    /// The path of an overlay file written during round `height`.
-    fn overlay<Access>(
-        &self,
-        layout: &CheckpointLayout<Access>,
-        height: Height,
-    ) -> Result<PathBuf, LayoutError>
-    where
-        Access: AccessPolicy,
-    {
-        match &self {
-            PageMapType::WasmMemory(id) => Ok(layout.canister(id)?.vmemory_0_overlay(height)),
-            PageMapType::StableMemory(id) => Ok(layout.canister(id)?.stable_memory_overlay(height)),
-            PageMapType::WasmChunkStore(id) => {
-                Ok(layout.canister(id)?.wasm_chunk_store_overlay(height))
-            }
-        }
-    }
-
-    /// List all existing overlay files of a this PageMapType inside `layout`.
-    fn overlays<Access>(
-        &self,
-        layout: &CheckpointLayout<Access>,
-    ) -> Result<Vec<PathBuf>, LayoutError>
-    where
-        Access: AccessPolicy,
-    {
-        match &self {
-            PageMapType::WasmMemory(id) => layout.canister(id)?.vmemory_0_overlays(),
-            PageMapType::StableMemory(id) => layout.canister(id)?.stable_memory_overlays(),
-            PageMapType::WasmChunkStore(id) => layout.canister(id)?.wasm_chunk_store_overlays(),
         }
     }
 
@@ -1309,7 +1291,7 @@ fn persist_metadata_or_die(
     let started_at = Instant::now();
     let tmp = state_layout.tmp().join("tmp_states_metadata.pb");
 
-    ic_utils::fs::write_atomically_using_tmp_file(state_layout.states_metadata(), &tmp, |w| {
+    ic_sys::fs::write_atomically_using_tmp_file(state_layout.states_metadata(), &tmp, |w| {
         let mut pb_meta = pb::StatesMetadata::default();
         for (h, m) in metadata.iter() {
             pb_meta.by_height.insert(h.get(), m.into());

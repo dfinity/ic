@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
+use ic_sys::fs::{sync_path, write_atomically};
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use serde::de::DeserializeOwned;
@@ -10,7 +11,6 @@ use std::fs::{self, File};
 use std::os::unix::prelude::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use utils::fs::{sync_path, write_atomically};
 
 use crate::driver::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR};
 use crate::driver::pot_dsl::TestPath;

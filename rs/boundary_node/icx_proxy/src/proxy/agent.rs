@@ -1,56 +1,41 @@
-use std::{
-    borrow::Borrow,
-    net::{IpAddr, SocketAddr},
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc, OnceLock,
-    },
-    thread::available_parallelism,
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
 };
 
 use anyhow::bail;
-use axum::extract::{ConnectInfo, FromRef, State};
+use axum::extract::{FromRef, State};
 use candid::Principal;
-use hyper::{
-    http::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE},
-    Body, Request, Response, StatusCode, Uri,
-};
+use hyper::{http::header::CONTENT_TYPE, Body, Request, Response, StatusCode, Uri};
 use ic_agent::{
     agent::{Agent, RejectCode, RejectResponse},
     agent_error::HttpErrorPayload,
     AgentError,
 };
 use ic_response_verification::MAX_VERIFICATION_VERSION;
-use ic_utils::interfaces::http_request::HeaderField;
 use ic_utils::{
     call::{AsyncCall, SyncCall},
-    interfaces::http_request::HttpRequestCanister,
+    interfaces::http_request::{HeaderField, HttpRequestCanister},
 };
-use tokio_util::task::LocalPoolHandle;
-use tracing::{info, warn};
+use tracing::{instrument, Span};
 
-use crate::http::request::HttpRequest;
-use crate::http::response::{AgentResponseAny, HttpResponse};
-use crate::http_client::{HEADERS_IN, HEADERS_OUT, HEADER_X_REQUEST_ID};
-use crate::metrics::RequestContext;
 use crate::{
     canister_id,
-    proxy::{AppState, HandleError, HyperService},
+    error::ErrorFactory,
+    http::{
+        headers::{ACCEPT_ENCODING_HEADER_NAME, CACHE_HEADER_NAME},
+        request::HttpRequest,
+        response::{AgentResponseAny, HttpResponse},
+    },
+    http_client::{RequestHeaders, HEADER_X_REQUEST_ID, REQUEST_HEADERS},
+    metrics::RequestContext,
+    proxy::{AppState, HandleError},
     validate::Validate,
 };
-use crate::{
-    error::ErrorFactory,
-    http::headers::{ACCEPT_ENCODING_HEADER_NAME, CACHE_HEADER_NAME},
-};
 
-// Local thread pool to execute Axum handler
-static LOCAL_THREAD_POOL: OnceLock<LocalPoolHandle> = OnceLock::new();
-
-pub struct Args<V, C> {
+pub struct Args<V> {
     agent: Agent,
-    replica_uri: Arc<Uri>,
     validator: V,
-    client: C,
     debug: bool,
 }
 
@@ -70,128 +55,43 @@ impl Pool {
         }
     }
 }
-impl<V: Clone, C: Clone> FromRef<AppState<V, C>> for Args<V, C> {
-    fn from_ref(state: &AppState<V, C>) -> Self {
-        let pool = state.pool();
-        let counter = pool.counter.fetch_add(1, Ordering::Relaxed) % pool.replicas.len();
-        let (agent, replica_uri) = pool.replicas[counter].clone();
+impl<V: Clone> FromRef<AppState<V>> for Args<V> {
+    fn from_ref(state: &AppState<V>) -> Self {
+        let agent = if let Some(v) = &state.0.agent {
+            v.clone()
+        } else {
+            let pool = state.pool();
+            let counter = pool.counter.fetch_add(1, Ordering::Relaxed) % pool.replicas.len();
+            let (agent, _) = pool.replicas[counter].clone();
+            agent
+        };
+
         Args {
             agent,
-            replica_uri,
             validator: state.validator().clone(),
-            client: state.client().clone(),
             debug: state.debug(),
         }
     }
 }
 
-fn create_proxied_request<B>(
-    client_ip: &IpAddr,
-    proxy_url: Uri,
-    mut request: Request<B>,
-) -> Result<Request<B>, anyhow::Error> {
-    *request.headers_mut() = remove_hop_headers(request.headers());
-    *request.uri_mut() = forward_uri(proxy_url, &request)?;
-
-    // Add forwarding information in the headers
-    // (TODO: should we switch to `http::header::FORWARDED`?)
-    static X_FORWARDED_FOR: HeaderName = HeaderName::from_static("x-forwarded-for");
-    request
-        .headers_mut()
-        .append(X_FORWARDED_FOR.clone(), client_ip.to_string().parse()?);
-
-    Ok(request)
-}
-
-fn forward_uri<B>(proxy_url: Uri, req: &Request<B>) -> Result<Uri, anyhow::Error> {
-    use hyper::http::uri::PathAndQuery;
-    use std::str::FromStr;
-
-    let mut parts = proxy_url.clone().into_parts();
-    let req_uri_path_and_query = req.uri().path_and_query().map(|p| p.to_owned());
-    parts.path_and_query = PathAndQuery::from_str(
-        format!(
-            "{}{}",
-            proxy_url.path().trim_end_matches('/'),
-            req_uri_path_and_query
-                .clone()
-                .map(|p| p.to_string())
-                .unwrap_or_default()
-        )
-        .as_str(),
+#[instrument(
+    parent = None,
+    target = "",
+    skip_all,
+    fields(
+        request_id,
+        canister_id,
+        method,
+        uri,
+        code,
+        req_len,
+        resp_len,
+        stream,
+        error
     )
-    .map_or(req_uri_path_and_query, Some);
-    Ok(Uri::from_parts(parts)?)
-}
-
-fn is_not_hop_header(name: impl Borrow<HeaderName>) -> bool {
-    use hyper::http::header::*;
-    // `keep-alive` is a non-standard header for H2 and beyond so it doesn't have a constant :(
-    static KEEP_ALIVE: HeaderName = HeaderName::from_static("keep-alive");
-
-    match name.borrow() {
-        &CONNECTION | &PROXY_AUTHENTICATE | &PROXY_AUTHORIZATION | &TE | &TRAILER
-        | &TRANSFER_ENCODING | &UPGRADE => false,
-        x => x != KEEP_ALIVE,
-    }
-}
-
-/// Returns a clone of the headers without the [hop-by-hop headers].
-///
-/// [hop-by-hop headers]: http://www.w3.org/Protocols/rfc2616/rfc2616-sec13.html
-fn remove_hop_headers(headers: &HeaderMap<HeaderValue>) -> HeaderMap<HeaderValue> {
-    headers
-        .iter()
-        .filter(|(k, _v)| is_not_hop_header(*k))
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .collect()
-}
-
-// This function wraps Axum handler.
-// The local thread pool is used to pin all async calls in the handler to a single thread
-// which is needed to use TLS (Thread Local Storage)
-pub async fn handler_wrapper<V: Validate + 'static, C: HyperService<Body> + 'static>(
-    State(args): State<Args<V, C>>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    uri_canister_id: Option<canister_id::UriHost>,
-    host_canister_id: Option<canister_id::HostHeader>,
-    query_param_canister_id: Option<canister_id::QueryParam>,
-    referer_host_canister_id: Option<canister_id::RefererHeaderHost>,
-    referer_query_param_canister_id: Option<canister_id::RefererHeaderQueryParam>,
-    request: Request<Body>,
-) -> Response<Body> {
-    let (tx, rx) = futures::channel::oneshot::channel();
-    let pool_handle = LOCAL_THREAD_POOL
-        .get_or_init(|| {
-            tokio_util::task::LocalPoolHandle::new(
-                // Reserve 3x the number of CPUs to accomodate for request peaks
-                available_parallelism().map(Into::into).unwrap_or(8) * 3,
-            )
-        })
-        .clone();
-
-    pool_handle.spawn_pinned(move || async move {
-        let res = handler(
-            State(args),
-            ConnectInfo(addr),
-            uri_canister_id,
-            host_canister_id,
-            query_param_canister_id,
-            referer_host_canister_id,
-            referer_query_param_canister_id,
-            request,
-        )
-        .await;
-
-        _ = tx.send(res);
-    });
-
-    rx.await.unwrap()
-}
-
-pub async fn handler<V: Validate, C: HyperService<Body>>(
-    State(mut args): State<Args<V, C>>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+)]
+pub async fn handler<V: Validate + 'static>(
+    State(args): State<Args<V>>,
     uri_canister_id: Option<canister_id::UriHost>,
     host_canister_id: Option<canister_id::HostHeader>,
     query_param_canister_id: Option<canister_id::QueryParam>,
@@ -202,64 +102,38 @@ pub async fn handler<V: Validate, C: HyperService<Body>>(
     let uri_canister_id = uri_canister_id.map(|v| v.0);
     let host_canister_id = host_canister_id.map(|v| v.0);
     let query_param_canister_id = query_param_canister_id.map(|v| v.0);
-    let referer_canister_id = referer_host_canister_id.map(|v| v.0);
+    let referer_host_canister_id = referer_host_canister_id.map(|v| v.0);
     let referer_query_param_canister_id = referer_query_param_canister_id.map(|v| v.0);
 
-    let res = process_request_inner(
-        request,
-        addr,
-        &args.agent,
-        &args.replica_uri,
-        &args.validator,
-        &mut args.client,
-        uri_canister_id
-            .or(host_canister_id)
-            .or(query_param_canister_id)
-            .or(referer_canister_id)
-            .or(referer_query_param_canister_id),
-    )
-    .await;
+    let canister_id = uri_canister_id
+        .or(host_canister_id)
+        .or(query_param_canister_id)
+        .or(referer_host_canister_id)
+        .or(referer_query_param_canister_id);
+
+    if canister_id.is_none() {
+        return Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body("Could not find a canister id to forward to.".into())
+            .unwrap();
+    }
+
+    // Initialize task local variable and process the request
+    let res = REQUEST_HEADERS
+        .scope(RequestHeaders::new(), async {
+            process_request(request, &args.agent, &args.validator, canister_id.unwrap()).await
+        })
+        .await;
 
     res.handle_error(args.debug)
 }
 
-async fn process_request_inner(
+async fn process_request(
     request: Request<Body>,
-    addr: SocketAddr,
     agent: &Agent,
-    replica_uri: &Uri,
     validator: &impl Validate,
-    client: &mut impl HyperService<Body>,
-    canister_id: Option<Principal>,
+    canister_id: Principal,
 ) -> Result<Response<Body>, anyhow::Error> {
-    let canister_id = match canister_id {
-        None => {
-            return if request.uri().path().starts_with("/api") {
-                let proxied_request =
-                    create_proxied_request(&addr.ip(), replica_uri.clone(), request)?;
-                let response = client.call(proxied_request).await?;
-                let (parts, body) = response.into_parts();
-                Ok(Response::from_parts(parts, body.into()))
-            } else {
-                Ok(Response::builder()
-                    .status(StatusCode::BAD_REQUEST)
-                    .body("Could not find a canister id to forward to.".into())
-                    .unwrap())
-            }
-        }
-
-        #[cfg(feature = "dev_proxy")]
-        Some(_) if request.uri().path().starts_with("/api") => {
-            info!("forwarding");
-            let proxied_request = create_proxied_request(&addr.ip(), replica_uri.clone(), request)?;
-            let response = client.call(proxied_request).await?;
-            let (parts, body) = response.into_parts();
-            return Ok(Response::from_parts(parts, body.into()));
-        }
-
-        Some(canister_id) => canister_id,
-    };
-
     let request_id = request
         .headers()
         .get(HEADER_X_REQUEST_ID)
@@ -267,33 +141,31 @@ async fn process_request_inner(
         .map(|x| x.to_str().unwrap_or("<malformed id>").to_string())
         .unwrap_or("<unknown id>".into());
 
-    info!(
-        "{}: {}: {} {}",
-        request_id,
-        canister_id,
-        request.method(),
-        request.uri()
-    );
+    Span::current().record("request_id", &request_id);
+    Span::current().record("canister_id", &canister_id.to_string());
+    Span::current().record("method", request.method().as_str());
+    Span::current().record("uri", &request.uri().to_string());
 
     let (parts, body) = request.into_parts();
 
-    // Store the request headers in TLS
-    HEADERS_OUT.with(|f| {
-        *f.borrow_mut() = parts.headers.clone();
+    // Store the request headers in task local storage
+    REQUEST_HEADERS.with(|x| {
+        x.borrow_mut().headers_out = parts.headers.clone();
     });
 
-    let http_request = HttpRequest::from((
-        &parts,
-        match HttpRequest::read_body(body).await {
-            Ok(data) => data,
-            Err(ErrorFactory::PayloadTooLarge) => {
-                return Ok(Response::builder()
-                    .status(StatusCode::PAYLOAD_TOO_LARGE)
-                    .body(Body::from("Request size exceeds limit"))?)
-            }
-            Err(e) => bail!(e),
-        },
-    ));
+    let body = match HttpRequest::read_body(body).await {
+        Ok(data) => data,
+        Err(ErrorFactory::PayloadTooLarge) => {
+            return Ok(Response::builder()
+                .status(StatusCode::PAYLOAD_TOO_LARGE)
+                .body(Body::from("Request size exceeds limit"))?)
+        }
+        Err(e) => bail!(e),
+    };
+
+    Span::current().record("req_len", body.len());
+
+    let http_request = HttpRequest::from((&parts, body));
 
     let canister = HttpRequestCanister::create(agent, canister_id);
     let header_fields = http_request
@@ -351,7 +223,11 @@ async fn process_request_inner(
         agent_response
     };
 
+    Span::current().record("resp_len", agent_response.body.len());
+
     let http_response = HttpResponse::create(agent, &agent_response).await?;
+    Span::current().record("stream", http_response.has_streaming_body);
+
     let mut response_builder =
         Response::builder().status(StatusCode::from_u16(http_response.status_code)?);
 
@@ -365,6 +241,8 @@ async fn process_request_inner(
 
         match validation_result {
             Err(err) => {
+                Span::current().record("error", format!("Request validation failed: {err}"));
+
                 return Ok(Response::builder()
                     .status(StatusCode::INTERNAL_SERVER_ERROR)
                     .body(err.into())
@@ -385,13 +263,17 @@ async fn process_request_inner(
                 response_builder = response_builder.header(name, value);
             }
         }
+
         Some(validation_info) => {
             if validation_info.verification_version < 2 {
                 // status codes are not certified in v1, reject known dangerous status codes
                 if http_response.status_code >= 300 && http_response.status_code < 400 {
+                    let msg = "Response verification v1 does not allow redirects";
+                    Span::current().record("error", msg);
+
                     return Ok(Response::builder()
                         .status(StatusCode::INTERNAL_SERVER_ERROR)
-                        .body("Response verification v1 does not allow redirects".into())
+                        .body(msg.into())
                         .unwrap());
                 }
 
@@ -429,12 +311,12 @@ async fn process_request_inner(
         )
         .body(match http_response.streaming_body {
             Some(body) => body,
-            None => Body::from(http_response.body.clone()),
+            None => Body::from(http_response.body),
         })?;
 
-    // Extract response headers from TLS
-    HEADERS_IN.with(|f| {
-        for (k, v) in (*f.borrow()).iter() {
+    // Extract response headers from task local storage
+    REQUEST_HEADERS.with(|x| {
+        for (k, v) in x.borrow().headers_in.iter() {
             response.headers_mut().insert(k, v.clone());
         }
     });
@@ -458,7 +340,9 @@ fn handle_result(
     use RejectCode::DestinationInvalid;
 
     let result = match result {
-        Ok((http_response,)) => return Ok(http_response),
+        Ok((http_response,)) => {
+            return Ok(http_response);
+        }
         Err(e) => e,
     };
 
@@ -469,7 +353,7 @@ fn handle_result(
             reject_message,
             ..
         }) => {
-            warn!("Destination Invalid");
+            Span::current().record("error", format!("Destination invalid: {reject_message}"));
             Response::builder()
                 .status(StatusCode::NOT_FOUND)
                 .body(reject_message.into())
@@ -479,14 +363,16 @@ fn handle_result(
         // If the result is a Replica error, returns the 500 code and message. There is no information
         // leak here because a user could use `dfx` to get the same reply.
         ReplicaError(response) => {
-            warn!("Replica Error");
-            let body = format!(
-                "Replica Error: reject code {:?}, reject message {}, error code {:?}",
+            let msg = format!(
+                "Replica Error: reject code {:?}, message {}, error code {:?}",
                 response.reject_code, response.reject_message, response.error_code,
             );
+
+            Span::current().record("error", &msg);
+
             Response::builder()
                 .status(StatusCode::BAD_GATEWAY)
-                .body(body.into())
+                .body(msg.into())
                 .unwrap()
         }
 
@@ -496,7 +382,7 @@ fn handle_result(
             content_type,
             content,
         }) => {
-            warn!("Denylist");
+            Span::current().record("error", "Denylisted");
             content_type
                 .into_iter()
                 .fold(Response::builder(), |r, c| r.header(CONTENT_TYPE, c))
@@ -506,7 +392,8 @@ fn handle_result(
         }
 
         ResponseSizeExceededLimit() => {
-            warn!("ResponseSizeExceededLimit");
+            Span::current().record("error", "Response size exceeds limit");
+
             Response::builder()
                 .status(StatusCode::INSUFFICIENT_STORAGE)
                 .body("Response size exceeds limit".into())
@@ -515,7 +402,6 @@ fn handle_result(
 
         // Handle all other errors
         e => {
-            warn!("Other error: {e}");
             return Err(Err(e.into()));
         }
     };

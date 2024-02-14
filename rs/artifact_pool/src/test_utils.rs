@@ -129,10 +129,10 @@ where
     T: PoolTestHelper,
 {
     T::run_persistent_pool_test("test_as_height_indexed_pool", |config, log| {
-        let rb_ops = random_beacon_ops();
+        let rb_ops = random_beacon_ops(/*heights=*/ 3..19);
         let fz_ops = finalization_ops();
         let nz_ops = notarization_ops();
-        let bp_ops = block_proposal_ops();
+        let bp_ops = block_proposal_ops(/*heights=*/ 1..18);
         let rbs_ops = random_beacon_share_ops();
         let nzs_ops = notarization_share_ops();
         let fzs_ops = finalization_share_ops();
@@ -266,7 +266,7 @@ where
     T::run_persistent_pool_test(
         "test_block_proposal_and_payload_correspondence",
         |config, log| {
-            let insert_ops = block_proposal_ops();
+            let insert_ops = block_proposal_ops(/*heights=*/ 1..18);
             let msgs = insert_ops
                 .ops
                 .iter()
@@ -340,7 +340,7 @@ where
     T::run_persistent_pool_test(
         "test_iterating_while_inserting_doesnt_see_new_updates",
         |config, log| {
-            let rb_ops = random_beacon_ops();
+            let rb_ops = random_beacon_ops(/*heights=*/ 3..19);
             let mut pool = T::new_consensus_pool(config, log);
             pool.mutate(rb_ops);
             let iter = pool.random_beacon().get_all();
@@ -377,7 +377,7 @@ where
     T: PoolTestHelper,
 {
     T::run_persistent_pool_test("test_iterator_can_outlive_the_pool", |config, log| {
-        let rb_ops = random_beacon_ops();
+        let rb_ops = random_beacon_ops(/*heights=*/ 3..19);
         let iter;
 
         // Create a pool in this inner scope, which will be destroyed
@@ -414,7 +414,7 @@ where
             let path = config
                 .persistent_pool_validated_persistent_db_path()
                 .clone();
-            let rb_ops = random_beacon_ops();
+            let rb_ops = random_beacon_ops(/*heights=*/ 3..19);
             {
                 let mut pool = T::new_consensus_pool(config, log);
                 pool.mutate(rb_ops);
@@ -464,10 +464,12 @@ where
 }
 
 // Support functions for the tests
-pub(crate) fn random_beacon_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
+pub(crate) fn random_beacon_ops(
+    heights: impl IntoIterator<Item = u64>,
+) -> PoolSectionOps<ValidatedConsensusArtifact> {
     let mut ops = PoolSectionOps::new();
-    for i in 3..19 {
-        let random_beacon = fake_random_beacon(Height::from(i));
+    for height in heights {
+        let random_beacon = fake_random_beacon(Height::from(height));
         let msg = ConsensusMessage::RandomBeacon(random_beacon);
         ops.insert(ValidatedConsensusArtifact {
             msg,
@@ -477,10 +479,12 @@ pub(crate) fn random_beacon_ops() -> PoolSectionOps<ValidatedConsensusArtifact> 
     ops
 }
 
-fn block_proposal_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
+pub(crate) fn block_proposal_ops(
+    heights: impl IntoIterator<Item = u64>,
+) -> PoolSectionOps<ValidatedConsensusArtifact> {
     let mut ops = PoolSectionOps::new();
-    for i in 1..18 {
-        let block_proposal = fake_block_proposal(Height::from(i));
+    for height in heights {
+        let block_proposal = fake_block_proposal(Height::from(height));
         let msg = ConsensusMessage::BlockProposal(block_proposal);
         ops.insert(ValidatedConsensusArtifact {
             msg,

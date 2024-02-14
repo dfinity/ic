@@ -232,6 +232,11 @@ fn test_disburse_maturity_succeeds_to_self() {
         .gov_fixture
         .get_account_balance(&destination_account, TargetLedger::Sns);
 
+    // TODO(NNS1-2835): Remove this when we no longer calls update_settings during heartbeat.
+    env.gov_fixture
+        .environment_fixture
+        .push_mocked_canister_reply(());
+
     // Disburse maturity to self.
     let command_response = env
         .gov_fixture
@@ -330,6 +335,12 @@ fn test_disburse_maturity_succeeds_to_other() {
     let mut env =
         setup_test_environment_with_one_neuron_with_maturity(earned_maturity_e8s, vec![receiver]);
     assert_ne!(env.controller, receiver);
+
+    // TODO(NNS1-2835): Remove this when we no longer calls update_settings during heartbeat.
+    env.gov_fixture
+        .environment_fixture
+        .push_mocked_canister_reply(());
+
     let controller_account = icrc_ledger_types::icrc1::account::Account {
         owner: env.controller.0,
         subaccount: None,
@@ -441,6 +452,11 @@ fn test_disburse_maturity_succeeds_with_multiple_operations() {
     let mut env =
         setup_test_environment_with_one_neuron_with_maturity(earned_maturity_e8s, vec![receiver]);
     assert_ne!(env.controller, receiver);
+
+    // TODO(NNS1-2835): Remove this when we no longer calls update_settings during heartbeat.
+    env.gov_fixture
+        .environment_fixture
+        .push_mocked_canister_reply(());
 
     // Disburse maturity repeatedly.
     let mut remaining_maturity_e8s = earned_maturity_e8s;
@@ -2705,6 +2721,11 @@ async fn assert_disburse_maturity_with_modulation_disburses_correctly(
         .set_maturity_modulation(maturity_modulation_basis_points)
         .create();
 
+    // TODO(NNS1-2835): Remove this when we no longer calls update_settings during heartbeat.
+    canister_fixture
+        .environment_fixture
+        .push_mocked_canister_reply(());
+
     // This is supposed to cause Governance to poll CMC for the maturity modulation.
     canister_fixture.heartbeat();
 
@@ -2790,6 +2811,11 @@ async fn test_disburse_maturity_applied_modulation_at_end_of_window() {
         // Set an initial maturity modulation that will be different then the final maturity modulation
         .set_maturity_modulation(initial_maturity_modulation_basis_points)
         .create();
+
+    // TODO(NNS1-2835): Remove this when we no longer calls update_settings during heartbeat.
+    canister_fixture
+        .environment_fixture
+        .push_mocked_canister_reply(());
 
     // This is supposed to cause Governance to poll CMC for the maturity modulation.
     canister_fixture.heartbeat();

@@ -140,6 +140,7 @@ use crate::driver::constants::{self, kibana_link, SSH_USERNAME};
 use crate::driver::farm::{Farm, GroupSpec};
 use crate::driver::log_events;
 use crate::driver::test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute};
+use crate::k8s::tnet::TNet;
 use crate::util::{block_on, create_agent};
 use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
@@ -1205,7 +1206,12 @@ impl HasGroupSetup for TestEnv {
                     )
                     .unwrap();
                 }
-                InfraProvider::K8s => {}
+                InfraProvider::K8s => {
+                    let mut tnet =
+                        TNet::new(&group_setup.infra_group_name).expect("new tnet failed");
+                    block_on(tnet.create()).expect("failed creating tnet");
+                    tnet.write_attribute(self);
+                }
             };
             group_setup.write_attribute(self);
             self.ssh_keygen().expect("ssh key generation failed");

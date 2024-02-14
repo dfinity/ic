@@ -7,16 +7,17 @@ use crate::{
     metrics::LABEL_UNKNOWN,
     types::ApiReqType,
     validator_executor::ValidatorExecutor,
-    EndpointService, HttpError, HttpHandlerMetrics, IngressFilterService,
+    HttpError, HttpHandlerMetrics, IngressFilterService,
 };
 use bytes::Bytes;
 use crossbeam::channel::Sender;
 use http::Request;
 use hyper::{Body, Response, StatusCode};
-use ic_config::http_handler::Config;
+use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_interfaces::ingress_pool::IngressPoolThrottler;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, info_sample, warn, ReplicaLogger};
+use ic_logger::{error, info_sample, replica_logger::no_op_logger, warn, ReplicaLogger};
+use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::{
     provisional_whitelist::ProvisionalWhitelistRegistry,
     subnet::{IngressMessageSettings, SubnetRegistry},
@@ -25,6 +26,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     artifact_kind::IngressArtifact,
+    malicious_flags::MaliciousFlags,
     messages::{SignedIngress, SignedIngressContent, SignedRequestBytes},
     CanisterId, CountBytes, NodeId, RegistryVersion, SubnetId,
 };
@@ -33,9 +35,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 use std::task::{Context, Poll};
-use tower::{
-    limit::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder, ServiceExt,
-};
+use tower::{Service, ServiceExt};
 
 #[derive(Clone)]
 pub struct CallService {
@@ -50,37 +50,79 @@ pub struct CallService {
     ingress_tx: Sender<UnvalidatedArtifactMutation<IngressArtifact>>,
 }
 
-impl CallService {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new_service(
-        config: Config,
-        log: ReplicaLogger,
-        metrics: HttpHandlerMetrics,
+pub struct CallServiceBuilder {
+    log: Option<ReplicaLogger>,
+    metrics: Option<HttpHandlerMetrics>,
+    node_id: NodeId,
+    subnet_id: SubnetId,
+    malicious_flags: Option<MaliciousFlags>,
+    ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
+    registry_client: Arc<dyn RegistryClient>,
+    ingress_filter: IngressFilterService,
+    ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
+    ingress_tx: Sender<UnvalidatedArtifactMutation<IngressArtifact>>,
+}
+
+impl CallServiceBuilder {
+    pub fn builder(
         node_id: NodeId,
         subnet_id: SubnetId,
         registry_client: Arc<dyn RegistryClient>,
-        validator_executor: ValidatorExecutor<SignedIngressContent>,
+        ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
         ingress_filter: IngressFilterService,
         ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
         ingress_tx: Sender<UnvalidatedArtifactMutation<IngressArtifact>>,
-    ) -> EndpointService {
-        BoxCloneService::new(
-            ServiceBuilder::new()
-                .layer(GlobalConcurrencyLimitLayer::new(
-                    config.max_call_concurrent_requests,
-                ))
-                .service(Self {
-                    log,
-                    metrics,
-                    subnet_id,
-                    registry_client,
-                    validator_executor,
-                    ingress_throttler,
-                    ingress_tx,
-                    ingress_filter,
-                    node_id,
-                }),
-        )
+    ) -> Self {
+        Self {
+            log: None,
+            metrics: None,
+            node_id,
+            subnet_id,
+            malicious_flags: None,
+            ingress_verifier,
+            registry_client,
+            ingress_filter,
+            ingress_throttler,
+            ingress_tx,
+        }
+    }
+
+    pub fn with_logger(mut self, log: ReplicaLogger) -> Self {
+        self.log = Some(log);
+        self
+    }
+
+    pub(crate) fn with_malicious_flags(mut self, malicious_flags: MaliciousFlags) -> Self {
+        self.malicious_flags = Some(malicious_flags);
+        self
+    }
+
+    pub(crate) fn with_metrics(mut self, metrics: HttpHandlerMetrics) -> Self {
+        self.metrics = Some(metrics);
+        self
+    }
+
+    pub fn build(self) -> CallService {
+        let log = self.log.unwrap_or(no_op_logger());
+        let default_metrics_registry = MetricsRegistry::default();
+        CallService {
+            log: log.clone(),
+            metrics: self
+                .metrics
+                .unwrap_or_else(|| HttpHandlerMetrics::new(&default_metrics_registry)),
+            node_id: self.node_id,
+            subnet_id: self.subnet_id,
+            registry_client: self.registry_client.clone(),
+            validator_executor: ValidatorExecutor::new(
+                self.registry_client,
+                self.ingress_verifier,
+                &self.malicious_flags.unwrap_or_default(),
+                log,
+            ),
+            ingress_filter: self.ingress_filter,
+            ingress_throttler: self.ingress_throttler,
+            ingress_tx: self.ingress_tx,
+        }
     }
 }
 

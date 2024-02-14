@@ -117,6 +117,7 @@ type InitArgs = record {
         cycles_for_archive_creation : opt nat64;
         node_max_memory_size_bytes : opt nat64;
         controller_id : principal;
+        more_controller_ids : opt vec principal;
     };
 };
 

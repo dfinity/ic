@@ -9,7 +9,7 @@ use crate::util::*;
 use candid::Principal;
 use canister_test::PrincipalId;
 use ic_agent::{agent::RejectCode, Agent, AgentError};
-use ic_ic00_types::{self as ic00, EmptyBlob, Method, Payload};
+use ic_management_canister_types::{self as ic00, EmptyBlob, Method, Payload};
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm};
 

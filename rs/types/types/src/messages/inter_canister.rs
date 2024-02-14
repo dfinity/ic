@@ -2,7 +2,7 @@ use crate::{ingress::WasmResult, CanisterId, CountBytes, Cycles, Funds, NumBytes
 use ic_error_types::{RejectCode, TryFromError, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_ic00_types::{
+use ic_management_canister_types::{
     CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, InstallChunkedCodeArgs,
     InstallCodeArgsV2, Method, Payload as _, ProvisionalTopUpCanisterArgs, StoredChunksArgs,
     UpdateSettingsArgs, UploadChunkArgs,
