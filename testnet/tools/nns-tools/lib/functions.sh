@@ -615,11 +615,11 @@ wait_for_sns_governance_to_be_in_normal_mode() {
 }
 
 set_testnet_env_variables() {
-    TEST_TMPDIR=${TEST_TMPDIR:"-/ic/test_tmpdir/_tmp"}
+    TEST_TMPDIR=${TEST_TMPDIR:-"-/ic/test_tmpdir/_tmp"}
 
     # Check if the target directory exists
     if [ ! -d "${TEST_TMPDIR}" ]; then
-        echo "The directory ${TEST_TMPDIR} does not exist. Check that you're running from within './gitlab-ci/container/container-run.sh', and that you created it by following the instructions in README.md." >&2
+        echo >&2 "The directory ${TEST_TMPDIR} does not exist. Check that you're running from within './gitlab-ci/container/container-run.sh', and that you created it by following the instructions in README.md."
         exit 1
     fi
 
@@ -629,7 +629,7 @@ set_testnet_env_variables() {
     # Check for NNS_URL and NEURON_ID environment variables
     if [ ! -z "${NNS_URL:-}" ] || [ ! -z "${NEURON_ID:-}" ]; then
         if [ -z "${NNS_URL:-}" ] || [ -z "${NEURON_ID:-}" ]; then
-            echo "It seems like you set one of NNS_URL and NEURON_ID, but not both. Both variables should be set to use custom values, or neither should be set to default to the values in ${TEST_TMPDIR}. Setting only one creates ambiguity, so the script will exit to avoid misconfiguration." >&2
+            echo >&2 "It seems like you set one of NNS_URL and NEURON_ID, but not both. Both variables should be set to use custom values, or neither should be set to default to the values in ${TEST_TMPDIR}. Setting only one creates ambiguity, so the script will exit to avoid misconfiguration."
             exit 1
         fi
     fi
@@ -648,7 +648,7 @@ set_testnet_env_variables() {
         fi
     else
         # Print an error and exit if not exactly one directory
-        echo "Error: There must be exactly one folder in ${TEST_TMPDIR}." >&2
+        echo >&2 "Error: There must be exactly one folder in ${TEST_TMPDIR}."
         exit 1
     fi
 }

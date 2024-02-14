@@ -14,7 +14,7 @@ IC_ADMIN=${IC_ADMIN:-$(which ic-admin 2>/dev/null || true)}
 IC_WASM=${IC_WASM:-$(which ic-wasm 2>/dev/null || true)}
 
 if [ -z "$IC_WASM" ]; then
-    echo "WARNING: ic-wasm not found in PATH."
+    echo >&2 "WARNING: ic-wasm not found in PATH."
 fi
 
 __dfx() {
