@@ -15,7 +15,6 @@ from typing import Callable, List, TypeVar
 import configargparse
 import invoke
 
-
 # We have yet to see the heisenbug with rootless builds, but build in a
 # unique directory just in case.
 TMP_ROOT = tempfile.mkdtemp()
