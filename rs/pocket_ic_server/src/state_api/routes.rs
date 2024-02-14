@@ -522,6 +522,26 @@ pub async fn status() -> StatusCode {
     StatusCode::OK
 }
 
+fn contains_unimplemented(config: ExtendedSubnetConfigSet) -> bool {
+    Iterator::any(
+        &mut vec![config.sns, config.ii, config.fiduciary, config.bitcoin]
+            .into_iter()
+            .flatten()
+            .chain(config.system)
+            .chain(config.application),
+        |spec: pocket_ic::common::rest::SubnetSpec| {
+            spec.get_subnet_id().is_some()
+                || matches!(
+                    spec,
+                    pocket_ic::common::rest::SubnetSpec::FromBlobStore(_, _)
+                )
+        },
+    ) || matches!(
+        config.nns,
+        Some(pocket_ic::common::rest::SubnetSpec::FromBlobStore(_, _))
+    )
+}
+
 /// Create a new empty IC instance from a given subnet configuration.
 /// The new InstanceId will be returned.
 pub async fn create_instance(
@@ -541,6 +561,16 @@ pub async fn create_instance(
             }),
         );
     }
+    // TODO: Remove this once the SubnetSpec variants are implemented
+    if contains_unimplemented(subnet_configs.clone()) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(rest::CreateInstanceResponse::Error {
+                message: "SubnetSpec::FromPath is currently only implemented for NNS. SubnetSpec::FromBlobStore is not yet implemented".to_owned(),
+            }),
+        );
+    }
+
     let pocket_ic = tokio::task::spawn_blocking(move || PocketIc::new(runtime, subnet_configs))
         .await
         .expect("Failed to launch PocketIC");
