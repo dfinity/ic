@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 pub async fn construction_derive(
     State(state): State<Arc<AppState>>,
-    request: Json<ConstructionDeriveRequest>,
+    Json(request): Json<ConstructionDeriveRequest>,
 ) -> Result<Json<ConstructionDeriveResponse>> {
     verify_network_id(&request.network_identifier, &state)
         .map_err(|err| Error::invalid_network_id(&err))?;
@@ -20,7 +20,7 @@ pub async fn construction_derive(
 
 pub async fn construction_preprocess(
     State(state): State<Arc<AppState>>,
-    request: Json<ConstructionPreprocessRequest>,
+    Json(request): Json<ConstructionPreprocessRequest>,
 ) -> Result<Json<ConstructionPreprocessResponse>> {
     verify_network_id(&request.network_identifier, &state)
         .map_err(|err| Error::invalid_network_id(&err))?;
@@ -29,7 +29,7 @@ pub async fn construction_preprocess(
 
 pub async fn construction_metadata(
     State(state): State<Arc<AppState>>,
-    request: Json<ConstructionMetadataRequest>,
+    Json(request): Json<ConstructionMetadataRequest>,
 ) -> Result<Json<ConstructionMetadataResponse>> {
     verify_network_id(&request.network_identifier, &state)
         .map_err(|err| Error::invalid_network_id(&err))?;
@@ -42,6 +42,22 @@ pub async fn construction_metadata(
                 .map_err(|err: String| Error::parsing_unsuccessful(&err))?,
             state.icrc1_agent.clone(),
             state.metadata.clone().into(),
+        )
+        .await?,
+    ))
+}
+
+pub async fn construction_submit(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<ConstructionSubmitRequest>,
+) -> Result<Json<ConstructionSubmitResponse>> {
+    verify_network_id(&request.network_identifier, &state)
+        .map_err(|err| Error::invalid_network_id(&err))?;
+    Ok(Json(
+        services::construction_submit(
+            request.signed_transaction,
+            state.ledger_id,
+            state.icrc1_agent.clone(),
         )
         .await?,
     ))

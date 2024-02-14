@@ -1,6 +1,7 @@
-use super::types::ConstructionMetadataRequestOptions;
+use super::types::{ConstructionMetadataRequestOptions, SignedTransaction};
+use super::utils::handle_construction_submit;
 use crate::common::types::Error;
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use icrc_ledger_agent::{CallMode, Icrc1Agent};
 use icrc_ledger_types::icrc1::account::Account;
 use rosetta_core::objects::{Amount, Currency};
@@ -9,6 +10,7 @@ use rosetta_core::{
     convert::principal_id_from_public_key, objects::PublicKey,
     response_types::ConstructionDeriveResponse,
 };
+use std::str::FromStr;
 use std::sync::Arc;
 
 pub fn construction_derive(public_key: PublicKey) -> Result<ConstructionDeriveResponse, Error> {
@@ -50,6 +52,19 @@ pub async fn construction_metadata(
             None
         },
     })
+}
+
+pub async fn construction_submit(
+    signed_transaction: String,
+    icrc1_ledger_id: CanisterId,
+    icrc1_agent: Arc<Icrc1Agent>,
+) -> Result<ConstructionSubmitResponse, Error> {
+    let signed_transaction = SignedTransaction::from_str(&signed_transaction)
+        .map_err(|err| Error::parsing_unsuccessful(&err))?;
+
+    handle_construction_submit(signed_transaction, icrc1_ledger_id.into(), icrc1_agent)
+        .await
+        .map_err(|err| Error::processing_construction_failed(&err))
 }
 
 #[cfg(test)]

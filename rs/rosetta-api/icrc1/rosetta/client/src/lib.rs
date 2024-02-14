@@ -177,4 +177,19 @@ impl RosettaClient {
         )
         .await
     }
+
+    pub async fn construction_submit(
+        &self,
+        network_identifier: NetworkIdentifier,
+        signed_transaction: String,
+    ) -> Result<ConstructionSubmitResponse, Error> {
+        self.call_endpoint(
+            "/construction/submit",
+            &ConstructionSubmitRequest {
+                network_identifier,
+                signed_transaction,
+            },
+        )
+        .await
+    }
 }
