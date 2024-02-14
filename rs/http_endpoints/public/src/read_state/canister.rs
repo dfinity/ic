@@ -430,7 +430,9 @@ mod test {
     use hyper::StatusCode;
     use ic_crypto_tree_hash::{Digest, Label, MixedHashTree, Path};
     use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{CanisterQueues, ReplicatedState, SystemMetadata};
+    use ic_replicated_state::{
+        canister_snapshots::CanisterSnapshots, CanisterQueues, ReplicatedState, SystemMetadata,
+    };
     use ic_test_utilities::{
         state::insert_dummy_canister,
         types::ids::{canister_test_id, subnet_test_id, user_test_id},
@@ -558,6 +560,7 @@ mod test {
             metadata,
             CanisterQueues::default(),
             RawQueryStats::default(),
+            CanisterSnapshots::default(),
         );
         assert_eq!(
             verify_paths(

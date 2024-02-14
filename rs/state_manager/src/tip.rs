@@ -788,6 +788,9 @@ fn serialize_to_tip(
     metrics: &StorageMetrics,
     lsmt_storage: FlagStatus,
 ) -> Result<(), CheckpointError> {
+    //TODO(MR-530): Implement serializing canister snapshots.
+    debug_assert!(state.canister_snapshots.is_unflushed_changes_empty());
+
     // Serialize ingress history separately. The `SystemMetadata` proto does not
     // encode it.
     //

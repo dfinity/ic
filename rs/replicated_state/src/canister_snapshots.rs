@@ -80,6 +80,11 @@ impl CanisterSnapshots {
     pub fn take_unflushed_changes(&mut self) -> Vec<SnapshotOperation> {
         std::mem::take(&mut self.unflushed_changes)
     }
+
+    /// Returns true if unflushed changes list is empty.
+    pub fn is_unflushed_changes_empty(&self) -> bool {
+        self.unflushed_changes.is_empty()
+    }
 }
 
 /// Contains all information related to a canister snapshot.
