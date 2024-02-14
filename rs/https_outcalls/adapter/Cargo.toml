@@ -12,7 +12,7 @@ futures = { workspace = true }
 http = "0.2"
 hyper = { version = "0.14.18", features = ["full"] }
 hyper-socks2 = { workspace = true }
-hyper-rustls = "0.24.0"
+hyper-rustls = { workspace = true }
 ic-adapter-metrics-server = { path = "../../monitoring/adapter_metrics_server" }
 ic-async-utils = { path = "../../async_utils" }
 ic-config = { path = "../../config" }

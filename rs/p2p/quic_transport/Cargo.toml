@@ -31,7 +31,7 @@ socket2 = { version = "0.5", features = ["all"] }
 thiserror = "1.0.50"
 tokio = { workspace = true }
 tokio-metrics = "0.3.0"
-tokio-rustls = "0.24.0"
+tokio-rustls = { workspace = true }
 tokio-util = { workspace = true }
 tower = { workspace = true }
 

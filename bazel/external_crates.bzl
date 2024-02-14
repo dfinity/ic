@@ -512,7 +512,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "hyper-rustls": crate.spec(
-                version = "^0.24.0",
+                version = "^0.24.2",
                 features = [
                     "http2",
                 ],
@@ -1009,7 +1009,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.1.0",
             ),
             "rustls": crate.spec(
-                version = "^0.21.0",
+                version = "^0.21.10",
                 features = [
                     "dangerous_configuration",
                 ],
@@ -1219,7 +1219,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.0",
             ),
             "tokio-rustls": crate.spec(
-                version = "^0.24.0",
+                version = "^0.24.1",
                 features = [
                     "dangerous_configuration",
                 ],

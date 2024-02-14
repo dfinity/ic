@@ -13,7 +13,7 @@ ic-protobuf = { path = "../../protobuf" }
 serde = { workspace = true }
 thiserror = "1.0.56"
 tokio = { workspace = true }
-tokio-rustls = "0.24.0"
+tokio-rustls = { workspace = true }
 x509-parser = "0.15.1"
 
 [dev-dependencies]
