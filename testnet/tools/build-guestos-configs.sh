@@ -324,6 +324,7 @@ function build_bootstrap_images() {
             "--nns_public_key" "${IC_PREP_DIR}/nns_public_key.pem" \
             "--hostname" "${hostname}" \
             "--accounts_ssh_authorized_keys" "${SSH}" \
+            "--default_firewall_whitelist" "${REPO_ROOT}/rs/tests/src/default_firewall_whitelist.conf" \
             ${ELASTICSEARCH_HOSTS:+"--elasticsearch_hosts"} ${ELASTICSEARCH_HOSTS:+"${ELASTICSEARCH_HOSTS}"} \
             ${ELASTICSEARCH_TAGS:+"--elasticsearch_tags"} ${ELASTICSEARCH_TAGS:+"${ELASTICSEARCH_TAGS}"} \
             ${NODE_OPERATOR_PRIVATE_KEY:+"--node_operator_private_key"} ${NODE_OPERATOR_PRIVATE_KEY:+"${NODE_OPERATOR_PRIVATE_KEY}"} \
