@@ -101,7 +101,9 @@ else
 fi
 
 trap 'rm -rf "${TEMPDIR}" "${SUBUID_FILE}" "${SUBGID_FILE}"' EXIT
-TEMPDIR=$(mktemp -d)
+TEMPDIR=$(mktemp -d --suffix=containerrun)
+SUBUID_FILE=$(mktemp --suffix=containerrun)
+SUBGID_FILE=$(mktemp --suffix=containerrun)
 
 PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"
@@ -152,8 +154,6 @@ else
 fi
 
 # Create dynamic subuid/subgid files for the user to run nested containers
-SUBUID_FILE=$(mktemp)
-SUBGID_FILE=$(mktemp)
 echo "$(id -u):100000:65536" >$SUBUID_FILE
 echo "$(id -u):100000:65536" >$SUBGID_FILE
 PODMAN_RUN_ARGS+=(
