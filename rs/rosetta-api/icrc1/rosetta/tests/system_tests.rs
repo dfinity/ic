@@ -1,8 +1,12 @@
 use crate::common::local_replica;
 use crate::common::local_replica::test_identity;
 use crate::common::utils::get_rosetta_blocks_from_icrc1_ledger;
+use candid::Encode;
+use candid::Nat;
 use candid::Principal;
 use common::local_replica::get_custom_agent;
+use ic_agent::agent::Envelope;
+use ic_agent::agent::EnvelopeContent;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
 use ic_base_types::CanisterId;
@@ -17,14 +21,19 @@ use ic_icrc_rosetta::common::types::Error;
 use ic_icrc_rosetta::common::utils::utils::icrc1_rosetta_block_to_rosetta_core_block;
 use ic_icrc_rosetta::common::utils::utils::icrc1_rosetta_block_to_rosetta_core_transaction;
 use ic_icrc_rosetta::construction_api::types::ConstructionMetadataRequestOptions;
+use ic_icrc_rosetta::construction_api::types::EnvelopePair;
+use ic_icrc_rosetta::construction_api::types::SignedTransaction;
 use ic_icrc_rosetta_client::RosettaClient;
 use ic_icrc_rosetta_runner::{
     start_rosetta, RosettaContext, RosettaOptions, DEFAULT_DECIMAL_PLACES,
 };
 use ic_rosetta_api::DEFAULT_BLOCKCHAIN;
 use ic_starter_tests::ReplicaContext;
+use icrc_ledger_agent::CallMode;
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::transfer::Memo;
+use icrc_ledger_types::icrc1::transfer::TransferArg;
 use lazy_static::lazy_static;
 use num_traits::cast::ToPrimitive;
 use proptest::prelude::ProptestConfig;
@@ -35,6 +44,7 @@ use rosetta_core::objects::*;
 use rosetta_core::request_types::*;
 use rosetta_core::response_types::BlockResponse;
 use rosetta_core::response_types::ConstructionPreprocessResponse;
+use std::borrow::Cow;
 use std::thread;
 use std::{
     path::PathBuf,
@@ -515,4 +525,118 @@ async fn test_construction_derive() {
         .account_identifier
         .expect("/construction/derive did not return an account identifier");
     assert_eq!(account_identifier, account.into());
+}
+
+#[tokio::test]
+async fn test_construction_submit() {
+    let keypair = EdKeypair::generate_from_u64(0);
+
+    let env = RosettaTestingEnvironmentBuilder::new()
+        .with_init_args_builder(
+            local_replica::icrc_ledger_default_args_builder()
+                .with_minting_account((*MINTING_IDENTITY).clone().sender().unwrap())
+                .with_initial_balance(
+                    keypair.generate_principal_id().unwrap().0,
+                    1_000_000_000_000u64,
+                ),
+        )
+        .build()
+        .await;
+
+    let transfer_arg = TransferArg {
+        to: (*MINTING_IDENTITY).clone().sender().unwrap().into(),
+        // Transfer Fee is the minimum burn amount
+        amount: Nat::from(DEFAULT_TRANSFER_FEE),
+        memo: Some(Memo::default()),
+        from_subaccount: None,
+        fee: None,
+        created_at_time: None,
+    };
+
+    let ingress_expiry = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .saturating_add(Duration::from_secs(4 * 60))
+        .as_nanos()
+        .to_u64()
+        .unwrap();
+
+    let sender = keypair.generate_principal_id().unwrap().0;
+
+    let call_envelope_content = EnvelopeContent::Call {
+        nonce: None,
+        ingress_expiry,
+        sender,
+        canister_id: env.icrc1_ledger_id,
+        method_name: "icrc1_transfer".to_owned(),
+        arg: Encode!(&transfer_arg).unwrap(),
+    };
+
+    let call_envelope_request_id = call_envelope_content.to_request_id();
+
+    let read_state_envelope_content = EnvelopeContent::ReadState {
+        ingress_expiry,
+        sender,
+        paths: vec![vec![
+            "request_status".into(),
+            call_envelope_request_id.to_vec().into(),
+        ]],
+    };
+
+    let call_envelope = Envelope {
+        content: Cow::Owned(call_envelope_content),
+        sender_pubkey: Some(EdKeypair::der_encode_pk(keypair.get_pb_key()).unwrap()),
+        sender_sig: Some(keypair.sign(&call_envelope_request_id.signable()).to_vec()),
+        sender_delegation: None,
+    };
+
+    let read_state_envelope = Envelope {
+        content: Cow::Owned(read_state_envelope_content.clone()),
+        sender_pubkey: Some(EdKeypair::der_encode_pk(keypair.get_pb_key()).unwrap()),
+        sender_sig: Some(
+            keypair
+                .sign(&read_state_envelope_content.to_request_id().signable())
+                .to_vec(),
+        ),
+        sender_delegation: None,
+    };
+
+    let envelope_pair = EnvelopePair {
+        call_envelope,
+        read_state_envelope,
+    };
+
+    let signed_transaction = SignedTransaction {
+        envelope_pairs: vec![envelope_pair],
+    };
+
+    let balance_before_transfer = env
+        .icrc1_agent
+        .balance_of(
+            keypair.generate_principal_id().unwrap().0.into(),
+            CallMode::Query,
+        )
+        .await
+        .unwrap();
+
+    let _construction_submit_response = env
+        .rosetta_client
+        .construction_submit(env.network_identifier, signed_transaction.to_string())
+        .await
+        .expect("Unable to call /construction/submit");
+
+    let current_balance = env
+        .icrc1_agent
+        .balance_of(
+            keypair.generate_principal_id().unwrap().0.into(),
+            CallMode::Query,
+        )
+        .await
+        .unwrap();
+
+    // Since we do not yet get the actual response back from the submit endpoint, we need to check that the transaction was successful by confirming the balance change
+    assert_eq!(
+        current_balance,
+        balance_before_transfer - Nat::from(DEFAULT_TRANSFER_FEE)
+    );
 }

@@ -319,6 +319,7 @@ async fn main() -> Result<()> {
         .route("/construction/derive", post(construction_derive))
         .route("/construction/preprocess", post(construction_preprocess))
         .route("/construction/metadata", post(construction_metadata))
+        .route("/construction/submit", post(construction_submit))
         // This layer creates a span for each http request and attaches
         // the request_id, HTTP Method and path to it.
         .layer(add_request_span())

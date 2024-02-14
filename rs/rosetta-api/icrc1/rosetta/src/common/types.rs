@@ -26,6 +26,7 @@ const ERROR_CODE_PARSING_ERROR: u32 = 7;
 const ERROR_CODE_UNSUPPORTED_OPERATION: u32 = 8;
 const ERROR_CODE_LEDGER_COMMUNICATION: u32 = 9;
 const ERROR_CODE_REQUEST_PROCESSING_ERROR: u32 = 10;
+const ERROR_CODE_PROCESSING_CONSTRUCTION_FAILED: u32 = 11;
 
 impl IntoResponse for Error {
     fn into_response(self) -> axum::response::Response {
@@ -153,6 +154,16 @@ impl Error {
         Self(rosetta_core::miscellaneous::Error {
             code: ERROR_CODE_REQUEST_PROCESSING_ERROR,
             message: "Error while processing the request.".to_owned(),
+            description: Some(format!("{:?}", description)),
+            retriable: false,
+            details: None,
+        })
+    }
+
+    pub fn processing_construction_failed<T: std::fmt::Debug>(description: &T) -> Self {
+        Self(rosetta_core::miscellaneous::Error {
+            code: ERROR_CODE_PROCESSING_CONSTRUCTION_FAILED,
+            message: "Processing of the construction request failed.".to_owned(),
             description: Some(format!("{:?}", description)),
             retriable: false,
             details: None,
