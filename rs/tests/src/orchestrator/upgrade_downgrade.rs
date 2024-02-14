@@ -51,6 +51,12 @@ pub fn config(env: TestEnv, subnet_type: SubnetType, mainnet_version: bool) {
     let mut ic = InternetComputer::new();
     if mainnet_version {
         ic = ic.with_mainnet_config();
+
+        // Due to a change in how default firewall rules are supplied, they are
+        // not preserved across the transitional upgrade. We temporarily stash
+        // the whitelist in the registry for the time being.
+        // THIS PATH SHOULD BE REMOVED.
+        ic = ic.with_forced_default_firewall();
     }
 
     let mut subnet_under_test = Subnet::new(subnet_type)

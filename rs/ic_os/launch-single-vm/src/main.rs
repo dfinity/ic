@@ -39,6 +39,9 @@ struct Args {
     /// Path to `build-bootstrap-config-image.sh` script
     #[clap(long)]
     build_bootstrap_script: PathBuf,
+    /// Path to `default_firewall_whitelist.conf` file
+    #[clap(long)]
+    default_firewall_whitelist: PathBuf,
     /// Key to be used for `admin` SSH
     #[clap(long)]
     ssh_key_path: Option<PathBuf>,
@@ -60,6 +63,7 @@ fn main() {
     let url = args.url;
     let sha256 = args.sha256;
     let build_bootstrap_script = args.build_bootstrap_script;
+    let default_firewall_whitelist = args.default_firewall_whitelist;
     let ssh_key_path = args.ssh_key_path;
 
     let test_name = "test_single_vm";
@@ -183,6 +187,8 @@ fn main() {
         .arg(&local_store)
         .arg("--accounts_ssh_authorized_keys")
         .arg(&keys_dir)
+        .arg("--default_firewall_whitelist")
+        .arg(default_firewall_whitelist)
         .status()
         .unwrap();
 
