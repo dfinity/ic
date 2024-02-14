@@ -23,5 +23,5 @@ rand = "0.8"
 signature = { workspace = true }
 time = "0.3.20"
 tokio = { workspace = true }
-tokio-rustls = { version = "0.24.0", features = ["dangerous_configuration"] }
+tokio-rustls = { workspace = true }
 x509-cert = { workspace = true }

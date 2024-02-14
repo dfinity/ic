@@ -18,10 +18,10 @@ ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-types = { path = "../types/types" }
 futures-util = "0.3.21"
 hyper = { version = "0.14.18", features = ["client", "tcp", "http1", "http2"] }
-hyper-rustls = { version = "0.24.0", features = ["http2"] }
+hyper-rustls = { workspace = true }
 itertools = { workspace = true }
 prost = { workspace = true }
-rustls = { version = "^0.21.0", features = ["dangerous_configuration"] }
+rustls = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 tokio = { workspace = true }
