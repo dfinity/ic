@@ -1249,10 +1249,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.9",
             ),
             "tonic": crate.spec(
-                version = "^0.10.2",
+                version = "^0.11.0",
             ),
             "tonic-build": crate.spec(
-                version = "^0.10.2",
+                version = "^0.11.0",
             ),
             "tower": crate.spec(
                 version = "^0.4.13",

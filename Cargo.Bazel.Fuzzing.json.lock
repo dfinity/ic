@@ -1,5 +1,5 @@
 {
-  "checksum": "6ce58a71cd09b051de4912fb658fd437cbb9e5f5e1f17fa0b0a1fd087d415793",
+  "checksum": "68c58e0cdb8ebf202df7933c6b22d7605b99935edd6786ad043bf9d2527e0e55",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -16197,11 +16197,11 @@
               "target": "toml"
             },
             {
-              "id": "tonic 0.10.2",
+              "id": "tonic 0.11.0",
               "target": "tonic"
             },
             {
-              "id": "tonic-build 0.10.2",
+              "id": "tonic-build 0.11.0",
               "target": "tonic_build"
             },
             {
@@ -55932,13 +55932,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "tonic 0.10.2": {
+    "tonic 0.11.0": {
       "name": "tonic",
-      "version": "0.10.2",
+      "version": "0.11.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tonic/0.10.2/download",
-          "sha256": "d560933a0de61cf715926b9cac824d4c883c2c43142f787595e48280c40a1d0e"
+          "url": "https://crates.io/api/v1/crates/tonic/0.11.0/download",
+          "sha256": "76c4eb7a4e9ef9d4763600161f12f5070b92a578e1b634db88a6887844c91a13"
         }
       },
       "targets": [
@@ -56054,17 +56054,17 @@
           ],
           "selects": {}
         },
-        "version": "0.10.2"
+        "version": "0.11.0"
       },
       "license": "MIT"
     },
-    "tonic-build 0.10.2": {
+    "tonic-build 0.11.0": {
       "name": "tonic-build",
-      "version": "0.10.2",
+      "version": "0.11.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tonic-build/0.10.2/download",
-          "sha256": "9d021fc044c18582b9a2408cd0dd05b1596e3ecdb5c4df822bb0183545683889"
+          "url": "https://crates.io/api/v1/crates/tonic-build/0.11.0/download",
+          "sha256": "be4ef6dd70a610078cb4e338a0f79d06bc759ff1b22d2120c2ff02ae264ba9c2"
         }
       },
       "targets": [
@@ -56118,7 +56118,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.10.2"
+        "version": "0.11.0"
       },
       "license": "MIT"
     },
