@@ -281,7 +281,10 @@ where
     }) {
         return Ok(canister_id);
     }
-    let canister_id = match runtime.create_canister(100_000_000_000).await {
+    let canister_id = match runtime
+        .create_canister(controllers_of_children_canisters(runtime), 100_000_000_000)
+        .await
+    {
         Ok(id) => {
             log!(
                 INFO,
@@ -305,6 +308,14 @@ where
     };
     mutate_state(|s| s.record_created_canister::<C>(contract, canister_id));
     Ok(canister_id)
+}
+
+fn controllers_of_children_canisters<R: CanisterRuntime>(runtime: &R) -> Vec<Principal> {
+    let more_controllers = read_state(|s| s.more_controller_ids().to_vec());
+    vec![runtime.id()]
+        .into_iter()
+        .chain(more_controllers)
+        .collect()
 }
 
 async fn install_canister_once<C, R, I>(

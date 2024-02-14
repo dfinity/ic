@@ -76,7 +76,9 @@ pub fn ic_xc_ledger_suite_orchestrator_test(env: TestEnv) {
         "rs/ethereum/ledger-suite-orchestrator/ledger_suite_orchestrator_canister.wasm",
     );
     let ledger_orchestrator = block_on(async {
-        let init_args = OrchestratorArg::InitArg(InitArg {});
+        let init_args = OrchestratorArg::InitArg(InitArg {
+            more_controller_ids: vec![ROOT_CANISTER_ID.get().0],
+        });
         let canister = install_nns_controlled_canister(
             &logger,
             &application_subnet_runtime,

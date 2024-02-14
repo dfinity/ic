@@ -4,7 +4,11 @@ type OrchestratorArg = variant {
     AddErc20Arg : AddErc20Arg;
 };
 
-type InitArg = record {};
+type InitArg = record {
+    // All canisters that will be spawned off by the orchestrator will be controlled by the orchestrator
+    // and *additionally* by the following controllers.
+    more_controller_ids : vec principal;
+};
 
 type UpgradeArg = record {
    // Hexadecimal encoding of the SHA2-256 ledger compressed wasm hash, e.g.,

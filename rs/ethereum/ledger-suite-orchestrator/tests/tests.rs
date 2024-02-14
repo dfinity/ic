@@ -1,3 +1,4 @@
+use crate::arbitrary::arb_init_arg;
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
@@ -15,24 +16,36 @@ use ic_state_machine_tests::{
 use ic_test_utilities_load_wasm::load_wasm;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
 use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
+use proptest::prelude::ProptestConfig;
+use proptest::proptest;
+use std::collections::BTreeSet;
 use std::str::FromStr;
 
 const MAX_TICKS: usize = 10;
 
-#[test]
-fn should_install_orchestrator_and_add_supported_erc20_tokens() {
-    let mut orchestrator = LedgerSuiteOrchestrator::new();
-    let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
-    let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
+proptest! {
+    #![proptest_config(ProptestConfig {
+            cases: 10,
+            .. ProptestConfig::default()
+        })]
+    #[test]
+    fn should_install_orchestrator_and_add_supported_erc20_tokens(init_arg in arb_init_arg()) {
+        let more_controllers = init_arg.more_controller_ids.clone();
+        let mut orchestrator = LedgerSuiteOrchestrator::new(init_arg);
+        let orchestrator_principal: Principal = orchestrator.ledger_suite_orchestrator_id.get().into();
+        let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
+        let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
+        let controllers: Vec<_> = std::iter::once(orchestrator_principal).chain(more_controllers.into_iter()).collect();
 
-    for token in supported_erc20_tokens(embedded_ledger_wasm_hash, embedded_index_wasm_hash) {
-        orchestrator = orchestrator
-            .add_erc20_token(token)
-            .expect_new_ledger_and_index_canisters()
-            .assert_all_controlled_by_orchestrator()
-            .assert_ledger_icrc1_total_supply(0_u8)
-            .assert_index_has_correct_ledger_id()
-            .setup;
+        for token in supported_erc20_tokens(embedded_ledger_wasm_hash, embedded_index_wasm_hash) {
+            orchestrator = orchestrator
+                .add_erc20_token(token)
+                .expect_new_ledger_and_index_canisters()
+                .assert_all_controlled_by(&controllers)
+                .assert_ledger_icrc1_total_supply(0_u8)
+                .assert_index_has_correct_ledger_id()
+                .setup;
+        }
     }
 }
 
@@ -65,7 +78,7 @@ fn should_spawn_ledger_with_correct_init_args() {
         accounts_overflow_trim_quantity: None,
     };
 
-    let orchestrator = LedgerSuiteOrchestrator::new();
+    let orchestrator = LedgerSuiteOrchestrator::default();
     let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
     let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
     orchestrator
@@ -115,7 +128,7 @@ fn should_spawn_ledger_with_correct_init_args() {
 
 #[test]
 fn should_reject_adding_an_already_managed_erc20_token() {
-    let orchestrator = LedgerSuiteOrchestrator::new();
+    let orchestrator = LedgerSuiteOrchestrator::default();
     let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
     let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
     let usdc = usdc(embedded_ledger_wasm_hash, embedded_index_wasm_hash);
@@ -142,7 +155,7 @@ fn should_reject_upgrade_with_unknown_wasm_hash() {
         assert_matches!(result, Err(e) if e.code() == ErrorCode::CanisterCalledTrap && e.description().contains("invalid arguments"));
     }
 
-    let orchestrator = LedgerSuiteOrchestrator::new();
+    let orchestrator = LedgerSuiteOrchestrator::default();
     let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
     let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
     let usdc = usdc(embedded_ledger_wasm_hash, embedded_index_wasm_hash);
@@ -193,7 +206,7 @@ fn should_reject_upgrade_with_unknown_wasm_hash() {
 
 #[test]
 fn should_reject_update_calls_to_http_request() {
-    let orchestrator = LedgerSuiteOrchestrator::new();
+    let orchestrator = LedgerSuiteOrchestrator::default();
     let request = HttpRequest {
         method: "GET".to_string(),
         url: "/dashboard".to_string(),
@@ -225,18 +238,20 @@ pub struct LedgerSuiteOrchestrator {
 
 impl Default for LedgerSuiteOrchestrator {
     fn default() -> Self {
-        Self::new()
+        Self::new(InitArg {
+            more_controller_ids: vec![],
+        })
     }
 }
 
 impl LedgerSuiteOrchestrator {
-    pub fn new() -> Self {
+    pub fn new(init_arg: InitArg) -> Self {
         let env = StateMachineBuilder::new()
             .with_default_canister_range()
             .build();
         let ledger_suite_orchestrator_id =
             env.create_canister_with_cycles(None, Cycles::new(u128::MAX), None);
-        install_ledger_orchestrator(&env, ledger_suite_orchestrator_id);
+        install_ledger_orchestrator(&env, ledger_suite_orchestrator_id, init_arg);
         Self {
             env,
             ledger_suite_orchestrator_id,
@@ -300,12 +315,15 @@ impl LedgerSuiteOrchestrator {
     }
 }
 
-fn install_ledger_orchestrator(env: &StateMachine, ledger_suite_orchestrator_id: CanisterId) {
-    let args = OrchestratorArg::InitArg(InitArg {});
+fn install_ledger_orchestrator(
+    env: &StateMachine,
+    ledger_suite_orchestrator_id: CanisterId,
+    init_arg: InitArg,
+) {
     env.install_existing_canister(
         ledger_suite_orchestrator_id,
         ledger_suite_orchestrator_wasm(),
-        Encode!(&args).unwrap(),
+        Encode!(&OrchestratorArg::InitArg(init_arg)).unwrap(),
     )
     .unwrap();
 }
@@ -443,14 +461,20 @@ pub struct ManagedCanistersAssert {
 }
 
 impl ManagedCanistersAssert {
-    pub fn assert_all_controlled_by_orchestrator(self) -> Self {
+    pub fn assert_all_controlled_by(self, expected_controllers: &[Principal]) -> Self {
         for canister_id in self.all_canister_ids() {
             assert_eq!(
                 self.setup
                     .canister_status_of(canister_id)
                     .settings()
-                    .controllers(),
-                vec![self.setup.ledger_suite_orchestrator_id.get()],
+                    .controllers()
+                    .into_iter()
+                    .map(|p| p.0)
+                    .collect::<BTreeSet<_>>(),
+                expected_controllers
+                    .iter()
+                    .copied()
+                    .collect::<BTreeSet<_>>(), // convert to set to ignore order
                 "BUG: unexpected controller for canister {}",
                 canister_id
             );
@@ -542,5 +566,24 @@ fn assert_reply(result: WasmResult) -> Vec<u8> {
         WasmResult::Reject(reject) => {
             panic!("Expected a successful reply, got a reject: {}", reject)
         }
+    }
+}
+
+mod arbitrary {
+    use candid::Principal;
+    use ic_ledger_suite_orchestrator::candid::InitArg;
+    use proptest::arbitrary::any;
+    use proptest::collection::vec;
+    use proptest::prelude::Strategy;
+
+    pub fn arb_init_arg() -> impl Strategy<Value = InitArg> {
+        // at most 10 principals, including the orchestrator's principal
+        vec(arb_principal(), 0..=9).prop_map(|more_controller_ids| InitArg {
+            more_controller_ids,
+        })
+    }
+
+    fn arb_principal() -> impl Strategy<Value = Principal> {
+        vec(any::<u8>(), 0..=29).prop_map(|bytes| Principal::from_slice(&bytes))
     }
 }

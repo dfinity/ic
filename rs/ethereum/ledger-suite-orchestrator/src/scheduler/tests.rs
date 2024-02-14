@@ -1,8 +1,9 @@
 use crate::candid::{InitArg, LedgerInitArg};
 use crate::management::{CallError, Reason};
-use crate::scheduler::test_fixtures::usdc_metadata;
+use crate::scheduler::test_fixtures::{usdc, usdc_metadata};
 use crate::scheduler::tests::mock::MockCanisterRuntime;
-use crate::scheduler::{Erc20Token, InstallLedgerSuiteArgs, Task, TaskError, Tasks};
+use crate::scheduler::{InstallLedgerSuiteArgs, Task, TaskError, Tasks};
+use crate::state::test_fixtures::new_state;
 use crate::state::{
     read_state, Canisters, IndexCanister, LedgerCanister, ManagedCanisterStatus, State, WasmHash,
     INDEX_BYTECODE, LEDGER_BYTECODE,
@@ -21,12 +22,51 @@ async fn should_install_ledger_suite() {
     tasks.add_task(Task::InstallLedgerSuite(usdc_install_args()));
     let mut runtime = MockCanisterRuntime::new();
 
-    runtime
-        .expect_id()
-        .times(1)
-        .return_const(ORCHESTRATOR_PRINCIPAL);
+    runtime.expect_id().return_const(ORCHESTRATOR_PRINCIPAL);
     expect_create_canister_returning(
         &mut runtime,
+        vec![ORCHESTRATOR_PRINCIPAL],
+        vec![Ok(LEDGER_PRINCIPAL), Ok(INDEX_PRINCIPAL)],
+    );
+    runtime.expect_install_code().times(2).return_const(Ok(()));
+
+    assert_eq!(tasks.execute(&runtime).await, Ok(()));
+
+    assert_eq!(
+        read_state(|s| s.managed_canisters(&usdc()).cloned()),
+        Some(Canisters {
+            ledger: Some(LedgerCanister::new(ManagedCanisterStatus::Installed {
+                canister_id: LEDGER_PRINCIPAL,
+                installed_wasm_hash: read_ledger_wasm_hash(),
+            })),
+            index: Some(IndexCanister::new(ManagedCanisterStatus::Installed {
+                canister_id: INDEX_PRINCIPAL,
+                installed_wasm_hash: read_index_wasm_hash(),
+            })),
+            archives: vec![],
+            metadata: usdc_metadata(),
+        })
+    );
+}
+
+#[tokio::test]
+async fn should_install_ledger_suite_with_additional_controllers() {
+    const OTHER_PRINCIPAL: Principal = Principal::from_slice(&[3_u8; 29]);
+    crate::state::init_state(
+        State::try_from(InitArg {
+            more_controller_ids: vec![OTHER_PRINCIPAL],
+        })
+        .unwrap(),
+    );
+    register_embedded_wasms();
+    let mut tasks = Tasks::default();
+    tasks.add_task(Task::InstallLedgerSuite(usdc_install_args()));
+    let mut runtime = MockCanisterRuntime::new();
+
+    runtime.expect_id().return_const(ORCHESTRATOR_PRINCIPAL);
+    expect_create_canister_returning(
+        &mut runtime,
+        vec![ORCHESTRATOR_PRINCIPAL, OTHER_PRINCIPAL],
         vec![Ok(LEDGER_PRINCIPAL), Ok(INDEX_PRINCIPAL)],
     );
     runtime.expect_install_code().times(2).return_const(Ok(()));
@@ -57,11 +97,12 @@ async fn should_not_retry_successful_operation_after_failing_one() {
     tasks.add_task(Task::InstallLedgerSuite(usdc_install_args()));
     let mut runtime = MockCanisterRuntime::new();
 
-    runtime
-        .expect_id()
-        .times(1)
-        .return_const(ORCHESTRATOR_PRINCIPAL);
-    expect_create_canister_returning(&mut runtime, vec![Ok(LEDGER_PRINCIPAL)]);
+    runtime.expect_id().return_const(ORCHESTRATOR_PRINCIPAL);
+    expect_create_canister_returning(
+        &mut runtime,
+        vec![ORCHESTRATOR_PRINCIPAL],
+        vec![Ok(LEDGER_PRINCIPAL)],
+    );
     let expected_error = CallError {
         method: "install_code".to_string(),
         reason: Reason::OutOfCycles,
@@ -88,16 +129,17 @@ async fn should_not_retry_successful_operation_after_failing_one() {
     );
 
     runtime.checkpoint();
-    runtime
-        .expect_id()
-        .times(1)
-        .return_const(ORCHESTRATOR_PRINCIPAL);
+    runtime.expect_id().return_const(ORCHESTRATOR_PRINCIPAL);
     let expected_error = CallError {
         method: "create_canister".to_string(),
         reason: Reason::OutOfCycles,
     };
     runtime.expect_install_code().times(1).return_const(Ok(()));
-    expect_create_canister_returning(&mut runtime, vec![Err(expected_error.clone())]);
+    expect_create_canister_returning(
+        &mut runtime,
+        vec![ORCHESTRATOR_PRINCIPAL],
+        vec![Err(expected_error.clone())],
+    );
 
     assert_eq!(
         tasks.execute(&runtime).await,
@@ -117,11 +159,12 @@ async fn should_not_retry_successful_operation_after_failing_one() {
     );
 
     runtime.checkpoint();
-    runtime
-        .expect_id()
-        .times(1)
-        .return_const(ORCHESTRATOR_PRINCIPAL);
-    expect_create_canister_returning(&mut runtime, vec![Ok(INDEX_PRINCIPAL)]);
+    runtime.expect_id().return_const(ORCHESTRATOR_PRINCIPAL);
+    expect_create_canister_returning(
+        &mut runtime,
+        vec![ORCHESTRATOR_PRINCIPAL],
+        vec![Ok(INDEX_PRINCIPAL)],
+    );
     let expected_error = CallError {
         method: "install_code".to_string(),
         reason: Reason::OutOfCycles,
@@ -151,10 +194,7 @@ async fn should_not_retry_successful_operation_after_failing_one() {
     );
 
     runtime.checkpoint();
-    runtime
-        .expect_id()
-        .times(1)
-        .return_const(ORCHESTRATOR_PRINCIPAL);
+    runtime.expect_id().return_const(ORCHESTRATOR_PRINCIPAL);
     runtime.expect_install_code().times(1).return_const(Ok(()));
     assert_eq!(tasks.execute(&runtime).await, Ok(()));
     assert_eq!(
@@ -184,11 +224,12 @@ async fn should_discard_add_erc20_task_when_ledger_wasm_not_found() {
     install_args.ledger_compressed_wasm_hash = unknown_wasm_hash.clone();
     tasks.add_task(Task::InstallLedgerSuite(install_args));
 
-    runtime
-        .expect_id()
-        .times(1)
-        .return_const(ORCHESTRATOR_PRINCIPAL);
-    expect_create_canister_returning(&mut runtime, vec![Ok(LEDGER_PRINCIPAL)]);
+    runtime.expect_id().return_const(ORCHESTRATOR_PRINCIPAL);
+    expect_create_canister_returning(
+        &mut runtime,
+        vec![ORCHESTRATOR_PRINCIPAL],
+        vec![Ok(LEDGER_PRINCIPAL)],
+    );
 
     assert_eq!(
         tasks.execute(&runtime).await,
@@ -221,12 +262,10 @@ async fn should_discard_add_erc20_task_when_index_wasm_not_found() {
     install_args.index_compressed_wasm_hash = unknown_wasm_hash.clone();
     tasks.add_task(Task::InstallLedgerSuite(install_args));
 
-    runtime
-        .expect_id()
-        .times(1)
-        .return_const(ORCHESTRATOR_PRINCIPAL);
+    runtime.expect_id().return_const(ORCHESTRATOR_PRINCIPAL);
     expect_create_canister_returning(
         &mut runtime,
+        vec![ORCHESTRATOR_PRINCIPAL],
         vec![Ok(LEDGER_PRINCIPAL), Ok(INDEX_PRINCIPAL)],
     );
     runtime.expect_install_code().times(1).return_const(Ok(()));
@@ -256,7 +295,11 @@ async fn should_discard_add_erc20_task_when_index_wasm_not_found() {
 }
 
 fn init_state() {
-    crate::state::init_state(State::from(InitArg {}));
+    crate::state::init_state(new_state());
+    register_embedded_wasms();
+}
+
+fn register_embedded_wasms() {
     mutate_wasm_store(|s| record_icrc1_ledger_suite_wasms(s, 1_620_328_630_000_000_000)).unwrap()
 }
 
@@ -267,15 +310,6 @@ fn usdc_install_args() -> InstallLedgerSuiteArgs {
         ledger_compressed_wasm_hash: read_ledger_wasm_hash(),
         index_compressed_wasm_hash: read_index_wasm_hash(),
     }
-}
-
-fn usdc() -> Erc20Token {
-    crate::candid::Erc20Contract {
-        chain_id: 1_u8.into(),
-        address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".to_string(),
-    }
-    .try_into()
-    .unwrap()
 }
 
 fn ledger_init_arg() -> LedgerInitArg {
@@ -310,14 +344,16 @@ fn read_ledger_wasm_hash() -> WasmHash {
 
 fn expect_create_canister_returning(
     runtime: &mut MockCanisterRuntime,
+    expected_controllers: Vec<Principal>,
     results: Vec<Result<Principal, CallError>>,
 ) {
     assert!(!results.is_empty(), "must return at least one result");
     let mut create_canister_call_counter = 0_usize;
     runtime
         .expect_create_canister()
+        .withf(move |controllers, _cycles| controllers == &expected_controllers)
         .times(results.len())
-        .returning(move |_| {
+        .returning(move |_controllers, _cycles| {
             if create_canister_call_counter >= results.len() {
                 panic!("create_canister called too many times!");
             }
@@ -344,6 +380,7 @@ mod mock {
 
             async fn create_canister(
                 &self,
+                controllers: Vec<Principal>,
                 cycles_for_canister_creation: u64,
             ) -> Result<Principal, CallError>;
 
@@ -358,9 +395,10 @@ mod mock {
 }
 
 mod install_ledger_suite_args {
-    use crate::candid::{AddErc20Arg, InitArg, LedgerInitArg};
+    use crate::candid::{AddErc20Arg, LedgerInitArg};
     use crate::scheduler::tests::usdc_metadata;
     use crate::scheduler::{ChainId, Erc20Token, InstallLedgerSuiteArgs, InvalidAddErc20ArgError};
+    use crate::state::test_fixtures::new_state;
     use crate::state::{IndexWasm, LedgerWasm, State};
     use crate::storage::test_fixtures::empty_wasm_store;
     use crate::storage::{record_icrc1_ledger_suite_wasms, WasmStore};
@@ -372,7 +410,7 @@ mod install_ledger_suite_args {
 
     #[test]
     fn should_error_if_contract_is_already_managed() {
-        let mut state = initial_state();
+        let mut state = new_state();
         let wasm_store = wasm_store_with_icrc1_ledger_suite();
         let arg = valid_add_erc20_arg(&state, &wasm_store);
         let contract: Erc20Token = arg.contract.clone().try_into().unwrap();
@@ -389,7 +427,7 @@ mod install_ledger_suite_args {
     proptest! {
         #[test]
         fn should_error_on_invalid_ethereum_address(invalid_address in "0x[0-9a-fA-F]{0,39}|[0-9a-fA-F]{41,}") {
-            let state = initial_state();
+            let state = new_state();
             let wasm_store = wasm_store_with_icrc1_ledger_suite();
             let mut arg = valid_add_erc20_arg(&state, &wasm_store);
             arg.contract.address = invalid_address;
@@ -401,7 +439,7 @@ mod install_ledger_suite_args {
 
         #[test]
         fn should_error_on_large_chain_id(offset in 0_u128..=u64::MAX as u128) {
-            let state = initial_state();
+            let state = new_state();
             let wasm_store = wasm_store_with_icrc1_ledger_suite();
             let mut arg = valid_add_erc20_arg(&state, &wasm_store);
             arg.contract.chain_id = Nat::from((u64::MAX as u128) + offset);
@@ -415,7 +453,7 @@ mod install_ledger_suite_args {
 
     #[test]
     fn should_accept_valid_erc20_arg() {
-        let state = initial_state();
+        let state = new_state();
         let wasm_store = wasm_store_with_icrc1_ledger_suite();
         let arg = valid_add_erc20_arg(&state, &wasm_store);
         let ledger_init_arg = arg.ledger_init_arg.clone();
@@ -476,10 +514,6 @@ mod install_ledger_suite_args {
             arg
         );
         arg
-    }
-
-    fn initial_state() -> State {
-        State::from(InitArg {})
     }
 
     fn wasm_store_with_icrc1_ledger_suite() -> WasmStore {
