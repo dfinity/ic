@@ -69,6 +69,7 @@ rust_binary(
     deps = [
         ":lib",
         "//rs/async_utils",
+        "//rs/monitoring/logger",
         "@crate_index//:clap",
         "@crate_index//:tokio",
     ],

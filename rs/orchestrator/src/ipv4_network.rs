@@ -4,7 +4,7 @@ use crate::{
     registry_helper::RegistryHelper,
 };
 
-use ic_logger::{debug, info, warn, ReplicaLogger};
+use ic_logger::{debug, info, ReplicaLogger};
 use ic_protobuf::registry::node::v1::IPv4InterfaceConfig;
 use ic_types::RegistryVersion;
 use std::{path::PathBuf, sync::Arc};
@@ -116,7 +116,7 @@ impl Ipv4Configurator {
 
     /// Checks for a change in the IPv4 configuration, and if found, updates the
     /// local network configuration
-    pub async fn check_and_update(&mut self) {
+    pub async fn check_and_update(&mut self) -> OrchestratorResult<()> {
         let registry_version = self.registry.get_latest_version();
         debug!(
             self.logger,
@@ -124,38 +124,19 @@ impl Ipv4Configurator {
         );
 
         // fetch the IPv4 config from the registry
-        let ipv4_config = match self.registry.get_node_ipv4_config(registry_version) {
-            Ok(config) => config,
-            Err(e) => {
-                warn!(
-                    self.logger,
-                    "Failed to fetch the IPv4 config from the registry at version {}: {}",
-                    registry_version,
-                    e
-                );
-                return; // Early return on error
-            }
-        };
+        let ipv4_config = self.registry.get_node_ipv4_config(registry_version)?;
 
         // check if the configuration changed and if so, apply the changes
         if self.configuration != ipv4_config {
-            match self.apply_ipv4_config_change(ipv4_config).await {
-                Ok(()) => self
-                    .metrics
-                    .ipv4_registry_version
-                    .set(registry_version.get() as i64),
-                Err(e) => {
-                    warn!(
-                        self.logger,
-                        "Failed to apply the IPv4 config at version {}: {}", registry_version, e
-                    );
-                    return;
-                }
-            };
+            self.apply_ipv4_config_change(ipv4_config).await?;
+            self.metrics
+                .ipv4_registry_version
+                .set(registry_version.get() as i64);
         };
 
         // keep track of the last successfully applied registry version (even if there was no change in the IPv4 config)
         *self.last_applied_version.write().await = registry_version;
+        Ok(())
     }
 
     pub fn get_last_applied_version(&self) -> Arc<RwLock<RegistryVersion>> {
