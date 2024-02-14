@@ -124,7 +124,7 @@ echo "Full diff before dropping artifacts allowed non-determinism"
 diff -u "$SHA256SUMS0" "$SHA256SUMS1" || true
 
 # TODO:(IDX-3050) remove after BD issue is resolved
-sed -i -e '/json.wasm.gz/d' $SHA256SUMS0 $SHA256SUMS1
+sed -i -e '/json.wasm.gz/d' -e '/http_counter.wasm.gz/d' $SHA256SUMS0 $SHA256SUMS1
 
 # Most of the time, we only want to check update images so we strip out any
 # disk images. When checking SetupOS, do the opposite.
