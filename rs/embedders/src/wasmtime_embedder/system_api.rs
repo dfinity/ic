@@ -582,21 +582,23 @@ pub(crate) fn syscalls(
                     overhead!(DEBUG_PRINT, metering_type),
                     length as u64,
                 )?;
-                match (
-                    caller.data().system_api.as_ref().unwrap().subnet_type(),
-                    feature_flags.rate_limiting_of_debug_prints,
-                ) {
-                    // Debug print is a no-op on non-system subnets with rate limiting.
-                    (SubnetType::Application, FlagStatus::Enabled) => Ok(()),
-                    (SubnetType::VerifiedApplication, FlagStatus::Enabled) => Ok(()),
-                    // If rate limiting is disabled or the subnet is a system subnet, then
-                    // debug print produces output.
-                    (_, FlagStatus::Disabled) | (SubnetType::System, FlagStatus::Enabled) => {
-                        with_memory_and_system_api(&mut caller, |system_api, memory| {
-                            system_api.ic0_debug_print(offset, length, memory)
-                        })
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    if feature_flags.canister_logging == FlagStatus::Enabled {
+                        system_api.save_log_message(offset, length, memory);
                     }
-                }
+                    match (
+                        feature_flags.rate_limiting_of_debug_prints,
+                        system_api.subnet_type(),
+                    ) {
+                        // Debug print is a no-op if rate limiting is enabled on non-system subnets.
+                        (FlagStatus::Enabled, SubnetType::Application) => Ok(()),
+                        (FlagStatus::Enabled, SubnetType::VerifiedApplication) => Ok(()),
+                        // Debug print produces output if either rate limiting is disabled or it's a system subnet.
+                        (FlagStatus::Disabled, _) | (_, SubnetType::System) => {
+                            system_api.ic0_debug_print(offset, length, memory)
+                        }
+                    }
+                })
             }
         })
         .unwrap();
