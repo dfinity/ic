@@ -96,6 +96,7 @@ pub trait CanisterRuntime {
     /// Creates a new canister with the given cycles.
     async fn create_canister(
         &self,
+        controllers: Vec<Principal>,
         cycles_for_canister_creation: u64,
     ) -> Result<Principal, CallError>;
 
@@ -150,12 +151,19 @@ impl CanisterRuntime for IcCanisterRuntime {
 
     async fn create_canister(
         &self,
+        controllers: Vec<Principal>,
         cycles_for_canister_creation: u64,
     ) -> Result<Principal, CallError> {
+        // See https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-create_canister
+        assert!(
+            controllers.len() <= 10,
+            "BUG: too many controllers. Expected at most 10, got {}",
+            controllers.len()
+        );
         let create_args = CreateCanisterArgs {
             settings: Some(
                 CanisterSettingsArgsBuilder::new()
-                    .with_controllers(vec![ic_cdk::id().into()])
+                    .with_controllers(controllers.into_iter().map(|p| p.into()).collect())
                     .build(),
             ),
             ..Default::default()

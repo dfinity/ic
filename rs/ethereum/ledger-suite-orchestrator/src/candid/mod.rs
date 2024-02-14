@@ -13,7 +13,9 @@ pub enum OrchestratorArg {
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct InitArg {}
+pub struct InitArg {
+    pub more_controller_ids: Vec<Principal>,
+}
 
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct UpgradeArg {

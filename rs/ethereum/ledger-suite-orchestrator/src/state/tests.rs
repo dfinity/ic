@@ -1,9 +1,7 @@
-use crate::candid::InitArg;
-use crate::state::State;
-
 mod manage_canister {
     use crate::scheduler::test_fixtures::{usdc, usdc_metadata, usdt, usdt_metadata};
-    use crate::state::tests::{expect_panic_with_message, init_state};
+    use crate::state::test_fixtures::new_state;
+    use crate::state::tests::expect_panic_with_message;
     use crate::state::{
         Canisters, Index, Ledger, ManageSingleCanister, ManagedCanisterStatus, WasmHash,
     };
@@ -12,7 +10,7 @@ mod manage_canister {
 
     #[test]
     fn should_record_created_canister_in_any_order() {
-        let mut state = init_state();
+        let mut state = new_state();
         state.record_new_erc20_token(usdc(), usdc_metadata());
         let usdc_index_canister_id = Principal::from_slice(&[1_u8; 29]);
         state.record_created_canister::<Index>(&usdc(), usdc_index_canister_id);
@@ -57,7 +55,7 @@ mod manage_canister {
         where
             Canisters: ManageSingleCanister<C>,
         {
-            let mut state = init_state();
+            let mut state = new_state();
             let canister_id = Principal::from_slice(&[1_u8; 29]);
             let contract = usdc();
 
@@ -76,7 +74,7 @@ mod manage_canister {
                 state.managed_status::<C>(&contract),
                 Some(&ManagedCanisterStatus::Installed {
                     canister_id,
-                    installed_wasm_hash: wasm_hash
+                    installed_wasm_hash: wasm_hash,
                 })
             );
         }
@@ -91,7 +89,7 @@ mod manage_canister {
         where
             Canisters: ManageSingleCanister<C>,
         {
-            let mut state = init_state();
+            let mut state = new_state();
 
             expect_panic_with_message(
                 || state.record_created_canister::<C>(&usdc(), Principal::from_slice(&[1_u8; 29])),
@@ -105,7 +103,7 @@ mod manage_canister {
 
     #[test]
     fn should_panic_when_recording_twice_same_new_erc20_token() {
-        let mut state = init_state();
+        let mut state = new_state();
         let erc20 = usdc();
         state.record_new_erc20_token(erc20.clone(), usdc_metadata());
 
@@ -121,7 +119,7 @@ mod manage_canister {
         where
             Canisters: ManageSingleCanister<C>,
         {
-            let mut state = init_state();
+            let mut state = new_state();
             let erc20 = usdc();
             state.record_new_erc20_token(erc20.clone(), usdc_metadata());
             let canister_id = Principal::from_slice(&[1_u8; 29]);
@@ -143,7 +141,7 @@ mod manage_canister {
         where
             Canisters: ManageSingleCanister<C>,
         {
-            let mut state = init_state();
+            let mut state = new_state();
 
             expect_panic_with_message(
                 || state.record_installed_canister::<C>(&usdc(), WasmHash::from([1_u8; 32])),
@@ -184,6 +182,47 @@ mod wasm_hash {
     }
 }
 
+mod validate_config {
+    use crate::candid::InitArg;
+    use crate::state::{InvalidStateError, State};
+    use candid::Principal;
+    use proptest::arbitrary::any;
+    use proptest::collection::{vec, SizeRange};
+    use proptest::prelude::Strategy;
+    use proptest::proptest;
+
+    proptest! {
+        #[test]
+        fn should_accept_valid_config(init_arg in arb_init_arg(0..=9)) {
+            let state = State::try_from(init_arg.clone()).expect("valid init arg");
+
+           assert_eq!(state.more_controller_ids, init_arg.more_controller_ids);
+        }
+
+        #[test]
+        fn should_error_when_too_many_additional_controllers(additional_controllers in vec(arb_principal(), 10..=100)) {
+            let init_arg = InitArg {
+                more_controller_ids: additional_controllers.clone(),
+            };
+
+            let result = State::try_from(init_arg);
+
+           assert_eq!(result, Err(InvalidStateError::TooManyAdditionalControllers{max: 9, actual: additional_controllers.len()}));
+        }
+    }
+
+    pub fn arb_init_arg(size: impl Into<SizeRange>) -> impl Strategy<Value = InitArg> {
+        // at most 10 principals, including the orchestrator's principal
+        vec(arb_principal(), size).prop_map(|more_controller_ids| InitArg {
+            more_controller_ids,
+        })
+    }
+
+    fn arb_principal() -> impl Strategy<Value = Principal> {
+        vec(any::<u8>(), 0..=29).prop_map(|bytes| Principal::from_slice(&bytes))
+    }
+}
+
 fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(f: F, expected_message: &str) {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
     let error = result.unwrap_err();
@@ -202,8 +241,4 @@ fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(f: F, expecte
         expected_message,
         panic_message
     );
-}
-
-fn init_state() -> State {
-    State::from(InitArg {})
 }

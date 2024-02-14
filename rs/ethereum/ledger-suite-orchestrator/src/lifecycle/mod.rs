@@ -16,7 +16,9 @@ pub fn init(init_arg: InitArg) {
         "[init]: initialized orchestrator with arg: {:?}",
         init_arg
     );
-    init_state(State::from(init_arg));
+    init_state(
+        State::try_from(init_arg).expect("ERROR: failed to initialize ledger suite orchestrator"),
+    );
     mutate_wasm_store(|s| record_icrc1_ledger_suite_wasms(s, ic_cdk::api::time()))
         .expect("BUG: failed to record icrc1 ledger suite wasms during initialisation");
     setup_timers()
@@ -42,6 +44,7 @@ pub fn post_upgrade(upgrade_arg: Option<UpgradeArg>) {
             }
         }
     }
+    read_state(|s| s.validate_config().expect("ERROR: invalid state"));
     setup_timers()
 }
 
@@ -62,6 +65,7 @@ pub fn add_erc20(token: AddErc20Arg) {
             ));
         }
     }
+    read_state(|s| s.validate_config().expect("ERROR: invalid state"));
     setup_timers()
 }
 

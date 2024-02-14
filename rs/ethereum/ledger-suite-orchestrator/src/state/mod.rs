@@ -1,4 +1,6 @@
 #[cfg(test)]
+pub mod test_fixtures;
+#[cfg(test)]
 mod tests;
 
 use crate::candid::InitArg;
@@ -337,7 +339,8 @@ impl ManagedCanisterStatus {
 #[derive(Debug, PartialEq, Clone, Default)]
 enum ConfigState {
     #[default]
-    Uninitialized, // This state is only used between wasm module initialization and init().
+    Uninitialized,
+    // This state is only used between wasm module initialization and init().
     Initialized(State),
 }
 
@@ -382,11 +385,16 @@ pub struct State {
     managed_canisters: ManagedCanisters,
     tasks: Tasks,
     processing_tasks_guard: bool,
+    more_controller_ids: Vec<Principal>,
 }
 
 impl State {
     pub fn tasks(&self) -> &Tasks {
         &self.tasks
+    }
+
+    pub fn more_controller_ids(&self) -> &[Principal] {
+        &self.more_controller_ids
     }
 
     pub fn add_task(&mut self, task: Task) {
@@ -490,6 +498,17 @@ impl State {
             installed_wasm_hash: wasm_hash,
         };
     }
+
+    pub fn validate_config(&self) -> Result<(), InvalidStateError> {
+        const MAX_ADDITIONAL_CONTROLLERS: usize = 9;
+        if self.more_controller_ids.len() > MAX_ADDITIONAL_CONTROLLERS {
+            return Err(InvalidStateError::TooManyAdditionalControllers {
+                max: MAX_ADDITIONAL_CONTROLLERS,
+                actual: self.more_controller_ids.len(),
+            });
+        }
+        Ok(())
+    }
 }
 
 pub trait ManageSingleCanister<T> {
@@ -561,13 +580,26 @@ impl ManageSingleCanister<Index> for Canisters {
     }
 }
 
-impl From<InitArg> for State {
-    fn from(InitArg {}: InitArg) -> Self {
-        Self {
+#[derive(Debug, Eq, PartialEq)]
+pub enum InvalidStateError {
+    TooManyAdditionalControllers { max: usize, actual: usize },
+}
+
+impl TryFrom<InitArg> for State {
+    type Error = InvalidStateError;
+    fn try_from(
+        InitArg {
+            more_controller_ids,
+        }: InitArg,
+    ) -> Result<Self, Self::Error> {
+        let state = Self {
             managed_canisters: Default::default(),
             tasks: Default::default(),
             processing_tasks_guard: false,
-        }
+            more_controller_ids,
+        };
+        state.validate_config()?;
+        Ok(state)
     }
 }
 
