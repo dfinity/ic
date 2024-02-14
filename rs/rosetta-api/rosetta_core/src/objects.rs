@@ -1,3 +1,6 @@
+use crate::models::EdKeypair;
+use crate::models::RosettaSupportedKeyPair;
+use crate::models::Secp256k1KeyPair;
 use crate::{
     identifiers::{
         AccountIdentifier, BlockIdentifier, CoinIdentifier, NetworkIdentifier, OperationIdentifier,
@@ -5,6 +8,9 @@ use crate::{
     },
     miscellaneous::*,
 };
+use anyhow::bail;
+use candid::Principal;
+use ic_types::PrincipalId;
 use serde::{Deserialize, Serialize};
 
 pub type Object = serde_json::Value;
@@ -477,6 +483,38 @@ impl PublicKey {
         PublicKey {
             hex_bytes,
             curve_type,
+        }
+    }
+
+    pub fn get_der_encoding(&self) -> anyhow::Result<Vec<u8>> {
+        match self.curve_type {
+            CurveType::Edwards25519 => {
+                EdKeypair::der_encode_pk(EdKeypair::hex_decode_pk(&self.hex_bytes)?)
+            }
+            CurveType::Secp256K1 => {
+                Secp256k1KeyPair::der_encode_pk(Secp256k1KeyPair::hex_decode_pk(&self.hex_bytes)?)
+            }
+            _ => bail!("Curve Type {:?} is not supported", self.curve_type),
+        }
+    }
+
+    pub fn get_principal(&self) -> anyhow::Result<Principal> {
+        Ok(PrincipalId::new_self_authenticating(&self.get_der_encoding()?).0)
+    }
+
+    pub fn get_public_key(&self) -> anyhow::Result<Vec<u8>> {
+        Ok(hex::decode(&self.hex_bytes)?)
+    }
+}
+
+impl<T> From<&T> for PublicKey
+where
+    T: RosettaSupportedKeyPair,
+{
+    fn from(keypair: &T) -> Self {
+        PublicKey {
+            hex_bytes: keypair.hex_encode_pk(),
+            curve_type: keypair.get_curve_type(),
         }
     }
 }
