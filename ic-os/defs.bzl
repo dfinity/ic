@@ -480,6 +480,7 @@ def icos_build(
             ":disk-img.tar.zst.cas-url",
             ":disk-img.tar.zst.sha256",
             "//ic-os:scripts/build-bootstrap-config-image.sh",
+            "//rs/tests:src/default_firewall_whitelist.conf",
             ":version.txt",
         ],
         outs = ["launch_remote_vm_script"],
@@ -489,11 +490,12 @@ def icos_build(
         URL="$$(cat $(location :disk-img.tar.zst.cas-url))"
         SHA="$$(cat $(location :disk-img.tar.zst.sha256))"
         SCRIPT="$(location //ic-os:scripts/build-bootstrap-config-image.sh)"
+        DEFAULT_FIREWALL_WHITELIST="$(location //rs/tests:src/default_firewall_whitelist.conf)"
         cat <<EOF > $@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "\\$$BUILD_WORKSPACE_DIRECTORY"
-$$BIN --version "$$VERSION" --url "$$URL" --sha256 "$$SHA" --build-bootstrap-script "$$SCRIPT"
+$$BIN --version "$$VERSION" --url "$$URL" --sha256 "$$SHA" --build-bootstrap-script "$$SCRIPT" --default-firewall-whitelist "$$DEFAULT_FIREWALL_WHITELIST"
 EOF
         """,
         executable = True,

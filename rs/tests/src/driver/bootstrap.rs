@@ -214,6 +214,28 @@ pub fn init_ic(
         ));
     }
 
+    // Due to a change in how default firewall rules are supplied, they are
+    // not preserved across the transitional upgrade. We temporarily stash
+    // the whitelist in the registry for the time being.
+    // THIS PATH SHOULD BE REMOVED.
+    if ic.with_forced_default_firewall {
+        let default_firewall_whitelist_path =
+            test_env.get_dependency_path("rs/tests/src/default_firewall_whitelist.conf");
+        let default_firewall_whitelist = std::fs::read_to_string(default_firewall_whitelist_path)
+            .expect("Could not read default whitelist");
+        let ipv6_whitelist = default_firewall_whitelist
+            .lines()
+            .find_map(|v| v.strip_prefix("ipv6_whitelist="))
+            .expect("Could not find ipv6_whitelist")
+            .replace('"', "")
+            .to_string();
+
+        ic_config.set_whitelisted_prefixes(Some(ipv6_whitelist));
+        ic_config.set_whitelisted_ports(Some(
+            "22,2497,4100,7070,8080,9090,9091,9100,19100,19531".to_string(),
+        ));
+    }
+
     info!(test_env.logger(), "Initializing via {:?}", &ic_config);
 
     Ok(ic_config.initialize()?)
@@ -400,6 +422,9 @@ fn create_config_disk_image(
         .prep_dir(ic_name)
         .expect("no no-name IC")
         .registry_local_store_path();
+    let default_firewall_whitelist_path =
+        test_env.get_dependency_path("rs/tests/src/default_firewall_whitelist.conf");
+
     cmd.arg(img_path.clone())
         .arg("--hostname")
         .arg(node.node_id.to_string())
@@ -408,7 +433,9 @@ fn create_config_disk_image(
         .arg("--ic_crypto")
         .arg(node.crypto_path())
         .arg("--elasticsearch_tags")
-        .arg(format!("system_test {}", group_name));
+        .arg(format!("system_test {}", group_name))
+        .arg("--default_firewall_whitelist")
+        .arg(default_firewall_whitelist_path);
 
     // We've seen k8s nodes fail to pick up RA correctly, so we specify their
     // addresses directly. Ideally, all nodes should do this, to match mainnet.
@@ -586,6 +613,9 @@ fn configure_setupos_image(
         .map(|v| v.lines().map(|v| v.to_owned()).collect())
         .unwrap_or_default();
 
+    let default_firewall_whitelist =
+        env.get_dependency_path("rs/tests/src/default_firewall_whitelist.conf");
+
     // TODO: We transform the IPv6 to get this information, but it could be
     // passed natively.
     let old_ip = nested_vm.get_vm()?.ipv6;
@@ -633,6 +663,8 @@ fn configure_setupos_image(
         .arg(&uncompressed_image)
         .arg("--mgmt-mac")
         .arg(&mac)
+        .arg("--default-firewall-whitelist-path")
+        .arg(&default_firewall_whitelist)
         .arg("--ipv6-prefix")
         .arg(&prefix)
         .arg("--ipv6-gateway")

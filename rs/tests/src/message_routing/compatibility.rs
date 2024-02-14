@@ -80,6 +80,13 @@ fn setup(env: TestEnv, config: Config) {
             .expect("failed to start prometheus VM");
     }
     let ic = InternetComputer::new().with_mainnet_config();
+
+    // Due to a change in how default firewall rules are supplied, they are
+    // not preserved across the transitional upgrade. We temporarily stash
+    // the whitelist in the registry for the time being.
+    // THIS PATH SHOULD BE REMOVED.
+    let ic = ic.with_forced_default_firewall();
+
     ic.add_subnet(subnet(SubnetType::System, None))
         .add_subnet(subnet(SubnetType::Application, Some(DKG_INTERVAL)))
         .add_subnet(subnet(SubnetType::Application, Some(DKG_INTERVAL)))
