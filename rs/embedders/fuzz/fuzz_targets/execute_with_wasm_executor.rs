@@ -63,9 +63,8 @@ fuzz_target!(|module: ConfiguredModule<ICWasmConfig>| {
     let log = no_op_logger();
     let embedder_config = Config {
         feature_flags: FeatureFlags {
-            rate_limiting_of_debug_prints: FlagStatus::Enabled,
-            wasm_native_stable_memory: FlagStatus::Enabled,
             write_barrier: FlagStatus::Enabled,
+            ..Default::default()
         },
         ..Default::default()
     };

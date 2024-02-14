@@ -2826,6 +2826,10 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
+    fn save_log_message(&self, _src: u32, _size: u32, _heap: &[u8]) {
+        // TODO(IC-272): implement storing log message.
+    }
+
     fn ic0_debug_print(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()> {
         const MAX_DEBUG_MESSAGE_SIZE: u32 = 32 * 1024;
         let size = size.min(MAX_DEBUG_MESSAGE_SIZE);
