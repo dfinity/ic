@@ -511,6 +511,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "full",
                 ],
             ),
+            "hyper-util": crate.spec(
+                version = "^0.1.3",
+                features = [
+                    "full",
+                ],
+            ),
             "hyper-rustls": crate.spec(
                 version = "^0.24.2",
                 features = [
@@ -1271,6 +1277,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 package = "tower-http",
                 version = "^0.5.1",
                 features = [
+                    "limit",
                     "trace",
                     "request-id",
                     "util",
