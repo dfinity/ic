@@ -1,9 +1,11 @@
 use crate::api::CspCreateMEGaKeyError;
 use crate::keygen::utils::idkg_dealing_encryption_pk_to_proto;
 use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
+use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
 use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
-use crate::secret_key_store::SecretKeyStoreInsertionError;
+use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreInsertionError};
 use crate::vault::api::IDkgProtocolCspVault;
+use crate::vault::local_csp_vault::idkg::SecretKeyStoreWriteError;
 use crate::vault::local_csp_vault::PublicKeyStore;
 use crate::vault::test_utils;
 use crate::LocalCspVault;
@@ -24,6 +26,7 @@ use std::sync::Arc;
 
 type LocalCspVaultForTest =
     LocalCspVault<ReproducibleRng, TempSecretKeyStore, TempSecretKeyStore, TempPublicKeyStore>;
+type CustomVaultFn = Box<dyn FnOnce(LocalCspVaultForTest) -> Box<dyn IDkgProtocolCspVault>>;
 
 mod idkg_gen_dealing_encryption_key_pair {
     use super::*;
@@ -1105,7 +1108,7 @@ mod idkg_load_transcript {
     use crate::canister_threshold::IDKG_THRESHOLD_KEYS_SCOPE;
     use crate::key_id::KeyId;
     use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
-    use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreWriteError};
+    use crate::secret_key_store::SecretKeyStoreWriteError;
     use crate::types::CspSecretKey;
     use crate::vault::api::{IDkgDealingInternalBytes, IDkgTranscriptInternalBytes};
     use crate::vault::local_csp_vault::idkg::IDkgDealingInternal;
@@ -1127,8 +1130,6 @@ mod idkg_load_transcript {
     use ic_types::NumberOfNodes;
     use rand::{CryptoRng, Rng};
     use std::collections::BTreeMap;
-
-    type CustomVaultFn = Box<dyn FnOnce(LocalCspVaultForTest) -> Box<dyn IDkgProtocolCspVault>>;
 
     /// In this test collection, we only use one party, so the dealer is the
     /// receiver and the index is always 0.
@@ -1382,7 +1383,7 @@ mod idkg_load_transcript {
             let signed_dealings = if self.additional_operation
                 == Some(IDkgLoadTranscriptTestAdditionalOperation::UseEmptyDealingMap)
             {
-                Default::default()
+                BTreeMap::new()
             } else {
                 let internal_dealing_raw = self.internal_dealing_raw(dealing_bytes, rng);
                 BTreeMap::from([(
@@ -1502,49 +1503,438 @@ mod idkg_load_transcript {
             }
         }
     }
+}
 
-    /// Creates a new vault with mocked SKSs that will be used in
-    /// `load_transcript` and returns `csks_insert_or_replace_error` in an internal
-    /// call to `canister_secret_key_store.insert_or_replace()`.
-    fn custom_vault_fn_returning(
-        csks_insert_or_replace_error: SecretKeyStoreWriteError,
-    ) -> CustomVaultFn {
-        let f = |vault: LocalCspVaultForTest| {
-            let mut sequence = Sequence::new();
-            let vault_arc = Arc::new(vault);
+mod idkg_load_transcript_with_openings {
+    use super::*;
 
+    use crate::key_id::KeyId;
+    use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
+    use crate::secret_key_store::SecretKeyStoreWriteError;
+    use crate::types::CspSecretKey;
+    use crate::vault::api::{IDkgDealingInternalBytes, IDkgTranscriptInternalBytes};
+    use crate::vault::local_csp_vault::idkg::IDkgDealingInternal;
+    use assert_matches::assert_matches;
+    use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
+    use ic_crypto_internal_seed::Seed;
+    use ic_crypto_internal_threshold_sig_ecdsa::test_utils::corrupt_dealing;
+    use ic_crypto_internal_threshold_sig_ecdsa::{
+        EccCurveType, EccPoint, EccScalar, IDkgTranscriptInternal, IDkgTranscriptOperationInternal,
+        MEGaCiphertext,
+    };
+    use ic_crypto_internal_types::NodeIndex;
+    use ic_crypto_secrets_containers::SecretArray;
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+    use ic_protobuf::registry::crypto::v1::PublicKey;
+    use ic_types::crypto::canister_threshold_sig::error::IDkgLoadTranscriptError;
+    use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptOperation;
+    use ic_types::crypto::AlgorithmId;
+    use ic_types::NumberOfNodes;
+    use rand::{CryptoRng, Rng};
+    use std::collections::BTreeMap;
+
+    type CustomVaultFn = Box<dyn FnOnce(LocalCspVaultForTest) -> Box<dyn IDkgProtocolCspVault>>;
+
+    /// In this test collection, we only use one party, so the dealer is the
+    /// receiver and the index is always 0.
+    const DEALER_RECEIVER_INDEX: NodeIndex = 0;
+
+    // In addition to these tests, there are also some integration tests in the
+    // crypto component that ensure that this works in the higher-level API.
+    #[test]
+    fn should_work_if_openings_are_not_needed() {
+        assert_matches!(
+            IDkgLoadTranscriptWithOpeningsTest::new_with_valid_params().run(),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn should_work_if_enough_openings_provided() {
+        let mut test = IDkgLoadTranscriptWithOpeningsTest::new_with_valid_params();
+        test.additional_operation = Some(
+            IDkgLoadTranscriptWithOpeningsTestAdditionalOperation::CorruptInternalDealingForComplaint,
+        );
+        assert_matches!(test.run(), Ok(()));
+    }
+
+    #[test]
+    fn should_work_if_enough_openings_provided_and_commitment_is_already_loaded_in_sks() {
+        let mut test = IDkgLoadTranscriptWithOpeningsTest::new_with_valid_params();
+        test.load_twice = true;
+        assert_matches!(test.run(), Ok(()));
+    }
+
+    #[test]
+    fn should_fail_if_deserialization_of_internal_dealings_fails() {
+        let mut test = IDkgLoadTranscriptWithOpeningsTest::new_with_valid_params();
+        test.additional_operation = Some(
+            IDkgLoadTranscriptWithOpeningsTestAdditionalOperation::CorruptDealingEncodingInLoadArgs,
+        );
+        assert_matches!(
+            test.run(),
+            Err(IDkgLoadTranscriptError::SerializationError { internal_error })
+            if internal_error.contains("failed to deserialize internal dealing")
+        );
+    }
+
+    #[test]
+    fn should_fail_if_deserialization_of_internal_transcript_fails() {
+        let mut test = IDkgLoadTranscriptWithOpeningsTest::new_with_valid_params();
+        test.additional_operation = Some(
+            IDkgLoadTranscriptWithOpeningsTestAdditionalOperation::CorruptTranscriptEncodingInLoadArgs,
+        );
+        assert_matches!(
+            test.run(),
+            Err(IDkgLoadTranscriptError::SerializationError { internal_error })
+            if internal_error.contains("failed to deserialize internal transcript")
+        );
+    }
+
+    #[test]
+    fn should_fail_on_errors_from_compute_secret_shares() {
+        let mut test = IDkgLoadTranscriptWithOpeningsTest::new_with_valid_params();
+        test.additional_operation =
+            Some(IDkgLoadTranscriptWithOpeningsTestAdditionalOperation::UseEmptyDealingMap);
+        assert_matches!(
+            test.run(),
+            Err(IDkgLoadTranscriptError::InvalidArguments { internal_error })
+            if internal_error.contains("UnableToCombineOpenings")
+        );
+    }
+
+    #[test]
+    fn should_fail_if_key_bytes_from_sks_are_not_mega_encryption_k256() {
+        let mut test = IDkgLoadTranscriptWithOpeningsTest::new_with_valid_params();
+
+        let custom_vault_fn = Box::new(|_vault: LocalCspVaultForTest| {
             let mut mnsks = MockSecretKeyStore::new();
-            let mut mcsks = MockSecretKeyStore::new();
-
-            {
-                let vault_arc = vault_arc.clone();
-                mcsks
-                    .expect_get()
-                    .times(1)
-                    .return_once(move |key_id| vault_arc.canister_sks_read_lock().get(key_id))
-                    .in_sequence(&mut sequence);
-            }
-
+            let invalid_key_for_idkg = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
+                SecretArray::new_and_dont_zeroize_argument(&[0; 32]),
+            ));
             mnsks
                 .expect_get()
                 .times(1)
-                .return_once(move |key_id| vault_arc.sks_read_lock().get(key_id))
-                .in_sequence(&mut sequence);
-
-            mcsks
-                .expect_insert_or_replace()
-                .times(1)
-                .return_once(move |_, _, _| Err(csks_insert_or_replace_error))
-                .in_sequence(&mut sequence);
-
+                .return_once(|_| Some(invalid_key_for_idkg));
             Box::new(
                 LocalCspVault::builder_for_test()
-                    .with_canister_secret_key_store(mcsks)
                     .with_node_secret_key_store(mnsks)
                     .build(),
             ) as Box<dyn IDkgProtocolCspVault>
-        };
-        Box::new(f)
+        });
+        test.custom_vault_for_load_transcript_with_openings_fn = Some(custom_vault_fn);
+
+        assert_matches!(test.run(),
+            Err(IDkgLoadTranscriptError::SerializationError{ internal_error })
+            if internal_error.contains("is not a MEGa encryption key set")
+        );
+    }
+
+    #[test]
+    fn should_fail_if_mega_keys_not_found() {
+        let mut test = IDkgLoadTranscriptWithOpeningsTest::new_with_valid_params();
+        let custom_vault_fn = Box::new(|_vault| {
+            // By constructing a new vault here, we lose the keys, so the call
+            // to `load_transcripts` will not find the needed private key.
+            Box::new(LocalCspVault::builder_for_test().build()) as Box<dyn IDkgProtocolCspVault>
+        });
+        test.custom_vault_for_load_transcript_with_openings_fn = Some(custom_vault_fn);
+
+        assert_matches!(test.run(), Err(IDkgLoadTranscriptError::PrivateKeyNotFound));
+    }
+
+    #[test]
+    fn should_fail_if_cannot_decrypt_openings() {
+        let mut test = IDkgLoadTranscriptWithOpeningsTest::new_with_valid_params();
+        test.additional_operation = Some(
+            IDkgLoadTranscriptWithOpeningsTestAdditionalOperation::CorruptInternalDealingCiphertext,
+        );
+        test.use_empty_openings = true;
+        assert_matches!(
+            test.run(),
+            Err(IDkgLoadTranscriptError::InvalidArguments{internal_error})
+            if internal_error.contains("InvalidCiphertext") && internal_error.contains("CurveMismatch")
+        );
+    }
+
+    #[test]
+    fn should_fail_if_sks_insertion_fails() {
+        let mut test = IDkgLoadTranscriptWithOpeningsTest::new_with_valid_params();
+
+        let custom_vault_fn = custom_vault_fn_returning(
+            SecretKeyStoreWriteError::SerializationError("test".to_string()),
+        );
+        test.custom_vault_for_load_transcript_with_openings_fn = Some(custom_vault_fn);
+
+        assert_matches!(
+            test.run(),
+            Err(IDkgLoadTranscriptError::InternalError{internal_error})
+            if internal_error == "test"
+        );
+    }
+
+    #[test]
+    fn should_fail_on_transient_internal_errors_from_sks() {
+        let mut test = IDkgLoadTranscriptWithOpeningsTest::new_with_valid_params();
+        let custom_vault_fn =
+            custom_vault_fn_returning(SecretKeyStoreWriteError::TransientError("test".to_string()));
+        test.custom_vault_for_load_transcript_with_openings_fn = Some(Box::new(custom_vault_fn));
+
+        assert_matches!(
+            test.run(),
+            Err(IDkgLoadTranscriptError::TransientInternalError{internal_error})
+            if internal_error == "test"
+        );
+    }
+
+    #[test]
+    fn should_fail_if_openings_needed_but_none_were_provided() {
+        let mut test = IDkgLoadTranscriptWithOpeningsTest::new_with_valid_params();
+        test.additional_operation =
+        Some(IDkgLoadTranscriptWithOpeningsTestAdditionalOperation::CorruptInternalDealingForComplaint);
+        test.use_empty_openings = true;
+        assert_matches!(
+            test.run(),
+            Err(IDkgLoadTranscriptError::InvalidArguments { internal_error })
+            if internal_error == "An invalid dealing with no openings was provided"
+        );
+    }
+
+    #[test]
+    fn should_fail_on_insufficient_number_of_openings() {
+        let mut test = IDkgLoadTranscriptWithOpeningsTest::new_with_valid_params();
+        test.reconstruction_threshold_in_transcript = Some(NumberOfNodes::from(2));
+
+        assert_matches!(
+            test.run(),
+            Err(IDkgLoadTranscriptError::InsufficientOpenings { internal_error })
+            if internal_error == "InsufficientOpenings(1, 2)"
+        );
+    }
+
+    struct IDkgLoadTranscriptWithOpeningsTest {
+        algorithm_id: AlgorithmId,
+        context_data: Vec<u8>,
+        reconstruction_threshold: NumberOfNodes,
+        /// An eventually different threshold to trigger the
+        /// `InsufficientOpenings` error
+        reconstruction_threshold_in_transcript: Option<NumberOfNodes>,
+        transcript_operation: IDkgTranscriptOperation,
+        key_id: Option<KeyId>,
+        /// Perform `load_transcript_with_openings` twice in a row
+        load_twice: bool,
+        use_empty_openings: bool,
+        /// A function for constructing a vault to be used in the call to
+        /// `load_transctipt`. This allows to mock the canister/node secret key
+        /// store or to remove the keys from the vault to trigger particular
+        /// kinds of errors from the `load_transcript_with_openings` call.
+        custom_vault_for_load_transcript_with_openings_fn: Option<CustomVaultFn>,
+        additional_operation: Option<IDkgLoadTranscriptWithOpeningsTestAdditionalOperation>,
+    }
+
+    #[derive(PartialEq)]
+    enum IDkgLoadTranscriptWithOpeningsTestAdditionalOperation {
+        CorruptDealingEncodingInLoadArgs,
+        CorruptInternalDealingForComplaint,
+        CorruptInternalDealingCiphertext,
+        CorruptTranscriptEncodingInLoadArgs,
+        UseEmptyDealingMap,
+    }
+
+    impl IDkgLoadTranscriptWithOpeningsTest {
+        fn new_with_valid_params() -> Self {
+            Self {
+                algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+                context_data: vec![49; 10],
+                reconstruction_threshold: NumberOfNodes::from(1),
+                reconstruction_threshold_in_transcript: None,
+                transcript_operation: IDkgTranscriptOperation::Random,
+                load_twice: false,
+                use_empty_openings: false,
+                key_id: None,
+                custom_vault_for_load_transcript_with_openings_fn: None,
+                additional_operation: None,
+            }
+        }
+
+        fn run(self) -> Result<(), IDkgLoadTranscriptError> {
+            let rng = &mut reproducible_rng();
+            let vault = LocalCspVault::builder_for_test().build();
+
+            let pk = vault
+                .idkg_gen_dealing_encryption_key_pair()
+                .expect("failed to generate key pair");
+            let key_id = self.key_id.unwrap_or_else(|| {
+                KeyId::try_from(&pk).expect("failed to generate the key id for the MEGA pubkey")
+            });
+            let pk_proto = idkg_dealing_encryption_pk_to_proto(pk.clone());
+            let (dealing_bytes, internal_transcript) =
+                self.dealing_bytes_and_internal_transcript(pk_proto, &vault);
+
+            let correct_signed_dealings_for_open_dealing = {
+                let internal_dealing_raw = dealing_bytes.as_ref().to_vec();
+                BTreeMap::from([(
+                    DEALER_RECEIVER_INDEX,
+                    // the signature is not verified here, so we just need some
+                    // signature that contains the required content
+                    dummy_batch_signed_dealing_with(internal_dealing_raw, node_id(456)),
+                )])
+            };
+
+            let signed_dealings = if self.additional_operation
+                == Some(IDkgLoadTranscriptWithOpeningsTestAdditionalOperation::UseEmptyDealingMap)
+            {
+                BTreeMap::new()
+            } else {
+                let internal_dealing_raw = self.internal_dealing_raw(dealing_bytes, rng);
+                BTreeMap::from([(
+                    DEALER_RECEIVER_INDEX,
+                    // the signature is not verified here, so we just need some
+                    // signature that contains the required content
+                    dummy_batch_signed_dealing_with(internal_dealing_raw, node_id(456)),
+                )])
+            };
+
+            let internal_transcript_bytes = IDkgTranscriptInternalBytes::from(
+                if self.additional_operation
+                == Some(IDkgLoadTranscriptWithOpeningsTestAdditionalOperation::CorruptTranscriptEncodingInLoadArgs) {
+                    vec![0xFF; 100]
+                } else {
+                    internal_transcript
+                        .serialize()
+                        .expect("failed to serialize transcript")
+                },
+            );
+
+            let opening = vault
+                .idkg_open_dealing(
+                    correct_signed_dealings_for_open_dealing
+                        .values()
+                        .next()
+                        .expect("empty dealings")
+                        .clone(),
+                    0,
+                    self.context_data.clone(),
+                    0,
+                    key_id,
+                )
+                .expect("failed to obtain opening");
+
+            let openings = if self.use_empty_openings {
+                BTreeMap::new()
+            } else {
+                BTreeMap::from([(0u32, BTreeMap::from([(0u32, opening.clone())]))])
+            };
+
+            let loader_vault: Box<dyn IDkgProtocolCspVault> =
+                if let Some(f) = self.custom_vault_for_load_transcript_with_openings_fn {
+                    f(vault)
+                } else {
+                    Box::new(vault)
+                };
+
+            // load the same transcript and openings twice in a row if
+            // requested, since the second time should be a no-op
+            let mut remaining_iterations = 1 + self.load_twice as usize;
+            while remaining_iterations != 0 {
+                loader_vault.idkg_load_transcript_with_openings(
+                    signed_dealings.clone(),
+                    openings.clone(),
+                    self.context_data.clone(),
+                    DEALER_RECEIVER_INDEX,
+                    key_id,
+                    internal_transcript_bytes.as_ref().to_vec().into(),
+                )?;
+                remaining_iterations -= 1;
+            }
+            Ok(())
+        }
+
+        fn dealing_bytes_and_internal_transcript(
+            &self,
+            pk_proto: PublicKey,
+            vault: &LocalCspVaultForTest,
+        ) -> (IDkgDealingInternalBytes, IDkgTranscriptInternal) {
+            let reconstruction_threshold_in_transcript = self
+                .reconstruction_threshold_in_transcript
+                .unwrap_or(self.reconstruction_threshold);
+            let receiver_keys = {
+                let mut result = vec![];
+                for _ in 0..reconstruction_threshold_in_transcript.get() {
+                    result.push(pk_proto.clone());
+                }
+                result
+            };
+
+            let dealing_bytes = vault
+                .idkg_create_dealing(
+                    self.algorithm_id,
+                    self.context_data.clone(),
+                    DEALER_RECEIVER_INDEX,
+                    reconstruction_threshold_in_transcript,
+                    receiver_keys,
+                    self.transcript_operation.clone(),
+                )
+                .expect("failed to generate dealing");
+
+            let dealing_map = BTreeMap::from([(
+                DEALER_RECEIVER_INDEX,
+                IDkgDealingInternal::deserialize(dealing_bytes.as_ref())
+                    .expect("failed to deserialize internal dealing"),
+            )]);
+
+            let internal_transcript = IDkgTranscriptInternal::new(
+                EccCurveType::K256,
+                reconstruction_threshold_in_transcript.get() as usize,
+                &dealing_map,
+                &IDkgTranscriptOperationInternal::Random,
+            )
+            .expect("failed to create internal transcript");
+            (dealing_bytes, internal_transcript)
+        }
+
+        fn internal_dealing_raw<R: Rng + CryptoRng>(
+            &self,
+            dealing_bytes: IDkgDealingInternalBytes,
+            rng: &mut R,
+        ) -> Vec<u8> {
+            if self.additional_operation
+                == Some(IDkgLoadTranscriptWithOpeningsTestAdditionalOperation::CorruptDealingEncodingInLoadArgs)
+            {
+                vec![0xFF; 100]
+            } else if self.additional_operation
+                == Some(
+                    IDkgLoadTranscriptWithOpeningsTestAdditionalOperation::CorruptInternalDealingForComplaint,
+                )
+            {
+                let internal_dealing = IDkgDealingInternal::deserialize(dealing_bytes.as_ref())
+                    .expect("failed to deserialize dealing");
+                let corrupted_internal_dealing =
+                    corrupt_dealing(&internal_dealing, &[0], Seed::from_rng(rng))
+                        .expect("failed to corrupt dealing");
+                corrupted_internal_dealing
+                    .serialize()
+                    .expect("failed to serialize corrupted internal dealing")
+            } else if self.additional_operation
+                == Some(IDkgLoadTranscriptWithOpeningsTestAdditionalOperation::CorruptInternalDealingCiphertext)
+            {
+                let mut internal_dealing = IDkgDealingInternal::deserialize(dealing_bytes.as_ref())
+                    .expect("failed to deserialize dealing");
+                let mismatching_curve = EccCurveType::P256;
+                let random_ephemeral_key = EccPoint::generator_g(mismatching_curve)
+                    .scalar_mul(&EccScalar::random(mismatching_curve, rng))
+                    .expect("failed to generate a random point");
+                match &mut internal_dealing.ciphertext {
+                    MEGaCiphertext::Single(c) => c.ephemeral_key = random_ephemeral_key,
+                    MEGaCiphertext::Pairs(c) => c.ephemeral_key = random_ephemeral_key,
+                }
+                internal_dealing
+                    .serialize()
+                    .expect("failed to serialize corrupted internal dealing")
+            } else {
+                dealing_bytes.as_ref().to_vec()
+            }
+        }
     }
 }
 
@@ -1573,4 +1963,48 @@ pub(crate) fn dummy_batch_signed_dealing_with(
 
 fn node_id(id: u64) -> NodeId {
     NodeId::from(PrincipalId::new_node_test_id(id))
+}
+
+/// Creates a new vault with mocked SKSs that will be used in
+/// `load_transcript[_with_openings]` and returns `csks_insert_or_replace_error`
+/// in an internal call to `canister_secret_key_store.insert_or_replace()`.
+fn custom_vault_fn_returning(
+    csks_insert_or_replace_error: SecretKeyStoreWriteError,
+) -> CustomVaultFn {
+    let f = |vault: LocalCspVaultForTest| {
+        let mut sequence = Sequence::new();
+        let vault_arc = Arc::new(vault);
+
+        let mut mnsks = MockSecretKeyStore::new();
+        let mut mcsks = MockSecretKeyStore::new();
+
+        {
+            let vault_arc = vault_arc.clone();
+            mcsks
+                .expect_get()
+                .times(1)
+                .return_once(move |key_id| vault_arc.canister_sks_read_lock().get(key_id))
+                .in_sequence(&mut sequence);
+        }
+
+        mnsks
+            .expect_get()
+            .times(1)
+            .return_once(move |key_id| vault_arc.sks_read_lock().get(key_id))
+            .in_sequence(&mut sequence);
+
+        mcsks
+            .expect_insert_or_replace()
+            .times(1)
+            .return_once(move |_, _, _| Err(csks_insert_or_replace_error))
+            .in_sequence(&mut sequence);
+
+        Box::new(
+            LocalCspVault::builder_for_test()
+                .with_canister_secret_key_store(mcsks)
+                .with_node_secret_key_store(mnsks)
+                .build(),
+        ) as Box<dyn IDkgProtocolCspVault>
+    };
+    Box::new(f)
 }
