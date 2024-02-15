@@ -1,9 +1,7 @@
 use crate::{
     common::modify_wasm_bytes,
     ids::TEST_NEURON_1_ID,
-    state_test_helpers::{
-        query, try_call_with_cycles_via_universal_canister, update, update_with_sender,
-    },
+    state_test_helpers::{query, update, update_with_sender},
 };
 use candid::{Decode, Encode};
 use canister_test::Project;
@@ -245,35 +243,18 @@ pub fn deploy_new_sns(
     caller: CanisterId,
     sns_wasm_canister_id: CanisterId,
     sns_init_payload: SnsInitPayload,
-    cycles: u128,
 ) -> DeployNewSnsResponse {
-    if caller == GOVERNANCE_CANISTER_ID {
-        update_with_sender(
-            env,
-            sns_wasm_canister_id,
-            "deploy_new_sns",
-            candid_one,
-            DeployNewSnsRequest {
-                sns_init_payload: Some(sns_init_payload),
-            },
-            caller.get(),
-        )
-        .unwrap()
-    } else {
-        let response = try_call_with_cycles_via_universal_canister(
-            env,
-            caller,
-            sns_wasm_canister_id,
-            "deploy_new_sns",
-            Encode!(&DeployNewSnsRequest {
-                sns_init_payload: Some(sns_init_payload)
-            })
-            .unwrap(),
-            cycles,
-        )
-        .unwrap();
-        Decode!(&response, DeployNewSnsResponse).unwrap()
-    }
+    update_with_sender(
+        env,
+        sns_wasm_canister_id,
+        "deploy_new_sns",
+        candid_one,
+        DeployNewSnsRequest {
+            sns_init_payload: Some(sns_init_payload),
+        },
+        caller.get(),
+    )
+    .unwrap()
 }
 
 /// Make list_deployed_snses request to a canister in the StateMachine

@@ -195,13 +195,13 @@ impl SnsGovernanceClient for SpySnsGovernanceClient {
 }
 
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum NnsGovernanceClientCall {
     SettleCommunityFundParticipation(SettleCommunityFundParticipation),
     SettleNeuronsFundParticipation(SettleNeuronsFundParticipationRequest),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum NnsGovernanceClientReply {
     SettleCommunityFundParticipation(Result<(), GovernanceError>),
     SettleNeuronsFundParticipation(SettleNeuronsFundParticipationResponse),
@@ -209,7 +209,7 @@ pub enum NnsGovernanceClientReply {
 }
 
 /// NnsGovernanceClient that allows tests to spy on the calls made
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct SpyNnsGovernanceClient {
     pub calls: Vec<NnsGovernanceClientCall>,
     pub replies: Vec<NnsGovernanceClientReply>,

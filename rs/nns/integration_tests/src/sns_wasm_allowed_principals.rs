@@ -120,7 +120,9 @@ fn deploy_new_sns_as(
             SNS_WASM_CANISTER_ID,
             "deploy_new_sns",
             Encode!(&DeployNewSnsRequest {
-                sns_init_payload: Some(SnsInitPayload::with_valid_values_for_testing()),
+                sns_init_payload: Some(
+                    SnsInitPayload::with_valid_values_for_testing_post_execution()
+                ),
             })
             .unwrap(),
         )

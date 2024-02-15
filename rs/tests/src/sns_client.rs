@@ -248,7 +248,7 @@ impl SnsClient {
 /// These parameters should be the one used "by default" for most tests, to ensure
 /// that the tests are using realistic parameters.
 pub fn openchat_create_service_nervous_system_proposal() -> CreateServiceNervousSystem {
-    let init: SnsInitPayload = SnsInitPayload::with_valid_values_for_testing();
+    let init: SnsInitPayload = SnsInitPayload::with_valid_values_for_testing_post_execution();
     CreateServiceNervousSystem {
         name: init.name,
         description: init.description,
