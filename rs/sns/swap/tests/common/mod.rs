@@ -1,7 +1,6 @@
 use crate::{
     common::doubles::{LedgerExpect, MockLedger},
-    now_fn, NNS_GOVERNANCE_CANISTER_ID, OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID, START_TIMESTAMP_SECONDS,
-    SWAP_CANISTER_ID,
+    now_fn, NNS_GOVERNANCE_CANISTER_ID, SWAP_CANISTER_ID,
 };
 use candid::Principal;
 use ic_base_types::PrincipalId;
@@ -23,7 +22,7 @@ use ic_sns_swap::{
         settle_community_fund_participation_result,
         sns_neuron_recipe::{ClaimedStatus, Investor, Investor::Direct, NeuronAttributes},
         CanisterCallError, CfNeuron, CfParticipant, DirectInvestment, ErrorRefundIcpRequest,
-        ErrorRefundIcpResponse, ListDirectParticipantsRequest, OpenRequest, Params, Participant,
+        ErrorRefundIcpResponse, ListDirectParticipantsRequest, Participant,
         RestoreDappControllersResponse, SetDappControllersCallResult, SetDappControllersResponse,
         SetModeCallResult, SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap,
         SweepResult, TransferableAmount,
@@ -39,14 +38,6 @@ use std::{
 };
 
 pub mod doubles;
-
-/// Intermediate structure that helps calculate an investor's SNS NeuronId
-pub enum TestInvestor {
-    /// The CommunityFund Investor with the memo used to calculate it's SNS NeuronId
-    CommunityFund(u64),
-    /// The Individual Investor with the PrincipalId used to calculate its SNS NeuronId
-    Direct(PrincipalId),
-}
 
 /// Given a vector of NeuronRecipes, return all related NeuronRecipes for
 /// the given buyer_principal
@@ -100,7 +91,7 @@ pub fn i2principal_id_string(i: u64) -> String {
     Principal::from(PrincipalId::new_user_test_id(i)).to_text()
 }
 
-pub fn create_successful_swap_neuron_basket(
+pub fn create_successful_swap_neuron_basket_for_one_direct_participant(
     controller: PrincipalId,
     basket_count: u64,
 ) -> Vec<SwapNeuron> {
@@ -114,6 +105,27 @@ pub fn create_successful_swap_neuron_basket(
                 .into(),
             }),
             status: ClaimedSwapNeuronStatus::Success as i32,
+        })
+        .collect()
+}
+
+pub fn create_successful_swap_neuron_basket_for_neurons_fund(
+    nns_governance_principal_id: PrincipalId,
+    num_neurons_fund_participants: usize,
+    basket_count: u64,
+) -> Vec<SwapNeuron> {
+    (0..num_neurons_fund_participants)
+        .flat_map(|j| {
+            (0..basket_count).map(move |i| SwapNeuron {
+                id: Some(NeuronId {
+                    id: compute_neuron_staking_subaccount_bytes(
+                        nns_governance_principal_id,
+                        NEURON_BASKET_MEMO_RANGE_START + (j as u64) * basket_count + i,
+                    )
+                    .into(),
+                }),
+                status: ClaimedSwapNeuronStatus::Success as i32,
+            })
         })
         .collect()
 }
@@ -305,33 +317,6 @@ pub fn paginate_participants(swap: &Swap, limit: usize) -> Vec<Participant> {
 
 pub fn get_snapshot_of_buyers_index_list() -> Vec<PrincipalId> {
     memory::BUYERS_LIST_INDEX.with(|m| m.borrow().iter().collect())
-}
-
-pub async fn open_swap(swap: &mut Swap, params: &Params) {
-    let account = Account {
-        owner: SWAP_CANISTER_ID.get().into(),
-        subaccount: None,
-    };
-    // Open swap.
-    {
-        assert!(params.swap_due_timestamp_seconds > START_TIMESTAMP_SECONDS);
-        let r = swap
-            .open(
-                SWAP_CANISTER_ID,
-                &mock_stub(vec![LedgerExpect::AccountBalance(
-                    account,
-                    Ok(Tokens::from_e8s(params.sns_token_e8s)),
-                )]),
-                START_TIMESTAMP_SECONDS,
-                OpenRequest {
-                    params: Some(params.clone()),
-                    cf_participants: vec![],
-                    open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
-                },
-            )
-            .await;
-        r.unwrap();
-    }
 }
 
 pub async fn buy_token(swap: &mut Swap, user: &PrincipalId, amount: &u64, ledger: &MockLedger) {

@@ -46,7 +46,7 @@ use ic_sns_init::SnsCanisterInitPayloads;
 use ic_sns_root::{
     pb::v1::SnsRootCanister, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
 };
-use ic_sns_swap::pb::v1::Init as SwapInit;
+use ic_sns_swap::pb::v1::{Init as SwapInit, NeuronBasketConstructionParameters};
 use ic_types::{CanisterId, PrincipalId};
 use icrc_ledger_types::icrc1::{
     account::{Account, Subaccount},
@@ -114,7 +114,6 @@ pub struct SnsTestsInitPayloadBuilder {
     pub governance: GovernanceCanisterInitPayloadBuilder,
     pub ledger: LedgerInitArgs,
     pub root: SnsRootCanister,
-    pub swap: SwapInit,
     pub index: IndexInitArgs,
 }
 
@@ -143,12 +142,6 @@ impl SnsTestsInitPayloadBuilder {
             .with_transfer_fee(DEFAULT_TRANSFER_FEE)
             .build();
 
-        let swap = SwapInit {
-            fallback_controller_principal_ids: vec![PrincipalId::new_user_test_id(6360).to_string()],
-            should_auto_finalize: Some(true),
-            ..Default::default()
-        };
-
         let index = IndexInitArgs {
             ledger_id: CanisterId::from_u64(0),
         };
@@ -161,7 +154,6 @@ impl SnsTestsInitPayloadBuilder {
             root: SnsRootCanister::default(),
             governance,
             ledger,
-            swap,
             index,
         }
     }
@@ -233,16 +225,38 @@ impl SnsTestsInitPayloadBuilder {
 
         let ledger = LedgerArgument::Init(self.ledger.clone());
 
-        let mut swap = self.swap.clone();
-        swap.transaction_fee_e8s = Some(self.ledger.transfer_fee.0.to_u64().unwrap());
-        swap.neuron_minimum_stake_e8s = Some(
-            governance
-                .parameters
-                .as_ref()
-                .unwrap()
-                .neuron_minimum_stake_e8s
-                .unwrap(),
-        );
+        let swap = SwapInit {
+            fallback_controller_principal_ids: vec![PrincipalId::new_user_test_id(6360).to_string()],
+            should_auto_finalize: Some(true),
+            transaction_fee_e8s: Some(self.ledger.transfer_fee.0.to_u64().unwrap()),
+            neuron_minimum_stake_e8s: Some(
+                governance
+                    .parameters
+                    .as_ref()
+                    .unwrap()
+                    .neuron_minimum_stake_e8s
+                    .unwrap(),
+            ),
+            min_participants: Some(5),
+            min_icp_e8s: None,
+            max_icp_e8s: None,
+            min_direct_participation_icp_e8s: Some(12_300_000_000),
+            max_direct_participation_icp_e8s: Some(65_000_000_000),
+            min_participant_icp_e8s: Some(6_500_000_000),
+            max_participant_icp_e8s: Some(65_000_000_000),
+            swap_start_timestamp_seconds: Some(10_000_000),
+            swap_due_timestamp_seconds: Some(10_086_400),
+            sns_token_e8s: Some(10_000_000),
+            neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+                count: 5,
+                dissolve_delay_interval_seconds: 10_001,
+            }),
+            nns_proposal_id: Some(10),
+            neurons_fund_participants: None,
+            neurons_fund_participation: Some(false),
+            neurons_fund_participation_constraints: None,
+            ..Default::default()
+        };
 
         let root = self.root.clone();
         let index = self.index.clone();

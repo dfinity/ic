@@ -9,7 +9,7 @@ use ic_types::PrincipalId;
 #[test]
 fn test_sns_initialization_parameters_are_set() {
     local_test_on_sns_subnet(|runtime| async move {
-        let sns_init_payload = SnsInitPayload::with_valid_legacy_values_for_testing();
+        let sns_init_payload = SnsInitPayload::with_valid_values_for_testing_post_execution();
 
         let sns_canisters_init_payload = sns_init_payload
             .build_canister_payloads(

@@ -1,3 +1,4 @@
+use crate::pb::v1::Params;
 use crate::{
     clients::{NnsGovernanceClient, SnsGovernanceClient, SnsRootClient},
     environment::CanisterEnvironment,
@@ -462,9 +463,21 @@ impl Swap {
             // Automatically fill out the fields that the (legacy) open request
             // used to provide, supporting clients who read legacy Swap fields.
             {
-                let open_request = init.mk_open_sns_request();
-                res.params = open_request.params;
-                res.cf_participants = open_request.cf_participants;
+                res.cf_participants = vec![];
+                match Params::try_from(&init) {
+                    Err(err) => {
+                        log!(
+                            ERROR,
+                            "Failed filling out the legacy Param structure: {}. \
+                            Falling back to None.",
+                            err
+                        );
+                        res.params = None;
+                    }
+                    Ok(params) => {
+                        res.params = Some(params);
+                    }
+                }
             }
             res.open_sns_token_swap_proposal_id = init.nns_proposal_id;
             res.decentralization_sale_open_timestamp_seconds = init.swap_start_timestamp_seconds;
@@ -750,73 +763,20 @@ impl Swap {
         Ok(auto_finalize_swap_response)
     }
 
-    /// Opens the SNS decentralization swap (only for the legacy flow).
-    ///
-    /// This function should not be called in the new, single-proposal flow.
-    ///
-    /// The swap parameters are specified via `req` (for the legacy flow) and
-    /// in `SnsInitPayload` (in the new single-proposal flow). This includes,
-    /// e.g., the limits on the total and per-participant ICP, the number of SNS
-    /// tokens for this swap, and the community fund participation of the swap.
-    ///
-    /// Preconditions:
-    /// 1. lifecycle == PENDING
-    /// 2. `req` validates.
-    /// 3. SNS token amount is sufficient.
-    ///
-    /// Postcondition (on Ok): lifecycle == OPEN
+    /// This function is obsolete.
     pub async fn open(
-        &mut self,
-        this_canister: CanisterId,
-        sns_ledger: &dyn ICRC1Ledger,
-        now_seconds: u64,
-        req: OpenRequest,
+        &self,
+        _this_canister: CanisterId,
+        _sns_ledger: &dyn ICRC1Ledger,
+        _now_seconds: u64,
+        _req: OpenRequest,
     ) -> Result<OpenResponse, String> {
-        // Precondition 1
-        if self.lifecycle() != Lifecycle::Pending {
-            return Err(format!(
-                "Invalid lifecycle state to open the swap: must be {:?}, was {:?}",
-                Lifecycle::Pending,
-                self.lifecycle()
-            ));
-        }
-        // Precondition 2
-        req.validate(now_seconds, self.init_or_panic())?;
-
-        // Precondition 3. Check that the SNS token amount is sufficient. We
-        // don't refuse to open the swap just because there are more SNS tokens
-        // sent to the swap canister than advertised, as this would lead to
-        // a dead end, because there is no way to take the tokens back.
-        let params = req.params.as_ref().expect("The params field has no value.");
-        let sns_token_amount = Self::get_sns_tokens(this_canister, sns_ledger).await?;
-        if sns_token_amount.get_e8s() < params.sns_token_e8s {
-            return Err(format!(
-                "Cannot OPEN, because the expected number of SNS tokens is not \
-                 available. expected={} available={}",
-                params.sns_token_e8s,
-                sns_token_amount.get_e8s(),
-            ));
-        }
-        assert!(self.params.is_none());
-        self.params = req.params;
-        self.cf_participants = req.cf_participants;
-        self.open_sns_token_swap_proposal_id = req.open_sns_token_swap_proposal_id;
-        let open_delay_seconds = self
-            .params
-            .clone()
-            .unwrap_or_default()
-            .sale_delay_seconds
-            .unwrap_or(0);
-        self.decentralization_sale_open_timestamp_seconds = Some(now_seconds + open_delay_seconds);
-        if open_delay_seconds > 0 {
-            self.set_lifecycle(Lifecycle::Adopted);
-        } else {
-            // set the purge_old_ticket last principal so that the routine can
-            // start in the next heartbeat
-            self.purge_old_tickets_next_principal = Some(FIRST_PRINCIPAL_BYTES.to_vec());
-            self.set_lifecycle(Lifecycle::Open);
-        }
-        Ok(OpenResponse {})
+        Err(
+            "Swap.open is obsolete. An SNS instance should be created via \
+            a `CreateServiceNervousSystem` proposal, the execution of which automatically leads to \
+            the swap being in the open state."
+                .to_string(),
+        )
     }
 
     /// Computes `amount_icp_e8s` scaled by (`total_sns_e8s` divided by
@@ -1070,30 +1030,6 @@ impl Swap {
         self.decentralization_swap_termination_timestamp_seconds = Some(now_seconds);
 
         true
-    }
-
-    /// Retrieves the balance of 'this' canister on the SNS token
-    /// ledger.
-    ///
-    /// It is assumed that prior to calling this method, tokens have
-    /// been transfer to the swap canister (this canister) on the
-    /// ledger of `init.sns_ledger_canister_id`. This transfer is
-    /// performed by the Governance canister of the SNS or
-    /// pre-decentralization token holders.
-    async fn get_sns_tokens(
-        this_canister: CanisterId,
-        sns_ledger: &dyn ICRC1Ledger,
-    ) -> Result<Tokens, String> {
-        // Look for the token balance of 'this' canister.
-        let account = Account {
-            owner: this_canister.get().0,
-            subaccount: None,
-        };
-        let e8s = sns_ledger
-            .account_balance(account)
-            .await
-            .map_err(|x| x.to_string())?;
-        Ok(e8s)
     }
 
     //
@@ -1973,7 +1909,7 @@ impl Swap {
                     ERROR,
                     "ClaimSwapNeuronsResponse's count of claimed_neurons is different than the count provided in the request. \
                     Request count {}. Response count {}.",
-                    claimed_neurons.len(), batch_count,
+                    batch_count, claimed_neurons.len(),
                 );
                 sweep_result.global_failures += 1;
             }
@@ -1987,10 +1923,14 @@ impl Swap {
                 ));
             }
 
+            // TODO: Also indicate how many neurons could not be claimed in this batch.
             log!(
                 INFO,
-                "Successfully claimed a batch of {} Neurons in SNS Governance. Current SweepResult progress {:?}",
-                batch_count, sweep_result,
+                "Successfully claimed {} SNS neurons ({} were skipped). \
+                Current SweepResult progress {:?}",
+                sweep_result.success,
+                sweep_result.skipped,
+                sweep_result,
             );
         }
         sweep_result
@@ -2004,43 +1944,59 @@ impl Swap {
     ) -> SweepResult {
         let mut sweep_result = SweepResult::default();
 
-        if let Some(neuron_id) = swap_neuron.id.as_ref() {
-            if let Ok(claimed_swap_neuron_status) =
-                ClaimedSwapNeuronStatus::try_from(swap_neuron.status)
-            {
-                if let Some(recipe) = claimable_neurons_index.get_mut(neuron_id) {
-                    let claim_status = ClaimedStatus::from(claimed_swap_neuron_status);
+        let Some(neuron_id) = swap_neuron.id.as_ref() else {
+            log!(ERROR, "Neuron must have an ID ({:?}).", swap_neuron);
+            sweep_result.global_failures += 1;
+            return sweep_result;
+        };
 
-                    match claim_status {
-                        ClaimedStatus::Success => sweep_result.success += 1,
-                        ClaimedStatus::Failed => sweep_result.failure += 1,
-                        ClaimedStatus::Invalid => sweep_result.invalid += 1,
-                        ClaimedStatus::Pending | ClaimedStatus::Unspecified => {
-                            log!(
-                                ERROR,
-                                "Unexpected ClaimedStatus ({:?}) resulting from \
-                                ClaimedSwapNeuronStatus ({:?}) for NeuronId {}",
-                                claim_status,
-                                claimed_swap_neuron_status,
-                                neuron_id
-                            );
-                            // Increment the SweepResult's invalid field, but the claiming could be attempted again
-                            sweep_result.invalid += 1;
-                        }
-                    }
+        let claimed_swap_neuron_status = match ClaimedSwapNeuronStatus::try_from(swap_neuron.status)
+        {
+            Ok(claimed_swap_neuron_status) => claimed_swap_neuron_status,
+            Err(err) => {
+                log!(
+                    ERROR,
+                    "Could not update a ClaimStatus for ({:?}): {}",
+                    swap_neuron,
+                    err
+                );
+                sweep_result.global_failures += 1;
+                return sweep_result;
+            }
+        };
 
-                    recipe.claimed_status = Some(claim_status as i32);
-                    return sweep_result;
-                }
+        let Some(recipe) = claimable_neurons_index.get_mut(neuron_id) else {
+            log!(
+                ERROR,
+                "Unable to find neuron {:?} (ID {}) in claimable_neurons_index.",
+                swap_neuron,
+                neuron_id,
+            );
+            sweep_result.global_failures += 1;
+            return sweep_result;
+        };
+
+        let claim_status = ClaimedStatus::from(claimed_swap_neuron_status);
+
+        match claim_status {
+            ClaimedStatus::Success => sweep_result.success += 1,
+            ClaimedStatus::Failed => sweep_result.failure += 1,
+            ClaimedStatus::Invalid => sweep_result.invalid += 1,
+            ClaimedStatus::Pending | ClaimedStatus::Unspecified => {
+                log!(
+                    ERROR,
+                    "Unexpected ClaimedStatus ({:?}) resulting from \
+                    ClaimedSwapNeuronStatus ({:?}) for NeuronId {}",
+                    claim_status,
+                    claimed_swap_neuron_status,
+                    neuron_id
+                );
+                // Increment the SweepResult's invalid field, but the claiming could be attempted again
+                sweep_result.invalid += 1;
             }
         }
-        log!(
-            ERROR,
-            "Unable to parse some part of the SwapNeuron and therefore could not update a ClaimStatus. \
-            ({:?})",
-            swap_neuron,
-        );
-        sweep_result.global_failures += 1;
+
+        recipe.claimed_status = Some(claim_status as i32);
         sweep_result
     }
 
@@ -3866,72 +3822,17 @@ impl<'a> fmt::Debug for SwapDigest<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-
     use super::*;
     use crate::pb::v1::{
         new_sale_ticket_response::Ok, CfNeuron, CfParticipant, NeuronBasketConstructionParameters,
         NeuronsFundParticipants, Params,
     };
+    use crate::swap_builder::SwapBuilder;
     use candid::Principal;
-    use ic_nervous_system_common::{E8, SECONDS_PER_DAY, START_OF_2022_TIMESTAMP_SECONDS};
-    use lazy_static::lazy_static;
+    use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
     use pretty_assertions::assert_eq;
     use proptest::prelude::proptest;
-
-    fn i2canister_id_string(i: u64) -> String {
-        CanisterId::try_from(PrincipalId::new_user_test_id(i))
-            .unwrap()
-            .to_string()
-    }
-
-    lazy_static! {
-        static ref SWAP: Swap = Swap::new(Init {
-            nns_governance_canister_id: i2canister_id_string(0),
-            sns_governance_canister_id: i2canister_id_string(1),
-            sns_ledger_canister_id: i2canister_id_string(2),
-            icp_ledger_canister_id: i2canister_id_string(3),
-            sns_root_canister_id: i2canister_id_string(4),
-            fallback_controller_principal_ids: vec![PrincipalId::new_user_test_id(5).to_string()],
-            transaction_fee_e8s: Some(0),
-            neuron_minimum_stake_e8s: Some(0),
-            confirmation_text: None,
-            restricted_countries: None,
-            min_participants: None,                      // TODO[NNS1-2339]
-            min_icp_e8s: None,                           // TODO[NNS1-2339]
-            max_icp_e8s: None,                           // TODO[NNS1-2339]
-            min_direct_participation_icp_e8s: None,                    // TODO[NNS1-2339]
-            max_direct_participation_icp_e8s: None,                    // TODO[NNS1-2339]
-            min_participant_icp_e8s: None,               // TODO[NNS1-2339]
-            max_participant_icp_e8s: None,               // TODO[NNS1-2339]
-            swap_start_timestamp_seconds: None,          // TODO[NNS1-2339]
-            swap_due_timestamp_seconds: None,            // TODO[NNS1-2339]
-            sns_token_e8s: None,                         // TODO[NNS1-2339]
-            neuron_basket_construction_parameters: None, // TODO[NNS1-2339]
-            nns_proposal_id: None,                       // TODO[NNS1-2339]
-            neurons_fund_participants: None,             // TODO[NNS1-2339]
-            should_auto_finalize: Some(true),
-            neurons_fund_participation_constraints: None,
-            neurons_fund_participation: None,
-        });
-    }
-
-    const PARAMS: Params = Params {
-        min_participants: 7,
-        min_icp_e8s: 10 * E8,
-        max_icp_e8s: 1000 * E8,
-        min_direct_participation_icp_e8s: Some(10 * E8),
-        max_direct_participation_icp_e8s: Some(1000 * E8),
-        min_participant_icp_e8s: 2 * E8,
-        max_participant_icp_e8s: 100 * E8,
-        swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS,
-        sns_token_e8s: 500 * E8,
-        neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-            count: 12,
-            dissolve_delay_interval_seconds: 30 * SECONDS_PER_DAY,
-        }),
-        sale_delay_seconds: None,
-    };
+    use std::collections::HashSet;
 
     #[test]
     fn test_get_lifecycle() {
@@ -4149,15 +4050,29 @@ mod tests {
 
     #[test]
     fn test_get_sale_parameters() {
-        let swap = Swap {
-            params: Some(PARAMS),
-            ..Default::default()
-        };
+        let swap = SwapBuilder::new().build();
 
         assert_eq!(
             swap.get_sale_parameters(&GetSaleParametersRequest {}),
             GetSaleParametersResponse {
-                params: Some(PARAMS),
+                params: Some(Params {
+                    min_participants: 1,
+                    min_icp_e8s: 10,
+                    max_icp_e8s: 100,
+                    min_direct_participation_icp_e8s: Some(10,),
+                    max_direct_participation_icp_e8s: Some(100,),
+                    min_participant_icp_e8s: 10,
+                    max_participant_icp_e8s: 20,
+                    swap_due_timestamp_seconds: 1234567,
+                    sns_token_e8s: 1000,
+                    neuron_basket_construction_parameters: Some(
+                        NeuronBasketConstructionParameters {
+                            count: 2,
+                            dissolve_delay_interval_seconds: 700,
+                        },
+                    ),
+                    sale_delay_seconds: None,
+                })
             },
         );
     }
@@ -4640,20 +4555,14 @@ mod tests {
         let time_remaining = 50;
         let now = sale_duration - time_remaining;
         let buyers = BTreeMap::new();
-        let mut swap = Swap {
-            lifecycle: Lifecycle::Open as i32,
-            params: Some(Params {
-                min_participants: 1,
-                min_direct_participation_icp_e8s: Some(10),
-                max_direct_participation_icp_e8s: Some(100),
-                min_participant_icp_e8s: 1,
-                max_participant_icp_e8s: 20,
-                swap_due_timestamp_seconds: sale_duration,
-                ..PARAMS
-            }),
-            buyers,
-            ..(SWAP.clone())
-        };
+        let mut swap = SwapBuilder::new()
+            .with_lifecycle(Lifecycle::Open)
+            .with_buyers(buyers)
+            .with_swap_start_due(None, Some(sale_duration))
+            .with_min_participants(1)
+            .with_min_max_participant_icp(1, 20)
+            .with_min_max_direct_participation(10, 100)
+            .build();
 
         let result = swap.try_commit(now) || swap.try_abort(now);
         assert!(!result);
@@ -4668,20 +4577,14 @@ mod tests {
         let buyers = btreemap! {
             PrincipalId::new_user_test_id(0).to_string() => BuyerState::new(1),
         };
-        let mut swap = Swap {
-            lifecycle: Lifecycle::Open as i32,
-            params: Some(Params {
-                min_participants: 1,
-                min_direct_participation_icp_e8s: Some(10),
-                max_direct_participation_icp_e8s: Some(100),
-                min_participant_icp_e8s: 10,
-                max_participant_icp_e8s: 20,
-                swap_due_timestamp_seconds: sale_duration,
-                ..PARAMS
-            }),
-            buyers,
-            ..(SWAP.clone())
-        };
+        let mut swap = SwapBuilder::new()
+            .with_lifecycle(Lifecycle::Open)
+            .with_buyers(buyers)
+            .with_swap_start_due(None, Some(sale_duration))
+            .with_min_participants(1)
+            .with_min_max_participant_icp(10, 20)
+            .with_min_max_direct_participation(10, 100)
+            .build();
 
         let result = swap.try_commit(now) || swap.try_abort(now);
         assert!(!result);
@@ -4696,26 +4599,25 @@ mod tests {
         let buyers = btreemap! {
             PrincipalId::new_user_test_id(0).to_string() => BuyerState::new(10),
         };
-        let mut swap = Swap {
-            lifecycle: Lifecycle::Open as i32,
-            params: Some(Params {
-                min_participants: 1,
-                min_direct_participation_icp_e8s: Some(10),
-                max_direct_participation_icp_e8s: Some(100),
-                min_participant_icp_e8s: 10,
-                max_participant_icp_e8s: 20,
-                swap_due_timestamp_seconds: sale_duration,
-                ..PARAMS
-            }),
-            buyers,
-            ..(SWAP.clone())
-        };
+        let mut swap = SwapBuilder::new()
+            .with_lifecycle(Lifecycle::Open)
+            .with_buyers(buyers)
+            .with_swap_start_due(None, Some(sale_duration))
+            .build();
+
+        assert_eq!(
+            Lifecycle::try_from(swap.lifecycle).unwrap(),
+            Lifecycle::Open
+        );
 
         let result = swap.try_commit(now) || swap.try_abort(now);
-        // swap should be open because there is time remaining and we have not
-        // reached the maximum amount of ICP raised
+        // swap should still be open because there is time remaining and we have not
+        // reached the maximum amount of ICP raised.
         assert!(!result);
-        assert_eq!(swap.lifecycle, Lifecycle::Open as i32);
+        assert_eq!(
+            Lifecycle::try_from(swap.lifecycle).unwrap(),
+            Lifecycle::Open
+        );
     }
 
     #[test]
@@ -4726,20 +4628,14 @@ mod tests {
         let buyers = btreemap! {
             PrincipalId::new_user_test_id(0).to_string() => BuyerState::new(20),
         };
-        let mut swap = Swap {
-            lifecycle: Lifecycle::Open as i32,
-            params: Some(Params {
-                min_participants: 1,
-                min_direct_participation_icp_e8s: Some(10),
-                max_direct_participation_icp_e8s: Some(20),
-                min_participant_icp_e8s: 10,
-                max_participant_icp_e8s: 20,
-                swap_due_timestamp_seconds: sale_duration,
-                ..PARAMS
-            }),
-            buyers,
-            ..(SWAP.clone())
-        };
+        let mut swap = SwapBuilder::new()
+            .with_lifecycle(Lifecycle::Open)
+            .with_buyers(buyers)
+            .with_swap_start_due(None, Some(sale_duration))
+            .with_min_participants(1)
+            .with_min_max_participant_icp(10, 20)
+            .with_min_max_direct_participation(10, 20)
+            .build();
         swap.update_derived_fields();
 
         // test try_commit
@@ -4767,20 +4663,14 @@ mod tests {
         let time_remaining = 0;
         let now = sale_duration - time_remaining;
         let buyers = BTreeMap::new();
-        let mut swap = Swap {
-            lifecycle: Lifecycle::Open as i32,
-            params: Some(Params {
-                min_participants: 1,
-                min_direct_participation_icp_e8s: Some(10),
-                max_direct_participation_icp_e8s: Some(20),
-                min_participant_icp_e8s: 10,
-                max_participant_icp_e8s: 20,
-                swap_due_timestamp_seconds: sale_duration,
-                ..PARAMS
-            }),
-            buyers,
-            ..(SWAP.clone())
-        };
+        let mut swap = SwapBuilder::new()
+            .with_lifecycle(Lifecycle::Open)
+            .with_buyers(buyers)
+            .with_swap_start_due(None, Some(sale_duration))
+            .with_min_participants(1)
+            .with_min_max_participant_icp(10, 20)
+            .with_min_max_direct_participation(10, 20)
+            .build();
 
         // test try_commit
         {
@@ -4811,20 +4701,14 @@ mod tests {
         let buyers = btreemap! {
             PrincipalId::new_user_test_id(0).to_string() => BuyerState::new(20),
         };
-        let mut swap = Swap {
-            lifecycle: Lifecycle::Open as i32,
-            params: Some(Params {
-                min_participants: 2,
-                min_direct_participation_icp_e8s: Some(10),
-                max_direct_participation_icp_e8s: Some(20),
-                min_participant_icp_e8s: 10,
-                max_participant_icp_e8s: 20,
-                swap_due_timestamp_seconds: sale_duration,
-                ..PARAMS
-            }),
-            buyers,
-            ..(SWAP.clone())
-        };
+        let mut swap = SwapBuilder::new()
+            .with_lifecycle(Lifecycle::Open)
+            .with_buyers(buyers)
+            .with_swap_start_due(None, Some(sale_duration))
+            .with_min_participants(2)
+            .with_min_max_participant_icp(10, 20)
+            .with_min_max_direct_participation(10, 20)
+            .build();
         swap.update_derived_fields();
 
         // test try_commit

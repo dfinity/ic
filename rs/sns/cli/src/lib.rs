@@ -1,6 +1,6 @@
 use crate::{
     deploy::{DirectSnsDeployerForTests, SnsWasmSnsDeployer},
-    init_config_file::{InitConfigFileArgs, SnsCliInitConfig, SnsInitialTokenDistributionConfig},
+    init_config_file::InitConfigFileArgs,
     prepare_canisters::PrepareCanistersArgs,
     propose::ProposeArgs,
 };
@@ -19,11 +19,7 @@ use ic_nns_governance::{
     },
     proposals::create_service_nervous_system::ExecutedCreateServiceNervousSystemProposal,
 };
-use ic_sns_init::pb::v1::{
-    sns_init_payload::InitialTokenDistribution, AirdropDistribution, DeveloperDistribution,
-    FractionalDeveloperVotingPower, NeuronDistribution, SnsInitPayload, SwapDistribution,
-    TreasuryDistribution,
-};
+use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsCanisterType, SnsWasm};
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs};
 use std::sync::Once;
@@ -225,59 +221,6 @@ impl DeployArgs {
 }
 
 pub fn generate_sns_init_payload(path: &Path) -> Result<SnsInitPayload, std::string::String> {
-    // First, try format v1. If serde_yaml::Error occurred, try format v2.
-    generate_sns_init_payload_v1(path).or_else(|previous_err| {
-        use GenerateSnsInitPayloadV1Error as E;
-        match previous_err {
-            E::Misc(err) => Err(err),
-            E::Yaml(_) => generate_sns_init_payload_v2(path),
-        }
-    })
-}
-
-enum GenerateSnsInitPayloadV1Error {
-    Yaml(serde_yaml::Error),
-    Misc(String),
-}
-
-fn generate_sns_init_payload_v1(
-    path: &Path,
-) -> Result<SnsInitPayload, GenerateSnsInitPayloadV1Error> {
-    // Read the file.
-    let file = File::open(path).map_err(|err| {
-        GenerateSnsInitPayloadV1Error::Misc(format!("Unable to read {:?}: {}", path, err))
-    })?;
-
-    // Parse its contents.
-    let mut sns_cli_init_config: SnsCliInitConfig =
-        serde_yaml::from_reader(file).map_err(GenerateSnsInitPayloadV1Error::Yaml)?;
-
-    // Normalize logo path: if relative, convert it to absolute, using the
-    // directory where the configuration file lives as the base (as opposed to
-    // the current working directory of the runner).
-    sns_cli_init_config.sns_governance.logo =
-        sns_cli_init_config.sns_governance.logo.map(|logo_path| {
-            if logo_path.is_absolute() {
-                logo_path
-            } else {
-                path.parent().unwrap().join(logo_path)
-            }
-        });
-
-    // Convert.
-    let sns_init_payload = SnsInitPayload::try_from(sns_cli_init_config)
-        .map_err(GenerateSnsInitPayloadV1Error::Misc)?;
-
-    // Validate.
-    sns_init_payload
-        .validate_legacy_init()
-        .map_err(GenerateSnsInitPayloadV1Error::Misc)?;
-
-    // Ship it!
-    Ok(sns_init_payload)
-}
-
-fn generate_sns_init_payload_v2(path: &Path) -> Result<SnsInitPayload, String> {
     let configuration = read_create_service_nervous_system_from_init_yaml(path)?;
 
     SnsInitPayload::try_from(configuration)
@@ -365,53 +308,7 @@ impl DeployTestflightArgs {
                     })
             }
             None => {
-                println!("Warning! No init_config_file provided. Using default SnsInitPayload for testflight deployment, but this is not supported and might not work.");
-                let developer_identity = get_identity("get-principal", &self.network);
-                let developer_neuron = NeuronDistribution {
-                    controller: Some(developer_identity),
-                    stake_e8s: 1500000000,
-                    memo: 0,
-                    dissolve_delay_seconds: 15780000,
-                    vesting_period_seconds: None,
-                };
-                let developer_dist = DeveloperDistribution {
-                    developer_neurons: vec![developer_neuron],
-                };
-                let treasury_dist = TreasuryDistribution {
-                    total_e8s: 5000000000,
-                };
-                let swap_dist = SwapDistribution {
-                    total_e8s: 6000000000,
-                    initial_swap_amount_e8s: 3000000000,
-                };
-                let airdrop_dist = AirdropDistribution {
-                    airdrop_neurons: vec![],
-                };
-                let dists = FractionalDeveloperVotingPower {
-                    developer_distribution: Some(developer_dist),
-                    treasury_distribution: Some(treasury_dist),
-                    swap_distribution: Some(swap_dist),
-                    airdrop_distribution: Some(airdrop_dist),
-                };
-                let initial_token_distribution = SnsInitialTokenDistributionConfig {
-                    initial_token_distribution: Some(
-                        InitialTokenDistribution::FractionalDeveloperVotingPower(dists),
-                    ),
-                };
-                let mut sns_init_config = SnsCliInitConfig {
-                    initial_token_distribution,
-                    ..Default::default()
-                };
-                sns_init_config.sns_ledger.token_name = Some("MyTestToken".to_string());
-                sns_init_config.sns_ledger.token_symbol = Some("MTT".to_string());
-                sns_init_config
-                    .sns_governance
-                    .fallback_controller_principal_ids = vec![developer_identity.to_string()];
-                sns_init_config.sns_governance.url = Some("https://example.com".to_string());
-                sns_init_config.sns_governance.name = Some("My_Test_Token".to_string());
-                sns_init_config.sns_governance.description =
-                    Some("MyTestTokenDescription".to_string());
-                sns_init_config.try_into()
+                panic!("The init_config_file is required for the DeployTestflightArgs.");
             }
         }
     }
