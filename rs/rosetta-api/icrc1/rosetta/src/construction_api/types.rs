@@ -1,5 +1,6 @@
 use anyhow::anyhow;
 use ic_agent::agent::Envelope;
+use ic_agent::agent::EnvelopeContent;
 use rosetta_core::objects::*;
 use serde::Deserialize;
 use serde::Serialize;
@@ -55,6 +56,24 @@ impl<'a> ToString for SignedTransaction<'a> {
 }
 
 impl<'a> FromStr for SignedTransaction<'a> {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_cbor::from_slice(hex::decode(s)?.as_slice()).map_err(|err| anyhow!("{:?}", err))
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnsignedTransaction {
+    pub envelope_contents: Vec<EnvelopeContent>,
+}
+
+impl ToString for UnsignedTransaction {
+    fn to_string(&self) -> String {
+        hex::encode(serde_cbor::ser::to_vec(self).unwrap())
+    }
+}
+
+impl FromStr for UnsignedTransaction {
     type Err = anyhow::Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         serde_cbor::from_slice(hex::decode(s)?.as_slice()).map_err(|err| anyhow!("{:?}", err))

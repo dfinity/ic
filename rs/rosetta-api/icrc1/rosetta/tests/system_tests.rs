@@ -5,7 +5,6 @@ use candid::Encode;
 use candid::Nat;
 use candid::Principal;
 use common::local_replica::get_custom_agent;
-use ic_agent::agent::Envelope;
 use ic_agent::agent::EnvelopeContent;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
@@ -21,8 +20,7 @@ use ic_icrc_rosetta::common::types::Error;
 use ic_icrc_rosetta::common::utils::utils::icrc1_rosetta_block_to_rosetta_core_block;
 use ic_icrc_rosetta::common::utils::utils::icrc1_rosetta_block_to_rosetta_core_transaction;
 use ic_icrc_rosetta::construction_api::types::ConstructionMetadataRequestOptions;
-use ic_icrc_rosetta::construction_api::types::EnvelopePair;
-use ic_icrc_rosetta::construction_api::types::SignedTransaction;
+use ic_icrc_rosetta::construction_api::types::UnsignedTransaction;
 use ic_icrc_rosetta_client::RosettaClient;
 use ic_icrc_rosetta_runner::{
     start_rosetta, RosettaContext, RosettaOptions, DEFAULT_DECIMAL_PLACES,
@@ -44,7 +42,6 @@ use rosetta_core::objects::*;
 use rosetta_core::request_types::*;
 use rosetta_core::response_types::BlockResponse;
 use rosetta_core::response_types::ConstructionPreprocessResponse;
-use std::borrow::Cow;
 use std::thread;
 use std::{
     path::PathBuf,
@@ -571,8 +568,21 @@ async fn test_construction_submit() {
         method_name: "icrc1_transfer".to_owned(),
         arg: Encode!(&transfer_arg).unwrap(),
     };
-
     let call_envelope_request_id = call_envelope_content.to_request_id();
+    let call_envelope_signable_bytes = call_envelope_request_id.signable();
+    let call_envelope_signature = Signature {
+        signing_payload: SigningPayload {
+            address: None,
+            hex_bytes: hex::encode(call_envelope_signable_bytes.clone()),
+            signature_type: Some(SignatureType::Ed25519),
+            account_identifier: Some(
+                Account::from(keypair.generate_principal_id().unwrap().0).into(),
+            ),
+        },
+        public_key: (&keypair).into(),
+        signature_type: SignatureType::Ed25519,
+        hex_bytes: hex::encode(keypair.sign(&call_envelope_signable_bytes)),
+    };
 
     let read_state_envelope_content = EnvelopeContent::ReadState {
         ingress_expiry,
@@ -582,33 +592,41 @@ async fn test_construction_submit() {
             call_envelope_request_id.to_vec().into(),
         ]],
     };
-
-    let call_envelope = Envelope {
-        content: Cow::Owned(call_envelope_content),
-        sender_pubkey: Some(EdKeypair::der_encode_pk(keypair.get_pb_key()).unwrap()),
-        sender_sig: Some(keypair.sign(&call_envelope_request_id.signable()).to_vec()),
-        sender_delegation: None,
+    let read_state_envelope_signable_bytes = read_state_envelope_content.to_request_id().signable();
+    let read_state_envelope_signature = Signature {
+        signing_payload: SigningPayload {
+            address: None,
+            hex_bytes: hex::encode(read_state_envelope_signable_bytes.clone()),
+            signature_type: Some(SignatureType::Ed25519),
+            account_identifier: Some(
+                Account::from(keypair.generate_principal_id().unwrap().0).into(),
+            ),
+        },
+        public_key: (&keypair).into(),
+        signature_type: SignatureType::Ed25519,
+        hex_bytes: hex::encode(keypair.sign(&read_state_envelope_signable_bytes)),
     };
 
-    let read_state_envelope = Envelope {
-        content: Cow::Owned(read_state_envelope_content.clone()),
-        sender_pubkey: Some(EdKeypair::der_encode_pk(keypair.get_pb_key()).unwrap()),
-        sender_sig: Some(
-            keypair
-                .sign(&read_state_envelope_content.to_request_id().signable())
-                .to_vec(),
-        ),
-        sender_delegation: None,
+    let unsinged_transaction = UnsignedTransaction {
+        envelope_contents: vec![
+            call_envelope_content.clone(),
+            read_state_envelope_content.clone(),
+        ],
     };
 
-    let envelope_pair = EnvelopePair {
-        call_envelope,
-        read_state_envelope,
-    };
+    let signatures = vec![call_envelope_signature, read_state_envelope_signature];
 
-    let signed_transaction = SignedTransaction {
-        envelope_pairs: vec![envelope_pair],
-    };
+    let construction_combine_response = env
+        .rosetta_client
+        .construction_combine(
+            env.network_identifier.clone(),
+            unsinged_transaction.to_string(),
+            signatures,
+        )
+        .await
+        .expect("Unable to call /construction/combine");
+
+    let signed_transaction = construction_combine_response.signed_transaction;
 
     let balance_before_transfer = env
         .icrc1_agent
