@@ -73,7 +73,7 @@ mod tests {
             },
             system_state::CyclesUseCase,
         },
-        metadata_state::{Stream, SubnetMetrics},
+        metadata_state::{ApiBoundaryNodeEntry, Stream, SubnetMetrics},
         page_map::{PageIndex, PAGE_SIZE},
         testing::ReplicatedStateTesting,
         ExecutionState, ExportedFunctions, Global, Memory, NumWasmPages, PageMap, ReplicatedState,
@@ -256,6 +256,21 @@ mod tests {
                 node_test_id(2) => vec![2; 44],
             };
 
+            state.metadata.api_boundary_nodes = btreemap! {
+                node_test_id(11) => ApiBoundaryNodeEntry {
+                    domain: "api-bn11-example.com".to_string(),
+                    ipv4_address: Some("127.0.0.1".to_string()),
+                    ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
+                    pubkey: None,
+                },
+                node_test_id(12) => ApiBoundaryNodeEntry {
+                    domain: "api-bn12-example.com".to_string(),
+                    ipv4_address: None,
+                    ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7335".to_string(),
+                    pubkey: None,
+                },
+            };
+
             let mut routing_table = RoutingTable::new();
             routing_table
                 .insert(
@@ -335,6 +350,7 @@ mod tests {
             "80D4B528CC9E09C775273994261DD544D45EFFF90B655D90FC3A6E3F633ED718",
             "970BC5155AEB4B4F81E470CBF6748EFA7D8805B936998A54AE70B7DD21F5DDCC",
             "EA3B53B72150E3982CB0E6773F86634685EE7B153DCFE10D86D9927778409D97",
+            "D13F75C42D3E2BDA2F742510029088A9ADB119E30241AC969DE24936489168B5",
         ];
 
         for certification_version in CertificationVersion::iter() {
