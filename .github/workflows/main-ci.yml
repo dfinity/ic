@@ -26,7 +26,7 @@ jobs:
   bazel-test-all:
     name: Bazel-Test-All
     runs-on:
-      labels: bazel-runner
+      labels: bazel-runner-large
     timeout-minutes: 90
     container:
       image: dfinity/ic-build:e52dca0c4a9aa4f7b3ade309815b9f19995c78b4042d3578d2f824e10a0fdff1
@@ -60,7 +60,7 @@ jobs:
   bazel-build-fuzzers:
     name: Bazel-Build-Fuzzers
     runs-on:
-      labels: bazel-runner
+      labels: bazel-runner-small
     container:
       image: dfinity/ic-build:e52dca0c4a9aa4f7b3ade309815b9f19995c78b4042d3578d2f824e10a0fdff1
     if: ${{ vars.RUN_CI == 'true' }}
@@ -80,7 +80,7 @@ jobs:
   bazel-build-fuzzers-afl:
     name: Bazel-Build-Fuzzers-AFL
     runs-on:
-      labels: bazel-runner
+      labels: bazel-runner-small
     container:
       image: dfinity/ic-build:e52dca0c4a9aa4f7b3ade309815b9f19995c78b4042d3578d2f824e10a0fdff1
     if: ${{ vars.RUN_CI == 'true' }}
@@ -100,7 +100,7 @@ jobs:
   bazel-build-fuzzers-archives:
     name: Bazel-Build-Fuzzers-Archives
     runs-on:
-      labels: bazel-runner
+      labels: bazel-runner-small
     container:
       image: dfinity/ic-build:e52dca0c4a9aa4f7b3ade309815b9f19995c78b4042d3578d2f824e10a0fdff1
     if: ${{ vars.RUN_CI == 'true' }}
