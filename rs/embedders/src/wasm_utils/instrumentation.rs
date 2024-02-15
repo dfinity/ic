@@ -1711,6 +1711,10 @@ fn get_data(
 ) -> Result<Segments, WasmInstrumentationError> {
     let res = data_section
         .iter()
+        .filter(|segment| match &segment.kind {
+            ic_wasm_transform::DataSegmentKind::Passive => false,
+            _ => true
+        })
         .map(|segment| {
             let offset = match &segment.kind {
                 ic_wasm_transform::DataSegmentKind::Active {
@@ -1723,17 +1727,34 @@ fn get_data(
                         "complex initialization expressions for data segments are not supported!".into()
                     ))),
                 },
-
-                _ => return Err(WasmInstrumentationError::WasmDeserializeError(
-                    WasmError::new("no offset found for the data segment".into())
-                )),
+                ic_wasm_transform::DataSegmentKind::Passive => unreachable!(),
             };
 
             Ok((offset, segment.data.to_vec()))
         })
         .collect::<Result<_,_>>()?;
 
-    data_section.clear();
+    // Clear all active data segments, but retain the indices of passive data segments:
+    // * Clear the data of active data segments if (directly or indirectly) followed by a passive segment.
+    // * Delete all active data segments not followed by any passive data segment.
+    let mut ends_with_passive_segment = false;
+    for index in (0..data_section.len()).rev() {
+        let kind = &data_section[index].kind;
+        match kind {
+            ic_wasm_transform::DataSegmentKind::Passive => ends_with_passive_segment = true,
+            ic_wasm_transform::DataSegmentKind::Active { .. } => {
+                if ends_with_passive_segment {
+                    data_section[index] = ic_wasm_transform::DataSegment {
+                        kind: kind.clone(),
+                        data: &[],
+                    };
+                } else {
+                    data_section.remove(index);
+                }
+            }
+        }
+    }
+
     Ok(res)
 }
 

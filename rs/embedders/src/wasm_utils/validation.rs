@@ -1128,15 +1128,13 @@ fn validate_export_section(
     Ok(())
 }
 
-// Checks that offset-expressions in data sections consist of only one constant
+// Checks that offset-expressions in active data segments consist of only one constant
 // expression. Required because of OP. See also:
 // instrumentation.rs
 fn validate_data_section(module: &Module) -> Result<(), WasmValidationError> {
     fn validate_segment(module: &Module, s: &DataSegment) -> Result<(), WasmValidationError> {
         match &s.kind {
-            DataSegmentKind::Passive => Err(WasmValidationError::InvalidDataSection(
-                "Empty offset in data segment.".to_string(),
-            )),
+            DataSegmentKind::Passive => Ok(()),
             DataSegmentKind::Active {
                 memory_index,
                 offset_expr,
