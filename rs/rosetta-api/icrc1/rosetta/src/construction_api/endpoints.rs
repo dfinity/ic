@@ -63,6 +63,17 @@ pub async fn construction_submit(
     ))
 }
 
+pub async fn construction_hash(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<ConstructionHashRequest>,
+) -> Result<Json<ConstructionHashResponse>> {
+    verify_network_id(&request.network_identifier, &state)
+        .map_err(|err| Error::invalid_network_id(&err))?;
+    Ok(Json(services::construction_hash(
+        request.signed_transaction,
+    )?))
+}
+
 pub async fn construction_combine(
     State(state): State<Arc<AppState>>,
     Json(request): Json<ConstructionCombineRequest>,

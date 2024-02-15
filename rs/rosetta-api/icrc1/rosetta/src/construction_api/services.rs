@@ -1,7 +1,8 @@
 use super::types::{ConstructionMetadataRequestOptions, SignedTransaction, UnsignedTransaction};
+use super::utils::{
+    handle_construction_combine, handle_construction_hash, handle_construction_submit,
+};
 use crate::common::types::Error;
-use crate::construction_api::utils::handle_construction_combine;
-use crate::construction_api::utils::handle_construction_submit;
 use ic_base_types::{CanisterId, PrincipalId};
 use icrc_ledger_agent::{CallMode, Icrc1Agent};
 use icrc_ledger_types::icrc1::account::Account;
@@ -65,6 +66,14 @@ pub async fn construction_submit(
 
     handle_construction_submit(signed_transaction, icrc1_ledger_id.into(), icrc1_agent)
         .await
+        .map_err(|err| Error::processing_construction_failed(&err))
+}
+
+pub fn construction_hash(signed_transaction: String) -> Result<ConstructionHashResponse, Error> {
+    let signed_transaction = SignedTransaction::from_str(&signed_transaction)
+        .map_err(|err| Error::parsing_unsuccessful(&err))?;
+
+    handle_construction_hash(signed_transaction)
         .map_err(|err| Error::processing_construction_failed(&err))
 }
 

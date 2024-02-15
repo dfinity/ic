@@ -1,16 +1,23 @@
-use super::types::{EnvelopePair, SignedTransaction, UnsignedTransaction};
+use super::types::{CanisterMethodName, EnvelopePair, SignedTransaction, UnsignedTransaction};
+use crate::common::storage::types::RosettaToken;
 use anyhow::anyhow;
 use anyhow::{bail, Context};
 use candid::{Decode, Nat, Principal};
 use ic_agent::agent::{Envelope, EnvelopeContent};
+use ic_ledger_canister_core::ledger::LedgerTransaction;
 use icrc_ledger_agent::Icrc1Agent;
-use icrc_ledger_types::icrc1::transfer::TransferError;
+use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
+use icrc_ledger_types::icrc2::approve::ApproveArgs;
+use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
 use rosetta_core::objects::Signature;
 use rosetta_core::response_types::ConstructionCombineResponse;
+use rosetta_core::response_types::ConstructionHashResponse;
 use rosetta_core::{
     identifiers::TransactionIdentifier, response_types::ConstructionSubmitResponse,
 };
 use std::borrow::Cow;
+use std::collections::HashSet;
 use std::sync::Arc;
 
 fn build_serialized_bytes<T: serde::Serialize + std::fmt::Debug>(
@@ -83,11 +90,174 @@ pub async fn handle_construction_submit(
     .map_err(|err| anyhow!("Failed to decode transfer result: {:?}", err))?;
 
     Ok(ConstructionSubmitResponse {
-        // TODO: Building the transaction hash is not yet supported by construction submit
         transaction_identifier: TransactionIdentifier {
-            hash: "0".to_string(),
+            hash: build_transaction_hash_from_envelope_content(&call_envelope.content)?,
         },
         metadata: None,
+    })
+}
+
+// Tries to convert a CanisterMethodArg into an icrc1::Transaction
+// Fails if the underlying method is not supported by icrc1 ledgers
+pub fn build_icrc1_transaction_from_canister_method_args(
+    canister_method_name: &CanisterMethodName,
+    caller: &Principal,
+    candid_bytes: Vec<u8>,
+) -> anyhow::Result<ic_icrc1::Transaction<RosettaToken>> {
+    Ok(match canister_method_name {
+        CanisterMethodName::Icrc2Approve => {
+            let ApproveArgs {
+                spender,
+                amount,
+                from_subaccount,
+                fee,
+                expected_allowance,
+                expires_at,
+                memo,
+                created_at_time,
+            } = Decode!(&candid_bytes, ApproveArgs).with_context(|| {
+                format!("Could not decode approve args from: {:?} ", candid_bytes)
+            })?;
+
+            let operation = ic_icrc1::Operation::Approve {
+                spender,
+                amount: RosettaToken::try_from(amount).map_err(|err| anyhow!("{:?}", err))?,
+                from: Account {
+                    owner: *caller,
+                    subaccount: from_subaccount,
+                },
+                fee: fee
+                    .map(|fee| RosettaToken::try_from(fee).map_err(|err| anyhow!("{:?}", err)))
+                    .transpose()?,
+                expected_allowance: expected_allowance
+                    .map(|fee| RosettaToken::try_from(fee).map_err(|err| anyhow!("{:?}", err)))
+                    .transpose()?,
+                expires_at,
+            };
+            ic_icrc1::Transaction {
+                operation,
+                memo,
+                created_at_time,
+            }
+        }
+        CanisterMethodName::Icrc2TransferFrom => {
+            let TransferFromArgs {
+                to,
+                amount,
+                from,
+                spender_subaccount,
+                fee,
+                memo,
+                created_at_time,
+            } = Decode!(&candid_bytes, TransferFromArgs).with_context(|| {
+                format!(
+                    "Could not decode transfer from args from: {:?} ",
+                    candid_bytes
+                )
+            })?;
+
+            let operation = ic_icrc1::Operation::Transfer {
+                to,
+                amount: RosettaToken::try_from(amount).map_err(|err| anyhow!("{:?}", err))?,
+                from,
+                spender: Some(Account {
+                    owner: *caller,
+                    subaccount: spender_subaccount,
+                }),
+                fee: fee
+                    .map(|fee| RosettaToken::try_from(fee).map_err(|err| anyhow!("{:?}", err)))
+                    .transpose()?,
+            };
+            ic_icrc1::Transaction {
+                operation,
+                memo,
+                created_at_time,
+            }
+        }
+        CanisterMethodName::Icrc1Transfer => {
+            let TransferArg {
+                to,
+                amount,
+                from_subaccount,
+                fee,
+                memo,
+                created_at_time,
+            } = Decode!(&candid_bytes, TransferArg).with_context(|| {
+                format!("Could not decode transfer args from: {:?} ", candid_bytes)
+            })?;
+
+            let operation = ic_icrc1::Operation::Transfer {
+                to,
+                amount: RosettaToken::try_from(amount).map_err(|err| anyhow!("{:?}", err))?,
+                from: Account {
+                    owner: *caller,
+                    subaccount: from_subaccount,
+                },
+                spender: None,
+                fee: fee
+                    .map(|fee| RosettaToken::try_from(fee).map_err(|err| anyhow!("{:?}", err)))
+                    .transpose()?,
+            };
+            ic_icrc1::Transaction {
+                operation,
+                memo,
+                created_at_time,
+            }
+        }
+    })
+}
+
+pub fn build_transaction_hash_from_envelope_content(
+    envelope_content: &EnvelopeContent,
+) -> anyhow::Result<String> {
+    // First we can derive the canister method args and the caller of the function from the envelope content
+    let canister_method_name = CanisterMethodName::new_from_envelope_content(envelope_content)?;
+
+    let candid_encoded_bytes = match envelope_content {
+        EnvelopeContent::Call { arg, .. } => arg.clone(),
+        _ => bail!(
+            "Wrong EnvelopeContent type, expected EnvelopeContent::Call, got {:?}",
+            envelope_content
+        ),
+    };
+
+    // Then we can derive the icrc1 transaction from the canister method args and the caller
+    let icrc1_transaction = build_icrc1_transaction_from_canister_method_args(
+        &canister_method_name,
+        envelope_content.sender(),
+        candid_encoded_bytes,
+    )?;
+
+    // TODO Transaction hash may not match up due to incoherence of RosettaToken and U64/U256: https://dfinity.atlassian.net/browse/FI-1154?atlOrigin=eyJpIjoiOWMwNWEwOGI3ZTZmNDFiZDlhMjc0YTQ0YmFmZmY1MmEiLCJwIjoiaiJ9
+    Ok(icrc1_transaction.hash().to_string())
+}
+
+pub fn handle_construction_hash(
+    signed_transaction: SignedTransaction,
+) -> anyhow::Result<ConstructionHashResponse> {
+    if signed_transaction.envelope_pairs.is_empty() {
+        bail!("No valid envelopes found in the signed transaction");
+    }
+
+    // There are multiple envelopes in the signed transaction, but we only support one icrc1 ledger transaction per signed transaction
+    // If there are multiple different icrc1 ledger transactions in the signed transaction, we return an error
+    let mut tx_hashes = HashSet::new();
+    for envelope_pair in signed_transaction.envelope_pairs {
+        let transaction_hash =
+            build_transaction_hash_from_envelope_content(&envelope_pair.call_envelope.content)?;
+        tx_hashes.insert(transaction_hash);
+    }
+
+    // We expect only one icrc1 ledger transaction in the signed transaction
+    if tx_hashes.len() > 1 {
+        bail!("Only one icrc1 ledger transaction is supported per signed transaction. Found more than one icrc1 ledger transaction.");
+    }
+
+    Ok(ConstructionHashResponse {
+        transaction_identifier: TransactionIdentifier {
+            hash: tx_hashes.into_iter().next().unwrap(),
+        },
+        metadata: serde_json::map::Map::new(),
     })
 }
 
