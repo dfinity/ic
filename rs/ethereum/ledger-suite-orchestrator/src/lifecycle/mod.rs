@@ -3,9 +3,10 @@ use crate::guard::TimerGuard;
 use crate::logs::INFO;
 use crate::management::IcCanisterRuntime;
 use crate::scheduler::{InstallLedgerSuiteArgs, Task, UpgradeOrchestratorArgs};
-use crate::state::{init_state, mutate_state, read_state, State};
+use crate::state::{init_state, mutate_state, read_state, GitCommitHash, State};
 use crate::storage::{mutate_wasm_store, read_wasm_store, record_icrc1_ledger_suite_wasms};
 use ic_canister_log::log;
+use std::str::FromStr;
 use std::time::Duration;
 
 const IC_CANISTER_RUNTIME: IcCanisterRuntime = IcCanisterRuntime {};
@@ -19,17 +20,22 @@ pub fn init(init_arg: InitArg) {
     init_state(
         State::try_from(init_arg).expect("ERROR: failed to initialize ledger suite orchestrator"),
     );
-    mutate_wasm_store(|s| record_icrc1_ledger_suite_wasms(s, ic_cdk::api::time()))
-        .expect("BUG: failed to record icrc1 ledger suite wasms during initialisation");
     setup_timers()
 }
 
 pub fn post_upgrade(upgrade_arg: Option<UpgradeArg>) {
-    //TODO: in case UpgradeArg is present, 1) refresh wasms binaries in stable memory and plan upgrade of managed canisters
     if let Some(arg) = upgrade_arg {
         if arg.upgrade_icrc1_ledger_suite() {
-            mutate_wasm_store(|s| record_icrc1_ledger_suite_wasms(s, ic_cdk::api::time()))
-                .expect("BUG: failed to record icrc1 ledger suite wasms during upgrade");
+            let git_commit = GitCommitHash::from_str(
+                arg.git_commit_hash
+                    .as_ref()
+                    .expect("ERROR: missing git commit hash"),
+            )
+            .expect("ERROR: invalid git commit hash");
+            mutate_wasm_store(|s| {
+                record_icrc1_ledger_suite_wasms(s, ic_cdk::api::time(), git_commit)
+            })
+            .expect("BUG: failed to record icrc1 ledger suite wasms during upgrade");
         }
         match read_wasm_store(|w| UpgradeOrchestratorArgs::validate_upgrade_arg(w, arg.clone())) {
             Ok(_valid_upgrade_args) => {
@@ -49,7 +55,9 @@ pub fn post_upgrade(upgrade_arg: Option<UpgradeArg>) {
 }
 
 pub fn add_erc20(token: AddErc20Arg) {
-    mutate_wasm_store(|s| record_icrc1_ledger_suite_wasms(s, ic_cdk::api::time()))
+    let git_commit =
+        GitCommitHash::from_str(&token.git_commit_hash).expect("ERROR: invalid git commit hash");
+    mutate_wasm_store(|s| record_icrc1_ledger_suite_wasms(s, ic_cdk::api::time(), git_commit))
         .expect("BUG: failed to record icrc1 ledger suite wasms when adding new ERC-20 token");
     match read_state(|s| {
         read_wasm_store(|w| InstallLedgerSuiteArgs::validate_add_erc20(s, w, token.clone()))

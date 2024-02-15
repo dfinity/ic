@@ -19,6 +19,7 @@ pub struct InitArg {
 
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct UpgradeArg {
+    pub git_commit_hash: Option<String>,
     pub ledger_compressed_wasm_hash: Option<String>,
     pub index_compressed_wasm_hash: Option<String>,
     pub archive_compressed_wasm_hash: Option<String>,
@@ -36,6 +37,7 @@ impl UpgradeArg {
 pub struct AddErc20Arg {
     pub contract: Erc20Contract,
     pub ledger_init_arg: LedgerInitArg,
+    pub git_commit_hash: String,
     pub ledger_compressed_wasm_hash: String,
     pub index_compressed_wasm_hash: String,
 }

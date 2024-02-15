@@ -1,9 +1,12 @@
-use crate::state::{Archive, ArchiveWasm, Index, IndexWasm, Ledger, LedgerWasm, Wasm};
+use crate::state::{
+    Archive, ArchiveWasm, GitCommitHash, Index, IndexWasm, Ledger, LedgerWasm, Wasm,
+};
 use crate::storage::test_fixtures::empty_wasm_store;
 use crate::storage::{
     wasm_store_try_get, wasm_store_try_insert, StorableWasm, WasmStore, WasmStoreError,
 };
 use proptest::arbitrary::any;
+use proptest::array::uniform20;
 use proptest::collection::{hash_set, vec};
 use proptest::prelude::{Strategy, TestCaseError};
 use proptest::{prop_assert_eq, proptest};
@@ -21,7 +24,7 @@ fn should_have_unique_markers() {
 
 proptest! {
     #[test]
-    fn should_record_and_retrieve_wasm(timestamp in any::<u64>(), (ledger_wasm, index_wasm, archive_wasm) in arb_distinct_wasms()) {
+    fn should_record_and_retrieve_wasm(timestamp in any::<u64>(), git_commit in arb_git_commit_hash(), (ledger_wasm, index_wasm, archive_wasm) in arb_distinct_wasms()) {
         fn test_retrieve <T: StorableWasm + Debug>(store: &WasmStore, wasm: &Wasm<T>) -> Result<(), TestCaseError> {
             let retrieved_wasm = wasm_store_try_get(store, wasm.hash()).unwrap().unwrap();
             prop_assert_eq!(&retrieved_wasm, wasm);
@@ -29,38 +32,38 @@ proptest! {
         }
         let mut wasm_store = empty_wasm_store();
 
-        prop_assert_eq!(wasm_store_try_insert(&mut wasm_store,timestamp, ledger_wasm.clone()), Ok(()));
+        prop_assert_eq!(wasm_store_try_insert(&mut wasm_store, timestamp, git_commit.clone(), ledger_wasm.clone()), Ok(()));
         test_retrieve(&wasm_store, &ledger_wasm)?;
 
-        prop_assert_eq!(wasm_store_try_insert(&mut wasm_store,timestamp, index_wasm.clone()), Ok(()));
+        prop_assert_eq!(wasm_store_try_insert(&mut wasm_store, timestamp, git_commit.clone(), index_wasm.clone()), Ok(()));
         test_retrieve(&wasm_store, &ledger_wasm)?;
         test_retrieve(&wasm_store, &index_wasm)?;
 
-        prop_assert_eq!(wasm_store_try_insert(&mut wasm_store,timestamp, archive_wasm.clone()), Ok(()));
+        prop_assert_eq!(wasm_store_try_insert(&mut wasm_store, timestamp, git_commit, archive_wasm.clone()), Ok(()));
         test_retrieve(&wasm_store, &ledger_wasm)?;
         test_retrieve(&wasm_store, &index_wasm)?;
         test_retrieve(&wasm_store, &archive_wasm)?;
     }
 
     #[test]
-    fn should_not_overwrite_existing_wasm(first_timestamp in any::<u64>(), second_timestamp in any::<u64>(), wasm in arb_wasm::<Ledger>()) {
+    fn should_not_overwrite_existing_wasm(first_timestamp in any::<u64>(), second_timestamp in any::<u64>(), git_commit in arb_git_commit_hash(), wasm in arb_wasm::<Ledger>()) {
         let mut wasm_store = empty_wasm_store();
-        prop_assert_eq!(wasm_store_try_insert(&mut wasm_store,first_timestamp, wasm.clone()), Ok(()));
-        prop_assert_eq!(wasm_store_try_insert(&mut wasm_store,second_timestamp , wasm.clone()), Ok(()));
+        prop_assert_eq!(wasm_store_try_insert(&mut wasm_store, first_timestamp, git_commit.clone(), wasm.clone()), Ok(()));
+        prop_assert_eq!(wasm_store_try_insert(&mut wasm_store, second_timestamp, git_commit, wasm.clone()), Ok(()));
 
         prop_assert_eq!(wasm_store.get(wasm.hash()).unwrap().timestamp, first_timestamp);
     }
 
     #[test]
-    fn should_error_when_mixing_wasms_on_record(timestamp in any::<u64>(), binary in arb_binary()) {
+    fn should_error_when_mixing_wasms_on_record(timestamp in any::<u64>(), git_commit in arb_git_commit_hash(), binary in arb_binary()) {
         let mut wasm_store = empty_wasm_store();
         let ledger_wasm = LedgerWasm::from(binary.clone());
         let index_wasm = IndexWasm::from(binary.clone());
         let _archive_wasm = ArchiveWasm::from(binary.clone());
         let wasm_hash = ledger_wasm.hash().clone();
 
-        prop_assert_eq!(wasm_store_try_insert(&mut wasm_store,timestamp, ledger_wasm), Ok(()));
-        prop_assert_eq!(wasm_store_try_insert(&mut wasm_store,timestamp, index_wasm), Err(WasmStoreError::WasmMismatch {
+        prop_assert_eq!(wasm_store_try_insert(&mut wasm_store,timestamp, git_commit.clone(), ledger_wasm), Ok(()));
+        prop_assert_eq!(wasm_store_try_insert(&mut wasm_store,timestamp, git_commit, index_wasm), Err(WasmStoreError::WasmMismatch {
             wasm_hash,
             expected_marker: Index::MARKER,
             actual_marker: Ledger::MARKER,
@@ -68,11 +71,11 @@ proptest! {
     }
 
     #[test]
-    fn should_panic_when_mixing_wasms_on_retrieve(timestamp in any::<u64>(), binary in arb_binary()) {
+    fn should_panic_when_mixing_wasms_on_retrieve(timestamp in any::<u64>(), git_commit in arb_git_commit_hash(), binary in arb_binary()) {
         let mut wasm_store = empty_wasm_store();
         let ledger_wasm = LedgerWasm::from(binary.clone());
         let wasm_hash = ledger_wasm.hash().clone();
-        prop_assert_eq!(wasm_store_try_insert(&mut wasm_store,timestamp, ledger_wasm), Ok(()));
+        prop_assert_eq!(wasm_store_try_insert(&mut wasm_store,timestamp, git_commit, ledger_wasm), Ok(()));
 
          prop_assert_eq!(wasm_store_try_get::<Index>(&wasm_store, &wasm_hash), Err(WasmStoreError::WasmMismatch {
             wasm_hash,
@@ -83,7 +86,7 @@ proptest! {
 }
 
 mod validate_wasm_hashes {
-    use crate::state::{ArchiveWasm, IndexWasm, LedgerWasm, WasmHash};
+    use crate::state::{ArchiveWasm, GitCommitHash, IndexWasm, LedgerWasm, WasmHash};
     use crate::storage::test_fixtures::empty_wasm_store;
     use crate::storage::{
         record_icrc1_ledger_suite_wasms, validate_wasm_hashes, WasmHashError, WasmStore,
@@ -209,7 +212,11 @@ mod validate_wasm_hashes {
     fn wasm_store_with_icrc1_ledger_suite() -> WasmStore {
         let mut store = empty_wasm_store();
         assert_eq!(
-            record_icrc1_ledger_suite_wasms(&mut store, 1_620_328_630_000_000_000),
+            record_icrc1_ledger_suite_wasms(
+                &mut store,
+                1_620_328_630_000_000_000,
+                GitCommitHash::default(),
+            ),
             Ok(())
         );
         store
@@ -239,6 +246,10 @@ fn arb_binary() -> impl Strategy<Value = Vec<u8>> {
 
 fn arb_wasm<T: Debug>() -> impl Strategy<Value = Wasm<T>> {
     arb_binary().prop_map(Wasm::from)
+}
+
+fn arb_git_commit_hash() -> impl Strategy<Value = GitCommitHash> {
+    uniform20(any::<u8>()).prop_map(GitCommitHash::from)
 }
 
 fn arb_distinct_wasms() -> impl Strategy<Value = (LedgerWasm, IndexWasm, ArchiveWasm)> {
