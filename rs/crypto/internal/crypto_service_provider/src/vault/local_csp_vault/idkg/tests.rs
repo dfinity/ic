@@ -312,21 +312,30 @@ mod idkg_gen_dealing_encryption_key_pair {
 
 mod idkg_retain_active_keys {
     use super::*;
+    use crate::canister_threshold::{IDKG_MEGA_SCOPE, IDKG_THRESHOLD_KEYS_SCOPE};
     use crate::key_id::KeyId;
     use crate::keygen::utils::mega_public_key_from_proto;
     use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
-    use crate::public_key_store::PublicKeyStore;
+    use crate::public_key_store::{PublicKeyRetainError, PublicKeyStore};
     use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
+    use crate::secret_key_store::SecretKeyStoreWriteError;
+    use crate::types::CspSecretKey;
     use crate::vault::api::{IDkgProtocolCspVault, PublicKeyStoreCspVault, SecretKeyStoreCspVault};
+    use crate::vault::local_csp_vault::idkg::{CommitmentOpeningBytes, PublicKeyRetainCheckError};
     use crate::LocalCspVault;
     use crate::SecretKeyStore;
     use assert_matches::assert_matches;
-    use ic_crypto_internal_threshold_sig_ecdsa::MEGaPublicKey;
+    use ic_crypto_internal_threshold_sig_ecdsa::{
+        EccCurveType, EccScalar, EccScalarBytes, MEGaPublicKey,
+    };
     use ic_crypto_internal_types::scope::{ConstScope, Scope};
     use ic_crypto_test_utils_keys::public_keys::valid_idkg_dealing_encryption_public_key;
+    use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
+    use ic_protobuf::registry::crypto::v1::PublicKey;
     use ic_types::crypto::canister_threshold_sig::error::IDkgRetainKeysError;
     use mockall::predicate::eq;
     use mockall::Sequence;
+    use parking_lot::RwLock;
     use rand::CryptoRng;
     use rand::Rng;
     use std::collections::BTreeSet;
@@ -513,6 +522,355 @@ mod idkg_retain_active_keys {
         assert!(vault
             .idkg_retain_active_keys(BTreeSet::new(), oldest_public_key)
             .is_ok());
+    }
+
+    #[test]
+    fn should_fail_if_oldest_pk_not_found_during_would_retain_modify_pks() {
+        let mut pks = MockPublicKeyStore::new();
+
+        let oldest_public_key_proto = valid_idkg_dealing_encryption_public_key();
+        let oldest_public_key = mega_public_key_from_proto(&oldest_public_key_proto)
+            .expect("should convert to MEGaPublicKey");
+        pks.expect_would_retain_idkg_public_keys_modify_pubkey_store()
+            .times(1)
+            .return_once(|_| Err(PublicKeyRetainCheckError::OldestPublicKeyNotFound));
+        let vault = LocalCspVault::builder_for_test()
+            .with_public_key_store(pks)
+            .build();
+
+        assert_matches!(
+            vault.idkg_retain_active_keys(BTreeSet::new(), oldest_public_key),
+            Err(IDkgRetainKeysError::InternalError{ internal_error })
+            if internal_error.contains("Could not find oldest IDKG public key")
+        );
+    }
+
+    #[test]
+    fn should_fail_on_serialization_error_from_pks_during_retention() {
+        let mut pks = MockPublicKeyStore::new();
+        let mut seq = Sequence::new();
+
+        let oldest_public_key_proto = valid_idkg_dealing_encryption_public_key();
+        let oldest_public_key = mega_public_key_from_proto(&oldest_public_key_proto)
+            .expect("should convert to MEGaPublicKey");
+        let err =
+            PublicKeyRetainError::Io(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"));
+        pks.expect_would_retain_idkg_public_keys_modify_pubkey_store()
+            .times(1)
+            .in_sequence(&mut seq)
+            .return_once(|_| Ok(true));
+        pks.expect_retain_idkg_public_keys_since()
+            .times(1)
+            .in_sequence(&mut seq)
+            .return_once(|_| Err(err));
+
+        let vault = LocalCspVault::builder_for_test()
+            .with_public_key_store(pks)
+            .build();
+
+        assert_matches!(
+            vault.idkg_retain_active_keys(BTreeSet::new(), oldest_public_key),
+            Err(IDkgRetainKeysError::TransientInternalError{ internal_error })
+            if internal_error.contains("oh no!")
+        );
+    }
+
+    #[test]
+    fn should_fail_if_oldest_pk_not_found_during_retention() {
+        let mut pks = MockPublicKeyStore::new();
+        let mut seq = Sequence::new();
+
+        let oldest_public_key_proto = valid_idkg_dealing_encryption_public_key();
+        let oldest_public_key = mega_public_key_from_proto(&oldest_public_key_proto)
+            .expect("should convert to MEGaPublicKey");
+        let err = PublicKeyRetainError::OldestPublicKeyNotFound;
+        pks.expect_would_retain_idkg_public_keys_modify_pubkey_store()
+            .times(1)
+            .in_sequence(&mut seq)
+            .return_once(|_| Ok(true));
+        pks.expect_retain_idkg_public_keys_since()
+            .times(1)
+            .in_sequence(&mut seq)
+            .return_once(|_| Err(err));
+
+        let vault = LocalCspVault::builder_for_test()
+            .with_public_key_store(pks)
+            .build();
+
+        assert_matches!(
+            vault.idkg_retain_active_keys(BTreeSet::new(), oldest_public_key),
+            Err(IDkgRetainKeysError::InternalError{ internal_error })
+            if internal_error.contains("Could not find oldest IDKG public key")
+        );
+    }
+
+    #[test]
+    fn should_fail_if_pk_proto_algorithm_id_unsupported() {
+        let mut pks = MockPublicKeyStore::new();
+        let mut seq = Sequence::new();
+
+        let invalid_alg_id_pk = PublicKey {
+            version: 1,
+            algorithm: AlgorithmIdProto::EcdsaP256 as i32,
+            key_value: vec![0xFF; 100],
+            proof_data: None,
+            timestamp: None,
+        };
+
+        let oldest_public_key_proto = valid_idkg_dealing_encryption_public_key();
+        let oldest_public_key = mega_public_key_from_proto(&oldest_public_key_proto)
+            .expect("should convert to MEGaPublicKey");
+        pks.expect_would_retain_idkg_public_keys_modify_pubkey_store()
+            .times(1)
+            .in_sequence(&mut seq)
+            .return_once(|_| Ok(true));
+        pks.expect_retain_idkg_public_keys_since()
+            .times(1)
+            .in_sequence(&mut seq)
+            .return_once(|_| Ok(true));
+        pks.expect_idkg_dealing_encryption_pubkeys()
+            .times(1)
+            .in_sequence(&mut seq)
+            .return_once(|| vec![invalid_alg_id_pk]);
+
+        let vault = LocalCspVault::builder_for_test()
+            .with_public_key_store(pks)
+            .build();
+
+        assert_matches!(
+            vault.idkg_retain_active_keys(BTreeSet::new(), oldest_public_key),
+            Err(IDkgRetainKeysError::InternalError{ internal_error })
+            if internal_error.contains("Unsupported algorithm")
+        );
+    }
+
+    #[test]
+    fn should_fail_if_failed_deserialize_pk_proto() {
+        let mut pks = MockPublicKeyStore::new();
+        let mut seq = Sequence::new();
+
+        let invalid_alg_id_pk = PublicKey {
+            version: 1,
+            algorithm: AlgorithmIdProto::MegaSecp256k1 as i32,
+            key_value: vec![0xFF; 100],
+            proof_data: None,
+            timestamp: None,
+        };
+
+        let oldest_public_key_proto = valid_idkg_dealing_encryption_public_key();
+        let oldest_public_key = mega_public_key_from_proto(&oldest_public_key_proto)
+            .expect("should convert to MEGaPublicKey");
+        pks.expect_would_retain_idkg_public_keys_modify_pubkey_store()
+            .times(1)
+            .in_sequence(&mut seq)
+            .return_once(|_| Ok(true));
+        pks.expect_retain_idkg_public_keys_since()
+            .times(1)
+            .in_sequence(&mut seq)
+            .return_once(|_| Ok(true));
+        pks.expect_idkg_dealing_encryption_pubkeys()
+            .times(1)
+            .in_sequence(&mut seq)
+            .return_once(|| vec![invalid_alg_id_pk]);
+
+        let vault = LocalCspVault::builder_for_test()
+            .with_public_key_store(pks)
+            .build();
+
+        assert_matches!(
+            vault.idkg_retain_active_keys(BTreeSet::new(), oldest_public_key),
+            Err(IDkgRetainKeysError::InternalError{ internal_error })
+            if internal_error.contains("Error deserializing IDKG public key")
+        );
+    }
+
+    #[test]
+    fn should_fail_if_sks_retain_fails() {
+        let errors_outputs = vec![
+            (
+                SecretKeyStoreWriteError::SerializationError("oh no!".to_string()),
+                IDkgRetainKeysError::SerializationError {
+                    internal_error: "Serialization error while retaining active IDKG dealing encryption secret keys: \"oh no!\"".to_string()
+                },
+            ),
+            (
+                SecretKeyStoreWriteError::TransientError("oh no!".to_string()),
+                IDkgRetainKeysError::TransientInternalError {
+                    internal_error: "IO error while retaining active IDKG dealing encryption secret keys: \"oh no!\"".to_string()
+                },
+            ),
+        ];
+
+        for (input_error, expected_output_error) in errors_outputs {
+            let mut pks = MockPublicKeyStore::new();
+            let mut sks = MockSecretKeyStore::new();
+            let mut seq = Sequence::new();
+
+            let oldest_public_key_proto = valid_idkg_dealing_encryption_public_key();
+            let oldest_public_key = mega_public_key_from_proto(&oldest_public_key_proto)
+                .expect("should convert to MEGaPublicKey");
+
+            pks.expect_would_retain_idkg_public_keys_modify_pubkey_store()
+                .times(1)
+                .in_sequence(&mut seq)
+                .return_once(|_| Ok(true));
+            pks.expect_retain_idkg_public_keys_since()
+                .times(1)
+                .in_sequence(&mut seq)
+                .return_once(|_| Ok(true));
+            pks.expect_idkg_dealing_encryption_pubkeys()
+                .times(1)
+                .in_sequence(&mut seq)
+                .return_once(|| vec![oldest_public_key_proto]);
+
+            sks.expect_retain()
+                .times(1)
+                .in_sequence(&mut seq)
+                .return_once(|_, _| Err(input_error));
+
+            let vault = LocalCspVault::builder_for_test()
+                .with_public_key_store(pks)
+                .with_node_secret_key_store(sks)
+                .build();
+
+            assert_eq!(
+                vault.idkg_retain_active_keys(BTreeSet::new(), oldest_public_key),
+                Err(expected_output_error)
+            );
+        }
+    }
+
+    #[test]
+    fn should_fail_if_csks_retain_fails() {
+        let errors_outputs = vec![
+            (
+                SecretKeyStoreWriteError::TransientError("oh no!".to_string()),
+                IDkgRetainKeysError::TransientInternalError {
+                    internal_error: "IO error while retaining active IDKG canister secret shares: \"oh no!\"".to_string()
+                },
+            ),
+            (
+                SecretKeyStoreWriteError::SerializationError("oh no!".to_string()),
+                IDkgRetainKeysError::SerializationError {
+                    internal_error: "Serialization error while retaining active IDKG canister secret shares: \"oh no!\"".to_string()
+                },
+            ),
+        ];
+
+        for (input_error, expected_output_error) in errors_outputs {
+            let mut pks = MockPublicKeyStore::new();
+            let mut csks = MockSecretKeyStore::new();
+            let mut seq = Sequence::new();
+
+            let oldest_public_key_proto = valid_idkg_dealing_encryption_public_key();
+            let oldest_public_key = mega_public_key_from_proto(&oldest_public_key_proto)
+                .expect("should convert to MEGaPublicKey");
+
+            pks.expect_would_retain_idkg_public_keys_modify_pubkey_store()
+                .times(1)
+                .in_sequence(&mut seq)
+                .return_once(|_| Ok(false));
+
+            csks.expect_retain_would_modify_keystore()
+                .times(1)
+                .in_sequence(&mut seq)
+                .return_once(|_, _| true);
+            csks.expect_retain()
+                .times(1)
+                .in_sequence(&mut seq)
+                .return_once(|_, _| Err(input_error));
+
+            let vault = LocalCspVault::builder_for_test()
+                .with_public_key_store(pks)
+                .with_canister_secret_key_store(csks)
+                .build();
+
+            assert_eq!(
+                vault.idkg_retain_active_keys(BTreeSet::new(), oldest_public_key),
+                Err(expected_output_error)
+            );
+        }
+    }
+
+    #[test]
+    fn should_use_correct_key_scope() {
+        let pks = TempPublicKeyStore::new();
+
+        let nsks = Arc::new(RwLock::new(TempSecretKeyStore::new()));
+        let csks = Arc::new(RwLock::new(TempSecretKeyStore::new()));
+
+        let mut mcsks = MockSecretKeyStore::new();
+        let mut mnsks = MockSecretKeyStore::new();
+
+        {
+            let csks = Arc::clone(&csks);
+            mcsks
+                .expect_retain_would_modify_keystore()
+                .times(1)
+                .withf(|_, scope| scope == &IDKG_THRESHOLD_KEYS_SCOPE)
+                .returning(move |filter, scope| {
+                    csks.read().retain_would_modify_keystore(filter, scope)
+                });
+        }
+
+        {
+            let csks = Arc::clone(&csks);
+            mcsks
+                .expect_retain()
+                .times(1)
+                .withf(|_, scope| scope == &IDKG_THRESHOLD_KEYS_SCOPE)
+                .returning(move |filter, scope| csks.write().retain(filter, scope));
+        }
+
+        {
+            let nsks = Arc::clone(&nsks);
+            mnsks
+                .expect_retain()
+                .times(1)
+                .withf(|_, scope| scope == &IDKG_MEGA_SCOPE)
+                .returning(move |filter, scope| nsks.write().retain(filter, scope));
+        }
+        let number_of_keys = 5;
+        {
+            let nsks = Arc::clone(&nsks);
+            mnsks
+                .expect_insert()
+                .times(number_of_keys)
+                .withf(|_, _, scope| scope.expect("empty scope") == IDKG_MEGA_SCOPE)
+                .returning(move |key, id, scope| nsks.write().insert(key, id, scope));
+        }
+
+        let vault = LocalCspVault::builder_for_test()
+            .with_public_key_store(pks)
+            .with_canister_secret_key_store(mcsks)
+            .with_node_secret_key_store(mnsks)
+            .build();
+
+        // Add a dummy opening to the CSKS to avoid going here through the
+        // full stack of loading a transcript. The correctness of the scope
+        // variable for `insert_or_replace` is tested in the this file's
+        // `load_transcript` module.
+        let scalar = EccScalar::zero(EccCurveType::K256);
+        let scalar_bytes = EccScalarBytes::try_from(&scalar).expect("serialization failed");
+        let opening_bytes = CommitmentOpeningBytes::Simple(scalar_bytes);
+        csks.write()
+            .insert_or_replace(
+                KeyId::from([29u8; 32]),
+                CspSecretKey::IDkgCommitmentOpening(opening_bytes),
+                Some(IDKG_THRESHOLD_KEYS_SCOPE),
+            )
+            .expect("failed to add dummy commitment opening to CSKS");
+
+        let oldest_public_key_index = 2;
+        let rotated_public_keys =
+            generate_idkg_dealing_encryption_key_pairs(&vault, number_of_keys);
+
+        vault
+            .idkg_retain_active_keys(
+                BTreeSet::new(),
+                rotated_public_keys[oldest_public_key_index].clone(),
+            )
+            .expect("error retaining active IDKG keys");
     }
 
     fn generate_idkg_dealing_encryption_key_pairs<
@@ -744,6 +1102,7 @@ mod idkg_create_dealing {
 mod idkg_load_transcript {
     use super::*;
 
+    use crate::canister_threshold::IDKG_THRESHOLD_KEYS_SCOPE;
     use crate::key_id::KeyId;
     use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
     use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreWriteError};
@@ -918,6 +1277,51 @@ mod idkg_load_transcript {
             Err(IDkgLoadTranscriptError::TransientInternalError{internal_error})
             if internal_error == "test"
         );
+    }
+
+    #[test]
+    fn should_use_correct_key_scope() {
+        let mut test = IDkgLoadTranscriptTest::new_with_valid_params();
+
+        let custom_vault_fn = Box::new(|vault: LocalCspVaultForTest| {
+            let LocalCspVaultForTest {
+                node_secret_key_store,
+                canister_secret_key_store,
+                public_key_store,
+                ..
+            } = vault;
+            let csks = Arc::new(canister_secret_key_store);
+
+            let mut mcsks = MockSecretKeyStore::new();
+            {
+                let csks = Arc::clone(&csks);
+                mcsks
+                    .expect_get()
+                    .times(1)
+                    .return_once(move |id| csks.read().get(id));
+            }
+            {
+                let csks = Arc::clone(&csks);
+                mcsks
+                    .expect_insert_or_replace()
+                    .times(1)
+                    .withf(|_, _, scope| scope == &Some(IDKG_THRESHOLD_KEYS_SCOPE))
+                    .return_once(move |id, key, scope| {
+                        csks.write().insert_or_replace(id, key, scope)
+                    });
+            }
+
+            Box::new(
+                LocalCspVault::builder_for_test()
+                    .with_canister_secret_key_store(mcsks)
+                    .with_node_secret_key_store(node_secret_key_store.rw_lock.into_inner())
+                    .with_public_key_store(public_key_store.rw_lock.into_inner())
+                    .build(),
+            ) as Box<dyn IDkgProtocolCspVault>
+        });
+        test.custom_vault_for_load_transcript_fn = Some(custom_vault_fn);
+
+        assert_matches!(test.run(), Ok(complaints) if complaints.is_empty());
     }
 
     struct IDkgLoadTranscriptTest {
