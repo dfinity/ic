@@ -147,9 +147,9 @@ async fn proxy(
         tokio::task::spawn(async move {
             match hyper::upgrade::on(req).await {
                 Ok(upgraded) => {
-                    if let Err(e) = tunnel(upgraded, target_addr).await {
-                        error!("server io error: {e}");
-                    }
+                    let _ = tunnel(upgraded, target_addr)
+                        .await
+                        .inspect_err(|e| error!("server io error: {e}"));
                 }
                 Err(e) => error!("upgrade error: {e}"),
             }
@@ -193,9 +193,9 @@ async fn proxy(
 
         tokio::task::spawn(
             async move {
-                if let Err(err) = conn.await {
-                    error!("Connection failed: {err:?}");
-                }
+                let _ = conn
+                    .await
+                    .inspect_err(|e| error!("Connection failed: {e:?}"));
             }
             .instrument(Span::current()),
         );

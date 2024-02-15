@@ -255,9 +255,9 @@ pub fn setup(opts: HttpClientOpts) -> Result<impl HyperService<Body>, Error> {
                 Err(e) => tracing::warn!("Could not load native certs: {}", e),
                 Ok(certs) => {
                     for cert in certs {
-                        if let Err(e) = root_cert_store.add(&rustls::Certificate(cert.0)) {
-                            tracing::warn!("Could not add native cert: {}", e);
-                        }
+                        let _ = root_cert_store
+                            .add(&rustls::Certificate(cert.0))
+                            .inspect_err(|e| tracing::warn!("Could not add native cert: {e}"));
                     }
                 }
             }
@@ -290,13 +290,14 @@ pub fn setup(opts: HttpClientOpts) -> Result<impl HyperService<Body>, Error> {
                         }
                     };
                     for c in certs {
-                        if let Err(e) = root_cert_store.add(&rustls::Certificate(c)) {
-                            tracing::warn!(
-                                "Could not add part of cert `{}`: {}",
-                                cert_path.display(),
-                                e
-                            );
-                        }
+                        let _ = root_cert_store
+                            .add(&rustls::Certificate(c))
+                            .inspect_err(|e| {
+                                tracing::warn!(
+                                    "Could not add part of cert `{}`: {e}",
+                                    cert_path.display()
+                                )
+                            });
                     }
                 }
                 Some(v) if v == "der" => {
@@ -304,9 +305,9 @@ pub fn setup(opts: HttpClientOpts) -> Result<impl HyperService<Body>, Error> {
                         "adding DER cert `{}` to root certificates",
                         cert_path.display()
                     );
-                    if let Err(e) = root_cert_store.add(&Certificate(buf)) {
-                        tracing::warn!("Could not add cert `{}`: {}", cert_path.display(), e);
-                    }
+                    let _ = root_cert_store.add(&Certificate(buf)).inspect_err(|e| {
+                        tracing::warn!("Could not add cert `{}`: {e}", cert_path.display())
+                    });
                 }
                 _ => tracing::warn!(
                     "Could not load cert `{}`: unknown extension",

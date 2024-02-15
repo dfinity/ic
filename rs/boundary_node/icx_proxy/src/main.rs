@@ -1,5 +1,3 @@
-// TODO: Remove after inspect_err stabilizes (rust-lang/rust#91345)
-
 #![allow(unstable_name_collisions)]
 
 use std::{net::SocketAddr, path::PathBuf};
@@ -33,23 +31,6 @@ use crate::{
 
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
-
-// TODO: Remove after inspect_err stabilizes (rust-lang/rust#91345)
-trait InspectErr {
-    type E;
-    fn inspect_err<F: FnOnce(&Self::E)>(self, f: F) -> Self;
-}
-
-impl<R, E> InspectErr for Result<R, E> {
-    type E = E;
-    fn inspect_err<F: FnOnce(&Self::E)>(self, f: F) -> Self {
-        if let Err(ref e) = self {
-            f(e);
-        }
-
-        self
-    }
-}
 
 #[derive(Parser)]
 struct Opts {

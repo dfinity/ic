@@ -157,19 +157,14 @@ impl HttpResponse {
                 };
 
                 let canister = HttpRequestCanister::create(&agent, callback.0.principal);
-                match canister
+                canister
                     .http_request_stream_callback(&callback.0.method, token)
                     .call()
                     .await
-                {
-                    Ok((StreamingCallbackHttpResponse { body, token },)) => {
-                        Ok(Some(((body, token.clone()), (agent, callback, token))))
-                    }
-                    Err(e) => {
-                        warn!("Error happened during streaming: {:?}", e);
-                        Err(e)
-                    }
-                }
+                    .inspect_err(|e| warn!("Error happened during streaming: {e:?}"))
+                    .map(|(StreamingCallbackHttpResponse { body, token },)| {
+                        Some(((body, token.clone()), (agent, callback, token)))
+                    })
             },
         )
     }
