@@ -1,10 +1,11 @@
-use super::types::{ConstructionMetadataRequestOptions, SignedTransaction};
-use super::utils::handle_construction_submit;
+use super::types::{ConstructionMetadataRequestOptions, SignedTransaction, UnsignedTransaction};
 use crate::common::types::Error;
+use crate::construction_api::utils::handle_construction_combine;
+use crate::construction_api::utils::handle_construction_submit;
 use ic_base_types::{CanisterId, PrincipalId};
 use icrc_ledger_agent::{CallMode, Icrc1Agent};
 use icrc_ledger_types::icrc1::account::Account;
-use rosetta_core::objects::{Amount, Currency};
+use rosetta_core::objects::{Amount, Currency, Signature};
 use rosetta_core::response_types::*;
 use rosetta_core::{
     convert::principal_id_from_public_key, objects::PublicKey,
@@ -64,6 +65,17 @@ pub async fn construction_submit(
 
     handle_construction_submit(signed_transaction, icrc1_ledger_id.into(), icrc1_agent)
         .await
+        .map_err(|err| Error::processing_construction_failed(&err))
+}
+
+pub fn construction_combine(
+    unsigned_transaction: String,
+    signatures: Vec<Signature>,
+) -> Result<ConstructionCombineResponse, Error> {
+    let unsigned_transaction = UnsignedTransaction::from_str(&unsigned_transaction)
+        .map_err(|err| Error::parsing_unsuccessful(&err))?;
+
+    handle_construction_combine(unsigned_transaction, signatures)
         .map_err(|err| Error::processing_construction_failed(&err))
 }
 

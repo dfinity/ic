@@ -3,6 +3,7 @@ use ic_icrc_rosetta::construction_api::types::ConstructionMetadataRequestOptions
 use reqwest::{Client, Url};
 use rosetta_core::identifiers::*;
 use rosetta_core::objects::Operation;
+use rosetta_core::objects::Signature;
 use rosetta_core::request_types::*;
 use rosetta_core::response_types::*;
 use serde::{Deserialize, Serialize};
@@ -188,6 +189,23 @@ impl RosettaClient {
             &ConstructionSubmitRequest {
                 network_identifier,
                 signed_transaction,
+            },
+        )
+        .await
+    }
+
+    pub async fn construction_combine(
+        &self,
+        network_identifier: NetworkIdentifier,
+        unsigned_transaction: String,
+        signatures: Vec<Signature>,
+    ) -> Result<ConstructionCombineResponse, Error> {
+        self.call_endpoint(
+            "/construction/combine",
+            &ConstructionCombineRequest {
+                network_identifier,
+                unsigned_transaction,
+                signatures,
             },
         )
         .await
