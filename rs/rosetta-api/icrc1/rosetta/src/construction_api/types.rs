@@ -1,4 +1,5 @@
 use anyhow::anyhow;
+use anyhow::bail;
 use ic_agent::agent::Envelope;
 use ic_agent::agent::EnvelopeContent;
 use rosetta_core::objects::*;
@@ -59,6 +60,39 @@ impl<'a> FromStr for SignedTransaction<'a> {
     type Err = anyhow::Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         serde_cbor::from_slice(hex::decode(s)?.as_slice()).map_err(|err| anyhow!("{:?}", err))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CanisterMethodName {
+    Icrc2Approve,
+    Icrc2TransferFrom,
+    Icrc1Transfer,
+}
+
+impl CanisterMethodName {
+    pub fn new_from_envelope_content(envelope_content: &EnvelopeContent) -> anyhow::Result<Self> {
+        match envelope_content {
+            EnvelopeContent::Call { method_name, .. } => {
+                Ok(method_name.parse::<CanisterMethodName>()?)
+            }
+            _ => bail!(
+                "EnvelopeContent has to be of type Call, but was {:?}",
+                envelope_content
+            ),
+        }
+    }
+}
+
+impl FromStr for CanisterMethodName {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "icrc2_approve" => Ok(Self::Icrc2Approve),
+            "icrc2_transfer_from" => Ok(Self::Icrc2TransferFrom),
+            "icrc1_transfer" => Ok(Self::Icrc1Transfer),
+            _ => bail!("Invalid CanisterMethodName: {}", s),
+        }
     }
 }
 

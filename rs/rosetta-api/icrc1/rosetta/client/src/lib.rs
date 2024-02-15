@@ -194,6 +194,21 @@ impl RosettaClient {
         .await
     }
 
+    pub async fn construction_hash(
+        &self,
+        network_identifier: NetworkIdentifier,
+        signed_transaction: String,
+    ) -> Result<ConstructionHashResponse, Error> {
+        self.call_endpoint(
+            "/construction/hash",
+            &ConstructionHashRequest {
+                network_identifier,
+                signed_transaction,
+            },
+        )
+        .await
+    }
+
     pub async fn construction_combine(
         &self,
         network_identifier: NetworkIdentifier,

@@ -637,11 +637,25 @@ async fn test_construction_submit() {
         .await
         .unwrap();
 
-    let _construction_submit_response = env
+    let construction_submit_response = env
         .rosetta_client
-        .construction_submit(env.network_identifier, signed_transaction.to_string())
+        .construction_submit(
+            env.network_identifier.clone(),
+            signed_transaction.to_string(),
+        )
         .await
         .expect("Unable to call /construction/submit");
+
+    let construction_hash_response = env
+        .rosetta_client
+        .construction_hash(env.network_identifier, signed_transaction.to_string())
+        .await
+        .expect("Unable to call /construction/hash");
+
+    assert_eq!(
+        construction_submit_response.transaction_identifier.hash,
+        construction_hash_response.transaction_identifier.hash
+    );
 
     let current_balance = env
         .icrc1_agent
