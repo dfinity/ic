@@ -79,12 +79,11 @@ use prometheus::IntCounter;
 use rand::RngCore;
 use std::{
     collections::{BTreeMap, HashMap},
-    convert::Into,
-    convert::TryFrom,
+    convert::{Into, TryFrom},
     fmt, mem,
     str::FromStr,
     sync::{Arc, Mutex},
-    time::Instant,
+    time::{Duration, Instant},
 };
 use strum::ParseError;
 
@@ -119,6 +118,9 @@ pub enum ExecuteMessageResult {
 
         /// The size of the heap delta the canister produced
         heap_delta: NumBytes,
+
+        /// The call duration, if the call context completed.
+        call_duration: Option<Duration>,
     },
     Paused {
         /// The old state of the canister before execution
@@ -1391,8 +1393,12 @@ impl ExecutionEnvironment {
                     response: ExecutionResponse::Request(response),
                     instructions_used: _,
                     heap_delta: _,
+                    call_duration,
                 } = &result
                 {
+                    if let Some(duration) = call_duration {
+                        self.metrics.call_durations.observe(duration.as_secs_f64());
+                    }
                     debug_assert_eq!(request_cycles, response.refund);
                 }
                 result
@@ -2807,6 +2813,7 @@ impl ExecutionEnvironment {
                 response,
                 instructions_used,
                 heap_delta,
+                call_duration,
             } => {
                 let ingress_status = match response {
                     ExecutionResponse::Ingress(ingress_status) => Some(ingress_status),
@@ -2821,6 +2828,10 @@ impl ExecutionEnvironment {
                     }
                     ExecutionResponse::Empty => None,
                 };
+                if let Some(duration) = call_duration {
+                    self.metrics.call_durations.observe(duration.as_secs_f64());
+                }
+
                 (
                     canister,
                     Some(instructions_used),

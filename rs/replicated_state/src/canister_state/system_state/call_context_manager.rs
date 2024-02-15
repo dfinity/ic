@@ -426,14 +426,14 @@ impl CallContextManager {
     }
 
     /// Accepts a canister result and produces an action that should be taken
-    /// by the caller.
+    /// by the caller; and the call context, if completed.
     pub fn on_canister_result(
         &mut self,
         call_context_id: CallContextId,
         callback_id: Option<CallbackId>,
         result: Result<Option<WasmResult>, HypervisorError>,
         instructions_used: NumInstructions,
-    ) -> CallContextAction {
+    ) -> (CallContextAction, Option<CallContext>) {
         enum OutstandingCalls {
             Yes,
             No,
@@ -473,50 +473,60 @@ impl CallContextManager {
         // the compiler to tell us if we handled all the possible cases.
         match (result, responded, outstanding_calls) {
             (Ok(None), Responded::No, OutstandingCalls::Yes)
-            | (Err(_), Responded::No, OutstandingCalls::Yes) => CallContextAction::NotYetResponded,
+            | (Err(_), Responded::No, OutstandingCalls::Yes) => {
+                (CallContextAction::NotYetResponded, None)
+            }
 
             (Ok(None), Responded::Yes, OutstandingCalls::Yes)
             | (Err(_), Responded::Yes, OutstandingCalls::Yes) => {
-                CallContextAction::AlreadyResponded
+                (CallContextAction::AlreadyResponded, None)
             }
             (Ok(None), Responded::Yes, OutstandingCalls::No)
-            | (Err(_), Responded::Yes, OutstandingCalls::No) => {
-                self.call_contexts.remove(&call_context_id);
-                CallContextAction::AlreadyResponded
-            }
+            | (Err(_), Responded::Yes, OutstandingCalls::No) => (
+                CallContextAction::AlreadyResponded,
+                self.call_contexts.remove(&call_context_id),
+            ),
 
             (Ok(None), Responded::No, OutstandingCalls::No) => {
                 let refund = context.available_cycles;
-                self.call_contexts.remove(&call_context_id);
-                CallContextAction::NoResponse { refund }
+                (
+                    CallContextAction::NoResponse { refund },
+                    self.call_contexts.remove(&call_context_id),
+                )
             }
 
             (Ok(Some(WasmResult::Reply(payload))), Responded::No, OutstandingCalls::No) => {
                 let refund = context.available_cycles;
-                self.call_contexts.remove(&call_context_id);
-                CallContextAction::Reply { payload, refund }
+                (
+                    CallContextAction::Reply { payload, refund },
+                    self.call_contexts.remove(&call_context_id),
+                )
             }
             (Ok(Some(WasmResult::Reply(payload))), Responded::No, OutstandingCalls::Yes) => {
                 let refund = context.available_cycles;
                 context.mark_responded();
-                CallContextAction::Reply { payload, refund }
+                (CallContextAction::Reply { payload, refund }, None)
             }
 
             (Ok(Some(WasmResult::Reject(payload))), Responded::No, OutstandingCalls::No) => {
                 let refund = context.available_cycles;
-                self.call_contexts.remove(&call_context_id);
-                CallContextAction::Reject { payload, refund }
+                (
+                    CallContextAction::Reject { payload, refund },
+                    self.call_contexts.remove(&call_context_id),
+                )
             }
             (Ok(Some(WasmResult::Reject(payload))), Responded::No, OutstandingCalls::Yes) => {
                 let refund = context.available_cycles;
                 context.mark_responded();
-                CallContextAction::Reject { payload, refund }
+                (CallContextAction::Reject { payload, refund }, None)
             }
 
             (Err(error), Responded::No, OutstandingCalls::No) => {
                 let refund = context.available_cycles;
-                self.call_contexts.remove(&call_context_id);
-                CallContextAction::Fail { error, refund }
+                (
+                    CallContextAction::Fail { error, refund },
+                    self.call_contexts.remove(&call_context_id),
+                )
             }
 
             // The following can never happen since we handle at the SystemApi level if a canister

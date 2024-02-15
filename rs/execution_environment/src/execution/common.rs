@@ -5,6 +5,7 @@ use ic_registry_subnet_type::SubnetType;
 use lazy_static::lazy_static;
 use prometheus::IntCounter;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 use crate::execution_environment::ExecutionResponse;
 use crate::{as_round_instructions, metrics::CallTreeMetrics, ExecuteMessageResult, RoundLimits};
@@ -566,6 +567,7 @@ pub(crate) fn finish_call_with_error(
         response,
         instructions_used,
         heap_delta: NumBytes::from(0),
+        call_duration: Some(Duration::from_secs(0)),
     }
 }
 
