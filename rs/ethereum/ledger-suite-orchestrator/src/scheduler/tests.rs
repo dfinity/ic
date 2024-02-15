@@ -5,8 +5,8 @@ use crate::scheduler::tests::mock::MockCanisterRuntime;
 use crate::scheduler::{InstallLedgerSuiteArgs, Task, TaskError, Tasks};
 use crate::state::test_fixtures::new_state;
 use crate::state::{
-    read_state, Canisters, IndexCanister, LedgerCanister, ManagedCanisterStatus, State, WasmHash,
-    INDEX_BYTECODE, LEDGER_BYTECODE,
+    read_state, Canisters, GitCommitHash, IndexCanister, LedgerCanister, ManagedCanisterStatus,
+    State, WasmHash, INDEX_BYTECODE, LEDGER_BYTECODE,
 };
 use crate::storage::{mutate_wasm_store, record_icrc1_ledger_suite_wasms};
 use candid::Principal;
@@ -300,7 +300,10 @@ fn init_state() {
 }
 
 fn register_embedded_wasms() {
-    mutate_wasm_store(|s| record_icrc1_ledger_suite_wasms(s, 1_620_328_630_000_000_000)).unwrap()
+    mutate_wasm_store(|s| {
+        record_icrc1_ledger_suite_wasms(s, 1_620_328_630_000_000_000, GitCommitHash::default())
+    })
+    .unwrap()
 }
 
 fn usdc_install_args() -> InstallLedgerSuiteArgs {
@@ -399,7 +402,7 @@ mod install_ledger_suite_args {
     use crate::scheduler::tests::usdc_metadata;
     use crate::scheduler::{ChainId, Erc20Token, InstallLedgerSuiteArgs, InvalidAddErc20ArgError};
     use crate::state::test_fixtures::new_state;
-    use crate::state::{IndexWasm, LedgerWasm, State};
+    use crate::state::{GitCommitHash, IndexWasm, LedgerWasm, State};
     use crate::storage::test_fixtures::empty_wasm_store;
     use crate::storage::{record_icrc1_ledger_suite_wasms, WasmStore};
     use assert_matches::assert_matches;
@@ -500,6 +503,7 @@ mod install_ledger_suite_args {
                 maximum_number_of_accounts: None,
                 accounts_overflow_trim_quantity: None,
             },
+            git_commit_hash: "6a8e5fca2c6b4e12966638c444e994e204b42989".to_string(),
             ledger_compressed_wasm_hash: LedgerWasm::from(crate::state::LEDGER_BYTECODE)
                 .hash()
                 .to_string(),
@@ -519,7 +523,11 @@ mod install_ledger_suite_args {
     fn wasm_store_with_icrc1_ledger_suite() -> WasmStore {
         let mut store = empty_wasm_store();
         assert_eq!(
-            record_icrc1_ledger_suite_wasms(&mut store, 1_620_328_630_000_000_000),
+            record_icrc1_ledger_suite_wasms(
+                &mut store,
+                1_620_328_630_000_000_000,
+                GitCommitHash::default()
+            ),
             Ok(())
         );
         store

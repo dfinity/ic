@@ -10,7 +10,7 @@ use candid::Principal;
 use ic_cdk::trap;
 use ic_stable_structures::{storable::Bound, Cell, Storable};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde_bytes::ByteBuf;
+use serde_bytes::ByteArray;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
@@ -24,6 +24,7 @@ pub(crate) const ARCHIVE_NODE_BYTECODE: &[u8] =
     include_bytes!(env!("LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH"));
 
 const WASM_HASH_LENGTH: usize = 32;
+const GIT_COMMIT_HASH_LENGTH: usize = 20;
 
 thread_local! {
     pub static STATE: RefCell<Cell<ConfigState, StableMemory>> = RefCell::new(Cell::init(
@@ -45,82 +46,88 @@ pub type IndexWasm = Wasm<Index>;
 pub type ArchiveWasm = Wasm<Archive>;
 
 #[derive(Debug, PartialEq, Ord, PartialOrd, Eq, Serialize, Deserialize, Clone)]
-#[serde(try_from = "serde_bytes::ByteBuf", into = "serde_bytes::ByteBuf")]
-pub struct WasmHash([u8; WASM_HASH_LENGTH]);
+#[serde(from = "serde_bytes::ByteArray<N>", into = "serde_bytes::ByteArray<N>")]
+pub struct Hash<const N: usize>([u8; N]);
 
-impl TryFrom<ByteBuf> for WasmHash {
-    type Error = String;
-
-    fn try_from(value: ByteBuf) -> Result<Self, Self::Error> {
-        Ok(WasmHash(value.to_vec().try_into().map_err(
-            |e: Vec<u8>| format!("expected {} bytes, but got {}", WASM_HASH_LENGTH, e.len()),
-        )?))
+impl<const N: usize> Default for Hash<N> {
+    fn default() -> Self {
+        Self([0; N])
     }
 }
 
-impl From<WasmHash> for ByteBuf {
-    fn from(value: WasmHash) -> Self {
-        ByteBuf::from(value.0.to_vec())
+impl<const N: usize> From<ByteArray<N>> for Hash<N> {
+    fn from(value: ByteArray<N>) -> Self {
+        Self(value.into_array())
     }
 }
 
-impl AsRef<[u8]> for WasmHash {
+impl<const N: usize> From<Hash<N>> for ByteArray<N> {
+    fn from(value: Hash<N>) -> Self {
+        ByteArray::new(value.0)
+    }
+}
+
+impl<const N: usize> AsRef<[u8]> for Hash<N> {
     fn as_ref(&self) -> &[u8] {
         &self.0
     }
 }
 
-impl From<[u8; WASM_HASH_LENGTH]> for WasmHash {
-    fn from(value: [u8; WASM_HASH_LENGTH]) -> Self {
+impl<const N: usize> From<[u8; N]> for Hash<N> {
+    fn from(value: [u8; N]) -> Self {
         Self(value)
     }
 }
 
-impl FromStr for WasmHash {
+impl<const N: usize> From<Hash<N>> for [u8; N] {
+    fn from(value: Hash<N>) -> Self {
+        value.0
+    }
+}
+
+impl<const N: usize> FromStr for Hash<N> {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let expected_num_hex_chars = WASM_HASH_LENGTH * 2;
+        let expected_num_hex_chars = N * 2;
         if s.len() != expected_num_hex_chars {
             return Err(format!(
-                "Invalid wasm hash: expected {} characters, got {}",
+                "Invalid hash: expected {} characters, got {}",
                 expected_num_hex_chars,
                 s.len()
             ));
         }
-        let mut bytes = [0u8; WASM_HASH_LENGTH];
+        let mut bytes = [0u8; N];
         hex::decode_to_slice(s, &mut bytes).map_err(|e| format!("Invalid hex string: {}", e))?;
         Ok(Self(bytes))
     }
 }
 
-impl Display for WasmHash {
+impl<const N: usize> Display for Hash<N> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", hex::encode(self.0))
     }
 }
 
-impl Storable for WasmHash {
+impl<const N: usize> Storable for Hash<N> {
     fn to_bytes(&self) -> Cow<[u8]> {
         Cow::from(self.as_ref())
     }
 
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
-        assert_eq!(
-            bytes.len(),
-            WASM_HASH_LENGTH,
-            "WasmHash representation is 32-bytes long"
-        );
-        let mut be_bytes = [0u8; WASM_HASH_LENGTH];
+        assert_eq!(bytes.len(), N, "Hash representation is {}-bytes long", N);
+        let mut be_bytes = [0u8; N];
         be_bytes.copy_from_slice(bytes.as_ref());
         Self(be_bytes)
     }
 
     const BOUND: Bound = Bound::Bounded {
-        max_size: WASM_HASH_LENGTH as u32,
+        max_size: N as u32,
         is_fixed_size: true,
     };
 }
+
+pub type WasmHash = Hash<WASM_HASH_LENGTH>;
 
 impl WasmHash {
     /// Creates an array of wasm hashes from an array of their respective string representations.
@@ -199,6 +206,10 @@ impl<T> From<&[u8]> for Wasm<T> {
         Self::new(value.to_vec())
     }
 }
+
+/// Uniquely identifies a Git commit revision by its full 40-character SHA-1 hash,
+/// see [Git Revision Selection](https://git-scm.com/book/en/v2/Git-Tools-Revision-Selection).
+pub type GitCommitHash = Hash<GIT_COMMIT_HASH_LENGTH>;
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, Default)]
 pub struct ManagedCanisters {

@@ -182,6 +182,34 @@ mod wasm_hash {
     }
 }
 
+mod git_commit_hash {
+    use crate::state::GitCommitHash;
+    use assert_matches::assert_matches;
+    use proptest::arbitrary::any;
+    use proptest::array::uniform20;
+    use proptest::{prop_assert_eq, proptest};
+    use std::str::FromStr;
+
+    proptest! {
+        #[test]
+        fn should_decode_display_string(hash in uniform20(any::<u8>())) {
+            let parsed_hash = GitCommitHash::from_str(&GitCommitHash::from(hash).to_string()).unwrap();
+            prop_assert_eq!(parsed_hash.as_ref(), &hash);
+        }
+
+        #[test]
+        fn should_error_on_invalid_hash(invalid_hash in "[0-9a-fA-F]{0,39}|[0-9a-fA-F]{41,}") {
+           assert_matches!(GitCommitHash::from_str(&invalid_hash), Err(_));
+        }
+
+         #[test]
+        fn should_accept_valid_hash(valid_hash in "[0-9a-fA-F]{40}") {
+            let result = GitCommitHash::from_str(&valid_hash).unwrap();
+            prop_assert_eq!(result.as_ref(), &hex::decode(valid_hash).unwrap()[..]);
+        }
+    }
+}
+
 mod validate_config {
     use crate::candid::InitArg;
     use crate::state::{InvalidStateError, State};

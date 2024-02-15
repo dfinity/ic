@@ -4,7 +4,7 @@ pub mod test_fixtures;
 mod tests;
 
 use crate::state::{
-    Archive, ArchiveWasm, Index, IndexWasm, Ledger, LedgerWasm, Wasm, WasmHash,
+    Archive, ArchiveWasm, GitCommitHash, Index, IndexWasm, Ledger, LedgerWasm, Wasm, WasmHash,
     ARCHIVE_NODE_BYTECODE, INDEX_BYTECODE, LEDGER_BYTECODE,
 };
 use crate::storage::memory::{wasm_store_memory, StableMemory};
@@ -51,6 +51,8 @@ pub struct StoredWasm {
     /// The canister time at which the orchestrator stored this wasm
     /// in nanoseconds since the epoch (1970-01-01).
     timestamp: u64,
+    /// The git commit hash that produced this wasm binary.
+    git_commit: GitCommitHash,
     /// The wasm binary.
     #[serde(with = "serde_bytes")]
     binary: Vec<u8>,
@@ -114,11 +116,13 @@ pub enum WasmStoreError {
 pub fn wasm_store_try_insert<T: StorableWasm>(
     wasm_store: &mut WasmStore,
     timestamp: u64,
+    git_commit: GitCommitHash,
     wasm: Wasm<T>,
 ) -> Result<(), WasmStoreError> {
     let wasm_hash = wasm.hash().clone();
     let storable_wasm = StoredWasm {
         timestamp,
+        git_commit,
         binary: wasm.to_bytes(),
         marker: T::MARKER,
     };
@@ -166,12 +170,24 @@ pub fn wasm_store_try_get<T: StorableWasm>(
 pub fn record_icrc1_ledger_suite_wasms(
     wasm_store: &mut WasmStore,
     timestamp: u64,
+    git_commit: GitCommitHash,
 ) -> Result<(), WasmStoreError> {
-    wasm_store_try_insert(wasm_store, timestamp, LedgerWasm::from(LEDGER_BYTECODE))?;
-    wasm_store_try_insert(wasm_store, timestamp, IndexWasm::from(INDEX_BYTECODE))?;
     wasm_store_try_insert(
         wasm_store,
         timestamp,
+        git_commit.clone(),
+        LedgerWasm::from(LEDGER_BYTECODE),
+    )?;
+    wasm_store_try_insert(
+        wasm_store,
+        timestamp,
+        git_commit.clone(),
+        IndexWasm::from(INDEX_BYTECODE),
+    )?;
+    wasm_store_try_insert(
+        wasm_store,
+        timestamp,
+        git_commit,
         ArchiveWasm::from(ARCHIVE_NODE_BYTECODE),
     )
 }

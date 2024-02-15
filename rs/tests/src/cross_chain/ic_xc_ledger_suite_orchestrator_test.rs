@@ -110,6 +110,7 @@ pub fn ic_xc_ledger_suite_orchestrator_test(env: TestEnv) {
             AddErc20Arg {
                 contract: usdc_contract(),
                 ledger_init_arg: usdc_ledger_init_arg(),
+                git_commit_hash: "6a8e5fca2c6b4e12966638c444e994e204b42989".to_string(),
                 ledger_compressed_wasm_hash: hex::encode(embedded_ledger_wasm(&env).module_hash()),
                 index_compressed_wasm_hash: hex::encode(embedded_index_wasm(&env).module_hash()),
             },

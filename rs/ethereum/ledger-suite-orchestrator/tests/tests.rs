@@ -22,6 +22,7 @@ use std::collections::BTreeSet;
 use std::str::FromStr;
 
 const MAX_TICKS: usize = 10;
+const GIT_COMMIT_HASH: &str = "6a8e5fca2c6b4e12966638c444e994e204b42989";
 
 proptest! {
     #![proptest_config(ProptestConfig {
@@ -85,6 +86,7 @@ fn should_spawn_ledger_with_correct_init_args() {
         .add_erc20_token(AddErc20Arg {
             contract: usdc_erc20_contract(),
             ledger_init_arg: realistic_usdc_ledger_init_arg,
+            git_commit_hash: GIT_COMMIT_HASH.to_string(),
             ledger_compressed_wasm_hash: embedded_ledger_wasm_hash.to_string(),
             index_compressed_wasm_hash: embedded_index_wasm_hash.to_string(),
         })
@@ -144,23 +146,24 @@ fn should_reject_adding_an_already_managed_erc20_token() {
 }
 
 #[test]
-fn should_reject_upgrade_with_unknown_wasm_hash() {
+fn should_reject_upgrade_with_invalid_args() {
     const UNKNOWN_WASM_HASH: &str =
         "0000000000000000000000000000000000000000000000000000000000000000";
-    fn test_upgrade_with_wrong_wasm_hash(
+    const INVALID_GIT_COMMIT_HASH: &str = "0000";
+    fn test_upgrade_with_invalid_args(
         orchestrator: &LedgerSuiteOrchestrator,
         upgrade_arg_with_wrong_hash: &OrchestratorArg,
     ) {
         let result = orchestrator.upgrade_ledger_suite_orchestrator(upgrade_arg_with_wrong_hash);
-        assert_matches!(result, Err(e) if e.code() == ErrorCode::CanisterCalledTrap && e.description().contains("invalid arguments"));
+        assert_matches!(result, Err(e) if e.code() == ErrorCode::CanisterCalledTrap && e.description().contains("ERROR: "));
     }
 
     let orchestrator = LedgerSuiteOrchestrator::default();
     let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
     let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
-    let usdc = usdc(embedded_ledger_wasm_hash, embedded_index_wasm_hash);
+    let usdc = usdc(embedded_ledger_wasm_hash.clone(), embedded_index_wasm_hash);
 
-    test_upgrade_with_wrong_wasm_hash(
+    test_upgrade_with_invalid_args(
         &orchestrator,
         &OrchestratorArg::AddErc20Arg(AddErc20Arg {
             ledger_compressed_wasm_hash: UNKNOWN_WASM_HASH.to_string(),
@@ -168,7 +171,7 @@ fn should_reject_upgrade_with_unknown_wasm_hash() {
         }),
     );
 
-    test_upgrade_with_wrong_wasm_hash(
+    test_upgrade_with_invalid_args(
         &orchestrator,
         &OrchestratorArg::AddErc20Arg(AddErc20Arg {
             index_compressed_wasm_hash: UNKNOWN_WASM_HASH.to_string(),
@@ -176,30 +179,54 @@ fn should_reject_upgrade_with_unknown_wasm_hash() {
         }),
     );
 
-    test_upgrade_with_wrong_wasm_hash(
+    test_upgrade_with_invalid_args(
+        &orchestrator,
+        &OrchestratorArg::AddErc20Arg(AddErc20Arg {
+            git_commit_hash: INVALID_GIT_COMMIT_HASH.to_string(),
+            ..usdc.clone()
+        }),
+    );
+
+    let valid_upgrade_arg = UpgradeArg {
+        git_commit_hash: None,
+        ledger_compressed_wasm_hash: None,
+        index_compressed_wasm_hash: None,
+        archive_compressed_wasm_hash: None,
+    };
+
+    test_upgrade_with_invalid_args(
         &orchestrator,
         &OrchestratorArg::UpgradeArg(UpgradeArg {
+            git_commit_hash: Some(GIT_COMMIT_HASH.to_string()),
             ledger_compressed_wasm_hash: Some(UNKNOWN_WASM_HASH.to_string()),
-            index_compressed_wasm_hash: None,
-            archive_compressed_wasm_hash: None,
+            ..valid_upgrade_arg.clone()
         }),
     );
 
-    test_upgrade_with_wrong_wasm_hash(
+    test_upgrade_with_invalid_args(
         &orchestrator,
         &OrchestratorArg::UpgradeArg(UpgradeArg {
-            ledger_compressed_wasm_hash: None,
+            git_commit_hash: Some(GIT_COMMIT_HASH.to_string()),
             index_compressed_wasm_hash: Some(UNKNOWN_WASM_HASH.to_string()),
-            archive_compressed_wasm_hash: None,
+            ..valid_upgrade_arg.clone()
         }),
     );
 
-    test_upgrade_with_wrong_wasm_hash(
+    test_upgrade_with_invalid_args(
         &orchestrator,
         &OrchestratorArg::UpgradeArg(UpgradeArg {
-            ledger_compressed_wasm_hash: None,
-            index_compressed_wasm_hash: None,
+            git_commit_hash: Some(GIT_COMMIT_HASH.to_string()),
             archive_compressed_wasm_hash: Some(UNKNOWN_WASM_HASH.to_string()),
+            ..valid_upgrade_arg.clone()
+        }),
+    );
+
+    test_upgrade_with_invalid_args(
+        &orchestrator,
+        &OrchestratorArg::UpgradeArg(UpgradeArg {
+            git_commit_hash: None,
+            ledger_compressed_wasm_hash: Some(embedded_ledger_wasm_hash.to_string()),
+            ..valid_upgrade_arg.clone()
         }),
     );
 }
@@ -372,6 +399,7 @@ fn usdc(
     AddErc20Arg {
         contract: usdc_erc20_contract(),
         ledger_init_arg: ledger_init_arg("USD Coin", "USDC"),
+        git_commit_hash: GIT_COMMIT_HASH.to_string(),
         ledger_compressed_wasm_hash: ledger_compressed_wasm_hash.to_string(),
         index_compressed_wasm_hash: index_compressed_wasm_hash.to_string(),
     }
@@ -394,6 +422,7 @@ fn usdt(
             address: "0xdAC17F958D2ee523a2206206994597C13D831ec7".to_string(),
         },
         ledger_init_arg: ledger_init_arg("Tether USD", "USDT"),
+        git_commit_hash: GIT_COMMIT_HASH.to_string(),
         ledger_compressed_wasm_hash: ledger_compressed_wasm_hash.to_string(),
         index_compressed_wasm_hash: index_compressed_wasm_hash.to_string(),
     }
