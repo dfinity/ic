@@ -2410,17 +2410,23 @@ impl UploadChunkArgs {
     }
 }
 
-/// Struct to be returned when uploading a Wasm chunk.
+/// Candid type representing the hash of a wasm chunk.
 /// `(record {
 ///      hash: blob;
 /// })`
-#[derive(CandidType, Deserialize, Debug)]
-pub struct UploadChunkReply {
+#[derive(CandidType, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ChunkHash {
     #[serde(with = "serde_bytes")]
     pub hash: Vec<u8>,
 }
 
-impl Payload<'_> for UploadChunkReply {}
+impl Payload<'_> for ChunkHash {}
+
+/// Struct to be returned when uploading a Wasm chunk.
+/// `(record {
+///      hash: blob;
+/// })`
+pub type UploadChunkReply = ChunkHash;
 
 /// Struct used for encoding/decoding
 /// `(record {
@@ -2536,8 +2542,8 @@ impl StoredChunksArgs {
 }
 
 /// Struct to be returned when listing chunks in the Wasm store
-/// `(vec blob)`
+/// `(vec record { hash: blob })`
 #[derive(CandidType, Deserialize, Debug, PartialEq)]
-pub struct StoredChunksReply(pub Vec<serde_bytes::ByteBuf>);
+pub struct StoredChunksReply(pub Vec<ChunkHash>);
 
 impl Payload<'_> for StoredChunksReply {}

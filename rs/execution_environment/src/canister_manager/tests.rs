@@ -25,9 +25,9 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
     CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
-    CanisterStatusResultV2, CanisterStatusType, ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob,
-    InstallCodeArgsV2, Method, Payload, SkipPreUpgrade, StoredChunksArgs, StoredChunksReply,
-    UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
+    CanisterStatusResultV2, CanisterStatusType, ChunkHash, ClearChunkStoreArgs, CreateCanisterArgs,
+    EmptyBlob, InstallCodeArgsV2, Method, Payload, SkipPreUpgrade, StoredChunksArgs,
+    StoredChunksReply, UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -7385,8 +7385,6 @@ fn clear_chunk_store_works() {
 
 #[test]
 fn stored_chunks_works() {
-    use serde_bytes::ByteBuf;
-
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
     let mut test = ExecutionTestBuilder::new()
@@ -7440,7 +7438,12 @@ fn stored_chunks_works() {
         StoredChunksReply
     )
     .unwrap();
-    assert_eq!(reply, StoredChunksReply(vec![ByteBuf::from(hash1)]));
+    assert_eq!(
+        reply,
+        StoredChunksReply(vec![ChunkHash {
+            hash: hash1.to_vec()
+        }])
+    );
 
     // Then two chunks
     test.subnet_message(
@@ -7466,7 +7469,14 @@ fn stored_chunks_works() {
         StoredChunksReply
     )
     .unwrap();
-    let mut expected = vec![ByteBuf::from(hash1), ByteBuf::from(hash2)];
+    let mut expected = vec![
+        ChunkHash {
+            hash: hash1.to_vec(),
+        },
+        ChunkHash {
+            hash: hash2.to_vec(),
+        },
+    ];
     expected.sort();
     assert_eq!(reply, StoredChunksReply(expected));
 }
