@@ -1,10 +1,15 @@
-use ic_certification_version::{CertificationVersion::V11, CURRENT_CERTIFICATION_VERSION};
+use assert_matches::assert_matches;
+use ic_certification_version::{
+    CertificationVersion::{V11, V15},
+    CURRENT_CERTIFICATION_VERSION,
+};
 use ic_config::{
     flag_status::FlagStatus,
     state_manager::{lsmt_storage_default, Config},
 };
 use ic_crypto_tree_hash::{
-    flatmap, sparse_labeled_tree_from_paths, Label, LabeledTree, MixedHashTree, Path as LabelPath,
+    flatmap, sparse_labeled_tree_from_paths, Label, LabeledTree, LookupStatus, MixedHashTree,
+    Path as LabelPath,
 };
 use ic_interfaces::certification::Verifier;
 use ic_interfaces::p2p::state_sync::{ChunkId, StateSyncArtifactId, StateSyncClient};
@@ -16,9 +21,9 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::system_state::wasm_chunk_store::WasmChunkStore, page_map::PageIndex,
-    testing::ReplicatedStateTesting, Memory, NetworkTopology, NumWasmPages, PageMap,
-    ReplicatedState, Stream, SubnetTopology,
+    canister_state::system_state::wasm_chunk_store::WasmChunkStore,
+    metadata_state::ApiBoundaryNodeEntry, page_map::PageIndex, testing::ReplicatedStateTesting,
+    Memory, NetworkTopology, NumWasmPages, PageMap, ReplicatedState, Stream, SubnetTopology,
 };
 use ic_state_layout::{CheckpointLayout, ReadOnly, StateLayout, SYSTEM_METADATA_FILE};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
@@ -56,6 +61,7 @@ use ic_types::{
     CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, NumBytes, PrincipalId,
 };
 use ic_types::{epoch_from_height, QueryStatsEpoch};
+use maplit::btreemap;
 use nix::sys::time::TimeValLike;
 use nix::sys::{
     stat::{utimensat, UtimensatFlags},
@@ -3613,6 +3619,116 @@ fn certified_read_can_certify_node_public_keys_since_v12() {
                 "mixed_tree: {:#?}",
                 mixed_tree
             );
+        }
+    })
+}
+
+#[test]
+fn certified_read_can_certify_api_boundary_nodes_since_v16() {
+    use LabeledTree::*;
+
+    state_manager_test(|_metrics, state_manager| {
+        let (_, mut state) = state_manager.take_tip();
+
+        state.metadata.api_boundary_nodes = btreemap! {
+            node_test_id(11) => ApiBoundaryNodeEntry {
+                domain: "api-bn11-example.com".to_string(),
+                ipv4_address: Some("127.0.0.1".to_string()),
+                ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
+                pubkey: None,
+            },
+            node_test_id(12) => ApiBoundaryNodeEntry {
+                domain: "api-bn12-example.com".to_string(),
+                ipv4_address: None,
+                ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7335".to_string(),
+                pubkey: None,
+            },
+        };
+
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+
+        let api_bn_id = node_test_id(11).get();
+        let path: Vec<&[u8]> = vec![b"api_boundary_nodes", api_bn_id.as_ref()];
+
+        let label_path = LabelPath::new(path.iter().map(label).collect::<Vec<_>>());
+
+        let labeled_tree =
+            sparse_labeled_tree_from_paths(&[label_path]).expect("failed to create labeled tree");
+        let delivered_certification = certify_height(&state_manager, height(1));
+
+        let (_state, mixed_tree, cert) = state_manager
+            .read_certified_state(&labeled_tree)
+            .expect("failed to read certified state");
+        assert_eq!(cert, delivered_certification);
+
+        if CURRENT_CERTIFICATION_VERSION > V15 {
+            assert_eq!(
+                tree_payload(mixed_tree),
+                SubTree(flatmap! {
+                    label("api_boundary_nodes") => SubTree(
+                        flatmap! {
+                            label(node_test_id(11).get_ref()) => SubTree(
+                                flatmap!{
+                                    label("domain") => Leaf("api-bn11-example.com".to_string().into_bytes()),
+                                    label("ipv4_address") => Leaf("127.0.0.1".to_string().into_bytes()),
+                                    label("ipv6_address") => Leaf("2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string().into_bytes()),
+                            })
+                        })
+                })
+            );
+        } else {
+            assert!(
+                mixed_tree.lookup(&path[..]).is_absent(),
+                "mixed_tree: {:#?}",
+                mixed_tree
+            );
+        }
+    })
+}
+
+#[test]
+fn certified_read_succeeds_for_empty_forks() {
+    state_manager_test(|_metrics, state_manager| {
+        let (_, state) = state_manager.take_tip();
+
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+
+        let path: LabeledTree<()> = LabeledTree::SubTree(flatmap! {
+            label("api_boundary_nodes") => LabeledTree::Leaf(()),
+            label("canister") => LabeledTree::Leaf(()),
+            label("streams") => LabeledTree::Leaf(()),
+        });
+
+        certify_height(&state_manager, height(1));
+        let (_, mixed_tree, _) = state_manager.read_certified_state(&path).unwrap();
+        let lookup_canister = mixed_tree.lookup(&[&b"canister"[..]]);
+        let lookup_streams = mixed_tree.lookup(&[&b"streams"[..]]);
+        let lookup_api_boundary_nodes = mixed_tree.lookup(&[&b"api_boundary_nodes"[..]]);
+
+        assert_matches!(
+            lookup_canister,
+            LookupStatus::Found(&ic_crypto_tree_hash::MixedHashTree::Empty)
+        );
+
+        assert_matches!(
+            lookup_streams,
+            LookupStatus::Found(&ic_crypto_tree_hash::MixedHashTree::Empty)
+        );
+
+        if CURRENT_CERTIFICATION_VERSION > V15 {
+            // If there are no api boundary nodes present, the lookup status should be `MixedHashTree::Empty`.
+            // This behavior is in consistent with looking up  `/streams` and `/canister`.
+            assert_matches!(
+                lookup_api_boundary_nodes,
+                LookupStatus::Found(&ic_crypto_tree_hash::MixedHashTree::Empty)
+            );
+        } else {
+            // The `/api_boundary_nodes` subtree is not added to the state tree yet. The lookup status should be absent.
+            assert!(
+                lookup_api_boundary_nodes.is_absent(),
+                "api_boundary_nodes: {:#?}",
+                lookup_api_boundary_nodes
+            )
         }
     })
 }

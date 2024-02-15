@@ -158,7 +158,7 @@ prop_compose! {
                 let req: CanonicalRequestV13 = (&request, certification_version).into();
                 req.try_into().unwrap()
             }
-            V14 | V15 => {
+            V14 | V15 | V16 => {
                 let req: CanonicalRequestV14 = (&request, certification_version).into();
                 req.try_into().unwrap()
             }
