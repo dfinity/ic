@@ -4,6 +4,8 @@
 // A replicated query is a call to a `canister_query` function in update
 // context.
 
+use std::time::Duration;
+
 use crate::execution::common::{
     finish_call_with_error, validate_message, wasm_result_to_query_response,
 };
@@ -167,5 +169,6 @@ pub fn execute_replicated_query(
         response,
         instructions_used,
         heap_delta: NumBytes::from(0),
+        call_duration: Some(Duration::from_secs(0)),
     }
 }

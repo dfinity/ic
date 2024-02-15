@@ -485,6 +485,7 @@ impl<'a> QueryContext<'a> {
             // This `unwrap()` cannot fail because of the non-optional `call_context_id`.
             .unwrap()
             .on_canister_result(call_context_id, callback_id, result, instructions_used)
+            .0
     }
 
     /// Observe System API call counters in the corresponding metrics.

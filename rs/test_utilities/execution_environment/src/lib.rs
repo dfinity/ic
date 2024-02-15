@@ -1085,6 +1085,7 @@ impl ExecutionTest {
                 response,
                 instructions_used,
                 heap_delta,
+                call_duration: _,
             } => (canister, response, instructions_used, heap_delta),
             ExecuteMessageResult::Paused { .. } => {
                 unreachable!("Unexpected paused execution")

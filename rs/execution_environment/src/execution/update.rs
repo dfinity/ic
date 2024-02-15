@@ -440,7 +440,7 @@ impl UpdateHelper {
                 .get()
                 .saturating_sub(output.num_instructions_left.get()),
         );
-        let action = self
+        let (action, call_context) = self
             .canister
             .system_state
             .call_context_manager_mut()
@@ -485,6 +485,8 @@ impl UpdateHelper {
             response,
             instructions_used,
             heap_delta,
+            call_duration: call_context
+                .map(|call_context| round.time.saturating_duration_since(call_context.time())),
         }
     }
 
