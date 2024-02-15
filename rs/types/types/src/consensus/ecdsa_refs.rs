@@ -661,7 +661,7 @@ impl TryFrom<&pb::UnmaskedTimesMaskedParams> for UnmaskedTimesMaskedParams {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct QuadrupleInCreation {
-    pub kappa_config: RandomTranscriptParams,
+    pub kappa_masked_config: Option<RandomTranscriptParams>,
     pub kappa_masked: Option<MaskedTranscript>,
 
     pub lambda_config: RandomTranscriptParams,
@@ -680,7 +680,9 @@ pub struct QuadrupleInCreation {
 
 impl Hash for QuadrupleInCreation {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.kappa_config.hash(state);
+        if let Some(config) = &self.kappa_masked_config {
+            config.hash(state);
+        }
         self.kappa_masked.hash(state);
         self.lambda_config.hash(state);
         self.lambda_masked.hash(state);
@@ -699,11 +701,11 @@ impl Hash for QuadrupleInCreation {
 impl QuadrupleInCreation {
     /// Initialization with the given random param pair.
     pub fn new(
-        kappa_config: RandomTranscriptParams,
+        kappa_masked_config: RandomTranscriptParams,
         lambda_config: RandomTranscriptParams,
     ) -> Self {
         QuadrupleInCreation {
-            kappa_config,
+            kappa_masked_config: Some(kappa_masked_config),
             kappa_masked: None,
             lambda_config,
             lambda_masked: None,
@@ -725,8 +727,8 @@ impl QuadrupleInCreation {
         &self,
     ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
         let mut params = Vec::new();
-        if self.kappa_masked.is_none() {
-            params.push(self.kappa_config.as_ref())
+        if let (Some(config), None) = (&self.kappa_masked_config, &self.kappa_masked) {
+            params.push(config.as_ref())
         }
         if self.lambda_masked.is_none() {
             params.push(self.lambda_config.as_ref())
@@ -748,7 +750,9 @@ impl QuadrupleInCreation {
     /// Returns the refs held
     pub fn get_refs(&self) -> Vec<TranscriptRef> {
         let mut ret = Vec::new();
-        ret.append(&mut self.kappa_config.as_ref().get_refs());
+        if let Some(config) = &self.kappa_masked_config {
+            ret.append(&mut config.as_ref().get_refs());
+        }
         if let Some(r) = &self.kappa_masked {
             ret.push(*r.as_ref());
         }
@@ -786,7 +790,9 @@ impl QuadrupleInCreation {
 
     /// Updates the height of the references.
     pub fn update(&mut self, height: Height) {
-        self.kappa_config.as_mut().update(height);
+        if let Some(config) = &mut self.kappa_masked_config {
+            config.as_mut().update(height);
+        }
         if let Some(r) = &mut self.kappa_masked {
             r.as_mut().update(height);
         }
@@ -823,7 +829,9 @@ impl QuadrupleInCreation {
     /// Returns the refs held and updates the height if specified
     pub fn get_refs_and_update(&mut self, height: Option<Height>) -> Vec<TranscriptRef> {
         let mut ret = Vec::new();
-        ret.append(&mut self.kappa_config.as_mut().get_refs_and_update(height));
+        if let Some(config) = &mut self.kappa_masked_config {
+            ret.append(&mut config.as_mut().get_refs_and_update(height));
+        }
         if let Some(r) = &mut self.kappa_masked {
             ret.push(r.as_mut().get_and_update(height));
         }
@@ -863,7 +871,10 @@ impl QuadrupleInCreation {
 impl From<&QuadrupleInCreation> for pb::QuadrupleInCreation {
     fn from(quadruple: &QuadrupleInCreation) -> Self {
         Self {
-            kappa_config: Some((&quadruple.kappa_config).into()),
+            kappa_masked_config: quadruple
+                .kappa_masked_config
+                .as_ref()
+                .map(|params| params.into()),
             kappa_masked: quadruple
                 .kappa_masked
                 .as_ref()
@@ -912,16 +923,18 @@ impl From<&QuadrupleInCreation> for pb::QuadrupleInCreation {
 impl TryFrom<&pb::QuadrupleInCreation> for QuadrupleInCreation {
     type Error = ProxyDecodeError;
     fn try_from(quadruple: &pb::QuadrupleInCreation) -> Result<Self, Self::Error> {
-        let kappa_config: RandomTranscriptParams = try_from_option_field(
-            quadruple.kappa_config.as_ref(),
-            "QuadrupleInCreation::kappa_config",
-        )?;
-
-        let kappa_masked: Option<MaskedTranscript> = quadruple
-            .kappa_masked
-            .as_ref()
-            .map(|transcript| transcript.try_into())
-            .transpose()?;
+        let (kappa_masked_config, kappa_masked) =
+            if let Some(config_proto) = &quadruple.kappa_masked_config {
+                let config: RandomTranscriptParams = config_proto.try_into()?;
+                let transcript: Option<MaskedTranscript> = quadruple
+                    .kappa_masked
+                    .as_ref()
+                    .map(|transcript| transcript.try_into())
+                    .transpose()?;
+                (Some(config), transcript)
+            } else {
+                (None, None)
+            };
 
         let lambda_config: RandomTranscriptParams = try_from_option_field(
             quadruple.lambda_config.as_ref(),
@@ -982,7 +995,7 @@ impl TryFrom<&pb::QuadrupleInCreation> for QuadrupleInCreation {
             };
 
         Ok(Self {
-            kappa_config,
+            kappa_masked_config,
             kappa_masked,
             lambda_config,
             lambda_masked,

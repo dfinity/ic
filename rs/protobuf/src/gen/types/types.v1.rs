@@ -570,7 +570,7 @@ pub struct UnmaskedTimesMaskedParams {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QuadrupleInCreation {
     #[prost(message, optional, tag = "1")]
-    pub kappa_config: ::core::option::Option<RandomTranscriptParams>,
+    pub kappa_masked_config: ::core::option::Option<RandomTranscriptParams>,
     #[prost(message, optional, tag = "2")]
     pub kappa_masked: ::core::option::Option<MaskedTranscript>,
     #[prost(message, optional, tag = "3")]
