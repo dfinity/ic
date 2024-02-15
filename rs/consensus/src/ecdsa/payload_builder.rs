@@ -677,8 +677,13 @@ pub(crate) fn create_data_payload_helper_2(
     }
 
     let matched_quadruples = if ECDSA_IMPROVED_LATENCY {
+        // We count the number of quadruples in the payload that were already matched,
+        // such that they can be replenished. In this process we don't consider quadruples
+        // that were matched to requests for disabled key IDs, since these requests are
+        // rejected immediately without consuming the quadruples.
         all_signing_requests
             .values()
+            .filter(|context| enabled_signing_keys.contains(&context.key_id))
             .filter_map(|context| context.matched_quadruple.as_ref())
             .filter(|(qid, _)| ecdsa_payload.available_quadruples.contains_key(qid))
             .count()
@@ -1402,6 +1407,104 @@ mod tests {
         );
         assert_eq!(result.len(), 1);
         assert_eq!(result.keys().next().unwrap().clone(), request_id_0);
+    }
+
+    #[test]
+    fn test_quadruple_recreation() {
+        let valid_key_id = EcdsaKeyId::from_str("Secp256k1:valid_key").unwrap();
+        let disabled_key_id = EcdsaKeyId::from_str("Secp256k1:disabled_key").unwrap();
+        let valid_keys = BTreeSet::from([valid_key_id.clone()]);
+
+        let (mut ecdsa_payload, _env) = set_up_ecdsa_payload_with_key();
+        // Add two quadruples
+        let quadruple_for_valid_key =
+            create_available_quadruple(&mut ecdsa_payload, valid_key_id.clone(), 10);
+        let quadruple_for_disabled_key =
+            create_available_quadruple(&mut ecdsa_payload, disabled_key_id.clone(), 11);
+        let non_existant_quadruple_for_valid_key = ecdsa_payload
+            .uid_generator
+            .next_quadruple_id(valid_key_id.clone());
+
+        let contexts = set_up_sign_with_ecdsa_contexts(vec![
+            // Two request contexts without quadruple
+            (valid_key_id.clone(), 0, mock_time(), None),
+            (disabled_key_id.clone(), 1, mock_time(), None),
+            // One valid context with matched quadruple
+            (
+                valid_key_id.clone(),
+                2,
+                mock_time(),
+                Some(quadruple_for_valid_key),
+            ),
+            // One invalid context with matched quadruple
+            (
+                disabled_key_id.clone(),
+                3,
+                mock_time(),
+                Some(quadruple_for_disabled_key),
+            ),
+            // One valid context matched to non-existant quadruple
+            (
+                valid_key_id.clone(),
+                4,
+                mock_time(),
+                Some(non_existant_quadruple_for_valid_key),
+            ),
+        ]);
+
+        let ecdsa_config = EcdsaConfig {
+            quadruples_to_create_in_advance: 5,
+            key_ids: vec![valid_key_id.clone()],
+            ..EcdsaConfig::default()
+        };
+
+        assert_eq!(ecdsa_payload.quadruples_in_creation.len(), 0);
+        assert_eq!(ecdsa_payload.available_quadruples.len(), 2);
+
+        create_data_payload_helper_2(
+            &mut ecdsa_payload,
+            Height::from(5),
+            mock_time(),
+            &ecdsa_config,
+            &valid_keys,
+            RegistryVersion::from(9),
+            CertifiedHeight::ReachedSummaryHeight,
+            &[node_test_id(0)],
+            &contexts,
+            &BTreeMap::default(),
+            &TestEcdsaBlockReader::new(),
+            &TestEcdsaTranscriptBuilder::new(),
+            &TestEcdsaSignatureBuilder::new(),
+            /*ecdsa_payload_metrics*/ None,
+            &ic_logger::replica_logger::no_op_logger(),
+        )
+        .unwrap();
+
+        let num_quadruples_in_creation = ecdsa_payload.quadruples_in_creation.len() as u32;
+        let num_available_quadruples = ecdsa_payload.available_quadruples.len() as u32;
+        if ECDSA_IMPROVED_LATENCY {
+            // In the new implementation, the two matched quadruples remain
+            // in available_quadruples.
+            assert_eq!(num_available_quadruples, 2);
+            // Usually, matched quadruples are replenished, but since one
+            // of them was matched to a disabled key id whose request context
+            // is rejected, the quadruple is "reused" and not replenished.
+            assert_eq!(
+                num_quadruples_in_creation,
+                ecdsa_config.quadruples_to_create_in_advance - 1
+            );
+        } else {
+            // In the old implementation, both quadruples are matched to
+            // two of the contexts requesting the valid keys, as the
+            // matched_quadruple field is ignored.
+            // The matched quadruples are moved to ongoing_signatures,
+            // thus we start the creation of 5 new quadruples.
+            assert_eq!(num_available_quadruples, 0);
+            assert_eq!(
+                num_quadruples_in_creation,
+                ecdsa_config.quadruples_to_create_in_advance
+            );
+        }
     }
 
     #[test]
