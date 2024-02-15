@@ -6,16 +6,14 @@ use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
 use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_crypto_ecdsa_secp256k1::{PrivateKey, PublicKey};
 use ic_crypto_extended_bip32::{DerivationIndex, DerivationPath};
-use ic_crypto_internal_seed::Seed;
-use ic_crypto_internal_threshold_sig_bls12381::api::{
-    combine_signatures, combined_public_key, generate_threshold_key, sign_message,
+use ic_crypto_test_utils_ni_dkg::{
+    dummy_initial_dkg_transcript_with_master_key, sign_message, SecretKeyBytes,
 };
-use ic_crypto_internal_threshold_sig_bls12381::types::SecretKeyBytes;
-use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
 use ic_crypto_tree_hash::{
     flatmap, sparse_labeled_tree_from_paths, Label, LabeledTree, LabeledTree::SubTree,
     Path as LabeledTreePath,
 };
+use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_cycles_account_manager::CyclesAccountManager;
 pub use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::{ExecutionServices, IngressHistoryReaderImpl};
@@ -47,6 +45,7 @@ pub use ic_management_canister_types::{
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
+use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
 use ic_protobuf::registry::{
     crypto::v1::EcdsaSigningSubnetList,
     node::v1::{ConnectionEndpoint, NodeRecord},
@@ -60,9 +59,9 @@ use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_client_helpers::provisional_whitelist::ProvisionalWhitelistRegistry;
 use ic_registry_client_helpers::subnet::{SubnetListRegistry, SubnetRegistry};
 use ic_registry_keys::{
-    make_canister_migrations_record_key, make_crypto_node_key, make_ecdsa_signing_subnet_list_key,
-    make_node_record_key, make_provisional_whitelist_record_key, make_routing_table_record_key,
-    ROOT_SUBNET_ID_KEY,
+    make_canister_migrations_record_key, make_catch_up_package_contents_key, make_crypto_node_key,
+    make_ecdsa_signing_subnet_list_key, make_node_record_key,
+    make_provisional_whitelist_record_key, make_routing_table_record_key, ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, INITIAL_REGISTRY_VERSION};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -85,8 +84,7 @@ use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_int_counter, fetch_int_gauge, fetch_int_gauge_vec, Labels,
 };
 use ic_test_utilities_registry::{
-    add_single_subnet_record, add_subnet_key_record, add_subnet_list_record,
-    insert_initial_dkg_transcript, SubnetRecordBuilder,
+    add_single_subnet_record, add_subnet_key_record, add_subnet_list_record, SubnetRecordBuilder,
 };
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_types::artifact::IngressMessageId;
@@ -94,7 +92,9 @@ use ic_types::batch::{BlockmakerMetrics, QueryStatsPayload, TotalQueryStats, Val
 pub use ic_types::canister_http::{CanisterHttpMethod, CanisterHttpRequestContext};
 use ic_types::consensus::block_maker::SubnetRecords;
 use ic_types::consensus::certification::CertificationContent;
-use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet};
+use ic_types::crypto::threshold_sig::ni_dkg::{
+    NiDkgId, NiDkgTag, NiDkgTargetSubnet, NiDkgTranscript,
+};
 pub use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::{
     canister_threshold_sig::MasterEcdsaPublicKey, AlgorithmId, CombinedThresholdSig,
@@ -116,8 +116,7 @@ use ic_types::{
         SignedIngress, UserQuery,
     },
     xnet::StreamIndex,
-    CountBytes, CryptoHashOfPartialState, Height, NodeId, NumberOfNodes, Randomness,
-    RegistryVersion,
+    CountBytes, CryptoHashOfPartialState, Height, NodeId, Randomness, RegistryVersion,
 };
 pub use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -134,11 +133,9 @@ use serde::Deserialize;
 
 pub use ic_error_types::RejectCode;
 use maplit::btreemap;
-use rand::{rngs::StdRng, SeedableRng};
+use rand::{rngs::StdRng, Rng, SeedableRng};
 use serde::Serialize;
 pub use slog::Level;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use std::io::stderr;
 use std::path::Path;
 use std::str::FromStr;
@@ -175,16 +172,15 @@ impl Verifier for FakeVerifier {
     }
 }
 
-/// Constructs the initial version of the registry containing
-/// root subnet ID, routing table, subnet list,
-/// and provisional whitelist.
-fn init_registry(
+/// Adds root subnet ID, routing table, subnet list,
+/// and provisional whitelist to the registry.
+pub fn finalize_registry(
     nns_subnet_id: SubnetId,
-    subnet_list: Vec<SubnetId>,
     routing_table: RoutingTable,
-    registry_version: RegistryVersion,
+    subnet_list: Vec<SubnetId>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
 ) {
+    let registry_version = INITIAL_REGISTRY_VERSION;
     let root_subnet_id_proto = SubnetIdProto {
         principal_id: Some(PrincipalIdIdProto {
             raw: nns_subnet_id.get_ref().to_vec(),
@@ -217,18 +213,20 @@ fn init_registry(
 }
 
 /// Adds subnet-related records to registry.
-/// Pre-condition: `init_registry` was called before with `routing_table` containing `subnet_id`.
+/// Note: `finalize_registry` must be called with `routing_table` containing `subnet_id`
+/// before any other public method of the `StateMachine` (except for `get_subnet_id`) is invoked.
 fn make_nodes_registry(
     subnet_id: SubnetId,
     subnet_type: SubnetType,
     ecdsa_keys: &[EcdsaKeyId],
     features: SubnetFeatures,
-    registry_version: RegistryVersion,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     nodes: &Vec<StateMachineNode>,
     is_root_subnet: bool,
     public_key: ThresholdSigPublicKey,
+    ni_dkg_transcript: NiDkgTranscript,
 ) -> Arc<FakeRegistryClient> {
+    let registry_version = INITIAL_REGISTRY_VERSION;
     // ECDSA subnet_id must be different from nns_subnet_id, otherwise
     // `sign_with_ecdsa` won't be charged.
     let subnet_id_proto = SubnetIdProto {
@@ -269,19 +267,11 @@ fn make_nodes_registry(
                 Some(node_record),
             )
             .unwrap();
-
-        let node_pk_proto = PublicKeyProto {
-            algorithm: AlgorithmId::Ed25519 as i32,
-            key_value: node.signing_key.verification_key().to_bytes().to_vec(),
-            version: 0,
-            proof_data: None,
-            timestamp: None,
-        };
         registry_data_provider
             .add(
                 &make_crypto_node_key(node.node_id, KeyPurpose::NodeSigning),
                 registry_version,
-                Some(node_pk_proto),
+                Some(node.node_pk_proto.clone()),
             )
             .unwrap();
     }
@@ -316,12 +306,20 @@ fn make_nodes_registry(
         .with_features(features)
         .build();
 
-    insert_initial_dkg_transcript(
-        registry_version.get(),
-        subnet_id,
-        &record,
-        &registry_data_provider,
-    );
+    // Insert initial DKG transcripts
+    let cup_contents = CatchUpPackageContents {
+        initial_ni_dkg_transcript_high_threshold: Some(ni_dkg_transcript.clone().into()),
+        initial_ni_dkg_transcript_low_threshold: Some(ni_dkg_transcript.into()),
+        ..Default::default()
+    };
+    registry_data_provider
+        .add(
+            &make_catch_up_package_contents_key(subnet_id),
+            INITIAL_REGISTRY_VERSION,
+            Some(cup_contents),
+        )
+        .expect("Failed to add subnet record.");
+
     add_single_subnet_record(
         &registry_data_provider,
         registry_version.get(),
@@ -539,6 +537,7 @@ impl XNetSlicePool for PocketXNetSlicePoolImpl {
 /// A replica node of the subnet with the corresponding `StateMachine`.
 struct StateMachineNode {
     node_id: NodeId,
+    node_pk_proto: PublicKeyProto,
     signing_key: ed25519_consensus::SigningKey,
 }
 
@@ -547,11 +546,19 @@ impl From<u64> for StateMachineNode {
         let mut bytes = [0; 32];
         bytes[..8].copy_from_slice(&i.to_le_bytes());
         let signing_key: ed25519_consensus::SigningKey = bytes.into();
+        let node_pk_proto = PublicKeyProto {
+            algorithm: AlgorithmId::Ed25519 as i32,
+            key_value: signing_key.verification_key().to_bytes().to_vec(),
+            version: 0,
+            proof_data: None,
+            timestamp: None,
+        };
         Self {
             node_id: PrincipalId::new_self_authenticating(
                 &signing_key.verification_key().to_bytes(),
             )
             .into(),
+            node_pk_proto,
             signing_key,
         }
     }
@@ -562,6 +569,7 @@ impl From<u64> for StateMachineNode {
 pub struct StateMachine {
     subnet_id: SubnetId,
     public_key: ThresholdSigPublicKey,
+    public_key_der: Vec<u8>,
     secret_key: SecretKeyBytes,
     ecdsa_secret_key: PrivateKey,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
@@ -610,12 +618,7 @@ pub struct StateMachineBuilder {
     subnet_type: SubnetType,
     subnet_size: usize,
     nns_subnet_id: Option<SubnetId>,
-    subnet_id: SubnetId,
-    /// The `subnet_list` should contain all subnet IDs with corresponding `SubnetRecord`s available in the registry
-    /// (subnet IDs in the `routing_table` are independent of this `subnet_list`);
-    /// if `subnet_list` is `None` here, then the actual `subnet_list` used when initializing the registry
-    /// consists of a single subnet ID from this `StateMachineBuilder`.
-    subnet_list: Option<Vec<SubnetId>>,
+    subnet_id: Option<SubnetId>,
     routing_table: RoutingTable,
     use_cost_scaling_flag: bool,
     ecdsa_keys: Vec<EcdsaKeyId>,
@@ -623,38 +626,13 @@ pub struct StateMachineBuilder {
     runtime: Option<Arc<Runtime>>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     lsmt_override: Option<FlagStatus>,
-    public_key: ThresholdSigPublicKey,
-    secret_key: SecretKeyBytes,
+    is_root_subnet: bool,
+    seq_no: u8,
+    with_extra_canister_range: Option<std::ops::RangeInclusive<CanisterId>>,
 }
 
 impl StateMachineBuilder {
-    fn compute_subnet_id_and_key_from_seed(
-        seed: [u8; 32],
-    ) -> (SubnetId, ThresholdSigPublicKey, SecretKeyBytes) {
-        let (public_coefficients, secret_key_bytes) = generate_threshold_key(
-            Seed::from_bytes(&seed),
-            NumberOfNodes::new(1),
-            NumberOfNodes::new(1),
-        )
-        .unwrap();
-        let public_key = ThresholdSigPublicKey::from(CspThresholdSigPublicKey::from(
-            combined_public_key(&public_coefficients).unwrap(),
-        ));
-        let secret_key = secret_key_bytes.first().unwrap().clone();
-        let own_subnet_id = SubnetId::from(PrincipalId::new_self_authenticating(
-            &public_key.into_bytes(),
-        ));
-        (own_subnet_id, public_key, secret_key)
-    }
-
     pub fn new() -> Self {
-        // fixed seed to keep tests reproducible
-        let seed: [u8; 32] = [
-            3, 5, 31, 46, 53, 66, 100, 101, 109, 121, 126, 129, 133, 152, 163, 165, 167, 186, 198,
-            203, 206, 208, 211, 216, 229, 232, 233, 236, 242, 244, 246, 250,
-        ];
-        let (own_subnet_id, public_key, secret_key) =
-            Self::compute_subnet_id_and_key_from_seed(seed);
         Self {
             state_dir: TempDir::new().expect("failed to create a temporary directory"),
             nonce: 0,
@@ -665,8 +643,7 @@ impl StateMachineBuilder {
             use_cost_scaling_flag: false,
             subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
             nns_subnet_id: None,
-            subnet_id: own_subnet_id,
-            subnet_list: None,
+            subnet_id: None,
             routing_table: RoutingTable::new(),
             ecdsa_keys: vec![EcdsaKeyId {
                 curve: EcdsaCurve::Secp256k1,
@@ -679,8 +656,9 @@ impl StateMachineBuilder {
             runtime: None,
             registry_data_provider: Arc::new(ProtoRegistryDataProvider::new()),
             lsmt_override: None,
-            public_key,
-            secret_key,
+            is_root_subnet: false,
+            seq_no: 0,
+            with_extra_canister_range: None,
         }
     }
 
@@ -740,33 +718,13 @@ impl StateMachineBuilder {
         }
     }
 
-    pub fn with_default_canister_range(mut self) -> Self {
-        self.routing_table = RoutingTable::new();
-        routing_table_insert_subnet(&mut self.routing_table, self.subnet_id)
-            .expect("failed to update the routing table");
-        self
+    pub fn with_default_canister_range(self) -> Self {
+        self // TODO: remove this pattern
     }
 
-    pub fn with_extra_canister_range(
-        mut self,
-        id_range: std::ops::RangeInclusive<CanisterId>,
-    ) -> Self {
-        self.routing_table
-            .assign_ranges(
-                CanisterIdRanges::try_from(vec![CanisterIdRange {
-                    start: *id_range.start(),
-                    end: *id_range.end(),
-                }])
-                .expect("invalid canister range"),
-                self.subnet_id,
-            )
-            .expect("failed to assign a canister range");
-        self
-    }
-
-    pub fn with_subnet_list(self, subnet_list: Vec<SubnetId>) -> Self {
+    pub fn with_extra_canister_range(self, id_range: std::ops::RangeInclusive<CanisterId>) -> Self {
         Self {
-            subnet_list: Some(subnet_list),
+            with_extra_canister_range: Some(id_range),
             ..self
         }
     }
@@ -779,7 +737,10 @@ impl StateMachineBuilder {
     }
 
     pub fn with_subnet_id(self, subnet_id: SubnetId) -> Self {
-        Self { subnet_id, ..self }
+        Self {
+            subnet_id: Some(subnet_id),
+            ..self
+        }
     }
 
     pub fn with_use_cost_scaling_flag(self, use_cost_scaling_flag: bool) -> Self {
@@ -795,8 +756,14 @@ impl StateMachineBuilder {
         Self { ecdsa_keys, ..self }
     }
 
-    pub fn with_ecdsa_keys(self, ecdsa_keys: Vec<EcdsaKeyId>) -> Self {
-        Self { ecdsa_keys, ..self }
+    pub fn with_multisubnet_ecdsa_key(self) -> Self {
+        Self {
+            ecdsa_keys: vec![EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: format!("master_ecdsa_public_key_{}", self.seq_no),
+            }],
+            ..self
+        }
     }
 
     pub fn with_features(self, features: SubnetFeatures) -> Self {
@@ -820,40 +787,18 @@ impl StateMachineBuilder {
         }
     }
 
-    pub fn with_subnet_key_seed(self, seed: [u8; 32]) -> Self {
-        let (own_subnet_id, public_key, secret_key) =
-            Self::compute_subnet_id_and_key_from_seed(seed);
+    pub fn with_subnet_seq_no(self, seq_no: u8) -> Self {
+        Self { seq_no, ..self }
+    }
+
+    pub fn with_root_subnet_config(self) -> Self {
         Self {
-            subnet_id: own_subnet_id,
-            public_key,
-            secret_key,
+            is_root_subnet: true,
             ..self
         }
     }
 
-    pub fn with_root_subnet(self) -> Self {
-        Self {
-            nns_subnet_id: Some(self.subnet_id),
-            ..self
-        }
-    }
-
-    pub fn build(self) -> StateMachine {
-        let nns_subnet_id = self.nns_subnet_id.unwrap_or(self.subnet_id);
-        let mut routing_table = self.routing_table;
-        if routing_table.is_empty() {
-            routing_table_insert_subnet(&mut routing_table, self.subnet_id).unwrap();
-        }
-        let registry_version = INITIAL_REGISTRY_VERSION;
-        if self.registry_data_provider.is_empty() {
-            init_registry(
-                nns_subnet_id,
-                self.subnet_list.unwrap_or(vec![self.subnet_id]),
-                routing_table,
-                registry_version,
-                self.registry_data_provider.clone(),
-            );
-        }
+    pub fn build_internal(self) -> StateMachine {
         StateMachine::setup_from_dir(
             self.state_dir,
             self.nonce,
@@ -872,13 +817,44 @@ impl StateMachineBuilder {
                     .expect("failed to create a tokio runtime")
                     .into()
             }),
-            registry_version,
             self.registry_data_provider,
             self.lsmt_override,
-            self.public_key,
-            self.secret_key,
-            self.subnet_id == nns_subnet_id,
+            self.is_root_subnet,
+            self.seq_no,
         )
+    }
+
+    pub fn build(self) -> StateMachine {
+        let nns_subnet_id = self.nns_subnet_id;
+        let mut routing_table = self.routing_table.clone();
+        let registry_data_provider = self.registry_data_provider.clone();
+        let extra_canister_range = self.with_extra_canister_range.clone();
+        let sm = self.build_internal();
+        let subnet_id = sm.get_subnet_id();
+        if routing_table.is_empty() {
+            routing_table_insert_subnet(&mut routing_table, subnet_id).unwrap();
+        }
+        if let Some(id_range) = extra_canister_range {
+            routing_table
+                .assign_ranges(
+                    CanisterIdRanges::try_from(vec![CanisterIdRange {
+                        start: *id_range.start(),
+                        end: *id_range.end(),
+                    }])
+                    .expect("invalid canister range"),
+                    subnet_id,
+                )
+                .expect("failed to assign a canister range");
+        }
+        let subnet_list = vec![sm.get_subnet_id()];
+        finalize_registry(
+            nns_subnet_id.unwrap_or(subnet_id),
+            routing_table,
+            subnet_list,
+            registry_data_provider,
+        );
+        sm.reload_registry();
+        sm
     }
 
     /// Build a `StateMachine` and register it for multi-subnet testing
@@ -888,8 +864,8 @@ impl StateMachineBuilder {
         subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>>,
     ) -> Arc<StateMachine> {
         // Build a `StateMachine` for the subnet with `self.subnet_id`.
-        let subnet_id = self.subnet_id;
-        let sm = Arc::new(self.build());
+        let sm = Arc::new(self.build_internal());
+        let subnet_id = sm.get_subnet_id();
 
         // Register this new `StateMachine` in the *shared* association
         // of subnet IDs and their corresponding `StateMachine`s.
@@ -1058,17 +1034,15 @@ impl StateMachine {
         checkpoints_enabled: bool,
         subnet_type: SubnetType,
         subnet_size: usize,
-        subnet_id: SubnetId,
+        subnet_id: Option<SubnetId>,
         use_cost_scaling_flag: bool,
         ecdsa_keys: Vec<EcdsaKeyId>,
         features: SubnetFeatures,
         runtime: Arc<Runtime>,
-        registry_version: RegistryVersion,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
         lsmt_override: Option<FlagStatus>,
-        public_key: ThresholdSigPublicKey,
-        secret_key: SecretKeyBytes,
         is_root_subnet: bool,
+        seq_no: u8,
     ) -> Self {
         let replica_logger = replica_logger();
 
@@ -1079,26 +1053,26 @@ impl StateMachine {
             None => (SubnetConfig::new(subnet_type), HypervisorConfig::default()),
         };
 
-        // Every subnet should have unique node IDs so we first compute
-        // a hash of the subnet ID and interpret it as a base value
-        // for node ID generation.
-        let mut s = DefaultHasher::new();
-        subnet_id.hash(&mut s);
-        let node_offset = s.finish();
-
+        let node_offset: u64 = StdRng::seed_from_u64(seq_no.into()).gen();
         let nodes: Vec<StateMachineNode> = (0..subnet_size as u64)
             .map(|i| (node_offset + i).into())
             .collect();
+        let (ni_dkg_transcript, secret_key) =
+            dummy_initial_dkg_transcript_with_master_key(&mut StdRng::seed_from_u64(seq_no.into()));
+        let public_key = (&ni_dkg_transcript).try_into().unwrap();
+        let public_key_der = threshold_sig_public_key_to_der(public_key).unwrap();
+        let subnet_id =
+            subnet_id.unwrap_or(PrincipalId::new_self_authenticating(&public_key_der).into());
         let registry_client = make_nodes_registry(
             subnet_id,
             subnet_type,
             &ecdsa_keys,
             features,
-            registry_version,
             registry_data_provider.clone(),
             &nodes,
             is_root_subnet,
             public_key,
+            ni_dkg_transcript,
         );
 
         let mut sm_config = ic_config::state_manager::Config::new(state_dir.path().to_path_buf());
@@ -1235,6 +1209,7 @@ impl StateMachine {
             subnet_id,
             secret_key,
             public_key,
+            public_key_der,
             ecdsa_secret_key,
             registry_data_provider,
             registry_client: registry_client.clone(),
@@ -1739,6 +1714,11 @@ impl StateMachine {
         self.public_key
     }
 
+    /// Returns the root key of the state machine.
+    pub fn root_key_der(&self) -> Vec<u8> {
+        self.public_key_der.clone()
+    }
+
     /// Blocks until the hash of the latest state is computed.
     ///
     /// # Panics
@@ -2221,17 +2201,14 @@ impl StateMachine {
     }
 
     fn certify_hash(&self, height: &Height, hash: &CryptoHashOfPartialState) -> Certification {
-        let signature_bytes = Some(
-            sign_message(
-                CertificationContent::new(hash.clone())
-                    .as_signed_bytes()
-                    .as_slice(),
-                &self.secret_key,
-            )
-            .unwrap(),
+        let signature = sign_message(
+            CertificationContent::new(hash.clone())
+                .as_signed_bytes()
+                .as_slice(),
+            &self.secret_key,
         );
-        let signature = combine_signatures(&[signature_bytes], NumberOfNodes::new(1)).unwrap();
-        let combined_sig = CombinedThresholdSigOf::from(CombinedThresholdSig(signature.0.to_vec()));
+        let combined_sig =
+            CombinedThresholdSigOf::from(CombinedThresholdSig(signature.as_ref().to_vec()));
         Certification {
             height: *height,
             signed: Signed {

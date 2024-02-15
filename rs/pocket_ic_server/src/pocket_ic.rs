@@ -5,16 +5,14 @@ use crate::{copy_dir, BlobStore};
 use ic_config::execution_environment;
 use ic_config::subnet_config::SubnetConfig;
 use ic_crypto_sha2::Sha256;
-use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_management_canister_types::CanisterInstallMode;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
-    EcdsaCurve, EcdsaKeyId, IngressState, IngressStatus, StateMachine, StateMachineBuilder,
+    finalize_registry, IngressState, IngressStatus, StateMachine, StateMachineBuilder,
     StateMachineConfig, SubmitIngressError, Time,
 };
-use ic_test_utilities::types::ids::subnet_test_id;
 use ic_types::messages::CertificateDelegation;
 use ic_types::{CanisterId, PrincipalId, SubnetId};
 use itertools::Itertools;
@@ -68,7 +66,6 @@ impl PocketIc {
 
         let mut range_gen = RangeGen::new();
         let mut subnet_config_info: Vec<SubnetConfigInfo> = vec![];
-        let mut subnet_ids = vec![];
         let mut routing_table = RoutingTable::new();
 
         let mut nns_subnet_id = subnet_configs.nns.and_then(|x| {
@@ -78,46 +75,13 @@ impl PocketIc {
 
         let ii_subnet_split = subnet_configs.ii.is_some();
 
-        let mut subnet_counter = 0_u64;
-        let mut apply_subnet_counter = move || -> u64 {
-            let current_subnet_counter = subnet_counter;
-            subnet_counter += 1;
-            current_subnet_counter
-        };
-
         for (subnet_kind, subnet_state_dir) in
             fixed_range_subnets.into_iter().chain(flexible_subnets)
         {
-            let subnet_id = match (subnet_kind, nns_subnet_id) {
-                (SubnetKind::NNS, Some(nns_subnet_id)) => nns_subnet_id,
-                (SubnetKind::NNS, None) => {
-                    let subnet_id = subnet_test_id(apply_subnet_counter());
-                    nns_subnet_id = Some(subnet_id);
-                    subnet_id
-                }
-                (_, None) => subnet_test_id(apply_subnet_counter()),
-                // Ensure that a generated `subnet_id` does not collide with `nns_subnet_id`.
-                (_, Some(nns_subnet_id)) => loop {
-                    let subnet_id = subnet_test_id(apply_subnet_counter());
-                    if subnet_id != nns_subnet_id {
-                        break subnet_id;
-                    }
-                },
-            };
-            subnet_ids.push(subnet_id);
-
             let RangeConfig {
                 canister_id_ranges: ranges,
                 canister_allocation_range: alloc_range,
             } = get_range_config(subnet_kind, &mut range_gen, ii_subnet_split);
-
-            // Insert ranges and allocation range into routing table
-            for range in &ranges {
-                routing_table.insert(*range, subnet_id).unwrap();
-            }
-            if let Some(alloc_range) = alloc_range {
-                routing_table.insert(alloc_range, subnet_id).unwrap();
-            }
 
             let state_dir = if let Some(subnet_state_dir) = subnet_state_dir {
                 let tmp_dir = TempDir::new().expect("Failed to create temporary directory");
@@ -128,8 +92,8 @@ impl PocketIc {
             };
 
             subnet_config_info.push(SubnetConfigInfo {
-                subnet_id,
                 ranges,
+                alloc_range,
                 subnet_kind,
                 state_dir,
             });
@@ -141,12 +105,15 @@ impl PocketIc {
         let mut topology = Topology(HashMap::new());
 
         // Create all StateMachines and the topology from the subnet config infos.
-        for SubnetConfigInfo {
-            subnet_id,
-            ranges,
-            subnet_kind,
-            state_dir,
-        } in subnet_config_info
+        for (
+            subnet_seq_no,
+            SubnetConfigInfo {
+                ranges,
+                alloc_range,
+                subnet_kind,
+                state_dir,
+            },
+        ) in subnet_config_info.into_iter().enumerate()
         {
             let subnet_config = SubnetConfig::new(conv_type(subnet_kind));
             let hypervisor_config = execution_environment::Config::default();
@@ -155,23 +122,38 @@ impl PocketIc {
             let mut builder = StateMachineBuilder::new()
                 .with_runtime(runtime.clone())
                 .with_config(Some(sm_config))
-                .with_subnet_id(subnet_id)
-                .with_nns_subnet_id(nns_subnet_id.unwrap_or(subnet_ids[0]))
-                .with_subnet_list(subnet_ids.clone())
+                .with_subnet_seq_no(subnet_seq_no as u8)
                 .with_subnet_size(subnet_size.try_into().unwrap())
-                .with_routing_table(routing_table.clone())
                 .with_registry_data_provider(registry_data_provider.clone())
-                .with_ecdsa_keys(vec![EcdsaKeyId {
-                    curve: EcdsaCurve::Secp256k1,
-                    name: format!("master_ecdsa_public_key_{}", subnet_id),
-                }])
+                .with_multisubnet_ecdsa_key()
                 .with_use_cost_scaling_flag(true);
+
+            if subnet_kind == SubnetKind::NNS {
+                builder = builder.with_root_subnet_config();
+                if let Some(nns_subnet_id) = nns_subnet_id {
+                    builder = builder.with_subnet_id(nns_subnet_id);
+                }
+            }
 
             if let Some(state_dir) = state_dir {
                 builder = builder.with_state_dir(state_dir);
             }
 
-            builder.build_with_subnets(subnets.clone());
+            let sm = builder.build_with_subnets(subnets.clone());
+            let subnet_id = sm.get_subnet_id();
+
+            // Store the actual NNS subnet ID if none was provided by the client.
+            if let (SubnetKind::NNS, None) = (subnet_kind, nns_subnet_id) {
+                nns_subnet_id = Some(subnet_id);
+            };
+
+            // Insert ranges and allocation range into routing table
+            for range in &ranges {
+                routing_table.insert(*range, subnet_id).unwrap();
+            }
+            if let Some(alloc_range) = alloc_range {
+                routing_table.insert(alloc_range, subnet_id).unwrap();
+            }
 
             // What will be returned to the client:
             let subnet_config = pocket_ic::common::rest::SubnetConfig {
@@ -182,11 +164,19 @@ impl PocketIc {
             topology.0.insert(subnet_id.get().0, subnet_config);
         }
 
+        // Finalize registry with subnet IDs that are only available now that we created
+        // all the StateMachines.
+        let subnet_list = topology.0.keys().map(|p| PrincipalId(*p).into()).collect();
+        finalize_registry(
+            nns_subnet_id.unwrap_or(PrincipalId(*topology.0.keys().next().unwrap()).into()),
+            routing_table.clone(),
+            subnet_list,
+            registry_data_provider,
+        );
+
         for subnet in subnets.read().unwrap().values() {
             // Reload registry on the state machines to make sure
-            // the registry contains all subnet records
-            // added incrementally to the registry data provider
-            // when creating the individual state machines.
+            // all the state machines have a consistent view of the registry.
             subnet.reload_registry();
         }
 
@@ -445,8 +435,8 @@ struct RangeConfig {
 
 /// Internal struct used during initialization.
 struct SubnetConfigInfo {
-    pub subnet_id: SubnetId,
     pub ranges: Vec<CanisterIdRange>,
+    pub alloc_range: Option<CanisterIdRange>,
     pub subnet_kind: SubnetKind,
     pub state_dir: Option<TempDir>,
 }
@@ -509,10 +499,7 @@ impl Operation for PubKey {
     fn compute(self, pic: &mut PocketIc) -> OpOut {
         let subnet = pic.get_subnet_with_id(self.subnet_id);
         match subnet {
-            Some(subnet) => {
-                let bytes = threshold_sig_public_key_to_der(subnet.root_key()).unwrap();
-                OpOut::Bytes(bytes)
-            }
+            Some(subnet) => OpOut::Bytes(subnet.root_key_der()),
             None => OpOut::Error(PocketIcError::SubnetNotFound(self.subnet_id.get().0)),
         }
     }

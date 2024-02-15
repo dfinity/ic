@@ -33,8 +33,9 @@ use std::sync::Arc;
 mod initial_config;
 
 pub use initial_config::{
-    dummy_initial_dkg_transcript, initial_dkg_transcript, initial_dkg_transcript_and_master_key,
-    sign_message, InitialNiDkgConfig,
+    dummy_initial_dkg_transcript, dummy_initial_dkg_transcript_with_master_key,
+    initial_dkg_transcript, initial_dkg_transcript_and_master_key, sign_message,
+    InitialNiDkgConfig, SecretKeyBytes,
 };
 
 pub fn create_transcript<R: CryptoComponentRng>(

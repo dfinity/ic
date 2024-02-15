@@ -11,12 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Fixed
+
+- Subnet IDs are derived from the subnets' public keys by default.
+
+
 ## 3.0.1 - 2024-02-14
 
 ### Fixed
-- traps in tECDSA calls
-- server rejects jsons containing unimplemented variants of SubnetSpec
-- inspect_message no longer panics when call is rejected
+- Traps in tECDSA calls due to malformed tECDSA public key.
+- Server rejects jsons containing unimplemented variants of `SubnetSpec`.
+- The `inspect_message` method no longer panics when call is rejected.
 
 ## 3.0.0 - 2024-02-06
 
