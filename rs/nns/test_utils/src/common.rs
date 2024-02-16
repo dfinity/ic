@@ -327,3 +327,9 @@ pub fn build_sns_wasms_wasm() -> Wasm {
     let features = [];
     Project::cargo_bin_maybe_from_env("sns-wasm-canister", &features)
 }
+
+/// Build mainnet Wasm for NNS SnsWasm canister
+pub fn build_mainnet_sns_wasms_wasm() -> Wasm {
+    let features = [];
+    Project::cargo_bin_maybe_from_env("mainnet-sns-wasm-canister", &features)
+}

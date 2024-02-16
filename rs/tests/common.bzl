@@ -244,8 +244,9 @@ SNS_CANISTER_WASM_PROVIDERS = {
         "tip-of-branch": "//rs/rosetta-api/icrc1/archive:archive_canister",
         "mainnet": "@mainnet_ic-icrc1-archive//file",
     },
-    "ic-icrc1-index": {
-        "tip-of-branch": "//rs/rosetta-api/icrc1/index:index_canister",
+    "ic-icrc1-index-ng": {
+        "tip-of-branch": "//rs/rosetta-api/icrc1/index-ng:index_ng_canister",
+        # FIXME[NNS1-2856]: This following should be changed to "@mainnet_ic-icrc1-index-ng//file".
         "mainnet": "@mainnet_ic-icrc1-index//file",
     },
 }

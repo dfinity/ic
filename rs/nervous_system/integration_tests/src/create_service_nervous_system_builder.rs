@@ -1,5 +1,6 @@
+use ic_base_types::PrincipalId;
 use ic_nervous_system_common::E8;
-use ic_nervous_system_proto::pb::v1::Tokens as TokensPb;
+use ic_nervous_system_proto::pb::v1::{Duration as DurationPb, Tokens as TokensPb};
 use ic_nns_governance::{
     governance::test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
     pb::v1::{
@@ -68,6 +69,34 @@ impl CreateServiceNervousSystemBuilder {
             .as_mut()
             .unwrap();
         developer_distribution.developer_neurons = developer_neurons;
+        self
+    }
+
+    pub fn with_one_developer_neuron(
+        self,
+        controller: PrincipalId,
+        dissolve_delay_seconds: u64,
+        stake_sns_e8s: u64,
+        vesting_period_seconds: u64,
+    ) -> Self {
+        let developer_neurons = vec![NeuronDistribution {
+            controller: Some(controller),
+            memo: Some(763535),
+            dissolve_delay: Some(DurationPb::from_secs(dissolve_delay_seconds)),
+            stake: Some(TokensPb::from_e8s(stake_sns_e8s)),
+            vesting_period: Some(DurationPb::from_secs(vesting_period_seconds)),
+        }];
+        self.initial_token_distribution_developer_neurons(developer_neurons)
+    }
+
+    pub fn with_governance_parameters_neuron_minimum_dissolve_delay_to_vote(
+        mut self,
+        neuron_minimum_dissolve_delay_to_vote_seconds: u64,
+    ) -> Self {
+        let governance_parameters = self.0.governance_parameters.as_mut().unwrap();
+        governance_parameters.neuron_minimum_dissolve_delay_to_vote = Some(DurationPb {
+            seconds: Some(neuron_minimum_dissolve_delay_to_vote_seconds),
+        });
         self
     }
 

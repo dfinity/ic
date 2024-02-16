@@ -362,7 +362,7 @@ pub fn add_all_wasms_to_sns_wasm(env: &TestEnv, canister_wasm_strategy: NnsCanis
         (SnsCanisterType::Ledger, "ic-icrc1-ledger"),
         (SnsCanisterType::Swap, "sns-swap-canister"),
         (SnsCanisterType::Archive, "ic-icrc1-archive"),
-        (SnsCanisterType::Index, "ic-icrc1-index"),
+        (SnsCanisterType::Index, "ic-icrc1-index-ng"),
     ];
     info!(logger, "Setting SNS canister environment variables");
     match canister_wasm_strategy {
