@@ -3,7 +3,7 @@
 /// interface guarantees consistency and determinism.
 ///
 use crate::InstanceId;
-use crate::{Computation, OpId, Operation};
+use crate::{OpId, Operation};
 use base64;
 use ic_types::{CanisterId, SubnetId};
 use ic_utils::thread::JoinOnDrop;
@@ -369,37 +369,38 @@ where
     /// * If the computation finished within the timeout, [UpdateReply::Output] is returned
     /// containing the result.
     ///
-    /// Operations are _not_ queued. Thus, if the instance is busy with an existing operation, the
-    /// client has to retry until the operation is accepted.
-    pub async fn update<S>(&self, computation: Computation<S>) -> UpdateResult
+    /// Operations are _not_ queued by default. Thus, if the instance is busy with an existing operation,
+    /// the client has to retry until the operation is done. Some operations for which the client
+    /// might be unable to retry are exceptions to this rule and they are queued up implicitly
+    /// by a retry mechanism inside PocketIc.
+    pub async fn update<S>(&self, op: Arc<S>, instance_id: InstanceId) -> UpdateResult
     where
-        S: Operation<TargetType = T> + Send + 'static,
+        S: Operation<TargetType = T> + Send + Sync + 'static,
     {
-        self.update_with_timeout(computation, None).await
+        self.update_with_timeout(op, instance_id, None).await
     }
 
     /// Same as [Self::update] except that the timeout can be specified manually. This is useful in
     /// cases when clients want to enforce a long-running blocking call.
     pub async fn update_with_timeout<S>(
         &self,
-        computation: Computation<S>,
+        op: Arc<S>,
+        instance_id: InstanceId,
         sync_wait_time: Option<Duration>,
     ) -> UpdateResult
     where
-        S: Operation<TargetType = T> + Send + 'static,
+        S: Operation<TargetType = T> + Send + Sync + 'static,
     {
-        let op_id = computation.op.id().0;
+        let op_id = op.id().0;
         trace!(
             "update_with_timeout::start instance_id={} op_id={}",
-            computation.instance_id,
+            instance_id,
             op_id,
         );
         let sync_wait_time = sync_wait_time.unwrap_or(self.inner.sync_wait_time);
         let st = self.inner.clone();
         let instances = st.instances.read().await;
-        let (bg_task, busy_outcome) = if let Some(instance_mutex) =
-            instances.get(computation.instance_id)
-        {
+        let (bg_task, busy_outcome) = if let Some(instance_mutex) = instances.get(instance_id) {
             let mut instance_state = instance_mutex.lock().await;
             // If this instance is busy, return the running op and initial state
             match &*instance_state {
@@ -419,7 +420,7 @@ where
                     // move pocket_ic out
 
                     let state_label = pocket_ic.get_state_label();
-                    let op_id = computation.op.id();
+                    let op_id = op.id();
                     let busy = InstanceState::Busy {
                         state_label: state_label.clone(),
                         op_id: op_id.clone(),
@@ -429,9 +430,6 @@ where
                     else {
                         unreachable!()
                     };
-
-                    let op = computation.op;
-                    let instance_id = computation.instance_id;
 
                     let bg_task = {
                         let old_state_label = state_label.clone();
@@ -489,7 +487,7 @@ where
         if let Ok(o) = time::timeout(sync_wait_time, bg_handle).await {
             trace!(
                 "update_with_timeout::synchronous instance_id={} op_id={}",
-                computation.instance_id,
+                instance_id,
                 op_id,
             );
             return Ok(UpdateReply::Output(o.expect("join failed!")));
@@ -497,7 +495,7 @@ where
 
         trace!(
             "update_with_timeout::timeout instance_id={} op_id={}",
-            computation.instance_id,
+            instance_id,
             op_id,
         );
         Ok(busy_outcome)
