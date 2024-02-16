@@ -10,7 +10,7 @@ use crate::pocket_ic::{
     AddCycles, ExecuteIngressMessage, GetCyclesBalance, GetStableMemory, GetTime, PubKey, Query,
     SetStableMemory, SetTime, Tick,
 };
-use crate::{pocket_ic::PocketIc, BindOperation, BlobStore, InstanceId, Operation};
+use crate::{pocket_ic::PocketIc, BlobStore, InstanceId, Operation};
 use aide::axum::routing::{delete, get, post, ApiMethodRouter};
 use aide::axum::ApiRouter;
 use axum::{
@@ -20,6 +20,9 @@ use axum::{
 };
 use axum_extra::headers;
 use axum_extra::headers::HeaderMapExt;
+use backoff::backoff::Backoff;
+use backoff::exponential::ExponentialBackoffBuilder;
+use backoff::ExponentialBackoff;
 use ic_types::CanisterId;
 use pocket_ic::common::rest::{
     self, ApiResponse, ExtendedSubnetConfigSet, RawAddCycles, RawCanisterCall, RawCanisterId,
@@ -30,6 +33,7 @@ use pocket_ic::WasmResult;
 use serde::Serialize;
 use std::{sync::Arc, time::Duration};
 use tokio::{runtime::Runtime, sync::RwLock, time::Instant};
+use tracing::trace;
 
 /// Name of a header that allows clients to specify for how long their are willing to wait for a
 /// response on a open http request.
@@ -108,35 +112,69 @@ async fn run_operation<T: Serialize>(
 where
     (StatusCode, ApiResponse<T>): From<OpOut>,
 {
-    match api_state
-        .update_with_timeout(op.on_instance(instance_id), timeout)
-        .await
-    {
-        Err(e) => (
-            StatusCode::BAD_REQUEST,
-            ApiResponse::Error {
-                message: format!("{:?}", e),
-            },
-        ),
-        Ok(update_reply) => match update_reply {
-            // If the op_id of the ongoing operation is the requested one, we return code 202.
-            UpdateReply::Started { state_label, op_id } => (
-                StatusCode::ACCEPTED,
-                ApiResponse::Started {
-                    state_label: format!("{:?}", state_label),
-                    op_id: format!("{:?}", op_id),
-                },
-            ),
-            // Otherwise, the instance is busy with a different computation, so we return 409.
-            UpdateReply::Busy { state_label, op_id } => (
-                StatusCode::CONFLICT,
-                ApiResponse::Busy {
-                    state_label: format!("{:?}", state_label),
-                    op_id: format!("{:?}", op_id),
-                },
-            ),
-            UpdateReply::Output(op_out) => op_out.into(),
-        },
+    let retry_if_busy = op.retry_if_busy();
+    let op = Arc::new(op);
+    let mut retry_policy: ExponentialBackoff = ExponentialBackoffBuilder::new()
+        .with_initial_interval(Duration::from_millis(10))
+        .with_max_interval(Duration::from_secs(1))
+        .with_multiplier(2.0)
+        .with_max_elapsed_time(Some(Duration::from_secs(60 * 5)))
+        .build();
+    loop {
+        match api_state
+            .update_with_timeout(op.clone(), instance_id, timeout)
+            .await
+        {
+            Err(e) => {
+                break (
+                    StatusCode::BAD_REQUEST,
+                    ApiResponse::Error {
+                        message: format!("{:?}", e),
+                    },
+                )
+            }
+            Ok(update_reply) => {
+                match update_reply {
+                    // If the op_id of the ongoing operation is the requested one, we return code 202.
+                    UpdateReply::Started { state_label, op_id } => {
+                        break (
+                            StatusCode::ACCEPTED,
+                            ApiResponse::Started {
+                                state_label: format!("{:?}", state_label),
+                                op_id: format!("{:?}", op_id),
+                            },
+                        )
+                    }
+                    // Otherwise, the instance is busy with a different computation, so we retry (if appliacable) or return 409.
+                    UpdateReply::Busy { state_label, op_id } => {
+                        if retry_if_busy {
+                            trace!("run_operation::retry_busy instance_id={} state_label={:?} op_id={}", instance_id, state_label, op_id.0);
+                            match retry_policy.next_backoff() {
+                                Some(duration) => tokio::time::sleep(duration).await,
+                                None => {
+                                    break (
+                                        StatusCode::TOO_MANY_REQUESTS,
+                                        ApiResponse::Error {
+                                            message: "Service is overloaded, try again later."
+                                                .to_string(),
+                                        },
+                                    )
+                                }
+                            }
+                        } else {
+                            break (
+                                StatusCode::CONFLICT,
+                                ApiResponse::Busy {
+                                    state_label: format!("{:?}", state_label),
+                                    op_id: format!("{:?}", op_id),
+                                },
+                            );
+                        }
+                    }
+                    UpdateReply::Output(op_out) => break op_out.into(),
+                }
+            }
+        }
     }
 }
 
