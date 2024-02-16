@@ -121,9 +121,6 @@ mod list_node_providers;
 mod network_economics;
 
 #[cfg(test)]
-mod sns_wasm_allowed_principals;
-
-#[cfg(test)]
 mod neuron_following;
 
 #[cfg(test)]
