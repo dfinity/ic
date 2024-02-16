@@ -724,6 +724,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "maplit": crate.spec(
                 version = "^1.0.2",
             ),
+            "maxminddb": crate.spec(
+                version = "^0.24",
+            ),
             "metrics-proxy": crate.spec(
                 git = "https://github.com/dfinity/metrics-proxy.git",
                 rev = "b6933ed79ac07baee7f3fbc0793bed95e614d27c",

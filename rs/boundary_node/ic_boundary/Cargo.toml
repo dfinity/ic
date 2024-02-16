@@ -66,6 +66,7 @@ jemalloc-ctl = "0.3"
 lazy_static = "1.4.0"
 little-loadshedder = "0.1.0"
 ratelimit = "0.7.1"
+maxminddb = "0.24"
 mockall = "0.11.4"
 moka = { version = "0.12", features = ["sync", "future"] }
 prometheus = { workspace = true }

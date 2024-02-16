@@ -39,7 +39,6 @@ def image_deps(mode, sev = False):
             "//publish/binaries:boundary-node-prober": "/opt/ic/bin/boundary-node-prober:0755",
             "//publish/binaries:certificate-issuer": "/opt/ic/bin/certificate-issuer:0755",
             "//publish/binaries:certificate-syncer": "/opt/ic/bin/certificate-syncer:0755",
-            "//publish/binaries:denylist-updater": "/opt/ic/bin/denylist-updater:0755",
             "//publish/binaries:ic-balance-exporter": "/opt/ic/bin/ic-balance-exporter:0755",
             "//publish/binaries:icx-proxy": "/opt/ic/bin/icx-proxy:0755",
             "//publish/binaries:systemd-journal-gatewayd-shim": "/opt/ic/bin/systemd-journal-gatewayd-shim:0755",

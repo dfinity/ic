@@ -110,14 +110,6 @@ options may be specified:
   --canary-proxy-port
     the portnumber to run the canary proxy on. Canary proxy disabled if not provided
 
-  --require_seo_certification
-    flag to enforce certification for all crawler and bot requests that are redirected
-    to icx-proxy.
-
-  --require_underscore_certification
-    flag to enforce certification for all requests going to /_/raw/ that are
-    passed through icx-proxy.
-
   --certificate_orchestrator_uri
     the API domain to reach the certificate orchestrator canister (e.g., https://ic0.app/).
 
@@ -249,8 +241,6 @@ function build_ic_bootstrap_tar() {
 
     # Firewall
     local IPV4_HTTP_IPS IPV6_HTTP_IPS IPV6_DEBUG_IPS IPV6_MONITORING_IPS
-    # Flags
-    local REQUIRE_SEO_CERTIFICATION REQUIRE_UNDERSCORE_CERTIFICATION
     # Canary Proxy
     local CANARY_PROXY_PORT
     # Custom domains
@@ -335,12 +325,6 @@ function build_ic_bootstrap_tar() {
                 ;;
             --canary-proxy-port)
                 CANARY_PROXY_PORT="$2"
-                ;;
-            --require_seo_certification)
-                REQUIRE_SEO_CERTIFICATION="$2"
-                ;;
-            --require_underscore_certification)
-                REQUIRE_UNDERSCORE_CERTIFICATION="$2"
                 ;;
             --certificate_orchestrator_uri)
                 CERTIFICATE_ORCHESTRATOR_URI="$2"
@@ -516,10 +500,10 @@ EOF
     # setup the deny list
     if [[ -n "${DENYLIST:-}" ]]; then
         echo "Using deny list ${DENYLIST}"
-        cp "${DENYLIST}" "${BOOTSTRAP_TMPDIR}/denylist.map"
+        cp "${DENYLIST}" "${BOOTSTRAP_TMPDIR}/denylist.json"
     else
         echo "Using empty denylist"
-        touch "${BOOTSTRAP_TMPDIR}/denylist.map"
+        echo '{"canisters":{}}' >"${BOOTSTRAP_TMPDIR}/denylist.json"
     fi
 
     # setup the bn_vars
@@ -537,14 +521,9 @@ ipv4_http_ips=${IPV4_HTTP_IPS}
 ipv6_http_ips=${IPV6_HTTP_IPS}
 ipv6_debug_ips=${IPV6_DEBUG_IPS}
 ipv6_monitoring_ips=${IPV6_MONITORING_IPS}
-require_seo_certification=${REQUIRE_SEO_CERTIFICATION:-}
-require_underscore_certification=${REQUIRE_UNDERSCORE_CERTIFICATION:-}
-ip_hash_salt=${IP_HASH_SALT:-"undefined"}
 logging_url=${LOGGING_URL:-"http://127.0.0.1:12345"}
 logging_user=${LOGGING_USER:-"undefined"}
 logging_password=${LOGGING_PASSWORD:-"undefined"}
-# Default to 1% sampling rate (value is 1/N)
-logging_2xx_sample_rate=${LOGGING_2XX_SAMPLE_RATE:-100}
 EOF
 
     # setup the prober identity

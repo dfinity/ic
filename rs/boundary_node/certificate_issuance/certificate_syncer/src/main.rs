@@ -138,7 +138,6 @@ async fn main() -> Result<(), Error> {
         renderer,
         cli.local_certificates_path,
         cli.local_configuration_path,
-        cli.domain_mappings_path,
     );
     let persister = WithReload(persister, reloader);
     let persister = WithDedup(persister, Arc::new(RwLock::new(None)));

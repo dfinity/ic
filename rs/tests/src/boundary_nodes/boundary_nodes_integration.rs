@@ -637,7 +637,7 @@ pub fn http_canister_test(env: TestEnv) {
                 .await?;
 
             if res != "'/foo' not found" {
-                bail!(res)
+                bail!("expected not found");
             }
 
             Ok(())
@@ -659,7 +659,7 @@ pub fn http_canister_test(env: TestEnv) {
                 .await?;
 
             if res != "'/foo' set to 'bar'" {
-                bail!(res)
+                bail!("exptected set to bar");
             }
 
             Ok(())
@@ -676,7 +676,7 @@ pub fn http_canister_test(env: TestEnv) {
                 .await?;
 
             if res != "bar" {
-                bail!(res)
+                bail!("expected bar");
             }
 
             Ok(())
@@ -694,7 +694,7 @@ pub fn http_canister_test(env: TestEnv) {
                 .await?;
 
             if res != "bar" {
-                bail!(res)
+                bail!("expected bar");
             }
 
             Ok(())
@@ -707,12 +707,10 @@ pub fn http_canister_test(env: TestEnv) {
             let res = client
                 .get(format!("https://{invalid_host}/?canisterId={canister_id}"))
                 .send()
-                .await?
-                .text()
                 .await?;
 
-            if res != "Could not find a canister id to forward to." {
-                bail!(res)
+            if res.status() != http::StatusCode::BAD_REQUEST {
+                bail!("expected 400");
             }
 
             Ok(())
@@ -804,7 +802,7 @@ pub fn prefix_canister_id_test(env: TestEnv) {
                 .await?;
 
             if res != "'/foo' not found" {
-                bail!(res)
+                bail!("expected foo not found");
             }
 
             Ok(())
@@ -826,7 +824,7 @@ pub fn prefix_canister_id_test(env: TestEnv) {
                 .await?;
 
             if res != "'/foo' set to 'bar'" {
-                bail!(res)
+                bail!("expected set to bar");
             }
 
             Ok(())
@@ -843,7 +841,7 @@ pub fn prefix_canister_id_test(env: TestEnv) {
                 .await?;
 
             if res != "bar" {
-                bail!(res)
+                bail!("expected bar");
             }
 
             Ok(())
@@ -861,7 +859,7 @@ pub fn prefix_canister_id_test(env: TestEnv) {
                 .await?;
 
             if res != "bar" {
-                bail!(res)
+                bail!("expected bar");
             }
 
             Ok(())
@@ -954,7 +952,7 @@ pub fn proxy_http_canister_test(env: TestEnv) {
                 .await?;
 
             if res != "'/foo' not found" {
-                bail!(res)
+                bail!("expected foo not found");
             }
 
             Ok(())
@@ -976,7 +974,7 @@ pub fn proxy_http_canister_test(env: TestEnv) {
                 .await?;
 
             if res != "'/foo' set to 'bar'" {
-                bail!(res)
+                bail!("expected set to bar");
             }
 
             Ok(())
@@ -993,7 +991,7 @@ pub fn proxy_http_canister_test(env: TestEnv) {
                 .await?;
 
             if res != "bar" {
-                bail!(res)
+                bail!("expected bar");
             }
 
             Ok(())
@@ -1011,8 +1009,8 @@ pub fn proxy_http_canister_test(env: TestEnv) {
                 .await?;
 
             if res != "bar" {
-                bail!(res)
-            }
+                bail!("expected bar");
+            };
 
             Ok(())
         })
@@ -1024,12 +1022,10 @@ pub fn proxy_http_canister_test(env: TestEnv) {
             let res = client
                 .get(format!("https://{invalid_host}/?canisterId={canister_id}"))
                 .send()
-                .await?
-                .text()
                 .await?;
 
-            if res != "Could not find a canister id to forward to." {
-                bail!(res)
+            if res.status() != http::StatusCode::BAD_REQUEST {
+                bail!("expected 400");
             }
 
             Ok(())
@@ -1130,17 +1126,18 @@ pub fn denylist_test(env: TestEnv) {
 
         info!(&logger, "created canister={canister_id}");
 
-        // Update the denylist and reload nginx
-        let denylist_command = format!(r#"printf "\"{}\" \"1\";\n" | sudo tee /var/opt/nginx/denylist/denylist.map && sudo service nginx reload"#, canister_id);
-        let cmd_output = boundary_node.block_on_bash_script(&denylist_command).unwrap();
+        // Update the denylist and restart icx-proxy
+        let denylist_command = format!(r#"echo "{{\"canisters\":{{\"{}\": {{}}}}}}" | sudo tee /run/ic-node/etc/icx-proxy/denylist.json && sudo service icx-proxy restart"#, canister_id);
         info!(
             logger,
-            "update denylist {BOUNDARY_NODE_NAME} with {denylist_command} to \n'{}'\n",
-            cmd_output,
+            "update denylist {BOUNDARY_NODE_NAME} with {denylist_command}"
         );
+        if let Err(e) = boundary_node.block_on_bash_script(&denylist_command) {
+            panic!("bash script failed: {:?}", e);
+        }
 
-        // Wait a bit for the reload to complete
-        tokio::time::sleep(Duration::from_secs(2)).await;
+        // Wait a bit for the restart to complete
+        tokio::time::sleep(Duration::from_secs(3)).await;
 
         let client_builder = reqwest::ClientBuilder::new();
         let (client_builder, host) = if let Some(playnet) = boundary_node.get_playnet() {
@@ -1164,9 +1161,8 @@ pub fn denylist_test(env: TestEnv) {
                 .status();
 
             if res != reqwest::StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS {
-                bail!(res)
+                bail!("expected 451, got {res}");
             }
-
 
             Ok(())
         }).await.unwrap();
@@ -1238,89 +1234,78 @@ pub fn canister_allowlist_test(env: TestEnv) {
         let client = client_builder.build().unwrap();
 
         // Check canister is available
-        let res = client
-            .get(format!("https://{canister_id}.raw.{host}/"))
-            .send()
-            .await
-            .expect("Could not perform get request.")
-            .status();
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            let res = client
+                .get(format!("https://{canister_id}.raw.{host}/"))
+                .send()
+                .await
+                .expect("Could not perform get request.")
+                .status();
 
-        assert_eq!(res, reqwest::StatusCode::OK, "expected OK, got {}", res);
+            if res != reqwest::StatusCode::OK {
+                bail!("expected OK, got {}", res);
+            }
 
-        // Update denylist with canister ID
-        let cmd_output = boundary_node.block_on_bash_script(
-            &format!(
-                r#"printf "\"{}\" 1;\n" | sudo tee /var/opt/nginx/denylist/denylist.map"#,
-                canister_id
-            ),
-        )
-        .unwrap();
+            Ok(())
+        }).await.unwrap();
 
+        // Update the denylist and restart icx-proxy
+        let denylist_command = format!(r#"echo "{{\"canisters\":{{\"{}\": {{}}}}}}" | sudo tee /run/ic-node/etc/icx-proxy/denylist.json && sudo service icx-proxy restart"#, canister_id);
         info!(
             logger,
-            "update denylist {BOUNDARY_NODE_NAME}: '{}'",
-            cmd_output.trim(),
+            "update denylist {BOUNDARY_NODE_NAME} with {denylist_command}"
         );
+        if let Err(e) = boundary_node.block_on_bash_script(&denylist_command) {
+            panic!("bash script failed: {:?}", e);
+        }
 
-        // Reload Nginx
-        let cmd_output = boundary_node.block_on_bash_script(
-            "sudo service nginx restart",
-        )
-        .unwrap();
-
-        info!(
-            logger,
-            "reload nginx on {BOUNDARY_NODE_NAME}: '{}'",
-            cmd_output.trim(),
-        );
-
-        tokio::time::sleep(Duration::from_secs(5)).await;
+        // Wait a bit for the restart to complete
+        tokio::time::sleep(Duration::from_secs(3)).await;
 
         // Check canister is restricted
-        let res = client
-            .get(format!("https://{canister_id}.raw.{host}/"))
-            .send()
-            .await
-            .expect("Could not perform get request.")
-            .status();
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            let res = client
+                .get(format!("https://{canister_id}.raw.{host}/"))
+                .send()
+                .await
+                .expect("Could not perform get request.")
+                .status();
 
-        assert_eq!(res, reqwest::StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS, "expected 451, got {}", res);
+            if res != reqwest::StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS {
+                bail!("expected 451, got {}", res);
+            }
 
-        // Update allowlist with canister ID
-        let cmd_output = boundary_node.block_on_bash_script(
-            &format!(r#"printf "{} 1;\n" | sudo tee /run/ic-node/allowlist_canisters.map && sudo mount -o ro,bind /run/ic-node/allowlist_canisters.map /etc/nginx/allowlist_canisters.map"#, canister_id),
-        )
-        .unwrap();
+            Ok(())
+        }).await.unwrap();
 
+        // Update the allowlist and restart icx-proxy
+        let allowlist_command = format!(r#"echo "{}" | sudo tee /run/ic-node/etc/icx-proxy/allowlist.txt && sudo service icx-proxy restart"#, canister_id);
         info!(
             logger,
-            "update allowlist {BOUNDARY_NODE_NAME}: '{}'",
-            cmd_output.trim(),
+            "update allowlist {BOUNDARY_NODE_NAME} with {allowlist_command}"
         );
+        if let Err(e) = boundary_node.block_on_bash_script(&allowlist_command) {
+            panic!("bash script failed: {:?}", e);
+        }
 
-        // Reload Nginx
-        let cmd_output = boundary_node.block_on_bash_script(
-            "sudo service nginx restart",
-        )
-        .unwrap();
-
-        info!(
-            logger,
-            "reload nginx on {BOUNDARY_NODE_NAME}: '{}'",
-            cmd_output.trim(),
-        );
-
-        tokio::time::sleep(Duration::from_secs(5)).await;
+        // Wait a bit for the restart to complete
+        tokio::time::sleep(Duration::from_secs(3)).await;
 
         // Check canister is available
-        let res = client
-            .get(format!("https://{canister_id}.raw.{host}/"))
-            .send()
-            .await
-            .expect("Could not perform get request.")
-            .status();
+        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
+            let res = client
+                .get(format!("https://{canister_id}.raw.{host}/"))
+                .send()
+                .await
+                .expect("Could not perform get request.")
+                .status();
 
-        assert_eq!(res, reqwest::StatusCode::OK, "expected OK, got {}", res);
+            if res != reqwest::StatusCode::OK {
+                bail!("expected OK, got {}", res);
+            }
+
+            Ok(())
+        }).await.unwrap();
     });
 }
 

@@ -45,13 +45,11 @@ Arguments:
        --denylist=                      a deny list of canisters
        --prober-identity=               specify an identity file for the prober
        --geolite2-country-db=           specify path to GeoLite2 Country Database
-       --geolite2-city-db=              specify path to GeoLite2 City Database
        --cert-issuer-creds              specify a credentials file for certificate-issuer
        --cert-issuer-identity           specify an identity file for certificate-issuer
        --cert-issuer-enc-key            specify an encryption key for certificate-issuer
        --ic-boundary-config             specify a path to the ic-boundary config file
        --pre-isolation-canisters        specify a set of pre-domain-isolation canisters
-       --ip-hash-salt                   specify a salt for hashing ip values
        --logging-url                    specify an endpoint for our logging backend
        --logging-user                   specify a user for our logging backend
        --logging-password               specify a password for our logging backend
@@ -109,9 +107,6 @@ for argument in "${@}"; do
         --geolite2-country-db=*)
             GEOLITE2_COUNTRY_DB="${argument#*=}"
             ;;
-        --geolite2-city-db=*)
-            GEOLITE2_CITY_DB="${argument#*=}"
-            ;;
         --cert-issuer-creds=*)
             CERTIFICATE_ISSUER_CREDENTIALS="${argument#*=}"
             ;;
@@ -126,9 +121,6 @@ for argument in "${@}"; do
             ;;
         --pre-isolation-canisters=*)
             PRE_ISOLATION_CANISTERS="${argument#*=}"
-            ;;
-        --ip-hash-salt=*)
-            IP_HASH_SALT="${argument#*=}"
             ;;
         --logging-url=*)
             LOGGING_URL="${argument#*=}"
@@ -429,10 +421,10 @@ function copy_deny_list() {
             NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
             if [[ -f "${DENY_LIST:-}" ]]; then
                 echo "Using deny list ${DENY_LIST}"
-                cp "${DENY_LIST}" "${CONFIG_DIR}/${NODE_PREFIX}/denylist.map"
+                cp "${DENY_LIST}" "${CONFIG_DIR}/${NODE_PREFIX}/denylist.json"
             else
                 echo "Using empty denylist"
-                touch "${CONFIG_DIR}/${NODE_PREFIX}/denylist.map"
+                touch "${CONFIG_DIR}/${NODE_PREFIX}/denylist.json"
             fi
         fi
     done
@@ -460,8 +452,8 @@ function copy_certs() {
 }
 
 function copy_geolite2_dbs() {
-    if [[ -z "${GEOLITE2_COUNTRY_DB:-}" || -z "${GEOLITE2_CITY_DB:-}" ]]; then
-        err "geolite2 dbs have not been provided, therefore geolocation capabilities will be disabled"
+    if [[ -z "${GEOLITE2_COUNTRY_DB:-}" ]]; then
+        err "geolite2 db has not been provided, therefore geolocation capabilities will be disabled"
         return
     fi
 
@@ -477,7 +469,6 @@ function copy_geolite2_dbs() {
 
         mkdir -p "${CONFIG_DIR}/${NODE_PREFIX}/geolite2_dbs"
         cp "${GEOLITE2_COUNTRY_DB}" "${CONFIG_DIR}/${NODE_PREFIX}/geolite2_dbs/"
-        cp "${GEOLITE2_CITY_DB}" "${CONFIG_DIR}/${NODE_PREFIX}/geolite2_dbs/"
     done
 }
 
@@ -572,26 +563,6 @@ function copy_pre_isolation_canisters() {
 
         mkdir -p "${CONFIG_DIR}/${NODE_PREFIX}"
         cp "${PRE_ISOLATION_CANISTERS}" "${CONFIG_DIR}/${NODE_PREFIX}/pre_isolation_canisters.txt"
-    done
-}
-
-function copy_ip_hash_salt() {
-    if [[ -z "${IP_HASH_SALT:-}" ]]; then
-        err "ip hashing salt has not been provided, proceeding without copying it"
-        return
-    fi
-
-    for n in $NODES; do
-        declare -n NODE=$n
-        if [[ "${NODE["type"]}" != "boundary" ]]; then
-            continue
-        fi
-
-        local SUBNET_IDX="${NODE["subnet_idx"]}"
-        local NODE_IDX="${NODE["node_idx"]}"
-        local NODE_PREFIX="${DEPLOYMENT}.${SUBNET_IDX}.${NODE_IDX}"
-
-        echo "ip_hash_salt=${IP_HASH_SALT}" >>"${CONFIG_DIR}/${NODE_PREFIX}/bn_vars.conf"
     done
 }
 
@@ -691,7 +662,6 @@ function main() {
     copy_ic_boundary_config
     generate_certificate_issuer_config
     copy_pre_isolation_canisters
-    copy_ip_hash_salt
     copy_logging_credentials
     copy_crowdsec_credentials
     build_tarball

@@ -11,6 +11,7 @@ mod cli;
 mod core;
 mod dns;
 mod firewall;
+mod geoip;
 mod http;
 mod management;
 mod metrics;
