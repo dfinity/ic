@@ -1595,7 +1595,7 @@ impl Governance {
 
         Self {
             heap_data: heap_governance_proto,
-            neuron_store: NeuronStore::new_restored(heap_neurons, topic_followee_map),
+            neuron_store: NeuronStore::new_restored((heap_neurons, topic_followee_map)),
             env,
             ledger,
             cmc,
@@ -1610,8 +1610,8 @@ impl Governance {
     /// After calling this method, the proto and neuron_store (the heap neurons at least)
     /// becomes unusable, so it should only be called in pre_upgrade once.
     pub fn take_heap_proto(&mut self) -> GovernanceProto {
-        let neurons = self.neuron_store.take_heap_neurons();
-        let heap_topic_followee_index = self.neuron_store.take_heap_topic_followee_index();
+        let neuron_store = std::mem::take(&mut self.neuron_store);
+        let (neurons, heap_topic_followee_index) = neuron_store.take();
         let heap_governance_proto = std::mem::take(&mut self.heap_data);
         reassemble_governance_proto(neurons, heap_topic_followee_index, heap_governance_proto)
     }
