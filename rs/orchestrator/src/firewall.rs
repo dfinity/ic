@@ -1,10 +1,12 @@
 use crate::{
-    catch_up_package_provider::CatchUpPackageProvider, error::OrchestratorResult,
-    metrics::OrchestratorMetrics, registry_helper::RegistryHelper,
+    catch_up_package_provider::CatchUpPackageProvider,
+    error::{OrchestratorError, OrchestratorResult},
+    metrics::OrchestratorMetrics,
+    registry_helper::RegistryHelper,
 };
 
 use ic_config::firewall::{Config as FirewallConfig, FIREWALL_FILE_DEFAULT_PATH};
-use ic_logger::{debug, error, info, warn, ReplicaLogger};
+use ic_logger::{debug, info, warn, ReplicaLogger};
 use ic_protobuf::registry::firewall::v1::{FirewallAction, FirewallRule, FirewallRuleDirection};
 use ic_registry_keys::FirewallRulesScope;
 use ic_sys::fs::write_string_using_tmp_file;
@@ -18,7 +20,6 @@ use std::{
     path::PathBuf,
     sync::Arc,
 };
-use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -30,20 +31,60 @@ enum DataSource {
 /// Provides function to continuously check the Registry to determine if there
 /// has been a change in the firewall config, and if so, updates the node's
 /// firewall rules file accordingly.
-pub(crate) struct ICAwareFirewall {
-    parent: StartupFirewall,
+pub(crate) struct Firewall {
     registry: Arc<RegistryHelper>,
     metrics: Arc<OrchestratorMetrics>,
     catchup_package_provider: Arc<CatchUpPackageProvider>,
+    logger: ReplicaLogger,
+    configuration: FirewallConfig,
     source: DataSource,
     compiled_config: String,
     last_applied_version: Arc<RwLock<RegistryVersion>>,
     /// If true, write the file content even if no change was detected in registry, i.e. first time
     must_write: bool,
+    /// If false, do not update the firewall rules (test mode)
+    enabled: bool,
     node_id: NodeId,
 }
 
-impl ICAwareFirewall {
+impl Firewall {
+    pub(crate) fn new(
+        node_id: NodeId,
+        registry: Arc<RegistryHelper>,
+        metrics: Arc<OrchestratorMetrics>,
+        firewall_config: FirewallConfig,
+        catchup_package_provider: Arc<CatchUpPackageProvider>,
+        logger: ReplicaLogger,
+    ) -> Self {
+        let config = firewall_config;
+
+        // Disable if the config is the default one (e.g if we're in a test)
+        let enabled = config
+            .config_file
+            .ne(&PathBuf::from(FIREWALL_FILE_DEFAULT_PATH));
+
+        if !enabled {
+            warn!(
+                logger,
+                "Firewall configuration not found. Orchestrator does not update firewall rules."
+            );
+        }
+
+        Self {
+            registry,
+            metrics,
+            catchup_package_provider,
+            configuration: config,
+            source: DataSource::Config,
+            logger,
+            compiled_config: Default::default(),
+            last_applied_version: Default::default(),
+            must_write: true,
+            enabled,
+            node_id,
+        }
+    }
+
     fn fetch_from_registry(
         &self,
         registry_version: RegistryVersion,
@@ -56,10 +97,13 @@ impl ICAwareFirewall {
     }
 
     /// Checks for the firewall configuration that applies to this node
-    async fn check_for_firewall_config(&mut self, registry_version: RegistryVersion) {
+    async fn check_for_firewall_config(
+        &mut self,
+        registry_version: RegistryVersion,
+    ) -> OrchestratorResult<()> {
         if *self.last_applied_version.read().await == registry_version {
             // No update in the registry, so no need to re-check
-            return;
+            return Ok(());
         }
 
         // Get the subnet ID of this node, if exists
@@ -103,11 +147,11 @@ impl ICAwareFirewall {
             // We fetched no ruled from the registry, so we will use the default rules in the config file
             warn!(
                 every_n_seconds => 300,
-                self.parent.logger,
+                self.logger,
                 "Firewall configuration was not found in registry. Using config file instead. This warning should be ignored when firewall config is not expected to appear in the registry (e.g., on testnets)."
             );
             self.source = DataSource::Config;
-            tcp_rules.append(&mut self.parent.configuration.default_rules.clone());
+            tcp_rules.append(&mut self.configuration.default_rules.clone());
         }
 
         // Whitelisting for node IPs
@@ -160,7 +204,7 @@ impl ICAwareFirewall {
             .map(|ip| ip.to_string())
             .collect();
         info!(
-            self.parent.logger,
+            self.logger,
             "Whitelisting {} node IP addresses ({} v4 and {} v6) on the firewall",
             node_whitelist_ips.len(),
             node_ipv4s.len(),
@@ -171,11 +215,7 @@ impl ICAwareFirewall {
         let tcp_node_whitelisting_rule = FirewallRule {
             ipv4_prefixes: node_ipv4s.clone(),
             ipv6_prefixes: node_ipv6s.clone(),
-            ports: self
-                .parent
-                .configuration
-                .tcp_ports_for_node_whitelist
-                .clone(),
+            ports: self.configuration.tcp_ports_for_node_whitelist.clone(),
             action: FirewallAction::Allow as i32,
             comment: "Automatic node whitelisting".to_string(),
             user: None,
@@ -185,11 +225,7 @@ impl ICAwareFirewall {
         let udp_node_whitelisting_rule = FirewallRule {
             ipv4_prefixes: node_ipv4s.clone(),
             ipv6_prefixes: node_ipv6s.clone(),
-            ports: self
-                .parent
-                .configuration
-                .udp_ports_for_node_whitelist
-                .clone(),
+            ports: self.configuration.udp_ports_for_node_whitelist.clone(),
             action: FirewallAction::Allow as i32,
             comment: "Automatic node whitelisting".to_string(),
             user: None,
@@ -210,11 +246,7 @@ impl ICAwareFirewall {
         let ic_http_adapter_rule = FirewallRule {
             ipv4_prefixes: node_ipv4s,
             ipv6_prefixes: node_ipv6s,
-            ports: self
-                .parent
-                .configuration
-                .ports_for_http_adapter_blacklist
-                .clone(),
+            ports: self.configuration.ports_for_http_adapter_blacklist.clone(),
             action: FirewallAction::Reject as i32,
             comment: "Automatic blacklisting for ic-http-adapter".to_string(),
             user: Some("ic-http-adapter".to_string()),
@@ -225,17 +257,14 @@ impl ICAwareFirewall {
         tcp_rules.insert(0, ic_http_adapter_rule);
 
         // Generate the firewall file content
-        let content = StartupFirewall::generate_firewall_file_content_full(
-            &self.parent.configuration,
-            tcp_rules,
-            udp_rules,
-        );
+        let content =
+            Self::generate_firewall_file_content_full(&self.configuration, tcp_rules, udp_rules);
 
         let changed = content.ne(&self.compiled_config);
         if changed {
             // Firewall config is different - update it
             info!(
-                self.parent.logger,
+                self.logger,
                 "New firewall configuration found (source: {:?}). Updating local firewall.",
                 self.source
             );
@@ -245,11 +274,11 @@ impl ICAwareFirewall {
         if changed || self.must_write {
             if content.is_empty() {
                 warn!(
-                    self.parent.logger,
+                    self.logger,
                     "No firewall configuration found. Orchestrator will not write any config to a file."
                 );
             } else {
-                self.parent.write_firewall_file(content.to_string()).await;
+                self.write_firewall_file(&content)?;
 
                 self.compiled_config = content;
                 update_version_metric = true;
@@ -264,178 +293,15 @@ impl ICAwareFirewall {
                 .set(i64::try_from(registry_version.get()).unwrap_or(-1));
         }
         *self.last_applied_version.write().await = registry_version;
-    }
 
-    /// Checks for new firewall config, and if found, update local firewall rules.
-    /// Uses locally-available firewall configuration data as well as data coming
-    /// from the registry.
-    pub async fn check_and_update(&mut self) -> OrchestratorResult<()> {
-        if !self.parent.enabled {
-            return Ok(());
-        }
-        let registry_version = self.registry.get_latest_version();
-        debug!(
-            self.parent.logger,
-            "Checking for firewall config at registry version: {}", registry_version
-        );
-        self.check_for_firewall_config(registry_version).await;
-        self.metrics
-            .firewall_registry_version
-            .set(registry_version.get() as i64);
         Ok(())
     }
 
-    pub fn get_last_applied_version(&self) -> Arc<RwLock<RegistryVersion>> {
-        Arc::clone(&self.last_applied_version)
-    }
-}
-
-/// Provides function to set up a minimal firewall upon orchestrator start.
-/// Also allows the orchestrator to later transition to an IC-aware firewall.
-#[derive(Debug)]
-pub struct StartupFirewall {
-    logger: ReplicaLogger,
-    configuration: FirewallConfig,
-    /// If false, do not update the firewall rules (test mode)
-    enabled: bool,
-    firewall_updates: mpsc::Sender<String>,
-    #[allow(dead_code)] // reason = "Drop of this field causes coalescer to end safely."
-    firewall_end: mpsc::Sender<()>,
-}
-
-impl StartupFirewall {
-    pub fn new(firewall_config: FirewallConfig, logger: ReplicaLogger) -> Self {
-        let config = firewall_config;
-
-        // Disable if the config is the default one (e.g if we're in a test)
-        let enabled = config
-            .config_file
-            .ne(&PathBuf::from(FIREWALL_FILE_DEFAULT_PATH));
-
-        if enabled {
-            info!(
-                logger,
-                "Firewall is enabled.  Configuration will be deployed into path {} . ",
-                config.config_file.display()
-            );
-        } else {
-            warn!(
-                logger,
-                "Path {} to deploy firewall configuration into is not valid.  Orchestrator will not update initial firewall rules, nor will it update rules as the registry updates.",
-                config.config_file.display()
-            );
-        }
-
-        let (firewall_updates, mut firewall_updates_receiver): (
-            mpsc::Sender<String>,
-            mpsc::Receiver<String>,
-        ) = mpsc::channel(1);
-        let (firewall_end, mut firewall_end_receiver): (mpsc::Sender<()>, mpsc::Receiver<()>) =
-            mpsc::channel(1);
-        let coalescer_config_file = config.config_file.clone();
-        let coalescer_logger = logger.clone();
-
-        // Spawn the firewall rule updater coalescer.
-        tokio::spawn(async move {
-            info!(coalescer_logger, "Firewall coalescer started.");
-
-            loop {
-                tokio::select! {
-                    _ = firewall_end_receiver.recv() => {
-                        break;
-                    },
-                    content = firewall_updates_receiver.recv() => {
-                        if content.is_none() {
-                            break;
-                        }
-                        let content = content.unwrap();
-                        // Write the firewall configuration to the file.
-                        // This will then be, in turn, picked up by systemd path unit
-                        // reload_nftables.path which then will reload the firewall.
-                        match write_string_using_tmp_file(&coalescer_config_file, content.as_str()) {
-                            Ok(_) => {
-                                info!(
-                                    coalescer_logger,
-                                    "Firewall coalescer updated file {}.",
-                                    coalescer_config_file.display()
-                                );
-                            }
-                            Err(e) => {
-                                error!(
-                                    coalescer_logger,
-                                    "Firewall coalescer could not update file {}: {}",
-                                    coalescer_config_file.display(),
-                                    e
-                                )
-                            }
-                        };
-                    },
-                };
-                // Now sleep until ended or a second has passed, to coalesce
-                // firewall updates.  systemd path units (used to activate
-                // the firewall on rule file changes) cannot detect fast
-                // (less than .5 second) updates to the same file, resulting
-                // in the initial firewall being applied but its immediate
-                // subsequent update being skipped.
-                tokio::select! {
-                    _ = firewall_end_receiver.recv() => {
-                        break;
-                    },
-                    _ = tokio::time::sleep(tokio::time::Duration::new(1, 0)) => {
-                    },
-                };
-            }
-
-            info!(coalescer_logger, "Firewall coalescer ended.");
-        });
-
-        Self {
-            configuration: config,
-            logger,
-            enabled,
-            firewall_updates,
-            firewall_end,
-        }
-    }
-
-    pub(crate) fn into_ic_aware_firewall(
-        self,
-        node_id: NodeId,
-        registry: Arc<RegistryHelper>,
-        metrics: Arc<OrchestratorMetrics>,
-        catchup_package_provider: Arc<CatchUpPackageProvider>,
-    ) -> ICAwareFirewall {
-        ICAwareFirewall {
-            parent: self,
-            registry,
-            metrics,
-            catchup_package_provider,
-            source: DataSource::Config,
-            compiled_config: Default::default(),
-            last_applied_version: Default::default(),
-            must_write: true,
-            node_id,
-        }
-    }
-
-    /// Checks for the firewall configuration that applies to this node,
-    /// then writes the configuration to the nftables configuration file.
-    /// This is the minimal version, which always applies upon start.
-    async fn check_for_firewall_config(&self) {
-        // Add default rules to list of rules.
-        let mut tcp_rules = Vec::<FirewallRule>::new();
-        let udp_rules = Vec::<FirewallRule>::new();
-        tcp_rules.append(&mut self.configuration.default_rules.clone());
-        // Generate and write the firewall file content.
-        let content =
-            &Self::generate_firewall_file_content_full(&self.configuration, tcp_rules, udp_rules);
-        self.write_firewall_file(content.to_string()).await;
-    }
-
-    // Send the firewall configpuration to the coalescer updater.
-    async fn write_firewall_file(&self, content: String) {
-        // If the receiver has gone, we ignore the error.
-        let _ = self.firewall_updates.send(content).await;
+    fn write_firewall_file(&self, content: &str) -> OrchestratorResult<()> {
+        let f = &self.configuration.config_file;
+        write_string_using_tmp_file(f, content)
+            .map_err(|e| OrchestratorError::file_write_error(f, e))?;
+        Ok(())
     }
 
     /// Generates a string with the content for the firewall rules file
@@ -590,13 +456,28 @@ impl StartupFirewall {
             .join("\n")
     }
 
-    /// Checks for new firewall config, and if found, update local firewall rules.
-    /// Only relies on locally-available firewall configuration data.
-    pub async fn check_and_update(&self) {
+    /// Checks for new firewall config, and if found, update local firewall
+    /// rules
+    pub async fn check_and_update(&mut self) {
         if !self.enabled {
             return;
         }
-        self.check_for_firewall_config().await
+        let registry_version = self.registry.get_latest_version();
+        debug!(
+            self.logger,
+            "Checking for firewall config registry version: {}", registry_version
+        );
+
+        if let Err(e) = self.check_for_firewall_config(registry_version).await {
+            info!(
+                self.logger,
+                "Failed to check for firewall config at version {}: {}", registry_version, e
+            )
+        }
+    }
+
+    pub fn get_last_applied_version(&self) -> Arc<RwLock<RegistryVersion>> {
+        Arc::clone(&self.last_applied_version)
     }
 }
 
@@ -719,6 +600,6 @@ fn test_firewall_rule_compilation() {
 
     assert_eq!(
         expected_file_content,
-        StartupFirewall::generate_firewall_file_content_full(&config, tcp_rules, udp_rules)
+        Firewall::generate_firewall_file_content_full(&config, tcp_rules, udp_rules)
     );
 }
