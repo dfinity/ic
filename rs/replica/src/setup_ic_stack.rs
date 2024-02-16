@@ -1,5 +1,4 @@
 use crate::setup::get_subnet_type;
-use crossbeam_channel::Sender;
 use ic_artifact_pool::{
     consensus_pool::ConsensusPoolImpl, ensure_persistent_pool_replica_version_compatibility,
 };
@@ -33,6 +32,7 @@ use ic_types::{
 use ic_xnet_endpoint::{XNetEndpoint, XNetEndpointConfig};
 use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
 use std::sync::{Arc, RwLock};
+use tokio::sync::mpsc::UnboundedSender;
 
 /// Create the consensus pool directory (if none exists)
 fn create_consensus_pool_dir(config: &Config) {
@@ -66,7 +66,7 @@ pub fn construct_ic_stack(
     Arc<dyn QueryHandler<State = ReplicatedState>>,
     Vec<Box<dyn JoinGuard>>,
     // TODO: remove this return value since it is used only in tests
-    Sender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
     XNetEndpoint,
 )> {
     // Determine the correct catch-up package.

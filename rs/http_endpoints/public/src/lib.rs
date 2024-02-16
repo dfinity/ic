@@ -55,7 +55,7 @@ use crate::{
 };
 use byte_unit::Byte;
 use bytes::Bytes;
-use crossbeam::{atomic::AtomicCell, channel::Sender};
+use crossbeam::atomic::AtomicCell;
 use http::method::Method;
 use hyper::{server::conn::Http, Body, Request, Response, StatusCode};
 use ic_async_utils::{receive_body, start_tcp_listener};
@@ -106,9 +106,12 @@ use std::{
 };
 use strum::{Display, IntoStaticStr};
 use tempfile::NamedTempFile;
-use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::net::TcpStream;
-use tokio::time::{sleep, timeout, Instant};
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    net::TcpStream,
+    sync::mpsc::UnboundedSender,
+    time::{sleep, timeout, Instant},
+};
 use tokio_io_timeout::TimeoutStream;
 use tower::{
     limit::GlobalConcurrencyLimitLayer, service_fn, util::BoxCloneService, BoxError, Service,
@@ -261,7 +264,7 @@ pub fn start_server(
     ingress_filter: IngressFilterService,
     query_execution_service: QueryExecutionService,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    ingress_tx: Sender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     query_signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,

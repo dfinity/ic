@@ -4992,7 +4992,6 @@ name = "ic-artifact-manager"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
- "crossbeam-channel",
  "ic-artifact-pool",
  "ic-config",
  "ic-interfaces",
@@ -5001,6 +5000,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-types",
  "prometheus",
+ "tokio",
 ]
 
 [[package]]
@@ -5996,7 +5996,6 @@ dependencies = [
  "axum 0.7.4",
  "backoff",
  "bytes",
- "crossbeam-channel",
  "futures",
  "ic-base-types",
  "ic-interfaces",
@@ -9481,7 +9480,6 @@ dependencies = [
  "async-trait",
  "axum 0.7.4",
  "bytes",
- "crossbeam-channel",
  "either",
  "futures",
  "ic-artifact-manager",
@@ -10067,7 +10065,6 @@ dependencies = [
  "canister-test",
  "clap 3.2.25",
  "criterion",
- "crossbeam-channel",
  "hex",
  "ic-artifact-pool",
  "ic-async-utils",

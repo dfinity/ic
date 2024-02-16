@@ -1,5 +1,4 @@
 use core::future::Future;
-use crossbeam_channel::Sender as CrossbeamSender;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_canister_client_sender::Sender;
 use ic_config::Config;
@@ -52,6 +51,7 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+use tokio::sync::mpsc::UnboundedSender;
 
 const CYCLES_BALANCE: u128 = 1 << 120;
 
@@ -62,7 +62,7 @@ const CYCLES_BALANCE: u128 = 1 << 120;
 /// time.
 #[allow(clippy::await_holding_lock)]
 fn process_ingress(
-    ingress_tx: &CrossbeamSender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    ingress_tx: &UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
     ingress_hist_reader: &dyn IngressHistoryReader,
     msg: SignedIngress,
     time_limit: Duration,
@@ -149,7 +149,7 @@ where
 /// function calls instead of http calls.
 pub struct LocalTestRuntime {
     pub query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
-    pub ingress_sender: CrossbeamSender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    pub ingress_sender: UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
     pub ingress_history_reader: Arc<dyn IngressHistoryReader>,
     pub state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     pub node_id: NodeId,

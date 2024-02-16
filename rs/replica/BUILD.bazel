@@ -38,7 +38,6 @@ DEPENDENCIES = [
     "//rs/xnet/endpoint",
     "//rs/xnet/payload_builder",
     "@crate_index//:clap",
-    "@crate_index//:crossbeam-channel",
     "@crate_index//:hex",
     "@crate_index//:jemalloc-ctl",
     "@crate_index//:jemallocator",
