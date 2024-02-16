@@ -8,7 +8,8 @@ use ic_cketh_minter::endpoints::events::{
     Event as CandidEvent, EventSource as CandidEventSource, GetEventsArg, GetEventsResult,
 };
 use ic_cketh_minter::endpoints::{
-    Eip1559TransactionPrice, RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg, WithdrawalError,
+    Eip1559TransactionPrice, GasFeeEstimate, MinterInfo, RetrieveEthRequest, RetrieveEthStatus,
+    WithdrawalArg, WithdrawalError,
 };
 use ic_cketh_minter::eth_logs::{EventSource, ReceivedEthEvent};
 use ic_cketh_minter::guard::retrieve_eth_guard;
@@ -35,6 +36,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 mod dashboard;
+
 pub const SEPOLIA_TEST_CHAIN_ID: u64 = 11155111;
 
 fn validate_caller_not_anonymous() -> candid::Principal {
@@ -136,6 +138,28 @@ async fn eip_1559_transaction_price() -> Eip1559TransactionPrice {
         }
         None => ic_cdk::trap("ERROR: last transaction price estimate is not available"),
     }
+}
+
+/// Returns the current parameters used by the minter.
+/// This includes information that can be retrieved form other endpoints as well.
+/// To retain some flexibility in the API all fields in the return value are optional.
+#[query]
+async fn get_minter_info() -> MinterInfo {
+    read_state(|s| MinterInfo {
+        minter_address: s.minter_address().map(|a| a.to_string()),
+        smart_contract_address: s.ethereum_contract_address.map(|a| a.to_string()),
+        minimum_withdrawal_amount: Some(s.minimum_withdrawal_amount.into()),
+        ethereum_block_height: Some(s.ethereum_block_height.into()),
+        last_observed_block_number: s.last_observed_block_number.map(|n| n.into()),
+        eth_balance: Some(s.eth_balance.eth_balance().into()),
+        last_gas_fee_estimate: s.last_transaction_price_estimate.as_ref().map(
+            |(timestamp, estimate)| GasFeeEstimate {
+                max_fee_per_gas: estimate.max_fee_per_gas.into(),
+                max_priority_fee_per_gas: estimate.max_priority_fee_per_gas.into(),
+                timestamp: *timestamp,
+            },
+        ),
+    })
 }
 
 #[update]
@@ -570,7 +594,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 Err(_) => {
                     return HttpResponseBuilder::bad_request()
                         .with_body_and_content_length("failed to parse the 'time' parameter")
-                        .build()
+                        .build();
                 }
             },
             None => 0,

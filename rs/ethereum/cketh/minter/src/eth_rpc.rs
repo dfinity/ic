@@ -197,6 +197,16 @@ impl From<CandidBlockTag> for BlockTag {
     }
 }
 
+impl From<BlockTag> for CandidBlockTag {
+    fn from(value: BlockTag) -> Self {
+        match value {
+            BlockTag::Latest => CandidBlockTag::Latest,
+            BlockTag::Safe => CandidBlockTag::Safe,
+            BlockTag::Finalized => CandidBlockTag::Finalized,
+        }
+    }
+}
+
 impl Display for BlockTag {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
