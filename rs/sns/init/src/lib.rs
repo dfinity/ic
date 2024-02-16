@@ -515,9 +515,6 @@ impl SnsInitPayload {
                 dissolve_delay_interval_seconds: 10_001,
             }),
             nns_proposal_id: Some(10),
-            neurons_fund_participants: Some(NeuronsFundParticipants {
-                participants: vec![],
-            }),
             neurons_fund_participation: Some(true),
             neurons_fund_participation_constraints: Some(NeuronsFundParticipationConstraints {
                 min_direct_participation_threshold_icp_e8s: Some(12_300_000_000),
@@ -538,6 +535,7 @@ impl SnsInitPayload {
                     ),
                 }),
             }),
+            neurons_fund_participants: None,
             ..SnsInitPayload::with_default_values()
         }
     }
@@ -1830,27 +1828,14 @@ impl SnsInitPayload {
     }
 
     fn validate_neurons_fund_participants(&self) -> Result<(), String> {
-        let neurons_fund_participants = self
-            .neurons_fund_participants
-            .as_ref()
-            .ok_or("Error: neurons_fund_participants must be specified")?;
-
-        let errors = neurons_fund_participants
-            .participants
-            .iter()
-            .map(|cf_participant| cf_participant.validate())
-            .filter_map(|result| result.err())
-            .collect::<Vec<String>>();
-
-        if !errors.is_empty() {
-            let msg = format!(
-                "Error: one or more participants from the Neuron's Fund is invalid: {}",
-                errors.join("\n")
-            );
-            return Err(msg);
+        if self.neurons_fund_participants.is_none() {
+            Ok(())
+        } else {
+            Err(format!(
+                "Error: neurons_fund_participants can be set only by Swap; was initialized to {:?}",
+                self.neurons_fund_participants
+            ))
         }
-
-        Ok(())
     }
 
     fn validate_swap_start_timestamp_seconds_pre_execution(&self) -> Result<(), String> {
@@ -2030,9 +2015,6 @@ impl SnsInitPayload {
         if self.nns_proposal_id.is_none() {
             missing_one_proposal_fields.push("nns_proposal_id")
         }
-        if self.neurons_fund_participants.is_none() {
-            missing_one_proposal_fields.push("neurons_fund_participants")
-        }
         if self.swap_start_timestamp_seconds.is_none() {
             missing_one_proposal_fields.push("swap_start_timestamp_seconds")
         }
@@ -2049,7 +2031,12 @@ impl SnsInitPayload {
         if missing_one_proposal_fields.is_empty() {
             Ok(())
         } else {
-            Err(format!("Error: The one-proposal SNS initialization requires some SnsInitPayload parameters to be Some. But the following fields were set to None: {}", missing_one_proposal_fields.join(", ")))
+            Err(format!(
+                "Error in validate_all_post_execution_swap_parameters_are_set: The one-proposal \
+                SNS initialization requires some SnsInitPayload parameters to be Some. But the \
+                following fields were set to None: {}",
+                missing_one_proposal_fields.join(", ")
+            ))
         }
     }
 
@@ -2088,7 +2075,12 @@ impl SnsInitPayload {
         if missing_one_proposal_fields.is_empty() {
             Ok(())
         } else {
-            Err(format!("Error: The one-proposal SNS initialization requires some SnsInitPayload parameters to be Some. But the following fields were set to None: {}", missing_one_proposal_fields.join(", ")))
+            Err(format!(
+                "Error in validate_all_non_legacy_pre_execution_swap_parameters_are_set: The one-\
+                proposal SNS initialization requires some SnsInitPayload parameters to be Some. \
+                But the following fields were set to None: {}",
+                missing_one_proposal_fields.join(", ")
+            ))
         }
     }
 }
