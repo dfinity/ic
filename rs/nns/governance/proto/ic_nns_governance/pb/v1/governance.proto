@@ -387,8 +387,6 @@ message Neuron {
 // the goal is to keep the size of the struct consistent and can be easily stored in a
 // StableBTreeMap. For the meaning of each field, see the Neuron struct.
 message AbridgedNeuron {
-  // TODO: drop this field after the change to use AbridgedNeuron is released.
-  ic_nns_common.pb.v1.NeuronId id = 1;
   bytes account = 2;
   ic_base_types.pb.v1.PrincipalId controller = 3;
   uint64 cached_neuron_stake_e8s = 5;
@@ -407,6 +405,9 @@ message AbridgedNeuron {
   bool not_for_profit = 16;
   optional uint64 joined_community_fund_timestamp_seconds = 17;
   optional NeuronType neuron_type = 22;
+
+  reserved 1;
+  reserved "id";
 }
 
 // Types of a Neuron.

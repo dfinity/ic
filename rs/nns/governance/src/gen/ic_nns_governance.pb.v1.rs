@@ -318,9 +318,6 @@ pub mod neuron {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AbridgedNeuron {
-    /// TODO: drop this field after the change to use AbridgedNeuron is released.
-    #[prost(message, optional, tag = "1")]
-    pub id: ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,
     #[prost(bytes = "vec", tag = "2")]
     pub account: ::prost::alloc::vec::Vec<u8>,
     #[prost(message, optional, tag = "3")]
