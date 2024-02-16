@@ -1,6 +1,6 @@
 use crate::common::local_replica;
 use crate::common::local_replica::test_identity;
-use crate::common::utils::get_rosetta_blocks_from_icrc1_ledger;
+use crate::common::utils::{get_rosetta_blocks_from_icrc1_ledger, wait_for_rosetta_block};
 use candid::Encode;
 use candid::Nat;
 use candid::Principal;
@@ -522,6 +522,52 @@ async fn test_construction_derive() {
         .account_identifier
         .expect("/construction/derive did not return an account identifier");
     assert_eq!(account_identifier, account.into());
+}
+
+#[tokio::test]
+async fn test_continuous_block_sync() {
+    let env = RosettaTestingEnvironmentBuilder::new().build().await;
+
+    for blocks in 1..6 {
+        let last_block_idx_start = env
+            .rosetta_client
+            .network_status(env.network_identifier.clone())
+            .await
+            .expect("Unable to call network_status")
+            .current_block_identifier
+            .index;
+
+        let args = TransferArg {
+            from_subaccount: None,
+            to: *TEST_ACCOUNT,
+            fee: Some(DEFAULT_TRANSFER_FEE.into()),
+            amount: 1u64.into(),
+            memo: None,
+            created_at_time: None,
+        };
+        for i in 0..blocks {
+            let block_index = env
+                .icrc1_agent
+                .transfer(args.clone())
+                .await
+                .expect("sending transfer failed")
+                .expect("transfer resulted in an error");
+            assert_eq!(block_index, last_block_idx_start + i + 1);
+        }
+
+        let last_block_idx = wait_for_rosetta_block(
+            &env.rosetta_client,
+            env.network_identifier.clone(),
+            last_block_idx_start + blocks,
+        )
+        .await;
+
+        assert_eq!(
+            last_block_idx,
+            last_block_idx_start + blocks,
+            "Rosetta did not sync the last block!"
+        );
+    }
 }
 
 #[tokio::test]

@@ -12,6 +12,7 @@ use ic_agent::{
 };
 use ic_base_types::CanisterId;
 use ic_icrc_rosetta::{
+    common::constants::{BLOCK_SYNC_WAIT_SECS, MAX_BLOCK_SYNC_WAIT_SECS},
     common::storage::{storage_client::StorageClient, types::MetadataEntry},
     construction_api::endpoints::*,
     data_api::endpoints::*,
@@ -25,7 +26,7 @@ use std::{path::PathBuf, process};
 use tower_http::classify::{ServerErrorsAsFailures, SharedClassifier};
 use tower_http::trace::TraceLayer;
 use tower_request_id::{RequestId, RequestIdLayer};
-use tracing::{debug, error_span, info, Level, Span};
+use tracing::{debug, error, error_span, info, Level, Span};
 use url::Url;
 
 lazy_static! {
@@ -301,7 +302,7 @@ async fn main() -> Result<()> {
 
     let metadata = load_metadata(&args, &icrc1_agent, &storage).await?;
     let shared_state = Arc::new(AppState {
-        icrc1_agent,
+        icrc1_agent: icrc1_agent.clone(),
         ledger_id: args.ledger_id,
         storage: storage.clone(),
         metadata,
@@ -335,6 +336,29 @@ async fn main() -> Result<()> {
 
     if let Some(port_file) = args.port_file {
         std::fs::write(port_file, tcp_listener.local_addr()?.port().to_string())?;
+    }
+
+    if !args.offline {
+        tokio::spawn(async move {
+            let mut sync_wait_secs = BLOCK_SYNC_WAIT_SECS;
+            loop {
+                if let Err(e) = start_synching_blocks(
+                    icrc1_agent.clone(),
+                    storage.clone(),
+                    *MAXIMUM_BLOCKS_PER_REQUEST,
+                )
+                .await
+                {
+                    error!("Error while syncing blocks: {}", e);
+                    sync_wait_secs = std::cmp::min(sync_wait_secs * 2, MAX_BLOCK_SYNC_WAIT_SECS);
+                    info!("Retrying in {} seconds.", sync_wait_secs);
+                } else {
+                    sync_wait_secs = BLOCK_SYNC_WAIT_SECS;
+                }
+
+                tokio::time::sleep(std::time::Duration::from_secs(sync_wait_secs)).await;
+            }
+        });
     }
 
     info!("Starting Rosetta server");
