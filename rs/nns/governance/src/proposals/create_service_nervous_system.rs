@@ -6,9 +6,7 @@ use crate::pb::v1::{
 use ic_nervous_system_common::SECONDS_PER_DAY;
 use ic_nervous_system_proto::pb::v1::{Duration, GlobalTimeOfDay};
 use ic_nns_constants::IS_MATCHED_FUNDING_ENABLED;
-use ic_sns_init::pb::v1::{
-    self as sns_init_pb, sns_init_payload, NeuronsFundParticipants, SnsInitPayload,
-};
+use ic_sns_init::pb::v1::{self as sns_init_pb, sns_init_payload, SnsInitPayload};
 use ic_sns_swap::pb::v1::{
     self as sns_swap_pb, CfParticipant, NeuronsFundParticipationConstraints,
 };
@@ -32,9 +30,6 @@ impl TryFrom<ExecutedCreateServiceNervousSystemProposal> for SnsInitPayload {
 
         let current_timestamp_seconds = src.current_timestamp_seconds;
         let nns_proposal_id = Some(src.proposal_id);
-        let neurons_fund_participants = Some(NeuronsFundParticipants {
-            participants: src.neurons_fund_participants,
-        });
         let neurons_fund_participation_constraints = src.neurons_fund_participation_constraints;
         let start_time = src
             .create_service_nervous_system
@@ -66,10 +61,12 @@ impl TryFrom<ExecutedCreateServiceNervousSystemProposal> for SnsInitPayload {
         let mut result = SnsInitPayload::try_from(src.create_service_nervous_system)?;
 
         result.nns_proposal_id = nns_proposal_id;
-        result.neurons_fund_participants = neurons_fund_participants;
         result.swap_start_timestamp_seconds = swap_start_timestamp_seconds;
         result.swap_due_timestamp_seconds = swap_due_timestamp_seconds;
         result.neurons_fund_participation_constraints = neurons_fund_participation_constraints;
+
+        // This field should be set only by Swap itself.
+        result.neurons_fund_participants = None;
 
         result.validate_post_execution()?;
 

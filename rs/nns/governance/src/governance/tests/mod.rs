@@ -463,8 +463,6 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
     fn test_convert_from_valid() {
         // Step 1: Prepare the world. (In this case, trivial.)
 
-        use ic_sns_init::pb::v1::NeuronsFundParticipants;
-
         use crate::governance::test_data::NEURONS_FUND_PARTICIPATION_CONSTRAINTS;
         let current_timestamp_seconds = 13_245;
         let proposal_id = 1000;
@@ -606,9 +604,7 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
                 confirmation_text: original_swap_parameters.confirmation_text.clone(),
                 restricted_countries: original_swap_parameters.restricted_countries.clone(),
                 nns_proposal_id: Some(proposal_id),
-                neurons_fund_participants: Some(NeuronsFundParticipants {
-                    participants: vec![],
-                }),
+                neurons_fund_participants: None,
                 neurons_fund_participation: Some(true),
 
                 neurons_fund_participation_constraints: Some(
