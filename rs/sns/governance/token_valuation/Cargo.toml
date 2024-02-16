@@ -13,14 +13,13 @@ ic-nervous-system-common = { path = "../../../nervous_system/common" }
 ic-nervous-system-runtime = { path = "../../../nervous_system/runtime" }
 ic-nervous-system-string = { path = "../../../nervous_system/string" }
 ic-nns-constants = { path = "../../../nns/constants" }
-ic-sns-swap = { path = "../../../sns/swap" }
+ic-sns-swap-proto-library = { path = "../../../sns/swap/proto_library" }
 ic-base-types = { path = "../../../types/base_types" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 mockall = { workspace = true }
 rust_decimal = "1.25"
 
 [dev-dependencies]
-ic-ledger-core = { path = "../../../rosetta-api/ledger_core" }
 lazy_static = "1.4.0"
 maplit = "1.0.2"
 tokio = { workspace = true }

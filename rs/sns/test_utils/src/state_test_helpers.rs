@@ -44,7 +44,7 @@ use icp_ledger::{
 };
 use icrc_ledger_types::icrc1::account::Account;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct SnsTestCanisterIds {
     pub root_canister_id: CanisterId,
     pub governance_canister_id: CanisterId,

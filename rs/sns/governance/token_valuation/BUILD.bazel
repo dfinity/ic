@@ -9,7 +9,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/string",
     "//rs/nns/cmc",
     "//rs/nns/constants",
-    "//rs/sns/swap",
+    "//rs/sns/swap/proto_library",
     "//rs/types/base_types",
     "@crate_index//:candid",
     "@crate_index//:futures",
@@ -23,7 +23,6 @@ MACRO_DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
-    "//rs/rosetta-api/ledger_core",
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
     "@crate_index//:tokio",

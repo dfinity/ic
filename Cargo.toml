@@ -314,6 +314,7 @@ members = [
   "rs/sns/root",
   "rs/sns/root/protobuf_generator",
   "rs/sns/swap",
+  "rs/sns/swap/proto_library",
   "rs/sns/test_utils",
   "rs/starter",
   "rs/state_manager",
