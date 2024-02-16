@@ -646,7 +646,6 @@ impl TryFrom<Neuron> for DecomposedNeuron {
         let id = id.ok_or(NeuronStoreError::NeuronIdIsNone)?;
 
         let main = AbridgedNeuron {
-            id: Some(id),
             account,
             controller,
             cached_neuron_stake_e8s,
@@ -695,7 +694,6 @@ impl DecomposedNeuron {
         } = self;
 
         let AbridgedNeuron {
-            id: _,
             account,
             controller,
             cached_neuron_stake_e8s,
