@@ -1725,36 +1725,6 @@ impl Governance {
         }
     }
 
-    /// Removes some data from a given proposal data and returns it.
-    ///
-    /// Specifically, remove the ballots in the proposal data and possibly the proposal's payload.
-    /// The payload is removed if the proposal is an ExecuteNervousSystemFunction or if it's
-    /// a UpgradeSnsControlledCanister. The text rendering should include displayable information about
-    /// the payload contents already.
-    fn limit_proposal_data(&self, data: &ProposalData) -> ProposalData {
-        let mut new_proposal = data.proposal.clone();
-        if let Some(proposal) = &mut new_proposal {
-            // We can't understand the payloads of nervous system functions, as well as the wasm
-            // for upgrades, so just omit them when listing proposals.
-            match &mut proposal.action {
-                Some(Action::ExecuteGenericNervousSystemFunction(m)) => {
-                    m.payload.clear();
-                }
-                Some(Action::UpgradeSnsControlledCanister(m)) => {
-                    m.new_canister_wasm.clear();
-                }
-                _ => (),
-            }
-        }
-
-        ProposalData {
-            proposal: new_proposal,
-            proposal_creation_timestamp_seconds: data.proposal_creation_timestamp_seconds,
-            ballots: BTreeMap::new(), // To reduce size of payload, exclude ballots
-            ..data.clone()
-        }
-    }
-
     /// Returns proposal data of proposals with proposal ID less
     /// than `before_proposal` (exclusive), returning at most `limit` proposal
     /// data. If `before_proposal` is not provided, list_proposals() starts from the highest
@@ -1782,11 +1752,20 @@ impl Governance {
     ///
     /// The caller can retrieve dropped payloads and ballots by calling `get_proposal`
     /// for each proposal of interest.
-    pub fn list_proposals(&self, req: &ListProposals) -> ListProposalsResponse {
-        let exclude_type: HashSet<u64> = req.exclude_type.iter().cloned().collect();
+    pub fn list_proposals(
+        &self,
+        request: &ListProposals,
+        caller: &PrincipalId,
+    ) -> ListProposalsResponse {
+        let caller_neurons_set: HashSet<_> = self
+            .get_neuron_ids_by_principal(caller)
+            .into_iter()
+            .map(|neuron_id| neuron_id.to_string())
+            .collect();
+        let exclude_type: HashSet<u64> = request.exclude_type.iter().cloned().collect();
         let include_reward_status: HashSet<i32> =
-            req.include_reward_status.iter().cloned().collect();
-        let include_status: HashSet<i32> = req.include_status.iter().cloned().collect();
+            request.include_reward_status.iter().cloned().collect();
+        let include_status: HashSet<i32> = request.include_status.iter().cloned().collect();
         let now = self.env.now();
         let filter_all = |data: &ProposalData| -> bool {
             let action = data.action;
@@ -1807,31 +1786,36 @@ impl Governance {
 
             true
         };
-        let limit = if req.limit == 0 || req.limit > MAX_LIST_PROPOSAL_RESULTS {
+        let limit = if request.limit == 0 || request.limit > MAX_LIST_PROPOSAL_RESULTS {
             MAX_LIST_PROPOSAL_RESULTS
         } else {
-            req.limit
+            request.limit
         } as usize;
         let props = &self.proto.proposals;
         // Proposals are stored in a sorted map. If 'before_proposal'
         // is provided, grab all proposals before that, else grab the
         // whole range.
-        let rng = if let Some(n) = req.before_proposal {
+        let rng = if let Some(n) = request.before_proposal {
             props.range(..(n.id))
         } else {
             props.range(..)
         };
         // Now reverse the range, filter, and restrict to 'limit'.
-        let limited_rng = rng.rev().filter(|(_, x)| filter_all(x)).take(limit);
+        let limited_rng = rng
+            .rev()
+            .filter(|(_, proposal)| filter_all(proposal))
+            .take(limit);
 
         let proposal_info = limited_rng
-            .map(|(_, y)| y)
-            .map(|pd| self.limit_proposal_data(pd))
+            .map(|(_id, proposal_data)| {
+                proposal_data.limited_for_list_proposals(&caller_neurons_set)
+            })
             .collect();
 
         // Ignore the keys and clone to a vector.
         ListProposalsResponse {
             proposals: proposal_info,
+            include_ballots_by_caller: Some(true),
         }
     }
 

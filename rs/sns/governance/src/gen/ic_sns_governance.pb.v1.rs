@@ -2275,6 +2275,9 @@ pub struct ListProposalsResponse {
     /// The returned list of proposals' ProposalData.
     #[prost(message, repeated, tag = "1")]
     pub proposals: ::prost::alloc::vec::Vec<ProposalData>,
+    /// Whether ballots cast by the caller are included in the returned proposals.
+    #[prost(bool, optional, tag = "2")]
+    pub include_ballots_by_caller: ::core::option::Option<bool>,
 }
 /// An operation that lists all neurons tracked in the Governance state in a
 /// paginated fashion.

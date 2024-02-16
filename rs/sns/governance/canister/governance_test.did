@@ -229,7 +229,10 @@ type ListProposals = record {
   exclude_type : vec nat64;
   include_status : vec int32;
 };
-type ListProposalsResponse = record { proposals : vec ProposalData };
+type ListProposalsResponse = record {
+  include_ballots_by_caller : opt bool;
+  proposals : vec ProposalData;
+};
 type ManageDappCanisterSettings = record {
   freezing_threshold : opt nat64;
   canister_ids : vec principal;

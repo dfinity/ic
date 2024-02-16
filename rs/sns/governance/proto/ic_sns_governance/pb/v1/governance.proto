@@ -1825,6 +1825,8 @@ message ListProposals {
 message ListProposalsResponse {
   // The returned list of proposals' ProposalData.
   repeated ProposalData proposals = 1;
+  // Whether ballots cast by the caller are included in the returned proposals.
+  optional bool include_ballots_by_caller = 2;
 }
 
 // An operation that lists all neurons tracked in the Governance state in a
