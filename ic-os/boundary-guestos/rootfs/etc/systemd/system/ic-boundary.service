@@ -21,6 +21,7 @@ ExecStart=/bin/bash -c ' \
         --metrics-addr "[::]:9324" \
         --log-failed-requests-only \
         --nftables-system-replicas-path /run/ic-node/etc/nftables/system_replicas.ruleset \
+        --geoip-db /run/ic-node/etc/ic-boundary/GeoLite2-Country.mmdb \
         --rate-limit-ledger-transfer 5 \
         ${MAX_CONCURRENCY:+ --max-concurrency "${MAX_CONCURRENCY}"} \
         ${SHED_EWMA_PARAM:+ --shed-ewma-param "${SHED_EWMA_PARAM}"} \

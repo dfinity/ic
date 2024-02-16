@@ -41,6 +41,7 @@ use crate::{
     cli::Cli,
     dns::DnsResolver,
     firewall::{FirewallGenerator, SystemdReloader},
+    geoip,
     http::{HttpClient, ReqwestClient},
     management,
     metrics::{
@@ -498,6 +499,12 @@ pub fn setup_router(
         // 1st layer wraps 2nd layer and so on
         ServiceBuilder::new()
             .layer(middleware::from_fn(routes::validate_request))
+            .layer(option_layer(cli.monitoring.geoip_db.as_ref().map(|x| {
+                middleware::from_fn_with_state(
+                    Arc::new(geoip::GeoIp::new(x).expect("unable to load GeoIP")),
+                    geoip::middleware,
+                )
+            })))
             .set_x_request_id(MakeRequestUuid)
             .layer(option_layer(
                 (!cli.monitoring.disable_request_logging).then_some(

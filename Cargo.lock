@@ -5232,6 +5232,7 @@ dependencies = [
  "jemallocator",
  "lazy_static",
  "little-loadshedder",
+ "maxminddb",
  "mockall",
  "moka",
  "prometheus",
@@ -12147,6 +12148,7 @@ name = "icx-proxy"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "arc-swap",
  "async-trait",
  "axum 0.6.20",
  "bytes",
@@ -12156,6 +12158,7 @@ dependencies = [
  "futures",
  "http 0.2.9",
  "http-body 0.4.5",
+ "httptest",
  "hyper 0.14.26",
  "hyper-rustls",
  "hyperlocal",
@@ -12165,12 +12168,17 @@ dependencies = [
  "ic-utils 0.33.0",
  "itertools 0.12.0",
  "jemallocator",
+ "maxminddb",
  "opentelemetry 0.20.0",
  "opentelemetry-prometheus",
  "prometheus",
+ "regex",
+ "reqwest",
  "rustls",
  "rustls-native-certs",
  "rustls-pemfile 1.0.4",
+ "serde",
+ "serde_json",
  "thiserror",
  "tokio",
  "tokio-test",
@@ -12425,6 +12433,15 @@ name = "ipnet"
 version = "2.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28b29a3cd74f0f4598934efe3aeba42bae0eb4680554128851ebbecb02af14e6"
+
+[[package]]
+name = "ipnetwork"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf466541e9d546596ee94f9f69590f89473455f88372423e0008fc1a7daf100e"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "is-terminal"
@@ -13419,6 +13436,18 @@ name = "matchit"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b87248edafb776e59e6ee64a79086f65890d3510f2c656c000bf2a7e8a0aea40"
+
+[[package]]
+name = "maxminddb"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d6087e5d8ea14861bb7c7f573afbc7be3798d3ef0fae87ec4fd9a4de9a127c3c"
+dependencies = [
+ "ipnetwork",
+ "log",
+ "memchr",
+ "serde",
+]
 
 [[package]]
 name = "md-5"

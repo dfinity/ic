@@ -113,7 +113,7 @@ async fn test_middleware_validate_request() -> Result<(), Error> {
             .propagate_x_request_id(),
     );
 
-    let url = "http://localhost/api/v2/canister/a/query";
+    let url = "http://localhost/api/v2/canister/s6hwe-laaaa-aaaab-qaeba-cai/query";
 
     // case 1: no 'x-request-id' header, middleware generates one with a random uuid
     let request = Request::builder()
@@ -130,6 +130,16 @@ async fn test_middleware_validate_request() -> Result<(), Error> {
         .to_str()
         .unwrap();
     assert!(UUID_REGEX.is_match(request_id));
+
+    // Check if canister id header is correct
+    let canister_id = resp
+        .headers()
+        .get(HEADER_IC_CANISTER_ID)
+        .unwrap()
+        .to_str()
+        .unwrap();
+
+    assert_eq!(canister_id, "s6hwe-laaaa-aaaab-qaeba-cai");
 
     // case 2: 'x-request-id' header contains a valid uuid, this uuid is not overwritten by middleware
     let request = Request::builder()

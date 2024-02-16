@@ -18,7 +18,6 @@ ExecStart=/bin/bash -c '                                                        
         --local-certificates-path     "/var/opt/nginx/certs"                                  \
         --local-configuration-path    "/var/opt/nginx/domains.conf"                           \
         --configuration-template-path "/etc/certificate-syncer/domain.tmpl"                   \
-        --domain-mappings-path        "/var/opt/nginx/domain_canister_mappings.js"            \
         --metrics-addr                "[::]:9322"                                             \
         ${POLLING_INTERVAL_SEC:+      --polling-interval-sec    "${POLLING_INTERVAL_SEC}"}    \
 '

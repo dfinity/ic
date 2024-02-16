@@ -37,6 +37,7 @@ use tracing::info;
 use crate::{
     cache::{Cache, CacheStatus},
     core::Run,
+    geoip,
     retry::RetryResult,
     routes::{ErrorCause, RequestContext, RequestType},
     snapshot::{Node, RegistrySnapshot},
@@ -619,6 +620,7 @@ pub async fn metrics_middleware(
     RawQuery(query_string): RawQuery,
     headers: HeaderMap,
     Extension(request_id): Extension<RequestId>,
+    Extension(canister_id): Extension<CanisterId>,
     request: Request<Body>,
     next: Next<Body>,
 ) -> impl IntoResponse {
@@ -640,6 +642,12 @@ pub async fn metrics_middleware(
         .unwrap_or_default();
     let request_type: &'static str = request_type.into();
 
+    let country_code = request
+        .extensions()
+        .get::<geoip::GeoData>()
+        .cloned()
+        .map(|x| x.country_code);
+
     // Perform the request & measure duration
     let start_time = Instant::now();
     let response = next.run(request).await;
@@ -652,9 +660,9 @@ pub async fn metrics_middleware(
         .cloned()
         .unwrap_or_default();
 
+    let canister_id_actual = response.extensions().get::<CanisterId>().cloned();
     let error_cause = response.extensions().get::<ErrorCause>().cloned();
     let retry_result = response.extensions().get::<RetryResult>().cloned();
-    let canister_id = response.extensions().get::<CanisterId>().cloned();
     let node = response.extensions().get::<Arc<Node>>().cloned();
     let cache_status = response
         .extensions()
@@ -758,7 +766,9 @@ pub async fn metrics_middleware(
                 status = status_code.as_u16(),
                 subnet_id,
                 node_id,
-                canister_id = canister_id.map(|x| x.to_string()),
+                country_code,
+                canister_id = canister_id.to_string(),
+                canister_id_actual = canister_id_actual.map(|x| x.to_string()),
                 canister_id_cbor = ctx.canister_id.map(|x| x.to_string()),
                 sender,
                 method_name = ctx.method_name,

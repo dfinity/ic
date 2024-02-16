@@ -20,11 +20,15 @@ use crate::{
     http_client::{Body, HyperService},
     logging::add_trace_layer,
     metrics::{with_metrics_middleware, HttpMetricParams},
+    proxy::domain_canister::DomainCanisterMatcher,
     validate::Validate,
     DomainAddr,
 };
 
 pub mod agent;
+pub mod denylist;
+pub mod domain_canister;
+pub mod geoip;
 
 const KB: usize = 1024;
 const MB: usize = 1024 * KB;
@@ -103,6 +107,9 @@ where
 
 pub struct SetupArgs<V, C> {
     pub validator: V,
+    pub domain_match: Option<Arc<DomainCanisterMatcher>>,
+    pub geoip: Option<Arc<geoip::GeoIp>>,
+    pub denylist: Option<Arc<denylist::Denylist>>,
     pub resolver: ResolverState,
     pub client: C,
     pub meter: Meter,
@@ -151,6 +158,9 @@ pub fn setup<C: HyperService<Body> + 'static>(
     let agent_service = agent_handler.with_state(AppState(Arc::new(AppStateInner {
         agent: None,
         replica_pool: Pool::new(replicas),
+        domain_match: args.domain_match,
+        geoip: args.geoip,
+        denylist: args.denylist,
         validator: args.validator,
         resolver: args.resolver,
         debug: opts.debug,
@@ -211,6 +221,9 @@ pub fn setup_unix_socket<C: HyperService<Body> + 'static>(
     let agent_service = agent_handler.with_state(AppState(Arc::new(AppStateInner {
         agent: Some(agent),
         replica_pool: Pool::new(vec![]),
+        domain_match: args.domain_match,
+        geoip: args.geoip,
+        denylist: args.denylist,
         validator: args.validator,
         resolver: args.resolver,
         debug: opts.debug,
@@ -235,6 +248,9 @@ pub struct AppState<V>(Arc<AppStateInner<V>>);
 
 struct AppStateInner<V> {
     agent: Option<Agent>,
+    domain_match: Option<Arc<DomainCanisterMatcher>>,
+    geoip: Option<Arc<geoip::GeoIp>>,
+    denylist: Option<Arc<denylist::Denylist>>,
     replica_pool: Pool,
     resolver: ResolverState,
     validator: V,
@@ -253,6 +269,15 @@ impl<V> AppState<V> {
     }
     pub fn debug(&self) -> bool {
         self.0.debug
+    }
+    pub fn domain_match(&self) -> Option<Arc<DomainCanisterMatcher>> {
+        self.0.domain_match.clone()
+    }
+    pub fn geoip(&self) -> Option<Arc<geoip::GeoIp>> {
+        self.0.geoip.clone()
+    }
+    pub fn denylist(&self) -> Option<Arc<denylist::Denylist>> {
+        self.0.denylist.clone()
     }
 }
 
