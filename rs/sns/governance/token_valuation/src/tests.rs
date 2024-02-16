@@ -15,9 +15,7 @@ use candid::{
 };
 use cycles_minting_canister::IcpXdrConversionRate;
 use ic_base_types::PrincipalId;
-use ic_ledger_core::Tokens;
-use ic_nervous_system_common::ledger::MockICRC1Ledger;
-use ic_sns_swap::pb::v1::Init as SwapInit;
+use ic_sns_swap_proto_library::pb::v1::Init as SwapInit;
 use lazy_static::lazy_static;
 use maplit::hashmap;
 use mockall::predicate;
@@ -34,12 +32,12 @@ async fn test_try_get_balance_valuation_factors() {
         subaccount: None,
     };
 
-    let mut icrc1_client = MockICRC1Ledger::new();
+    let mut icrc1_client = MockIcrc1Client::new();
     icrc1_client
-        .expect_account_balance()
+        .expect_icrc1_balance_of()
         .times(1)
         .with(predicate::eq(account))
-        .returning(|_account| Ok(Tokens::from_e8s(0xCAFE * E8)));
+        .returning(|_account| Ok(Nat::from(0xCAFE * E8)));
 
     let mut icps_per_token_client = MockIcpsPerTokenClient::new();
     icps_per_token_client

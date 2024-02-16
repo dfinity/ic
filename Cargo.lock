@@ -10506,6 +10506,8 @@ dependencies = [
  "ic-sns-governance",
  "ic-sns-governance-proposal-criticality",
  "ic-sns-governance-protobuf-generator",
+ "ic-sns-governance-token-valuation",
+ "ic-sns-governance-treasury-transfer-limit",
  "ic-sns-test-utils",
  "ic-test-utilities",
  "ic-test-utilities-compare-dirs",
@@ -10557,12 +10559,11 @@ dependencies = [
  "futures",
  "ic-base-types",
  "ic-cdk",
- "ic-ledger-core",
  "ic-nervous-system-common",
  "ic-nervous-system-runtime",
  "ic-nervous-system-string",
  "ic-nns-constants",
- "ic-sns-swap",
+ "ic-sns-swap-proto-library",
  "icrc-ledger-types",
  "lazy_static",
  "maplit",
@@ -10769,6 +10770,18 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-test",
+]
+
+[[package]]
+name = "ic-sns-swap-proto-library"
+version = "0.0.1"
+dependencies = [
+ "candid",
+ "comparable",
+ "ic-base-types",
+ "ic-nervous-system-proto",
+ "prost",
+ "serde",
 ]
 
 [[package]]

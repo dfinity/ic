@@ -1,6 +1,9 @@
 use crate::{
     canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
-    governance::{bytes_to_subaccount, log_prefix, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER},
+    governance::{
+        bytes_to_subaccount, log_prefix, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER,
+        TREASURY_SUBACCOUNT_NONCE,
+    },
     logs::{ERROR, INFO},
     pb::v1::{
         governance::{SnsMetadata, Version},
@@ -18,14 +21,22 @@ use crate::{
     types::{Environment, DEFAULT_TRANSFER_FEE},
     validate_chars_count, validate_len, validate_required_field,
 };
+use candid::Principal;
 use dfn_core::api::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
-use ic_nervous_system_common::{i2d, E8, SECONDS_PER_DAY};
+use ic_nervous_system_common::{
+    i2d, ledger::compute_distribution_subaccount_bytes, E8, SECONDS_PER_DAY,
+};
 use ic_nervous_system_proto::pb::v1::Percentage;
+use ic_sns_governance_token_valuation::{
+    try_get_icp_balance_valuation, try_get_sns_token_balance_valuation,
+};
+use ic_sns_governance_treasury_transfer_limit::TreasuryTransferTotalUpperBound;
 use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::Account;
+use rust_decimal::Decimal;
 use std::{
     collections::{BTreeMap, HashSet},
     convert::TryFrom,
@@ -181,8 +192,16 @@ pub async fn validate_and_render_action(
         Some(action) => action,
     };
 
+    // Supporting auxiliary data. Not all of these are used in every case. This makes it very
+    // transparent which parts of governance_proto are used by each of the action-specific
+    // validators.
     let disallowed_target_canister_ids: HashSet<CanisterId> =
         reserved_canister_targets.clone().drain(..).collect();
+    let sns_transfer_fee_e8s = governance_proto
+        .parameters
+        .as_ref()
+        .and_then(|params| params.transaction_fee_e8s)
+        .unwrap_or(DEFAULT_TRANSFER_FEE.get_e8s());
 
     match action {
         proposal::Action::Unspecified(_unspecified) => {
@@ -239,19 +258,20 @@ pub async fn validate_and_render_action(
             validate_and_render_manage_sns_metadata(manage_sns_metadata)
         }
         proposal::Action::TransferSnsTreasuryFunds(transfer) => {
-            let sns_transfer_fee_e8s = governance_proto
-                .parameters
-                .as_ref()
-                .and_then(|params| params.transaction_fee_e8s)
-                .unwrap_or(DEFAULT_TRANSFER_FEE.get_e8s());
-            validate_and_render_transfer_sns_treasury_funds(transfer, sns_transfer_fee_e8s)
+            let swap_canister_id = governance_proto.swap_canister_id_or_panic();
+            let sns_ledger_canister_id = governance_proto.ledger_canister_id_or_panic();
+            let proposals = governance_proto.proposals.values();
+            validate_and_render_transfer_sns_treasury_funds(
+                transfer,
+                sns_transfer_fee_e8s,
+                env,
+                swap_canister_id,
+                sns_ledger_canister_id,
+                proposals,
+            )
+            .await
         }
         proposal::Action::MintSnsTokens(mint) => {
-            let sns_transfer_fee_e8s = governance_proto
-                .parameters
-                .as_ref()
-                .and_then(|params| params.transaction_fee_e8s)
-                .unwrap_or(DEFAULT_TRANSFER_FEE.get_e8s());
             validate_and_render_mint_sns_tokens(mint, sns_transfer_fee_e8s)
         }
         proposal::Action::ManageLedgerParameters(manage_ledger_parameters) => {
@@ -302,11 +322,45 @@ fn validate_and_render_manage_nervous_system_parameters(
 }
 
 /// Validates and render TransferSnsTreasuryFunds proposal
-fn validate_and_render_transfer_sns_treasury_funds(
+async fn validate_and_render_transfer_sns_treasury_funds(
     transfer: &TransferSnsTreasuryFunds,
     sns_transfer_fee_e8s: u64,
+    env: &dyn Environment,
+    swap_canister_id: CanisterId,
+    sns_ledger_canister_id: CanisterId,
+    proposals: impl Iterator<Item = &ProposalData>,
 ) -> Result<String, String> {
-    let mut defects: Vec<String> = vec![];
+    let mut defects = vec![];
+
+    // Validate amount. This requires calling CMC and the swap canister; hence, await.
+    let amount_result = transfer_sns_treasury_funds_amount_is_within_limits_or_err(
+        transfer,
+        env,
+        swap_canister_id,
+        sns_ledger_canister_id,
+        proposals,
+    )
+    .await;
+    if let Err(err) = amount_result {
+        defects.push(err);
+    }
+
+    // Validate all other aspects of the proposal action.
+    locally_validate_and_render_transfer_sns_treasury_funds(transfer, sns_transfer_fee_e8s, defects)
+}
+
+/// Performs all the validation on a TransferSnsTreasuryFunds that does not require fetching
+/// information from other canisters.
+fn locally_validate_and_render_transfer_sns_treasury_funds(
+    transfer: &TransferSnsTreasuryFunds,
+    sns_transfer_fee_e8s: u64,
+    mut defects: Vec<String>,
+) -> Result<String, String> {
+    // Two things are happening here:
+    //
+    //     1. make sure that from_treasury is not Unspecified.
+    //
+    //     2. Humanize from_treasury.
     let (from, unit) = match transfer.from_treasury() {
         TransferFrom::IcpTreasury => ("ICP Treasury (ICP Ledger)", "ICP"),
         TransferFrom::SnsTokenTreasury => ("SNS Token Treasury (SNS Ledger)", "SNS Tokens"),
@@ -319,12 +373,12 @@ fn validate_and_render_transfer_sns_treasury_funds(
         }
     };
 
+    // Make sure amount is not too small.
     let minimum_transaction = match transfer.from_treasury() {
         TransferFrom::IcpTreasury => NNS_DEFAULT_TRANSFER_FEE.get_e8s(),
         TransferFrom::SnsTokenTreasury => sns_transfer_fee_e8s,
         TransferFrom::Unspecified => 0,
     };
-
     if transfer.amount_e8s < minimum_transaction {
         defects.push(format!(
             "For transactions from {}, the fee and minimum transaction is {} e8s",
@@ -332,6 +386,7 @@ fn validate_and_render_transfer_sns_treasury_funds(
         ))
     }
 
+    // Inspect to_principal, which must be Some(non_anonymous).
     let to_principal = if let Some(to_principal) = transfer.to_principal {
         if to_principal == PrincipalId::new_anonymous() {
             defects.push("to_principal must not be anonymous.".to_string());
@@ -370,7 +425,6 @@ fn validate_and_render_transfer_sns_treasury_funds(
     }
 
     let display_amount_tokens = i2d(transfer.amount_e8s) / i2d(E8);
-
     Ok(format!(
         r"# Proposal to transfer SNS Treasury funds:
 ## Source treasury: {from}
@@ -382,6 +436,113 @@ fn validate_and_render_transfer_sns_treasury_funds(
         amount_e8s = transfer.amount_e8s,
         memo = transfer.memo.unwrap_or(0)
     ))
+}
+
+impl TransferFrom {
+    fn treasury_account(self, sns_governance_canister_id: CanisterId) -> Result<Account, String> {
+        let sns_governance_canister_id = PrincipalId::from(sns_governance_canister_id);
+        let owner = Principal::from(sns_governance_canister_id);
+
+        match self {
+            TransferFrom::Unspecified => Err("from_treasury is Unspecified.".to_string()),
+
+            TransferFrom::IcpTreasury => Ok(Account {
+                owner,
+                subaccount: None,
+            }),
+
+            TransferFrom::SnsTokenTreasury => Ok(Account {
+                owner,
+                subaccount: Some(compute_distribution_subaccount_bytes(
+                    sns_governance_canister_id,
+                    TREASURY_SUBACCOUNT_NONCE,
+                )),
+            }),
+        }
+    }
+}
+
+async fn transfer_sns_treasury_funds_amount_is_within_limits_or_err(
+    transfer: &TransferSnsTreasuryFunds,
+    env: &dyn Environment,
+    swap_canister_id: CanisterId,
+    sns_ledger_canister_id: CanisterId,
+    proposals: impl Iterator<Item = &ProposalData>,
+) -> Result<(), String> {
+    let treasury_transfer_total_tokens = {
+        let e8s = total_treasury_transfer_amount_e8s(
+            proposals,
+            transfer.from_treasury(),
+            env.now() - 7 * SECONDS_PER_DAY,
+        )
+        // An Err here most likely indicates a bug in our code, not something that the user did wrong.
+        .ok_or_else(|| {
+            "Unable to validate amount: \
+             Overflowed while calculating total of (executed) TransferSnsTreasuryFunds proposals \
+             during the past 7 days."
+                .to_string()
+        })?;
+
+        Decimal::from(e8s)
+            .checked_div(Decimal::from(E8))
+            // Err is most likely a bug.
+            .ok_or_else(|| {
+                format!(
+                    "Unable to validate amount: \
+                 Overflow occured while performing {} / {}",
+                    e8s, E8,
+                )
+            })?
+    };
+
+    let from_treasury = transfer.from_treasury();
+    let treasury_account = from_treasury.treasury_account(env.canister_id())?;
+
+    // Get valuation of the tokens in the treasury.
+    //
+    // TODO(NNS1-2809): This should probably be done higher in the call stack (and then passed
+    // down), because the caller needs valuation later in the proposal lifecycle. Specifically, when
+    // the proposal is executed.
+    let valuation = match from_treasury {
+        TransferFrom::Unspecified => return Err("from_treasury is Unspecified.".to_string()),
+
+        TransferFrom::IcpTreasury => try_get_icp_balance_valuation(treasury_account).await,
+
+        TransferFrom::SnsTokenTreasury => {
+            try_get_sns_token_balance_valuation(
+                treasury_account,
+                sns_ledger_canister_id,
+                swap_canister_id,
+            )
+            .await
+        }
+    }
+    // An Err here is most likely due to a failure to call another canister.
+    .map_err(|valuation_error| format!("Unable to validate amount: {:?}", valuation_error,))?;
+
+    // From valuation, determine limit on the total from the past 7 days.
+    let max_tokens = TreasuryTransferTotalUpperBound::in_tokens(valuation)
+        // Err is most likely a bug.
+        .map_err(|treasury_limit_error| {
+            format!("Unable to validate amount: {:?}", treasury_limit_error,)
+        })?;
+
+    // Finally, inspect amount: it must not exceed max - spent (remainder). Or if you prefer,
+    // equivalently, amount + spent must be <= max.
+    let allowance_remainder_tokens = max_tokens - treasury_transfer_total_tokens;
+    let transfer_amount_tokens = Decimal::from(transfer.amount_e8s) / Decimal::from(E8);
+    if transfer_amount_tokens > allowance_remainder_tokens {
+        // Although it might not be obvious to the user, their proposal is invalid, and we consider
+        // it to be "their fault".
+        return Err(format!(
+            "Amount is too large. Within the past 7 days, a total of {} tokens has already been \
+             transferred. Whereas, at most {} is allowed. An additional {} would cause that upper \
+             bound to be exceeded. Maybe, try again in a few days?",
+            treasury_transfer_total_tokens, max_tokens, transfer_amount_tokens
+        ));
+    }
+
+    Ok(())
 }
 
 /// Validates and render MintSnsTokens proposal
@@ -1576,9 +1737,9 @@ impl ProposalRewardStatus {
 ///   based on TransferSnsTreasuryFunds.from_treasury, which specifies which token the proposal is
 ///   concerned about. Furthermore, that field is compared against this parameter.
 /// * `min_executed_timestamp_seconds` - Older proposals are not considered.
-#[allow(unused)] // TODO(NNS1-2808): Delete `allow(unused)`.
-fn total_treasury_transfer_amount_e8s(
-    proposals: &[ProposalData],
+#[must_use]
+fn total_treasury_transfer_amount_e8s<'a>(
+    proposals: impl Iterator<Item = &'a ProposalData>,
     filter_from_treasury: TransferFrom,
     min_executed_timestamp_seconds: u64,
 ) -> Option<u64> {
@@ -2681,7 +2842,7 @@ Version {
     fn validate_and_render_transfer_sns_treasury_funds_renders_for_valid_inputs() {
         // Valid case
         assert_eq!(
-            validate_and_render_transfer_sns_treasury_funds(
+            locally_validate_and_render_transfer_sns_treasury_funds(
                 &TransferSnsTreasuryFunds {
                     from_treasury: TransferFrom::IcpTreasury.into(),
                     amount_e8s: 1000000,
@@ -2689,7 +2850,8 @@ Version {
                     to_principal: Some(basic_principal_id()),
                     to_subaccount: None
                 },
-                0
+                0,
+                vec![],
             )
             .unwrap(),
             r"# Proposal to transfer SNS Treasury funds:
@@ -2703,7 +2865,7 @@ Version {
 
         // Valid case with default sub-account
         assert_eq!(
-            validate_and_render_transfer_sns_treasury_funds(
+            locally_validate_and_render_transfer_sns_treasury_funds(
                 &TransferSnsTreasuryFunds {
                     from_treasury: TransferFrom::IcpTreasury.into(),
                     amount_e8s: 10000000,
@@ -2713,7 +2875,8 @@ Version {
                         subaccount: vec![0; 32]
                     })
                 },
-                0
+                0,
+                vec![],
             )
             .unwrap(),
             r"# Proposal to transfer SNS Treasury funds:
@@ -2729,7 +2892,7 @@ Version {
         // The textual representation of ICRC-1 Accounts can be
         // found at https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-1/TextualEncoding.md
         assert_eq!(
-            validate_and_render_transfer_sns_treasury_funds(
+            locally_validate_and_render_transfer_sns_treasury_funds(
                 &TransferSnsTreasuryFunds {
                     from_treasury: TransferFrom::IcpTreasury.into(),
                     amount_e8s: E8,
@@ -2737,7 +2900,8 @@ Version {
                     to_principal: Some(basic_principal_id()),
                     to_subaccount: Some(subaccount_1())
                 },
-                0
+                0,
+                vec![],
             )
             .unwrap(),
             r"# Proposal to transfer SNS Treasury funds:
@@ -2751,7 +2915,7 @@ Version {
 
         // Valid transfer from SNS treasury
         assert_eq!(
-            validate_and_render_transfer_sns_treasury_funds(
+            locally_validate_and_render_transfer_sns_treasury_funds(
                 &TransferSnsTreasuryFunds {
                     from_treasury: TransferFrom::SnsTokenTreasury.into(),
                     amount_e8s: 1000000,
@@ -2759,7 +2923,8 @@ Version {
                     to_principal: Some(basic_principal_id()),
                     to_subaccount: None
                 },
-                0
+                0,
+                vec![],
             )
             .unwrap(),
             r"# Proposal to transfer SNS Treasury funds:
@@ -2776,7 +2941,7 @@ Version {
     fn validate_and_render_transfer_sns_treasury_funds_no_principal() {
         // invalid case no principal
         assert_eq!(
-            validate_and_render_transfer_sns_treasury_funds(
+            locally_validate_and_render_transfer_sns_treasury_funds(
                 &TransferSnsTreasuryFunds {
                     from_treasury: TransferFrom::IcpTreasury.into(),
                     amount_e8s: 1000000,
@@ -2786,7 +2951,8 @@ Version {
                         subaccount: vec![0; 32]
                     })
                 },
-                0
+                0,
+                vec![],
             )
             .unwrap_err(),
             "TransferSnsTreasuryFunds proposal was invalid for the following reason(s):\nMust specify a principal to make the transfer to.".to_string()
@@ -2797,7 +2963,7 @@ Version {
     fn validate_and_render_transfer_sns_treasury_funds_anonymous_principal() {
         // invalid case anonymous principal
         assert_eq!(
-            validate_and_render_transfer_sns_treasury_funds(
+            locally_validate_and_render_transfer_sns_treasury_funds(
                 &TransferSnsTreasuryFunds {
                     from_treasury: TransferFrom::IcpTreasury.into(),
                     amount_e8s: 1000000,
@@ -2805,7 +2971,8 @@ Version {
                     to_principal: Some(PrincipalId::new_anonymous()),
                     to_subaccount: None
                 },
-                0
+                0,
+                vec![],
             )
             .unwrap_err(),
             "TransferSnsTreasuryFunds proposal was invalid for the following reason(s):\nto_principal must not be anonymous.".to_string()
@@ -2816,7 +2983,7 @@ Version {
     fn validate_and_render_transfer_sns_treasury_funds_bad_subaccount() {
         // invalid case bad subaccount
         assert_eq!(
-            validate_and_render_transfer_sns_treasury_funds(
+            locally_validate_and_render_transfer_sns_treasury_funds(
                 &TransferSnsTreasuryFunds {
                     from_treasury: TransferFrom::IcpTreasury.into(),
                     amount_e8s: 1000000,
@@ -2826,7 +2993,8 @@ Version {
                         subaccount: vec![1, 2]
                     })
                 },
-                0
+                0,
+                vec![],
             )
             .unwrap_err(),
             "TransferSnsTreasuryFunds proposal was invalid for the following reason(s):\nInvalid subaccount".to_string()
@@ -2836,7 +3004,7 @@ Version {
     #[test]
     fn validate_and_render_transfer_sns_treasury_funds_amount_less_than_fee() {
         assert_eq!(
-            validate_and_render_transfer_sns_treasury_funds(
+            locally_validate_and_render_transfer_sns_treasury_funds(
                 &TransferSnsTreasuryFunds {
                     from_treasury: TransferFrom::IcpTreasury.into(),
                     amount_e8s: 1000,
@@ -2844,13 +3012,14 @@ Version {
                     to_principal: Some(basic_principal_id()),
                     to_subaccount: None
                 },
-                0
+                0,
+                vec![],
             )
             .unwrap_err(),
             "TransferSnsTreasuryFunds proposal was invalid for the following reason(s):\nFor transactions from ICP Treasury (ICP Ledger), the fee and minimum transaction is 10000 e8s"
         );
         assert_eq!(
-            validate_and_render_transfer_sns_treasury_funds(
+            locally_validate_and_render_transfer_sns_treasury_funds(
                 &TransferSnsTreasuryFunds {
                     from_treasury: TransferFrom::SnsTokenTreasury.into(),
                     amount_e8s: 999,
@@ -2858,7 +3027,8 @@ Version {
                     to_principal: Some(basic_principal_id()),
                     to_subaccount: None
                 },
-                1000
+                1000,
+                vec![],
             )
             .unwrap_err(),
             "TransferSnsTreasuryFunds proposal was invalid for the following reason(s):\nFor transactions from SNS Token Treasury (SNS Ledger), the fee and minimum transaction is 1000 e8s"

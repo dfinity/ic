@@ -204,7 +204,7 @@ fn test_total_treasury_transfer_amount_e8s() {
 
     assert_eq!(
         total_treasury_transfer_amount_e8s(
-            &proposals,
+            proposals.iter(),
             TransferFrom::IcpTreasury,
             min_executed_timestamp_seconds,
         ),
@@ -216,7 +216,7 @@ fn test_total_treasury_transfer_amount_e8s() {
     // previous result by this amount.
     assert_eq!(
         total_treasury_transfer_amount_e8s(
-            &proposals,
+            proposals.iter(),
             TransferFrom::IcpTreasury,
             // This is somewhat pathological, but the behavior is still well-defined. Therefore, the
             // code under test should be able to handle this even though we do not expect to see
@@ -250,7 +250,7 @@ fn test_total_treasury_transfer_amount_e8s() {
     // Assert result is MAX.
     assert_eq!(
         total_treasury_transfer_amount_e8s(
-            &proposals,
+            proposals.iter(),
             TransferFrom::IcpTreasury,
             min_executed_timestamp_seconds,
         ),
@@ -279,7 +279,7 @@ fn test_total_treasury_transfer_amount_e8s() {
     // Assert quietly explodes.
     assert_eq!(
         total_treasury_transfer_amount_e8s(
-            &proposals,
+            proposals.iter(),
             TransferFrom::IcpTreasury,
             min_executed_timestamp_seconds,
         ),
