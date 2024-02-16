@@ -98,7 +98,6 @@ pub mod manager;
 mod pool_readers;
 pub mod processors;
 
-use crossbeam_channel::{Receiver, RecvTimeoutError, Sender};
 use ic_interfaces::{
     p2p::{
         artifact_manager::{ArtifactClient, ArtifactProcessor, ArtifactProcessorEvent, JoinGuard},
@@ -112,14 +111,20 @@ use ic_interfaces::{
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_types::{artifact::*, artifact_kind::*, malicious_flags::MaliciousFlags};
 use prometheus::{histogram_opts, labels, Histogram};
-use std::sync::{
-    atomic::{AtomicBool, Ordering::SeqCst},
-    Arc, RwLock,
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering::SeqCst},
+        Arc, RwLock,
+    },
+    thread::{Builder as ThreadBuilder, JoinHandle},
+    time::Duration,
 };
-use std::thread::{Builder as ThreadBuilder, JoinHandle};
-use std::time::Duration;
+use tokio::{
+    sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
+    time::timeout,
+};
 
-type ArtifactEventSender<Artifact> = Sender<UnvalidatedArtifactMutation<Artifact>>;
+type ArtifactEventSender<Artifact> = UnboundedSender<UnvalidatedArtifactMutation<Artifact>>;
 
 /// Metrics for a client artifact processor.
 struct ArtifactProcessorMetrics {
@@ -234,7 +239,7 @@ where
     // will result on slow consuption of chunks. Slow consumption of chunks will in turn
     // result in slower consumptions of adverts. Ideally adverts are consumed at rate
     // independent of consensus.
-    let (sender, receiver) = crossbeam_channel::unbounded();
+    let (sender, receiver) = unbounded_channel();
     let shutdown = Arc::new(AtomicBool::new(false));
 
     // Spawn the processor thread
@@ -268,10 +273,15 @@ fn process_messages<
     time_source: Arc<SysTimeSource>,
     client: Box<dyn ArtifactProcessor<Artifact>>,
     send_advert: Box<S>,
-    receiver: Receiver<UnvalidatedArtifactMutation<Artifact>>,
+    mut receiver: UnboundedReceiver<UnvalidatedArtifactMutation<Artifact>>,
     mut metrics: ArtifactProcessorMetrics,
     shutdown: Arc<AtomicBool>,
 ) {
+    let current_thread_rt = tokio::runtime::Builder::new_current_thread()
+        .thread_name("ArtifactProcessor_Thread".to_string())
+        .enable_time()
+        .build()
+        .unwrap();
     let mut last_on_state_change_result = false;
     while !shutdown.load(SeqCst) {
         // TODO: assess impact of continued processing in same
@@ -281,17 +291,28 @@ fn process_messages<
         } else {
             Duration::from_millis(ARTIFACT_MANAGER_TIMER_DURATION_MSEC)
         };
-        let recv_artifact = receiver.recv_timeout(recv_timeout);
-        let batched_artifact_events = match recv_artifact {
-            Ok(artifact_event) => {
-                let mut artifacts = vec![artifact_event];
-                while let Ok(artifact) = receiver.try_recv() {
-                    artifacts.push(artifact);
+
+        let batched_artifact_events = current_thread_rt.block_on(async {
+            match timeout(recv_timeout, receiver.recv()).await {
+                Ok(Some(artifact_event)) => {
+                    let mut artifacts = vec![artifact_event];
+                    while let Ok(artifact) = receiver.try_recv() {
+                        artifacts.push(artifact);
+                    }
+                    Some(artifacts)
                 }
-                artifacts
+                Ok(None) => {
+                    // p2p is stopped
+                    None
+                }
+                Err(_) => Some(vec![]),
             }
-            Err(RecvTimeoutError::Timeout) => vec![],
-            Err(RecvTimeoutError::Disconnected) => return,
+        });
+        let batched_artifact_events = match batched_artifact_events {
+            Some(v) => v,
+            None => {
+                return;
+            }
         };
         time_source.update_time().ok();
         let ChangeResult {
@@ -318,7 +339,7 @@ const ARTIFACT_MANAGER_TIMER_DURATION_MSEC: u64 = 200;
 /// The struct contains all relevant interfaces for P2P to operate.
 pub struct ArtifactClientHandle<Artifact: ArtifactKind + 'static> {
     /// To send the process requests
-    pub sender: Sender<UnvalidatedArtifactMutation<Artifact>>,
+    pub sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
     /// Reference to the artifact client.
     /// TODO: long term we can remove the 'ArtifactClient' and directly use
     /// 'ValidatedPoolReader' and ' PriorityFnAndFilterProducer' traits.

@@ -6,7 +6,6 @@ use crate::{
     sender::ConsensusManagerSender,
 };
 use axum::Router;
-use crossbeam_channel::Sender as CrossbeamSender;
 use ic_base_types::NodeId;
 use ic_interfaces::p2p::{
     artifact_manager::ArtifactProcessorEvent,
@@ -23,7 +22,10 @@ use ic_types::artifact::{ArtifactKind, UnvalidatedArtifactMutation};
 use phantom_newtype::AmountOf;
 use tokio::{
     runtime::Handle,
-    sync::{mpsc::Receiver, watch},
+    sync::{
+        mpsc::{Receiver, UnboundedSender},
+        watch,
+    },
 };
 
 mod metrics;
@@ -56,7 +58,7 @@ impl ConsensusManagerBuilder {
         adverts_to_send: Receiver<ArtifactProcessorEvent<Artifact>>,
         raw_pool: Arc<RwLock<Pool>>,
         priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
-        sender: CrossbeamSender<UnvalidatedArtifactMutation<Artifact>>,
+        sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
     ) where
         Pool: 'static + Send + Sync + ValidatedPoolReader<Artifact>,
         Artifact: ArtifactKind,
@@ -112,7 +114,7 @@ fn start_consensus_manager<Artifact, Pool>(
     adverts_received: Receiver<(SlotUpdate<Artifact>, NodeId, ConnId)>,
     raw_pool: Arc<RwLock<Pool>>,
     priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
-    sender: CrossbeamSender<UnvalidatedArtifactMutation<Artifact>>,
+    sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
     transport: Arc<dyn Transport>,
     topology_watcher: watch::Receiver<SubnetTopology>,
 ) where

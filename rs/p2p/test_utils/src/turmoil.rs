@@ -399,8 +399,8 @@ pub fn start_test_processor(
     change_set_producer: TestConsensus<U64Artifact>,
 ) -> (
     Box<dyn JoinGuard>,
-    tokio::sync::mpsc::Receiver<ArtifactProcessorEvent<U64Artifact>>,
-    crossbeam_channel::Sender<UnvalidatedArtifactMutation<U64Artifact>>,
+    mpsc::Receiver<ArtifactProcessorEvent<U64Artifact>>,
+    mpsc::UnboundedSender<UnvalidatedArtifactMutation<U64Artifact>>,
 ) {
     let (tx, rx) = tokio::sync::mpsc::channel(1000);
     let time_source = Arc::new(SysTimeSource::new());

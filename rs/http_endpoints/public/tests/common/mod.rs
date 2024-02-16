@@ -1,4 +1,3 @@
-use crossbeam::channel::Receiver;
 use hyper::{
     client::conn::{handshake, SendRequest},
     Body, Method, Request, StatusCode,
@@ -71,7 +70,10 @@ use std::{
     collections::BTreeMap, convert::Infallible, net::SocketAddr, sync::Arc, sync::RwLock,
     time::Duration,
 };
-use tokio::net::{TcpSocket, TcpStream};
+use tokio::{
+    net::{TcpSocket, TcpStream},
+    sync::mpsc::UnboundedReceiver,
+};
 use tower::{util::BoxCloneService, Service, ServiceExt};
 use tower_test::mock::Handle;
 
@@ -458,7 +460,7 @@ impl HttpEndpointBuilder {
         self,
     ) -> (
         IngressFilterHandle,
-        Receiver<UnvalidatedArtifactMutation<IngressArtifact>>,
+        UnboundedReceiver<UnvalidatedArtifactMutation<IngressArtifact>>,
         QueryExecutionHandle,
     ) {
         let metrics = MetricsRegistry::new();
@@ -473,7 +475,7 @@ impl HttpEndpointBuilder {
         let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(0)));
         let crypto = Arc::new(CryptoReturningOk::default());
 
-        let (ingress_tx, ingress_rx) = crossbeam::channel::unbounded();
+        let (ingress_tx, ingress_rx) = tokio::sync::mpsc::unbounded_channel();
         let mut ingress_pool_throtller = MockIngressPoolThrottler::new();
         ingress_pool_throtller
             .expect_exceeds_threshold()

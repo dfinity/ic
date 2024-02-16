@@ -74,7 +74,7 @@ use std::{
     str::FromStr,
     sync::{Arc, Mutex, RwLock},
 };
-use tokio::sync::mpsc::Sender as TokioSender;
+use tokio::sync::mpsc::{Sender as TokioSender, UnboundedSender};
 
 const ENABLE_NEW_P2P_CONSENSUS: bool = false;
 const ENABLE_NEW_P2P_CERTIFICATION: bool = false;
@@ -164,7 +164,7 @@ pub fn setup_consensus_and_p2p(
     registry_poll_delay_duration_ms: u64,
 ) -> (
     Arc<RwLock<IngressPoolImpl>>,
-    Sender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
     Vec<Box<dyn JoinGuard>>,
 ) {
     let time_source = Arc::new(SysTimeSource::new());

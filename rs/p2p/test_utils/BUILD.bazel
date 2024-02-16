@@ -32,7 +32,6 @@ DEPENDENCIES = [
     "//rs/types/types_test_utils",
     "@crate_index//:axum_0_7_0",
     "@crate_index//:bytes",
-    "@crate_index//:crossbeam-channel",
     "@crate_index//:either",
     "@crate_index//:futures",
     "@crate_index//:mockall",

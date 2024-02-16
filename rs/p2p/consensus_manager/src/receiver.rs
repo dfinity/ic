@@ -19,7 +19,6 @@ use axum::{
 };
 use backoff::{backoff::Backoff, ExponentialBackoffBuilder};
 use bytes::Bytes;
-use crossbeam_channel::Sender as CrossbeamSender;
 use ic_base_types::NodeId;
 use ic_interfaces::p2p::consensus::{PriorityFnAndFilterProducer, ValidatedPoolReader};
 use ic_logger::{error, warn, ReplicaLogger};
@@ -31,7 +30,7 @@ use tokio::{
     runtime::Handle,
     select,
     sync::{
-        mpsc::{Receiver, Sender},
+        mpsc::{Receiver, Sender, UnboundedSender},
         watch,
     },
     task::JoinSet,
@@ -166,7 +165,7 @@ pub(crate) struct ConsensusManagerReceiver<Artifact: ArtifactKind, Pool, Receive
     raw_pool: Arc<RwLock<Pool>>,
     priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
     current_priority_fn: watch::Sender<PriorityFn<Artifact::Id, Artifact::Attribute>>,
-    sender: CrossbeamSender<UnvalidatedArtifactMutation<Artifact>>,
+    sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
 
     slot_table: HashMap<NodeId, HashMap<SlotNumber, SlotEntry<Artifact::Id>>>,
     active_downloads: HashMap<Artifact::Id, watch::Sender<PeerCounter>>,
@@ -195,7 +194,7 @@ where
         adverts_received: Receiver<(SlotUpdate<Artifact>, NodeId, ConnId)>,
         raw_pool: Arc<RwLock<Pool>>,
         priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
-        sender: CrossbeamSender<UnvalidatedArtifactMutation<Artifact>>,
+        sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
         transport: Arc<dyn Transport>,
         topology_watcher: watch::Receiver<SubnetTopology>,
     ) {
@@ -596,7 +595,7 @@ where
         mut artifact: Option<(Artifact::Message, NodeId)>,
         mut peer_rx: watch::Receiver<PeerCounter>,
         mut priority_fn_watcher: watch::Receiver<PriorityFn<Artifact::Id, Artifact::Attribute>>,
-        sender: CrossbeamSender<UnvalidatedArtifactMutation<Artifact>>,
+        sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
         transport: Arc<dyn Transport>,
         metrics: ConsensusManagerMetrics,
     ) -> (
@@ -739,7 +738,7 @@ mod tests {
         priority_fn_producer: Arc<
             dyn PriorityFnAndFilterProducer<U64Artifact, MockValidatedPoolReader>,
         >,
-        sender: CrossbeamSender<UnvalidatedArtifactMutation<U64Artifact>>,
+        sender: UnboundedSender<UnvalidatedArtifactMutation<U64Artifact>>,
         transport: Arc<dyn Transport>,
         topology_watcher: watch::Receiver<SubnetTopology>,
     ) -> ConsensusManagerReceiver<
@@ -786,7 +785,7 @@ mod tests {
                 .returning(|_| Box::new(|_, _| Priority::Stash));
             let mock_transport = MockTransport::new();
             let (_tx, rx) = tokio::sync::mpsc::channel(100);
-            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
+            let (cb_tx, _cb_rx) = tokio::sync::mpsc::unbounded_channel();
             let (_pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
             let mut mgr = create_receive_manager(
                 log,
@@ -942,7 +941,7 @@ mod tests {
                 .returning(|_| Box::new(|_, _| Priority::Stash));
             let mock_transport = MockTransport::new();
             let (_tx, rx) = tokio::sync::mpsc::channel(100);
-            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
+            let (cb_tx, _cb_rx) = tokio::sync::mpsc::unbounded_channel();
             let (_pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
             let mut mgr = create_receive_manager(
                 log,
@@ -1038,7 +1037,7 @@ mod tests {
                 .returning(|_| Box::new(|_, _| Priority::Stash));
             let mock_transport = MockTransport::new();
             let (_tx, rx) = tokio::sync::mpsc::channel(100);
-            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
+            let (cb_tx, _cb_rx) = tokio::sync::mpsc::unbounded_channel();
             let (_pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
             let mut mgr = create_receive_manager(
                 log,
@@ -1098,7 +1097,7 @@ mod tests {
                 .returning(|_| Box::new(|_, _| Priority::Stash));
             let mock_transport = MockTransport::new();
             let (_tx, rx) = tokio::sync::mpsc::channel(100);
-            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
+            let (cb_tx, _cb_rx) = tokio::sync::mpsc::unbounded_channel();
             let (_pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
             let mut mgr = create_receive_manager(
                 log,
@@ -1180,7 +1179,7 @@ mod tests {
                 .in_sequence(&mut seq);
             let mock_transport = MockTransport::new();
             let (_tx, rx) = tokio::sync::mpsc::channel(100);
-            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
+            let (cb_tx, _cb_rx) = tokio::sync::mpsc::unbounded_channel();
             let (_pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
             let mut mgr = create_receive_manager(
                 log,
@@ -1262,7 +1261,7 @@ mod tests {
                     .unwrap())
             });
             let (_tx, rx) = tokio::sync::mpsc::channel(100);
-            let (cb_tx, cb_rx) = crossbeam_channel::unbounded();
+            let (cb_tx, mut cb_rx) = tokio::sync::mpsc::unbounded_channel();
             let (_pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
             let mut mgr = create_receive_manager(
                 log,
@@ -1293,7 +1292,7 @@ mod tests {
             mgr.handle_pfn_timer_tick();
             // Check that we received downloaded artifact.
             assert_eq!(
-                cb_rx.recv().unwrap(),
+                cb_rx.blocking_recv().unwrap(),
                 UnvalidatedArtifactMutation::Insert((0, NODE_1))
             );
         });
@@ -1318,7 +1317,7 @@ mod tests {
                 .returning(|_| Box::new(|_, _| Priority::Stash));
             let mock_transport = MockTransport::new();
             let (_tx, rx) = tokio::sync::mpsc::channel(100);
-            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
+            let (cb_tx, _cb_rx) = tokio::sync::mpsc::unbounded_channel();
             let (pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
             let mut mgr = create_receive_manager(
                 log,
@@ -1408,7 +1407,7 @@ mod tests {
                 .returning(|_| Box::new(|_, _| Priority::Stash));
             let mock_transport = MockTransport::new();
             let (_tx, rx) = tokio::sync::mpsc::channel(100);
-            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
+            let (cb_tx, _cb_rx) = tokio::sync::mpsc::unbounded_channel();
             let (pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
             let mut mgr = create_receive_manager(
                 log,
@@ -1470,7 +1469,7 @@ mod tests {
                 .returning(|_| Box::new(|_, _| Priority::Stash));
             let mock_transport = MockTransport::new();
             let (_tx, rx) = tokio::sync::mpsc::channel(100);
-            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
+            let (cb_tx, _cb_rx) = tokio::sync::mpsc::unbounded_channel();
             let (_pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
             let mut mgr = create_receive_manager(
                 log,
@@ -1569,7 +1568,7 @@ mod tests {
                 .returning(|_| Box::new(|_, _| Priority::Stash));
             let mock_transport = MockTransport::new();
             let (_tx, rx) = tokio::sync::mpsc::channel(100);
-            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
+            let (cb_tx, _cb_rx) = tokio::sync::mpsc::unbounded_channel();
             let (_pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
             let mut mgr = create_receive_manager(
                 log,
@@ -1653,7 +1652,7 @@ mod tests {
                 .returning(|_| Box::new(|_, _| Priority::Stash));
             let mock_transport = MockTransport::new();
             let (_tx, rx) = tokio::sync::mpsc::channel(100);
-            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
+            let (cb_tx, _cb_rx) = tokio::sync::mpsc::unbounded_channel();
             let (_pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
             let mut mgr = create_receive_manager(
                 log,
@@ -1789,7 +1788,7 @@ mod tests {
                     .unwrap())
             });
             let (_tx, rx) = tokio::sync::mpsc::channel(100);
-            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
+            let (cb_tx, _cb_rx) = tokio::sync::mpsc::unbounded_channel();
             let (_pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
             let mut mgr = create_receive_manager(
                 log,

@@ -10,7 +10,6 @@ use crate::{
     HttpError, HttpHandlerMetrics, IngressFilterService,
 };
 use bytes::Bytes;
-use crossbeam::channel::Sender;
 use http::Request;
 use hyper::{Body, Response, StatusCode};
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
@@ -35,6 +34,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 use std::task::{Context, Poll};
+use tokio::sync::mpsc::UnboundedSender;
 use tower::{Service, ServiceExt};
 
 #[derive(Clone)]
@@ -47,7 +47,7 @@ pub struct CallService {
     validator_executor: ValidatorExecutor<SignedIngressContent>,
     ingress_filter: IngressFilterService,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    ingress_tx: Sender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
 }
 
 pub struct CallServiceBuilder {
@@ -60,7 +60,7 @@ pub struct CallServiceBuilder {
     registry_client: Arc<dyn RegistryClient>,
     ingress_filter: IngressFilterService,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    ingress_tx: Sender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
 }
 
 impl CallServiceBuilder {
@@ -71,7 +71,7 @@ impl CallServiceBuilder {
         ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
         ingress_filter: IngressFilterService,
         ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-        ingress_tx: Sender<UnvalidatedArtifactMutation<IngressArtifact>>,
+        ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
     ) -> Self {
         Self {
             log: None,
@@ -290,7 +290,7 @@ impl Service<Request<Bytes>> for CallService {
 
             let is_overloaded = ingress_throttler.read().unwrap().exceeds_threshold()
                 || ingress_tx
-                    .try_send(UnvalidatedArtifactMutation::Insert((msg, node_id)))
+                    .send(UnvalidatedArtifactMutation::Insert((msg, node_id)))
                     .is_err();
 
             let response = if is_overloaded {

@@ -17,7 +17,6 @@ DEPENDENCIES = [
     "@crate_index//:axum_0_7_0",
     "@crate_index//:backoff",
     "@crate_index//:bytes",
-    "@crate_index//:crossbeam-channel",
     "@crate_index//:futures",
     "@crate_index//:prometheus",
     "@crate_index//:rand",
