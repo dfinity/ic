@@ -416,6 +416,7 @@ pub(crate) fn get_quadruple_ids_to_deliver(
     let current_key_transcript_id = unmasked_transcript.transcript_id();
 
     let mut quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>> = BTreeMap::new();
+    quadruple_ids.insert(ecdsa.key_transcript.key_id.clone(), BTreeSet::new());
 
     for (quadruple_id, quadruple) in &ecdsa.available_quadruples {
         let Some(quadruple_key_transcript) = quadruple.key_unmasked_ref.as_ref() else {
@@ -426,14 +427,11 @@ pub(crate) fn get_quadruple_ids_to_deliver(
             continue;
         }
 
-        if let Some(key_id) = quadruple_id.key_id() {
-            if *key_id == ecdsa.key_transcript.key_id {
-                quadruple_ids
-                    .entry(key_id.clone())
-                    .or_default()
-                    .insert(quadruple_id.clone());
-            }
-        }
+        quadruple_ids
+            .entry(ecdsa.key_transcript.key_id.clone())
+            .and_modify(|s| {
+                s.insert(quadruple_id.clone());
+            });
     }
 
     quadruple_ids
@@ -850,30 +848,6 @@ mod tests {
             quadruple_ids_to_be_delivered,
             delivered_ids.into_iter().collect::<Vec<_>>()
         );
-    }
-
-    #[test]
-    fn test_quadruples_for_invalid_key_id_should_not_be_delivered() {
-        let mut rng = reproducible_rng();
-        let (mut ecdsa_payload, _, _) = set_up_ecdsa_payload(
-            &mut rng,
-            subnet_test_id(1),
-            /*nodes_count=*/ 8,
-            /*should_create_key_transcript=*/ true,
-        );
-        let current_key_transcript = ecdsa_payload.key_transcript.current.clone().unwrap();
-        let wrong_key_id = EcdsaKeyId::from_str("Secp256k1:wrong_key").unwrap();
-
-        add_available_quadruples_with_key_transcript(
-            &mut ecdsa_payload,
-            current_key_transcript.unmasked_transcript(),
-            &wrong_key_id,
-        );
-
-        let block = make_block(Some(ecdsa_payload));
-        let delivered_ids = get_quadruple_ids_to_deliver(&block);
-
-        assert!(delivered_ids.is_empty());
     }
 
     #[test]
