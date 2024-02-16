@@ -86,6 +86,10 @@ pub fn rpc_csp_vault_reconnection_test(env: TestEnv) {
         "ic-crypto-csp.service: Main process exited, code=killed, status=9/KILL",
     );
 
+    // TODO(CRP-2348): bump `tarpc` to `>0.34`, then try removing this sleep and
+    // check if the test becomes flaky.
+    std::thread::sleep(std::time::Duration::from_secs(3));
+
     ensure_replica_is_not_stuck(
         &message_canister,
         "Replica process update calls after killing server",
