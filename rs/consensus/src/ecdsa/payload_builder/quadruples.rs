@@ -66,11 +66,27 @@ pub(super) fn update_quadruples_in_creation(
                         transcript_cache.get_completed_transcript(config.as_ref().transcript_id)
                     {
                         debug!(
-                        log,
-                        "update_quadruples_in_creation: {:?} kappa_unmasked transcript {:?} is made",
-                        key,
-                        transcript.get_type()
-                    );
+                            log,
+                            "update_quadruples_in_creation: {:?} kappa_unmasked transcript {:?} \
+                            is made from reshare",
+                            key,
+                            transcript.get_type()
+                        );
+                        quadruple.kappa_unmasked =
+                            Some(ecdsa::UnmaskedTranscript::try_from((height, &transcript))?);
+                        new_transcripts.push(transcript);
+                    }
+                } else if let Some(config) = &quadruple.kappa_unmasked_config {
+                    if let Some(transcript) =
+                        transcript_cache.get_completed_transcript(config.as_ref().transcript_id)
+                    {
+                        debug!(
+                            log,
+                            "update_quadruples_in_creation: {:?} kappa_unmasked transcript {:?} is \
+                            made from unmasked config",
+                            key,
+                            transcript.get_type()
+                        );
                         quadruple.kappa_unmasked =
                             Some(ecdsa::UnmaskedTranscript::try_from((height, &transcript))?);
                         new_transcripts.push(transcript);
@@ -291,7 +307,7 @@ fn make_new_quadruples_if_needed_helper(
     }
 }
 
-/// Create a new random transcript config and advance the
+/// Create a new masked random transcript config and advance the
 /// next_unused_transcript_id by one.
 fn new_random_config(
     subnet_nodes: &[NodeId],
@@ -311,6 +327,27 @@ fn new_random_config(
     )
 }
 
+/// Create a new random unmasked transcript config and advance the
+/// next_unused_transcript_id by one.
+#[allow(dead_code)]
+pub fn new_random_unmasked_config(
+    subnet_nodes: &[NodeId],
+    summary_registry_version: RegistryVersion,
+    uid_generator: &mut ecdsa::EcdsaUIDGenerator,
+) -> ecdsa::RandomUnmaskedTranscriptParams {
+    let transcript_id = uid_generator.next_transcript_id();
+    let dealers = subnet_nodes.iter().copied().collect::<BTreeSet<_>>();
+    let receivers = subnet_nodes.iter().copied().collect::<BTreeSet<_>>();
+
+    ecdsa::RandomUnmaskedTranscriptParams::new(
+        transcript_id,
+        dealers,
+        receivers,
+        summary_registry_version,
+        AlgorithmId::ThresholdEcdsaSecp256k1,
+    )
+}
+
 #[cfg(test)]
 pub(super) mod test_utils {
     use crate::ecdsa::test_utils::create_sig_inputs;
@@ -321,7 +358,9 @@ pub(super) mod test_utils {
 
     use ic_management_canister_types::EcdsaKeyId;
     use ic_types::{
-        consensus::ecdsa::{self, EcdsaPayload, QuadrupleId, UnmaskedTranscript},
+        consensus::ecdsa::{
+            self, EcdsaPayload, QuadrupleId, QuadrupleInCreation, UnmaskedTranscript,
+        },
         NodeId, RegistryVersion,
     };
 
@@ -337,6 +376,29 @@ pub(super) mod test_utils {
         quadruples_in_creation.insert(
             uid_generator.next_quadruple_id(key_id),
             ecdsa::QuadrupleInCreation::new(kappa_config_ref.clone(), lambda_config_ref.clone()),
+        );
+        (kappa_config_ref, lambda_config_ref)
+    }
+
+    pub fn create_new_quadruple_in_creation_unmasked_kappa(
+        subnet_nodes: &[NodeId],
+        registry_version: RegistryVersion,
+        uid_generator: &mut ecdsa::EcdsaUIDGenerator,
+        key_id: EcdsaKeyId,
+        quadruples_in_creation: &mut BTreeMap<ecdsa::QuadrupleId, ecdsa::QuadrupleInCreation>,
+    ) -> (
+        ecdsa::RandomUnmaskedTranscriptParams,
+        ecdsa::RandomTranscriptParams,
+    ) {
+        let kappa_config_ref =
+            new_random_unmasked_config(subnet_nodes, registry_version, uid_generator);
+        let lambda_config_ref = new_random_config(subnet_nodes, registry_version, uid_generator);
+        quadruples_in_creation.insert(
+            uid_generator.next_quadruple_id(key_id),
+            ecdsa::QuadrupleInCreation::new_with_unmasked_kappa(
+                kappa_config_ref.clone(),
+                lambda_config_ref.clone(),
+            ),
         );
         (kappa_config_ref, lambda_config_ref)
     }
@@ -375,6 +437,42 @@ pub(super) mod test_utils {
         }
 
         quadruple_id
+    }
+
+    /// Return a sorted list of IDs of all transcripts in creation
+    pub fn config_ids(payload: &ecdsa::EcdsaPayload) -> Vec<u64> {
+        let mut arr = payload
+            .iter_transcript_configs_in_creation()
+            .map(|x| x.transcript_id.id())
+            .collect::<Vec<_>>();
+        arr.sort_unstable();
+        arr
+    }
+
+    /// Return a sorted list of IDs of all completed transcripts,
+    /// excluding the key transcript
+    pub fn transcript_ids(payload: &ecdsa::EcdsaPayload) -> Vec<u64> {
+        let key_transcript = payload.key_transcript.current.as_ref().unwrap();
+        let mut arr = payload
+            .active_transcripts()
+            .into_iter()
+            .map(|x| x.transcript_id.id())
+            .filter(|id| *id != key_transcript.transcript_id().id())
+            .collect::<Vec<_>>();
+        arr.sort_unstable();
+        arr
+    }
+
+    pub fn assert_quadruple_masked_kappa(quadruple: Option<&QuadrupleInCreation>) {
+        let quadruple = quadruple.expect("Quadruple in creation should exist");
+        assert_eq!(quadruple.kappa_unmasked_config, None);
+    }
+
+    pub fn assert_quadruple_unmasked_kappa(quadruple: Option<&QuadrupleInCreation>) {
+        let quadruple = quadruple.expect("Quadruple in creation should exist");
+        assert_eq!(quadruple.kappa_masked, None);
+        assert_eq!(quadruple.kappa_masked_config, None);
+        assert_eq!(quadruple.unmask_kappa_config, None);
     }
 }
 
@@ -514,20 +612,14 @@ pub(super) mod tests {
             &no_op_logger(),
         );
         assert!(result.unwrap().is_empty());
-        let config_ids = |payload: &ecdsa::EcdsaPayload| {
-            let mut arr = payload
-                .iter_transcript_configs_in_creation()
-                .map(|x| x.transcript_id.id())
-                .collect::<Vec<_>>();
-            arr.sort_unstable();
-            arr
-        };
 
         // check if nothing has changed
         assert!(payload.available_quadruples.is_empty());
         assert_eq!(payload.peek_next_transcript_id().id(), 2);
         assert_eq!(payload.iter_transcript_configs_in_creation().count(), 2);
+        assert!(transcript_ids(&payload).is_empty());
         assert_eq!(config_ids(&payload), [0, 1]);
+        assert_quadruple_masked_kappa(payload.quadruples_in_creation.values().next());
 
         // 1. When kappa_masked is ready, expect a new kappa_unmasked config.
         let kappa_transcript = {
@@ -560,7 +652,9 @@ pub(super) mod tests {
         assert!(payload.available_quadruples.is_empty());
         let kappa_unmasked_config_id = IDkgTranscriptId::new(subnet_id, 2, cur_height);
         assert_eq!(payload.peek_next_transcript_id().id(), 3);
+        assert_eq!(transcript_ids(&payload), [0]);
         assert_eq!(config_ids(&payload), [1, 2]);
+        assert_quadruple_masked_kappa(payload.quadruples_in_creation.values().next());
 
         // 2. When lambda_masked is ready, expect a new key_times_lambda config.
         let lambda_transcript = {
@@ -593,7 +687,9 @@ pub(super) mod tests {
         assert!(payload.available_quadruples.is_empty());
         assert_eq!(payload.peek_next_transcript_id().id(), 4);
         let key_times_lambda_config_id = IDkgTranscriptId::new(subnet_id, 3, cur_height);
+        assert_eq!(transcript_ids(&payload), [0, 1]);
         assert_eq!(config_ids(&payload), [2, 3]);
+        assert_quadruple_masked_kappa(payload.quadruples_in_creation.values().next());
 
         // 3. When kappa_unmasked and lambda_masked is ready, expect kappa_times_lambda
         // config.
@@ -630,7 +726,9 @@ pub(super) mod tests {
         assert!(payload.available_quadruples.is_empty());
         assert_eq!(payload.peek_next_transcript_id().id(), 5);
         let kappa_times_lambda_config_id = IDkgTranscriptId::new(subnet_id, 4, cur_height);
+        assert_eq!(transcript_ids(&payload), [0, 1, 2]);
         assert_eq!(config_ids(&payload), [3, 4]);
+        assert_quadruple_masked_kappa(payload.quadruples_in_creation.values().next());
 
         // 4. When both kappa_times_lambda and key_times_lambda are ready, quadruple is
         // complete.
@@ -670,10 +768,187 @@ pub(super) mod tests {
         )
         .unwrap();
         assert_eq!(result.len(), 2);
+        for completed_transcript in result {
+            block_reader.add_transcript(
+                ecdsa::TranscriptRef::new(cur_height, completed_transcript.transcript_id),
+                completed_transcript,
+            );
+        }
         // check if new config is made
         assert_eq!(payload.available_quadruples.len(), 1);
+        assert_eq!(payload.quadruples_in_creation.len(), 0);
         assert_eq!(payload.peek_next_transcript_id().id(), 5);
+        assert_eq!(transcript_ids(&payload), [1, 2, 3, 4]);
         assert!(config_ids(&payload).is_empty());
+        let quadruple_ref = payload.available_quadruples.values().next().unwrap();
+        quadruple_ref
+            .translate(&block_reader)
+            .expect("Translating should succeed");
+    }
+
+    #[test]
+    fn test_ecdsa_update_quadruples_in_creation_unmasked_kappa() {
+        let mut rng = reproducible_rng();
+        let subnet_id = subnet_test_id(1);
+        let (mut payload, env, mut block_reader) = set_up(&mut rng, subnet_id, Height::from(100));
+        let transcript_builder = TestEcdsaTranscriptBuilder::new();
+
+        // Start quadruple creation
+        let (kappa_unmasked_config_ref, lambda_config_ref) =
+            create_new_quadruple_in_creation_unmasked_kappa(
+                &env.nodes.ids::<Vec<_>>(),
+                env.newest_registry_version,
+                &mut payload.uid_generator,
+                payload.key_transcript.key_id.clone(),
+                &mut payload.quadruples_in_creation,
+            );
+
+        // 0. No action case
+        let cur_height = Height::new(1000);
+        let update_res = payload.uid_generator.update_height(cur_height);
+        assert!(update_res.is_ok());
+        let result = update_quadruples_in_creation(
+            &mut payload,
+            &transcript_builder,
+            cur_height,
+            &no_op_logger(),
+        );
+        assert!(result.unwrap().is_empty());
+
+        // check if nothing has changed
+        assert!(payload.available_quadruples.is_empty());
+        assert_eq!(payload.peek_next_transcript_id().id(), 2);
+        assert!(transcript_ids(&payload).is_empty());
+        assert_eq!(config_ids(&payload), [0, 1]);
+        assert_quadruple_unmasked_kappa(payload.quadruples_in_creation.values().next());
+
+        // 1. When lambda_masked is ready, expect a new key_times_lambda config.
+        let lambda_transcript = {
+            let param = lambda_config_ref.as_ref();
+            env.nodes.run_idkg_and_create_and_verify_transcript(
+                &param.translate(&block_reader).unwrap(),
+                &mut rng,
+            )
+        };
+        transcript_builder
+            .add_transcript(lambda_config_ref.as_ref().transcript_id, lambda_transcript);
+        let cur_height = Height::new(2000);
+        let update_res = payload.uid_generator.update_height(cur_height);
+        assert!(update_res.is_ok());
+        let result = update_quadruples_in_creation(
+            &mut payload,
+            &transcript_builder,
+            cur_height,
+            &no_op_logger(),
+        )
+        .unwrap();
+        assert_eq!(result.len(), 1);
+        for completed_transcript in result {
+            block_reader.add_transcript(
+                ecdsa::TranscriptRef::new(cur_height, completed_transcript.transcript_id),
+                completed_transcript,
+            );
+        }
+        // check if new config is made
+        assert!(payload.available_quadruples.is_empty());
+        assert_eq!(payload.peek_next_transcript_id().id(), 3);
+        let key_times_lambda_config_id = IDkgTranscriptId::new(subnet_id, 2, cur_height);
+        assert_eq!(transcript_ids(&payload), [1]);
+        assert_eq!(config_ids(&payload), [0, 2]);
+        assert_quadruple_unmasked_kappa(payload.quadruples_in_creation.values().next());
+
+        // 2. When kappa_unmasked and lambda_masked is ready, expect kappa_times_lambda
+        // config.
+        let kappa_unmasked_transcript = {
+            let param = kappa_unmasked_config_ref.as_ref();
+            env.nodes.run_idkg_and_create_and_verify_transcript(
+                &param.translate(&block_reader).unwrap(),
+                &mut rng,
+            )
+        };
+        transcript_builder.add_transcript(
+            kappa_unmasked_config_ref.as_ref().transcript_id,
+            kappa_unmasked_transcript,
+        );
+        let cur_height = Height::new(3000);
+        let update_res = payload.uid_generator.update_height(cur_height);
+        assert!(update_res.is_ok());
+        let result = update_quadruples_in_creation(
+            &mut payload,
+            &transcript_builder,
+            cur_height,
+            &no_op_logger(),
+        )
+        .unwrap();
+        assert_eq!(result.len(), 1);
+        for completed_transcript in result {
+            block_reader.add_transcript(
+                ecdsa::TranscriptRef::new(cur_height, completed_transcript.transcript_id),
+                completed_transcript,
+            );
+        }
+        // check if new config is made
+        assert!(payload.available_quadruples.is_empty());
+        assert_eq!(payload.peek_next_transcript_id().id(), 4);
+        let kappa_times_lambda_config_id = IDkgTranscriptId::new(subnet_id, 3, cur_height);
+        assert_eq!(transcript_ids(&payload), [0, 1]);
+        assert_eq!(config_ids(&payload), [2, 3]);
+        assert_quadruple_unmasked_kappa(payload.quadruples_in_creation.values().next());
+
+        // 3. When both kappa_times_lambda and key_times_lambda are ready, quadruple is
+        // complete.
+        let kappa_times_lambda_transcript = {
+            let param = payload
+                .iter_transcript_configs_in_creation()
+                .find(|x| x.transcript_id == kappa_times_lambda_config_id)
+                .unwrap()
+                .clone();
+            env.nodes.run_idkg_and_create_and_verify_transcript(
+                &param.translate(&block_reader).unwrap(),
+                &mut rng,
+            )
+        };
+        transcript_builder
+            .add_transcript(kappa_times_lambda_config_id, kappa_times_lambda_transcript);
+        let key_times_lambda_transcript = {
+            let param = payload
+                .iter_transcript_configs_in_creation()
+                .find(|x| x.transcript_id == key_times_lambda_config_id)
+                .unwrap()
+                .clone();
+            env.nodes.run_idkg_and_create_and_verify_transcript(
+                &param.translate(&block_reader).unwrap(),
+                &mut rng,
+            )
+        };
+        transcript_builder.add_transcript(key_times_lambda_config_id, key_times_lambda_transcript);
+        let cur_height = Height::new(5000);
+        let update_res = payload.uid_generator.update_height(cur_height);
+        assert!(update_res.is_ok());
+        let result = update_quadruples_in_creation(
+            &mut payload,
+            &transcript_builder,
+            cur_height,
+            &no_op_logger(),
+        )
+        .unwrap();
+        assert_eq!(result.len(), 2);
+        for completed_transcript in result {
+            block_reader.add_transcript(
+                ecdsa::TranscriptRef::new(cur_height, completed_transcript.transcript_id),
+                completed_transcript,
+            );
+        }
+        // check if new config is made
+        assert_eq!(payload.available_quadruples.len(), 1);
+        assert_eq!(payload.quadruples_in_creation.len(), 0);
+        assert_eq!(payload.peek_next_transcript_id().id(), 4);
+        assert_eq!(transcript_ids(&payload), [0, 1, 2, 3]);
+        assert!(config_ids(&payload).is_empty());
+        let quadruple_ref = payload.available_quadruples.values().next().unwrap();
+        quadruple_ref
+            .translate(&block_reader)
+            .expect("Translating should succeed");
     }
 
     fn get_current_unmasked_key_transcript(payload: &EcdsaPayload) -> UnmaskedTranscript {

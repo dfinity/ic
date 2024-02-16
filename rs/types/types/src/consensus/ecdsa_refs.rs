@@ -718,6 +718,26 @@ impl QuadrupleInCreation {
             kappa_times_lambda: None,
         }
     }
+
+    /// Initialization with unmasked kappa param.
+    pub fn new_with_unmasked_kappa(
+        kappa_unmasked_config: RandomUnmaskedTranscriptParams,
+        lambda_config: RandomTranscriptParams,
+    ) -> Self {
+        QuadrupleInCreation {
+            kappa_masked_config: None,
+            kappa_masked: None,
+            lambda_config,
+            lambda_masked: None,
+            kappa_unmasked_config: Some(kappa_unmasked_config),
+            unmask_kappa_config: None,
+            kappa_unmasked: None,
+            key_times_lambda_config: None,
+            key_times_lambda: None,
+            kappa_times_lambda_config: None,
+            kappa_times_lambda: None,
+        }
+    }
 }
 
 impl QuadrupleInCreation {

@@ -4,10 +4,10 @@ pub use crate::consensus::ecdsa_refs::{
     unpack_reshare_of_unmasked_params, EcdsaBlockReader, IDkgTranscriptAttributes,
     IDkgTranscriptOperationRef, IDkgTranscriptParamsRef, MaskedTranscript,
     PreSignatureQuadrupleRef, PseudoRandomId, QuadrupleId, QuadrupleInCreation,
-    RandomTranscriptParams, RequestId, ReshareOfMaskedParams, ReshareOfUnmaskedParams,
-    ThresholdEcdsaSigInputsError, ThresholdEcdsaSigInputsRef, TranscriptAttributes,
-    TranscriptCastError, TranscriptLookupError, TranscriptParamsError, TranscriptRef,
-    UnmaskedTimesMaskedParams, UnmaskedTranscript,
+    RandomTranscriptParams, RandomUnmaskedTranscriptParams, RequestId, ReshareOfMaskedParams,
+    ReshareOfUnmaskedParams, ThresholdEcdsaSigInputsError, ThresholdEcdsaSigInputsRef,
+    TranscriptAttributes, TranscriptCastError, TranscriptLookupError, TranscriptParamsError,
+    TranscriptRef, UnmaskedTimesMaskedParams, UnmaskedTranscript,
 };
 use crate::{
     consensus::BasicSignature,
