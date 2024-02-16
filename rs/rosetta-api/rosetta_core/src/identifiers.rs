@@ -232,10 +232,10 @@ impl AccountIdentifier {
     }
 }
 
-impl TryInto<icrc_ledger_types::icrc1::account::Account> for AccountIdentifier {
+impl TryFrom<AccountIdentifier> for icrc_ledger_types::icrc1::account::Account {
     type Error = anyhow::Error;
-    fn try_into(self) -> Result<icrc_ledger_types::icrc1::account::Account, Self::Error> {
-        let subaccount: Option<[u8; 32]> = match self.sub_account.as_ref() {
+    fn try_from(value: AccountIdentifier) -> Result<Self, Self::Error> {
+        let subaccount: Option<[u8; 32]> = match value.sub_account.as_ref() {
             None => None,
             Some(sub_acc) => Some(hex::decode(&sub_acc.address)?.try_into().map_err(|_| {
                 anyhow!(
@@ -245,10 +245,10 @@ impl TryInto<icrc_ledger_types::icrc1::account::Account> for AccountIdentifier {
             })?),
         };
         Ok(icrc_ledger_types::icrc1::account::Account {
-            owner: Principal::from_str(&self.address).with_context(|| {
+            owner: Principal::from_str(&value.address).with_context(|| {
                 format!(
                     "Unable to convert accountidentifier.address {:?} to Principal",
-                    &self.address
+                    &value.address
                 )
             })?,
             subaccount,

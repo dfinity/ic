@@ -1,21 +1,18 @@
-use crate::{
-    common::{
-        constants::{NODE_VERSION, ROSETTA_VERSION},
-        storage::storage_client::StorageClient,
-        types::Error,
-        utils::utils::{
-            convert_timestamp_to_millis, get_rosetta_block_from_block_identifier,
-            get_rosetta_block_from_partial_block_identifier,
-            icrc1_rosetta_block_to_rosetta_core_block,
-            icrc1_rosetta_block_to_rosetta_core_transaction,
-        },
+use crate::common::{
+    constants::{NODE_VERSION, ROSETTA_VERSION},
+    storage::{storage_client::StorageClient, types::RosettaToken},
+    types::Error,
+    utils::utils::{
+        convert_timestamp_to_millis, get_rosetta_block_from_block_identifier,
+        get_rosetta_block_from_partial_block_identifier, icrc1_rosetta_block_to_rosetta_core_block,
+        icrc1_rosetta_block_to_rosetta_core_transaction,
     },
-    Metadata,
 };
 use candid::Principal;
+use ic_ledger_core::tokens::Zero;
 use ic_rosetta_api::DEFAULT_BLOCKCHAIN;
+use icrc_ledger_types::icrc1::account::Account;
 use rosetta_core::{identifiers::*, miscellaneous::Version, objects::*, response_types::*};
-use std::sync::Arc;
 
 pub fn network_list(ledger_id: &Principal) -> NetworkListResponse {
     NetworkListResponse {
@@ -53,7 +50,7 @@ pub fn network_options(ledger_id: &Principal) -> NetworkOptionsResponse {
     }
 }
 
-pub fn network_status(storage_client: Arc<StorageClient>) -> Result<NetworkStatusResponse, Error> {
+pub fn network_status(storage_client: &StorageClient) -> Result<NetworkStatusResponse, Error> {
     let current_block = storage_client
         .get_block_with_highest_block_idx()
         .map_err(|e| Error::unable_to_find_block(&e))?
@@ -79,26 +76,27 @@ pub fn network_status(storage_client: Arc<StorageClient>) -> Result<NetworkStatu
 }
 
 pub fn block_transaction(
-    storage_client: Arc<StorageClient>,
-    block_identifier: BlockIdentifier,
-    transaction_identifier: TransactionIdentifier,
-    metadata: Metadata,
+    storage_client: &StorageClient,
+    block_identifier: &BlockIdentifier,
+    transaction_identifier: &TransactionIdentifier,
+    decimals: u8,
+    symbol: String,
 ) -> Result<BlockTransactionResponse, Error> {
     let rosetta_block =
-        get_rosetta_block_from_block_identifier(block_identifier.clone(), storage_client.clone())
+        get_rosetta_block_from_block_identifier(block_identifier.clone(), storage_client)
             .map_err(|err| Error::invalid_block_identifier(&err))?;
 
-    if rosetta_block.get_block_identifier() != block_identifier {
+    if &rosetta_block.get_block_identifier() != block_identifier {
         return Err(Error::invalid_block_identifier(&format!("Both index {} and hash {} were provided but they do not match the same block. Actual index {} and hash {}",block_identifier.index,block_identifier.hash,rosetta_block.index,hex::encode(&rosetta_block.block_hash))));
     }
 
-    if rosetta_block.get_transaction_identifier() != transaction_identifier {
+    if &rosetta_block.get_transaction_identifier() != transaction_identifier {
         return Err(Error::invalid_transaction_identifier());
     }
 
     let currency = Currency {
-        symbol: metadata.symbol.clone(),
-        decimals: metadata.decimals.into(),
+        symbol,
+        decimals: decimals.into(),
         ..Default::default()
     };
 
@@ -109,16 +107,17 @@ pub fn block_transaction(
 }
 
 pub fn block(
-    storage_client: Arc<StorageClient>,
-    partial_block_identifier: PartialBlockIdentifier,
-    metadata: Metadata,
+    storage_client: &StorageClient,
+    partial_block_identifier: &PartialBlockIdentifier,
+    decimals: u8,
+    symbol: String,
 ) -> Result<BlockResponse, Error> {
     let rosetta_block =
         get_rosetta_block_from_partial_block_identifier(partial_block_identifier, storage_client)
             .map_err(|err| Error::invalid_block_identifier(&err))?;
     let currency = Currency {
-        symbol: metadata.symbol.clone(),
-        decimals: metadata.decimals.into(),
+        symbol,
+        decimals: decimals.into(),
         ..Default::default()
     };
 
@@ -128,12 +127,56 @@ pub fn block(
     )))
 }
 
+pub fn account_balance(
+    storage_client: &StorageClient,
+    account_identifier: &AccountIdentifier,
+    partial_block_identifier: &Option<PartialBlockIdentifier>,
+    decimals: u8,
+    symbol: String,
+) -> Result<AccountBalanceResponse, Error> {
+    let rosetta_block = match partial_block_identifier {
+        Some(block_id) => get_rosetta_block_from_partial_block_identifier(block_id, storage_client)
+            .map_err(|err| Error::invalid_block_identifier(&err))?,
+        None => storage_client
+            .get_block_with_highest_block_idx()
+            .map_err(|e| Error::unable_to_find_block(&e))?
+            .ok_or_else(|| Error::unable_to_find_block(&"Current block not found".to_owned()))?,
+    };
+
+    let balance = storage_client
+        .get_account_balance_at_block_idx(
+            &(Account::try_from(account_identifier.clone())
+                .map_err(|err| Error::parsing_unsuccessful(&err))?),
+            rosetta_block.index,
+        )
+        .map_err(|e| Error::unable_to_find_account_balance(&e))?
+        .unwrap_or(RosettaToken::zero());
+
+    Ok(AccountBalanceResponse {
+        block_identifier: rosetta_block.get_block_identifier(),
+        balances: vec![Amount {
+            value: balance.to_string(),
+            currency: Currency {
+                symbol,
+                decimals: decimals.into(),
+                metadata: None,
+            },
+            metadata: None,
+        }],
+        metadata: None,
+    })
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::common::storage::types::{RosettaBlock, Tokens};
+    use crate::{
+        common::storage::types::{RosettaBlock, Tokens},
+        Metadata,
+    };
     use ic_icrc1_test_utils::valid_blockchain_strategy;
     use proptest::prelude::*;
+    use std::sync::Arc;
 
     const BLOCKHAIN_LENGTH: usize = 1000;
 
@@ -151,7 +194,7 @@ mod test {
                         }
 
                         // If there is no block in the database the service should return an error
-                        let network_status_err = network_status(storage_client_memory.clone()).unwrap_err();
+                        let network_status_err = network_status(&storage_client_memory).unwrap_err();
                         assert!(network_status_err.0.message.contains("Unable to find block"));
                         if !blockchain.is_empty() {
 
@@ -159,7 +202,7 @@ mod test {
                         let block_with_highest_idx = storage_client_memory.get_block_with_highest_block_idx().unwrap().unwrap();
                         let genesis_block = storage_client_memory.get_block_with_lowest_block_idx().unwrap().unwrap();
 
-                        let network_status_response = network_status(storage_client_memory.clone()).unwrap();
+                        let network_status_response = network_status(&storage_client_memory).unwrap();
 
                         assert_eq!(NetworkStatusResponse {
                             current_block_identifier: BlockIdentifier::from(&block_with_highest_idx),
@@ -197,7 +240,7 @@ mod test {
                         };
 
                         // If the neither the index nor the hash is set the service should return an error
-                        let block_res = block(storage_client_memory.clone(),block_identifier,metadata.clone());
+                        let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone());
                         assert!(block_res.unwrap_err().0.description.unwrap().contains("Neither block index nor block hash were provided"));
 
                         block_identifier = PartialBlockIdentifier{
@@ -206,7 +249,7 @@ mod test {
                         };
 
                         // If the block identifier index does not exist the service should return an error
-                        let block_res = block(storage_client_memory.clone(),block_identifier,metadata.clone());
+                        let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone());
                         assert!(block_res.unwrap_err().0.description.unwrap().contains(&format!("Block at index {} could not be found",invalid_block_idx)));
 
                         block_identifier = PartialBlockIdentifier{
@@ -215,7 +258,7 @@ mod test {
                         };
 
                         // If the block identifier hash does not exist the service should return an error
-                        let block_res = block(storage_client_memory.clone(),block_identifier,metadata.clone());
+                        let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone());
                         assert!(block_res.unwrap_err().0.description.unwrap().contains(&format!("Block with hash {} could not be found",hex::encode(invalid_block_hash.clone()))));
 
                         block_identifier = PartialBlockIdentifier{
@@ -224,7 +267,7 @@ mod test {
                         };
 
                         // If the block identifier hash is invalid the service should return an error
-                        let block_res = block(storage_client_memory.clone(),block_identifier,metadata.clone());
+                        let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone());
                         assert!(block_res.unwrap_err().0.description.unwrap().contains("Invalid block hash provided"));
 
                         if !blockchain.is_empty() {
@@ -236,7 +279,7 @@ mod test {
                             };
 
                         // If the block identifier index is valid the service should return the block
-                        let block_res = block(storage_client_memory.clone(),block_identifier,metadata.clone());
+                        let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone());
                         assert_eq!(block_res.unwrap(),BlockResponse {
                             block: Some(
                                 icrc1_rosetta_block_to_rosetta_core_block(rosetta_blocks[valid_block_idx as usize].clone(), Currency {
@@ -253,7 +296,7 @@ mod test {
                             };
 
                             // If the block identifier hash is valid the service should return the block
-                            let block_res = block(storage_client_memory.clone(),block_identifier,metadata.clone());
+                            let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone());
                             assert_eq!(block_res.unwrap(),BlockResponse {
                                 block: Some(
                                     icrc1_rosetta_block_to_rosetta_core_block(rosetta_blocks[valid_block_idx as usize].clone(), Currency {
@@ -270,7 +313,7 @@ mod test {
                             };
 
                             // If the block identifier index and hash are provided but do not match the same block the service should return an error
-                            let block_res = block(storage_client_memory.clone(),block_identifier,metadata.clone());
+                            let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone());
                             assert!(block_res.unwrap_err().0.description.unwrap().contains(format!("Both index {} and hash {} were provided but they do not match the same block",valid_block_idx.clone(),invalid_block_hash.clone()).as_str()));
 
                             block_identifier = PartialBlockIdentifier{
@@ -279,7 +322,7 @@ mod test {
                             };
 
                             // If the block identifier index and hash are provided but neither of them match a block the service should return an error
-                            let block_res = block(storage_client_memory.clone(),block_identifier,metadata.clone());
+                            let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone());
                             assert!(block_res.unwrap_err().0.description.unwrap().contains(&format!("Block at index {} could not be found",invalid_block_idx.clone())));
 
                             block_identifier = PartialBlockIdentifier{
@@ -288,7 +331,7 @@ mod test {
                             };
 
                             // If the block identifier index is invalid and the hash is valid the service should return an error
-                            let block_res = block(storage_client_memory.clone(),block_identifier,metadata.clone());
+                            let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone());
                             assert!(block_res.unwrap_err().0.description.unwrap().contains(format!("Block at index {} could not be found",invalid_block_idx).as_str()));
                 }
             }
@@ -320,13 +363,13 @@ mod test {
                 };
 
                 // If the storage is empty the service should return an error
-                let block_transaction_res = block_transaction(storage_client_memory.clone(),block_identifier.clone(),transaction_identifier.clone(),metadata.clone());
+                let block_transaction_res = block_transaction(&storage_client_memory,&block_identifier,&transaction_identifier,metadata.decimals,metadata.symbol.clone());
                 assert!(block_transaction_res.unwrap_err().0.description.unwrap().contains(&format!("Block at index {} could not be found",invalid_block_idx)));
 
                 storage_client_memory.store_blocks(rosetta_blocks.clone()).unwrap();
 
                 // If the block identifier index is invalid the service should return an error
-                let block_transaction_res = block_transaction(storage_client_memory.clone(),block_identifier.clone(),transaction_identifier.clone(),metadata.clone());
+                let block_transaction_res = block_transaction(&storage_client_memory,&block_identifier,&transaction_identifier,metadata.decimals,metadata.symbol.clone());
                 assert!(block_transaction_res.unwrap_err().0.description.unwrap().contains(&format!("Block at index {} could not be found",invalid_block_idx)));
 
                 if !blockchain.is_empty() {
@@ -343,7 +386,7 @@ mod test {
                     };
 
                     // If the block identifier index and hash are valid the service should return the block
-                    let block_transaction_res = block_transaction(storage_client_memory.clone(),block_identifier.clone(),transaction_identifier.clone(),metadata.clone());
+                    let block_transaction_res = block_transaction(&storage_client_memory,&block_identifier,&transaction_identifier,metadata.decimals,metadata.symbol.clone());
                     let expected_block_transaction_res = rosetta_core::response_types::BlockTransactionResponse { transaction: icrc1_rosetta_block_to_rosetta_core_transaction(rosetta_blocks[valid_block_idx as usize].clone(), Currency {
                         symbol: metadata.symbol.clone(),
                         decimals: metadata.decimals.into(),
@@ -357,7 +400,7 @@ mod test {
                     };
 
                     // If the transaction identifier hash does not match a transaction in the block the service should return an error
-                    let block_transaction_res = block_transaction(storage_client_memory.clone(),block_identifier.clone(),transaction_identifier.clone(),metadata.clone());
+                    let block_transaction_res = block_transaction(&storage_client_memory,&block_identifier,&transaction_identifier,metadata.decimals,metadata.symbol.clone());
                     assert!(block_transaction_res.unwrap_err().0.description.unwrap().contains("Invalid transaction identifier provided"));
 
                     block_identifier = BlockIdentifier{
@@ -366,7 +409,7 @@ mod test {
                     };
 
                     // If the block identifier hash is invalid the service should return an error
-                    let block_transaction_res = block_transaction(storage_client_memory.clone(),block_identifier.clone(),transaction_identifier.clone(),metadata.clone());
+                    let block_transaction_res = block_transaction(&storage_client_memory,&block_identifier,&transaction_identifier,metadata.decimals,metadata.symbol.clone());
                     assert!(block_transaction_res.unwrap_err().0.description.unwrap().contains(format!("Both index {} and hash {} were provided but they do not match the same block",valid_block_idx.clone(),invalid_block_hash.clone()).as_str()));
                 }
         }

@@ -18,71 +18,10 @@ use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
 use std::str::FromStr;
 
-/// An AccountBalanceRequest is utilized to make a balance request on the
-/// /account/balance endpoint. If the block_identifier is populated, a
-/// historical balance query should be performed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct AccountBalanceRequest {
-    #[serde(rename = "network_identifier")]
-    pub network_identifier: NetworkIdentifier,
-
-    #[serde(rename = "account_identifier")]
-    pub account_identifier: AccountIdentifier,
-
-    #[serde(rename = "block_identifier")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub block_identifier: Option<PartialBlockIdentifier>,
-
-    #[serde(rename = "metadata")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<AccountBalanceMetadata>,
-}
-
-impl AccountBalanceRequest {
-    pub fn new(
-        network_identifier: NetworkIdentifier,
-        account_identifier: AccountIdentifier,
-    ) -> AccountBalanceRequest {
-        AccountBalanceRequest {
-            network_identifier,
-            account_identifier,
-            block_identifier: None,
-            metadata: None,
-        }
-    }
-}
-
-/// An AccountBalanceResponse is returned on the /account/balance endpoint. If
-/// an account has a balance for each AccountIdentifier describing it (ex: an
-/// ERC-20 token balance on a few smart contracts), an account balance request
-/// must be made with each AccountIdentifier.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct AccountBalanceResponse {
-    #[serde(rename = "block_identifier")]
-    pub block_identifier: BlockIdentifier,
-
-    /// A single account may have a balance in multiple currencies.
-    #[serde(rename = "balances")]
-    pub balances: Vec<Amount>,
-
-    /// Account-based blockchains that utilize a nonce or sequence number should
-    /// include that number in the metadata. This number could be unique to the
-    /// identifier or global across the account address.
-    #[serde(rename = "metadata")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<NeuronInfoResponse>,
-}
-
-impl AccountBalanceResponse {
-    pub fn new(block_identifier: BlockIdentifier, balances: Vec<Amount>) -> AccountBalanceResponse {
-        AccountBalanceResponse {
-            block_identifier,
-            balances,
-            metadata: None,
-        }
-    }
+pub struct ConstructionHashResponse {
+    pub transaction_identifier: TransactionIdentifier,
+    pub metadata: ObjectMap,
 }
 
 /// CallRequest is the input to the `/call`
@@ -673,6 +612,27 @@ pub struct AccountBalanceMetadata {
     pub account_type: BalanceAccountType,
 }
 
+impl From<AccountBalanceMetadata> for ObjectMap {
+    fn from(p: AccountBalanceMetadata) -> Self {
+        match serde_json::to_value(p) {
+            Ok(serde_json::Value::Object(o)) => o,
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl TryFrom<Option<ObjectMap>> for AccountBalanceMetadata {
+    type Error = ApiError;
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
+        serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
+            ApiError::internal_error(format!(
+                "Could not parse AccountBalanceMetadata metadata from metadata JSON object: {}",
+                e
+            ))
+        })
+    }
+}
+
 #[test]
 fn test_neuron_info_request_parsing() {
     let r1: AccountBalanceMetadata =
@@ -794,4 +754,25 @@ pub struct NeuronInfoResponse {
     /// Current stake of the neuron, in e8s.
     #[serde(rename = "stake_e8s")]
     pub stake_e8s: u64,
+}
+
+impl From<NeuronInfoResponse> for ObjectMap {
+    fn from(p: NeuronInfoResponse) -> Self {
+        match serde_json::to_value(p) {
+            Ok(serde_json::Value::Object(o)) => o,
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl TryFrom<Option<ObjectMap>> for NeuronInfoResponse {
+    type Error = ApiError;
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
+        serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
+            ApiError::internal_error(format!(
+                "Could not parse NeuronInfoResponse metadata from metadata JSON object: {}",
+                e
+            ))
+        })
+    }
 }

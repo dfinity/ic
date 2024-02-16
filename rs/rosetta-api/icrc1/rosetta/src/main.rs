@@ -314,6 +314,7 @@ async fn main() -> Result<()> {
         .route("/network/options", post(network_options))
         .route("/network/status", post(network_status))
         .route("/block", post(block))
+        .route("/account/balance", post(account_balance))
         .route("/block/transaction", post(block_transaction))
         .route("/mempool", post(mempool))
         .route("/mempool/transaction", post(mempool_transaction))
