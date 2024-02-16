@@ -3,6 +3,8 @@ use anyhow::Result;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
 use kube::api::{DynamicObject, Patch, PatchParams};
 use kube::{Api, Client};
+use std::convert::AsRef;
+use strum_macros::AsRefStr;
 use tracing::*;
 
 static NODE_TEMPLATE: &str = r#"
@@ -102,32 +104,61 @@ pub async fn create_vm(
     Ok(())
 }
 
+#[derive(Debug, AsRefStr)]
+enum Action {
+    #[strum(serialize = "start")]
+    Start,
+    #[strum(serialize = "restart")]
+    Restart,
+    #[strum(serialize = "stop")]
+    Stop,
+    Delete,
+}
+
 pub async fn start_vm(name: &str) -> Result<String> {
-    action_vm(name, "start").await
+    action_vm(name, Action::Start).await
+}
+
+pub async fn restart_vm(name: &str) -> Result<String> {
+    action_vm(name, Action::Restart).await
 }
 
 pub async fn stop_vm(name: &str) -> Result<String> {
-    action_vm(name, "stop").await
+    action_vm(name, Action::Stop).await
 }
 
-async fn action_vm(name: &str, action: &str) -> Result<String> {
+pub async fn delete_vm(name: &str) -> Result<String> {
+    action_vm(name, Action::Delete).await
+}
+
+async fn action_vm(name: &str, action: Action) -> Result<String> {
     let client = Client::try_default().await?;
-    Ok(client
-        .request_text(
-            http::Request::builder()
-                .method("PUT")
-                .uri(format!(
-                    "/apis/subresources.kubevirt.io/v1/namespaces/{}/virtualmachines/{}/{}",
-                    *TNET_NAMESPACE, name, action,
-                ))
-                .body("{}".as_bytes().to_vec())
-                .unwrap(),
-        )
-        .await
-        .or_else(|e| match e {
-            kube::Error::Api(error_response) if error_response.reason == "Conflict" => {
-                kube::Result::Ok(Default::default())
-            }
-            _ => kube::Result::Err(e),
-        })?)
+
+    let request = match action {
+        Action::Start | Action::Stop | Action::Restart => http::Request::builder()
+            .method("PUT")
+            .uri(format!(
+                "/apis/subresources.kubevirt.io/v1/namespaces/{}/virtualmachines/{}/{}",
+                *TNET_NAMESPACE,
+                name,
+                action.as_ref(),
+            ))
+            .body("{}".as_bytes().to_vec())
+            .unwrap(),
+        Action::Delete => http::Request::builder()
+            .method("DELETE")
+            .uri(format!(
+                "/apis/kubevirt.io/v1/namespaces/{}/virtualmachines/{}",
+                *TNET_NAMESPACE, name
+            ))
+            .body("{}".as_bytes().to_vec())
+            .unwrap(),
+    };
+
+    Ok(client.request_text(request).await.or_else(|e| match e {
+        kube::Error::Api(error_response) if error_response.reason == "Conflict" => {
+            kube::Result::Ok(Default::default())
+        }
+        _ => kube::Result::Err(e),
+    })?)
 }

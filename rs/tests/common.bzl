@@ -158,6 +158,7 @@ DEPENDENCIES = [
     "@crate_index//:slog-term",
     "@crate_index//:slog",
     "@crate_index//:ssh2",
+    "@crate_index//:strum",
     "@crate_index//:tempfile",
     "@crate_index//:thiserror",
     "@crate_index//:time",
@@ -174,6 +175,7 @@ MACRO_DEPENDENCIES = [
     "@crate_index//:async-recursion",
     "@crate_index//:async-trait",
     "@crate_index//:indoc",
+    "@crate_index//:strum_macros",
 ]
 
 GUESTOS_DEV_VERSION = "//ic-os/guestos/envs/dev:version.txt"

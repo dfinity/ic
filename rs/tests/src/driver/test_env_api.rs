@@ -141,6 +141,7 @@ use crate::driver::farm::{Farm, GroupSpec};
 use crate::driver::log_events;
 use crate::driver::test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute};
 use crate::k8s::tnet::TNet;
+use crate::k8s::virtualmachine::{delete_vm, restart_vm, start_vm};
 use crate::util::{block_on, create_agent};
 use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
@@ -1868,32 +1869,45 @@ pub trait VmControl {
     fn start(&self);
 }
 
-pub struct FarmHostedVm {
+pub struct HostedVm {
     farm: Farm,
     group_name: String,
     vm_name: String,
+    k8s: bool,
 }
 
 /// VmControl enables a user to interact with VMs, i.e. change their state.
 /// All functions belonging to this trait crash if a respective operation is for any reason
 /// unsuccessful.
-impl VmControl for FarmHostedVm {
+impl VmControl for HostedVm {
     fn kill(&self) {
-        self.farm
-            .destroy_vm(&self.group_name, &self.vm_name)
-            .expect("could not kill VM")
+        if self.k8s {
+            block_on(delete_vm(&self.vm_name)).expect("could not kill VM");
+        } else {
+            self.farm
+                .destroy_vm(&self.group_name, &self.vm_name)
+                .expect("could not kill VM");
+        }
     }
 
     fn reboot(&self) {
-        self.farm
-            .reboot_vm(&self.group_name, &self.vm_name)
-            .expect("could not reboot VM")
+        if self.k8s {
+            block_on(restart_vm(&self.vm_name)).expect("could not reboot VM");
+        } else {
+            self.farm
+                .reboot_vm(&self.group_name, &self.vm_name)
+                .expect("could not reboot VM");
+        }
     }
 
     fn start(&self) {
-        self.farm
-            .start_vm(&self.group_name, &self.vm_name)
-            .expect("could not start VM")
+        if self.k8s {
+            block_on(start_vm(&self.vm_name)).expect("could not start VM");
+        } else {
+            self.farm
+                .start_vm(&self.group_name, &self.vm_name)
+                .expect("could not start VM");
+        }
     }
 }
 
@@ -1912,10 +1926,26 @@ where
         let pot_setup = GroupSetup::read_attribute(&env);
         let farm_base_url = env.get_farm_url().unwrap();
         let farm = Farm::new(farm_base_url, env.logger());
-        Box::new(FarmHostedVm {
+
+        let mut vm_name = self.vm_name();
+        let mut k8s = false;
+        if InfraProvider::read_attribute(&env) == InfraProvider::K8s {
+            k8s = true;
+            let tnet = TNet::read_attribute(&env);
+            let tnet_node = tnet
+                .nodes
+                .iter()
+                .find(|n| n.node_id.clone().expect("node_id missing") == vm_name.clone())
+                .expect("tnet doesn't have this node")
+                .clone();
+            vm_name = tnet_node.name.expect("nameless node");
+        }
+
+        Box::new(HostedVm {
             farm,
             group_name: pot_setup.infra_group_name,
-            vm_name: self.vm_name(),
+            vm_name,
+            k8s,
         })
     }
 }
