@@ -924,10 +924,10 @@ impl SystemTestGroup {
                 if with_farm && !args.no_delete_farm_group {
                     Self::delete_farm_group(group_ctx.clone());
                 }
+                if args.k8s && !args.debug_keepalive {
+                    Self::delete_tnet(group_ctx.clone());
+                }
                 if report.failure.is_empty() {
-                    if args.k8s {
-                        Self::delete_tnet(group_ctx.clone());
-                    }
                     Ok(Outcome::FromParentProcess(report))
                 } else {
                     bail!(SystemTestGroupError::SystemTestFailure(report))

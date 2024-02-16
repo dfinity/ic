@@ -17916,6 +17916,8 @@ dependencies = [
  "slog-async",
  "slog-term",
  "ssh2",
+ "strum 0.25.0",
+ "strum_macros 0.25.3",
  "tempfile",
  "thiserror",
  "time",

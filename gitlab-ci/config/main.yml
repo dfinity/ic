@@ -174,7 +174,8 @@ bazel-system-tests-k8s:
   variables:
     RUST_LOG: info
     KUBECONFIG: "$KUBECONFIG_TNET_CREATOR"
-    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel $BAZEL_EXTRA_ARGS_RULES --test_tag_filters=k8s --k8s"
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel $BAZEL_EXTRA_ARGS_RULES --jobs=10 --test_tag_filters=k8s --k8s"
+    BAZEL_TARGETS: "${TARGETS:-//...}"
   timeout: 80 minutes
 
 bazel-system-test-hourly:
