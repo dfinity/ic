@@ -26,6 +26,24 @@ impl From<TransactionPrice> for Eip1559TransactionPrice {
     }
 }
 
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub struct MinterInfo {
+    pub minter_address: Option<String>,
+    pub smart_contract_address: Option<String>,
+    pub minimum_withdrawal_amount: Option<Nat>,
+    pub ethereum_block_height: Option<CandidBlockTag>,
+    pub last_observed_block_number: Option<Nat>,
+    pub eth_balance: Option<Nat>,
+    pub last_gas_fee_estimate: Option<GasFeeEstimate>,
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub struct GasFeeEstimate {
+    pub max_fee_per_gas: Nat,
+    pub max_priority_fee_per_gas: Nat,
+    pub timestamp: u64,
+}
+
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct EthTransaction {
     pub transaction_hash: String,
