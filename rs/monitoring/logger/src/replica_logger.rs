@@ -26,7 +26,6 @@ impl From<LogEntryLogger> for ReplicaLogger {
 }
 
 /// Logs `LogEntry`s using `slog`
-#[derive(Debug)]
 pub struct LogEntryLogger {
     pub root: slog::Logger,
     // Only logs at `level` or above
