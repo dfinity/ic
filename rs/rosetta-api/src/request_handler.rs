@@ -10,7 +10,7 @@ mod construction_submit;
 use crate::ledger_client::list_known_neurons_response::ListKnownNeuronsResponse;
 use crate::ledger_client::pending_proposals_response::PendingProposalsResponse;
 use crate::ledger_client::proposal_info_response::ProposalInfoResponse;
-use crate::models::{CallResponse, NetworkIdentifier};
+use crate::models::{AccountBalanceMetadata, CallResponse, NetworkIdentifier};
 use crate::request_types::GetProposalInfo;
 use crate::transaction_id::TransactionIdentifier;
 use crate::{convert, models, API_VERSION, NODE_VERSION};
@@ -19,18 +19,6 @@ use ic_ledger_canister_blocks_synchronizer::blocks::HashedBlock;
 use ic_ledger_core::block::BlockType;
 use ic_nns_common::pb::v1::NeuronId;
 use rosetta_core::objects::ObjectMap;
-
-use ic_nns_governance::pb::v1::manage_neuron::NeuronIdOrSubaccount;
-use ic_types::crypto::DOMAIN_IC_REQUEST;
-use ic_types::messages::MessageId;
-use ic_types::CanisterId;
-use icp_ledger::{Block, BlockIndex};
-use rosetta_core::request_types::MetadataRequest;
-use rosetta_core::response_types::NetworkListResponse;
-use std::convert::{TryFrom, TryInto};
-use std::num::TryFromIntError;
-use std::sync::Arc;
-use strum::IntoEnumIterator;
 
 use crate::convert::{from_model_account_identifier, neuron_account_from_public_key};
 use crate::errors::{ApiError, Details};
@@ -43,7 +31,18 @@ use crate::models::{
     OperationStatus, Operator, PartialBlockIdentifier, SearchTransactionsResponse, SyncStatus,
     Version,
 };
+use ic_nns_governance::pb::v1::manage_neuron::NeuronIdOrSubaccount;
+use ic_types::crypto::DOMAIN_IC_REQUEST;
+use ic_types::messages::MessageId;
+use ic_types::CanisterId;
+use icp_ledger::{Block, BlockIndex};
+use rosetta_core::request_types::MetadataRequest;
+use rosetta_core::response_types::NetworkListResponse;
 use rosetta_core::response_types::{MempoolResponse, MempoolTransactionResponse};
+use std::convert::{TryFrom, TryInto};
+use std::num::TryFromIntError;
+use std::sync::Arc;
+use strum::IntoEnumIterator;
 
 /// The maximum amount of blocks to retrieve in a single search.
 const MAX_SEARCH_LIMIT: usize = 10_000;
@@ -81,8 +80,11 @@ impl RosettaRequestHandler {
         msg: AccountBalanceRequest,
     ) -> Result<AccountBalanceResponse, ApiError> {
         verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
-
-        let neuron_info_request_params = match msg.metadata.clone().unwrap_or_default().account_type
+        let neuron_info_request_params = match AccountBalanceMetadata::try_from(
+            msg.metadata.clone(),
+        )
+        .unwrap_or_default()
+        .account_type
         {
             BalanceAccountType::Ledger => None,
             BalanceAccountType::Neuron {
@@ -162,7 +164,7 @@ impl RosettaRequestHandler {
         Ok(AccountBalanceResponse {
             block_identifier: b,
             balances: vec![amount],
-            metadata: neuron_info,
+            metadata: neuron_info.map(|ni| ni.into()),
         })
     }
 

@@ -21,8 +21,8 @@ use rosetta_core::{
     objects::{Amount, Currency},
 };
 use serde_bytes::ByteBuf;
+use std::fmt::Write;
 use std::time::Duration;
-use std::{fmt::Write, sync::Arc};
 
 const MINT_OPERATION_IDENTIFIER: u64 = 0;
 const BURN_OPERATION_IDENTIFIER: u64 = 0;
@@ -58,14 +58,17 @@ pub fn convert_timestamp_to_millis(timestamp_nanos: u64) -> anyhow::Result<u64> 
 
 pub fn get_rosetta_block_from_block_identifier(
     block_identifier: BlockIdentifier,
-    storage_client: Arc<StorageClient>,
+    storage_client: &StorageClient,
 ) -> anyhow::Result<RosettaBlock> {
-    get_rosetta_block_from_partial_block_identifier(block_identifier.into(), storage_client)
+    get_rosetta_block_from_partial_block_identifier(
+        &PartialBlockIdentifier::from(block_identifier),
+        storage_client,
+    )
 }
 
 pub fn get_rosetta_block_from_partial_block_identifier(
-    partial_block_identifier: PartialBlockIdentifier,
-    storage_client: Arc<StorageClient>,
+    partial_block_identifier: &PartialBlockIdentifier,
+    storage_client: &StorageClient,
 ) -> anyhow::Result<RosettaBlock> {
     Ok(
         match (

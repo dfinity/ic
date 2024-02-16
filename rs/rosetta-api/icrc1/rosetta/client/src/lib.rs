@@ -179,6 +179,27 @@ impl RosettaClient {
         .await
     }
 
+    pub async fn account_balance(
+        &self,
+        block_index: u64,
+        account_identifier: AccountIdentifier,
+        network_identifier: NetworkIdentifier,
+    ) -> Result<AccountBalanceResponse, Error> {
+        self.call_endpoint(
+            "/account/balance",
+            &AccountBalanceRequest {
+                block_identifier: Some(PartialBlockIdentifier {
+                    index: Some(block_index),
+                    hash: None,
+                }),
+                account_identifier,
+                network_identifier,
+                metadata: None,
+            },
+        )
+        .await
+    }
+
     pub async fn construction_submit(
         &self,
         network_identifier: NetworkIdentifier,

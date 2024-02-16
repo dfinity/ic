@@ -322,6 +322,28 @@ pub struct ConstructionSubmitResponse {
     pub metadata: Option<ObjectMap>,
 }
 
+/// An AccountBalanceResponse is returned on the /account/balance endpoint. If
+/// an account has a balance for each AccountIdentifier describing it (ex: an
+/// ERC-20 token balance on a few smart contracts), an account balance request
+/// must be made with each AccountIdentifier.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct AccountBalanceResponse {
+    #[serde(rename = "block_identifier")]
+    pub block_identifier: BlockIdentifier,
+
+    /// A single account may have a balance in multiple currencies.
+    #[serde(rename = "balances")]
+    pub balances: Vec<Amount>,
+
+    /// Account-based blockchains that utilize a nonce or sequence number should
+    /// include that number in the metadata. This number could be unique to the
+    /// identifier or global across the account address.
+    #[serde(rename = "metadata")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<ObjectMap>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConstructionHashResponse {
     pub transaction_identifier: TransactionIdentifier,

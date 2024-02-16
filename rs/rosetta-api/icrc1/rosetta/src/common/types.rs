@@ -25,8 +25,9 @@ const ERROR_CODE_MEMPOOL_TRANSACTION_MISSING: u32 = 6;
 const ERROR_CODE_PARSING_ERROR: u32 = 7;
 const ERROR_CODE_UNSUPPORTED_OPERATION: u32 = 8;
 const ERROR_CODE_LEDGER_COMMUNICATION: u32 = 9;
-const ERROR_CODE_REQUEST_PROCESSING_ERROR: u32 = 10;
-const ERROR_CODE_PROCESSING_CONSTRUCTION_FAILED: u32 = 11;
+const ERROR_CODE_ACCOUNT_BALANCE_NOT_FOUND: u32 = 10;
+const ERROR_CODE_REQUEST_PROCESSING_ERROR: u32 = 11;
+const ERROR_CODE_PROCESSING_CONSTRUCTION_FAILED: u32 = 12;
 
 impl IntoResponse for Error {
     fn into_response(self) -> axum::response::Response {
@@ -144,6 +145,16 @@ impl Error {
         Self(rosetta_core::miscellaneous::Error {
             code: ERROR_CODE_LEDGER_COMMUNICATION,
             message: "Failed to communicate with the icrc1 ledger.".to_owned(),
+            description: Some(format!("{:?}", description)),
+            retriable: false,
+            details: None,
+        })
+    }
+
+    pub fn unable_to_find_account_balance<T: std::fmt::Debug>(description: &T) -> Self {
+        Self(rosetta_core::miscellaneous::Error {
+            code: ERROR_CODE_ACCOUNT_BALANCE_NOT_FOUND,
+            message: "Unable to find account balance.".to_owned(),
             description: Some(format!("{:?}", description)),
             retriable: false,
             details: None,

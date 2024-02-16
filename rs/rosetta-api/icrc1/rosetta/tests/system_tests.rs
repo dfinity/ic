@@ -32,16 +32,22 @@ use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
+use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use lazy_static::lazy_static;
 use num_traits::cast::ToPrimitive;
 use proptest::prelude::ProptestConfig;
 use proptest::proptest;
+use proptest::strategy::Strategy;
+use proptest::test_runner::Config as TestRunnerConfig;
+use proptest::test_runner::TestRunner;
 use rosetta_core::identifiers::*;
 use rosetta_core::models::RosettaSupportedKeyPair;
 use rosetta_core::objects::*;
 use rosetta_core::request_types::*;
 use rosetta_core::response_types::BlockResponse;
 use rosetta_core::response_types::ConstructionPreprocessResponse;
+use std::collections::HashMap;
+use std::collections::HashSet;
 use std::thread;
 use std::{
     path::PathBuf,
@@ -213,6 +219,29 @@ impl RosettaTestingEnvironmentBuilder {
             network_identifier,
         }
     }
+}
+
+async fn assert_rosetta_balance(
+    account: Account,
+    block_index: u64,
+    balance: u64,
+    rosetta_client: &RosettaClient,
+    network_identifier: NetworkIdentifier,
+) {
+    println!(
+        "Checking balance for account: {:?} at block index {}",
+        account, block_index
+    );
+    let rosetta_balance = rosetta_client
+        .account_balance(block_index, account.into(), network_identifier.clone())
+        .await
+        .expect("Unable to call account_balance")
+        .balances
+        .first()
+        .unwrap()
+        .clone()
+        .value;
+    assert_eq!(rosetta_balance, balance.to_string());
 }
 
 #[tokio::test]
@@ -522,6 +551,166 @@ async fn test_construction_derive() {
         .account_identifier
         .expect("/construction/derive did not return an account identifier");
     assert_eq!(account_identifier, account.into());
+}
+
+#[test]
+fn test_account_balance() {
+    let mut runner = TestRunner::new(TestRunnerConfig {
+        max_shrink_iters: 0,
+        cases: *NUM_TEST_CASES,
+        ..Default::default()
+    });
+
+    runner
+        .run(
+            &(valid_transactions_strategy(
+                (*MINTING_IDENTITY).clone(),
+                DEFAULT_TRANSFER_FEE,
+                50,
+                SystemTime::now(),
+            )
+            .no_shrink()),
+            |args_with_caller| {
+                let rt = Runtime::new().unwrap();
+                let minting_account = MINTING_IDENTITY.sender().unwrap().into();
+
+                rt.block_on(async {
+                    let env = RosettaTestingEnvironmentBuilder::new()
+                        .with_args_with_caller(args_with_caller.clone())
+                        .with_init_args_builder(
+                            local_replica::icrc_ledger_default_args_builder()
+                                .with_minting_account(minting_account),
+                        )
+                        .build()
+                        .await;
+
+                    // Keep track of the account balances
+                    let mut accounts_balances: HashMap<Account, u64> = HashMap::new();
+
+                    let current_index = env
+                        .rosetta_client
+                        .network_status(env.network_identifier.clone())
+                        .await
+                        .expect("Unable to call network_status")
+                        .current_block_identifier
+                        .index;
+
+                    // We start at the block index before any transactions were created by the strategy
+                    let mut block_start_index = current_index - args_with_caller.len() as u64 + 1;
+
+                    let mut all_involved_accounts = HashSet::new();
+
+                    for ArgWithCaller {
+                        caller,
+                        arg,
+                        principal_to_basic_identity: _,
+                    } in args_with_caller.iter()
+                    {
+                        let sender_principal = caller.sender().unwrap();
+                        let mut involved_accounts = vec![];
+                        match arg {
+                            LedgerEndpointArg::ApproveArg(ApproveArgs {
+                                from_subaccount,
+                                spender,
+                                ..
+                            }) => {
+                                let from = Account {
+                                    owner: sender_principal,
+                                    subaccount: *from_subaccount,
+                                };
+
+                                // We are not interested in collisions with the minting account
+                                if from != minting_account {
+                                    accounts_balances.entry(from).and_modify(|balance| {
+                                        *balance -= DEFAULT_TRANSFER_FEE;
+                                    });
+                                    involved_accounts.push(from);
+                                }
+                                if *spender != minting_account {
+                                    accounts_balances.entry(*spender).or_insert(0);
+                                    involved_accounts.push(*spender);
+                                }
+                            }
+                            LedgerEndpointArg::TransferArg(TransferArg {
+                                from_subaccount,
+                                to,
+                                amount,
+                                ..
+                            }) => {
+                                let from = Account {
+                                    owner: sender_principal,
+                                    subaccount: *from_subaccount,
+                                };
+
+                                // For Mint transactions we do not keep track of the balance of the minter
+                                if from != minting_account {
+                                    accounts_balances.entry(from).and_modify(|balance| {
+                                        *balance -= amount.0.to_u64().unwrap();
+                                        // If the transfer is a burn no transfer fee should be deducted
+                                        if *to != minting_account {
+                                            *balance -= DEFAULT_TRANSFER_FEE;
+                                        }
+                                    });
+                                    involved_accounts.push(from);
+                                }
+                                if *to != minting_account {
+                                    accounts_balances
+                                        .entry(*to)
+                                        .and_modify(|balance| {
+                                            *balance += amount.0.to_u64().unwrap();
+                                        })
+                                        .or_insert(amount.0.to_u64().unwrap());
+                                    involved_accounts.push(*to);
+                                }
+                            }
+                        };
+
+                        for account in involved_accounts {
+                            all_involved_accounts.insert(account);
+                            assert_rosetta_balance(
+                                account,
+                                block_start_index,
+                                *accounts_balances.get(&account).unwrap(),
+                                &env.rosetta_client,
+                                env.network_identifier.clone(),
+                            )
+                            .await;
+                        }
+
+                        block_start_index += 1;
+                    }
+
+                    // Assert that the current balance on the ledger is the same as that of icrc rosetta
+                    for account in all_involved_accounts.into_iter() {
+                        let ledger_balance = env
+                            .icrc1_agent
+                            .balance_of(account, icrc_ledger_agent::CallMode::Query)
+                            .await
+                            .unwrap()
+                            .0
+                            .to_u64()
+                            .unwrap();
+                        let current_block_index = env
+                            .rosetta_client
+                            .network_status(env.network_identifier.clone())
+                            .await
+                            .expect("Unable to call network_status")
+                            .current_block_identifier
+                            .index;
+                        assert_rosetta_balance(
+                            account,
+                            current_block_index,
+                            ledger_balance,
+                            &env.rosetta_client,
+                            env.network_identifier.clone(),
+                        )
+                        .await;
+                    }
+                });
+                Ok(())
+            },
+        )
+        .unwrap();
 }
 
 #[tokio::test]

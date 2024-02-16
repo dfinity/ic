@@ -414,7 +414,7 @@ impl RosettaApiHandle {
             network_identifier: self.network_id(),
             account_identifier: ic_rosetta_api::convert::to_model_account_identifier(&acc),
             block_identifier: None,
-            metadata: Some(account_balance_metadata),
+            metadata: Some(account_balance_metadata.into()),
         };
 
         to_rosetta_response(
@@ -430,10 +430,12 @@ impl RosettaApiHandle {
         &self,
         acc: AccountIdentifier,
     ) -> Result<Result<AccountBalanceResponse, RosettaError>, String> {
-        let req = AccountBalanceRequest::new(
-            self.network_id(),
-            ic_rosetta_api::convert::to_model_account_identifier(&acc),
-        );
+        let req = AccountBalanceRequest {
+            network_identifier: self.network_id(),
+            account_identifier: ic_rosetta_api::convert::to_model_account_identifier(&acc),
+            block_identifier: None,
+            metadata: None,
+        };
 
         to_rosetta_response(
             self.post_json_request(

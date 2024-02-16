@@ -299,6 +299,27 @@ impl ConstructionSubmitRequest {
     }
 }
 
+/// An AccountBalanceRequest is utilized to make a balance request on the
+/// /account/balance endpoint. If the block_identifier is populated, a
+/// historical balance query should be performed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct AccountBalanceRequest {
+    #[serde(rename = "network_identifier")]
+    pub network_identifier: NetworkIdentifier,
+
+    #[serde(rename = "account_identifier")]
+    pub account_identifier: AccountIdentifier,
+
+    #[serde(rename = "block_identifier")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub block_identifier: Option<PartialBlockIdentifier>,
+
+    #[serde(rename = "metadata")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<ObjectMap>,
+}
+
 /// ConstructionHashRequest is the input to the `/construction/hash` endpoint.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
