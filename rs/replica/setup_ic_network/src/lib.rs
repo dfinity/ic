@@ -399,7 +399,7 @@ pub fn setup_consensus_and_p2p(
         state_sync_manager_rx,
     );
 
-    new_p2p_consensus.run(quic_transport, topology_watcher);
+    let _cancellation_token = new_p2p_consensus.run(quic_transport, topology_watcher);
 
     // Tcp transport
     let oldest_registry_version_in_use = consensus_pool_cache.get_oldest_registry_version_in_use();

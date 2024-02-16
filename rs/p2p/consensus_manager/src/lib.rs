@@ -27,6 +27,7 @@ use tokio::{
         watch,
     },
 };
+use tokio_util::sync::CancellationToken;
 
 mod metrics;
 mod receiver;
@@ -40,6 +41,7 @@ pub struct ConsensusManagerBuilder {
     rt_handle: Handle,
     clients: Vec<StartConsensusManagerFn>,
     router: Option<Router>,
+    cancellation_token: CancellationToken,
 }
 
 impl ConsensusManagerBuilder {
@@ -50,6 +52,7 @@ impl ConsensusManagerBuilder {
             rt_handle,
             clients: Vec::new(),
             router: None,
+            cancellation_token: CancellationToken::new(),
         }
     }
 
@@ -68,6 +71,7 @@ impl ConsensusManagerBuilder {
         let log = self.log.clone();
         let rt_handle = self.rt_handle.clone();
         let metrics_registry = self.metrics_registry.clone();
+        let cancellation_token = self.cancellation_token.child_token();
 
         let builder = move |transport: Arc<dyn Transport>, topology_watcher| {
             start_consensus_manager(
@@ -81,6 +85,7 @@ impl ConsensusManagerBuilder {
                 sender,
                 transport,
                 topology_watcher,
+                cancellation_token,
             )
         };
 
@@ -97,10 +102,11 @@ impl ConsensusManagerBuilder {
         self,
         transport: Arc<dyn Transport>,
         topology_watcher: watch::Receiver<SubnetTopology>,
-    ) {
+    ) -> CancellationToken {
         for client in self.clients {
             client(transport.clone(), topology_watcher.clone());
         }
+        self.cancellation_token
     }
 }
 
@@ -117,6 +123,7 @@ fn start_consensus_manager<Artifact, Pool>(
     sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
     transport: Arc<dyn Transport>,
     topology_watcher: watch::Receiver<SubnetTopology>,
+    cancellation_token: CancellationToken,
 ) where
     Pool: 'static + Send + Sync + ValidatedPoolReader<Artifact>,
     Artifact: ArtifactKind,
@@ -130,6 +137,7 @@ fn start_consensus_manager<Artifact, Pool>(
         raw_pool.clone(),
         transport.clone(),
         adverts_to_send,
+        cancellation_token,
     );
 
     ConsensusManagerReceiver::run(
