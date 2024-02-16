@@ -134,11 +134,15 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
     // The next block to be updated is the highest block index in the account balance table + 1 if the table is not empty and 0 otherwise
     let next_block_to_be_updated =
         get_highest_block_idx_in_account_balance_table(connection)?.map_or(0, |idx| idx + 1);
+    let highest_block_idx =
+        get_block_with_highest_block_idx(connection)?.map_or(0, |block| block.index);
+
+    // If the blocks and account_balance tables show the same max block height then there is nothing that needs to be synced
+    if highest_block_idx < next_block_to_be_updated {
+        return Ok(());
+    }
     // Create a progressbar to visualize the updating process
-    let pb = create_progress_bar(
-        next_block_to_be_updated,
-        get_block_with_highest_block_idx(connection)?.map_or(0, |block| block.index),
-    );
+    let pb = create_progress_bar(next_block_to_be_updated, highest_block_idx);
 
     // Take an interval of 100000 blocks and update the account balances for these blocks
     const BATCH_SIZE: u64 = 100000;

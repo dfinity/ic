@@ -113,6 +113,8 @@ pub async fn start_synching_blocks(
     // After all the gaps have been filled continue with a synchronization from the top of the blockchain.
     sync_from_the_tip(agent, storage_client.clone(), maximum_blocks_per_request).await?;
 
+    storage_client.update_account_balances()?;
+
     Ok(())
 }
 
