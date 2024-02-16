@@ -132,8 +132,8 @@ impl<'a> OutputIterator<'a> {
     ) -> Self {
         let mut canister_iterators: VecDeque<_> = canisters
             .iter_mut()
+            .filter(|(_, canister)| canister.has_output())
             .map(|(owner, canister)| canister.system_state.output_into_iter(*owner))
-            .filter(|handle| !handle.is_empty())
             .collect();
 
         let mut rng = ChaChaRng::seed_from_u64(seed);
@@ -795,9 +795,7 @@ impl ReplicatedState {
             &mut self.subnet_queues,
             own_subnet_id,
             // We seed the output iterator with the time. We can do this because
-            // we don't need unpredictability of the rotation, and we accept that
-            // in case the same time is passed in two consecutive batches we
-            // rotate by the same amount for now.
+            // we don't need unpredictability of the rotation.
             time.as_nanos_since_unix_epoch(),
         )
     }
