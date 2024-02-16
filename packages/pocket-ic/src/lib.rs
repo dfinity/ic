@@ -340,6 +340,9 @@ impl PocketIc {
     }
 
     /// Make the IC produce and progress by one block.
+    /// Note that multiple ticks might be necessary to observe
+    /// an expected effect, e.g., if the effect depends on
+    /// inter-canister calls or heartbeats.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub fn tick(&self) {
         let endpoint = "update/tick";
