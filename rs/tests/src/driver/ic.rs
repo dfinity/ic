@@ -49,11 +49,6 @@ pub struct InternetComputer {
     /// Indicates whether this `InternetComputer` instance should be installed with
     /// GuestOS disk images of the latest-deployed mainnet version.
     pub with_mainnet_config: bool,
-    // Due to a change in how default firewall rules are supplied, they are
-    // not preserved across the transitional upgrade. We temporarily stash
-    // the whitelist in the registry for the time being.
-    // THIS PATH SHOULD BE REMOVED.
-    pub with_forced_default_firewall: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -195,15 +190,6 @@ impl InternetComputer {
 
     pub fn with_mainnet_config(mut self) -> Self {
         self.with_mainnet_config = true;
-        self
-    }
-
-    // Due to a change in how default firewall rules are supplied, they are
-    // not preserved across the transitional upgrade. We temporarily stash
-    // the whitelist in the registry for the time being.
-    // THIS PATH SHOULD BE REMOVED.
-    pub fn with_forced_default_firewall(mut self) -> Self {
-        self.with_forced_default_firewall = true;
         self
     }
 

@@ -27,10 +27,6 @@ options may be specified:
   --ipv6_gateway a:b::c
     Default IPv6 gateway.
 
-  --default_firewall_whitelist path
-    File containing the default whitelist configuration for GuestOS on
-    orchestrator startup.
-
   --ipv4_address a.b.c.d/n
     (optional) The IPv4 address to assign. Must include prefix length (e.g.
     18.208.190.35/28).
@@ -138,7 +134,6 @@ function build_ic_bootstrap_tar() {
     local MALICIOUS_BEHAVIOR
     local QUERY_STATS_EPOCH_LENGTH
     local BITCOIND_ADDR
-    local DEFAULT_FIREWALL_WHITELIST
 
     while true; do
         if [ $# == 0 ]; then
@@ -151,9 +146,6 @@ function build_ic_bootstrap_tar() {
                 ;;
             --ipv6_gateway)
                 IPV6_GATEWAY="$2"
-                ;;
-            --default_firewall_whitelist)
-                DEFAULT_FIREWALL_WHITELIST="$2"
                 ;;
             --ipv4_address)
                 IPV4_ADDRESS="$2"
@@ -279,9 +271,6 @@ EOF
     fi
     if [ "${NODE_OPERATOR_PRIVATE_KEY}" != "" ]; then
         cp "${NODE_OPERATOR_PRIVATE_KEY}" "${BOOTSTRAP_TMPDIR}/node_operator_private_key.pem"
-    fi
-    if [ "${DEFAULT_FIREWALL_WHITELIST}" != "" ]; then
-        cp "${DEFAULT_FIREWALL_WHITELIST}" "${BOOTSTRAP_TMPDIR}/default_firewall_whitelist.conf"
     fi
 
     tar cf "${OUT_FILE}" \

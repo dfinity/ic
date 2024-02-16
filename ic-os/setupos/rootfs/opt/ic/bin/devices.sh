@@ -42,11 +42,6 @@ function copy_config_files() {
         echo "node_operator_private_key.pem does not exist, requiring HSM."
     fi
 
-    if [ -f "${CONFIG_DIR}/default_firewall_whitelist.conf" ]; then
-        cp ${CONFIG_DIR}/default_firewall_whitelist.conf /media/
-        log_and_reboot_on_error "${?}" "Unable to copy default_firewall_whitelist.conf to hostOS config partition."
-    fi
-
     echo "* Copying deployment.json to config partition..."
     cp /data/deployment.json /media/
     log_and_reboot_on_error "${?}" "Unable to copy deployment.json to hostOS config partition."
