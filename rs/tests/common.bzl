@@ -149,7 +149,6 @@ DEPENDENCIES = [
     "@crate_index//:ring",
     "@crate_index//:rsa",
     "@crate_index//:rust_decimal",
-    "@crate_index//:rustls",
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",

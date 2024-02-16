@@ -9,8 +9,6 @@ DEPENDENCIES = [
     "@crate_index//:axum_0_7_0",
     "@crate_index//:axum_server_0_6_0",
     "@crate_index//:clap",
-    "@crate_index//:rustls",
-    "@crate_index//:rustls-pemfile",
     "@crate_index//:serde_json",
     "@crate_index//:tokio",
 ]
